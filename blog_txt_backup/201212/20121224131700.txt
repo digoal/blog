@@ -1,0 +1,335 @@
+PostgreSQL research
+
+PostgreSQL cluster table using index
+
+2012-12-24 13:17:00   查看原文>>
+
+今天一位群里的兄弟问到的cluster问题. 所以拿出来写一下. 
+PostgreSQL CLUSTER意在将表按照索引的顺序排布. 
+可以通过ctid来观察这个排布, 或者通过pg_stats.correlation来观察这个排布. 
+下面来举个例子 : 
+创建测试表 : 
+
+digoal=> create table test (id int, val numeric);
+CREATE TABLE
+
+
+插入测试数据 : 
+
+digoal=> insert into test select generate_series(1,100000),random();
+INSERT 0 100000
+表分析 : 
+digoal=> vacuum analyze test;
+VACUUM
+
+
+查询表的物理分布和对应列的值离散情况 : 
+可以看出id列的顺序和表的物理分布一致 : 
+
+digoal=> select correlation from pg_stats where schemaname='digoal' and tablename='test' and attname='id';
+ correlation 
+-------------
+           1
+(1 row)
+digoal=> select correlation from pg_stats where schemaname='digoal' and tablename='test' and attname='val';
+ correlation 
+-------------
+  0.00625629
+(1 row)
+
+
+查询val的最小值的物理存储位置 : 
+
+digoal=> select ctid,id,val from test where val=(select min(val) from test);
+   ctid    |  id   |          val           
+-----------+-------+------------------------
+ (380,154) | 70420 | 0.00000077439472079277
+(1 row)
+
+
+查询id的最小值的物理存储位置 : 
+因为测试数据是generate_series(1,100000)生成的, 所以ID列的值与物理分布相同 : 
+
+digoal=> select ctid,id,val from test where id=(select min(id) from test);
+ ctid  | id |        val        
+-------+----+-------------------
+ (0,1) |  1 | 0.645392156671733
+(1 row)
+
+
+创建索引 : 
+
+digoal=> create index idx_test_1 on test(id);
+CREATE INDEX
+digoal=> create index idx_test_2 on test(val);
+CREATE INDEX
+
+
+使用cluster重新对表进行物理分布 : 
+
+digoal=> cluster test using idx_test_2;
+CLUSTER
+
+
+再次查看val的最小值的物理存储位置 : 
+说明表的物理分布已经和idx_test_2的排序相同了.
+
+digoal=> select ctid,id,val from test where val=(select min(val) from test);
+ ctid  |  id   |          val           
+-------+-------+------------------------
+ (0,1) | 70420 | 0.00000077439472079277
+(1 row)
+
+
+再次查看id的最小值的物理存储位置 : 
+
+digoal=> select ctid,id,val from test where id=(select min(id) from test);
+   ctid   | id |        val        
+----------+----+-------------------
+ (349,37) |  1 | 0.645392156671733
+(1 row)
+
+
+分析表 : 
+
+digoal=> vacuum analyze test;
+VACUUM
+
+
+查询表的物理分布和对应列的值离散情况 : 
+可以看出现在表的物理分布和val列的值顺序一致.
+
+digoal=> select correlation from pg_stats where schemaname='digoal' and tablename='test' and attname='id';
+ correlation 
+-------------
+ -0.00118176
+(1 row)
+digoal=> select correlation from pg_stats where schemaname='digoal' and tablename='test' and attname='val';
+ correlation 
+-------------
+           1
+(1 row)
+
+
+
+现在使用idx_test_1这个索引来重分布test表 : 
+结果不再解释.
+
+digoal=> cluster verbose test using idx_test_1;
+INFO:  clustering "digoal.test" using index scan on "idx_test_1"
+INFO:  "test": found 0 removable, 100000 nonremovable row versions in 542 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+CPU 0.00s/0.15u sec elapsed 0.19 sec.
+CLUSTER
+digoal=> select ctid,id,val from test where val=(select min(val) from test);
+   ctid    |  id   |          val           
+-----------+-------+------------------------
+ (380,154) | 70420 | 0.00000077439472079277
+(1 row)
+digoal=> select ctid,id,val from test where id=(select min(id) from test);
+ ctid  | id |        val        
+-------+----+-------------------
+ (0,1) |  1 | 0.645392156671733
+(1 row)
+digoal=> vacuum analyze test;
+VACUUM
+digoal=> select correlation from pg_stats where schemaname='digoal' and tablename='test' and attname='id';
+ correlation 
+-------------
+           1
+(1 row)
+digoal=> select correlation from pg_stats where schemaname='digoal' and tablename='test' and attname='val';
+ correlation 
+-------------
+  0.00780408
+(1 row)
+
+
+
+cluster的好处 : 
+1. 因为PostgreSQL 统计了表的物理存储顺序和每一列值的顺态值, 在执行计划选择时, 可以用到这个顺态值用作计算走索引的成本.
+这个值越接近0, 说明表的物理分布上这个列的值比较离散, 走索引的成本越高; 
+反之这个值越接近1或者-1, 说明表的物理分布上这个列的值比较有序, 走索引的成本越低; 
+2. cluster 后, 表的物理分布就和索引一致了, 观察上面ctid的变化就可以得知. cluster完后查看pg_stats.correlation会等于1.
+3. 注意cluster是一次性的, 在这个表做了dml 后, 物理分布又会被打乱.
+4. 结合块设备的read ahead, cluster后, 如果执行计划走这个cluster了的索引取数据(如几百条到几万条[取数在全表来说是比较少的时候]), 可以减少大量的物理磁盘读请求.
+
+cluster加哪些锁?
+SESSION 1 : 
+
+digoal=> begin;
+BEGIN
+digoal=> cluster test using idx_test_2;
+CLUSTER
+digoal=> select pg_backend_pid();
+ pg_backend_pid 
+----------------
+          10222
+
+
+
+SESSION 2 : 
+
+digoal=> select pid,locktype,database,relation,granted,mode,b.relname from pg_locks a,pg_class b where a.relation=b.oid and pid=10222;
+  pid  | locktype | database | relation | granted |        mode         |  relname   
+-------+----------+----------+----------+---------+---------------------+------------
+ 10222 | relation |    16386 |    89731 | t       | AccessShareLock     | idx_test_2
+ 10222 | relation |    16386 |    89731 | t       | AccessExclusiveLock | idx_test_2
+ 10222 | relation |    16386 |    89729 | t       | AccessShareLock     | idx_test_1
+ 10222 | relation |    16386 |    89729 | t       | AccessExclusiveLock | idx_test_1
+ 10222 | relation |    16386 |    89726 | t       | ShareLock           | test
+ 10222 | relation |    16386 |    89726 | t       | AccessExclusiveLock | test
+(6 rows)
+
+
+对照src/include/storage/lock.h的定义, 可以看出这里总共涉及了以下锁 : 
+test表的ShareLock 是CREATE INDEX (WITHOUT CONCURRENTLY)申请的.
+test表的AccessExclusiveLock 是重建表申请的,
+索引的AccessShareLock和AccessExclusiveLock 是重建索引申请的.
+也就是说cluster不但要重建表还要重建索引.
+AccessExclusiveLock和所有锁冲突, 因此select也被阻断 : 
+SESSION 1 : 
+
+digoal=> begin;
+BEGIN
+digoal=> cluster test using idx_test_1;
+CLUSTER
+
+
+
+SESSION 2 : 
+
+digoal=> select * from test limit 1;
+waiting...
+
+
+
+SESSION 3 : 
+
+digoal=> select pid,locktype,database,relation,granted,mode,b.relname from pg_locks a,pg_class b where a.relation=b.oid;
+  pid  | locktype | database | relation | granted |        mode         |          relname           
+-------+----------+----------+----------+---------+---------------------+----------------------------
+ 12044 | relation |    16386 |     2663 | t       | AccessShareLock     | pg_class_relname_nsp_index
+ 12044 | relation |    16386 |     2662 | t       | AccessShareLock     | pg_class_oid_index
+ 12044 | relation |    16386 |     1259 | t       | AccessShareLock     | pg_class
+ 12044 | relation |    16386 |    11069 | t       | AccessShareLock     | pg_locks
+ 10759 | relation |    16386 |    89762 | f       | AccessShareLock     | test
+  5685 | relation |    16386 |    89768 | t       | AccessShareLock     | idx_test_1
+  5685 | relation |    16386 |    89768 | t       | AccessExclusiveLock | idx_test_1
+  5685 | relation |    16386 |    89765 | t       | AccessExclusiveLock | pg_toast_89762
+  5685 | relation |    16386 |    89762 | t       | ShareLock           | test
+  5685 | relation |    16386 |    89762 | t       | AccessExclusiveLock | test
+  5685 | relation |    16386 |    89769 | t       | AccessShareLock     | idx_test_2
+  5685 | relation |    16386 |    89769 | t       | AccessExclusiveLock | idx_test_2
+(12 rows)
+
+
+pid=10759的会话正在等待test表的AccessShareLock.
+
+因此filenode也是发生变化的, 如下 : 
+
+digoal=> \d+ test
+                                    Table "digoal.test"
+  Column  |            Type             | Modifiers | Storage | Stats target | Description 
+----------+-----------------------------+-----------+---------+--------------+-------------
+ id       | integer                     |           | plain   |              | 
+ crt_time | timestamp without time zone |           | plain   |              | 
+Indexes:
+    "idx_test_1" btree (id)
+    "idx_test_2" btree (crt_time DESC) CLUSTER
+Has OIDs: no
+digoal=> select pg_relation_filepath('test'::regclass);
+             pg_relation_filepath             
+----------------------------------------------
+ pg_tblspc/16385/PG_9.2_201204301/16386/89752
+(1 row)
+digoal=> select pg_relation_filepath('idx_test_1'::regclass);
+             pg_relation_filepath             
+----------------------------------------------
+ pg_tblspc/16385/PG_9.2_201204301/16386/89755
+(1 row)
+digoal=> select pg_relation_filepath('idx_test_2'::regclass);
+             pg_relation_filepath             
+----------------------------------------------
+ pg_tblspc/16385/PG_9.2_201204301/16386/89756
+(1 row)
+
+
+
+执行cluster后, 表, 索引的文件名都发生了变化 : 
+
+digoal=> cluster test using idx_test_2;
+CLUSTER
+digoal=> select pg_relation_filepath('test'::regclass);
+             pg_relation_filepath             
+----------------------------------------------
+ pg_tblspc/16385/PG_9.2_201204301/16386/89757
+(1 row)
+digoal=> select pg_relation_filepath('idx_test_1'::regclass);
+             pg_relation_filepath             
+----------------------------------------------
+ pg_tblspc/16385/PG_9.2_201204301/16386/89760
+(1 row)
+digoal=> select pg_relation_filepath('idx_test_2'::regclass);
+             pg_relation_filepath             
+----------------------------------------------
+ pg_tblspc/16385/PG_9.2_201204301/16386/89761
+(1 row)
+
+
+
+【参考】
+1. src/backend/commands/cluster.c
+2. 
+pg_stats.correlation
+
+Statistical correlation between physical row ordering and logical ordering of the column values. 
+This ranges from -1 to +1. 
+When the value is near -1 or +1, an index scan on the column will be estimated to be cheaper than when it is near zero, due to reduction of random access to the disk. 
+(This column is null if the column data type does not have a < operator.)
+digoal=> \d pg_stats
+          View "pg_catalog.pg_stats"
+         Column         |   Type   | Modifiers 
+------------------------+----------+-----------
+ schemaname             | name     | 
+ tablename              | name     | 
+ attname                | name     | 
+ inherited              | boolean  | 
+ null_frac              | real     | 
+ avg_width              | integer  | 
+ n_distinct             | real     | 
+ most_common_vals       | anyarray | 
+ most_common_freqs      | real[]   | 
+ histogram_bounds       | anyarray | 
+ correlation            | real     | 
+ most_common_elems      | anyarray | 
+ most_common_elem_freqs | real[]   | 
+ elem_count_histogram   | real[]   | 
+
+
+3. src/include/storage/lock.h
+
+#define NoLock                                  0
+
+#define AccessShareLock                 1               /* SELECT */
+#define RowShareLock                    2               /* SELECT FOR UPDATE/FOR SHARE */
+#define RowExclusiveLock                3               /* INSERT, UPDATE, DELETE */
+#define ShareUpdateExclusiveLock 4              /* VACUUM (non-FULL),ANALYZE, CREATE
+                                                                                 * INDEX CONCURRENTLY */
+#define ShareLock                               5               /* CREATE INDEX (WITHOUT CONCURRENTLY) */
+#define ShareRowExclusiveLock   6               /* like EXCLUSIVE MODE, but allows ROW
+                                                                                 * SHARE */
+#define ExclusiveLock                   7               /* blocks ROW SHARE/SELECT...FOR
+                                                                                 * UPDATE */
+#define AccessExclusiveLock             8               /* ALTER TABLE, DROP TABLE, VACUUM
+                                                                                 * FULL, and unqualified LOCK TABLE */
+
+
+4. http://www.postgresql.org/docs/9.2/static/sql-cluster.html
+5. http://www.postgresql.org/docs/9.2/static/view-pg-stats.html
+
+评论
+
+chengh0201 - 2012-12-24 13:36:58
+
+[face55]

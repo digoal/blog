@@ -1,0 +1,124 @@
+PostgreSQL research
+
+PostgreSQL pending patch : pg_basebackup throttling, limit network transfer rate
+
+2013-08-05 14:58:21   查看原文>>
+
+PostgreSQL 的一个限速补丁, 目前可以实现基础备份命令pg_basebackup的限速.
+
+PostgreSQL 9.3beta2为例
+安装补丁
+
+root@db-172-16-3-33-> cd postgresql-9.3beta2
+root@db-172-16-3-33-> wget http://www.postgresql.org/message-id/attachment/29732/backup_throttling.patch
+root@db-172-16-3-33-> patch -p1 < ./backup_throttling.patch
+root@db-172-16-3-33-> gmake && gmake install
+
+
+pg_basebackup 新增-r选项.
+
+root@db-172-16-3-33-> pg_basebackup --help
+  -r, --max-rate         maximum transfer rate between server and client
+
+
+
+[测试]
+限速1MB/s (可以单位m, k)
+
+pg93@db-172-16-3-39-> pg_basebackup -D $PGDATA -F p -x -P -v -h 172.16.3.33 -U postgres -r 1m
+WARNING:  skipping special file "./.s.PGSQL.1999"
+transaction log start point: 1/6F000028 on timeline 13
+WARNING:  skipping special file "./.s.PGSQL.1999"/pg_root/pg_subtrans/0059)
+207155/403043 kB (51%), 0/1 tablespace (...03/pg93/pg_root/base/16384/16385)
+
+
+
+root@db-172-16-3-39-> sar -n DEV 5 10000|grep eth0
+02:47:33 PM      eth0    752.00     58.00 1110626.40   7256.80      0.00      0.00      2.00
+02:47:38 PM      eth0    663.20     57.40 972859.20   7505.00      0.00      0.00      1.80
+02:47:43 PM      eth0    749.00     61.20 1107662.00   7462.00      0.00      0.00      1.60
+02:47:48 PM      eth0    791.80     58.40 1170254.00   7282.80      0.00      0.00      1.60
+
+
+
+[参考]
+1. http://www.postgresql.org/message-id/flat/51EF8054.9070606@gmail.com#51EF8054.9070606@gmail.com
+2. 
+
++      <term><option>--max-rate</option></term>
++      <listitem>
++       <para>
++       The maximum amount of data transferred from server per second.
++       The purpose is to limit impact of
++       <application>pg_basebackup</application> on a running master server.
++       </para>
++       <para>
++       Suffixes <literal>k</literal> (kilobytes) and <literal>m</literal>
++       (megabytes) are accepted. For example: <literal>10m</literal>
++       </para>
++      </listitem>
+
+
+3. 
+
+root@db-172-16-3-33-> pg_basebackup --help
+  -r, --max-rate         maximum transfer rate between server and client
+
+
+4.
+
++/*
++ * If the progress is more than what max_rate allows, sleep.
++ *
++ * Do not call if max_rate == 0.
++ */
++static void
++enforce_max_rate()
++{
++       int64           min_elapsed,
++                               now,
++                               elapsed,
++                               to_sleep;
++
++       int64           last_chunk;
++
++       last_chunk = totaldone - last_measured;
++
++       /* The measurements shouldn't be more frequent then necessary. */
++       if (last_chunk < RATE_MIN_SAMPLE)
++               return;
++
++
++       now = localGetCurrentTimestamp();
++       elapsed = now - last_measured_time;
++
++       /*
++        * max_rate relates to seconds, thus the expression in brackets is
++        * milliseconds per byte.
++        */
++       min_elapsed = last_chunk * (USECS_PER_SEC / max_rate);
++
++       /*
++        * min_elapsed is the minimum time we must have spent to get here. If we
++        * spent less, let's wait.
++        */
++       to_sleep = min_elapsed - elapsed;
++       if (to_sleep > 0)
++               pg_usleep((long) to_sleep);
++
++       last_measured = totaldone;
++       last_measured_time = now + to_sleep;
++}
++
+
+ /*
+  * Write a piece of tar data
+@@ -852,6 +977,8 @@ ReceiveTarFile(PGconn *conn, PGresult *res, int rownum)
+                totaldone += r;
+                if (showprogress)
+                        progress_report(rownum, filename);
++               if (max_rate > 0)
++                       enforce_max_rate();
+        }  
+
+

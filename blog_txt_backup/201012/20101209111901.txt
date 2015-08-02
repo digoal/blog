@@ -1,0 +1,167 @@
+PostgreSQL research
+
+MongoDB Lock use caveats
+
+2010-12-09 11:19:01   查看原文>>
+
+在mongodb中使用db.runCommand({fsync:1,lock:1})可以将内存中未写入磁盘的信息写入磁盘，并锁住对数据库改写的操作,读操作可以继续。
+一般用于数据库的SNAPSHOT。
+由于MONGODB使用的是read/write锁,即读写是冲突的.因此使用lock有几个需要注意的地方，用得不好可能导致需要重启数据库。
+例如:
+session A:
+> db.runCommand({fsync:1,lock:1})
+{
+        "info" : "now locked against writes, use db.$cmd.sys.unlock.findOne() to unlock",
+        "ok" : 1
+}
+> db.currentOp()                
+{ "inprog" : [ ] }
+
+# 此时不做任何写操作,登录到session B,C.
+session B:
+MongoDB shell version: 1.6.4
+connecting to: 127.0.0.1:5281/admin
+> db.auth("digoal","DIGOAL")
+这里卡住
+
+session C:
+MongoDB shell version: 1.6.4
+connecting to: 127.0.0.1:5281/admin
+> db.auth("digoal","DIGOAL")
+这里卡住
+
+session A:
+> db.currentOp()                
+{
+        "inprog" : [
+                {
+                        "opid" : 35,
+                        "active" : false,
+                        "lockType" : "read",
+                        "waitingForLock" : true,
+                        "op" : "query",
+                        "ns" : "?dmin.tbl_test",
+                        "query" : {
+
+                        },
+                        "client" : "127.0.0.1:33874",
+                        "desc" : "conn"
+                },
+                {
+                        "opid" : 34,
+                        "active" : true,
+                        "lockType" : "write",
+                        "waitingForLock" : true,
+                        "secs_running" : 18,
+                        "op" : "query",
+                        "ns" : "?",
+                        "query" : {
+                                "authenticate" : 1,
+                                "user" : "digoal",
+                                "nonce" : "28d27268246c42b8",
+                                "key" : "2b29a029bea30bd16c1bc2ba3b53396f"
+                        },
+                        "client" : "127.0.0.1:43981",
+                        "desc" : "conn"
+                }
+        ],
+        "fsyncLock" : 1,
+        "info" : "use db.$cmd.sys.unlock.findOne() to terminate the fsync write/snapshot lock"
+}
+
+#释放锁
+> db.$cmd.sys.unlock.findOne(); 
+{ "ok" : 1, "info" : "unlock requested" }
+> db.currentOp()              
+{ "inprog" : [ ] }
+
+session B:
+认证通过
+session C:
+认证通过
+
+session A:
+# 再次加锁
+> db.runCommand({fsync:1,lock:1})
+{
+        "info" : "now locked against writes, use db.$cmd.sys.unlock.findOne() to unlock",
+        "ok" : 1
+}
+
+session B:
+> db.tbl_test.find()
+{ "_id" : ObjectId("4d003b9c23ce070b7227bc5f"), "a" : 1 }
+
+session C:
+> db.tbl_test.find()
+{ "_id" : ObjectId("4d003b9c23ce070b7227bc5f"), "a" : 1 }
+
+session D:
+MongoDB shell version: 1.6.4
+connecting to: 127.0.0.1:5281/admin
+> db.auth("digoal","DIGOAL")
+这里卡住
+
+再次回到session B,C:
+> db.tbl_test.find()
+卡住了
+
+session A:
+> db.currentOp()                
+{
+        "inprog" : [
+                {
+                        "opid" : 45,
+                        "active" : true,
+                        "lockType" : "write",
+                        "waitingForLock" : true,
+                        "secs_running" : 63,
+                        "op" : "query",
+                        "ns" : "?",
+                        "query" : {
+                                "authenticate" : 1,
+                                "user" : "digoal",
+                                "nonce" : "8240c091997df278",
+                                "key" : "0c848429a5a973e3b25b10c906fc9211"
+                        },
+                        "client" : "127.0.0.1:45638",
+                        "desc" : "conn"
+                },
+                {
+                        "opid" : 46,
+                        "active" : false,
+                        "lockType" : "read",
+                        "waitingForLock" : true,
+                        "op" : "query",
+                        "ns" : "?dmin.tbl_test",
+                        "query" : {
+
+                        },
+                        "client" : "127.0.0.1:43981",
+                        "desc" : "conn"
+                },
+                {
+                        "opid" : 49,
+                        "active" : true,
+                        "lockType" : "write",
+                        "waitingForLock" : true,
+                        "secs_running" : 20,
+                        "op" : "query",
+                        "ns" : "?",
+                        "query" : {
+                                "authenticate" : 1,
+                                "user" : "wapprepaid",
+                                "nonce" : "5ae8f2534427f6d2",
+                                "key" : "01e013f0a035f86455d807b4d94f1e44"
+                        },
+                        "client" : "172.16.10.74:2637",
+                        "desc" : "conn"
+                }
+        ],
+        "fsyncLock" : 1,
+        "info" : "use db.$cmd.sys.unlock.findOne() to terminate the fsync write/snapshot lock"
+}
+
+认证时需要加载WRITE锁，导致读被堵塞。
+另外需要注意的是，如果SESSION A，也就是允许fsync和lock的SESSION被堵塞了的话，只能重启数据库了。
+重启前KILL -9 ,删除lock文件.

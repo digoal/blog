@@ -1,0 +1,446 @@
+PostgreSQL research
+
+PostgreSQL 9.3 add Fast promote mode skips checkpoint at end of recovery
+
+2013-01-29 17:15:46   查看原文>>
+
+PostgreSQL 将新增promote的选项, -m smart | fast
+1. smart 模式下promote standby数据库时, 在结束恢复后, 必须执行完一个checkpoint才激活.
+2. fast 模式下promote standby数据库时, 在结束恢复后, 不需要等待checkpoin结束, 而是往XLOG中写入XLOG_END_OF_RECOVERY标记, 然后激活.
+原文如下 : 
+
+pg_ctl promote -m fast will skip the checkpoint at end of recovery so that we
+can achieve very fast failover when the apply delay is low. Write new WAL record
+XLOG_END_OF_RECOVERY to allow us to switch timeline correctly for downstream log
+readers. If we skip synchronous end of recovery checkpoint we request a normal
+spread checkpoint so that the window of re-recovery is low.
+
+Simon Riggs and Kyotaro Horiguchi, with input from Fujii Masao.
+Review by Heikki Linnakangas
+
+
+【注意】
+1. 不管是哪种模式, 都需要等待已经接收到的xlog全部恢复. 所以如果standby的恢复速度与XLOG的接收量相差很大的话, fast模式也快不到哪去.
+2. wal receiver进程是在apply xlog的进程逻辑(startup process)中关闭的. 如下,
+src/backend/access/transam/xlog.c
+
+/*
+ * Check to see whether the user-specified trigger file exists and whether a
+ * promote request has arrived.  If either condition holds, return true.
+ */
+static bool
+CheckForStandbyTrigger(void)
+{
+        struct stat stat_buf;
+        static bool triggered = false;
+
+        if (triggered)
+                return true;
+
+        if (IsPromoteTriggered())
+        {
+                ereport(LOG,
+                                (errmsg("received promote request")));
+                ResetPromoteTriggered();
+                triggered = true;
+                return true;
+        }
+
+        if (TriggerFile == NULL)
+                return false;
+
+        if (stat(TriggerFile, &stat_buf) == 0)
+        {
+                ereport(LOG,
+                                (errmsg("trigger file found: %s", TriggerFile)));
+                unlink(TriggerFile);
+                triggered = true;
+                return true;
+        }
+        return false;
+}
+
+
+所以在检测到触发文件或者promote_triggered=true也就是接收到pg_ctl的promote请求后, 将关闭WALreceiver进程.
+
+src/backend/access/transam/xlog.c
+
+/*
+ * In standby mode, wait for WAL at position 'RecPtr' to become available, either
+ * via restore_command succeeding to restore the segment, or via walreceiver
+ * having streamed the record (or via someone copying the segment directly to
+ * pg_xlog, but that is not documented or recommended).
+ *
+ * If 'fetching_ckpt' is true, we're fetching a checkpoint record, and should
+ * prepare to read WAL starting from RedoStartLSN after this.
+ *
+ * 'RecPtr' might not point to the beginning of the record we're interested
+ * in, it might also point to the page or segment header. In that case,
+ * 'tliRecPtr' is the position of the WAL record we're interested in. It is
+ * used to decide which timeline to stream the requested WAL from.
+ *
+ * When the requested record becomes available, the function opens the file
+ * containing it (if not open already), and returns true. When end of standby
+ * mode is triggered by the user, and there is no more WAL available, returns
+ * false.
+ */
+static bool
+WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
+                                                        bool fetching_ckpt, XLogRecPtr tliRecPtr)
+{
+        static pg_time_t last_fail_time = 0;
+        pg_time_t now;
+
+        /*-------
+         * Standby mode is implemented by a state machine:
+         *
+         * 1. Read from archive (XLOG_FROM_ARCHIVE)
+         * 2. Read from pg_xlog (XLOG_FROM_PG_XLOG)
+         * 3. Check trigger file
+         * 4. Read from primary server via walreceiver (XLOG_FROM_STREAM)
+         * 5. Rescan timelines
+         * 6. Sleep 5 seconds, and loop back to 1.
+         *
+         * Failure to read from the current source advances the state machine to
+         * the next state. In addition, successfully reading a file from pg_xlog
+         * moves the state machine from state 2 back to state 1 (we always prefer
+         * files in the archive over files in pg_xlog).
+         *
+         * 'currentSource' indicates the current state. There are no currentSource
+         * values for "check trigger", "rescan timelines", and "sleep" states,
+         * those actions are taken when reading from the previous source fails, as
+         * part of advancing to the next state.
+         *-------
+         */
+....
+略
+                                case XLOG_FROM_PG_XLOG:
+                                        /*
+                                         * Check to see if the trigger file exists. Note that we do
+                                         * this only after failure, so when you create the trigger
+                                         * file, we still finish replaying as much as we can from
+                                         * archive and pg_xlog before failover.
+                                         */
+                                        if (CheckForStandbyTrigger())
+                                        {
+                                                ShutdownWalRcv();
+                                                return false;
+                                        }
+略
+...
+
+
+src/backend/postmaster/startup.c
+
+void
+ResetPromoteTriggered(void)
+{
+        promote_triggered = false;
+}
+
+
+
+【参考】
+1. https://github.com/postgres/postgres/commit/fd4ced5230162b50a5c9d33b4bf9cfb1231aa62e
+2. src/bin/pg_ctl/pg_ctl.c
+
+ printf(_("\nPromotion modes are:\n"));
+ printf(_("  smart       promote after performing a checkpoint\n"));
+ printf(_("  fast        promote quickly without waiting for checkpoint completion\n"));
+
+
+00278 static pgpid_t
+00279 get_pgpid(void)
+00280 {
+00281     FILE       *pidf;
+00282     long        pid;
+00283 
+00284     pidf = fopen(pid_file, "r");
+00285     if (pidf == NULL)
+00286     {
+00287         /* No pid file, not an error on startup */
+00288         if (errno == ENOENT)
+00289             return 0;
+00290         else
+00291         {
+00292             write_stderr(_("%s: could not open PID file \"%s\": %s\n"),
+00293                          progname, pid_file, strerror(errno));
+00294             exit(1);
+00295         }
+00296     }
+00297     if (fscanf(pidf, "%ld", &pid) != 1)
+00298     {
+00299         /* Is the file empty? */
+00300         if (ftell(pidf) == 0 && feof(pidf))
+00301             write_stderr(_("%s: the PID file \"%s\" is empty\n"),
+00302                          progname, pid_file);
+00303         else
+00304             write_stderr(_("%s: invalid data in PID file \"%s\"\n"),
+00305                          progname, pid_file);
+00306         exit(1);
+00307     }
+00308     fclose(pidf);
+00309     return (pgpid_t) pid;
+00310 }
+
+
+01102 /*
+01103  * promote
+01104  */
+01105 
+01106 static void
+01107 do_promote(void)
+01108 {
+01109     FILE       *prmfile;
+01110     pgpid_t     pid;
+01111     struct stat statbuf;
+01112 
+01113     pid = get_pgpid();
+01114 
+01115     if (pid == 0)               /* no pid file */
+01116     {
+01117         write_stderr(_("%s: PID file \"%s\" does not exist\n"), progname, pid_file);
+01118         write_stderr(_("Is server running?\n"));
+01119         exit(1);
+01120     }
+01121     else if (pid < 0)           /* standalone backend, not postmaster */
+01122     {
+01123         pid = -pid;
+01124         write_stderr(_("%s: cannot promote server; "
+01125                        "single-user server is running (PID: %ld)\n"),
+01126                      progname, pid);
+01127         exit(1);
+01128     }
+01129 
+01130     /* If recovery.conf doesn't exist, the server is not in standby mode */
+01131     if (stat(recovery_file, &statbuf) != 0)
+01132     {
+01133         write_stderr(_("%s: cannot promote server; "
+01134                        "server is not in standby mode\n"),
+01135                      progname);
+01136         exit(1);
+01137     }
+01138 
+01139     /*
+01140      * Use two different kinds of promotion file so we can understand
+01141      * the difference between smart and fast promotion.
+01142      */
+01143     if (shutdown_mode >= FAST_MODE)
+01144         snprintf(promote_file, MAXPGPATH, "%s/fast_promote", pg_data);
+01145     else
+01146         snprintf(promote_file, MAXPGPATH, "%s/promote", pg_data);
+01147 
+01148     if ((prmfile = fopen(promote_file, "w")) == NULL)
+01149     {
+01150         write_stderr(_("%s: could not create promote signal file \"%s\": %s\n"),
+01151                      progname, promote_file, strerror(errno));
+01152         exit(1);
+01153     }
+01154     if (fclose(prmfile))
+01155     {
+01156         write_stderr(_("%s: could not write promote signal file \"%s\": %s\n"),
+01157                      progname, promote_file, strerror(errno));
+01158         exit(1);
+01159     }
+01160 
+01161     sig = SIGUSR1;
+01162     if (kill((pid_t) pid, sig) != 0)
+01163     {
+01164         write_stderr(_("%s: could not send promote signal (PID: %ld): %s\n"),
+01165                      progname, pid, strerror(errno));
+01166         if (unlink(promote_file) != 0)
+01167             write_stderr(_("%s: could not remove promote signal file \"%s\": %s\n"),
+01168                          progname, promote_file, strerror(errno));
+01169         exit(1);
+01170     }
+01171 
+01172     print_msg(_("server promoting\n"));
+01173 }
+
+
+3. src/backend/postmaster/postmaster.c
+
+04617 /*
+04618  * sigusr1_handler - handle signal conditions from child processes
+04619  */
+04620 static void
+04621 sigusr1_handler(SIGNAL_ARGS)
+04622 {
+04623     int         save_errno = errno;
+04624 
+04625     PG_SETMASK(&BlockSig);
+04626 
+04627     /*
+04628      * RECOVERY_STARTED and BEGIN_HOT_STANDBY signals are ignored in
+04629      * unexpected states. If the startup process quickly starts up, completes
+04630      * recovery, exits, we might process the death of the startup process
+04631      * first. We don't want to go back to recovery in that case.
+04632      */
+04633     if (CheckPostmasterSignal(PMSIGNAL_RECOVERY_STARTED) &&
+04634         pmState == PM_STARTUP && Shutdown == NoShutdown)
+04635     {
+04636         /* WAL redo has started. We're out of reinitialization. */
+04637         FatalError = false;
+04638 
+04639         /*
+04640          * Crank up the background tasks.  It doesn't matter if this fails,
+04641          * we'll just try again later.
+04642          */
+04643         Assert(CheckpointerPID == 0);
+04644         CheckpointerPID = StartCheckpointer();
+04645         Assert(BgWriterPID == 0);
+04646         BgWriterPID = StartBackgroundWriter();
+04647 
+04648         pmState = PM_RECOVERY;
+04649     }
+04650     if (CheckPostmasterSignal(PMSIGNAL_BEGIN_HOT_STANDBY) &&
+04651         pmState == PM_RECOVERY && Shutdown == NoShutdown)
+04652     {
+04653         /*
+04654          * Likewise, start other special children as needed.
+04655          */
+04656         Assert(PgStatPID == 0);
+04657         PgStatPID = pgstat_start();
+04658 
+04659         ereport(LOG,
+04660         (errmsg("database system is ready to accept read only connections")));
+04661 
+04662         pmState = PM_HOT_STANDBY;
+04663 
+04664         /* Some workers may be scheduled to start now */
+04665         StartOneBackgroundWorker();
+04666     }
+04667 
+04668     if (CheckPostmasterSignal(PMSIGNAL_WAKEN_ARCHIVER) &&
+04669         PgArchPID != 0)
+04670     {
+04671         /*
+04672          * Send SIGUSR1 to archiver process, to wake it up and begin archiving
+04673          * next transaction log file.
+04674          */
+04675         signal_child(PgArchPID, SIGUSR1);
+04676     }
+04677 
+04678     if (CheckPostmasterSignal(PMSIGNAL_ROTATE_LOGFILE) &&
+04679         SysLoggerPID != 0)
+04680     {
+04681         /* Tell syslogger to rotate logfile */
+04682         signal_child(SysLoggerPID, SIGUSR1);
+04683     }
+04684 
+04685     if (CheckPostmasterSignal(PMSIGNAL_START_AUTOVAC_LAUNCHER) &&
+04686         Shutdown == NoShutdown)
+04687     {
+04688         /*
+04689          * Start one iteration of the autovacuum daemon, even if autovacuuming
+04690          * is nominally not enabled.  This is so we can have an active defense
+04691          * against transaction ID wraparound.  We set a flag for the main loop
+04692          * to do it rather than trying to do it here --- this is because the
+04693          * autovac process itself may send the signal, and we want to handle
+04694          * that by launching another iteration as soon as the current one
+04695          * completes.
+04696          */
+04697         start_autovac_launcher = true;
+04698     }
+04699 
+04700     if (CheckPostmasterSignal(PMSIGNAL_START_AUTOVAC_WORKER) &&
+04701         Shutdown == NoShutdown)
+04702     {
+04703         /* The autovacuum launcher wants us to start a worker process. */
+04704         StartAutovacuumWorker();
+04705     }
+04706 
+04707     if (CheckPostmasterSignal(PMSIGNAL_START_WALRECEIVER) &&
+04708         WalReceiverPID == 0 &&
+04709         (pmState == PM_STARTUP || pmState == PM_RECOVERY ||
+04710          pmState == PM_HOT_STANDBY || pmState == PM_WAIT_READONLY) &&
+04711         Shutdown == NoShutdown)
+04712     {
+04713         /* Startup Process wants us to start the walreceiver process. */
+04714         WalReceiverPID = StartWalReceiver();
+04715     }
+04716 
+04717     if (CheckPostmasterSignal(PMSIGNAL_ADVANCE_STATE_MACHINE) &&
+04718         (pmState == PM_WAIT_BACKUP || pmState == PM_WAIT_BACKENDS))
+04719     {
+04720         /* Advance postmaster's state machine */
+04721         PostmasterStateMachine();
+04722     }
+04723 
+04724     if (CheckPromoteSignal() && StartupPID != 0 &&
+04725         (pmState == PM_STARTUP || pmState == PM_RECOVERY ||
+04726          pmState == PM_HOT_STANDBY || pmState == PM_WAIT_READONLY))
+04727     {
+04728         /* Tell startup process to finish recovery */
+04729         signal_child(StartupPID, SIGUSR2);
+04730     }
+04731 
+04732     PG_SETMASK(&UnBlockSig);
+04733 
+04734     errno = save_errno;
+04735 }
+
+
+4. src/backend/access/transam/xlog.c
+
+09568 /*
+09569  * Check to see if a promote request has arrived. Should be
+09570  * called by postmaster after receiving SIGUSR1.
+09571  */
+09572 bool
+09573 CheckPromoteSignal(void)
+09574 {
+09575     struct stat stat_buf;
+09576 
+09577     if (stat(PROMOTE_SIGNAL_FILE, &stat_buf) == 0 ||
+09578         stat(FAST_PROMOTE_SIGNAL_FILE, &stat_buf) == 0)
+09579         return true;
+09580 
+09581     return false;
+09582 }
+
+
+5. src/backend/postmaster/startup.c
+
+00106 /* SIGUSR2: set flag to finish recovery */ 00107 static void 00108 StartupProcTriggerHandler(SIGNAL_ARGS) 00109 { 00110     int         save_errno = errno; 00111  00112     promote_triggered = true; 00113     WakeupRecovery(); 00114  00115     errno = save_errno; 00116 }
+
+
+6. src/backend/access/transam/xlog.c
+
+00438     /*
+00439      * recoveryWakeupLatch is used to wake up the startup process to continue
+00440      * WAL replay, if it is waiting for WAL to arrive or failover trigger file
+00441      * to appear.
+00442      */
+00443     Latch       recoveryWakeupLatch;
+
+
+09584 /*
+09585  * Wake up startup process to replay newly arrived WAL, or to notice that
+09586  * failover has been requested.
+09587  */
+09588 void
+09589 WakeupRecovery(void)
+09590 {
+09591     SetLatch(&XLogCtl->recoveryWakeupLatch);
+09592 }
+
+
+7. src/include/storage/latch.h
+
+00090 /*
+00091  * Latch structure should be treated as opaque and only accessed through
+00092  * the public functions. It is defined here to allow embedding Latches as
+00093  * part of bigger structs.
+00094  */
+00095 typedef struct
+00096 {
+00097     sig_atomic_t is_set;
+00098     bool        is_shared;
+00099     int         owner_pid;
+00100 #ifdef WIN32
+00101     HANDLE      event;
+00102 #endif
+00103 } Latch;
+
+

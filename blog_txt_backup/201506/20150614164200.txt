@@ -1,0 +1,160 @@
+PostgreSQL research
+
+PostgreSQL 9.5 new feature - Use PG_OOM_ADJUST_FILE and PG_OOM_ADJUST_VALUE to control Linux OOM killer
+
+2015-06-14 16:42:00   查看原文>>
+
+PostgreSQL 9.5新特性，通过两个环境变量控制Linux OOM killer，当然还是要结合内核参数来使用的，只是不需要重新编译PG。
+
+Add environment variables PG_OOM_ADJUST_FILE and PG_OOM_ADJUST_VALUE to control Linux OOM killer (Gurjeet Singh)
+The previous OOM control involved a compile-time option.
+
+
+
+"overcommit" memory是指当前操作系统commit的内存超出commitLimit。
+当前系统的commitLimit和已commit的内存可以通过/proc/meminfo查看：
+
+（The current overcommit limit and amount committed are viewable in
+/proc/meminfo as CommitLimit and Committed_AS respectively.）
+# cat /proc/meminfo |grep -i commit
+CommitLimit:    89149372 kB
+Committed_AS:   19386404 kB
+
+
+通过两个内核参数可以控制Limit：
+
+# sysctl -a|grep overcommit
+vm.overcommit_memory = 0
+vm.overcommit_ratio = 90  # 设置Limit为当前内存的比例
+vm.overcommit_kbytes = 0  # 或者设置Limit为KB
+vm.nr_overcommit_hugepages = 0
+
+
+例如我修改CommitLimit为当前内存的一半：
+
+# sysctl -w vm.overcommit_ratio=50
+vm.overcommit_ratio = 50
+
+
+可以看到CommitLimit的变化：
+
+# cat /proc/meminfo |grep -i commit
+CommitLimit:    49527428 kB
+Committed_AS:   19386764 kB
+[root@db-172-16-3-150 ~]# free
+             total       used       free     shared    buffers     cached
+Mem:      99054860    7155832   91899028     161632     496572    4514604
+-/+ buffers/cache:    2144656   96910204
+Swap:            0          0          0
+
+
+另外一个内核参数overcommit_memory 是控制当overcommit发生时，内核如何处理？与OOM Killer有关了：
+overcommit_memory 允许设置为3个值，0,1,2：
+默认为0，启发式的OOM，允许root用户使用更多的内存，当commited数超过限制时，会触发OOM Killer。
+
+0       -       Heuristic overcommit handling. Obvious overcommits of
+                address space are refused. Used for a typical system. It
+                ensures a seriously wild allocation fails while allowing
+                overcommit to reduce swap usage.  root is allowed to 
+                allocate slighly more memory in this mode. This is the 
+                default.
+
+
+1,允许出现overcommit（超出内存使用），通常在用在一些科学应用，例如GreenPlum数据仓库。
+
+1       -       Always overcommit. Appropriate for some scientific
+                applications.
+
+
+2,不允许出现overcommit，限制在SWAP + ( MEM*overcommit_ratio 或 overcommit_kbytes )；
+也就是说，只要交换分区足够大，基本上可以避免出现操作系统主动OOM Killer。
+
+2       -       Don't overcommit. The total address space commit
+                for the system is not permitted to exceed swap + a
+                configurable amount (default is 50%) of physical RAM.
+                Depending on the amount you use, in most situations
+                this means a process will not be killed while accessing
+                pages but will receive errors on memory allocation as
+                appropriate.
+
+
+
+首先说一下如何尽可能的减少OOM发生的几率的几种方法，
+1. 开启交换分区，同时设置足够大的overcommit_ratio，例如90。并且将overcommit_memory 设置为2。（这种设置可能导致使用交换分区。）
+2. 设置较大的overcommit_ratio如90，同时设置overcommit_memory =0（默认），这种方法会发生OOM，但是可以减少交换分区使用几率。
+
+当系统触发OOM Killer时，如何保护PostgreSQL进程不被kill呢？
+需要设置进程的oom adj。
+在PostgreSQL 9.5以前的版本，需要在编译时指定几个宏。参考：
+http://blog.163.com/digoal@126/blog/static/1638770402012811103039776/
+现在，不需要在编译时指定，可以在环境变量中使用。
+例子：
+首先要设置当前进程的oom adj（需要超级用户），然后配置环境变量，启动数据库。
+
+[root@db-172-16-3-150 ~]# echo -1000 > /proc/self/oom_score_adj
+[root@db-172-16-3-150 ~]# cat /proc/self/oom_score_adj
+-1000
+[root@db-172-16-3-150 ~]# su - pg95
+pg95@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down.... done
+server stopped
+
+
+设置postgres主进程的oom adj值，即-1000。（老的系统可能是-17）
+
+pg95@db-172-16-3-150-> export PG_OOM_ADJUST_FILE=/proc/self/oom_score_adj
+
+
+设置postgres子进程的oom adj值，这个值可以随意设置，一般比postgres高一点即可（更容易被KILL）
+
+pg95@db-172-16-3-150-> export PG_OOM_ADJUST_VALUE=-1
+pg95@db-172-16-3-150-> pg_ctl start
+server starting
+pg95@db-172-16-3-150-> ps -ewf|grep postgres|grep pg95
+pg95     24444     1  0 16:32 pts/4    00:00:00 /opt/pgsql9.5/bin/postgres
+pg95     24446 24444  0 16:32 ?        00:00:00 postgres: logger process   
+pg95     24448 24444  0 16:32 ?        00:00:00 postgres: checkpointer process   
+pg95     24449 24444  0 16:32 ?        00:00:00 postgres: writer process   
+pg95     24450 24444  0 16:32 ?        00:00:00 postgres: wal writer process   
+pg95     24451 24444  0 16:32 ?        00:00:00 postgres: autovacuum launcher process   
+pg95     24452 24444  0 16:32 ?        00:00:00 postgres: archiver process   
+pg95     24453 24444  0 16:32 ?        00:00:00 postgres: stats collector process   
+pg95     24464 24384  0 16:32 pts/4    00:00:00 grep postgres
+pg95@db-172-16-3-150-> cat /proc/24444/oom_score_adj 
+-1000
+pg95@db-172-16-3-150-> cat /proc/24446/oom_score_adj 
+-1
+pg95@db-172-16-3-150-> cat /proc/24453/oom_score_adj 
+-1
+
+
+后面FORK的backend process的oom adj也是-1
+
+pg95@db-172-16-3-150-> psql
+psql (9.5devel)
+Type "help" for help.
+
+postgres=# select pg_backend_pid();
+ pg_backend_pid 
+----------------
+          24628
+(1 row)
+
+postgres=# \! cat /proc/24628/oom_score_adj
+-1
+
+
+其实我们还有一个小小的问题，就是我们其实也希望数据库启动时的进程也是-1000，但是不希望backend process是-1000。
+这个需要通过root用户来修改。例如：
+
+# echo -1000 > /proc/24446/oom_score_adj
+。。。。。。
+
+
+
+[参考]
+1. http://www.postgresql.org/docs/devel/static/kernel-resources.html#LINUX-MEMORY-OVERCOMMIT
+2. /usr/share/doc/kernel-doc-2.6.32/Documentation/vm/overcommit-accounting
+3. http://blog.163.com/digoal@126/blog/static/1638770402012811103039776/
+
+Flag Counter

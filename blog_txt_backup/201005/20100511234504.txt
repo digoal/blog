@@ -1,0 +1,419 @@
+PostgreSQL research
+
+PostgreSQL Statistics and Query Explain Introduction
+
+2010-05-11 23:45:04   查看原文>>
+
+熟悉ORACLE的朋友对执行计划和统计信息肯定不陌生。今天我要说的是PostgreSQL的统计信息和执行计划，同时那ORACLE的做一个简单比较。
+
+在说PostgreSQL的统计信息和SQL优化器之前，先来看一个ORACLE SQL的处理过程，因为PG的处理过程和这个非常类似：
+
+ 
+
+PostgreSQL Statistics and Query Explain Introduction - 德哥(DiGoal,Just Do It!) - Not Only DBA
+
+可以看出SQL处理分成了五个部分，SQL Statement(接收到客户端提交的SQL),Parsing(语法检查，语义检测，共享池检测),Optimization（产生多种执行计划和成本）,Row Source Generation（生成迭代查询计划）,Execution（执行）如果是硬解析的话才有Optimization和Row Source Generation的过程。
+
+Oracle是需要依赖统计信息来产生执行计划的，如果没有统计信息，Oracle将使用内部信息如（块数）来产生执行计划。PostgreSQL也有统计信息的概念，我们一起来看一看。
+
+首先涉及到一个参数：default_statistics_target
+
+这是一个PostgreSQL的全局参数，指定列柱状图中柱子的个数，也就是表列里边被统计到的散列值目标有多少个，PostgreSQL8.3默认是10,PostgreSQL8.4及9.0的默认值是100。值越大，收集统计信息的耗费也越大。（打个比方，表table_a(col1 int,col2 varchar(60)),那么col1和col2都将有10个值出现在柱状图当中，包含了值，行数占比）
+
+使用ALTER TABLE SET STATISTICS语法可以定义表级别的statistics_target。将覆盖数据库的全局参数。
+
+说完这个参数，接下来看看哪里可以看到这些统计信息：
+
+pg_class系统表：这个表中的relpages,reltuples可作为PLANNER的评估值。relpages表示这个数据库对象占用的disk blocks，reltuples表示行数。（这两个值都不是实时的，只有在VACUUM,ANALYZE,或者某些DDL语句如CREATE INDEX执行之后才会更新。当单独执行analyze时，更新的reltuples可能是个大概值，因为ANALYZE不会进行全表扫描.）planner将扩展
+取自pg_class的值以匹配表的物理大小，获得更真实的值。
+
+举例：
+
+snake=> select relname,relkind,relpages,reltuples from pg_class where relname ~’club’;
+
+
+
+
+relname        | relkind | relpages | reltuples
+
+
+
+
+———————–+———+———-+———–
+
+
+
+
+club                  | r       |        9 |       301
+
+
+
+
+club_clubid_key       | i       |        2 |       301
+
+
+
+
+club_masterskyid_key1 | i       |        2 |       301
+
+
+
+
+club_name_key1        | i       |        5 |       301
+
+
+
+
+club_pkey             | i       |        2 |       301
+
+
+
+
+(6 rows)
+
+
+
+
+snake=> select count(*) from club;
+
+
+
+
+count
+
+
+
+
+——-
+
+
+
+
+305
+
+
+
+
+(1 row)
+
+
+
+
+snake=> analyze club;
+
+
+
+
+ANALYZE
+
+
+
+
+snake=> select relname,relkind,relpages,reltuples from pg_class where relname ~’club’;
+
+
+
+
+relname        | relkind | relpages | reltuples
+
+
+
+
+———————–+———+———-+———–
+
+
+
+
+club                  | r       |        9 |       305
+
+
+
+
+club_clubid_key       | i       |        2 |       305
+
+
+
+
+club_masterskyid_key1 | i       |        2 |       305
+
+
+
+
+club_name_key1        | i       |        5 |       305
+
+
+
+
+club_pkey             | i       |        2 |       305
+
+
+由于这个表的PAGE数较小，所以更新之后的值是精确值。
+
+pg_statistic系统表：许多查询并不是查询所有的行的，往往返回的是部分行，如使用WHERE条件查询。PLANNER需要评估WHERE条件将带来多少的结果返回，生成合适的查询计划。此时pg_class提供的两个值就不能满足PLANNER的需求了，需要用到pg_statistic的值。pg_statistic的更新来自analyze,vacuum analyze操作，并且获取到的是近似值。PostgreSQL不
+推荐我们直接查询pg_statistic，因为需要超级用户的权限，后面我们会说到使用pg_stats来替代查询pg_statistic。
+
+pg_stats系统视图：对于DBA来说，pg_stats更具有可读性，并且权限控制得更好，权限控制在当前用户具有读权限的表。
+
+来看看pg_stats的字段解释：
+
+schemaname = pg_namespace.nspname
+
+tablename = pg_class.relname
+
+attname = pg_attribute.attname
+
+inherited = true, 这行所表示的列的统计信息包含了本表和所有的继承表。
+
+= false，这行所表示的列的统计信息只包含了本表。
+
+null_frac，这行所表示的列的NULL值占总记录数的比例。
+
+avg_width，字段平均宽度。
+
+n_distinct，正数表示所有记录中，唯一值的个数。而且正值一般表示不管记录数怎么变化，此列都有一个固定的唯一值个数。
+
+负数表示随着记录数的增长，唯一值的个数和总记录数保持一定比例。（如-1表示唯一值个数=记录数，如PK COLUMN）
+
+most_common_vals，出现概率较大的列值，如果都一样的概率，这个值为空。如果是某些特殊字段类型如TSVECTOR,这里出现的就是相应的元素值。
+
+most_common_freqs，对应上一个字段中的值概率。如果是某些特殊字段如TSVECTOR，可能包含更多的信息。超过前一个字段的值个数。
+
+histogram_bounds，只有当被统计列的类型可以使用<这样的操作符时，这一列才有值。代表的意义是，两个值之间的记录数被认为是相等的。另外，当most_common_vals中列出了被统计列的所有可能的值，那么histogram_bounds将为NULL，因为没有必要再统计了。这里的被统计列的值不能等于most_comm_vals的被统计列的值。
+
+correlation，取值范围-1到1,值越靠近-1或1被统计列的逻辑顺序与物理行的顺序越有接近趋势。（越接近的话，使用该索引扫排序可以减少磁头移动概率，CLUSTERDB和CLUSTER命令可以强制将表的物理排序匹配索引列的逻辑排序）一般我们去看一个含SERIAL作为PK的表，PK的这一列得到的统计信息里面correlation=1.
+
+好了，这个视图的解释就是如上，还可以使用ALTER TABLE SET STATISTICS或default_statistics_target 来限制most_common_vals and histogram_bounds的最大值范围。
+
+举例：
+
+建立测试表
+
+create table tbl_test(id serial primary key,name varchar(10));
+
+插入测试数据
+
+insert into tbl_test (name) values (‘a’),(‘b’),(‘b’),(‘c’),(‘c’),(‘c’);  插入65898行为止
+
+确认总共插入了多少记录
+
+db_monitor=> select count(*) from tbl_test;
+
+65898
+
+查看真实的记录分布
+
+db_monitor=> select name,count(*) from tbl_test group by name;
+
+name | count
+
+c    | 32949
+
+b    | 21966
+
+a    | 10983
+
+更新统计信息
+
+db_monitor=> ANALYZE tbl_test ;
+
+查看系统统计信息表是否属实：
+
+db_monitor=> select relpages,reltuples from pg_class where relname=’tbl_test’;
+
+
+
+
+relpages | reltuples
+
+
+
+
+———-+———–
+
+
+
+
+292 |     65898
+
+
+属实。
+
+db_monitor=> select * from pg_stats where tablename=’tbl_test’;
+
+
+
+
+schemaname | tablename | attname | null_frac | avg_width | n_distinct | most_common_vals |     most_common_freqs     |                        histogram_bounds                         | correlation
+
+
+
+
+————+———–+———+———–+———–+————+——————+—————————+—————————————————————–+————-
+
+
+
+
+monitor    | tbl_test  | id      |         0 |         4 |         -1 |                  |                           | {62,6329,13154,19733,26939,33241,39332,45982,52163,58763,65884} |           1
+
+
+
+
+monitor    | tbl_test  | name    |         0 |         2 |          3 | {c,b,a}          | {0.512333,0.326,0.161667} |                                                                 |    0.391998
+
+
+简单解释一下：
+
+当attname=name时most_common_vals列出了所有的列唯一值{c,b,a}，根据规则所以histogram_bounds为空。most_common_freqs 对应的是c,b,a的记录数比例。n_distinct=3。
+
+当attname=id时，n_distinct=-1,表示行数和count(DISTINCT)值一致。most_common_vals为空，因为没有任何一个值比其他的值在行中出现的概率大。histogram_bounds把取值均分成了10个区间{62,6329,13154,19733,26939,33241,39332,45982,52163,58763,65884}。correlation值=1，表示物理行的顺序和ID列的逻辑顺序一致，这个很好理解，因为我们是顺序
+插入的，而且没有做UPDATE DELETE。
+
+创建索引
+
+db_monitor=> create index idx_test on tbl_test(name);
+
+强制按照IDX_TEST的索引进行物理排序
+
+db_monitor=> CLUSTER tbl_test USING idx_test;
+
+更新统计信息
+
+db_monitor=> ANALYZE tbl_test ;
+
+ANALYZE
+
+查看统计信息
+
+db_monitor=> select * from pg_stats where tablename=’tbl_test’;
+
+
+
+
+schemaname | tablename | attname | null_frac | avg_width | n_distinct | most_common_vals |      most_common_freqs       |                        histogram_bounds                         | correlation
+
+
+
+
+————+———–+———+———–+———–+————+——————+——————————+—————————————————————–+————-
+
+
+
+
+monitor    | tbl_test  | id      |         0 |         4 |         -1 |                  |                              | {13,6506,12518,19576,25779,32641,39293,45957,52579,60063,65834} |     0.39861
+
+
+
+
+monitor    | tbl_test  | name    |         0 |         2 |          3 | {c,b,a}          | {0.493667,0.334667,0.171667} |                                                                 |           1
+
+
+变化：
+
+most_common_freqs值有变化{0.493667,0.334667,0.171667},因为analyze是随机抽样统计的，所有每次ANALYZE后会有细微差距.
+
+correlation=1 的值出现在name列那一行了。
+
+测一下反向索引
+
+db_monitor=> drop index idx_test ;
+
+
+
+
+db_monitor=> create index idx_test on tbl_test (name desc);
+
+
+
+
+db_monitor=> CLUSTER tbl_test USING idx_test ;
+
+
+
+
+db_monitor=> select * from pg_stats where tablename=’tbl_test’;
+
+
+
+
+db_monitor=> analyze tbl_test;
+
+
+
+
+schemaname | tablename | attname | null_frac | avg_width | n_distinct | most_common_vals |     most_common_freqs     |                              histogram_bounds                               | correlation
+
+
+
+
+————+———–+———+———–+———–+————+——————+—————————+—————————————————————————–+————-
+
+
+
+
+monitor    | tbl_test  | id      |         0 |         4 |         -1 |                  |                           | {42,109298,211208,318511,425216,532181,631480,738856,854741,956067,1053950} |    0.349504
+
+
+
+
+monitor    | tbl_test  | name    |         0 |         2 |          3 | {c,b,a}          | {0.491667,0.324333,0.184} |                                                                             |   -0.681599
+
+
+并没有得到期望的-1结果，而是 -0.681599
+
+换ID DESC试试
+
+db_monitor=> create index idx_test1 on tbl_test (id desc);
+
+
+
+
+CREATE INDEX
+
+
+
+
+db_monitor=> CLUSTER tbl_test USING idx_test1 ;
+
+
+
+
+CLUSTER
+
+
+
+
+db_monitor=> analyze tbl_test;
+
+
+
+
+ANALYZE
+
+
+
+
+db_monitor=> select * from pg_stats where tablename=’tbl_test’;
+
+
+
+
+schemaname | tablename | attname | null_frac | avg_width | n_distinct | most_common_vals |     most_common_freqs     |                               histogram_bounds                               | correlation
+
+
+
+
+————+———–+———+———–+———–+————+——————+—————————+——————————————————————————+————-
+
+
+
+
+monitor    | tbl_test  | id      |         0 |         4 |         -1 |                  |                           | {217,101308,205017,307335,404545,505911,615753,724481,856028,959332,1054205} |          -1
+
+
+
+
+monitor    | tbl_test  | name    |         0 |         2 |          3 | {c,b,a}          | {0.505333,0.331,0.163667} |                                                                              |    0.322349
+
+
+得到了-1的期望结果。
+

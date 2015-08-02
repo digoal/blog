@@ -1,0 +1,230 @@
+PostgreSQL research
+
+PostgreSQL 9.1's unlogged table use caveat
+
+2011-06-14 13:08:41   查看原文>>
+
+首先要强调一下，慎用 unlogged table。
+unlogged table是PostgreSQL 9.1 引入的新特性。unlogged表有如下特征 : 
+1. unlogged表不记录WAL，同时在unlogged上面创建的索引也是unlogged的。
+2. unlogged表在不干净的关闭数据库或者数据库crash之后，数据库启动时会自动truncate unlogged的表
+从测试结果来看，unlogged表的数据在最后一次checkpoint到crash之间的数据还在占用磁盘空间.需要vacuum来回收.
+原文引用 : 
+However, they are not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown.
+具体可查看源码 : 
+src/backend/storage/file/reinit.c
+/*
+ * Reset unlogged relations from before the last restart.
+ *
+ * If op includes UNLOGGED_RELATION_CLEANUP, we remove all forks of any
+ * relation with an "init" fork, except for the "init" fork itself.
+ *
+ * If op includes UNLOGGED_RELATION_INIT, we copy the "init" fork to the main
+ * fork.
+ */
+
+
+3. unlogged表的数据不会被复制到standby数据库.
+4. 写此文时，gist index不支持unlogged表.
+
+语法:
+CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXISTS ] table_name ( [
+  { column_name data_type [ COLLATE collation ] [ column_constraint [ ... ] ]
+    | table_constraint
+    | LIKE parent_table [ like_option ... ] }
+    [, ... ]
+] )
+
+下面分别来测试一下unlogged表的这些特性。
+1. unlogged表不记录WAL，同时在unlogged上面创建的索引也是unlogged的。
+digoal=> create table tbl_user_log (id int,firstname text,lastname text,corp text);
+CREATE TABLE
+digoal=> create unlogged table tbl_user_unlogged (id int,firstname text,lastname text,corp text);
+CREATE TABLE
+digoal=> select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 0/1544AD30
+(1 row)
+digoal=> insert into tbl_user_log select generate_series(1,4000000),'zhou','digoal','sky-mobi';
+INSERT 0 4000000
+digoal=> select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 0/2A4C4268
+(1 row)
+digoal=> insert into tbl_user_unlogged select generate_series(1,4000000),'zhou','digoal','sky-mobi';
+INSERT 0 4000000
+digoal=> select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 0/2A4C42E8
+(1 row)
+
+2. unlogged表在不干净的关闭数据库或者数据库crash之后，数据库启动时会自动truncate unlogged的表.
+digoal=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# checkpoint;
+select count(*) from tbl_user_log;
+CHECKPOINT
+digoal=# select count(*) from digoal.tbl_user_log;
+  count  
+---------
+ 4000000
+(1 row)
+
+digoal=# select count(*) from digoal.tbl_user_unlogged;
+  count  
+---------
+ 4000000
+(1 row)
+
+# 不干净的关闭数据库
+postgres@db5-> pg_ctl stop -m immediate
+waiting for server to shut down.... done
+server stopped
+postgres@db5-> pg_ctl start
+server starting
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+psql (9.1beta2)
+Type "help" for help.
+# 数据没有被truncate,原因是前面有一次checkpoint.
+digoal=> select count(*) from digoal.tbl_user_unlogged;
+  count  
+---------
+ 4000000
+(1 row)
+digoal=> select count(*) from digoal.tbl_user_log;
+  count  
+---------
+ 4000000
+(1 row)
+
+# 在来一次不做checkpoint之后的测试.
+digoal=> insert into tbl_user_log select generate_series(1,1000000),'zhou','digoal','sky-mobi';
+INSERT 0 1000000
+digoal=> insert into tbl_user_unlogged select generate_series(1,1000000),'zhou','digoal','sky-mobi';
+INSERT 0 1000000
+digoal=> select count(*) from tbl_user_unlogged ;
+  count  
+---------
+ 5000000
+(1 row)
+
+digoal=> select count(*) from tbl_user_log ;
+  count  
+---------
+ 5000000
+(1 row)
+
+digoal=> \q
+postgres@db5-> pg_ctl stop -m immediate
+waiting for server to shut down.... done
+server stopped
+postgres@db5-> pg_ctl start
+server starting
+postgres@db5-> psql -h 127.0.0.1
+psql: FATAL:  the database system is starting up
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+psql (9.1beta2)
+Type "help" for help.
+# unlogged表这次插入的100W数据没有被恢复.
+digoal=> select count(*) from tbl_user_unlogged ;
+  count  
+---------
+ 4000000
+(1 row)
+
+digoal=> select count(*) from tbl_user_log ;
+  count  
+---------
+ 5000000
+(1 row)
+# 使用pageinspect查看unlogged表在crash 重启后的RAW数据，发现数据全部归零了.
+digoal=# select * from get_raw_page('digoal.tbl_user_unlogged',0);
+
+# vacuum一个unlogged表,
+digoal=> vacuum FREEZE VERBOSE  tbl_user_unlogged ;
+WARNING:  relation "tbl_user_unlogged" page 0 is uninitialized --- fixing
+WARNING:  relation "tbl_user_unlogged" page 1 is uninitialized --- fixing
+WARNING:  relation "tbl_user_unlogged" page 2 is uninitialized --- fixing
+WARNING:  relation "tbl_user_unlogged" page 3 is uninitialized --- fixing
+WARNING:  relation "tbl_user_unlogged" page 4 is uninitialized --- fixing
+WARNING:  relation "tbl_user_unlogged" page 5 is uninitialized --- fixing
+..........................
+INFO:  "tbl_user_unlogged": found 0 removable, 0 nonremovable row versions in 7353 out of 7353 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+7353 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 10.50 sec.
+INFO:  "tbl_user_unlogged": truncated 7353 to 0 pages
+DETAIL:  CPU 0.05s/0.02u sec elapsed 0.08 sec.
+INFO:  vacuuming "pg_toast.pg_toast_16395"
+INFO:  index "pg_toast_16395_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_16395": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+
+digoal=#   select pg_relation_size('digoal.tbl_user_unlogged');
+ pg_relation_size 
+------------------
+                0
+(1 row)
+
+3. unlogged表的数据不会被复制到standby数据库.
+# 以下是在primary库上面的输出结果:
+digoal=> select pg_relation_size('tbl_user_log');
+ pg_relation_size 
+------------------
+        301178880
+(1 row)
+
+digoal=> select pg_relation_size('tbl_user_unlogged');
+ pg_relation_size 
+------------------
+        361414656
+(1 row)
+digoal=> vacuum full tbl_user_unlogged;
+VACUUM
+digoal=> select pg_relation_size('tbl_user_unlogged');
+ pg_relation_size 
+------------------
+        240943104
+(1 row)
+
+# 以下是在standby库上面的输出结果:
+digoal=> select pg_relation_size('tbl_user_log');
+ pg_relation_size 
+------------------
+        301178880
+(1 row)
+
+digoal=> select pg_relation_size('tbl_user_unlogged');
+ pg_relation_size 
+------------------
+                0
+(1 row)
+
+4. 写此文时，gist index不支持unlogged表.
+digoal=> create unlogged table tbl_point (id int,p point);
+CREATE TABLE
+digoal=> create INDEX idx_p on tbl_point using gist(p);
+ERROR:  unlogged GiST indexes are not supported
+
+综上测试，unlogged表还是需要谨慎使用的
+
+评论
+
+francs - 2011-06-14 13:18:00
+
+看来使用 unlogged 表风险很大啊！估计在大批量加载数据的时候可能用到。
+
+德哥@Digoal 回复 francs - 2011-06-14 13:18:00
+
+是的，加载的末端最好加一句checkpoint.
+

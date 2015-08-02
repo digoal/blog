@@ -1,0 +1,141 @@
+PostgreSQL research
+
+bulk update OR per row update case
+
+2011-08-13 18:34:44   查看原文>>
+
+前几天一位开发人员与我聊到一个业务需求，需要批量的给用户下发一批优惠券。怎么做比较好？
+这个需求在数据库的操作就是更新某个表的用户记录。如给前100名的用户下发优惠券，首先要获得这100名的用户名单，然后更新他们的记录。
+一般开发人员的写法如下,一个事务中更新掉这100名用户记录。
+update user_table set .... where ..... ;
+如果这条SQL执行很快的话，这种方法是没有问题的。
+但是一需要更新的用户量大（如向所有人发放的优惠券），SQL执行时间长，会发生什么？
+1、堵塞并发的用户数据更新SQL请求，例如并发用户的消费其他优惠券行为。（Oracle和PostgreSQL都将如此）
+2、PostgreSQL里面会导致用户表和用户表上的索引膨胀，因为在SQL提交之前，前后TUPLE版本都不能被VACUUM掉。在ORACLE里面的体现是UNDO表空间膨胀，甚至出现SNAPSHOT TOO OLD的报错致使UPDATE失败，数据回滚。
+
+避免这种情况的发生，举例：
+1、更新表结构，不同的优惠券使用不同的券类型ID，避免发放优惠券的时候堵塞其他优惠券的使用。
+2、不要使用批量发放，将长事务打散成小事务，如每发放100条COMMIT一次。
+
+下面是简化的测试，（略去了获取user_info，解析user_info，以及锁定user_info的过程，正常的流程中需要这几个过程，因为这里只测试bluk update和单行UPDATE。）：
+测试表 :
+tbl_update_test
+            Table "digoal.tbl_update_test"
+   Column    |            Type             | Modifiers
+-------------+-----------------------------+-----------
+ id          | integer                     | not null
+user_info | text |
+ crt_time    | timestamp without time zone |
+ mod_time    | timestamp without time zone |
+Indexes:
+    "tbl_update_test_pkey" PRIMARY KEY, btree (id)
+插入测试数据:
+insert into tbl_update_test select generate_series(1,30000000),'nickname:digoal,card_type:1,card_status:true',now(),now();
+记录下当前的表和索引SIZE：
+tbl_update_test ： 1.7GB
+tbl_update_test_pkey ： 640MB
+
+1. 在没有发放优惠券操作时，测试一下用户消费优惠券行为的QPS：
+在另一台服务器上使用PGBENCH测试
+测试脚本 : update1.sql
+\setrandom randomid 1 30000000
+update tbl_update_test set user_info='nickname:digoal,card_type:1,card_status:false' and mod_time=now() where id=:randomid;
+测试结果 :
+postgres@db-172-16-3-33-> pgbench -M extended -c 2 -f /home/postgres/pgbench/update1.sql -j 2 -n -T 180 -h 172.16.3.176 -p 1921 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 2
+number of threads: 2
+duration: 180 s
+number of transactions actually processed: 1139405
+tps = 6329.984593 (including connections establishing)
+tps = 6330.129798 (excluding connections establishing)
+
+2. 在批量发放优惠券操作时，测试一下用户消费优惠券行为的QPS：
+在数据库PSQL终端使用 update tbl_update_test set user_info=user_info||',card_type:2,card_status:true' and mod_time=now(); 批量发放优惠券card_type:2,card_status:true。这条SQL执行了大约20分钟。也就是堵塞了20分钟的并发。并且数据表和索引都膨胀了一倍。
+同时在另一台服务器上使用PGBENCH测试,
+测试脚本 : update.sql
+\setrandom randomid 1 30000000
+update tbl_update_test set user_info='nickname:digoal,card_type:1,card_status:false' and mod_time=now() where id=:randomid;
+
+测试结果 :
+postgres@db-172-16-3-33-> pgbench -M extended -c 2 -f /home/postgres/pgbench/update.sql -j 2 -n -T 180 -h 172.16.3.176 -p 1921 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 2
+number of threads: 2
+duration: 180 s
+number of transactions actually processed: 9680
+tps = 8.053994 (including connections establishing)
+tps = 8.054026 (excluding connections establishing)
+测试过程中，pgbench的几个进程一直处于wait状态。
+29022 postgres  15   0 2324m 209m 206m S    0  1.3   0:01.38 postgres: digoal digoal 172.16.3.33(28801) UPDATE waiting             
+29023 postgres  15   0 2324m 153m 151m S    0  1.0   0:00.90 postgres: digoal digoal 172.16.3.33(28802) UPDATE waiting
+结论显然是，bulk update在这种情况下非常糟糕。
+
+3. 改为per row update试试，在测试之前，大家想想会发生什么？
+首先，SQL并发问题肯定是解决了，但是会带来另外的问题。
+还记得正常UPDATE的QPS吗？6300多，要UPDATE3000W条记录的话需要80分钟。
+发一次优惠券要这么久，实在难以忍受。
+下面是测试脚本,更新100W条记录花的时间比预期的长很多，原因是SHELL的效率低下，还需要频繁的建立连接:
+#!/bin/bash
+date
+for ((i=1;i<=1000000;i++)) do
+psql -h 127.0.0.1 digoal digoal -c "update tbl_update_test set card_status=false where id=$i"
+done
+date
+
+改用以下方法来测试：
+create sequence seq_update_test start with 1 cache 1 increment by 1;
+digoal=> create or replace function f_update_test () returns void as $BODY$
+digoal$> declare
+digoal$> v_id int;
+digoal$> begin
+digoal$> select nextval('seq_update_test'::regclass) into v_id;
+digoal$> update tbl_update_test set user_info='nickname:digoal,card_type:1,card_status:false' and mod_time=now() where id=v_id;
+digoal$> end;
+digoal$> $BODY$ language plpgsql;
+
+vi /home/postgres/pgbench/update.sql
+select f_update_test();
+然后执行 pgbench -M extended -c 2 -f /home/postgres/pgbench/update.sql -j 2 -n -t 500000 -h 172.16.3.176 -p 1921 -U digoal digoal
+测试结果 :
+postgres@db-172-16-3-33-> pgbench -M extended -c 2 -f /home/postgres/pgbench/update.sql -j 2 -n -t 500000 -h 172.16.3.176 -p 1921 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 2
+number of threads: 2
+number of transactions per client: 500000
+number of transactions actually processed: 1000000/1000000
+tps = 6125.607405 (including connections establishing)
+tps = 6125.807072 (excluding connections establishing)
+TPS比前面高很多，原因是改用了简单的函数调用，没有函数参数传入，生产中效率要比这个低，因为还要传入参数。
+这里耗时是163秒，如果更新3000W条记录就是4890秒，需要80多分钟。这种情况下，表没有膨胀一倍，原因前面已经阐述了。
+
+同时在另一个窗口执行用户消费优惠券的操作。
+pgbench -M extended -c 2 -f /home/postgres/pgbench/update1.sql -j 2 -n -T 180 -h 172.16.3.176 -p 1921 -U digoal digoal
+结果 :
+postgres@db-172-16-3-33-> pgbench -M extended -c 2 -f /home/postgres/pgbench/update1.sql -j 2 -n -T 180 -h 172.16.3.176 -p 1921 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 2
+number of threads: 2
+duration: 180 s
+number of transactions actually processed: 1076026
+tps = 5977.849957 (including connections establishing)
+tps = 5977.970710 (excluding connections establishing)
+使用per row update基本上不会导致并发能力下降。
+
+最终解决办法结论,最不推荐的是bluk update,per row update可以在小数据量下使用,大数据量下更新时间长 :
+1. 使用多维字段，用户ID+优惠券ID+优惠券使用状态。
+例如 digoal=> insert into tbl_update_test(id,card_type,card_status,crt_time,mod_time) select generate_series(1,3000000),1,true,now(),now();
+INSERT 0 3000000
+Time: 20064.692 ms
+3000W条插入耗时将会是200秒.并且不影响并发。
+2. （可选）使用表继承根据优惠券ID拆分成多个子表。
+3. 发放优惠券使用插入，而不是更新用户记录。
+4. 消费优惠券后，删除用户该优惠券的记录。

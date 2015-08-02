@@ -1,0 +1,181 @@
+PostgreSQL research
+
+use generate_series and outer join fill gap rows
+
+2015-04-09 14:27:55   查看原文>>
+
+群里一位网友的需求 : 
+姓名序号成绩
+------------------
+张三  1     11
+张三  2     31
+李四  1     53
+李四  3     23
+
+想得到的结果：
+张三  1    11
+张三  2    31
+张三  3    0   --> 补出来的记录行
+李四  1    53
+李四  2    0    --> 补出来的记录行
+李四  3    23
+
+PostgreSQL中，有没有什么分析函数可以自动补全“按序号，缺少的每一行记录”？
+
+之前写过一个使用generate_series来填充缺失的ip地址的例子, 有兴趣请参考.
+http://blog.163.com/digoal@126/blog/static/163877040201111805555263/
+
+这位网友的问题和这个差不多, 都是有补齐的需求.
+要补齐记录, 不能使用窗口, 因为窗口函数返回一条记录. 有不能使用聚合, 聚合是把多条变成一条记录.
+还是老方法, 使用generate_series生成需要补齐的记录, 然后使用OUTER JOIN.
+
+例子 : 
+
+postgres=# create table tbl(id int, info text);
+CREATE TABLE
+postgres=# insert into tbl values (1, 'a1');
+INSERT 0 1
+postgres=# insert into tbl values (1, 'a3');
+INSERT 0 1
+postgres=# insert into tbl values (1, 'b2');
+INSERT 0 1
+postgres=# insert into tbl values (1, 'b10');
+INSERT 0 1
+postgres=# select * from tbl;
+ id | info 
+----+------
+  1 | a1
+  1 | a3
+  1 | b2
+  1 | b10
+(4 rows)
+
+
+使用substring分裂info字段.
+
+postgres=# select id,info,substring(info,'([a-z]*)\d*') as x, substring(info,'[a-z]*(\d*)') as y from tbl;
+ id | info | x | y  
+----+------+---+----
+  1 | a1   | a | 1
+  1 | a3   | a | 3
+  1 | b2   | b | 2
+  1 | b10  | b | 10
+(4 rows)
+
+
+
+使用WITH语法, 将最终需求合成一条SQL.
+
+postgres=# with t1 as (
+    select id,info,substring(info,'([a-z]*)\d*') as x, 
+    substring(info,'[a-z]*(\d*)') as y from tbl
+), 
+t2 as (
+    select generate_series(min,max) id from (select min(y::int8),max(y::int8) from t1) t
+), 
+t3 as (
+    select t.x||t2.id as info from ( select x from t1 group by x) t,t2
+) 
+select case when t1.id is not null then t1.id else 0 end,
+           case when t1.info is null then t3.info else t1.info end 
+from t3 left outer join t1 
+on t1.info=t3.info;
+ case | info 
+------+------
+    1 | a1
+    0 | a10
+    0 | a2
+    1 | a3
+    0 | a4
+    0 | a5
+    0 | a6
+    0 | a7
+    0 | a8
+    0 | a9
+    0 | b1
+    1 | b10
+    1 | b2
+    0 | b3
+    0 | b4
+    0 | b5
+    0 | b6
+    0 | b7
+    0 | b8
+    0 | b9
+(20 rows)
+
+
+
+如果info字段本来就是两个字段的话, 不需要split的过程.
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201111805555263/
+这里还有一个时间gap填充的例子 : 
+2. http://stackoverflow.com/questions/13728489/how-to-fill-timestamp-gaps-in-a-postgres-query
+
+DROP SCHEMA tmp CASCADE;
+CREATE SCHEMA tmp ;
+SET search_path = tmp;
+
+DROP TABLE IF EXISTS channel1m CASCADE;
+CREATE TABLE channel1m (
+  zts TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+  zitemid BIGINT,
+  zvalue BIGINT
+);
+
+-- in which a row may be inserted each minute, per zitemid, as follows:
+
+INSERT INTO channel1m(zts, zitemid, zvalue) VALUES
+ ('2012-12-03 15:29:00',   100,            1)
+,('2012-12-03 15:30:00',   100,            2)
+,('2012-12-03 15:30:00',   101,            0)
+,('2012-12-03 15:32:00',   100,            1)
+,('2012-12-03 15:32:00',   101,            1)
+        ;
+
+        -- CTE to the rescue!!!
+WITH cal AS (
+        WITH mm AS (
+                SELECT MIN(xx.zts) AS minmin, MAX(xx.zts) AS maxmax
+                 FROM channel1m xx)
+        SELECT generate_series(mm.minmin , mm.maxmax , '1 min'::interval) AS stamp
+        FROM mm
+        )
+, ite AS (
+        SELECT DISTINCT zitemid AS zitemid
+        FROM channel1m
+        )
+SELECT cal.stamp
+        , ite.zitemid
+        , tab.zvalue
+FROM cal
+JOIN ite ON 1=1 -- Note: this is a cartesian product of the {time,id} -domains
+LEFT JOIN channel1m tab ON tab.zts = cal.stamp AND tab.zitemid = ite.zitemid
+ORDER BY stamp ASC
+        ;
+Output:
+
+NOTICE:  drop cascades to table tmp.channel1m
+DROP SCHEMA
+CREATE SCHEMA
+SET
+NOTICE:  table "channel1m" does not exist, skipping
+DROP TABLE
+CREATE TABLE
+INSERT 0 5
+        stamp        | zitemid | zvalue 
+---------------------+---------+--------
+ 2012-12-03 15:29:00 |     101 |       
+ 2012-12-03 15:29:00 |     100 |      1
+ 2012-12-03 15:30:00 |     100 |      2
+ 2012-12-03 15:30:00 |     101 |      0
+ 2012-12-03 15:31:00 |     100 |       
+ 2012-12-03 15:31:00 |     101 |       
+ 2012-12-03 15:32:00 |     100 |      1
+ 2012-12-03 15:32:00 |     101 |      1
+(8 rows)
+
+
+
+Flag Counter

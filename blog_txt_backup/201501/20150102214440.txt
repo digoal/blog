@@ -1,0 +1,215 @@
+PostgreSQL research
+
+Primary & Standby with 2 HOST HA for PostgreSQL (auto failover failback)
+
+2015-01-02 21:44:40   查看原文>>
+
+元旦2天, 弄了个小玩意, 适合2台主机, 使用PostgreSQL流复制组建HA.
+实现自动的failover和failback.
+已经提交到github, 主备角色各一个虚拟IP.
+https://github.com/digoal/PostgreSQL_HA_with_primary_standby_2vip
+有此类需求的朋友可以下载测试. 
+
+之前还写过一个master对应单个IP, 并且不会自动failback的脚本, 没有这个复杂, 也比较好用. 
+https://github.com/digoal/sky_postgresql_cluster
+
+如果使用RHCS的话, 可以组件基于共享存储的HA, 我写过几篇文章详细介绍如何部署
+http://blog.163.com/digoal@126/blog/static/163877040201481085344535/
+http://blog.163.com/digoal@126/blog/static/163877040201481085624211/
+
+回到主题, 讲一下2台主机如何使用流复制来做HA.
+A HA script for PostgreSQL with 2 HOST (one for primary, one for standby), Primary with one VIP, Standby with another VIP. Auto failover and failback.
+
+硬件需求 : 
+两台主机, 分别负责primary和standby;
+2台主机还需要2个fence设备, 切换时防止脑裂.
+2个虚拟IP, 分别对应primary和standby;
+三种状态, primary, standby, primary_standby;
+
+三种状态自由切换:
+当1台主机异常时, 另一台主机承担primary_standby角色, 并启动2个虚拟IP.
+正常情况下两台主机分别承担primary和standby角色, 分别启动一个虚拟IP.
+
+应用程序连接虚拟IP, 一个虚拟IP对应的是primary, 另一个虚拟IP对应的是standby. 
+虚拟IP和角色的关系固定, 不会变化, 例如: 
+  假设192.168.111.130对应primary角色, 那么不管怎么切换, 他们始终在一起(谁是primary, 谁就会启动192.168.111.130).
+
+数据库角色转变和心跳原理 :
+1. 根据文件recovery.conf是否存在检测本地节点角色
+    存在(standby), 不存在(master)
+2. 加载NFS对端归档目录
+3. 启动数据库 
+如果是standby 
+  1 备份上一个控制文件副本 
+  2 备份当前控制文件 
+  3 启动数据库 
+如果是master 
+  1. 启动数据库
+
+启动VIP 
+如果是standby 
+  1. 启动vips 
+如果是master 
+  1. 如果vipm已被其他节点启动 
+      降级为standby 
+      启动vips 
+   2. 如果vipm没有被其他节点启动 
+      启动vipm
+
+触发第一次心跳
+
+循环心跳检测
+不同的角色, 循环逻辑不同:
+
+master角色, 循环检查
+1. 网关检查, 反映本地网络状况
+2. 本地心跳检查, 反映本地数据库健康状态
+3. 本地角色对应IP检查
+4. 检查VIPS,PORT,数据库心跳
+==如果本地健康,对端不健康
+==触发切换
+1. 主节点fence standby
+2. 主节点接管VIPS
+3. 主节点转换master_standby角色
+
+standby角色, 循环检查
+1. 网关检查, 反映本地网络状况
+2. 本地心跳检查, 反映本地数据库健康状态
+3. 本地角色对应IP检查
+4. 检查备延迟, 判断是否允许promote
+5. 检查VIPM,PORT,数据库心跳
+==如果本地健康,对端不健康
+==触发切换
+1. 备节点fence master
+2. 备节点停库
+3. 备节点备份控制文件
+4. 备节点注释restore_command
+5. 备节点启动数据库
+6. 备节点激活数据库
+7. 备节点接管VIPM
+8. 备节点转换master_standby角色
+
+master_standby角色, 循环检查
+1. 检查对端数据库监听是否启动
+==如果对端数据库已启动
+==触发释放vips
+1. 释放vips
+2. 转换为master角色
+
+架构图 : 
+Primary Standby with 2 HOST HA for PostgreSQL (auto failover failback) - 德哥@Digoal - PostgreSQL research
+ 
+Primary Standby with 2 HOST HA for PostgreSQL (auto failover failback) - 德哥@Digoal - PostgreSQL research
+ 
+Primary Standby with 2 HOST HA for PostgreSQL (auto failover failback) - 德哥@Digoal - PostgreSQL research
+ 
+Primary Standby with 2 HOST HA for PostgreSQL (auto failover failback) - 德哥@Digoal - PostgreSQL research
+ 
+Primary Standby with 2 HOST HA for PostgreSQL (auto failover failback) - 德哥@Digoal - PostgreSQL research
+
+[压力测试以及一致性测试]
+主192.168.173.37
+备192.168.173.42
+创建测试表 , 测试函数
+postgres=# create table test(id int primary key, info text, crt_time timestamp);
+CREATE TABLE
+postgres=# create or replace function f_test(i_id int) returns void as $$
+declare
+begin
+  update test set info=md5(random()::text),crt_time=now() where id=i_id;
+  if not found then 
+    insert into test values(i_id,md5(random()::text),now());
+  end if;
+  exception when others then
+  return;
+end;
+$$ language plpgsql strict;
+压力测试脚本
+vi test.sql
+\setrandom id 1 30000000
+select f_test(:id);
+压力测试
+postgres@db-192-168-173-37-> pgbench -M prepared -n -r -f ./test.sql -c 16 -j 4 -T 3000
+在约1分钟后, 关闭主库eth0:1 接口
+[root@db-192-168-173-37 ~]# ifdown eth0:1
+这期间173.37还在做压力测试, 数据库已经和42产生了差异数据.
+看后面37能不能顺利转换成standby
+
+触发切换, 备切换成主备角色
+[root@db-192-168-173-42 ~]# tail -f -n 1 /tmp/sky_pg_clusterd.log
+2015-01-0408:50:42 detecting eth0 192.168.173.130 exists, ps: return 0 exist, other not exist.
+checkmaster check times: 3
+2015-01-0408:50:45 detecting eth0 192.168.173.130 exists, ps: return 0 exist, other not exist.
+checkmaster check times: 4
+2015-01-0408:50:48 detecting eth0 192.168.173.130 exists, ps: return 0 exist, other not exist.
+checkmaster check times: 5
+2015-01-0408:50:51 detecting eth0 192.168.173.130 exists, ps: return 0 exist, other not exist.
+checkmaster ipscan timeout: 5
+2015-01-0408:50:53 normal fenceing, waiting...
+Success: Rebooted
+waiting for server to shut down............. done
+server stopped
+waiting for server to start....LOG:  00000: redirecting log output to logging collector process
+HINT:  Future log output will appear in directory "pg_log".
+LOCATION:  SysLogger_Start, syslogger.c:649
+.............................. done
+server started
+2015-01-0408:51:48 promoting database ...
+server promoting
+2015-01-0408:51:48 testing promote status
+2015-01-0408:51:48 promoting...
+2015-01-0408:51:49 testing promote status
+2015-01-0408:51:49 promote success.
+CHECKPOINT
+ pg_switch_xlog 
+----------------
+ 1/14C58C30
+(1 row)
+
+CHECKPOINT
+ pg_switch_xlog 
+----------------
+ 1/150000E8
+(1 row)
+
+CHECKPOINT
+2015-01-0408:51:56 eth0:1 if upping. 1.
+2015-01-0408:52:00 eth0:1 upped success.
+2015-01-0408:52:00 this is m_s
+2015-01-0408:52:01 detecting eth0 192.168.173.1 exists, ps: return 0 exist, other not exist.
+ cluster_keepalive_test 
+------------------------
+ 
+(1 row)
+
+2015-01-0408:52:01 detecting 192.168.173.130 address up on eth0 ....
+2015-01-0408:52:01 detecting 192.168.173.131 address up on eth0 ....
+2015-01-0408:52:01 detecting postgresql listener on peer host.
+connect failed!: Operation now in progress
+socket created!
+
+在新主节点(192.168.173.42)接着压
+postgres@db-192-168-173-42-> pgbench -M prepared -n -r -f ./test.sql -c 16 -j 4 -T 30
+
+最后主备一致性检查
+新主节点
+postgres=# select count(*),sum(hashtext(info)) from test;
+  count  |      sum      
+---------+---------------
+ 1808909 | -680268294581
+(1 row)
+
+新备节点
+postgres=# select count(*),sum(hashtext(info)) from test;
+  count  |      sum      
+---------+---------------
+ 1808909 | -680268294581
+(1 row)
+
+[参考]
+1. https://github.com/digoal/PostgreSQL_HA_with_primary_standby_2vip
+2. https://github.com/digoal/sky_postgresql_cluster
+3. http://blog.163.com/digoal@126/blog/static/163877040201481085344535/
+4. http://blog.163.com/digoal@126/blog/static/163877040201481085624211/
+
+Flag Counter

@@ -1,0 +1,120 @@
+PostgreSQL research
+
+savepoint cann't used in plpgsql
+
+2011-12-26 16:04:25   查看原文>>
+
+PostgreSQL的function为原子操作，要么全部成功，要么全部失败，如果需要设置savepoint, 部分成功的话，应该怎么做呢，下面先来看看savepoint在plpgsql中能不能用。
+
+错误示例 1 :
+create or replace function savepoint_test () returns int as $BODY$
+declare
+point int;
+begin
+update user_info set qq=11 where userid=1;
+savepoint a;
+update user_info set qq=22 where userid=2;
+savepoint b;
+-- 以下模拟异常
+raise exception 'b';
+update user_info set qq=33 where userid=3;
+savepoint c;
+update user_info set qq=44 where userid=4;
+rollback to b;
+return 0;
+end;
+$BODY$ language plpgsql;
+
+错误示例 2 :
+create or replace function savepoint_test () returns int as $BODY$
+declare
+point int;
+begin
+update user_info set qq=11 where userid=1;
+savepoint a;
+update user_info set qq=22 where userid=2;
+savepoint b;
+-- 以下模拟异常
+raise exception 'b';
+update user_info set qq=33 where userid=3;
+savepoint c;
+update user_info set qq=44 where userid=4;
+return 0;
+exception
+when others then
+rollback to b;
+end;
+$BODY$ language plpgsql;
+
+如果要在postgresql的函数内实现savepoint, 可以用以下方法, 确保部分成功 : 
+create or replace function savepoint_test () returns int as $BODY$
+declare
+point int;
+begin
+  update user_info set qq=11 where userid=1;
+  point := 1;
+
+  update user_info set qq=22 where userid=2;
+  point := 2;
+
+  update user_info set qq=33 where userid=3;
+  point := 3;
+
+-- 以下模拟异常
+  raise exception 'b';
+  update user_info set qq=44 where userid=4;
+  point := 4;
+
+  return 0;
+
+exception
+when others then
+  if (point=1) then
+    update user_info set qq=11 where userid=1;
+  elseif (point=2) then
+    update user_info set qq=11 where userid=1;
+    update user_info set qq=22 where userid=2;
+  elseif (point=3) then
+    update user_info set qq=11 where userid=1;
+    update user_info set qq=22 where userid=2;
+    update user_info set qq=33 where userid=3;
+  end if;
+return 1;
+end;
+$BODY$ language plpgsql;
+
+postgres=# create table user_info (userid int primary key, qq int);
+CREATE TABLE
+postgres=# insert into user_info values (1,1);
+INSERT 0 1
+postgres=# insert into user_info values (2,2);
+INSERT 0 1
+postgres=# insert into user_info values (3,3);
+INSERT 0 1
+postgres=# insert into user_info values (4,4);
+INSERT 0 1
+postgres=# select savepoint_test();
+ savepoint_test 
+----------------
+              1
+(1 row)
+
+postgres=# select * from user_info;
+ userid | qq 
+--------+----
+      4 |  4
+      1 | 11
+      2 | 22
+      3 | 33
+(4 rows)
+
+
+
+
+【参考】
+src/pl/plpgsql/src/pl_exec.c
+                case SPI_ERROR_TRANSACTION:
+                        ereport(ERROR,
+                                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                                         errmsg("cannot begin/end transactions in PL/pgSQL"),
+                        errhint("Use a BEGIN block with an EXCEPTION clause instead.")));

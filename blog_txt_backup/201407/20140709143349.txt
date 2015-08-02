@@ -1,0 +1,934 @@
+PostgreSQL research
+
+CentOS 7 lvm cache dev VS zfs VS flashcache VS bcache VS direct SSD
+
+2014-07-09 14:33:49   查看原文>>
+
+本文测试结果仅供参考, rhel 7.0的lvm cache也只是一个预览性质的特性, 从测试结果来看, 用在生产环境也尚早.
+
+前段时间对比了Linux下ZFS和FreeBSD下ZFS的性能, 在fsync接口上存在较大的性能差异, 这个问题已经提交给zfsonlinux的开发组员. 
+http://blog.163.com/digoal@126/blog/static/1638770402014526992910/
+https://github.com/zfsonlinux/zfs/issues/2431
+ZFS从功能和性能来讲, 确实是一个非常强大的文件系统, 包括块设备的管理.
+Linux下如果要达到ZFS的部分功能, 需要软RAID管理, lvm, filesystem的软件组合.
+RHEL 7开始, lvm针对SSD加入了类似flashcache, bcache的缓存功能. 支持writeback, writethrough模式. 
+本文将介绍一下lvm cache的使用, 同时对比一下它和zfs, flashcache, bcache以及直接使用ssd的性能差别.
+理论上讲lvm cache 和bcache, flashcache的writeback模式, 相比直接使用ssd性能应该差不多(但是实际测试下来lvm的cache性能很不理想, 比zfs略好, 但是有大量的读, SSD iostat利用率很高, 并且lvm的条带使用不均匀, 不如zfs). ZFS使用ZIL后, 理论性能应该和前者也差不多, 但是zfsonlinux这块有我前面提到的性能问题, 所以就另当别论了.
+另一方面, lvm cache的cache是独享的, 所以一个lv cache卷只能给一个lv orig卷使用. 这点和ZFS差别较大 . 但是zfs l2arc又不支持回写, 也是个缺陷.
+
+本文测试环境 : 
+DELL R720xd
+12 * 4TB SATA, 2*300G SAS(安装OS)
+宝存 1.2T PCI-E SSD
+CentOS 7 x64
+CentOS 7 lvm cache dev VS zfs VS flashcache VS bcache VS direct SSD - 德哥@Digoal - PostgreSQL research
+测试工具, dd, pg_test_fsync.
+测试fsync数据块大小8KB.
+
+宝存SSD驱动安装.
+
+[root@localhost soft_bak]# tar -zxvf release2.6.9.tar.gz 
+release2.6.9/
+release2.6.9/shannon-2.6.18-274.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-358.23.2.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-279.1.1.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/uninstall
+release2.6.9/shannon-2.6.32-279.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-220.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-v2.6-9.src.rpm
+release2.6.9/shannon-2.6.18-92.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-131.0.15.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-8.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-238.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/install
+release2.6.9/shannon-2.6.32-431.5.1.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-128.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-371.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-308.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-53.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-71.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-431.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-358.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-194.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.18-164.el5.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-358.6.2.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+release2.6.9/shannon-2.6.32-279.22.1.el6.x86_64.x86_64-v2.6-9.x86_64.rpm
+[root@localhost soft_bak]# rpm -ivh release2.6.9/shannon-v2.6-9.src.rpm
+Updating / installing...
+   1:shannon-2.6.18-v2.6-9            ################################# [100%]
+warning: user spike does not exist - using root
+warning: group spike does not exist - using root
+warning: user spike does not exist - using root
+warning: group spike does not exist - using root
+warning: user spike does not exist - using root
+warning: group spike does not exist - using root
+
+# uname -r
+3.10.0-123.el7.x86_64
+# yum install -y kernel-devel-3.10.0-123.el7.x86_64 rpm-build gcc make ncurses-devel
+
+# cd ~/rpmbuild/SPECS/
+[root@localhost SPECS]# ll
+total 8
+-rw-rw-r--. 1 root root 7183 May 21 17:10 shannon-driver.spec
+[root@localhost SPECS]# rpmbuild -bb shannon-driver.spec
+[root@localhost SPECS]# cd ..
+[root@localhost rpmbuild]# ll
+total 0
+drwxr-xr-x. 3 root root 32 Jul  9 19:56 BUILD
+drwxr-xr-x. 2 root root  6 Jul  9 19:56 BUILDROOT
+drwxr-xr-x. 3 root root 19 Jul  9 19:56 RPMS
+drwxr-xr-x. 2 root root 61 Jul  9 19:48 SOURCES
+drwxr-xr-x. 2 root root 32 Jul  9 19:48 SPECS
+drwxr-xr-x. 2 root root  6 Jul  9 19:50 SRPMS
+[root@localhost rpmbuild]# cd RPMS
+[root@localhost RPMS]# ll
+total 0
+drwxr-xr-x. 2 root root 67 Jul  9 19:56 x86_64
+[root@localhost RPMS]# cd x86_64/
+[root@localhost x86_64]# ll
+total 404
+-rw-r--r--. 1 root root 412100 Jul  9 19:56 shannon-3.10.0-123.el7.x86_64.x86_64-v2.6-9.x86_64.rpm
+[root@localhost x86_64]# rpm -ivh shannon-3.10.0-123.el7.x86_64.x86_64-v2.6-9.x86_64.rpm
+
+Disk /dev/dfa: 1200.0 GB, 1200000860160 bytes, 2343751680 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 4096 bytes
+I/O size (minimum/optimal): 4096 bytes / 65536 bytes
+Disk label type: dos
+Disk identifier: 0x7e462b44
+
+
+
+PostgreSQL安装
+
+yum -y install lrzsz sysstat e4fsprogs ntp readline-devel zlib zlib-devel openssl openssl-devel pam-devel libxml2-devel libxslt-devel python-devel tcl-devel gcc make smartmontools flex bison perl perl-devel perl-ExtUtils* OpenIPMI-tools openldap-devel
+wget http://ftp.postgresql.org/pub/source/v9.3.4/postgresql-9.3.4.tar.bz2
+tar -jxvf postgresql-9.3.4.tar.bz2
+cd postgresql-9.3.4
+./configure --prefix=/opt/pgsql9.3.4 --with-pgport=1921 --with-perl --with-tcl --with-python --with-openssl --with-pam --with-ldap --with-libxml --with-libxslt --enable-thread-safety --enable-debug --enable-cassert
+gmake world && gmake install-world
+ln -s /opt/pgsql9.3.4 /opt/pgsql
+
+
+
+测试iops
+1. 直接使用SSD
+
+# mkfs.xfs -f /dev/dfa1
+meta-data=/dev/dfa1              isize=256    agcount=32, agsize=6553592 blks
+         =                       sectsz=4096  attr=2, projid32bit=1
+         =                       crc=0
+data     =                       bsize=4096   blocks=209714944, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=0
+log      =internal log           bsize=4096   blocks=102399, version=2
+         =                       sectsz=4096  sunit=1 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+[root@localhost postgresql-9.3.4]# mount -t xfs /dev/dfa1 /mnt
+[root@localhost postgresql-9.3.4]# df -h
+Filesystem               Size  Used Avail Use% Mounted on
+/dev/mapper/centos-root   50G  1.5G   49G   3% /
+devtmpfs                  16G     0   16G   0% /dev
+tmpfs                     16G     0   16G   0% /dev/shm
+tmpfs                     16G  8.9M   16G   1% /run
+tmpfs                     16G     0   16G   0% /sys/fs/cgroup
+/dev/sda3                497M   96M  401M  20% /boot
+/dev/mapper/centos-home  173G   33M  173G   1% /home
+/dev/dfa1                800G   34M  800G   1% /mnt
+
+[root@localhost postgresql-9.3.4]# /opt/pgsql/bin/pg_test_fsync -f /mnt/1
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                   56805.093 ops/sec      18 usecs/op
+        fdatasync                       45160.147 ops/sec      22 usecs/op
+        fsync                           45507.091 ops/sec      22 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                       57602.016 ops/sec      17 usecs/op
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                   28568.840 ops/sec      35 usecs/op
+        fdatasync                       32591.457 ops/sec      31 usecs/op
+        fsync                           32736.908 ops/sec      31 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                       29071.443 ops/sec      34 usecs/op
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write       40968.787 ops/sec      24 usecs/op
+         2 *  8kB open_sync writes      28805.187 ops/sec      35 usecs/op
+         4 *  4kB open_sync writes      18107.673 ops/sec      55 usecs/op
+         8 *  2kB open_sync writes        834.181 ops/sec    1199 usecs/op
+        16 *  1kB open_sync writes        417.767 ops/sec    2394 usecs/op
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close             35905.678 ops/sec      28 usecs/op
+        write, close, fsync             35702.972 ops/sec      28 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                           314143.606 ops/sec       3 usecs/op
+
+
+iostat SSD使用率59%
+
+
+[root@localhost postgresql-9.3.4]# dd if=/dev/zero of=/mnt/1 obs=4K oflag=sync,nonblock,noatime,nocache count=1024000
+1024000+0 records in
+128000+0 records out
+524288000 bytes (524 MB) copied, 6.95128 s, 75.4 MB/s
+
+
+iostat SSD使用率27.60
+
+2. 使用lvm cache
+
+# umount /mnt
+
+
+清除设备信息(注意, 将丢失数据)
+
+# dd if=/dev/urandom bs=512 count=64 of=/dev/dfa
+# dd if=/dev/urandom bs=512 count=64 of=/dev/sdb
+...
+# dd if=/dev/urandom bs=512 count=64 of=/dev/sdm
+
+
+创建pv
+
+# pvcreate /dev/sdb
+...
+# pvcreate /dev/sdm
+
+
+注意, 创建dfa的pv时报错, 跟踪后发现是需要修改lvm.conf
+
+[root@localhost ~]# pvcreate /dev/dfa
+  Physical volume /dev/dfa not found
+  Device /dev/dfa not found (or ignored by filtering).
+
+[root@localhost ~]# pvcreate -vvvv /dev/dfa 2>&1|less
+#filters/filter-type.c:27         /dev/dfa: Skipping: Unrecognised LVM device type 252
+
+[root@localhost ~]# ll /dev/dfa
+brw-rw----. 1 root disk 252, 0 Jul  9 21:19 /dev/dfa
+
+[root@localhost ~]# ll /dev/sdb
+brw-rw----. 1 root disk 8, 16 Jul  9 21:03 /dev/sdb
+
+[root@localhost ~]# cat /proc/devices 
+Character devices:
+  1 mem
+  4 /dev/vc/0
+  4 tty
+  4 ttyS
+  5 /dev/tty
+  5 /dev/console
+  5 /dev/ptmx
+  7 vcs
+ 10 misc
+ 13 input
+ 21 sg
+ 29 fb
+128 ptm
+136 pts
+162 raw
+180 usb
+188 ttyUSB
+189 usb_device
+202 cpu/msr
+203 cpu/cpuid
+226 drm
+245 shannon_ctrl_cdev
+246 ipmidev
+247 ptp
+248 pps
+249 megaraid_sas_ioctl
+250 hidraw
+251 usbmon
+252 bsg
+253 watchdog
+254 rtc
+
+Block devices:
+259 blkext
+  8 sd
+  9 md
+ 65 sd
+ 66 sd
+ 67 sd
+ 68 sd
+ 69 sd
+ 70 sd
+ 71 sd
+128 sd
+129 sd
+130 sd
+131 sd
+132 sd
+133 sd
+134 sd
+135 sd
+252 shannon
+253 device-mapper
+254 mdp
+
+
+
+修改/etc/lvm/lvm.conf, 添加宝存的type
+
+[root@localhost ~]# vi /etc/lvm/lvm.conf
+    # types = [ "fd", 16 ]
+    types = [ "shannon", 252 ]
+
+
+可以创建pv了.
+
+[root@localhost ~]# pvcreate /dev/dfa
+  Physical volume "/dev/dfa" successfully created
+
+
+
+创建新的vg
+
+[root@localhost ~]# pvs
+  PV         VG     Fmt  Attr PSize   PFree
+  /dev/dfa          lvm2 a--    1.09t 1.09t
+  /dev/sda5  centos lvm2 a--  238.38g    0 
+  /dev/sdb          lvm2 a--    3.64t 3.64t
+  /dev/sdc          lvm2 a--    3.64t 3.64t
+  /dev/sdd          lvm2 a--    3.64t 3.64t
+  /dev/sde          lvm2 a--    3.64t 3.64t
+  /dev/sdf          lvm2 a--    3.64t 3.64t
+  /dev/sdg          lvm2 a--    3.64t 3.64t
+  /dev/sdh          lvm2 a--    3.64t 3.64t
+  /dev/sdi          lvm2 a--    3.64t 3.64t
+  /dev/sdj          lvm2 a--    3.64t 3.64t
+  /dev/sdk          lvm2 a--    3.64t 3.64t
+  /dev/sdl          lvm2 a--    3.64t 3.64t
+  /dev/sdm          lvm2 a--    3.64t 3.64t
+
+
+
+创建机械盘和SSD盘2个VG
+
+[root@localhost ~]# vgcreate vgdata01 /dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh /dev/sdi /dev/sdj /dev/sdk /dev/sdl /dev/sdm
+  Volume group "vgdata01" successfully created
+[root@localhost ~]# vgcreate vgdata02 /dev/dfa
+  Volume group "vgdata02" successfully created
+
+
+
+在机械盘的vg上创建lv
+
+[root@localhost ~]# lvcreate -L 100G -i 12 -n lv01 vgdata01
+  Using default stripesize 64.00 KiB
+  Rounding size (25600 extents) up to stripe boundary size (25608 extents).
+  Logical volume "lv01" created
+[root@localhost ~]# lvs
+  LV   VG       Attr       LSize   Pool Origin Data%  Move Log Cpy%Sync Convert
+  home centos   -wi-ao---- 172.69g                                             
+  root centos   -wi-ao----  50.00g                                             
+  swap centos   -wi-ao----  15.70g                                             
+  lv01 vgdata01 -wi-a----- 100.03g 
+
+
+在SSD VG上创建cache data和cache meta lv.
+
+[root@localhost ~]# lvcreate -L 100G -n lv_cdata vgdata02
+  Logical volume "lv_cdata" created
+[root@localhost ~]# lvcreate -L 100M -n lv_cmeta vgdata02
+  Logical volume "lv_cmeta" created
+
+
+将cache data和cache meta lv转换成cache pool
+
+[root@localhost ~]# lvconvert --type cache-pool --poolmetadata vgdata02/lv_cmeta vgdata02/lv_cdata
+  Logical volume "lvol0" created
+  Converted vgdata02/lv_cdata to cache pool.
+[root@localhost ~]# lvs
+  LV       VG       Attr       LSize   Pool Origin Data%  Move Log Cpy%Sync Convert
+  home     centos   -wi-ao---- 172.69g                                             
+  root     centos   -wi-ao----  50.00g                                             
+  swap     centos   -wi-ao----  15.70g                                             
+  lv01     vgdata01 -wi-a----- 100.03g                                             
+  lv_cdata vgdata02 Cwi-a-C--- 100.00g 
+
+
+将机械盘LV转换成CACHE lv.
+
+[root@localhost ~]# lvconvert --type cache --cachepool vgdata02/lv_cdata vgdata01/lv01
+  Unable to find cache pool LV, vgdata02/lv_cdata
+
+
+报错, 目前不支持跨VG创建cache lv.
+本地VG则支持.
+
+[root@localhost ~]# lvcreate -L 100G -n lv01 vgdata02
+  Logical volume "lv01" created
+[root@localhost ~]# lvconvert --type cache --cachepool vgdata02/lv_cdata vgdata02/lv01
+  vgdata02/lv01 is now cached.
+
+
+
+所以需要调整一下, 把ssd加入vgdata01, 同时创建lvm条带时需要制定一下块设备.
+
+[root@localhost ~]# lvremove /dev/mapper/vgdata02-lv01
+Do you really want to remove active logical volume lv01? [y/n]: y
+  Logical volume "lv01" successfully removed
+[root@localhost ~]# lvremove /dev/mapper/vgdata01-lv01 
+Do you really want to remove active logical volume lv01? [y/n]: y
+  Logical volume "lv01" successfully removed
+[root@localhost ~]# lvchange -a y vgdata02/lv_cdata
+[root@localhost ~]# lvremove /dev/mapper/vgdata02-lv_cdata
+Do you really want to remove active logical volume lv_cdata? [y/n]: y
+  Logical volume "lv_cdata" successfully removed
+[root@localhost ~]# vgremove vgdata02
+  Volume group "vgdata02" successfully removed
+
+
+扩展vgdata01
+
+[root@localhost ~]# vgextend vgdata01 /dev/dfa
+  Volume group "vgdata01" successfully extended
+
+
+
+创建条带lvm, 同时指定机械盘(指定4K大小的条带).
+
+[root@localhost ~]# lvcreate -L 100G -i 12 -I4 -n lv01 vgdata01 /dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh /dev/sdi /dev/sdj /dev/sdk /dev/sdl /dev/sdm
+  Rounding size (25600 extents) up to stripe boundary size (25608 extents).
+  Logical volume "lv01" created
+
+
+创建cache lvm , 指定SSD.
+
+[root@localhost ~]# lvcreate -L 100G -n lv_cdata vgdata01 /dev/dfa
+  Logical volume "lv_cdata" created
+[root@localhost ~]# lvcreate -L 100M -n lv_cmeta vgdata01 /dev/dfa
+  Logical volume "lv_cmeta" created
+
+
+转换cache lv
+
+[root@localhost ~]# lvconvert --type cache-pool --poolmetadata vgdata01/lv_cmeta --cachemode writeback vgdata01/lv_cdata
+  Logical volume "lvol0" created
+  Converted vgdata01/lv_cdata to cache pool.
+[root@localhost ~]# lvconvert --type cache --cachepool vgdata01/lv_cdata vgdata01/lv01
+  vgdata01/lv01 is now cached.
+[root@localhost ~]# lvs
+  LV       VG       Attr       LSize   Pool     Origin       Data%  Move Log Cpy%Sync Convert
+  home     centos   -wi-ao---- 172.69g                                                       
+  root     centos   -wi-ao----  50.00g                                                       
+  swap     centos   -wi-ao----  15.70g                                                       
+  lv01     vgdata01 Cwi-a-C--- 100.03g lv_cdata [lv01_corig]                                 
+  lv_cdata vgdata01 Cwi-a-C--- 100.00g  
+
+
+在合并后的lv01上创建文件系统.
+
+[root@localhost ~]# mkfs.xfs /dev/mapper/vgdata01-lv01
+meta-data=/dev/mapper/vgdata01-lv01 isize=256    agcount=16, agsize=1638912 blks
+         =                       sectsz=4096  attr=2, projid32bit=1
+         =                       crc=0
+data     =                       bsize=4096   blocks=26222592, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=0
+log      =internal log           bsize=4096   blocks=12804, version=2
+         =                       sectsz=4096  sunit=1 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+[root@localhost ~]# mount /dev/mapper/vgdata01-lv01 /mnt
+[root@localhost ~]# df -h
+Filesystem                 Size  Used Avail Use% Mounted on
+/dev/mapper/vgdata01-lv01  100G   33M  100G   1% /mnt
+
+[root@localhost ~]# /opt/pgsql/bin/pg_test_fsync -f /mnt/1
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                    8124.408 ops/sec     123 usecs/op
+        fdatasync                        8178.149 ops/sec     122 usecs/op
+        fsync                            8113.938 ops/sec     123 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                        8300.755 ops/sec     120 usecs/op
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                    4178.896 ops/sec     239 usecs/op
+        fdatasync                        6963.270 ops/sec     144 usecs/op
+        fsync                            6930.345 ops/sec     144 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                        4205.576 ops/sec     238 usecs/op
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write        7062.249 ops/sec     142 usecs/op
+         2 *  8kB open_sync writes       4229.181 ops/sec     236 usecs/op
+         4 *  4kB open_sync writes       2281.264 ops/sec     438 usecs/op
+         8 *  2kB open_sync writes        583.685 ops/sec    1713 usecs/op
+        16 *  1kB open_sync writes        285.534 ops/sec    3502 usecs/op
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close              7494.674 ops/sec     133 usecs/op
+        write, close, fsync              7481.698 ops/sec     134 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                           307025.095 ops/sec       3 usecs/op
+
+
+iostat SSD 使用率55%
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util
+dfa               0.00     0.00  878.00 15828.00 56192.00 63312.00    14.31     0.63    0.04    0.51    0.01   0.03  52.80
+sdc               0.00   288.00    0.00 8350.00     0.00  4664.00     1.12     0.14    0.02    0.00    0.02   0.02  14.00
+sdb               0.00   288.00    0.00 8350.00     0.00  4664.00     1.12     0.12    0.01    0.00    0.01   0.01  11.90
+sdd               0.00   288.00    0.00 8350.00     0.00  4664.00     1.12     0.12    0.01    0.00    0.01   0.01  11.90
+sdh               0.00   299.00    0.00 8350.00     0.00  4708.00     1.13     0.14    0.02    0.00    0.02   0.02  14.10
+sdf               0.00   299.00    0.00 8350.00     0.00  4708.00     1.13     0.12    0.01    0.00    0.01   0.01  11.40
+sdi               0.00   299.00    0.00 8350.00     0.00  4708.00     1.13     0.15    0.02    0.00    0.02   0.02  14.30
+sdg               0.00   299.00    0.00 8350.00     0.00  4708.00     1.13     0.14    0.02    0.00    0.02   0.02  13.30
+sde               0.00   288.00    0.00 8350.00     0.00  4664.00     1.12     0.12    0.01    0.00    0.01   0.01  12.00
+sdl               0.00   291.00    0.00 8350.00     0.00  4676.00     1.12     0.14    0.02    0.00    0.02   0.02  14.00
+sdk               0.00   291.00    0.00 8352.00     0.00  4676.00     1.12     0.14    0.02    0.00    0.02   0.02  13.60
+sdm               0.00   291.00    0.00 8352.00     0.00  4676.00     1.12     0.14    0.02    0.00    0.02   0.02  13.60
+sdj               0.00   291.00    0.00 8352.00     0.00  4676.00     1.12     0.14    0.02    0.00    0.02   0.02  14.10
+
+[root@localhost ~]# dd if=/dev/zero of=/mnt/1 obs=4K oflag=sync,nonblock,noatime,nocache count=1024000
+1024000+0 records in
+128000+0 records out
+524288000 bytes (524 MB) copied, 90.1487 s, 5.8 MB/s
+
+
+
+直接使用机械盘条带的测试结果 (指定4KiB条带大小)
+
+[root@localhost ~]# lvcreate -L 100G -i 12 -I4 -n lv02 vgdata01 /dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh /dev/sdi /dev/sdj /dev/sdk /dev/sdl /dev/sdm
+[root@localhost ~]# mkfs.xfs /dev/mapper/vgdata01-lv02
+meta-data=/dev/mapper/vgdata01-lv02 isize=256    agcount=16, agsize=1638911 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=0
+data     =                       bsize=4096   blocks=26222576, imaxpct=25
+         =                       sunit=1      swidth=12 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=0
+log      =internal log           bsize=4096   blocks=12803, version=2
+         =                       sectsz=512   sunit=1 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+
+# mount /dev/mapper/vgdata01-lv02 /mnt
+[root@localhost ~]# /opt/pgsql/bin/pg_test_fsync -f /mnt/1
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                    5724.374 ops/sec     175 usecs/op
+        fdatasync                        5143.975 ops/sec     194 usecs/op
+        fsync                            5248.552 ops/sec     191 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                        5636.435 ops/sec     177 usecs/op
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                    2763.554 ops/sec     362 usecs/op
+        fdatasync                        4121.941 ops/sec     243 usecs/op
+        fsync                            4060.660 ops/sec     246 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                        2701.105 ops/sec     370 usecs/op
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write        5019.091 ops/sec     199 usecs/op
+         2 *  8kB open_sync writes       3055.081 ops/sec     327 usecs/op
+         4 *  4kB open_sync writes       1715.343 ops/sec     583 usecs/op
+         8 *  2kB open_sync writes        786.708 ops/sec    1271 usecs/op
+        16 *  1kB open_sync writes        469.455 ops/sec    2130 usecs/op
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close              4490.716 ops/sec     223 usecs/op
+        write, close, fsync              4566.385 ops/sec     219 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                           294268.753 ops/sec       3 usecs/op
+
+
+
+条带利用率显然没有ZFS使用均匀.
+
+sdc               0.00     0.00    0.00 14413.00     0.00 28988.00     4.02     0.40    0.03    0.00    0.03   0.03  39.90
+sdb               0.00     0.00    0.00 14413.00     0.00 28988.00     4.02     0.39    0.03    0.00    0.03   0.03  38.90
+sdd               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.01    0.00    0.00    0.00   0.00   0.90
+sdh               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.01    0.00    0.00    0.00   0.00   0.90
+sdf               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.01    0.00    0.00    0.00   0.00   1.40
+sdi               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.01    0.00    0.00    0.00   0.00   0.70
+sdg               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.02    0.00    0.00    0.00   0.00   1.90
+sde               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.01    0.00    0.00    0.00   0.00   0.90
+sdl               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.02    0.00    0.00    0.00   0.00   2.00
+sdk               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.01    0.00    0.00    0.00   0.00   1.40
+sdm               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.02    0.00    0.00    0.00   0.00   1.70
+sdj               0.00     0.00    0.00 7248.00     0.00   328.00     0.09     0.01    0.00    0.00    0.00   0.00   1.00
+
+
+
+删除设备
+
+# umount /mnt
+[root@localhost ~]# lvremove vgdata01/lv_cdata
+  Flushing cache for lv01
+  970 blocks must still be flushed.
+  0 blocks must still be flushed.
+Do you really want to remove active logical volume lv_cdata? [y/n]: y
+  Logical volume "lv_cdata" successfully removed
+[root@localhost ~]# lvremove vgdata01/lv01
+Do you really want to remove active logical volume lv01? [y/n]: y
+  Logical volume "lv01" successfully removed
+[root@localhost ~]# lvremove vgdata01/lv02
+Do you really want to remove active logical volume lv02? [y/n]: y
+  Logical volume "lv02" successfully removed
+[root@localhost ~]# pvremove /dev/dfa
+  PV /dev/dfa belongs to Volume Group vgdata01 so please use vgreduce first.
+  (If you are certain you need pvremove, then confirm by using --force twice.)
+[root@localhost ~]# vgremove vgdata01
+  Volume group "vgdata01" successfully removed
+[root@localhost ~]# pvremove /dev/dfa
+  Labels on physical volume "/dev/dfa" successfully wiped
+[root@localhost ~]# pvremove /dev/sdb
+  Labels on physical volume "/dev/sdb" successfully wiped
+[root@localhost ~]# pvremove /dev/sdc
+  Labels on physical volume "/dev/sdc" successfully wiped
+[root@localhost ~]# pvremove /dev/sdd
+  Labels on physical volume "/dev/sdd" successfully wiped
+[root@localhost ~]# pvremove /dev/sde
+  Labels on physical volume "/dev/sde" successfully wiped
+[root@localhost ~]# pvremove /dev/sdf
+  Labels on physical volume "/dev/sdf" successfully wiped
+[root@localhost ~]# pvremove /dev/sdg
+  Labels on physical volume "/dev/sdg" successfully wiped
+[root@localhost ~]# pvremove /dev/sdh
+  Labels on physical volume "/dev/sdh" successfully wiped
+[root@localhost ~]# pvremove /dev/sdi
+  Labels on physical volume "/dev/sdi" successfully wiped
+[root@localhost ~]# pvremove /dev/sdj
+  Labels on physical volume "/dev/sdj" successfully wiped
+[root@localhost ~]# pvremove /dev/sdk
+  Labels on physical volume "/dev/sdk" successfully wiped
+[root@localhost ~]# pvremove /dev/sdl
+  Labels on physical volume "/dev/sdl" successfully wiped
+[root@localhost ~]# pvremove /dev/sdm
+  Labels on physical volume "/dev/sdm" successfully wiped
+[root@localhost ~]# pvs
+  PV         VG     Fmt  Attr PSize   PFree
+  /dev/sda5  centos lvm2 a--  238.38g    0 
+
+
+
+以下测试可参照, 其中flashcache性能损失极少(甚至比直接使用SSD性能更高).
+zfs和lvm性能差不多, lvm略高, 但是LVM的fsync带来了大量的cache设备的读操作, 使得ssd的util比zfs高很多, 相当于浪费了较多的io. 不知原因, ZFSonLinux 则没有这个问题.
+http://blog.163.com/digoal@126/blog/static/1638770402014528115551323/
+3. 使用flashcache
+4. 使用bcache
+5. 使用zfs
+
+# yum install -y libtoolize autoconf automake
+# tar -zxvf spl-0.6.3.tar.gz 
+# tar -zxvf zfs-0.6.3.tar.gz
+# cd spl-0.6.3
+# ./autogen.sh 
+# ./configure --prefix=/opt/spl0.6.3
+# make && make install
+
+[root@localhost spl-0.6.3]# cd ..
+[root@localhost soft_bak]# cd zfs-0.6.3
+[root@localhost zfs-0.6.3]# yum install -y libuuid-devel
+[root@localhost zfs-0.6.3]# ./configure --prefix=/opt/zfs0.6.3
+[root@localhost zfs-0.6.3]# make && make install
+
+[root@localhost ~]# modprobe splat
+[root@localhost ~]# /opt/spl0.6.3/sbin/splat -a
+------------------------------ Running SPLAT Tests ------------------------------
+                kmem:kmem_alloc           Pass  
+                kmem:kmem_zalloc          Pass  
+                kmem:vmem_alloc           Pass  
+                kmem:vmem_zalloc          Pass  
+                kmem:slab_small           Pass  
+                kmem:slab_large           Pass  
+                kmem:slab_align           Pass  
+                kmem:slab_reap            Pass  
+                kmem:slab_age             Pass  
+                kmem:slab_lock            Pass  
+                kmem:vmem_size            Pass  
+                kmem:slab_reclaim         Pass  
+               taskq:single               Pass  
+               taskq:multiple             Pass  
+               taskq:system               Pass  
+               taskq:wait                 Pass  
+               taskq:order                Pass  
+               taskq:front                Pass  
+               taskq:recurse              Pass  
+               taskq:contention           Pass  
+               taskq:delay                Pass  
+               taskq:cancel               Pass  
+                krng:freq                 Pass  
+               mutex:tryenter             Pass  
+               mutex:race                 Pass  
+               mutex:owned                Pass  
+               mutex:owner                Pass  
+             condvar:signal1              Pass  
+             condvar:broadcast1           Pass  
+             condvar:signal2              Pass  
+             condvar:broadcast2           Pass  
+             condvar:timeout              Pass  
+              thread:create               Pass  
+              thread:exit                 Pass  
+              thread:tsd                  Pass  
+              rwlock:N-rd/1-wr            Pass  
+              rwlock:0-rd/N-wr            Pass  
+              rwlock:held                 Pass  
+              rwlock:tryenter             Pass  
+              rwlock:rw_downgrade         Pass  
+              rwlock:rw_tryupgrade        Pass  
+                time:time1                Pass  
+                time:time2                Pass  
+               vnode:vn_open              Pass  
+               vnode:vn_openat            Pass  
+               vnode:vn_rdwr              Pass  
+               vnode:vn_rename            Pass  
+               vnode:vn_getattr           Pass  
+               vnode:vn_sync              Pass  
+                kobj:open                 Pass  
+                kobj:size/read            Pass  
+              atomic:64-bit               Pass  
+                list:create/destroy       Pass  
+                list:ins/rm head          Pass  
+                list:ins/rm tail          Pass  
+                list:insert_after         Pass  
+                list:insert_before        Pass  
+                list:remove               Pass  
+                list:active               Pass  
+             generic:ddi_strtoul          Pass  
+             generic:ddi_strtol           Pass  
+             generic:ddi_strtoull         Pass  
+             generic:ddi_strtoll          Pass  
+             generic:udivdi3              Pass  
+             generic:divdi3               Pass  
+                cred:cred                 Pass  
+                cred:kcred                Pass  
+                cred:groupmember          Pass  
+                zlib:compress/uncompress  Pass  
+               linux:shrink_dcache        Pass  
+               linux:shrink_icache        Pass  
+               linux:shrinker             Pass  
+
+[root@localhost zfs-0.6.3]# /opt/zfs0.6.3/sbin/zpool create -f -o ashift=12 zp1 sdb sdc sdd sde sdf sdg sdh sdi sdj sdk sdl sdm
+[root@localhost zfs-0.6.3]# export PATH=/opt/zfs0.6.3/sbin:$PATH
+[root@localhost zfs-0.6.3]# zpool status
+  pool: zp1
+ state: ONLINE
+  scan: none requested
+config:
+
+        NAME        STATE     READ WRITE CKSUM
+        zp1         ONLINE       0     0     0
+          sdb       ONLINE       0     0     0
+          sdc       ONLINE       0     0     0
+          sdd       ONLINE       0     0     0
+          sde       ONLINE       0     0     0
+          sdf       ONLINE       0     0     0
+          sdg       ONLINE       0     0     0
+          sdh       ONLINE       0     0     0
+          sdi       ONLINE       0     0     0
+          sdj       ONLINE       0     0     0
+          sdk       ONLINE       0     0     0
+          sdl       ONLINE       0     0     0
+          sdm       ONLINE       0     0     0
+
+[root@localhost zfs-0.6.3]# fdisk -c -u /dev/dfa
+Welcome to fdisk (util-linux 2.23.2).
+
+Changes will remain in memory only, until you decide to write them.
+Be careful before using the write command.
+
+Device does not contain a recognized partition table
+Building a new DOS disklabel with disk identifier 0x2dd27e66.
+
+The device presents a logical sector size that is smaller than
+the physical sector size. Aligning to a physical sector (or optimal
+I/O) size boundary is recommended, or performance may be impacted.
+
+Command (m for help): n
+Partition type:
+   p   primary (0 primary, 0 extended, 4 free)
+   e   extended
+Select (default p): p
+Partition number (1-4, default 1): 
+First sector (2048-2343751679, default 2048): 
+Using default value 2048
+Last sector, +sectors or +size{K,M,G} (2048-2343751679, default 2343751679): +16777216    
+Partition 1 of type Linux and of size 8 GiB is set
+
+Command (m for help): n
+Partition type:
+   p   primary (1 primary, 0 extended, 3 free)
+   e   extended
+Select (default p): p
+Partition number (2-4, default 2): 
+First sector (16779265-2343751679, default 16781312): 
+Using default value 16781312
+Last sector, +sectors or +size{K,M,G} (16781312-2343751679, default 2343751679): +209715200
+Partition 2 of type Linux and of size 100 GiB is set
+
+Command (m for help): w
+The partition table has been altered!
+
+Calling ioctl() to re-read partition table.
+Syncing disks.
+
+添加zil
+[root@localhost zfs-0.6.3]# zpool add zp1 log /dev/dfa1
+
+[root@localhost zfs-0.6.3]# zpool status
+  pool: zp1
+ state: ONLINE
+  scan: none requested
+config:
+
+        NAME        STATE     READ WRITE CKSUM
+        zp1         ONLINE       0     0     0
+          sdb       ONLINE       0     0     0
+          sdc       ONLINE       0     0     0
+          sdd       ONLINE       0     0     0
+          sde       ONLINE       0     0     0
+          sdf       ONLINE       0     0     0
+          sdg       ONLINE       0     0     0
+          sdh       ONLINE       0     0     0
+          sdi       ONLINE       0     0     0
+          sdj       ONLINE       0     0     0
+          sdk       ONLINE       0     0     0
+          sdl       ONLINE       0     0     0
+          sdm       ONLINE       0     0     0
+        logs
+          dfa1      ONLINE       0     0     0
+
+新增zfs
+[root@localhost zfs-0.6.3]# zfs create -o atime=off -o mountpoint=/data01 zp1/data01
+[root@localhost zfs-0.6.3]# df -h
+Filesystem               Size  Used Avail Use% Mounted on
+/dev/mapper/centos-root   50G  1.7G   49G   4% /
+devtmpfs                  16G     0   16G   0% /dev
+tmpfs                     16G     0   16G   0% /dev/shm
+tmpfs                     16G  8.9M   16G   1% /run
+tmpfs                     16G     0   16G   0% /sys/fs/cgroup
+/dev/mapper/centos-home  173G   33M  173G   1% /home
+/dev/sda3                497M   96M  401M  20% /boot
+zp1                       43T  128K   43T   1% /zp1
+zp1/data01                43T  128K   43T   1% /data01
+
+测试
+[root@localhost zfs-0.6.3]# /opt/pgsql/bin/pg_test_fsync -f /data01/1
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                                n/a*
+        fdatasync                        6107.726 ops/sec     164 usecs/op
+        fsync                            7016.477 ops/sec     143 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                                    n/a*
+* This file system and its mount options do not support direct
+I/O, e.g. ext4 in journaled mode.
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                                n/a*
+        fdatasync                        5602.343 ops/sec     178 usecs/op
+        fsync                            8100.693 ops/sec     123 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                                    n/a*
+* This file system and its mount options do not support direct
+I/O, e.g. ext4 in journaled mode.
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write                    n/a*
+         2 *  8kB open_sync writes                   n/a*
+         4 *  4kB open_sync writes                   n/a*
+         8 *  2kB open_sync writes                   n/a*
+        16 *  1kB open_sync writes                   n/a*
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close              6521.974 ops/sec     153 usecs/op
+        write, close, fsync              6672.833 ops/sec     150 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                           82646.970 ops/sec      12 usecs/op
+
+[root@localhost zfs-0.6.3]# dd if=/dev/zero of=/data01/1 obs=4K oflag=sync,nonblock,noatime,nocache count=1024000
+1024000+0 records in
+128000+0 records out
+524288000 bytes (524 MB) copied, 12.9542 s, 40.5 MB/s
+
+
+zfs直接使用机械盘测试, IOPS分布非常均匀.
+
+[root@localhost ~]# zpool remove zp1 /dev/dfa1
+[root@localhost ~]# /opt/pgsql/bin/pg_test_fsync -f /data01/1
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                                n/a*
+        fdatasync                        8086.756 ops/sec     124 usecs/op
+        fsync                            7312.509 ops/sec     137 usecs/op
+
+sdc               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.04    0.03    0.00    0.03   0.03   3.50
+sdb               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.03    0.03    0.00    0.03   0.03   3.10
+sdd               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.04    0.03    0.00    0.03   0.03   3.50
+sdh               0.00     0.00    0.00 1092.00     0.00 10920.00    20.00     0.04    0.04    0.00    0.04   0.04   4.20
+sdf               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.04    0.04    0.00    0.04   0.03   3.70
+sdi               0.00     0.00    0.00 1092.00     0.00 10920.00    20.00     0.03    0.03    0.00    0.03   0.03   3.10
+sdg               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.03    0.03    0.00    0.03   0.03   2.90
+sde               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.04    0.03    0.00    0.03   0.03   3.60
+sdl               0.00     0.00    0.00 1092.00     0.00 10920.00    20.00     0.02    0.02    0.00    0.02   0.02   2.10
+sdk               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.04    0.03    0.00    0.03   0.03   3.70
+sdm               0.00     0.00    0.00 1092.00     0.00 10920.00    20.00     0.03    0.03    0.00    0.03   0.03   3.00
+sdj               0.00     0.00    0.00 1094.00     0.00 10940.00    20.00     0.04    0.04    0.00    0.04   0.04   3.90
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/1638770402014699041427/
+2. http://blog.163.com/digoal@126/blog/static/163877040201463101652528/
+3. http://blog.163.com/digoal@126/blog/static/1638770402014528115551323/
+4. http://blog.163.com/digoal@126/blog/static/16387704020145264116819/
+5. http://blog.163.com/digoal@126/blog/static/1638770402014526992910/
+6. http://blog.163.com/digoal@126/blog/static/16387704020145198321025/
+7. https://github.com/facebook/flashcache
+8. https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Logical_Volume_Manager_Administration/LV.html#LV_stripecreate
+Flag Counter

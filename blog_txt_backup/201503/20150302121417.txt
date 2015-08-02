@@ -1,0 +1,154 @@
+PostgreSQL research
+
+PostgreSQL seq's lastval
+
+2015-03-02 12:14:17   查看原文>>
+
+序列在PostgreSQL中可以通过像查询表一样来查询, 但是却和表不一样, 为什么呢?
+如果是表的话, 变更的数据是否可见, 和事务隔离级别有关, 但是SEQUENCE不是这样的, 查询seq时和事务隔离级别无关.
+因为序列状态和会话有关, 每个会话会存储用到的序列, 结构如下
+
+/*
+ * We store a SeqTable item for every sequence we have touched in the current
+ * session.  This is needed to hold onto nextval/currval state.  (We can't
+ * rely on the relcache, since it's only, well, a cache, and may decide to
+ * discard entries.)
+ */
+typedef struct SeqTableData
+{
+        Oid                     relid;                  /* pg_class OID of this sequence (hash key) */
+        Oid                     filenode;               /* last seen relfilenode of this sequence */
+        LocalTransactionId lxid;        /* xact in which we last did a seq op */
+        bool            last_valid;             /* do we have a valid "last" value? */
+        int64           last;                   /* value last returned by nextval */
+        int64           cached;                 /* last value already cached for nextval */
+        /* if last != cached, we have not used up all the cached values */
+        int64           increment;              /* copy of sequence's increment field */
+        /* note that increment is zero until we first do read_seq_tuple() */
+} SeqTableData;
+
+
+
+例如系统中有一个序列名为seq.
+开启A事务, 隔离级别repeatable read
+
+postgres=# begin isolation level repeatable read;
+BEGIN
+postgres=# select 1;
+ ?column? 
+----------
+        1
+(1 row)
+
+postgres=# select * from seq;
+ sequence_name | last_value | start_value | increment_by |      max_value      | min_value | cache_value | log_cnt | is_cycled | is_
+called 
+---------------+------------+-------------+--------------+---------------------+-----------+-------------+---------+-----------+----
+-------
+ seq           |          8 |           1 |            1 | 9223372036854775807 |         1 |           1 |      30 | f         | t
+(1 row)
+
+
+在B会话中, 消耗一个值
+
+postgres=# select nextval('seq'::regclass);
+ nextval 
+---------
+       9
+(1 row)
+
+
+在A会话中, 看到了这个变化, 注意last_value
+
+postgres=# select * from seq;
+ sequence_name | last_value | start_value | increment_by |      max_value      | min_value | cache_value | log_cnt | is_cycled | is_
+called 
+---------------+------------+-------------+--------------+---------------------+-----------+-------------+---------+-----------+----
+-------
+ seq           |          9 |           1 |            1 | 9223372036854775807 |         1 |           1 |      29 | f         | t
+(1 row)
+
+
+
+只有通过currval看到的是当前会话的序列值 : 
+在B会话中, 查看当前的序列值
+
+postgres=# select currval('seq');
+ currval 
+---------
+       9
+(1 row)
+
+
+在A会话中消耗序列值
+
+postgres=# select nextval('seq'::regclass);
+ nextval 
+---------
+      10
+(1 row)
+
+postgres=# select nextval('seq'::regclass);
+ nextval 
+---------
+      11
+(1 row)
+
+
+在B会话中看到的currval还是9.
+
+postgres=# select currval('seq');
+ currval 
+---------
+       9
+(1 row)
+调用discard sequences;后, 序列值不在当前会话存储, 所以currval会返回序列在当前会话未定义.
+postgres=# discard sequences;
+DISCARD SEQUENCES
+postgres=# select currval('seq');
+ERROR:  currval of sequence "seq" is not yet defined in this session
+
+
+对应代码
+
+Datum
+currval_oid(PG_FUNCTION_ARGS)
+{
+        Oid                     relid = PG_GETARG_OID(0);
+        int64           result;
+        SeqTable        elm;
+        Relation        seqrel;
+
+        /* open and AccessShareLock sequence */
+        init_sequence(relid, &elm, &seqrel);
+
+        if (pg_class_aclcheck(elm->relid, GetUserId(), ACL_SELECT) != ACLCHECK_OK &&
+                pg_class_aclcheck(elm->relid, GetUserId(), ACL_USAGE) != ACLCHECK_OK)
+                ereport(ERROR,
+                                (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+                                 errmsg("permission denied for sequence %s",
+                                                RelationGetRelationName(seqrel))));
+
+        if (!elm->last_valid)
+                ereport(ERROR,
+                                (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+                                 errmsg("currval of sequence \"%s\" is not yet defined in this session",
+                                                RelationGetRelationName(seqrel))));
+
+        result = elm->last;
+
+        relation_close(seqrel, NoLock);
+
+        PG_RETURN_INT64(result);
+}
+
+
+
+所以要问序列最后一个消耗的值, 通过'schema.seq_name'.last_value可以查看.
+要问当前会话获得的最后一个序列值, 通过currval函数查看
+要问下一个序列值, 通过nextval获取(获取就消耗掉了).
+
+序列操作的相关源码文件 : 
+1. src/backend/commands/sequence.c
+
+Flag Counter

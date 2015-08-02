@@ -1,0 +1,56 @@
+PostgreSQL research
+
+recovery standby base old pg_controlfile after pg_resetxlog
+
+2014-11-30 13:48:41   查看原文>>
+
+    今早一个数据库的流复制standby因为主库产生的XLOG过多, 延迟后触发了recovery.conf的restore命令, 但是restore里面用了sudo 进行copy并未保持源文件的owner, 属性等特征, 使用了root owner, 导致COPY完的xlog不能被postgresql 正常读取.
+同事在处理这个事情, 因为没有了解实际情况, 上去就使用了pg_resetxlog修改standby的nextXID(resetxlog在这个场景属于扯淡的操作, 千万不要这么干), 接着大家知道的, standby无法正常完成standby的工作了.
+    这个数据库有10几个T, 要重新做standby的话, 拷贝的数据量太大了, 即使使用rsync重做, 工作量也比较大(表空间过多, 目录过多).
+    有没有省事的方法呢?
+    首先来分析一下事件, 
+    1. xlog不能被postgresql 正常读取(这个很好修复, 修改一下restore command就可以了, 或者不要用sudo 来拷贝).
+
+2014-11-30 10:05:54.505 CST,,,3695,,5435f48b.e6f,6,,2014-10-09 10:35:55 CST,1/0,0,LOG,00000,"restored log file ""0000000300002A9D0000004D"" from archive",,,,,,,,"RestoreArchivedFile, xlogarchive.c:254",""
+2014-11-30 10:05:54.534 CST,,,3695,,5435f48b.e6f,7,,2014-10-09 10:35:55 CST,1/0,0,PANIC,42501,"could not open file ""pg_xlog/0000000300002A9D0000004D"": Permission denied",,,,,,,,"XLogFileRead, xlog.c:2696",""
+
+
+    2. pg_resetxlog对控制文件造成了持久性伤害, 没有办法修复.
+
+     pg_resetxlog -x 90010254 -f $PGDATA
+
+
+    为了快速恢复, 可以找到更早的控制文件, 刚好这套数据库的备份系统使用的是ZFS快照做的, 每天会创建一个快照, 所以可以取早些时间的快照, 拿到控制文件, 替换掉standby被人为"破坏"的控制文件, 启动standby后, 将从控制文件开始恢复需要的xlog. (只要这些xlog归档还在就可以了).
+
+    操作过程 : 
+
+    1. shutdown standby
+    2. mount zfs snapshot old then standby crashed time.
+    3. copy $PGDATA/global/pg_control from snapshot to standby.
+    4. startup standby.
+    5. umount snapshot.
+
+
+    注意, 拿到的控制文件必须是standby crash之前的控制文件, 并且控制文件至今的所有xlog归档必须都在. postgresql standby将从控制文件需要的xlog开始恢复数据块. 所以这么做是完全可以的.
+    现在standby数据库已经完全恢复了
+
+  882 postgres  20   0 2337m  15m  14m S  0.0  0.1   0:00.10 /opt/pgsql9.3.2/bin/postgres                                           
+  883 postgres  20   0  157m 1072  476 S  0.0  0.0   0:00.14 postgres: logger process                                               
+  884 postgres  20   0 2338m 2.0g 2.0g S  0.0  8.6   5:16.35 postgres: startup process   recovering 0000000300002AA50000003F        
+  889 postgres  20   0 2338m 2.0g 2.0g S  0.0  8.6   0:35.69 postgres: checkpointer process                                         
+  890 postgres  20   0 2338m 2.0g 2.0g S  0.0  8.6   0:34.98 postgres: writer process                                               
+  905 postgres  20   0  159m 1212  456 S  0.0  0.0   0:02.62 postgres: stats collector process                                      
+ 1922 postgres  20   0  105m 1632 1180 S  0.0  0.0   0:00.01 -bash                                                                  
+ 1959 postgres  20   0  137m 1764 1292 S  0.0  0.0   0:00.00 psql                                                                   
+ 1960 postgres  20   0 2340m 6780 4684 S  0.0  0.0   0:00.01 postgres: postgres postgres [local] idle                               
+ 4309 postgres  20   0 2346m 7080 1748 S  0.0  0.0   0:00.67 postgres: wal receiver process   streaming 2AA5/3F0429C0 
+
+
+
+    有备份真好, 有合理的备份更好. 
+    对zfs pitr备份有兴趣的朋友可以参考 : 
+    http://blog.163.com/digoal@126/blog/static/163877040201451894734122/
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201451894734122/
+Flag Counter

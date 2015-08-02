@@ -1,0 +1,391 @@
+PostgreSQL research
+
+extended the postgresql metric python module on ganglia
+
+2014-09-24 14:56:48   查看原文>>
+
+本文主要拿PostgreSQL ganglia python module 来讲一下如何扩展这个模块, 增加我们想要的监控项.
+
+首先要了解一下metric的数据类型, 以及各字段的含义, 以帮助了解如何自定义metric模块.
+http://blog.163.com/digoal@126/blog/static/163877040201481835916946/
+http://blog.163.com/digoal@126/blog/static/163877040201481843417188/
+http://blog.163.com/digoal@126/blog/static/1638770402014819102825333/
+
+接下来需要对监控软件简单的分析, 了解什么样的监控点适合用在什么样的监控软件中.
+哪些适合放在ganglia, 哪些适合放在nagios / zabbix, 哪些适合定期人工巡检.
+
+1. 适合用ganglia来展示的数据, 务必是数字类型或者可以转换成数据类型(如true, false转换成0,1), 最好是集群级别的数据.
+如果是表级别, 或者数据库级别的数据, 那么.py会变复杂一点, 例如需要在.pyconf中配置需要监控的表, 库(不像zabbix可以使用discovery接口), 需要在.py里分别在不同的库中取不同的表的数据. 
+本文简化一下, 只在ganglia中采样和展示集群级别的metric.
+采样点举例 : 
+
+最大连接, 已用连接, 剩余连接, idle in transaction连接, active连接
+pg_stat_bgwriter
+shared buffer size
+提交比例
+集群大小
+数据库统计, 命中率, pg_stat_database
+hot standby延迟
+剩余年龄
+锁等待数量
+锁等待时长(秒)
+当天产生的 pg_log 文件大小(bytes)
+prepared 事务数 以及 时长(秒).
+当前慢查询数(例如>500ms)
+当前最长查询时间(秒)
+当前最长事务空闲时间(秒)
+当前最长事务时间(秒)
+10分钟内产生wal的量(bytes)
+数据库状态是否正常, 返回1正常, 其他不正常.
+
+
+
+2. 适合在nagios中监控的数据, 可以是一些容易设置阈值来判断状态(正常, 告警, 异常)的点.
+监控点举例 : 
+数据库健康状态, 监听端口, 是否开启归档, 是否开启autovacuum, 数据库的年龄, 剩余连接数, 活跃连接数, idle in transaction连接数, 提交和回滚比例, standby延迟, 锁等待, 长事务, prepared事务, 序列剩余量, 表的膨胀, 未使用的索引(索引的扫描次数), 等.
+可参考 http://blog.163.com/digoal@126/blog/static/163877040201412763135184/
+3. 适合在zabbix中展示的数据, zabbix可以认为是ganglia和nagios的结合体, 图形方面和告警能力都还行, 所以基本上通吃.
+4. 适合定期人工巡检的数据.
+不容易做成自动化监控的点, 都可以归类到人工定期巡检里面. 包括巡检自动化监控程序自身是否正常.
+巡检点举例 : 
+数据库基本信息(版本,OS,编译参数,内核参数,库,....), 数据库配置文件, 错误日志分析, 数据库连接异常排查, 定时任务, 数据库增长情况, TOP 10 SQL, 数据库运行状态(连接数, 年龄, 大表, 索引超标表, 冷索引, 触发器, 膨胀, 垃圾数据, 存储空间, IO, 归档, 回滚比例, 长事务, 序列, 备份, 容灾, HA状态) , 安全检查(密码策略, 用户审计, 特殊配
+置, 事件触发器, 触发器, 审计参数, 用户权限, SQL注入, public对象, 对象大小写, 个人账号审计).
+可参考 http://blog.163.com/digoal@126/blog/static/1638770402014252816497/
+
+ganglia采样点SQL : 
+
+最大连接, 已用连接, 剩余连接, idle in transaction连接, active连接
+select t2.max::int,t1.used,(t2.max::int-t1.used) free,t1.idle,t1.active from (select count(*) used,sum(case state when 'idle in transaction' then 1 else 0 end) idle,sum(case state when 'active' then 1 else 0 end) active from pg_stat_activity)t1,(select setting as max from pg_settings where name = 'max_connections')t2;
+
+pg_stat_bgwriter
+postgres=# \d pg_stat_bgwriter 
+              View "pg_catalog.pg_stat_bgwriter"
+        Column         |           Type           | Modifiers 
+-----------------------+--------------------------+-----------
+ checkpoints_timed     | bigint                   | 
+ checkpoints_req       | bigint                   | 
+ checkpoint_write_time | double precision         | 
+ checkpoint_sync_time  | double precision         | 
+ buffers_checkpoint    | bigint                   | 
+ buffers_clean         | bigint                   | 
+ maxwritten_clean      | bigint                   | 
+ buffers_backend       | bigint                   | 
+ buffers_backend_fsync | bigint                   | 
+ buffers_alloc         | bigint                   | 
+ stats_reset           | timestamp with time zone | 
+
+shared buffer size
+select t1.setting*t2.setting from (select setting::int8 from pg_settings where name = 'shared_buffers')t1, (select setting::int8 from pg_settings where name = 'block_size')t2;
+
+提交比例
+select 100*sum(xact_commit)/sum(xact_commit+xact_rollback) from pg_stat_database;
+
+集群大小
+select sum(pg_database_size(datname)) from pg_database;
+
+数据库统计, 命中率, pg_stat_database
+postgres=# \d pg_stat_database
+          View "pg_catalog.pg_stat_database"
+     Column     |           Type           | Modifiers 
+----------------+--------------------------+-----------
+ datid          | oid                      | 
+ datname        | name                     | 
+ numbackends    | integer                  | 
+ xact_commit    | bigint                   | 
+ xact_rollback  | bigint                   | 
+ blks_read      | bigint                   | 
+ blks_hit       | bigint                   | 
+ tup_returned   | bigint                   | 
+ tup_fetched    | bigint                   | 
+ tup_inserted   | bigint                   | 
+ tup_updated    | bigint                   | 
+ tup_deleted    | bigint                   | 
+ conflicts      | bigint                   | 
+ temp_files     | bigint                   | 
+ temp_bytes     | bigint                   | 
+ deadlocks      | bigint                   | 
+ blk_read_time  | double precision         | 
+ blk_write_time | double precision         | 
+ stats_reset    | timestamp with time zone | 
+
+hot standby延迟
+postgres=# \d pg_stat_replication 
+          View "pg_catalog.pg_stat_replication"
+      Column      |           Type           | Modifiers 
+------------------+--------------------------+-----------
+ pid              | integer                  | 
+ usesysid         | oid                      | 
+ usename          | name                     | 
+ application_name | text                     | 
+ client_addr      | inet                     | 
+ client_hostname  | text                     | 
+ client_port      | integer                  | 
+ backend_start    | timestamp with time zone | 
+ state            | text                     | 
+ sent_location    | text                     | 
+ write_location   | text                     | 
+ flush_location   | text                     | 
+ replay_location  | text                     | 
+ sync_priority    | integer                  | 
+ sync_state       | text                     | 
+select max(pg_xlog_location_diff(pg_current_xlog_location(),flush_location)) from pg_stat_replication;
+
+剩余年龄
+select min(2000000000-age(datfrozenxid)) from pg_database;
+
+锁等待数量
+select count(*) from pg_stat_activity where waiting;
+
+锁等待时长(秒)
+select max(trunc(EXTRACT(EPOCH FROM now()-query_start))) inter from pg_stat_activity where waiting;
+
+当天产生的 pg_log 文件大小(bytes)
+postgres=# select sum((pg_stat_file(file)).size) from (select dir||'/'||pg_ls_dir(dir) as file from (select setting as dir from pg_settings where name='log_directory') t)t where (pg_stat_file(file)).change>=current_date;
+  sum   
+--------
+ 722653
+(1 row)
+postgres=# select pg_ls_dir('/tmp');
+ERROR:  absolute path not allowed
+如果使用绝对路径, 建议将pg_log软连接.
+
+prepared 事务数 以及 时长(秒).
+select count(*),max(trunc(EXTRACT(EPOCH FROM now()-prepared))) inter from pg_prepared_xacts;
+
+当前慢查询数(例如>500ms)
+select count(*) from pg_stat_activity where now()-query_start>interval '0.5 s' and state='active';
+
+当前最长查询时间(s)
+select max(trunc(EXTRACT(EPOCH FROM now()-query_start))) from pg_stat_activity where state='active';
+
+当前最长事务空闲时间
+select max(trunc(EXTRACT(EPOCH FROM now()-xact_start))) from pg_stat_activity where state='idle in transaction';
+
+当前最长事务时间
+select max(trunc(EXTRACT(EPOCH FROM now()-xact_start))) from pg_stat_activity where state='idle in transaction' or state='active';
+
+10分钟内产生wal的量(bytes)
+select sum((pg_stat_file(file)).size) from (select 'pg_xlog/'||pg_ls_dir('pg_xlog') as file)t where now()-(pg_stat_file(file)).change<=interval '10 min';
+
+数据库状态是否正常, 返回1正常, 其他不正常.
+postgres=# select function();
+ ?column? 
+----------
+        1
+(1 row)
+自定义一个函数, 处理一些逻辑, 例如 : 
+https://github.com/digoal/sky_postgresql_cluster/raw/master/INSTALL.txt
+
+
+
+以上采样点对应的.py和.pyconf文件部分内容 : 
+以集群剩余年龄为例
+postgres.py 添加需要采样的代码 : 
+
+在    db_curs.close()前加入
+    # PostgreSQL cluster xacts remain
+    db_curs.execute(
+        'select min(2000000000-age(datfrozenxid)) from pg_database;')
+    results = db_curs.fetchall()
+    pg_xacts_remain = results[0]
+    pg_metrics.update({'Pypg_xacts_remain':pg_xacts_remain[0]})
+
+并在metric_init(params)函数的    descriptors 字典末尾中加入metric的描述.
+        {'name':'Pypg_hours_since_last_analyze','units':'hours','slope':'both','description':'PG hours since last analyze'},  # 加入:
+        {'name':'Pypg_xacts_remain','units':'xact','slope':'both','description':'PG xacts remain'}]
+
+
+
+postgres.pyconf 添加需要采样的metric配置 : 
+
+   metric {
+     name = "Pypg_xacts_remain"
+     title = "Postgres Cluster xacts Remain"
+     value_threshold = 0
+   }
+
+
+
+将postgres.py和postgres.pyconf拷贝到配置指定的相应位置, 并重启gmond.
+
+[root@db-172-16-3-221 soft_bak]# cat /opt/ganglia-core-3.6.0/etc/conf.d/modpython.conf 
+/*
+  params - path to the directory where mod_python
+           should look for python metric modules
+
+  the "pyconf" files in the include directory below
+  will be scanned for configurations for those modules
+*/
+modules {
+  module {
+    name = "python_module"
+    path = "modpython.so"
+    params = "/opt/ganglia-core-3.6.0/lib64/ganglia/python_modules"
+  }
+}
+
+include ("/opt/ganglia-core-3.6.0/etc/conf.d/*.pyconf")
+
+[root@db-172-16-3-221 soft_bak]# ll /opt/ganglia-core-3.6.0/lib64/ganglia/python_modules/postgres.py
+-rw-r--r-- 1 root root 11466 Sep 24 13:51 /opt/ganglia-core-3.6.0/lib64/ganglia/python_modules/postgres.py
+[root@db-172-16-3-221 soft_bak]# ll /opt/ganglia-core-3.6.0/etc/conf.d/postgres.pyconf 
+-rw-r--r-- 1 root root 4183 Sep 24 13:52 /opt/ganglia-core-3.6.0/etc/conf.d/postgres.pyconf
+
+配置pyconf的数据库连接参数 :
+modules {
+   module {
+     name = "postgres"
+     language = "python"
+     param host {
+       value = "127.0.0.1"
+     }
+     param port {
+       value = "5432"
+     }
+     param dbname {
+       value = "postgres"
+     }
+     param username {
+       value = "postgres"
+     }
+     param password {
+       value = "postgres"
+     }
+   }
+}
+
+
+
+验证metric是否正常, 如果遇到如下错误, 可能是这个模块依赖的库没有安装 : 
+
+[root@db-172-16-3-221 conf.d]# gmond -m
+[PYTHON] Can't import the metric module [postgres].
+
+Traceback (most recent call last):
+  File "/opt/ganglia-core-3.6.0/lib64/ganglia/python_modules/postgres.py", line 1, in <module>
+    import psycopg2
+ImportError: No module named psycopg2
+
+
+以上问题的解决办法 : 
+
+# wget http://www.psycopg.org/psycopg/tarballs/PSYCOPG-2-5/psycopg2-2.5.4.tar.gz
+# tar -zxvf psycopg2-2.5.4.tar.gz
+# cd psycopg2-2.5.4
+# python ./setup.py install
+
+
+
+接下来的这个问题是没有加载libpq库.
+
+[root@db-172-16-3-221 psycopg2-2.5.4]# gmond -m
+[PYTHON] Can't import the metric module [postgres].
+
+Traceback (most recent call last):
+  File "/opt/ganglia-core-3.6.0/lib64/ganglia/python_modules/postgres.py", line 1, in <module>
+    import psycopg2
+  File "/usr/lib64/python2.6/site-packages/psycopg2/__init__.py", line 50, in <module>
+    from psycopg2._psycopg import BINARY, NUMBER, STRING, DATETIME, ROWID
+ImportError: libpq.so.5: cannot open shared object file: No such file or directory
+
+
+加载即可
+
+# vi /etc/ld.so.conf
+/opt/pgsql/lib
+# ldconfig
+# ldconfig -p|grep libpq
+        libpqwalreceiver.so (libc6,x86-64) => /opt/pgsql/lib/libpqwalreceiver.so
+        libpq.so.5 (libc6,x86-64) => /opt/pgsql/lib/libpq.so.5
+        libpq.so (libc6,x86-64) => /opt/pgsql/lib/libpq.so
+
+
+
+现在可以正常查看这些新增的metric了.
+
+# gmond -m|grep Py
+Pypg_hours_since_last_vacuum    PG hours since last vacuum (module python_module)
+Pypg_blks_memread       PG Blocks Read from Memory (module python_module)
+Pypg_inserts    PG Inserts (module python_module)
+Pypg_waiting_sessions   PG Waiting Sessions Blocked (module python_module)
+Pypg_longest_query      PG Longest Query in Seconds (module python_module)
+Pypg_bgwriter_buffers_clean     PG number of buffers written by the background writer (module python_module)
+Pypg_locks_otherexclusive       PG Exclusive Locks write blocking (module python_module)
+Pypg_bgwriter_buffers_alloc     PG number of buffers allocated (module python_module)
+Pypg_bgwriter_checkpoint_write_time     PG time to write checkpoints to disk (module python_module)
+Pypg_deletes    PG Deletes (module python_module)
+Pypg_bgwriter_checkpoints_req   PG unscheduled checkpoints (module python_module)
+Pypg_longest_xact       PG Longest Transaction in Seconds (module python_module)
+Pypg_locks_shared       PG Shared Locks NON blocking (module python_module)
+Pypg_active_sessions    PG Active Sessions (module python_module)
+Pypg_bgwriter_buffers_checkpoint        PG number of buffers written during checkpoint (module python_module)
+Pypg_transactions       PG Transactions (module python_module)
+Pypg_locks_accessexclusive      PG AccessExclusive Locks read write blocking (module python_module)
+Pypg_tup_idxfetch       PG Tuples fetched from indexes (module python_module)
+Pypg_reads      PG Reads (module python_module)
+Pypg_bgwriter_checkpoints_timed PG scheduled checkpoints (module python_module)
+Pypg_blks_diskread      PG Blocks Read from Disk (module python_module)
+Pypg_idle_sessions      PG Idle Sessions (module python_module)
+Pypg_updates    PG Updates (module python_module)
+Pypg_bgwriter_checkpoint_sync_time      PG time to sync checkpoints to disk (module python_module)
+Pypg_xacts_remain       PG xacts remain (module python_module)
+Pypg_tup_seqscan        PG Tuples sequentially scanned (module python_module)
+Pypg_hours_since_last_analyze   PG hours since last analyze (module python_module)
+Pypg_idle_in_transaction_sessions       PG Idle In Transaction Sessions (module python_module)
+Pypg_bgwriter_buffers_backend   PG number of buffers written directly by a backend (module python_module)
+
+
+
+gmond -f 在前台执行, 可以看到一些问题, 如下 : 
+
+Traceback (most recent call last):
+  File "/opt/ganglia-core-3.6.0/lib64/ganglia/python_modules/postgres.py", line 168, in metric_handler
+    pg_metrics = pg_metrics_queries()
+  File "/opt/ganglia-core-3.6.0/lib64/ganglia/python_modules/postgres.py", line 20, in deco
+    self.last_value = func(*args, **kwds)
+  File "/opt/ganglia-core-3.6.0/lib64/ganglia/python_modules/postgres.py", line 149, in pg_metrics_queries
+    hours_since_vacuum = int(pg_stat_table_values[2])
+TypeError: int() argument must be a string or a number, not 'NoneType'
+[PYTHON] Can't call the metric handler function for [Pypg_xacts_remain] in the python module [postgres].
+
+
+这是由于extract(epoch from now() - min(last_vacuum))::int/60/60空值引起的.
+
+digoal=# select sum(seq_tup_read), sum(idx_tup_fetch), 
+digoal-#         extract(epoch from now() - min(last_vacuum))::int/60/60, 
+digoal-#         extract(epoch from now() - min(last_analyze))::int/60/60 
+digoal-#         from pg_stat_all_tables;
+    sum    |   sum    | ?column? | ?column? 
+-----------+----------+----------+----------
+ 152919588 | 17332093 |          |      937
+(1 row)
+
+
+处理方法 : 
+
+    hours_since_vacuum = int(pg_stat_table_values[2])
+改成
+    hours_since_vacuum = int(pg_stat_table_values[2] or 0)
+
+
+所有可能出现空值的metric, 都建议修改一下.
+
+[注意]
+1. 自定义metric name的命名规则, 便于在gweb中聚合, 还有title, 便于了解含义.
+
+[参考]
+1. http://bucardo.org/wiki/Check_postgres
+2. http://blog.163.com/digoal@126/blog/static/1638770402014252816497/
+3. http://blog.163.com/digoal@126/blog/static/163877040201412763135184/
+4. https://github.com/ganglia/gmond_python_modules/tree/master/postgresql
+5. http://blog.163.com/digoal@126/blog/static/1638770402014823102256805/
+6. http://blog.163.com/digoal@126/blog/static/16387704020148345219914/
+7. https://github.com/mentalblock/ganglia_postgresql
+8. http://blog.163.com/digoal@126/blog/static/163877040201481835916946/
+9. http://blog.163.com/digoal@126/blog/static/163877040201481843417188/
+10. http://blog.163.com/digoal@126/blog/static/1638770402014819102825333/
+11. https://github.com/digoal/sky_postgresql_cluster/raw/master/INSTALL.txt
+12. http://pgstatsinfo.projects.pgfoundry.org/
+13. http://blog.163.com/digoal@126/blog/static/163877040201211354145701/
+
+Flag Counter

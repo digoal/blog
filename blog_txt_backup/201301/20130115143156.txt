@@ -1,0 +1,180 @@
+PostgreSQL research
+
+reduce PostgreSQL pg_xlog full page writes
+
+2013-01-15 14:31:56   查看原文>>
+
+pg_xlog 是 PostgreSQL 可靠性的保证.
+今天群里的兄弟聊到归档文件颇多, 如何减少的问题.
+简单的方法是通过调整shared_buffer, checkpoint间隔.  
+如下 : 
+【场景1】 : 
+vi postgresql.conf
+
+shared_buffers = 32MB
+checkpoint_segments = 3 
+checkpoint_timeout = 1min
+
+
+重启数据库.
+创建测试表 : 
+
+digoal=> create table test (id int primary key, info text);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "test_pkey" for table "test"
+CREATE TABLE
+digoal=> insert into test select generate_series(1,1000000),'DIGOAL';
+INSERT 0 1000000
+
+
+创建检查点 : 
+
+postgres=# checkpoint;
+CHECKPOINT
+
+
+记下当前的xlog位置.
+
+postgres=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 96E8/6ABEB740
+(1 row)
+
+
+pgbench脚本 : 
+
+ocz@db-172-16-3-150-> cat test.sql
+\setrandom id 1 1000000
+update test set info=clock_timestamp()::text where id=:id;
+
+
+pgbench测试, 处理80万更新事务 : 
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 100000 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 100000
+number of transactions actually processed: 800000/800000
+tps = 4833.566032 (including connections establishing)
+tps = 4833.864802 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002287        \setrandom id 1 1000000
+        1.640042        update test set info=clock_timestamp()::text where id=:id;
+
+
+测试完后创建检查点, 并查看当前的xlog位置 : 
+
+postgres=# checkpoint;
+CHECKPOINT
+digoal=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 96E9/1E7DAF50
+(1 row)
+
+
+计算历经了多少的XLOG数据, 如下2860MB. : 
+
+digoal=# select pg_xlog_location_diff('96E9/1E7DAF50', '96E8/6ABEB740')/1024/1024;
+       ?column?        
+-----------------------
+ 2859.9355621337890625
+(1 row)
+
+
+
+【场景2】
+vi $PGDATA/postgresql.conf
+修改以下三个参数的值 : 
+
+shared_buffers = 4096MB
+checkpoint_segments = 256
+checkpoint_timeout = 5min
+
+
+xlog文件大小16MB, shared_buffers=4096MB, checkpoint_segments=shared_buffers/xlog文件大小=256;
+这几个参数需要配合调节.
+
+重启数据库 : 
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down.... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+
+
+创建检查点, 记录当前的xlog位置: 
+
+ocz@db-172-16-3-150-> psql
+psql (9.2.1)
+Type "help" for help.
+postgres=# checkpoint;
+CHECKPOINT
+postgres=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 96E9/25FE5558
+(1 row)
+
+
+
+pgbench测试, 处理80万更新事务 : 
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 100000 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 100000
+number of transactions actually processed: 800000/800000
+tps = 35387.346131 (including connections establishing)
+tps = 35405.115679 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002269        \setrandom id 1 1000000
+        0.202819        update test set info=clock_timestamp()::text where id=:id;
+
+
+
+测完后, 创建检查点并记录当前的xlog位置 : 
+
+postgres=# checkpoint;
+CHECKPOINT
+postgres=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 96E9/35B5FB80
+(1 row)
+
+
+
+计算历经了多少的xlog, 如下251MB.
+
+postgres=# select pg_xlog_location_diff('96E9/35B5FB80', '96E9/25FE5558')/1024/1024;
+       ?column?       
+----------------------
+ 251.4780654907226563
+(1 row)
+
+
+
+执行同样的事务量, xlog从2860MB下降到251MB.
+
+【小结】
+1. 通过减少block_size的大小也是方法之一, 当然效果没有以上的方法明显. 并且程序编译完后就没有办法修改了.
+2. 检查点的间隔太长虽然减少了xlog的产生, 但是如果数据库异常关闭(-m immediate)或者服务器异常导致服务器异常关闭后, 在数据库启动时需要recovery, 这个过程也会拉长. 因为要应用更多的变更. 
+
+【参考】
+1. http://www.postgresql.org/docs/9.2/static/wal-configuration.html
+为什么调了这几个参数能减少xlog的量, 如下 : 
+
+If full_page_writes is set (as is the default), there is another factor to consider. To ensure data page consistency, the first modification of a data page after each checkpoint results in logging the entire page content. 
+In that case, a smaller checkpoint interval increases the volume of output to the WAL log, partially negating the goal of using a smaller interval, and in any case causing more disk I/O.
+

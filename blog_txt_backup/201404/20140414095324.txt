@@ -1,0 +1,129 @@
+PostgreSQL research
+
+PostgreSQL 9.4 Make security barrier views automatically updatable
+
+2014-04-14 9:53:24   查看原文>>
+
+PostgreSQL 9.4新增的一个功能, 允许设置了安全栅栏标签的"简单"视图和未设置"安全栅栏"的视图一样自动更新.
+简单视图自动更新引入自9.3版本, 具体可参考
+http://blog.163.com/digoal@126/blog/static/16387704020134922356437/
+9.4 新增该项功能的简要说明 : 
+
+Make security barrier views automatically updatable
+
+Views which are marked as security_barrier must have their quals
+applied before any user-defined quals are called, to prevent
+user-defined functions from being able to see rows which the
+security barrier view is intended to prevent them from seeing.
+
+Remove the restriction on security barrier views being automatically
+updatable by adding a new securityQuals list to the RTE structure
+which keeps track of the quals from security barrier views at each
+level, independently of the user-supplied quals.  When RTEs are
+later discovered which have securityQuals populated, they are turned
+into subquery RTEs which are marked as security_barrier to prevent
+any user-supplied quals being pushed down (modulo LEAKPROOF quals).
+
+Dean Rasheed, reviewed by Craig Ringer, Simon Riggs, KaiGai Kohei
+
+
+除了使用安全栅栏, 其实如果where条件中的操作符标记为LEAKPROOF, 那么都会在用户传入的任何where 条件之前被评估.
+所以不存在利用cbo和function进行视图攻击的可能性(http://blog.163.com/digoal@126/blog/static/163877040201361031431669/).
+
+If an automatically updatable view is marked with the security_barrier property then all the view's WHERE conditions (and any conditions using operators which are marked as LEAKPROOF) will always be evaluated before any conditions that a user of the view has added. See Section 38.5 for full details. 
+Note that, due to this, rows which are not ultimately returned (because they do not pass the user's WHERE conditions) may still end up being locked. 
+EXPLAIN can be used to see which conditions are applied at the relation level (and therefore do not lock rows) and which are not.
+
+
+但是需要注意, 使用安全栅栏的视图, 或者视图中存在的leakproof操作符对应的where 条件在用户传入的where条件前被评估.
+所以在对这类视图执行DML操作时, 锁的行数可能比普通视图要多, 使用explain可以看到具体锁了哪些行.
+
++-- security barrier view
++CREATE TABLE base_tbl (person text, visibility text);
++INSERT INTO base_tbl VALUES ('Tom', 'public'),
++                            ('Dick', 'private'),
++                            ('Harry', 'public');
++CREATE VIEW rw_view1 AS
++  SELECT person FROM base_tbl WHERE visibility = 'public';
++CREATE FUNCTION snoop(anyelement)
++RETURNS boolean AS
++$$
++BEGIN
++  RAISE NOTICE 'snooped value: %', $1;
++  RETURN true;
++END;
++$$
++LANGUAGE plpgsql COST 0.000001;
++CREATE OR REPLACE FUNCTION leakproof(anyelement)
++RETURNS boolean AS
++$$
++BEGIN
++  RETURN true;
++END;
++$$
++LANGUAGE plpgsql STRICT IMMUTABLE LEAKPROOF;
+
++EXPLAIN (costs off) UPDATE rw_view1 SET person=person WHERE snoop(person);
++                     QUERY PLAN                      
++-----------------------------------------------------
++ Update on base_tbl base_tbl_1
++   ->  Subquery Scan on base_tbl   
++         Filter: snoop(base_tbl.person)  -- 这个条件是用户传入的, 在评估安全栅栏条件后执行过滤, 所以自动添加子查询.
++         ->  Seq Scan on base_tbl base_tbl_2
++               Filter: (visibility = 'public'::text)    -- 这个条件是relation级别的. 不属于被锁的范围. 可以使用pgrowlocks插件查看.
++(5 rows)
+
+
+对于leakproof函数, 需要注意它的规则重写, 也可能成为攻击点.
+
+The query planner has more flexibility when dealing with functions that have no side effects. Such functions are referred to as LEAKPROOF, and include many simple, commonly used operators, such as many equality operators. The query planner can safely allow such functions to be evaluated at any point in the query execution process, since invoking them on rows invisible to the user will not leak any information about the unseen rows. In contrast, a function that might throw an error depending on the values received as arguments (such as one that throws an error in the event of overflow or division by zero) are not leak-proof, and could provide significant information about the unseen rows if applied before the security view's row filters.
+
+It is important to understand that even a view created with the security_barrier option is intended to be secure only in the limited sense that the contents of the invisible tuples will not be passed to possibly-insecure functions. The user may well have other means of making inferences about the unseen data; for example, they can see the query plan using EXPLAIN, or measure the run time of queries against the view. A malicious attacker might be able to infer something about the amount of unseen data, or even gain some information about the data distribution or most common values (since these things may affect the run time of the plan; or even, since they are also reflected in the optimizer statistics, the choice of plan). If these types of "covert channel" attacks are of concern, it is probably unwise to grant any access to the data at all.
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201363141544732
+2. http://blog.163.com/digoal@126/blog/static/16387704020134922356437/
+3. http://www.postgresql.org/docs/devel/static/sql-createview.html
+4. http://www.postgresql.org/docs/devel/static/rules-privileges.html
+5. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=842faa714c0454d67e523f5a0b6df6500e9bc1a5
+6. http://www.postgresql.org/docs/devel/static/sql-createfunction.html
+7. http://blog.163.com/digoal@126/blog/static/163877040201361031431669/
+8. 
+
+--- a/doc/src/sgml/ref/create_view.sgml
++++ b/doc/src/sgml/ref/create_view.sgml
+@@ -323,12 +323,6 @@ CREATE VIEW vista AS SELECT text 'Hello World' AS hello;
+        or set-returning functions.
+       </para>
+      </listitem>
+-
+-     <listitem>
+-      <para>
+-       The view must not have the <literal>security_barrier</> property.
+-      </para>
+-     </listitem>
+     </itemizedlist>
+    </para>
+ 
+@@ -362,6 +356,19 @@ CREATE VIEW vista AS SELECT text 'Hello World' AS hello;
+    </para>
+ 
+    <para>
++    If an automatically updatable view is marked with the
++    <literal>security_barrier</> property then all the view's <literal>WHERE</>
++    conditions (and any conditions using operators which are marked as LEAKPROOF)
++    will always be evaluated before any conditions that a user of the view has
++    added.   See <xref linkend="rules-privileges"> for full details.  Note that,
++    due to this, rows which are not ultimately returned (because they do not
++    pass the user's <literal>WHERE</> conditions) may still end up being locked.
++    <command>EXPLAIN</command> can be used to see which conditions are
++    applied at the relation level (and therefore do not lock rows) and which are
++    not.
++   </para>
++
++   <para>
+
+
+Flag Counter

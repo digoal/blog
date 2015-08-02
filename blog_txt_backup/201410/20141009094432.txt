@@ -1,0 +1,375 @@
+PostgreSQL research
+
+PostgreSQL password security
+
+2014-10-09 9:44:32   查看原文>>
+
+数据库密码管理是数据库安全的重要环节之一.
+例如简单密码策略应该包含 : 
+1. 密码复杂度
+2. 密码验证失败延迟
+3. 密码更换周期, 以及重复使用策略
+4. 密码验证失败几次后锁定, 以及解锁时间等
+5. 设置密码时防止密码被记录到数据库日志,history,或审计日志中. (也可以使用pwd+user的md5值设置密码, 或者使用提示输入) , 创建用户时使用createuser命令行工具-W选项提示输入密码. 修改用户密码建议使用pg_md5工具生成密码, 在psql中使用ALTER ROLE填入md5值.
+
+下面依次来讲解一下在PostgreSQL中如何实现简单的密码策略.
+1. 密码复杂度
+PostgreSQL提供了一个插件passwordcheck可以满足简单的密码复杂度测验, 防止使用过短, 或者与包含用户名的密码.
+如果需要更复杂的检查, 可以让passwordcheck使用crack库.
+安装过程 : 
+安装cracklib以及字典
+
+# yum install -y cracklib-devel cracklib-dicts cracklib
+
+
+字典如下(.pwd结尾文件) : 
+
+[root@db-172-16-3-221 cracklib]# rpm -ql cracklib-dicts
+/usr/lib64/cracklib_dict.hwm
+/usr/lib64/cracklib_dict.pwd
+/usr/lib64/cracklib_dict.pwi
+/usr/sbin/mkdict
+/usr/sbin/packer
+/usr/share/cracklib
+/usr/share/cracklib/cracklib-small.hwm
+/usr/share/cracklib/cracklib-small.pwd
+/usr/share/cracklib/cracklib-small.pwi
+/usr/share/cracklib/pw_dict.hwm
+/usr/share/cracklib/pw_dict.pwd
+/usr/share/cracklib/pw_dict.pwi
+
+
+当然, 你也可以使用 create-cracklib-dict 通过word文件自行生成字典.
+例如 : 
+
+下载word文件
+http://sourceforge.net/projects/cracklib/files/cracklib-words/2008-05-07/
+(可以自行添加word进去)
+# cd /opt/soft_bak/
+# wget http://downloads.sourceforge.net/project/cracklib/cracklib-words/2008-05-07/cracklib-words-20080507.gz?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fcracklib%2Ffiles%2Fcracklib-words%2F2008-05-07%2F&ts=1412826278&use_mirror=nchc
+# tar -zxvf cracklib-words-20080507.gz
+# gunzip cracklib-words-20080507.gz
+[root@db-172-16-3-221 soft_bak]# less cracklib-words-20080507 
+`
+`!@#$%^&*()_+
+^
+^%$#@!
+~
+~!@
+~!@#
+~!@#~@!#
+创建字典文件
+[root@db-172-16-3-221 soft_bak]# create-cracklib-dict -h
+Usage: create-cracklib-dict [options] wordlist ...
+
+This script takes one or more word list files as arguments
+and converts them into cracklib dictionaries for use
+by password checking programs. The results are placed in
+the default compiled-in dictionary location.
+
+If you wish to store the dictionary in a different location,
+use the cracklib-format and cracklib-packer commands directly.
+
+Options:
+  -o, --output <file>   Alternative output file for cracklib-packer
+  -h, --help            This help output
+
+Example:
+create-cracklib-dict /usr/share/words
+[root@db-172-16-3-221 soft_bak]# create-cracklib-dict -o ./cracklib-dict ./cracklib-words-20080507 
+skipping line: 1
+1669426 1669425
+[root@db-172-16-3-221 soft_bak]# ll cracklib-dict.*
+-rw-r--r-- 1 root root    1024 Oct  9 12:00 cracklib-dict.hwm
+-rw-r--r-- 1 root root 7472513 Oct  9 12:00 cracklib-dict.pwd
+-rw-r--r-- 1 root root  417372 Oct  9 12:00 cracklib-dict.pwi
+
+
+使用这个密码文件
+
+修改passwordcheck.c以及Makefile.
+
+[root@db-172-16-3-221 cracklib]# cd /opt/soft_bak/postgresql-9.3.5/contrib/passwordcheck/
+[root@db-172-16-3-221 passwordcheck]# vi passwordcheck.c
+#ifdef USE_CRACKLIB
+#include <crack.h>
+//  如果是源码安装的cracklib, 可能需要修改如下, 本例不需要修改
+//  #include "/opt/cracklib/include/crack.h"
+#endif
+/* passwords shorter than this will be rejected, 最小密码长度最好改成20或更大 */
+#define MIN_PWD_LENGTH 20
+
+
+
+修改Makefile, 把注释去掉, 并修改字典文件(不要带.pwd后缀).
+
+[root@db-172-16-3-221 passwordcheck]# vi Makefile
+# contrib/passwordcheck/Makefile
+# uncomment the following two lines to enable cracklib support
+PG_CPPFLAGS = -DUSE_CRACKLIB '-DCRACKLIB_DICTPATH="/usr/share/cracklib/pw_dict"'
+# 修改字典文件 /usr/lib/cracklib_dict
+SHLIB_LINK = -lcrack
+
+
+
+安装模块: 
+
+[root@db-172-16-3-221 passwordcheck]# make clean
+rm -f passwordcheck.so   libpasswordcheck.a  libpasswordcheck.pc
+rm -f passwordcheck.o
+[root@db-172-16-3-221 passwordcheck]# make
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -DUSE_CRACKLIB '-DCRACKLIB_DICTPATH="/usr/share/cracklib/pw_dict"' -I. -I. -I../../src/include -D_GNU_SOURCE -I/usr/include/libxml2   -c -o passwordcheck.o passwordcheck.c
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -shared -o passwordcheck.so passwordcheck.o -L../../src/port -L../../src/common -Wl,--as-needed -Wl,-rpath,'/opt/pgsql9.3.5/lib',--enable-new-dtags  -lcrack 
+[root@db-172-16-3-221 passwordcheck]# make install
+/bin/mkdir -p '/opt/pgsql9.3.5/lib'
+/usr/bin/install -c -m 755  passwordcheck.so '/opt/pgsql9.3.5/lib/passwordcheck.so'
+
+
+
+加载模块.
+
+[root@db-172-16-3-221 passwordcheck]# su - postgres
+postgres@db-172-16-3-221-> cd $PGDATA
+postgres@db-172-16-3-221-> vi postgresql.conf
+shared_preload_libraries = 'passwordcheck'
+postgres@db-172-16-3-221-> pg_ctl restart -m fast
+
+
+
+修改密码测试 : 
+
+postgres@db-172-16-3-221-> psql
+psql (9.3.5)
+Type "help" for help.
+可以看到, 不符合密码强度(必须包含大小写, 非字符), 或者在密码文件中的密码都不允许使用.
+digoal=# alter role postgres encrypted password 'helloworld123';
+ERROR:  password is easily cracked
+digoal=# alter role postgres encrypted password 'helloworld';
+ERROR:  password must contain both letters and nonletters
+digoal=# alter role postgres encrypted password 'hello';
+ERROR:  password is too short
+digoal=# alter role postgres encrypted password 'postgres';
+ERROR:  password must not contain user name
+digoal=# alter role postgres encrypted password 'postgresql';
+ERROR:  password must not contain user name
+digoal=# alter role postgres encrypted password 'abcpostgreHAHAHA';
+ERROR:  password must contain both letters and nonletters
+digoal=# alter role postgres encrypted password 'a_b_cpostgreHAHAHA';
+ERROR:  password is too short
+digoal=# alter role postgres encrypted password 'a_b_cpostgreHAHAHAHAHAH';
+ALTER ROLE
+
+
+使用passwordcheck模块后, 就可以在数据库中强制密码复杂度了.
+
+2. 密码验证失败延迟
+这个主要用于防止暴力破解. 验证失败后, 延迟一个时间窗口才能继续验证.
+安装 : 
+
+[root@db-172-16-3-221 auth_delay]# cd /opt/soft_bak/postgresql-9.3.5/contrib/auth_delay/
+[root@db-172-16-3-221 auth_delay]# gmake clean
+rm -f auth_delay.so auth_delay.o
+[root@db-172-16-3-221 auth_delay]# gmake
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -I. -I. -I../../src/include -D_GNU_SOURCE -I/usr/include/libxml2   -c -o auth_delay.o auth_delay.c
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -L../../src/port -L../../src/common -Wl,--as-needed -Wl,-rpath,'/opt/pgsql9.3.5/lib',--enable-new-dtags  -shared -o auth_delay.so auth_delay.o
+[root@db-172-16-3-221 auth_delay]# gmake install
+/bin/mkdir -p '/opt/pgsql9.3.5/lib'
+/usr/bin/install -c -m 755  auth_delay.so '/opt/pgsql9.3.5/lib/'
+
+
+# 加载模块
+
+[root@db-172-16-3-221 auth_delay]# su - postgres
+postgres@db-172-16-3-221-> cd $PGDATA
+postgres@db-172-16-3-221-> vi postgresql.conf
+shared_preload_libraries = 'auth_delay,passwordcheck'
+auth_delay.milliseconds = 5000
+
+
+测试
+
+postgres@db-172-16-3-221-> pg_ctl restart -m fast
+postgres@db-172-16-3-221-> psql -h 172.16.3.221 -U postgres postgres
+Password for user postgres: 密码输入错误后, 需要等待5秒返回认证失败. 防止暴力破解密码.
+psql: FATAL:  password authentication failed for user "postgres"
+
+
+
+3. 密码更换周期, 以及重复使用策略
+密码更换周期通过设置角色的有效期来强制指定, 例如
+
+digoal=# alter role postgres valid until '2015-01-01';
+ALTER ROLE
+digoal=# \du
+                             List of roles
+ Role name |                   Attributes                   | Member of 
+-----------+------------------------------------------------+-----------
+ postgres  | Superuser, Create role, Create DB, Replication+| {}
+           | Password valid until 2015-01-01 00:00:00+08    | 
+
+
+那么2015-01-01后, 使用密码认证将不能登录, 但是如果配置为trust的话, 不需要密码验证还是能登录的.
+重复使用策略目前无法简单的实现, 但是可以结合事件触发器来实现, 例如创建用户, 修改用户时, 将用户和密码+user的md5值记录到一个文件中, 下次修改密码时在事件触发器中检索一下是否重复使用了密码.
+
+4. 密码验证失败几次后锁定, 以及解锁时间等
+目前PostgreSQL不支持这个安全策略, 目前只能使用auth_delay来延长暴力破解的时间.
+
+5. 设置密码时防止密码被记录到数据库日志,history,或审计日志中. 
+这一点是最容易被忽略的, 可能导致密码泄露.
+例如 : 
+
+postgres@db-172-16-3-221-> psql
+psql (9.3.5)
+Type "help" for help.
+digoal=# alter role postgres encrypted password 'a_b_cpostgreHAHAHAHAHAH';
+ALTER ROLE
+
+
+这条SQL, 包括密码都可能被记录到2个地方.
+1. history
+
+postgres@db-172-16-3-221-> cd
+postgres@db-172-16-3-221-> less .psql_history
+alter role postgres encrypted password 'a_b_cpostgreHAHAHAHAHAH';
+\q
+
+
+2. csvlog, (如果开启了DDL或更高级别审计, #log_statement = 'ddl'                 # none, ddl, mod, all).
+
+postgres@db-172-16-3-221-> cd $PGDATA/pg_log
+2014-10-09 09:30:53.277 CST,"postgres","digoal",36441,"[local]",5435e54c.8e59,3,"idle",2014-10-09 09:30:52 CST,2/76,0,LOG,00000,"statement: alter role postgres encrypted password 'a_b_cpostgreHAHAHAHAHAH';",,,,,,,,"exec_simple_query, postgres.c:890","psql"
+
+
+同时还可能被记录到审计工具中, 例如堡垒机.
+
+解决办法 : 
+1. 使用pwd+user的md5值设置密码, 
+2. 或者创建用户时使用createuser命令行工具-W选项提示输入密码. 
+例如 : 
+postgres@db-172-16-3-221-> createuser -D -E -I -l -P -R -s --no-replication -h 127.0.0.1 -p 5432 -U postgres -W newrole
+Enter password for new role: 
+Enter it again: 
+Password: 
+我们看到日志中记录的密码已经是加密后的密码.
+2014-10-09 09:36:31.491 CST,"postgres","postgres",36499,"127.0.0.1:10919",5435e69f.8e93,3,"idle",2014-10-09 09:36:31 CST,2/100,0,LOG,00000,"statement: CREATE ROLE newrole ENCRYPTED PASSWORD 'md5e8541c3402dc262583fc1b0980b013df' SUPERUSER CREATEDB CREATEROLE NOINHERIT LOGIN NOREPLICATION;
+对应的代码 : 
+src/bin/scripts/createuser.c
+
+                if (encrypted != TRI_NO)
+                {
+                        char       *encrypted_password;
+
+                        encrypted_password = PQencryptPassword(newpassword,
+                                                                                                   newuser);
+                        if (!encrypted_password)
+                        {
+                                fprintf(stderr, _("Password encryption failed.\n"));
+                                exit(1);
+                        }
+                        appendStringLiteralConn(&sql, encrypted_password, conn);
+                        PQfreemem(encrypted_password);
+                }
+
+
+src/interfaces/libpq/fe-auth.c
+
+/*
+ * PQencryptPassword -- exported routine to encrypt a password
+ *
+ * This is intended to be used by client applications that wish to send
+ * commands like ALTER USER joe PASSWORD 'pwd'.  The password need not
+ * be sent in cleartext if it is encrypted on the client side.  This is
+ * good because it ensures the cleartext password won't end up in logs,
+ * pg_stat displays, etc.  We export the function so that clients won't
+ * be dependent on low-level details like whether the enceyption is MD5
+ * or something else.
+ *
+ * Arguments are the cleartext password, and the SQL name of the user it
+ * is for.
+ *
+ * Return value is a malloc'd string, or NULL if out-of-memory.  The client
+ * may assume the string doesn't contain any special characters that would
+ * require escaping.
+ */
+char *
+PQencryptPassword(const char *passwd, const char *user)
+{
+        char       *crypt_pwd;
+
+        crypt_pwd = malloc(MD5_PASSWD_LEN + 1);
+        if (!crypt_pwd)
+                return NULL;
+
+        if (!pg_md5_encrypt(passwd, user, strlen(user), crypt_pwd))
+        {
+                free(crypt_pwd);
+                return NULL;
+        }
+
+        return crypt_pwd;
+}
+
+
+src/backend/libpq/md5.c
+
+/*
+ * Computes MD5 checksum of "passwd" (a null-terminated string) followed
+ * by "salt" (which need not be null-terminated).
+ *
+ * Output format is "md5" followed by a 32-hex-digit MD5 checksum.
+ * Hence, the output buffer "buf" must be at least 36 bytes long.
+ *
+ * Returns TRUE if okay, FALSE on error (out of memory).
+ */
+bool
+pg_md5_encrypt(const char *passwd, const char *salt, size_t salt_len,
+                           char *buf)
+{
+        size_t          passwd_len = strlen(passwd);
+
+        /* +1 here is just to avoid risk of unportable malloc(0) */
+        char       *crypt_buf = malloc(passwd_len + salt_len + 1);
+        bool            ret;
+
+        if (!crypt_buf)
+                return false;
+
+        /*
+         * Place salt at the end because it may be known by users trying to crack
+         * the MD5 output.
+         */
+        memcpy(crypt_buf, passwd, passwd_len);
+        memcpy(crypt_buf + passwd_len, salt, salt_len);
+
+        strcpy(buf, "md5");
+        ret = pg_md5_hash(crypt_buf, passwd_len + salt_len, buf + 3);
+
+        free(crypt_buf);
+
+        return ret;
+}
+
+
+3. 修改用户密码建议使用pg_md5工具生成密码, 在psql中使用ALTER ROLE填入md5值. 
+与上面类似, pg_md5是pgpool提供的一个工具, 实际上就是调用上面的函数.
+
+如果需要将认证模块剥离, 可以选择使用域认证或其他第三方认证方法, 这样的话, 密码策略就交由第三方管理了.
+http://blog.163.com/digoal@126/blog/static/1638770402014824551899/
+http://blog.163.com/digoal@126/blog/static/1638770402014563264469/
+http://blog.163.com/digoal@126/blog/static/16387704020145914717111/
+
+
+[其他]
+1. PostgreSQL在密码安全管理这块还需要加强.
+例如应该有密码修改的命令行工具.
+应该有密码重复使用的策略模块.
+
+[参考]
+1. http://www.postgresql.org/docs/9.4/static/passwordcheck.html
+2. http://www.postgresql.org/docs/9.4/static/auth-delay.html
+3. http://blog.163.com/digoal@126/blog/static/1638770402014824551899/
+4. http://blog.163.com/digoal@126/blog/static/1638770402014563264469/
+5. http://blog.163.com/digoal@126/blog/static/16387704020145914717111/
+6. http://sourceforge.net/projects/cracklib/
+
+Flag Counter

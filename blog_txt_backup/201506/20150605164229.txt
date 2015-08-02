@@ -1,0 +1,188 @@
+PostgreSQL research
+
+Why PostgreSQL stream replication standby so fast
+
+2015-06-05 16:42:29   查看原文>>
+
+PostgreSQL 流复制以及基于流复制的standby 延迟可以控制在微秒级别，为什么能有这么好的表现呢？
+Why PostgreSQL stream replication standby so fast - 德哥@Digoal - PostgreSQL research
+这主要和它的复制原理有关，因为它是基于BLOCK变更的复制和恢复。主节点（或上游节点）产生的xlog会在每次xlog flush或write后立即让wal sender进程触发读取xlog并发送到wal receiver端。因此产生XLOG和发送XLOG的过程是连续的。
+例如一个比较大的插入或更新操作，假设一次更新的数据量有几个GB，在执行SQL的过程当中会不断的产生xlog数据，只要网卡性能超出产生XLOG的速度，那么当更新完成并提交时，在standby也能立即反应提交后的状态。
+
+从代码可以看出，wal sender一次发送数据的量<=XLOG_BLCKSZ * 16，如果使用8K的XLOG_BLCKSZ，那么一次网络传输的片段是128K。从上一篇测试网络性能的文章来看到32K时单线程即可将网卡带宽利用完，http://blog.163.com/digoal@126/blog/static/1638770402015553437256/  所以128K要吃掉整个网络带宽不是问题。当然万兆网卡我没有测试过，如果你
+发现128K不够的话，可以修改一下这个限制。
+src/backend/replication/walsender.c
+
+/*
+ * Maximum data payload in a WAL data message.  Must be >= XLOG_BLCKSZ.
+ *
+ * We don't have a good idea of what a good value would be; there's some
+ * overhead per message in both walsender and walreceiver, but on the other
+ * hand sending large batches makes walsender less responsive to signals
+ * because signals are checked only between messages.  128kB (with
+ * default 8k blocks) seems like a reasonable guess for now.
+ */
+#define MAX_SEND_SIZE (XLOG_BLCKSZ * 16)
+
+...
+/*
+ * Send out the WAL in its normal physical/stored form.
+ *
+ * Read up to MAX_SEND_SIZE bytes of WAL that's been flushed to disk,
+ * but not yet sent to the client, and buffer it in the libpq output
+ * buffer.
+ *
+ * If there is no unsent WAL remaining, WalSndCaughtUp is set to true,
+ * otherwise WalSndCaughtUp is set to false.
+ */
+static void
+XLogSendPhysical(void)
+{
+......
+        /*
+         * Figure out how much to send in one message. If there's no more than
+         * MAX_SEND_SIZE bytes to send, send everything. Otherwise send
+         * MAX_SEND_SIZE bytes, but round back to logfile or page boundary.
+         *
+         * The rounding is not only for performance reasons. Walreceiver relies on
+         * the fact that we never split a WAL record across two messages. Since a
+         * long WAL record is split at page boundary into continuation records,
+         * page boundary is always a safe cut-off point. We also assume that
+         * SendRqstPtr never points to the middle of a WAL record.
+         */
+        startptr = sentPtr;
+        endptr = startptr;
+        endptr += MAX_SEND_SIZE;
+
+        /* if we went beyond SendRqstPtr, back off */
+        if (SendRqstPtr <= endptr)
+        {
+                endptr = SendRqstPtr;
+                if (sendTimeLineIsHistoric)
+                        WalSndCaughtUp = false;
+                else
+                        WalSndCaughtUp = true;
+        }
+        else
+        {
+                /* round down to page boundary. */
+                endptr -= (endptr % XLOG_BLCKSZ);
+                WalSndCaughtUp = false;
+        }
+
+        nbytes = endptr - startptr;
+        Assert(nbytes <= MAX_SEND_SIZE);
+
+        /*
+         * OK to read and send the slice.
+         */
+        resetStringInfo(&output_message);
+        pq_sendbyte(&output_message, 'w');
+
+        pq_sendint64(&output_message, startptr);        /* dataStart */
+        pq_sendint64(&output_message, SendRqstPtr); /* walEnd */
+        pq_sendint64(&output_message, 0);       /* sendtime, filled in last */
+
+
+        /*
+         * Read the log directly into the output buffer to avoid extra memcpy
+         * calls.
+         */
+        enlargeStringInfo(&output_message, nbytes);
+        XLogRead(&output_message.data[output_message.len], startptr, nbytes);
+        output_message.len += nbytes;
+        output_message.data[output_message.len] = '\0';
+
+        /*
+         * Fill the send timestamp last, so that it is taken as late as possible.
+         */
+        resetStringInfo(&tmpbuf);
+        pq_sendint64(&tmpbuf, GetCurrentIntegerTimestamp());
+        memcpy(&output_message.data[1 + sizeof(int64) + sizeof(int64)],
+                   tmpbuf.data, sizeof(int64));
+
+        pq_putmessage_noblock('d', output_message.data, output_message.len);
+
+        sentPtr = endptr;
+......
+
+
+
+flush后异步唤醒wal sender, 保证写wal和发送wal的连续性。
+src/backend/access/transam/xlog.c
+
+                                issue_xlog_fsync(openLogFile, openLogSegNo);
+
+                                /* signal that we need to wakeup walsenders later */
+                                WalSndWakeupRequest();
+......
+        /*
+         * If asked to flush, do so
+         */
+        if (LogwrtResult.Flush < WriteRqst.Flush &&
+                LogwrtResult.Flush < LogwrtResult.Write)
+
+        {
+                /*
+                 * Could get here without iterating above loop, in which case we might
+                 * have no open file or the wrong one.  However, we do not need to
+                 * fsync more than one file.
+                 */
+                if (sync_method != SYNC_METHOD_OPEN &&
+                        sync_method != SYNC_METHOD_OPEN_DSYNC)
+                {
+                        if (openLogFile >= 0 &&
+                                !XLByteInPrevSeg(LogwrtResult.Write, openLogSegNo))
+                                XLogFileClose();
+                        if (openLogFile < 0)
+                        {
+                                XLByteToPrevSeg(LogwrtResult.Write, openLogSegNo);
+                                openLogFile = XLogFileOpen(openLogSegNo);
+                                openLogOff = 0;
+                        }
+
+                        issue_xlog_fsync(openLogFile, openLogSegNo);
+                }
+
+                /* signal that we need to wakeup walsenders later */
+                WalSndWakeupRequest();
+
+                LogwrtResult.Flush = LogwrtResult.Write;
+        }
+......
+void
+XLogFlush(XLogRecPtr record)
+{
+        /* wake up walsenders now that we've released heavily contended locks */
+        WalSndWakeupProcessRequests();
+
+/*
+ * Flush xlog, but without specifying exactly where to flush to.
+ *
+ * We normally flush only completed blocks; but if there is nothing to do on
+ * that basis, we check for unflushed async commits in the current incomplete
+ * block, and flush through the latest one of those.  Thus, if async commits
+ * are not being used, we will flush complete blocks only.  We can guarantee
+ * that async commits reach disk after at most three cycles; normally only
+ * one or two.  (When flushing complete blocks, we allow XLogWrite to write
+ * "flexibly", meaning it can stop at the end of the buffer ring; this makes a
+ * difference only with very high load or long wal_writer_delay, but imposes
+ * one extra cycle for the worst case for async commits.)
+ *
+ * This routine is invoked periodically by the background walwriter process.
+ *
+ * Returns TRUE if we flushed anything.
+ */
+bool
+XLogBackgroundFlush(void)
+{
+......
+        /* wake up walsenders now that we've released heavily contended locks */
+        WalSndWakeupProcessRequests();
+
+
+
+[参考]
+1. src/backend/replication
+2. http://blog.163.com/digoal@126/blog/static/1638770402015553437256/
+Flag Counter

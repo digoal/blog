@@ -1,0 +1,321 @@
+PostgreSQL research
+
+PostgreSQL execute redis commands
+
+2013-05-12 13:39:41   查看原文>>
+
+需要使用到redis wrapper和redis client api.
+下载地址 : 
+1. https://bitbucket.org/qooleot/redis_wrapper
+2. https://github.com/redis/hiredis
+
+【安装】
+1. 安装redis(服务端)
+
+wget http://redis.googlecode.com/files/redis-2.6.13.tar.gz
+tar -zxvf redis-2.6.13.tar.gz
+mv redis-2.6.13 /opt/
+cd /opt/redis-2.6.13
+make
+
+
+-- 配置redis.conf
+
+vi redis.conf
+daemonize yes
+pidfile /var/run/redis.pid
+port 6379
+bind 0.0.0.0
+unixsocket /opt/redis-2.6.13/redis.sock
+unixsocketperm 755
+timeout 0
+tcp-keepalive 60
+loglevel notice
+logfile /var/log/redis.log
+databases 16
+save 900 1
+save 300 10
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+dbfilename dump6379.rdb
+dir /opt/redis-2.6.13/
+slave-serve-stale-data yes
+slave-read-only yes
+repl-disable-tcp-nodelay no
+slave-priority 100
+appendonly no
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+lua-time-limit 5000
+slowlog-log-slower-than 10000
+slowlog-max-len 128
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+list-max-ziplist-entries 512
+list-max-ziplist-value 64
+set-max-intset-entries 512
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+activerehashing yes
+client-output-buffer-limit normal 0 0 0
+client-output-buffer-limit slave 256mb 64mb 60
+client-output-buffer-limit pubsub 32mb 8mb 60
+hz 10
+aof-rewrite-incremental-fsync yes
+
+
+-- 启动redis
+
+/opt/redis-2.6.13/src/redis-server /opt/redis-2.6.13/redis.conf
+
+# netstat -anp|grep 6379
+tcp        0      0 0.0.0.0:6379                0.0.0.0:*                   LISTEN      16550/redis-server 
+
+
+
+2. 安装hiredis(PostgreSQL 端)
+下载: https://github.com/redis/hiredis
+刚好我写本文的时候这个repository出了点问题,无法下载.
+可以使用redis包含的hiredis源码.
+
+cd /opt/redis-2.6.13/deps/hiredis
+gmake
+gmake install
+
+
+
+3. 安装redis wrapper(PostgreSQL 端) https://bitbucket.org/qooleot/redis_wrapper
+
+git clone https://bitbucket.org/qooleot/redis_wrapper.git
+mv redis_wrapper /opt/soft_bak/postgresql-9.2.4/contrib/
+[root@db-172-16-3-33 soft_bak]# export PATH=/opt/pgsql9.2.4/bin:$PATH
+[root@db-172-16-3-33 soft_bak]# which pg_config
+/opt/pgsql9.2.4/bin/pg_config
+cp -r /opt/redis-2.6.13/deps/hiredis /opt/soft_bak/postgresql-9.2.4/contrib/redis_wrapper
+cd /opt/soft_bak/postgresql-9.2.4/contrib/redis_wrapper/hiredis
+gmake
+gmake install
+su - pg92
+psql
+digoal=# create extension redis;
+CREATE EXTENSION
+
+
+
+【测试】
+查看redis_wrapper包含的函数 : 
+
+pg92@db-172-16-3-33-> cd /opt/pgsql9.2.4/share/extension/
+pg92@db-172-16-3-33-> cat redis--0.0.2.sql 
+-- complain if script is sourced in psql, rather than via CREATE EXTENSION
+\echo Use "CREATE EXTENSION redis" to load this file. \quit
+
+CREATE FUNCTION redis_connect(con_num int, 
+                              con_host text = '127.0.0.1', 
+                              con_port int = 6379,
+                              con_pass text = '',
+                              con_db int  = 0,
+                              ignore_duplicate bool = false)
+RETURNS void
+AS 'MODULE_PATHNAME'
+LANGUAGE C;
+
+CREATE FUNCTION redis_disconnect(con_num int = 0)
+RETURNS void
+AS 'MODULE_PATHNAME'
+LANGUAGE C;
+
+CREATE FUNCTION redis_command(
+       con_num int, 
+       command text, 
+       variadic args text[] DEFAULT '{}')
+RETURNS text
+AS 'MODULE_PATHNAME' , 'redis_command'
+LANGUAGE C;
+
+CREATE FUNCTION redis_command_argv(con_num int, variadic args text[])
+RETURNS text
+AS 'MODULE_PATHNAME' , 'redis_command_argv'
+LANGUAGE C;
+
+CREATE FUNCTION redis_push_record(
+       con_num       int,
+       data          record,
+       push_keys     boolean,
+       key_set       text,
+       key_prefix    text,
+       key_fields    text[])
+returns void
+AS 'MODULE_PATHNAME'
+LANGUAGE C;
+
+CREATE FUNCTION redis_drop_table(
+       con_num       int,
+       key_set       text DEFAULT NULL,
+       key_prefix    text DEFAULT NULL)
+returns void
+AS 'MODULE_PATHNAME'
+LANGUAGE C;
+
+
+
+-- 连接redis
+SESSION A : 
+
+digoal=# select redis_connect(
+0,
+'127.0.0.1',           
+6379,           
+'',           
+0,         
+false);
+ redis_connect 
+---------------
+ 
+(1 row)
+
+
+SESSION B : 
+
+[root@db-172-16-3-33 ~]# netstat -anp|grep 6379
+tcp        0      0 0.0.0.0:6379                0.0.0.0:*                   LISTEN      16550/redis-server  
+tcp        0      0 127.0.0.1:47229             127.0.0.1:6379              ESTABLISHED 19210/postgres: pos 
+tcp        0      0 127.0.0.1:6379              127.0.0.1:47229             ESTABLISHED 16550/redis-server  
+
+
+-- SET key value测试
+SESSION A : 
+
+postgres=# select redis_command(0,'SET %s %s','a.key','a.value');
+ redis_command 
+---------------
+ OK
+(1 row)
+
+
+SESSION B : 
+
+[root@db-172-16-3-33 ~]# /opt/redis-2.6.13/src/redis-cli 
+redis 127.0.0.1:6379>
+redis 127.0.0.1:6379> get a.key
+"a.value"
+redis 127.0.0.1:6379> 
+
+
+-- mset 测试
+SESSION A : 
+
+postgres=# select redis_command_argv(0,'MSET','key1','val1','key2','val2','key3','val3');
+ redis_command_argv 
+--------------------
+ OK
+(1 row)
+
+
+SESSION B : 
+
+redis 127.0.0.1:6379> mget a.key key1 key2 key3
+1) "a.value"
+2) "val1"
+3) "val2"
+4) "val3"
+
+
+-- 测试push record, 将表的数据写入hash或者sets.
+SESSION A : 
+
+postgres=# select * from t;
+ id 
+----
+  1
+  2
+  3
+  1
+  2
+  3
+(6 rows)
+postgres=# select redis_push_record(0, t, true, 'abc', 'def', '{id}'::text[]) from t;
+ redis_push_record 
+-------------------
+ 
+ 
+ 
+ 
+ 
+ 
+(6 rows)
+
+
+SESSION B : 
+
+redis 127.0.0.1:6379> scard abc
+(integer) 3
+redis 127.0.0.1:6379> spop abc
+"def:2"
+redis 127.0.0.1:6379> spop abc
+"def:3"
+redis 127.0.0.1:6379> spop abc
+"def:1"
+redis 127.0.0.1:6379> spop abc
+(nil)
+redis 127.0.0.1:6379> scard abc
+(integer) 0
+
+
+-- 清除hashs或者sets的值.
+session a : 
+
+postgres=# select redis_push_record(0, t, true, 'abc', 'def', '{id}'::text[]) from t;
+ redis_push_record 
+-------------------
+ 
+ 
+ 
+ 
+ 
+ 
+(6 rows)
+
+
+session b : 
+
+redis 127.0.0.1:6379> scard abc
+(integer) 3
+
+
+session a :
+
+postgres=# select redis_drop_table(0,'abc');
+ redis_drop_table 
+------------------
+ 
+(1 row)
+
+
+session b : 
+
+redis 127.0.0.1:6379> scard abc
+(integer) 0
+
+
+
+【参考】
+1. https://bitbucket.org/qooleot/redis_wrapper
+2. https://github.com/redis/hiredis
+3. http://redis.io/download
+4. 引用
+
+Redis commands from Postgres
+A while ago a client wanted a way to call Redis commands from Postgres, for example to push values to Redis, or perform other Redis housekeeping that can't be done by use of the Redis FDW. I put together a quick Postgres interface using the official hiredis client library, and I have been polishing it up a bit in preparation for my talk at PgCon, and the package is now available for public use.
+
+The basic interface contains functions to provide persistent connection handles, to disconnect, and to call the library functions redisCommand() and redisCommandArgv(). Yesterday, I added functions to push a record to a Redis “table”, and to drop a Redis “table”. I am planning to add a function to push a whole Postgres table or view, but for now this can be achieved by pushing the records - tests yesterday on very modest hardware managed to push 1 million rows in 130 seconds and drop the same table in 45 seconds. Of course, in Redis dropping a table means in effect dropping its component objects, so it's still doing several million operations here.
+
+Of course, Redis doesn't really have tables in the PostgreSQL sense. It has a single global namespace which contains keys, which are strings, and values, which are various sorts of things (strings, integers, lists, hashes, sets, ordered sets). Hence my use of inverted commas above. For this purpose, a Redis table consists of a set of objects whose keys have a common prefix, or whose keys are the elements of a Redis set object. These uses are critical to the effective use of the Redis Foreign Data Wrapper, which I will also be expanding upon in my talk.
+
+I also added some regression  tests which demonstrate the abilities of the interface package. I'll be working on improving the documentation shortly.
+
+

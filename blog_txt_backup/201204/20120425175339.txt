@@ -1,0 +1,276 @@
+PostgreSQL research
+
+个人分析-阿里遇到的GreenPlum故障
+
+2012-04-25 17:53:39   查看原文>>
+
+老唐他们最近在维护GreenPlum时遇到的一个问题案例, 根据他们的排错来看, 可能是遇到了GreenPlum的BUG.
+但是对于BUG的详细定位我还是有一定的怀疑。具体排错如下：
+
+最近在维护greenplum中，发现pg_class表的索引很大了，为了增加提高性能，就做了一个reindex table pg_class;但做完后，就发现整个greenplum数据库的性能降低到只有以前的几分之一了，通dtrace脚本跟踪发现是一直在狂读pg_class，也不清楚为什么。当时没有办法，只好新建了一张与pg_class结构和索引都完全一样的表，然后把pg_class的内容导到这个新建的表中，然后关闭数据库，交换两个表的底层文件后，故障消失了。当时是一直不明白为什么，也把这个问题报给了EMC公司，也一直没有定位到原因。
+由于我们还有一个容灾环境，在容灾环境上建了一个greenplum的clone，然后在这个环境上也重现的故障。通过几天的定位，终于把原因找到了。
+原因是当重建pg_class表的索引时，导致索引pg_class_oid_index在pg_class表中的物理位置发生了变化。
+原先物理位置在0号块，
+
+aligputf8=# select ctid,relname,oid from pg_class where oid=2662;
+
+  ctid   |      relname       | oid  
+
+---------+--------------------+------
+
+ (0,108) | pg_class_oid_index | 2662
+
+reindex table pg_class后，索引pg_class_oid_index的位置移到了文件的最后：
+
+aligputf8=# select ctid,relname,oid from pg_class where relname='pg_class_oid_index';
+
+    ctid    |      relname       | oid  
+
+------------+--------------------+------
+
+ (43585,32) | pg_class_oid_index | 2662
+
+而为什么索引pg_class_oid_index在pg_class表中的条 目的物理位置移到最后就会导致狂读pg_class的问题发生呢？
+
+原因是，当访问任何一个表时，就需要从pg_class表中提取这个表的元数据信息，而在pg_class中查找表的原数据信息，需要访问索 引pg_class_oid_index，而访问索引pg_class_oid_index，也需要从pg_class表中获得索引pg_class_oid_index的元数据信息，而获得索引pg_class_oid_index自己的元数据信息，就不能再通过索引自己去查找自己的信息了，这里就只能从头扫描表pg_class来获得，而由于索引pg_class_oid_index的条目被移到了最后的位置，所以导致需要几乎把pg_class从头 扫描到尾才能找到pg_class_oid_index的条目，这样就大大的降低了数据库的性能。
+
+greenplum中，有几百万张表。 
+
+这个问题在原生的PostgreSQL中是否存在。从理论上看，估计也可能会有。
+查询表在pg_class中的信息是调用RelationIdGetRelation函数的。当在内存中找不到相关信息时，而这个函数一般是通过索引pg_class_oid_index去查找的。
+而数据库第一次起来的时候，如果通过RelationIdGetRelation函数获得索引pg_class_oid_index自己的信息，则自己不能通过自己去查找，所以必须全表扫描pg_class来得到，所以第一次时，估计也会比较慢。
+
+
+
+而获得索引pg_class_oid_index自己的元数据信息，就不能再通过索引自己去查找自己的信息了，这里就只能从头扫描表pg_class来获得，而由于索引pg_class_oid_index的条目被移到了最后的位置，所以导致需要几乎把pg_class从头扫描到尾才能找到pg_class_oid_index的条目，这样就大大的降低了数据库的性能。
+
+这部分内容在我使用PostgreSQL 9.1.3进行测试后, 无法得到印证. 因为PostgreSQL启动时会加载system catalog到内存中.
+详见
+src/backend/utils/cache/relcache.c
+测试过程如下 : 
+首先调用函数创建100W张测试表.
+先修改max_pred_locks_per_transaction, 改到一个比较大的数字, 否则一次建几百万表会有资源溢出的可能.
+
+create or replace function crt_table(i_prefix varchar(15),i_min int,i_max int) returns int as $$
+declare
+begin
+for i in i_min..i_max loop
+execute 'create table '||i_prefix||i||' (c1 int,c2 timestamp(0),c3 varchar(64))';
+end loop;
+return 0;
+end;
+$$ language plpgsql;
+
+
+-- 使用shell调用这个函数来建表.
+cat crt_table.sh 
+
+#!/bin/bash
+func()
+{
+s=10000
+for i in $(seq 1 200)
+do
+SQL="select 1 from crt_table('$1',$(($s*($i-1)+1)),$(($s*($i))));"
+echo -e $SQL|psql -f -
+done
+}
+
+func b &
+func c &
+func d &
+func e &
+func f &
+func g &
+func h &
+
+
+-- 查询当前数据库中的pg_class记录数, 全表扫描, 耗时274
+
+test=# select count(*) from pg_class;
+  count  
+---------
+ 1100292
+(1 row)
+
+Time: 274.327 ms
+
+
+-- 为避免受CACHE影响, 再次查询, 以得到真实的查询速度.
+
+test=# select count(*) from pg_class;
+  count  
+---------
+ 1100292
+(1 row)
+
+Time: 274.398 ms
+
+
+-- pg_class表大小目前是209MB左右
+
+test=# select pg_relation_size('pg_class')/1024;
+ ?column? 
+----------
+   213064
+(1 row)
+
+Time: 1.258 ms
+
+
+-- 重建pg_class的索引, 其中包含pg_class_oid_index.
+
+test=# REINDEX TABLE pg_class;
+REINDEX
+Time: 3524.714 ms
+test=# \d pg_class
+      Table "pg_catalog.pg_class"
+     Column     |   Type    | Modifiers 
+----------------+-----------+-----------
+ relname        | name      | not null
+ relnamespace   | oid       | not null
+ reltype        | oid       | not null
+ reloftype      | oid       | not null
+ relowner       | oid       | not null
+ relam          | oid       | not null
+ relfilenode    | oid       | not null
+ reltablespace  | oid       | not null
+ relpages       | integer   | not null
+ reltuples      | real      | not null
+ reltoastrelid  | oid       | not null
+ reltoastidxid  | oid       | not null
+ relhasindex    | boolean   | not null
+ relisshared    | boolean   | not null
+ relpersistence | "char"    | not null
+ relkind        | "char"    | not null
+ relnatts       | smallint  | not null
+ relchecks      | smallint  | not null
+ relhasoids     | boolean   | not null
+ relhaspkey     | boolean   | not null
+ relhasrules    | boolean   | not null
+ relhastriggers | boolean   | not null
+ relhassubclass | boolean   | not null
+ relfrozenxid   | xid       | not null
+ relacl         | aclitem[] | 
+ reloptions     | text[]    | 
+Indexes:
+    "pg_class_oid_index" UNIQUE, btree (oid)
+    "pg_class_relname_nsp_index" UNIQUE, btree (relname, relnamespace)
+
+
+
+-- 重建后pg_class_oid_index这条记录被放到了第26632个块中. 这个也是正常的, 因为我创建的表都是比p开头小的字母的表.
+
+test=# select ctid from pg_class where relname='pg_class_oid_index';
+   ctid    
+-----------
+ (26632,5)
+(1 row)
+
+Time: 1.368 ms
+
+
+-- 我的block_size=8K, 所以可以计算出pg_class_oid_index这条记录在pg_class中基本上是靠在最后的.
+
+test=# select 26632*8;
+ ?column? 
+----------
+   213056
+(1 row)
+
+Time: 0.353 ms
+
+
+-- 接下来测试一下是否会出现走pg_class_oid_index这个索引时需要重读pg_class的情况. 
+-- 因为pg_class_oid_index的元数据已经在内存存在, 从以下的测试结果来没有对pg_class进行全表扫描.
+-- 因为全表扫pg_class耗费了274毫秒.
+-- 另外我还不是太确定 "获取pg_class_oid_index这个索引的元数据时, 如果没有在内存中存在, 则需要重读pg_class" 这句描述到底对不对?
+
+test=# select oid from pg_class order by oid desc limit 10;
+   oid   
+---------
+ 3944301
+ 3944298
+ 3944295
+ 3944292
+ 3944289
+ 3944286
+ 3944283
+ 3944280
+ 3944277
+ 3944274
+(10 rows)
+
+Time: 0.904 ms
+test=# select * from pg_class where oid=3944274;
+ relname | relnamespace | reltype | reloftype | relowner | relam | relfilenode | reltablespace | relpages | reltuples | reltoastreli
+d | reltoastidxid | relhasindex | relisshared | relpersistence | relkind | relnatts | relchecks | relhasoids | relhaspkey | relhasru
+les | relhastriggers | relhassubclass | relfrozenxid | relacl | reloptions 
+---------+--------------+---------+-----------+----------+-------+-------------+---------------+----------+-----------+-------------
+--+---------------+-------------+-------------+----------------+---------+----------+-----------+------------+------------+---------
+----+----------------+----------------+--------------+--------+------------
+ l99991  |         2200 | 3944276 |         0 |       10 |     0 |     3944274 |             0 |        0 |         0 |             
+0 |             0 | f           | f           | p              | r       |        3 |         0 | f          | f          | f       
+    | f              | f              |     78352779 |        | 
+(1 row)
+
+Time: 0.510 ms
+
+
+
+不管 "获取pg_class_oid_index这个索引的元数据时, 如果没有在内存中存在, 则需要重读pg_class" 这个是不是对的,
+PostgreSQL 在启动时会把system catalog 全部加载到内存, 这个是事实.
+14591 postgres  18   0  209m  53m  52m S  0.0  0.2   0:00.89 /opt/pgsql/bin/postgres 
+209M刚好符合pg_class的SIZE, 
+但是索引(注意索引pg_class_oid_index这条在pg_class中的元数据已经进到内存了)并没有加载进去, 如下, 包含索引应该有264MB.
+
+test=# select pg_total_relation_size('pg_class')/1024/1024;
+ ?column? 
+----------
+      264
+
+
+ 正因为启动的时候要加载system catalog到内存, 所以pg_class越大, 启动速度约慢.
+并且pg_class的内容可能被刷出缓存, 视OS的CACHE机制而定.
+
+【小结】
+1. 如果  "获取pg_class_oid_index这个索引的元数据时, 如果没有在内存中存在, 则需要重读pg_class"  这个观点是正确的,
+那么老唐他们遇到的问题可能是pg_class的包含了pg_class_oid_index这台记录的内容刷出缓存后造成的. 但是也不应该造成pg_class频繁的读, 因为读一次就够了, pg_class_oid_index的内容很快会回到CACHE中. 频繁使用的东西也不那么容易从CACHE中出去. 所以造成频繁PG_CLASS读, 这个可能性不大.
+2. 第二种可能性我认为是pg_class_oid_index失效了. 以前使用EDB 8.3时遇到过索引失效的问题, 导致执行计划全变成全表扫描了.
+这个可能性我认为比较大.
+参考如下, 《记录一次EnterpriseDB的索引异常失效处理》
+http://blog.163.com/digoal@126/blog/static/1638770402010411102112458/
+3. 由于系统是GreenPlum的, 也可能是GreenPlum带来的其他BUG。
+
+直接通过PGOPTIONS='-c gp_session_role=utility' psql -p 50001连接时，只有数据库刚起来时，第一次连接时，才会出现全表扫描pg_class的情况，以后估计是因为cache在内存中的了，就不会再这样了。但如果是master过来的连接，则经常发生这样。
+
+
+根据这个来分析, 应该是PG_CLASS变大后的一个普遍现象, 例如很多情况下会涉及到某些系统表和pg_class关联进行查询, 导致使用了pg_class的全表扫描, 比如
+\dS操作会执行如下SQL, 
+
+SELECT n.nspname as "Schema",
+  c.relname as "Name",
+  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'i' THEN 'index' WHEN 'S' THEN 'sequence' WHEN 's' THEN 'special' WHEN 'f' THEN 'foreign table' END as "Type",
+  pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+FROM pg_catalog.pg_class c
+     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('r','v','S','s','f','')
+      AND n.nspname !~ '^pg_toast'
+  AND pg_catalog.pg_table_is_visible(c.oid)
+ORDER BY 1,2;
+
+
+这个SQL的执行计划如下, 用到了pg_class的全表扫描.
+
+ Sort  (cost=17.57..17.69 rows=45 width=133)
+   Sort Key: n.nspname, c.relname
+   ->  Hash Join  (cost=1.14..16.34 rows=45 width=133)
+         Hash Cond: (c.relnamespace = n.oid)
+         ->  Seq Scan on pg_class c  (cost=0.00..13.76 rows=54 width=73)
+               Filter: (pg_table_is_visible(oid) AND (relkind = ANY ('{r,v,S,s,f,""}'::"char"[])))
+         ->  Hash  (cost=1.07..1.07 rows=5 width=68)
+               ->  Seq Scan on pg_namespace n  (cost=0.00..1.07 rows=5 width=68)
+                     Filter: (nspname !~ '^pg_toast'::text)
+
+
+不知道master连接segment node的过程是不是会产生一些类似的全表扫描.

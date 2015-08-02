@@ -1,0 +1,455 @@
+PostgreSQL research
+
+ceph osd & placement group's stats introduce
+
+2014-12-25 10:02:54   查看原文>>
+
+本文主要介绍一下osd和PG的状态监控.
+
+OSD有4种状态 : 
+ceph osd placement groups stats introduce - 德哥@Digoal - PostgreSQL research
+Up 的OSD可能在集群中(In)或不在集群中(Out), Down的OSD则肯定是不在集群中(Out)的.
+
+[root@osd4 ~]# ceph osd stat
+     osdmap e41: 4 osds: 4 up, 4 in
+
+
+例如以上命令看到的集群的osd状态, 总共有4个OSD, 4个在集群中.
+如果你发现有up和in数字不一致, 说明有Down的或Out的osd, 可以通过如下命令查看详情.
+
+[root@osd4 ~]# ceph osd tree
+# id    weight  type name       up/down reweight
+-1      4       root default
+-2      1               host osd1
+0       1                       osd.0   up      1
+-3      1               host osd2
+1       1                       osd.1   up      1
+-4      1               host osd3
+2       1                       osd.2   up      1
+-5      1               host osd4
+3       1                       osd.3   up      1
+
+
+如果发现有Down的OSD, 启动OSD daemon进程即可.
+例如 : 
+
+/usr/bin/ceph-osd -i 3 --pid-file /var/run/ceph/osd.3.pid -c /etc/ceph/ceph.conf --cluster ceph [--osd-data=path] [--osd-journal=path]
+
+
+使用ceph pg stat时, 或使用ceph -s时, 可以看到有时CEPH集群的健康状态是HEALTH_OK, 有时是HEALTH_WARN的. 
+集群健康状态非HEALTH_OK, 表明pg的状态非active+clean.
+
+[root@mon1 ~]# ceph -s
+    cluster f649b128-963c-4802-ae17-5a76f36c4c76
+     health HEALTH_OK
+     monmap e8: 5 mons at {mon1=172.17.0.2:6789/0,mon2=172.17.0.3:6789/0,mon3=172.17.0.4:6789/0,mon4=172.17.0.9:6789/0,mon5=172.17.0.10:6789/0}, election epoch 38, quorum 0,1,2,3,4 mon1,mon2,mon3,mon4,mon5
+     osdmap e29: 4 osds: 4 up, 4 in
+      pgmap v17830: 128 pgs, 1 pools, 0 bytes data, 0 objects
+            42261 MB used, 1595 GB / 1636 GB avail
+                 128 active+clean
+
+
+
+为了减少用户数据在OSD中的metadata数据量, CEPH在用户数据和OSD之间加了一层Placement Group(实际上是POOL, 逻辑划分), 即用户数据存在PG中(打印pg map时你会发现), 而PG则存在POOL中, POOL则包含了一些OSD, 以及一些对象属性(如复制多少份).
+获取PG状态 : 
+
+[root@mon1 ~]# ceph pg stat
+v17784: 128 pgs: 128 active+clean; 0 bytes data, 42223 MB used, 1595 GB / 1636 GB avail
+
+
+可以看到 pg的状态是active+clean, 获取其他状态.
+
+如果ceph不是active+clean的状态, 说明ceph集群有问题, 
+如果我们发现集群的健康状态非HEALTH_OK, 例如只是警告, 那么可能是什么原因引起的呢?
+
+1. You have just created a pool and placement groups haven’t peered yet. (创建了一个池, 但是pg还未peer结束)
+2. The placement groups are recovering. (PG正在恢复)
+3. You have just added an OSD to or removed an OSD from the cluster. (添加或删除OSD, 并且重分布未结束)
+4. You have just modified your CRUSH map and your placement groups are migrating. (修改了CRUSH map, pg正在迁移数据)
+5. There is inconsistent data in different replicas of a placement group. (PG在不同的副本中存在不同的数据)
+6. Ceph is scrubbing a placement group’s replicas. (ceph正在修复异常的PG)
+7. Ceph doesn’t have enough storage capacity to complete backfilling operations. (ceph没有足够的空间完成backfill操作)
+
+
+
+接下来我们看看如何查看PG的状态.
+如何来查看每个PG的状态呢? 要打印最详细的PG状态, 可以使用如下命令 : 
+
+ceph pg dump
+    You can also format the output in JSON format and save it to a file:
+ceph pg dump -o {filename} --format=json
+
+
+将输出每个pg的状态, 信息量很大, 例如
+
+[root@mon1 ~]# ceph pg dump | less
+dumped all in format plain
+version 17880
+stamp 2014-12-15 17:39:01.282848
+last_osdmap_epoch 29
+last_pg_scan 26
+full_ratio 0.95
+nearfull_ratio 0.85
+pg_stat objects mip     degr    misp    unf     bytes   log     disklog state   state_stamp     v       reported        up      up_primary      acting  acting_primary  last_scrub      scrub_stamp     last_deep_scrub deep_scrub_stamp
+0.2d    0       0       0       0       0       0       0       0       active+clean    2014-12-15 16:09:51.973547      0'0     29:35   [1,3]   1       [1,3]   1       0'0     2014-12-15 16:09:51.973484      0'0     2014-12-09 16:05:52.202755
+0.2c    0       0       0       0       0       0       0       0       active+clean    2014-12-15 16:08:50.041015      0'0     29:44   [2,0]   2       [2,0]   2       0'0     2014-12-15 16:08:50.040959      0'0     2014-12-09 16:05:52.201643
+0.2b    0       0       0       0       0       0       0       0       active+clean    2014-12-15 16:09:48.255609      0'0     29:54   [3,1]   3       [3,1]   3       0'0     2014-12-15 16:09:48.255543      0'0     2014-12-09 16:05:52.200547
+0.2a    0       0       0       0       0       0       0       0       active+clean    2014-12-15 16:09:42.253658      0'0     29:54   [3,1]   3       [3,1]   3       0'0     2014-12-15 16:09:42.253596      0'0     2014-12-09 16:05:52.199419
+0.29    0       0       0       0       0       0       0       0       active+clean    2014-12-15 16:09:41.252917      0'0     29:61   [3,0]   3       [3,0]   3       0'0     2014-12-15 16:09:41.252854      0'0     2014-12-09 16:05:52.198286
+............
+
+
+第一列是pollnum+pg-ID的信息.
+例如0.2d 表示 pollnum=0 , pg-id=2d
+
+因为ceph pg dump输出的pg包含了poolid, 那么如何查看pool的信息呢? 如下 : 
+
+[root@localhost rbd0]# ceph osd lspools
+0 rbd,1 pool1,
+
+
+因此0.2d这个 placement group是放在0号POOL的, 即rbd.
+
+查看单个pg的信息如下, 输出JSON
+
+ceph pg {poolnum}.{pg-id} query
+
+
+例如 : 
+
+[root@mon1 ~]# ceph pg 0.2d query
+{ "state": "active+clean",
+  "snap_trimq": "[]",
+  "epoch": 29,
+  "up": [
+        1,
+        3],
+  "acting": [
+        1,
+        3],
+  "actingbackfill": [
+        "1",
+        "3"],
+  "info": { "pgid": "0.2d",
+      "last_update": "0'0",
+      "last_complete": "0'0",
+      "log_tail": "0'0",
+      "last_user_version": 0,
+      "last_backfill": "MAX",
+      "purged_snaps": "[]",
+      "history": { "epoch_created": 1,
+          "last_epoch_started": 27,
+          "last_epoch_clean": 27,
+          "last_epoch_split": 0,
+          "same_up_since": 22,
+          "same_interval_since": 26,
+          "same_primary_since": 22,
+          "last_scrub": "0'0",
+          "last_scrub_stamp": "2014-12-15 16:09:51.973484",
+          "last_deep_scrub": "0'0",
+          "last_deep_scrub_stamp": "2014-12-09 16:05:52.202755",
+          "last_clean_scrub_stamp": "2014-12-15 16:09:51.973484"},
+      "stats": { "version": "0'0",
+          "reported_seq": "35",
+          "reported_epoch": "29",
+          "state": "active+clean",
+          "last_fresh": "2014-12-15 16:09:51.973547",
+          "last_change": "2014-12-15 16:09:51.973547",
+          "last_active": "2014-12-15 16:09:51.973547",
+          "last_clean": "2014-12-15 16:09:51.973547",
+          "last_became_active": "0.000000",
+          "last_unstale": "2014-12-15 16:09:51.973547",
+          "last_undegraded": "2014-12-15 16:09:51.973547",
+          "last_fullsized": "2014-12-15 16:09:51.973547",
+          "mapping_epoch": 22,
+          "log_start": "0'0",
+          "ondisk_log_start": "0'0",
+          "created": 1,
+          "last_epoch_clean": 27,
+          "parent": "0.0",
+          "parent_split_bits": 0,
+          "last_scrub": "0'0",
+          "last_scrub_stamp": "2014-12-15 16:09:51.973484",
+          "last_deep_scrub": "0'0",
+          "last_deep_scrub_stamp": "2014-12-09 16:05:52.202755",
+          "last_clean_scrub_stamp": "2014-12-15 16:09:51.973484",
+          "log_size": 0,
+          "ondisk_log_size": 0,
+          "stats_invalid": "0",
+          "stat_sum": { "num_bytes": 0,
+              "num_objects": 0,
+              "num_object_clones": 0,
+              "num_object_copies": 0,
+              "num_objects_missing_on_primary": 0,
+              "num_objects_degraded": 0,
+              "num_objects_misplaced": 0,
+              "num_objects_unfound": 0,
+              "num_objects_dirty": 0,
+              "num_whiteouts": 0,
+              "num_read": 0,
+              "num_read_kb": 0,
+              "num_write": 0,
+              "num_write_kb": 0,
+              "num_scrub_errors": 0,
+              "num_shallow_scrub_errors": 0,
+              "num_deep_scrub_errors": 0,
+              "num_objects_recovered": 0,
+              "num_bytes_recovered": 0,
+              "num_keys_recovered": 0,
+              "num_objects_omap": 0,
+              "num_objects_hit_set_archive": 0,
+              "num_bytes_hit_set_archive": 0},
+          "stat_cat_sum": {},
+          "up": [
+                1,
+                3],
+          "acting": [
+                1,
+                3],
+          "blocked_by": [],
+          "up_primary": 1,
+          "acting_primary": 1},
+      "empty": 1,
+      "dne": 0,
+      "incomplete": 0,
+      "last_epoch_started": 27,
+      "hit_set_history": { "current_last_update": "0'0",
+          "current_last_stamp": "0.000000",
+          "current_info": { "begin": "0.000000",
+              "end": "0.000000",
+              "version": "0'0"},
+          "history": []}},
+  "peer_info": [
+        { "peer": "3",
+          "pgid": "0.2d",
+          "last_update": "0'0",
+          "last_complete": "0'0",
+          "log_tail": "0'0",
+          "last_user_version": 0,
+          "last_backfill": "MAX",
+          "purged_snaps": "[]",
+          "history": { "epoch_created": 1,
+              "last_epoch_started": 27,
+              "last_epoch_clean": 27,
+              "last_epoch_split": 0,
+              "same_up_since": 22,
+              "same_interval_since": 26,
+              "same_primary_since": 22,
+              "last_scrub": "0'0",
+              "last_scrub_stamp": "2014-12-15 16:09:51.973484",
+              "last_deep_scrub": "0'0",
+              "last_deep_scrub_stamp": "2014-12-09 16:05:52.202755",
+              "last_clean_scrub_stamp": "2014-12-15 16:09:51.973484"},
+          "stats": { "version": "0'0",
+              "reported_seq": "18",
+              "reported_epoch": "21",
+              "state": "peering",
+              "last_fresh": "2014-12-09 16:07:23.524448",
+              "last_change": "2014-12-09 16:07:22.474261",
+              "last_active": "0.000000",
+              "last_clean": "0.000000",
+              "last_became_active": "0.000000",
+              "last_unstale": "2014-12-09 16:07:23.524448",
+              "last_undegraded": "2014-12-09 16:07:23.524448",
+              "last_fullsized": "2014-12-09 16:07:23.524448",
+              "mapping_epoch": 22,
+              "log_start": "0'0",
+              "ondisk_log_start": "0'0",
+              "created": 1,
+              "last_epoch_clean": 21,
+              "parent": "0.0",
+              "parent_split_bits": 0,
+              "last_scrub": "0'0",
+              "last_scrub_stamp": "2014-12-09 16:05:52.202755",
+              "last_deep_scrub": "0'0",
+              "last_deep_scrub_stamp": "2014-12-09 16:05:52.202755",
+              "last_clean_scrub_stamp": "0.000000",
+              "log_size": 0,
+              "ondisk_log_size": 0,
+              "stats_invalid": "1",
+              "stat_sum": { "num_bytes": 0,
+                  "num_objects": 0,
+                  "num_object_clones": 0,
+                  "num_object_copies": 0,
+                  "num_objects_missing_on_primary": 0,
+                  "num_objects_degraded": 0,
+                  "num_objects_misplaced": 0,
+                  "num_objects_unfound": 0,
+                  "num_objects_dirty": 0,
+                  "num_whiteouts": 0,
+                  "num_read": 0,
+                  "num_read_kb": 0,
+                  "num_write": 0,
+                  "num_write_kb": 0,
+                  "num_scrub_errors": 0,
+                  "num_shallow_scrub_errors": 0,
+                  "num_deep_scrub_errors": 0,
+                  "num_objects_recovered": 0,
+                  "num_bytes_recovered": 0,
+                  "num_keys_recovered": 0,
+                  "num_objects_omap": 0,
+                  "num_objects_hit_set_archive": 0,
+                  "num_bytes_hit_set_archive": 0},
+              "stat_cat_sum": {},
+              "up": [
+                    1,
+                    3],
+              "acting": [
+                    1,
+                    3],
+              "blocked_by": [],
+              "up_primary": 1,
+              "acting_primary": 1},
+          "empty": 1,
+          "dne": 0,
+          "incomplete": 0,
+          "last_epoch_started": 27,
+          "hit_set_history": { "current_last_update": "0'0",
+              "current_last_stamp": "0.000000",
+              "current_info": { "begin": "0.000000",
+                  "end": "0.000000",
+                  "version": "0'0"},
+              "history": []}}],
+  "recovery_state": [
+        { "name": "Started\/Primary\/Active",
+          "enter_time": "2014-12-09 16:08:14.195101",
+          "might_have_unfound": [],
+          "recovery_progress": { "backfill_targets": [],
+              "waiting_on_backfill": [],
+              "last_backfill_started": "0\/\/0\/\/-1",
+              "backfill_info": { "begin": "0\/\/0\/\/-1",
+                  "end": "0\/\/0\/\/-1",
+                  "objects": []},
+              "peer_backfill_info": [],
+              "backfills_in_flight": [],
+              "recovering": [],
+              "pg_backend": { "pull_from_peer": [],
+                  "pushing": []}},
+          "scrub": { "scrubber.epoch_start": "26",
+              "scrubber.active": 0,
+              "scrubber.block_writes": 0,
+              "scrubber.waiting_on": 0,
+              "scrubber.waiting_on_whom": []}},
+        { "name": "Started",
+          "enter_time": "2014-12-09 16:08:13.157757"}],
+  "agent_state": {}}
+
+
+
+正常情况下 , 添加OSD后, 可以看到pg的状态变化如下 : 
+ceph osd placement groups stats introduce - 德哥@Digoal - PostgreSQL research
+其他情况可能出现其他状态.
+PG所有可能的状态和介绍如下 : 
+
+1. PEERING
+
+正在建立对等关系. 确保所有存储PG副本的OSD加入.
+When Ceph is Peering a placement group, Ceph is bringing the OSDs that store the replicas of the placement group into agreement about the state of the objects and metadata in the placement group. When Ceph completes peering, this means that the OSDs that store the placement group agree about the current state of the placement group. However, completion of the peering process does NOT mean that each replica has the latest contents. 
+注意这里提到, 即使完成了PEERING, 并不代表所有的副本都是最终状态的. 
+
+Authoratative History
+为了确保数据一致性, 用户在CEPH存储数据时, 只有所有的副本(注意是acting set中的osd, 例如进入degrade后, 可能不是所有的osd都参与写)都写结束了, 才返回用户写结束.
+Ceph will NOT acknowledge a write operation to a client, until all OSDs of the acting set persist the write operation. This practice ensures that at least one member of the acting set will have a record of every acknowledged write operation since the last successful peering operation.
+With an accurate record of each acknowledged write operation, Ceph can construct and disseminate a new authoritative history of the placement group–a complete, and fully ordered set of operations that, if performed, would bring an OSD’s copy of a placement group up to date.
+
+
+
+2. ACTIVE
+正常状态.
+
+Once Ceph completes the peering process, a placement group may become active. The active state means that the data in the placement group is generally available in the primary placement group and the replicas for read and write operations.
+
+
+
+3. CLEAN
+所有副本一致的状态.
+
+When a placement group is in the clean state, the primary OSD and the replica OSDs have successfully peered and there are no stray replicas for the placement group. Ceph replicated all objects in the placement group the correct number of times.
+
+
+
+4. DEGRADED
+
+这里的描述表明, 当用户往CEPH写数据时, 有副本的情况下, 主osd 负责将数据复制到副本OSD.
+在所有副本写入完成前, PG将保持degraded状态, 结束后进入ACTIVE状态
+When a client writes an object to the primary OSD, the primary OSD is responsible for writing the replicas to the replica OSDs. After the primary OSD writes the object to storage, the placement group will remain in a degraded state until the primary OSD has received an acknowledgement from the replica OSDs that Ceph created the replica objects successfully.
+如果OSDdown, ceph将标记这个OSD上所有的PG为degraded状态.
+这个osd再次UP的时候, 将重新peer.
+只要PG是active的, 新对象还是允许写入PG的.
+The reason a placement group can be active+degraded is that an OSD may be active even though it doesn’t hold all of the objects yet. If an OSD goes down, Ceph marks each placement group assigned to the OSD as degraded. The OSDs must peer again when the OSD comes back online. However, a client can still write a new object to a degraded placement group if it is active.
+如果OSD持续DOWN状态超过默认的300秒, 那么CEPH将触发remap, 这个OSD的PG副本将重分布.
+If an OSD is down and the degraded condition persists, Ceph may mark the down OSD as out of the cluster and remap the data from the down OSD to another OSD. The time between being marked down and being marked out is controlled by mon osd down out interval, which is set to 300 seconds by default.
+当PG进入DEGRADED后,PG可以继续提供服务, 但是某些用户数据可能不可用.
+A placement group can also be degraded, because Ceph cannot find one or more objects that Ceph thinks should be in the placement group. While you cannot read or write to unfound objects, you can still access all of the other objects in the degraded placement group.
+
+
+
+5. RECOVERING
+
+当OSD进入DOWN状态后, 这个OSD的PG副本将落后于其他OSD的同样的PG副本, 所以UP后, 需要RECOVERY.
+Ceph was designed for fault-tolerance at a scale where hardware and software problems are ongoing. When an OSD goes down, its contents may fall behind the current state of other replicas in the placement groups. When the OSD is back up, the contents of the placement groups must be updated to reflect the current state. During that time period, the OSD may reflect a recovering state.
+如果是交换机, 或机柜出问题的话, 可能导致整个机柜或整个交换机下的所有主机上的OSD DOWN, 那么会有大量的OSD需要恢复.
+Recovery isn’t always trivial, because a hardware failure might cause a cascading failure of multiple OSDs. For example, a network switch for a rack or cabinet may fail, which can cause the OSDs of a number of host machines to fall behind the current state of the cluster. Each one of the OSDs must recover once the fault is resolved.
+如果发生上述情况, CEPH提供了机制来均衡大量OSD恢复带来的资源冲突问题.
+Ceph provides a number of settings to balance the resource contention between new service requests and the need to recover data objects and restore the placement groups to the current state. The osd recovery delay start setting allows an OSD to restart, re-peer and even process some replay requests before starting the recovery process. The osd recovery threads setting limits the number of threads for the recovery process (1 thread by default). The osd recovery thread timeout sets a thread timeout, because multiple OSDs may fail, restart and re-peer at staggered rates. The osd recovery max active setting limits the number of recovery requests an OSD will entertain simultaneously to prevent the OSD from failing to serve . The osd recovery max chunk setting limits the size of the recovered data chunks to prevent network congestion.
+
+
+
+6. BACK FILLING
+
+当新的OSD加入集群时, CRUSH将从已有的OSD重新指派PG组给这个新加入的OSD.
+When a new OSD joins the cluster, CRUSH will reassign placement groups from OSDs in the cluster to the newly added OSD. Forcing the new OSD to accept the reassigned placement groups immediately can put excessive load on the new OSD. Back filling the OSD with the placement groups allows this process to begin in the background. Once backfilling is complete, the new OSD will begin serving requests when it is ready.
+backfill过程中可能出现的状态 : backfill_wait, backfill, backfill_too_full
+During the backfill operations, you may see one of several states: backfill_wait indicates that a backfill operation is pending, but isn’t underway yet; backfill indicates that a backfill operation is underway; and, backfill_too_full indicates that a backfill operation was requested, but couldn’t be completed due to insufficient storage capacity. When a placement group can’t be backfilled, it may be considered incomplete.
+
+Ceph provides a number of settings to manage the load spike associated with reassigning placement groups to an OSD (especially a new OSD). By default, osd_max_backfills sets the maximum number of concurrent backfills to or from an OSD to 10. The osd backfill full ratio enables an OSD to refuse a backfill request if the OSD is approaching its full ratio (85%, by default). If an OSD refuses a backfill request, the osd backfill retry interval enables an OSD to retry the request (after 10 seconds, by default). OSDs can also set osd backfill scan min and osd backfill scan max to manage scan intervals (64 and 512, by default).
+
+
+
+7. REMAPPED
+
+如果PG组所在的OSD集合改变, 将触发PG的迁移动作, 迁移到新的OSD集合.
+在迁移结束前, 将请求PG的老的OSD集合中的primary OSD进行读写, 直至迁移结束.
+When the Acting Set that services a placement group changes, the data migrates from the old acting set to the new acting set. It may take some time for a new primary OSD to service requests. So it may ask the old primary to continue to service requests until the placement group migration is complete. Once data migration completes, the mapping uses the primary OSD of the new acting set.
+
+
+
+8. STALE
+
+如果pg所在的OSD的主OSD DOWN, 则PG进入STALE状态.
+While Ceph uses heartbeats to ensure that hosts and daemons are running, the ceph-osd daemons may also get into a stuck state where they aren’t reporting statistics in a timely manner (e.g., a temporary network fault). By default, OSD daemons report their placement group, up thru, boot and failure statistics every half second (i.e., 0.5), which is more frequent than the heartbeat thresholds. If the Primary OSD of a placement group’s acting set fails to report to the monitor or if other OSDs have reported the primary OSD down, the monitors will mark the placement group stale.
+当CEPH集群启动时, peering结束前, PG处于stale状态.
+When you start your cluster, it is common to see the stale state until the peering process completes. After your cluster has been running for awhile, seeing placement groups in the stale state indicates that the primary OSD for those placement groups is down or not reporting placement group statistics to the monitor.
+另一种情况是, 当Primary OSD没有定期向MON报告PG的统计信息时, PG也会进入STALE状态.
+
+
+
+
+PG其他状态(unclean, inactive, stale) : 
+
+[root@localhost rbd0]# ceph pg stat
+v27135: 256 pgs: 256 active+clean; 10307 MB data, 504 GB used, 1131 GB / 1636 GB avail
+其他状态, 
+Unclean: Placement groups contain objects that are not replicated the desired number of times. They should be recovering.
+
+Inactive: Placement groups cannot process reads or writes because they are waiting for an OSD with the most up-to-date data to come back up.
+
+Stale: Placement groups are in an unknown state, because the OSDs that host them have not reported to the monitor cluster in a while (configured by mon osd report timeout).
+
+
+
+搜索状态不正常的pg.
+
+[root@mon1 ~]# ceph pg dump_stuck unclean
+ok
+[root@mon1 ~]# ceph pg dump_stuck inactive
+ok
+[root@mon1 ~]# ceph pg dump_stuck stale
+ok
+
+
+
+[参考]
+1. http://ceph.com/docs/master/rados/operations/monitoring-osd-pg/
+
+Flag Counter

@@ -1,0 +1,596 @@
+PostgreSQL research
+
+We can ignore the performance influence when use sync replication in PostgreSQL 9.1
+
+2011-10-22 1:06:44   查看原文>>
+
+PostgreSQL 9.1 提供了同步复制的能力，但是我一直担心同步复制必将带来较大的性能影响。
+下面从单节点，多个异步复制节点，多个复制节点（含同步复制节点）；以及同步事务，本地事务，异步事务这几个方面来测试一下同步复制带来的性能影响。
+
+下面是测试过程和测试结果。
+首先是测试环境如下 : 
+服务器配置 : 
+主库:   8核, 24G, 1块本地SAS10K转硬盘, 1块1GB网卡, x86服务器
+standby库1:  8核, 8G,  1块本地SAS10K转硬盘, 1块1GB网卡, x86服务器
+standby库2:  8核, 14G, 1块本地SAS10K转硬盘, 1块1GB网卡, x86服务器
+
+环境搭建可以使用pg_basebackup, 这个备份工具也是9.1提供的, 利用流复制协议远程备份数据库的命令. 当然也可以使用传统的pg_start_backup 然后SCP等命令。
+对pg_basebackup不熟悉的朋友可以参考我以前写的BLOG
+http://blog.163.com/digoal@126/blog/static/163877040201182395310376/
+或者参考man pg_basebackup. 
+
+环境搭建好后就开始建立测试表和测试数据了 : 
+测试表 : 
+
+create table user_info
+(userid int,
+engname text,
+cnname text,
+occupation text,
+birthday date,
+signname text,
+email text,
+qq numeric,
+crt_time timestamp without time zone,
+mod_time timestamp without time zone
+);
+
+create table user_login_rec
+(userid int,
+login_time timestamp without time zone,
+ip inet
+);
+
+create table user_logout_rec
+(userid int,
+logout_time timestamp without time zone,
+ip inet
+);
+
+
+
+测试数据 : 
+我这里弄了5000W测试数据进去，当然你像测试多点数据的话可以再多塞点数据进去。
+
+insert into user_info (userid,engname,cnname,occupation,birthday,signname,email,qq,crt_time,mod_time)
+select generate_series(1,50000000),
+'digoal.zhou',
+'德哥',
+'DBA',
+'1970-01-01'
+,E'公益是一辈子的事, I\'m Digoal.Zhou, Just do it!',
+'digoal@126.com',
+276732431,
+clock_timestamp(),
+NULL
+;
+
+set work_mem='2048MB';
+set maintenance_work_mem='2048MB';
+alter table user_info add constraint pk_user_info primary key (userid) using index tablespace digoal_idx;
+
+
+建立PK。
+
+接下来新建数据库操作函数，我这里测试的是模拟用户登录，退出。涉及的SQL是查询用户信息，写登录日志表和退出日志表。
+登录函数 : 
+
+create or replace function f_user_login 
+(i_userid int,
+OUT o_userid int,
+OUT o_engname text,
+OUT o_cnname text,
+OUT o_occupation text,
+OUT o_birthday date,
+OUT o_signname text,
+OUT o_email text,
+OUT o_qq numeric
+)
+as $BODY$
+declare
+begin
+select userid,engname,cnname,occupation,birthday,signname,email,qq
+into o_userid,o_engname,o_cnname,o_occupation,o_birthday,o_signname,o_email,o_qq
+from user_info where userid=i_userid;
+insert into user_login_rec (userid,login_time,ip) values (i_userid,now(),inet_client_addr());
+return;
+end;
+$BODY$
+language plpgsql;
+
+
+
+退出函数 : 
+
+create or replace function f_user_logout
+(i_userid int,
+OUT o_result int
+)
+as $BODY$
+declare
+begin
+insert into user_logout_rec (userid,logout_time,ip) values (i_userid,now(),inet_client_addr());
+o_result := 0;
+return;
+exception 
+when others then
+o_result := 1;
+return;
+end;
+$BODY$
+language plpgsql;
+
+
+
+接下来新建pgbouncer连接池，用于测试单场景（开启16个连接到数据库, 允许1W个客户端连接），另一个用来测试复合场景（分别开启12个连接到数据库, 允许2W个客户端连接）。
+
+然后编辑pgbench需要的SQL文件 : 
+pgbench测试脚本1 f_user_login.sql : 
+
+\setrandom userid 1 50000000
+select * from f_user_login(:userid);
+
+
+
+pgbench测试脚本2 f_user_logout.sql : 
+
+\setrandom userid 1 50000000
+select * from f_user_logout(:userid);
+
+
+
+测试结果 : 
+一、未开启任何standby的测试(异步事务) : 
+单项测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 4451365
+tps = 24729.367434 (including connections establishing)
+tps = 24729.796402 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002033        \setrandom userid 1 50000000
+        1.289057        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 5022561
+tps = 27902.772377 (including connections establishing)
+tps = 27903.700179 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002034        \setrandom userid 1 50000000
+        1.141897        select * from f_user_logout(:userid);
+
+
+
+复合测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2374574
+tps = 13191.822223 (including connections establishing)
+tps = 13191.979321 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002205        \setrandom userid 1 50000000
+        2.420410        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 2000 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2864446
+tps = 15913.315357 (including connections establishing)
+tps = 15913.774923 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002180        \setrandom userid 1 50000000
+        2.005673        select * from f_user_logout(:userid);
+
+
+
+
+
+二、开启2台异步standby测试(异步事务) : 
+
+postgres=# select * from pg_stat_replication;
+ procpid | usesysid | usename | application_name | client_addr | client_hostname | client_port |         backend_start         |   s
+tate   | sent_location | write_location | flush_location | replay_location | sync_priority | sync_state 
+---------+----------+---------+------------------+-------------+-----------------+-------------+-------------------------------+----
+-------+---------------+----------------+----------------+-----------------+---------------+------------
+    2780 |    16464 | replica | standby1         | 172.xxx.xxx.1 |                 |       26038 | 2011-10-22 00:09:48.067483+08 | str
+eaming | 4/90163068    | 4/90163068     | 4/90163068     | 4/90163068      |             0 | async
+    2781 |    16464 | replica | standby2         | 172.xxx.xxx.2 |                 |       59262 | 2011-10-22 00:09:53.633187+08 | str
+eaming | 4/90163068    | 4/90163068     | 4/90163068     | 4/90163068      |             0 | async
+
+
+
+单项测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 4216608
+tps = 23425.184203 (including connections establishing)
+tps = 23425.862496 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002019        \setrandom userid 1 50000000
+        1.361130        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 4769505
+tps = 26496.706965 (including connections establishing)
+tps = 26497.351435 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002039        \setrandom userid 1 50000000
+        1.202742        select * from f_user_logout(:userid);
+
+
+
+复合测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2325629
+tps = 12919.857136 (including connections establishing)
+tps = 12920.135410 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002146        \setrandom userid 1 50000000
+        2.471710        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 2000 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2817671
+tps = 15634.878108 (including connections establishing)
+tps = 15635.203940 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002186        \setrandom userid 1 50000000
+        2.041436        select * from f_user_logout(:userid);
+
+
+
+
+三、开启1台同步standby, 1台异步standby测试 : 
+这里测了三种情况，一种是同步事务synchronous_commit=on，一种是本地事务synchronous_commit=local，一种是异步事务synchronous_commit=off。
+3.1 异步事务测试结果 : 
+
+postgres=# select * from pg_stat_replication;
+ procpid | usesysid | usename | application_name | client_addr | client_hostname | client_port |         backend_start         |   s
+tate   | sent_location | write_location | flush_location | replay_location | sync_priority | sync_state 
+---------+----------+---------+------------------+-------------+-----------------+-------------+-------------------------------+----
+-------+---------------+----------------+----------------+-----------------+---------------+------------
+    2780 |    16464 | replica | standby1         | 172.xxx.xxx.1 |                 |       26038 | 2011-10-22 00:09:48.067483+08 | str
+eaming | 4/901630F8    | 4/901630F8     | 4/901630F8     | 4/901630F8      |             1 | sync
+    2781 |    16464 | replica | standby2         | 172.xxx.xxx.2 |                 |       59262 | 2011-10-22 00:09:53.633187+08 | str
+eaming | 4/901630F8    | 4/901630F8     | 4/901630F8     | 4/901630F8      |             2 | potential
+
+
+
+3.1.1 单项测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 4159570
+tps = 23108.282523 (including connections establishing)
+tps = 23108.654858 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002064        \setrandom userid 1 50000000
+        1.379831        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 4961886
+tps = 27565.527965 (including connections establishing)
+tps = 27566.353175 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002029        \setrandom userid 1 50000000
+        1.155964        select * from f_user_logout(:userid);
+
+
+
+3.1.2 复合测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2247088
+tps = 12483.605632 (including connections establishing)
+tps = 12483.992644 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002179        \setrandom userid 1 50000000
+        2.558105        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 2000 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2705016
+tps = 15027.514772 (including connections establishing)
+tps = 15027.784844 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002145        \setrandom userid 1 50000000
+        2.124289        select * from f_user_logout(:userid);
+
+
+
+3.2 本地事务测试结果
+3.2.1 单项测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 1880394
+tps = 10446.398754 (including connections establishing)
+tps = 10446.716731 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002059        \setrandom userid 1 50000000
+        3.058239        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2283510
+tps = 12685.954741 (including connections establishing)
+tps = 12686.191268 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002034        \setrandom userid 1 50000000
+        2.517571        select * from f_user_logout(:userid);
+
+
+
+3.2.2 复合测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 1010209
+tps = 5611.969675 (including connections establishing)
+tps = 5612.109360 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002196        \setrandom userid 1 50000000
+        5.696539        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 2000 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 1043739
+tps = 5798.298837 (including connections establishing)
+tps = 5798.383639 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002193        \setrandom userid 1 50000000
+        5.513390        select * from f_user_logout(:userid);
+
+
+
+3.3 同步事务测试结果 : 
+3.3.1 单项测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 1778910
+tps = 9882.600708 (including connections establishing)
+tps = 9882.886514 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002006        \setrandom userid 1 50000000
+        3.233093        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2202408
+tps = 12235.373102 (including connections establishing)
+tps = 12235.684730 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002018        \setrandom userid 1 50000000
+        2.610460        select * from f_user_logout(:userid);
+
+
+
+3.3.2 复合测试结果 : 
+
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_login.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 1999 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 945110
+tps = 5201.559767 (including connections establishing)
+tps = 5201.652220 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002197        \setrandom userid 1 50000000
+        6.122413        select * from f_user_login(:userid);
+postgres@db5-> pgbench -c 32 -M extended -f ./f_user_logout.sql -j 32 -n -r -T 180 -h 127.0.0.1 -p 2000 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 1007326
+tps = 5546.141117 (including connections establishing)
+tps = 5546.243610 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002194        \setrandom userid 1 50000000
+        5.735635        select * from f_user_logout(:userid);
+
+
+
+为了对比的公平，把本地事务的性能和同步事务进行比较，得出的结论是同步复制带来的影响微乎其微。
+把异步事务的性能和其他模式下的异步事务的性能进行比较，得出的结论是同步复制带来的影响微乎其微。
+
+增加一组数据，采用同步事务测试复合场景过程中，主节点的CPU空闲率约48%，sync节点的空闲率约91%。async节点的空闲率约91%。
+由于是同步事务，所以等待基本集中在xlog的写等待上。
+
+【小结】
+从测试结果来看，在sync节点的性能以及与Primary节点通讯网络带宽足够的情况下，同步复制带来的影响确实非常小。
+PostgreSQL 9.1的性能令人满意，按照这个速度（异步事务），一台非常普通的X86服务器（另外两台备机如果提供查询的话可以满足更多的查询需求），一天可以提供20多亿次插入请求和10多亿次的查询请求。
+结合PG分布式应用，再多点用户数只要加服务器就行了，非常容易扩展。
+
+【测试sync节点DOWN机后自动将potential节点切换为sync节点】
+1. 关闭1号standby节点, 然后去主节点观察. 2号standby节点已经变成sync状态了。
+
+postgres=# select * from pg_stat_replication;
+ procpid | usesysid | usename | application_name | client_addr | client_hostname | client_port |         backend_start         |   s
+tate   | sent_location | write_location | flush_location | replay_location | sync_priority | sync_state 
+---------+----------+---------+------------------+-------------+-----------------+-------------+-------------------------------+----
+-------+---------------+----------------+----------------+-----------------+---------------+------------
+    2781 |    16464 | replica | standby2         | 172.xxx.xxx.2 |                 |       59262 | 2011-10-22 00:09:53.633187+08 | str
+eaming | 5/17B32770    | 5/17B32770     | 5/17B32770     | 5/17B32770      |             2 | sync
+(1 row)
+
+
+2. 再次开启1号standby节点，1号节点恢复为sync状态，2号又变回potential.
+
+postgres=# select * from pg_stat_replication;
+ procpid | usesysid | usename | application_name | client_addr | client_hostname | client_port |         backend_start         |   s
+tate   | sent_location | write_location | flush_location | replay_location | sync_priority | sync_state 
+---------+----------+---------+------------------+-------------+-----------------+-------------+-------------------------------+----
+-------+---------------+----------------+----------------+-----------------+---------------+------------
+    2920 |    16464 | replica | standby1         | 172.xxx.xxx.1 |                 |       13088 | 2011-10-22 00:28:30.324383+08 | str
+eaming | 5/17B32770    | 5/17B32770     | 5/17B32770     | 5/17B32770      |             1 | sync
+    2781 |    16464 | replica | standby2         | 172.xxx.xxx.2 |                 |       59262 | 2011-10-22 00:09:53.633187+08 | str
+eaming | 5/17B32770    | 5/17B32770     | 5/17B32770     | 5/17B32770      |             2 | potential
+(2 rows)
+
+
+3. 把1号和2号standby节点都关掉。主库的sync事务将进入等待状态,非sync事务依然可以进行读写。
+发现所有standby节点都挂了之后应该考虑立即取消sync模式, 保持事务进行。
+
+【配置文件】
+standby节点的recovery.conf文件 : 
+
+standby_mode = on
+primary_conninfo = 'host=172.xxx.xxx.3 port=5432 user=replica application_name=standby1'         # e.g. 'host=localhost port=5432'
+trigger_file = '/pgdata/digoal/5432/data02/pg_root/postgresql.trigger.5432'
+
+
+
+【测试数据样本】 
+
+digoal=> select * from user_info limit 5;
+ userid |   engname   | cnname | occupation |  birthday  |                    signname                    |     email      |    qq  
+   |          crt_time          | mod_time 
+--------+-------------+--------+------------+------------+------------------------------------------------+----------------+--------
+---+----------------------------+----------
+      1 | digoal.zhou | 德哥   | DBA        | 1970-01-01 | 公益是一辈子的事, I'm Digoal.Zhou, Just do it! | digoal@126.com | 2767324
+31 | 2011-10-21 22:01:20.029311 | 
+      2 | digoal.zhou | 德哥   | DBA        | 1970-01-01 | 公益是一辈子的事, I'm Digoal.Zhou, Just do it! | digoal@126.com | 2767324
+31 | 2011-10-21 22:01:20.029424 | 
+      3 | digoal.zhou | 德哥   | DBA        | 1970-01-01 | 公益是一辈子的事, I'm Digoal.Zhou, Just do it! | digoal@126.com | 2767324
+31 | 2011-10-21 22:01:20.029433 | 
+      4 | digoal.zhou | 德哥   | DBA        | 1970-01-01 | 公益是一辈子的事, I'm Digoal.Zhou, Just do it! | digoal@126.com | 2767324
+31 | 2011-10-21 22:01:20.029438 | 
+      5 | digoal.zhou | 德哥   | DBA        | 1970-01-01 | 公益是一辈子的事, I'm Digoal.Zhou, Just do it! | digoal@126.com | 2767324
+31 | 2011-10-21 22:01:20.029442 | 
+(5 rows)
+
+Time: 0.612 ms
+digoal=> select * from user_login_rec limit 5;
+  userid  |         login_time         |      ip      
+----------+----------------------------+--------------
+ 23375965 | 2011-10-21 22:56:04.722263 | 172.xxx.xxx.xxx
+ 22441124 | 2011-10-21 22:56:04.727708 | 172.xxx.xxx.xxx
+ 46581992 | 2011-10-21 22:56:04.721366 | 172.xxx.xxx.xxx
+ 17439690 | 2011-10-21 22:56:04.72087  | 172.xxx.xxx.xxx
+ 36373256 | 2011-10-21 22:56:04.722019 | 172.xxx.xxx.xxx
+(5 rows)
+
+Time: 0.516 ms
+digoal=> select * from user_logout_rec limit 5;
+  userid  |        logout_time         |      ip      
+----------+----------------------------+--------------
+  8899868 | 2011-10-21 22:17:03.468211 | 172.xxx.xxx.xxx
+ 47715166 | 2011-10-21 22:17:03.467715 | 172.xxx.xxx.xxx
+  4865187 | 2011-10-21 22:17:03.468816 | 172.xxx.xxx.xxx
+ 25229626 | 2011-10-21 22:17:03.470679 | 172.xxx.xxx.xxx
+  7699796 | 2011-10-21 22:17:03.470818 | 172.xxx.xxx.xxx
+(5 rows)
+
+Time: 0.541 ms
+
+
+【其他】
+同步复制大多数的瓶颈来自备机的IO能力以及主机和备机之间的网络延时. 可以通过以下工具进行分析.
+1. IO分析工具
+iostat
+2. 网络分析工具
+sar -n DEV 1 10000
+mtr
+qperf
+
+评论
+
+babyyellow - 2011-12-21 16:30:45
+
+[face55]

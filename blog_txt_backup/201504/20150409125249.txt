@@ -1,0 +1,277 @@
+PostgreSQL research
+
+PostgreSQL 9.5 new feature - IMPORT FOREIGN SCHEMA for fast bulk foreign table create
+
+2015-04-09 12:52:49   查看原文>>
+
+之前写过一篇使用函数来快速生成外部表的建表DDL的方法.
+从metadata中抽取表名, 字段名, 类型, 封装成外部表的建表语句. 
+感兴趣的朋友可以参考如下 : 
+http://blog.163.com/digoal@126/blog/static/163877040201521162114359/
+
+PostgreSQL 9.5提供了一个更快捷的方式, 使用import foreign schema可以直接将远端的整个schema中的所有表或部分表直接创建在本地的某个指定的schema下.
+
+Command:     IMPORT FOREIGN SCHEMA
+Description: import table definitions from a foreign server
+Syntax:
+IMPORT FOREIGN SCHEMA remote_schema
+[ { LIMIT TO | EXCEPT } ( table_name [, ...] ) ]
+FROM SERVER server_name
+INTO local_schema
+[ OPTIONS ( option 'value' [, ... ] ) ]
+
+
+
+测试 : 
+remote db postgresql 9.4.1
+
+postgres=# create schema rmt;
+CREATE SCHEMA
+postgres=# create table rmt(id int, info text, crt_time timestamp);
+CREATE TABLE
+postgres=# create table rmt1(id int, info text, crt_time timestamp);
+CREATE TABLE
+postgres=# create table rmt2(id int, info text, crt_time timestamp);
+CREATE TABLE
+
+postgres=# insert into rmt select generate_series(1,100000), md5(random()::text), clock_timestamp();
+INSERT 0 100000
+postgres=# insert into rmt1 select generate_series(1,100000), md5(random()::text), clock_timestamp();
+INSERT 0 100000
+postgres=# insert into rmt2 select generate_series(1,100000), md5(random()::text), clock_timestamp();
+INSERT 0 100000
+postgres=# alter table rmt add constraint pk primary key (id);
+ALTER TABLE
+postgres=# alter table rmt add constraint ck check (length(info)>1);
+ALTER TABLE
+
+postgres=# alter table rmt set schema rmt;
+ALTER TABLE
+postgres=# alter table rmt1 set schema rmt;
+ALTER TABLE
+postgres=# alter table rmt2 set schema rmt;
+ALTER TABLE
+postgres=# \dt rmt.*
+        List of relations
+ Schema | Name | Type  |  Owner   
+--------+------+-------+----------
+ rmt    | rmt  | table | postgres
+ rmt    | rmt1 | table | postgres
+ rmt    | rmt2 | table | postgres
+(3 rows)
+
+
+
+local db postgresql 9.5
+
+postgres=# create extension postgres_fdw;
+CREATE EXTENSION
+postgres=# create server rmt foreign data wrapper postgres_fdw options (hostaddr '127.0.0.1', port '1921', dbname 'postgres');
+CREATE SERVER
+postgres=# create user mapping for postgres server rmt options (user 'postgres', password 'postgres');
+CREATE USER MAPPING
+
+postgres=# create schema r1;
+CREATE SCHEMA
+postgres=# import FOREIGN SCHEMA rmt from server rmt into r1 ;
+IMPORT FOREIGN SCHEMA
+
+postgres=# \det+
+                             List of foreign tables
+ Schema | Table | Server |              FDW Options               | Description 
+--------+-------+--------+----------------------------------------+-------------
+ r1     | rmt   | rmt    | (schema_name 'rmt', table_name 'rmt')  | 
+ r1     | rmt1  | rmt    | (schema_name 'rmt', table_name 'rmt1') | 
+ r1     | rmt2  | rmt    | (schema_name 'rmt', table_name 'rmt2') | 
+(3 rows)
+
+postgres=# \d r1.rmt
+                            Foreign table "r1.rmt"
+  Column  |            Type             | Modifiers |       FDW Options        
+----------+-----------------------------+-----------+--------------------------
+ id       | integer                     | not null  | (column_name 'id')
+ info     | text                        |           | (column_name 'info')
+ crt_time | timestamp without time zone |           | (column_name 'crt_time')
+Server: rmt
+FDW Options: (schema_name 'rmt', table_name 'rmt')
+
+postgres=# select count(*) from r1.rmt1;
+ count  
+--------
+ 100000
+(1 row)
+
+postgres=# select count(*) from r1.rmt;
+ count  
+--------
+ 100000
+(1 row)
+
+postgres=# select count(*) from r1.rmt2;
+ count  
+--------
+ 100000
+(1 row)
+
+
+还可以使用limit to或者except来控制只导某些表, 或排除某些表.
+
+postgres=# drop foreign table r1.rmt;
+DROP FOREIGN TABLE
+postgres=# drop foreign table r1.rmt1;
+DROP FOREIGN TABLE
+postgres=# drop foreign table r1.rmt2;
+DROP FOREIGN TABLE
+
+postgres=# import FOREIGN SCHEMA rmt limit to (rmt) from server  rmt into r1 ;
+IMPORT FOREIGN SCHEMA
+postgres=# \det+
+                            List of foreign tables
+ Schema | Table | Server |              FDW Options              | Description 
+--------+-------+--------+---------------------------------------+-------------
+ r1     | rmt   | rmt    | (schema_name 'rmt', table_name 'rmt') | 
+(1 row)
+
+postgres=# drop foreign table r1.rmt;
+DROP FOREIGN TABLE
+postgres=# import FOREIGN SCHEMA rmt except (rmt) from server  rmt into r1 ;
+IMPORT FOREIGN SCHEMA
+postgres=# \det+
+                             List of foreign tables
+ Schema | Table | Server |              FDW Options               | Description 
+--------+-------+--------+----------------------------------------+-------------
+ r1     | rmt1  | rmt    | (schema_name 'rmt', table_name 'rmt1') | 
+ r1     | rmt2  | rmt    | (schema_name 'rmt', table_name 'rmt2') | 
+(2 rows)
+
+
+
+注意, 导入时会同时将视图, 物化视图, 外部表都一并导入, 除非使用except来排除.
+remote db postgresql 9.4.1
+
+postgres=# \dt
+        List of relations
+ Schema | Name | Type  |  Owner   
+--------+------+-------+----------
+ public | rt1  | table | postgres
+ public | rt2  | table | postgres
+ public | tbl  | table | postgres
+ public | test | table | postgres
+(4 rows)
+postgres=# \dn
+  List of schemas
+  Name  |  Owner   
+--------+----------
+ public | postgres
+ rmt    | postgres
+(2 rows)
+postgres=# create view rmt.v1 as select * from test;
+CREATE VIEW
+postgres=# \dv rmt.*
+        List of relations
+ Schema | Name | Type |  Owner   
+--------+------+------+----------
+ rmt    | v1   | view | postgres
+(1 row)
+postgres=# create server rmt foreign data wrapper postgres_fdw options (hostaddr '127.0.0.1', port '1921', dbname 'postgres');
+CREATE SERVER
+postgres=# create user mapping for postgres server rmt options (user 'postgres', password 'postgres');
+CREATE USER MAPPING
+postgres=# create foreign table rmt.ft1 (id int, info text) server rmt options (schema_name 'public', table_name 'test'); 
+CREATE FOREIGN TABLE
+postgres=# SELECT id, info FROM rmt.ft1;
+  id  | info  
+------+-------
+    1 | test1
+    2 | test2
+    3 | test2
+    4 | test2
+    5 | test2
+    6 | test2
+    7 | test2
+    8 | test3
+  100 | test3
+ 1000 | test4
+    2 | test2
+    2 | test2
+    2 | test2
+(13 rows)
+
+
+
+local db postgresql 9.5
+导入时会同时将视图, 物化视图, 外部表都一并导入, 除非使用except来排除.
+
+postgres=# drop foreign table r1.rmt1;
+DROP FOREIGN TABLE
+postgres=# drop foreign table r1.rmt2;
+DROP FOREIGN TABLE
+postgres=# import FOREIGN SCHEMA rmt except (rmt) from server  rmt into r1 ;
+IMPORT FOREIGN SCHEMA
+postgres=# \det+
+                             List of foreign tables
+ Schema | Table | Server |              FDW Options               | Description 
+--------+-------+--------+----------------------------------------+-------------
+ r1     | ft1   | rmt    | (schema_name 'rmt', table_name 'ft1')  | 
+ r1     | rmt1  | rmt    | (schema_name 'rmt', table_name 'rmt1') | 
+ r1     | rmt2  | rmt    | (schema_name 'rmt', table_name 'rmt2') | 
+ r1     | v1    | rmt    | (schema_name 'rmt', table_name 'v1')   | 
+(4 rows)
+postgres=# select * from r1.v1;
+  id  | info  
+------+-------
+    1 | test1
+    2 | test2
+    3 | test2
+    4 | test2
+    5 | test2
+    6 | test2
+    7 | test2
+    8 | test3
+  100 | test3
+ 1000 | test4
+    2 | test2
+    2 | test2
+    2 | test2
+(13 rows)
+postgres=# select * from r1.ft1;
+  id  | info  
+------+-------
+    1 | test1
+    2 | test2
+    3 | test2
+    4 | test2
+    5 | test2
+    6 | test2
+    7 | test2
+    8 | test3
+  100 | test3
+ 1000 | test4
+    2 | test2
+    2 | test2
+    2 | test2
+(13 rows)
+
+
+
+最后需要注意的是, 目前只有postgres_fdw支持import FOREIGN SCHEMA语法, 其他fdw需要自己去实现.
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=59efda3e50ca4de6a9d5aa4491464e22b6329b1e
+
+Implement IMPORT FOREIGN SCHEMA.
+
+This command provides an automated way to create foreign table definitions
+that match remote tables, thereby reducing tedium and chances for error.
+In this patch, we provide the necessary core-server infrastructure and
+implement the feature fully in the postgres_fdw foreign-data wrapper.
+Other wrappers will throw a "feature not supported" error until/unless
+they are updated.
+
+Ronan Dunklau and Michael Paquier, additional work by me
+
+
+2. http://www.postgresql.org/docs/devel/static/sql-importforeignschema.html
+3. http://blog.163.com/digoal@126/blog/static/163877040201521162114359/
+
+Flag Counter

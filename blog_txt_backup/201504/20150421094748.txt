@@ -1,0 +1,281 @@
+PostgreSQL research
+
+use md5 or hashtext?
+
+2015-04-21 9:47:48   查看原文>>
+
+我们在PostgreSQL中存储较长的字符串时，如果数据量较大，并且要实现精确匹配的话，有什么好的方法呢？
+首选想到的是索引，但是当字符串太长，超出索引长度限制(见src/backend/access/common/indextuple.c，长度限制为INDEX_SIZE_MASK)，是无法创建索引的。另外，字符串的索引效率也比较低下。
+那么有其他方法吗？
+我们可以将字符串转换为更短的字符或数字，例如md5, hashtext.
+这些转换不一定是一一对应的，所以在查询出来之后，还需要使用字符串进行最终的过滤。
+例如：
+
+postgres=# create table t2 (info text);
+postgres=# insert into t2 values (repeat(md5(random()::text),100000));
+INSERT 0 1
+postgres=# create index idx_test on t2(info);
+ERROR:  54000: index row requires 36688 bytes, maximum size is 8191
+LOCATION:  index_form_tuple, indextuple.c:174
+postgres=# select hashtext(info),md5(info) from t2;
+  hashtext   |               md5                
+-------------+----------------------------------
+ -1986549156 | b62583576dcc9820316585a1714acc78
+
+
+我们看到md5返回的还是字符串，而hashtext返回int.
+
+postgres=# \df hashtext
+                            List of functions
+   Schema   |   Name   | Result data type | Argument data types |  Type  
+------------+----------+------------------+---------------------+--------
+ pg_catalog | hashtext | integer          | text                | normal
+(1 row)
+
+postgres=# \df md5
+                          List of functions
+   Schema   | Name | Result data type | Argument data types |  Type  
+------------+------+------------------+---------------------+--------
+ pg_catalog | md5  | text             | bytea               | normal
+ pg_catalog | md5  | text             | text                | normal
+(2 rows)
+
+
+那么哪个计算效率高一点呢？
+
+postgres=# \timing
+Timing is on.
+postgres=# select count(hashtext(i::text)) from generate_series(1,1000000) t(i);
+  count  
+---------
+ 1000000
+(1 row)
+Time: 662.121 ms
+postgres=# select count(md5(i::text)) from generate_series(1,1000000) t(i);
+  count  
+---------
+ 1000000
+(1 row)
+Time: 986.254 ms
+
+
+显然hashtext计算效率略高。
+那么转换为索引的效率哪个更高？我分别插入1000万条数据，然后使用pgbench测试检索速度。
+
+postgres=# create table t_md5(info text);
+CREATE TABLE
+Time: 4.594 ms
+postgres=# create table t_hashtext(info int);
+CREATE TABLE
+Time: 2.874 ms
+postgres=# insert into t_md5 select md5(i::text) from generate_series(1,10000000) t(i);
+INSERT 0 10000000
+Time: 34427.290 ms
+postgres=# insert into t_hashtext select hashtext(i::text) from generate_series(1,10000000) t(i);
+INSERT 0 10000000
+Time: 22678.304 ms
+
+
+创建索引速度对比
+
+postgres=# create index idx_t_hashtext on t_hashtext(info);
+CREATE INDEX
+Time: 27838.217 ms
+postgres=# create index idx_t_md5 on t_md5(info);
+CREATE INDEX
+Time: 58043.625 ms
+
+
+表，索引大小对比
+
+postgres=# \dt+ t_hashtext 
+                       List of relations
+ Schema |    Name    | Type  |  Owner   |  Size  | Description 
+--------+------------+-------+----------+--------+-------------
+ public | t_hashtext | table | postgres | 344 MB | 
+(1 row)
+
+postgres=# \dt+ t_md5 
+                    List of relations
+ Schema | Name  | Type  |  Owner   |  Size  | Description 
+--------+-------+-------+----------+--------+-------------
+ public | t_md5 | table | postgres | 650 MB | 
+(1 row)
+
+postgres=# \di+ idx_t_hashtext 
+                               List of relations
+ Schema |      Name      | Type  |  Owner   |   Table    |  Size  | Description 
+--------+----------------+-------+----------+------------+--------+-------------
+ public | idx_t_hashtext | index | postgres | t_hashtext | 213 MB | 
+(1 row)
+
+postgres=# \di+ idx_t_md5 
+                          List of relations
+ Schema |   Name    | Type  |  Owner   | Table |  Size  | Description 
+--------+-----------+-------+----------+-------+--------+-------------
+ public | idx_t_md5 | index | postgres | t_md5 | 553 MB | 
+(1 row)
+
+
+查询速度对比，首选确保使用了索引。
+
+postgres=# explain select * from t_hashtext where info=hashtext(1::text);
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Index Only Scan using idx_t_hashtext on t_hashtext  (cost=0.43..8.45 rows=1 width=4)
+   Index Cond: (info = (-631133447))
+(2 rows)
+postgres=# explain select * from t_md5 where info=md5(1::text);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Index Only Scan using idx_t_md5 on t_md5  (cost=0.43..8.45 rows=1 width=33)
+   Index Cond: (info = 'c4ca4238a0b923820dcc509a6f75849b'::text)
+(2 rows)
+
+
+使用pgbench测试
+
+postgres@db-172-16-3-150-> vi test.sql
+\setrandom id 1 10000000
+select * from t_md5 where info=md5(:id::text);
+postgres@db-172-16-3-150-> pgbench -M prepared -f ./test.sql -n -r -c 16 -j 8 -T 30
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 8
+duration: 30 s
+number of transactions actually processed: 1944319
+latency average: 0.247 ms
+tps = 64809.373871 (including connections establishing)
+tps = 64833.546859 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002463        \setrandom id 1 10000000
+        0.242614        select * from t_md5 where info=md5(:id::text);
+
+postgres@db-172-16-3-150-> vi test.sql
+\setrandom id 1 10000000
+select * from t_hashtext where info=hashtext(:id::text);
+postgres@db-172-16-3-150-> pgbench -M prepared -f ./test.sql -n -r -c 16 -j 8 -T 30
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 8
+duration: 30 s
+number of transactions actually processed: 2045818
+latency average: 0.235 ms
+tps = 68192.664950 (including connections establishing)
+tps = 68217.163836 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002492        \setrandom id 1 10000000
+        0.230370        select * from t_hashtext where info=hashtext(:id::text);
+
+
+查询效率相差不大.
+以上测试用到的主机2颗CPU Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz，
+系统为CentOS 6.x x64。
+
+[参考]
+1. src/backend/access/hash/hashfunc.c
+
+Datum
+hashtext(PG_FUNCTION_ARGS)
+{
+        text       *key = PG_GETARG_TEXT_PP(0);
+        Datum           result;
+
+        /*
+         * Note: this is currently identical in behavior to hashvarlena, but keep
+         * it as a separate function in case we someday want to do something
+         * different in non-C locales.  (See also hashbpchar, if so.)
+         */
+        result = hash_any((unsigned char *) VARDATA_ANY(key),
+                                          VARSIZE_ANY_EXHDR(key));
+
+        /* Avoid leaking memory for toasted inputs */
+        PG_FREE_IF_COPY(key, 0);
+
+        return result;
+}
+
+...
+/*
+ * hash_any() -- hash a variable-length key into a 32-bit value
+ *              k               : the key (the unaligned variable-length array of bytes)
+ *              len             : the length of the key, counting by bytes
+ *
+ * Returns a uint32 value.  Every bit of the key affects every bit of
+ * the return value.  Every 1-bit and 2-bit delta achieves avalanche.
+ * About 6*len+35 instructions. The best hash table sizes are powers
+ * of 2.  There is no need to do mod a prime (mod is sooo slow!).
+ * If you need less than 32 bits, use a bitmask.
+ *
+ * Note: we could easily change this function to return a 64-bit hash value
+ * by using the final values of both b and c.  b is perhaps a little less
+ * well mixed than c, however.
+ */
+Datum
+hash_any(register const unsigned char *k, register int keylen)
+{
+......
+}
+
+
+2. src/backend/utils/adt/varlena.c
+
+/*
+ * Create an md5 hash of a text string and return it as hex
+ *
+ * md5 produces a 16 byte (128 bit) hash; double it for hex
+ */
+#define MD5_HASH_LEN  32
+
+Datum
+md5_text(PG_FUNCTION_ARGS)
+{
+        text       *in_text = PG_GETARG_TEXT_PP(0);
+        size_t          len;
+        char            hexsum[MD5_HASH_LEN + 1];
+
+        /* Calculate the length of the buffer using varlena metadata */
+        len = VARSIZE_ANY_EXHDR(in_text);
+
+        /* get the hash result */
+        if (pg_md5_hash(VARDATA_ANY(in_text), len, hexsum) == false)
+                ereport(ERROR,
+                                (errcode(ERRCODE_OUT_OF_MEMORY),
+                                 errmsg("out of memory")));
+
+        /* convert to text and return it */
+        PG_RETURN_TEXT_P(cstring_to_text(hexsum));
+}
+
+
+3. backend/libpq/md5.c
+md5计算函数。
+4. src/backend/access/common/indextuple.c
+
+        /*
+         * Here we make sure that the size will fit in the field reserved for it
+         * in t_info.
+         */
+        if ((size & INDEX_SIZE_MASK) != size)
+                ereport(ERROR,
+                                (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                                 errmsg("index row requires %zu bytes, maximum size is %zu",
+                                                size, (Size) INDEX_SIZE_MASK)));
+
+
+5. src/include/access/itup.h
+
+#define INDEX_SIZE_MASK 0x1FFF
+
+
+Flag Counter
+
+评论
+
+aa - 2015-04-22 17:47:12
+
+[face0]

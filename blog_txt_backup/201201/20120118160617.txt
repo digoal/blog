@@ -1,0 +1,121 @@
+PostgreSQL research
+
+pg-amqp extension
+
+2012-01-18 16:06:17   查看原文>>
+
+amqp 指的是Advanced Message Queuing Protocol
+有兴趣的朋友可以去它的主页了解一下。
+pg_amqp是一个PostgreSQL的extension, 可以非常方便的使用PostgreSQL 的函数向AMQP发布消息。
+【安装】
+1. 下载 
+    http://www.pgxn.org/dist/pg_amqp/
+2. 解压安装
+unzip pg_amqp-0.3.0.zip
+root@db-172-> chown -R postgres:postgres pg_amqp-0.3.0
+root@db-172-> mv pg_amqp-0.3.0 postgresql-9.1.2/contrib/
+root@db-172-> cd postgresql-9.1.2/contrib/pg_amqp-0.3.0/
+root@db-172-> . /home/postgres/.bash_profile 
+env LDFLAGS="-lpthread" gmake
+最后一行应该带上-lpthread参数, 例如
+gcc -pthread -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wformat-security -fno-strict-aliasing -fwrapv -fpic -shared -o src/pg_amqp.so src/pg_amqp.o src/librabbitmq/amqp_api.o src/librabbitmq/amqp_connection.o src/librabbitmq/amqp_debug.o src/librabbitmq/amqp_framing.o
+src/librabbitmq/amqp_mem.o src/librabbitmq/amqp_socket.o src/librabbitmq/amqp_table.o -L/opt/pgsql/lib  -Wl,-rpath,'/opt/pgsql/lib',--enable-new-dtags
+如果没有带上这个参数, 可以在gmake install之前把当前目录下的src/pg_amqp.so文件先保留到其他目录, 在gmake install之后去替换$PGHOME/lib/src/pg_amqp.so.
+不替换的话启动PostgreSQL会报错 : FATAL:  could not load library "/opt/pgsql/lib/src/pg_amqp.so": /opt/pgsql/lib/src/pg_amqp.so: undefined symbol: pthread_key_create
+
+env LDFLAGS="-lpthread" gmake install
+
+chown -R postgres:postgres $PGHOME
+
+把pg_amqp.so移到$PGHOME/lib
+mv $PGHOME/lib/src/pg_amqp.so $PGHOME/lib/
+
+3. 配置 postgresql.conf
+shared_preload_libraries = ' pg_amqp'
+4. 重启数据库
+pg_ctl stop -m fast -D $PGDATA
+pg_ctl start -D $PGDATA
+
+【测试】
+1. 创建extension
+postgres@db-172-> psql -h 127.0.0.1  digoal postgres
+psql (9.1.2)
+Type "help" for help.
+digoal=# create extension amqp;
+CREATE EXTENSION
+# 查看extension sql文件
+postgres@db-172-> cd /opt/pgsql/share/extension/
+postgres@db-172-> ll|grep amqp
+-rw-r--r-- 1 postgres postgres 2.3K Jan 18 15:51 amqp--0.3.0.sql
+-rw-r--r-- 1 postgres postgres  163 Jan 18 15:51 amqp.control
+-rw-r--r-- 1 postgres postgres  566 Jan 18 15:51 amqp--unpackaged--0.3.0.sql
+
+less amqp--0.3.0.sql 
+
+create function amqp.exchange_declare(integer, varchar, varchar, boolean, boolean, boolean)
+returns boolean as 'pg_amqp.so', 'pg_amqp_exchange_declare'
+language C immutable;
+
+comment on function amqp.exchange_declare(integer, varchar, varchar, boolean, boolean, boolean) is
+'Declares a exchange (broker_id, exchange_name, exchange_type, passive, durable, auto_delete)
+auto_delete should be set to false as unexpected errors can cause disconnect/reconnect which
+would trigger the auto deletion of the exchange.';
+
+create function amqp.publish(integer, varchar, varchar, varchar)
+returns boolean as 'pg_amqp.so', 'pg_amqp_publish'
+language C immutable;
+
+comment on function amqp.publish(integer, varchar, varchar, varchar) is
+'Publishes a message (broker_id, exchange, routing_key, message).  The message will only
+be published if the containing PostgreSQL transaction successfully commits.  Under certain
+circumstances, the AMQP commit might fail.  In this case, a WARNING is emitted.
+
+Publish returns a boolean indicating if the publish command was successful.  Note that as
+AMQP publish is asynchronous, you may find out later it was unsuccessful.';
+
+create function amqp.autonomous_publish(integer, varchar, varchar, varchar)
+returns boolean as 'pg_amqp.so', 'pg_amqp_autonomous_publish'
+language C immutable;
+
+comment on function amqp.autonomous_publish(integer, varchar, varchar, varchar) is
+'Works as amqp.publish does, but the message is published immediately irrespective of the
+current transaction state.  PostgreSQL commit and rollback at a later point will have no
+effect on this message being sent to AMQP.';
+
+create function amqp.disconnect(integer)
+returns void as 'pg_amqp.so', 'pg_amqp_disconnect'
+language C immutable strict;
+
+comment on function amqp.disconnect(integer) is
+'Explicitly disconnect the specified (broker_id) if it is current connected. Broker
+connections, once established, live until the PostgreSQL backend terminated.  This
+allows for more precise control over that.
+select amqp.disconnect(broker_id) from amqp.broker
+will disconnect any brokers that may be connected.';
+
+create table amqp.broker (
+  broker_id serial not null,
+  host text not null,
+  port integer not null default 5672,
+  vhost text,
+  username text,
+  password text,
+  primary key(broker_id, host, port)
+);
+
+函数的comment已经描述得很详细了, 怎么使用就不测试了。
+
+【用法】
+插入AMQP的连接信息到amqp.broker表,格式如下
+Insert AMQP broker information (host/port/user/pass) into the amqp.broker table.
+
+A process starts and connects to PostgreSQL and runs:
+SELECT amqp.publish(broker_id, 'amqp.direct', 'foo', 'message');
+Upon process termination, all broker connections will be torn down. If there is a need to disconnect from a specific broker, one can call:
+
+select amqp.disconnect(broker_id);
+which will disconnect from the broker if it is connected and do nothing if it is already disconnected.
+
+【参考】
+http://www.amqp.org
+http://api.pgxn.org/src/pg_amqp/pg_amqp-0.3.0/README.md

@@ -1,0 +1,236 @@
+PostgreSQL research
+
+use Linux root user start PostgreSQL cluster
+
+2012-09-11 13:22:50   查看原文>>
+
+在上一篇BLOG中介绍了为什么PostgreSQL的oom_adj修改策略没有生效, 因为PostgreSQL进程是普通用户启动的, 没有权限修改/proc/$pid/oom_adj.
+所以有一种办法是让root可以启动数据库集群.
+正常情况下, 用root启动数据库会报错, 如下 : 
+
+root@db-172-16-3-150-> pg_ctl start
+pg_ctl: cannot be run as root
+Please log in (using, e.g., "su") as the (unprivileged) user that will
+own the server process.
+
+
+原因是pg_ctl在启动数据库时, 要判断一下用户的uid, 如果等于0, 那么将报错, 并退出. 源代码如下 : 
+
+#ifndef WIN32
+        if (geteuid() == 0)
+        {
+                write_stderr(_("%s: cannot be run as root\n"
+                                           "Please log in (using, e.g., \"su\") as the "
+                                           "(unprivileged) user that will\n"
+                                           "own the server process.\n"),
+                                         progname);
+                exit(1);
+        }
+#endif
+
+
+其中geteuid是用来获取用户的uid的系统函数 : 
+
+GETUID(2)                  Linux Programmer’s Manual                 GETUID(2)
+
+NAME
+       getuid, geteuid - get user identity
+
+SYNOPSIS
+       #include <unistd.h>
+       #include <sys/types.h>
+
+       uid_t getuid(void);
+       uid_t geteuid(void);
+
+DESCRIPTION
+       getuid() returns the real user ID of the current process.
+
+       geteuid() returns the effective user ID of the current process.
+
+ERRORS
+       These functions are always successful.
+
+CONFORMING TO
+       POSIX.1-2001, 4.3BSD.
+
+HISTORY
+       In  Unix  V6  the  getuid()  call  returned  (euid << 8) + uid.  Unix V7 introduced separate calls getuid() and
+       geteuid().
+
+
+那么如果要让数据库能够使用root启动, 就非常简单了, 稍微修改一下源码, 重新编译.
+接下来将exit(1)都注释掉, 保持错误输出, 但是不退出. 
+重新编译即可.
+[root@db-172-16-3-150 postgresql-9.2.0]# grep -r geteuid *
+src/bin/pg_resetxlog/pg_resetxlog.c:   
+
+#ifndef WIN32
+        if (geteuid() == 0)
+        {
+                fprintf(stderr, _("%s: cannot be executed by \"root\"\n"),
+                                progname);
+                fprintf(stderr, _("You must run %s as the PostgreSQL superuser.\n"),
+                                progname);
+                // exit(1);
+        }
+#endif
+
+
+
+src/bin/pg_ctl/pg_ctl.c:       
+
+#ifndef WIN32
+        if (geteuid() == 0)
+        {
+                write_stderr(_("%s: cannot be run as root\n"
+                                           "Please log in (using, e.g., \"su\") as the "
+                                           "(unprivileged) user that will\n"
+                                           "own the server process.\n"),
+                                         progname);
+                // exit(1);
+        }
+#endif
+
+
+
+src/bin/initdb/initdb.c:       
+
+        if (geteuid() == 0)                     /* 0 is root's uid */
+        {
+                fprintf(stderr,
+                                _("%s: cannot be run as root\n"
+                                  "Please log in (using, e.g., \"su\") as the "
+                                  "(unprivileged) user that will\n"
+                                  "own the server process.\n"),
+                                progname);
+                //exit(1);
+        }
+
+        pw = getpwuid(geteuid());
+        if (!pw)
+        {
+                fprintf(stderr,
+                          _("%s: could not obtain information about current user: %s\n"),
+                                progname, strerror(errno));
+                //exit(1);
+        }
+
+
+
+src/backend/main/main.c:      
+
+#ifndef WIN32
+        if (geteuid() == 0)
+        {
+                write_stderr("\"root\" execution of the PostgreSQL server is not permitted.\n"
+                                         "The server must be started under an unprivileged user ID to prevent\n"
+                  "possible system security compromise.  See the documentation for\n"
+                                  "more information on how to properly start the server.\n");
+                //exit(1);
+        }
+
+
+
+重新编译后, 原来的数据目录需要修改为root权限的, 因为先要去判断是否启动用户的权限, 这里就不再修改源码了. 
+因为可以简单的解决.
+
+chown -R root:root $PGDATA
+
+
+接下来使用新编译的bin文件启动数据库.
+
+root@db-172-16-3-150-> whoami
+root
+
+
+调整当前shell进程的oom_adj的值, 这样的话, postgres将会继承这个值, 然后看看子进程是否会正常的调用如下oom_adj write.
+
+#ifdef LINUX_OOM_ADJ
+                {
+                        /*
+                         * Use open() not stdio, to ensure we control the open flags. Some
+                         * Linux security environments reject anything but O_WRONLY.
+                         */
+                        int                     fd = open("/proc/self/oom_adj", O_WRONLY, 0);
+
+                        /* We ignore all errors */
+                        if (fd >= 0)
+                        {
+                                char            buf[16];
+                                int                     rc;
+
+                                snprintf(buf, sizeof(buf), "%d\n", LINUX_OOM_ADJ);
+                                rc = write(fd, buf, strlen(buf));
+                                (void) rc;
+                                close(fd);
+                        }
+                }
+#endif   /* LINUX_OOM_ADJ */
+
+
+root@db-172-16-3-150-> echo -17 > /proc/self/oom_adj 
+root@db-172-16-3-150-> cat /proc/self/oom_adj 
+-17
+root@db-172-16-3-150-> pg_ctl start
+pg_ctl: cannot be run as root
+Please log in (using, e.g., "su") as the (unprivileged) user that will
+own the server process.
+server starting
+
+
+使用root用户启动正常 : 
+
+root@db-172-16-3-150-> "root" execution of the PostgreSQL server is not permitted.
+The server must be started under an unprivileged user ID to prevent
+possible system security compromise.  See the documentation for
+more information on how to properly start the server.
+LOG:  database system was shut down at 2012-09-11 13:08:47 CST
+LOG:  autovacuum launcher started
+LOG:  database system is ready to accept connections
+
+root@db-172-16-3-150-> ps -ewf|grep root|grep postgres
+root      4325     1  0 13:09 pts/4    00:00:00 /opt/pgsql9.2.0/bin/postgres
+root      4327  4325  0 13:09 ?        00:00:00 postgres: checkpointer process   
+root      4328  4325  0 13:09 ?        00:00:00 postgres: writer process    
+root      4329  4325  0 13:09 ?        00:00:00 postgres: wal writer process   
+root      4330  4325  0 13:09 ?        00:00:00 postgres: autovacuum launcher process   
+root      4331  4325  0 13:09 ?        00:00:00 postgres: stats collector process   
+root      4339 23963  0 13:09 pts/4    00:00:00 grep postgres
+
+
+显然, oom_adj已经正常了. 子进程正常调用了src/backend/postmaster/fork_process.c里面的write(fd, buf, strlen(buf));
+
+root@db-172-16-3-150-> cat /proc/4325/oom_adj 
+-17
+root@db-172-16-3-150-> cat /proc/4327/oom_adj 
+0
+root@db-172-16-3-150-> cat /proc/4328/oom_adj 
+0
+root@db-172-16-3-150-> cat /proc/4329/oom_adj 
+0
+root@db-172-16-3-150-> cat /proc/4330/oom_adj 
+0
+root@db-172-16-3-150-> cat /proc/4331/oom_adj 
+0
+
+
+使用psql新建一个连接, 检查backend pid的oom_adj值是否修改为0 : 
+
+root@db-172-16-3-150-> psql -h 127.0.0.1
+psql (9.2.0)
+Type "help" for help.
+
+postgres=# select pg_backend_pid();
+ pg_backend_pid 
+----------------
+           4357
+(1 row)
+
+postgres=# \!
+[root@db-172-16-3-150 pg9.2.0]# cat /proc/4357/oom_adj 
+0
+
+
+
+Flag Counter

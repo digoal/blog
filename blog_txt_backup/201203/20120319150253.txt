@@ -1,0 +1,295 @@
+PostgreSQL research
+
+PostgreSQL row exchange case.
+
+2012-03-19 15:02:53   查看原文>>
+
+今天介绍一个PostgreSQL 行交换的例子.
+在现实中可能有一些需求是需要对一个表的其中两行的记录进行交换的,(除了主键).
+具体的思路是查询出原来的两行的记录, 然后分两次更新响应的记录.
+需要注意的是原来的记录被查出来之后, 可能被其他的用户更新, 为了避免这种情况的发生, 需要用到行锁.
+例如 : 
+
+create table top1000 (id int primary key,username text not null unique deferrable,score numeric);
+
+
+插入测试数据 : 
+
+insert into top1000 select generate_series(1,1000),'digoal'||generate_series(1,1000),generate_series(1,1000);
+
+
+
+创建行交换函数(使用nowait可以有效防止死锁或长时间等待) : 
+
+create or replace function exchange_rows(i_id1 int,i_id2 int) returns int as
+$$
+declare
+v_username1 text;
+v_score1 numeric;
+v_username2 text;
+v_score2 numeric;
+begin
+select username,score into v_username1,v_score1 from top1000 where id=i_id1 for update nowait;
+select username,score into v_username2,v_score2 from top1000 where id=i_id2 for update nowait;
+update top1000 set username=v_username1,score=v_score1 where id=i_id2;
+update top1000 set username=v_username2,score=v_score2 where id=i_id1;
+return 0;
+exception 
+when others then
+raise notice 'ErrorNO %',SQLSTATE;
+return 1;
+end;
+$$
+language plpgsql;
+
+
+行交换测试 : 
+
+digoal=> begin;
+BEGIN
+Time: 0.095 ms
+digoal=> set constraints top1000_username_key deferred;
+SET CONSTRAINTS
+Time: 0.200 ms
+digoal=> select * from exchange_rows(1,2);
+ exchange_rows 
+---------------
+             0
+(1 row)
+Time: 0.827 ms
+digoal=> end;
+COMMIT
+Time: 0.159 ms
+
+digoal=> select * from top1000 where id in (1,2);
+ id | username | score 
+----+----------+-------
+  2 | digoal1  |     1
+  1 | digoal2  |     2
+(2 rows)
+Time: 0.428 ms
+
+
+由于行交换的中间过程会产生违反唯一约束的情况, 所以需要做行交换的表在唯一约束上需要使用deferrable关键字.
+事务开始时需要设置该约束为deferred的.
+
+方法2, 使用with语法.
+
+create or replace function exchange_rows(i_id1 int,i_id2 int) returns int as
+$$
+declare
+value int;
+begin
+value := 1;
+with
+o1 as (select username,score from top1000 where id=i_id1 for update nowait),
+o2 as (select username,score from top1000 where id=i_id2 for update nowait),
+u1 as (update top1000 set username=o2.username,score=o2.score from o1,o2 where id=i_id1),
+u2 as (update top1000 set username=o1.username,score=o1.score from o1,o2 where id=i_id2)
+select 0 into value;
+return value;
+exception
+when others then
+raise notice 'ErrorNO %',SQLSTATE;
+return value;
+end;
+$$
+language plpgsql;
+
+
+测试 : 
+
+digoal=> select * from exchange_rows(2,3);
+ exchange_rows 
+---------------
+             0
+(1 row)
+
+Time: 1.575 ms
+digoal=> select * from top1000 where id in (2,3);
+ id | username | score 
+----+----------+-------
+  3 | digoal3  |     3
+  2 | digoal1  |     1
+(2 rows)
+
+Time: 0.443 ms
+
+
+
+方法3, 不锁行也可以做, 不过在update的过程中可能导致死锁. 因此不建议使用.
+
+create or replace function exchange_rows(i_id1 int,i_id2 int) returns int as
+$$
+declare
+v_username1 text;
+v_score1 numeric;
+v_xmin1 int;
+v_cnt1 int;
+v_username2 text;
+v_score2 numeric;
+v_xmin2 int;
+v_cnt2 int;
+begin
+v_cnt1 := 0;
+v_cnt2 := 0;
+select xmin,username,score into v_xmin1,v_username1,v_score1 from top1000 where id=i_id1;
+select xmin,username,score into v_xmin2,v_username2,v_score2 from top1000 where id=i_id2;
+update top1000 set username=v_username1,score=v_score1 where id=i_id2 and xmin=v_xmin2;
+GET DIAGNOSTICS v_cnt1 = ROW_COUNT;
+update top1000 set username=v_username2,score=v_score2 where id=i_id1 and xmin=v_xmin1;
+GET DIAGNOSTICS v_cnt2 = ROW_COUNT;
+if ( (v_cnt1+v_cnt2) <> 2 ) then
+  raise exception 'at least one row changed when exchanging.v_cnt1:%, v_cnt2:%.',v_cnt1,v_cnt2;
+  return 1;
+end if;
+return 0;
+exception 
+when others then
+raise notice 'ErrorNO %',SQLSTATE;
+return 1;
+end;
+$$
+language plpgsql;
+
+
+测试 : 
+
+digoal=> begin;
+BEGIN
+Time: 0.253 ms
+digoal=> set constraints top1000_username_key deferred;
+SET CONSTRAINTS
+Time: 0.244 ms
+digoal=> select * from exchange_rows(2,3);
+ exchange_rows 
+---------------
+             0
+(1 row)
+
+Time: 1.342 ms
+digoal=> end;
+COMMIT
+Time: 0.259 ms
+digoal=> select * from top1000 where id in (2,3);
+ id | username | score 
+----+----------+-------
+  3 | digoal3  |     3
+  2 | digoal1  |     1
+(2 rows)
+
+Time: 0.596 ms
+
+
+
+还有一种with的方法, 在PostgreSQL版本的with支持update后可选这种方法.
+
+postgres=# create table t4(id int primary key, info text, crt_time timestamp);
+CREATE TABLE
+postgres=# insert into t4 values (1,'abc',now());
+INSERT 0 1
+postgres=# insert into t4 values (2,'def',now());
+INSERT 0 1
+方法如下, 需要交换的两条记录的ID放在id in(1,2)这里 : 
+postgres=# with t1(id,info) as (select id,info from t4 where id in (1,2)) update t4 set info=t1.info from t1 where t4.id<>t1.id returning * ;
+ id | info |          crt_time          | id | info 
+----+------+----------------------------+----+------
+  2 | abc  | 2015-03-13 16:31:07.464255 |  1 | abc
+  1 | def  | 2015-03-13 16:31:01.711353 |  2 | def
+(2 rows)
+UPDATE 2
+交换记录后如下 : 
+postgres=# select * from t4;
+ id | info |          crt_time          
+----+------+----------------------------
+  2 | abc  | 2015-03-13 16:31:07.464255
+  1 | def  | 2015-03-13 16:31:01.711353
+(2 rows)
+
+
+
+
+最后举一个实际应用的例子 : 
+假设id是排名, 任何一个低等级的人都可以向比他高3级以内的人挑战, 挑战结束时双方通过比较最终的得分判断谁赢谁输.
+挑战成功则交换名次以及更新积分, 挑战失败则只更新积分.
+
+create or replace function exchange_rows(i_username1 text,i_score1 numeric,i_id2 int,i_score2 numeric) returns int as
+$$
+declare
+value int;
+begin
+value := 1;
+with
+o1 as (select id,username,score+i_score1 as score from top1000 where username=i_username1 for update nowait),
+o2 as (select id,username,score+i_score2 as score from top1000 where id=i_id2 for update nowait),
+u1 as (update top1000 set username=case when o1.score>o2.score then o2.username else o1.username end,score=case when o1.score>o2.score then o2.score else o1.score end from o1,o2 where top1000.id=o1.id),
+u2 as (update top1000 set username=case when o1.score>o2.score then o1.username else o2.username end,score=case when o1.score>o2.score then o1.score else o2.score end from o1,o2 where top1000.id=o2.id)
+select 0 into value;
+return value;
+exception
+when others then
+raise notice 'ErrorNO %',SQLSTATE;
+return value;
+end;
+$$
+language plpgsql;
+
+
+假设当前的1, 2名分别为digoal1和digoal2.
+
+digoal=> select * from top1000 where id in (1,2);
+ id | username | score 
+----+----------+-------
+  1 | digoal1  | 125.0
+  2 | digoal2  |  72.0
+(2 rows)
+
+
+
+接下来是digoal2向第一名发起挑战的结果. 显然是digoal2的最终得分高于第一名, 因此挑战胜利更换名次并更新积分.
+
+digoal=> select * from exchange_rows('digoal2', 100.0, 1, 10.0);
+ exchange_rows 
+---------------
+             0
+(1 row)
+
+
+
+最新的名次 : 
+
+digoal=> select * from top1000 where id in (1,2);
+ id | username | score 
+----+----------+-------
+  1 | digoal2  | 172.0
+  2 | digoal1  | 135.0
+(2 rows)
+
+
+
+接下来是digoal1向第一名发起挑战, 但是挑战失败了, digoal2还是第一名. 所以只更新积分, 名次不变.
+
+digoal=> select * from exchange_rows('digoal1', 10.0, 1, 10.0);
+ exchange_rows 
+---------------
+             0
+(1 row)
+
+digoal=> select * from top1000 where id in (1,2);
+ id | username | score 
+----+----------+-------
+  1 | digoal2  | 182.0
+  2 | digoal1  | 145.0
+(2 rows)
+
+
+
+评论
+
+showdy1984 - 2012-03-19 17:37:31
+
+感谢德哥的帮助。。[face1]
+
+德哥@Digoal 回复 showdy1984 - 2012-03-19 17:37:31
+
+[face0]不客气,有空常来.

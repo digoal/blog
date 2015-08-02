@@ -1,0 +1,379 @@
+PostgreSQL research
+
+mongoDB 4 nodes testing shard implement
+
+2011-06-21 10:25:57   查看原文>>
+
+一、概述 : 
+Server1 : 10.10.10.40 ( configsrv and mongod )
+Server2 : 10.10.10.41 ( configsrv and mongod )
+Server3 : 10.10.10.42 ( configsrv and mongod )
+Server4 : 10.10.10.43 ( mongos(test) and mongod )
+
+replication group : 
+s6543_4041 : 
+10.10.10.40:6543
+10.10.10.41:6543
+s6543_4243 : 
+10.10.10.42:6543
+10.10.10.43:6543
+s6544_4041 : 
+10.10.10.40:6544
+10.10.10.41:6544
+s6544_4243 : 
+10.10.10.42:6544
+10.10.10.43:6544
+
+configsrv : 
+10.10.10.40:6545
+10.10.10.41:6545
+10.10.10.42:6545
+
+mongos : 
+10.10.10.43:6546
+
+服务器配置:
+6块磁盘,3个raid1组.
+disk1 : /opt/mongo6545
+disk2 : /data1/mongo6543
+disk3 : /data2/mongo6544
+
+二、配置文件 : 
+repl6543配置 : 
+-- mongod6543.conf
+vi /opt/mongo/conf/mongod6543.conf
+logpath=/var/log/mongo/mongod6543.log
+logappend=true
+fork = true
+port = 6543
+dbpath=/data1/mongo6543
+noauth = true
+nohttpinterface = true
+nssize = 1024
+directoryperdb = true
+maxConns = 15000
+oplogSize = 20480
+journal = true
+profile = 1
+slowms = 100
+replSet = s6543_4041 / s6543_4243
+
+repl6544配置 : 
+-- mongod6544.conf 
+vi /opt/mongo/conf/mongod6544.conf
+logpath=/var/log/mongo/mongod6544.log
+logappend=true
+fork = true
+port = 6544
+dbpath=/data2/mongo6544
+noauth = true
+nohttpinterface = true
+nssize = 1024
+directoryperdb = true
+maxConns = 15000
+oplogSize = 20480
+journal = true
+profile = 1
+slowms = 100
+replSet = s6544_4041 / s6544_4243
+
+configsrv配置 : 
+-- mongod6545.conf 
+vi /opt/mongo/conf/mongod6545.conf
+logpath = /var/log/mongo/mongod6545.log
+logappend = true
+fork = true
+port = 6545
+dbpath = /opt/mongo6545
+noauth = true
+nohttpinterface = true
+nssize = 1024
+directoryperdb = true
+maxConns = 15000
+journal = true
+profile = 1
+slowms = 100
+configsvr = true
+
+mongos配置 : 
+-- mongos6546.conf 
+vi /opt/mongo/conf/mongod6546.conf
+logpath = /var/log/mongo/mongos6546.log
+logappend = true
+fork = true
+bind_ip = 127.0.0.1
+port = 6546
+maxConns = 300
+chunkSize = 200
+configdb = 10.10.10.40:6545,10.10.10.41:6545,10.10.10.42:6545
+
+chown -R mongo:mongo /opt/mongo
+chmod 400 /opt/mongo/conf/*.conf
+
+三、mongod服务器防火墙配置: (由于关闭了auth)
+# 如果mongodb扩容,后续增加的数据库IP应该被增加到允许列表.
+-A RH-Firewall-1-INPUT -s 127.0.0.1/32 -j ACCEPT
+-A RH-Firewall-1-INPUT -s 10.10.10.40/32 -j ACCEPT
+-A RH-Firewall-1-INPUT -s 10.10.10.41/32 -j ACCEPT
+-A RH-Firewall-1-INPUT -s 10.10.10.42/32 -j ACCEPT
+-A RH-Firewall-1-INPUT -s 10.10.10.43/32 -j ACCEPT
+# 允许应用的mongos访问,如果增加了mongos服务器,也应该加入到以下允许范围.
+# -A RH-Firewall-1-INPUT -s xxx.xxx.xxx.xxx/32 -j ACCEPT
+# 如果mongod服务器上需增加mongod进程,后续增加的监听端口应该拒绝除应用以及数据库本身以外的IP访问.
+-A RH-Firewall-1-INPUT -p tcp -m state --state NEW -m tcp --dport 6543 -j REJECT
+-A RH-Firewall-1-INPUT -p tcp -m state --state NEW -m tcp --dport 6544 -j REJECT
+-A RH-Firewall-1-INPUT -p tcp -m state --state NEW -m tcp --dport 6545 -j REJECT
+# 其他配置接续
+
+
+启动顺序 : 
+1. 启动 shard with replSet
+mongod -f $MONGO_HOME/conf/mongod6543.conf
+mongod -f $MONGO_HOME/conf/mongod6544.conf
+
+2. 配置replSet : 
+connect to 10.10.10.40:6543/admin
+> config = {_id: 's6543_4041', members: [
+                          {_id: 0, host: '10.10.10.40:6543', arbiterOnly: false},
+                          {_id: 1, host: '10.10.10.41:6543', arbiterOnly: false}]
+           }
+
+> rs.initiate(config);
+{
+   "info" : "Config now saved locally.  Should come online in about a minute.",
+   "ok" : 1
+}
+
+connect to 10.10.10.41:6544/admin
+> config = {_id: 's6544_4041', members: [
+                          {_id: 0, host: '10.10.10.41:6544', arbiterOnly: false},
+                          {_id: 1, host: '10.10.10.40:6544', arbiterOnly: false}]
+           }
+
+> rs.initiate(config);
+{
+   "info" : "Config now saved locally.  Should come online in about a minute.",
+   "ok" : 1
+}
+
+connect to 10.10.10.42:6543/admin
+> config = {_id: 's6543_4243', members: [
+                          {_id: 0, host: '10.10.10.42:6543', arbiterOnly: false},
+                          {_id: 1, host: '10.10.10.43:6543', arbiterOnly: false}]
+           }
+
+> rs.initiate(config);
+{
+   "info" : "Config now saved locally.  Should come online in about a minute.",
+   "ok" : 1
+}
+
+connect to 10.10.10.43:6544/admin
+> config = {_id: 's6544_4243', members: [
+                          {_id: 0, host: '10.10.10.43:6544', arbiterOnly: false},
+                          {_id: 1, host: '10.10.10.42:6544', arbiterOnly: false}]
+           }
+
+> rs.initiate(config);
+{
+   "info" : "Config now saved locally.  Should come online in about a minute.",
+   "ok" : 1
+}
+
+> rs.status() 
+查看状态
+
+3. 启动 configsrv
+10.10.10.40
+10.10.10.41
+10.10.10.42
+mongod -f $MONGO_HOME/conf/mongod6545.conf
+
+4. 启动 mongos
+10.10.10.43
+mongos -f $MONGO_HOME/conf/mongod6546.conf
+
+5. 配置shard (限制每个shard的使用最多80GB)
+connect to 10.10.10.43:6546/admin
+> db.runCommand({"addShard" : "s6543_4041/10.10.10.40:6543,10.10.10.41:6543", "maxSize" : 81920});
+> db.runCommand({"addShard" : "s6544_4041/10.10.10.40:6544,10.10.10.41:6544", "maxSize" : 81920});
+> db.runCommand({"addShard" : "s6543_4243/10.10.10.42:6543,10.10.10.43:6543", "maxSize" : 81920});
+> db.runCommand({"addShard" : "s6544_4243/10.10.10.42:6544,10.10.10.43:6544", "maxSize" : 81920});
+
+四、启动概要 : 
+
+10.10.10.40
+mongod -f $MONGO_HOME/conf/mongod6543.conf
+10.10.10.41
+mongod -f $MONGO_HOME/conf/mongod6543.conf
+
+10.10.10.41
+mongod -f $MONGO_HOME/conf/mongod6544.conf
+10.10.10.40
+mongod -f $MONGO_HOME/conf/mongod6544.conf
+
+10.10.10.42
+mongod -f $MONGO_HOME/conf/mongod6543.conf
+10.10.10.43
+mongod -f $MONGO_HOME/conf/mongod6543.conf
+
+10.10.10.43
+mongod -f $MONGO_HOME/conf/mongod6544.conf
+10.10.10.42
+mongod -f $MONGO_HOME/conf/mongod6544.conf
+
+10.10.10.40
+10.10.10.41
+10.10.10.42
+mongod -f $MONGO_HOME/conf/mongod6545.conf
+
+10.10.10.43
+mongos -f $MONGO_HOME/conf/mongos6546.conf
+
+
+五、详细配置过程
+MongoDB replicSet 1.8.2 产品部署推荐:
+1. 文件系统加载时使用参数noatime
+2. no VM PAGEs
+3. 推荐使用逻辑卷,文件系统推荐ext4或xfs
+4. replicaSet建议:3个full nodes 或 2个full nodes+1个arbiter node (最好是奇数个物理服务器,否则仲裁会有问题，例如两台物理机，两个mongod进程，相互网络不通的话，任何一台都无法达到majority，因此都无法成为primary。那就是只读了.因如果物理服务器只有2台是不合理的。)
+   当然服务器可以后期增加.
+5. 如果使用auth,keyFile建议权限400 (遗憾的是SHARD不支持auth,而且auth也存在一些BUG,因此在这个版本还不推荐使用)
+6. 推荐关闭http访问
+7. 建议开启journal , 注意，开启journal后一个逻辑写将产生最多4个物理写(最恶劣的情况是这样的)
+   (1main,1journal,1local,1journal)
+   但是由于IO是异步的，所以一般不会有4个物理写这么严重。
+
+详细配置:
+1. 操作系统版本 Red Hat Enterprise Linux Server release 5.6 (Tikanga) 64位
+
+2. root用户 crontab配置
+8 * * * * /usr/sbin/ntpdate asia.pool.ntp.org && /sbin/hwclock --systohc
+
+3. ntpd配置
+vi /etc/sysconfig/ntpd
+SYNC_HWCLOCK=yes
+
+4. sysctl.conf配置
+
+5. vi /etc/security/limits.conf
+
+6. 主机名配置
+hostname db-10-10-10-40.digoal.com.cn
+vi /etc/sysconfig/network
+HOSTNAME=db-10-10-10-40.digoal.com.cn
+
+7. vi /etc/resolv.conf
+search digoal.com.cn
+nameserver 10.10.10.1
+
+8. 主机名配置
+vi /etc/hosts
+127.0.0.1               localhost.localdomain localhost
+192.168.164.40 db-10-10-10-40.digoal.com.cn db-10-10-10-40
+192.168.164.41 db-10-10-10-41.digoal.com.cn db-10-10-10-41
+192.168.164.42 db-10-10-10-42.digoal.com.cn db-10-10-10-42
+192.168.164.43 db-10-10-10-43.digoal.com.cn db-10-10-10-43
+
+9. 配置iptables
+
+10. 密码配置
+useradd mongo
+passwd root
+passwd mongo
+
+11. mongo用户profile
+vi .bash_profile
+export PS1="$USER@`/bin/hostname -s`-> " 
+export MONGO_HOME=/opt/mongo
+export PATH=$MONGO_HOME/bin:$PATH:.
+umask 022
+alias rm='rm -i'
+alias ll='ls -lh'
+
+12. 下载解压最新的稳定版
+wget mongodb-linux-x86_64-1.8.2.tar
+
+tar -zxvf mongodb-linux-x86_64-1.8.2.tgz
+mv mongodb-linux-x86_64-1.8.2 /opt/mongo
+
+chown -R mongo:mongo /opt/mongo
+
+13. 建立日志目录
+mkdir /var/log/mongo
+chown -R mongo:mongo /var/log/mongo
+
+14. 建立配置文件目录和数据文件目录
+mkdir -p /opt/mongo/conf
+chown -R mongo:mongo /opt/mongo
+
+建立存储:
+pvcreate /dev/sdb
+pvcreate /dev/sdc
+vgcreate vg0 /dev/sdb
+vgcreate vg1 /dev/sdc
+lvcreate -l 100%VG -n lv0 -v vg0
+lvcreate -l 100%VG -n lv1 -v vg1
+
+[root@192_168_168_40 ~]# lvs
+  LV   VG   Attr   LSize   Origin Snap%  Move Log Copy%  Convert
+  lv0  vg0  -wi-a- 136.12G                                      
+  lv1  vg1  -wi-a- 136.12G
+
+创建文件系统:
+mkfs.ext4 /dev/mapper/vg0-lv0
+mkfs.ext4 /dev/mapper/vg1-lv1
+
+mkdir -p /data1
+mkdir -p /data2
+
+vi /etc/fstab
+/dev/mapper/vg0-lv0     /data1                  ext4    defaults,noatime 0 0
+/dev/mapper/vg1-lv1     /data2                  ext4    defaults,noatime 0 0
+
+mount -a
+
+mkdir -p /data1/mongo6543
+mkdir -p /data2/mongo6544
+
+chown -R mongo:mongo /data1
+chown -R mongo:mongo /data2
+
+配置configsrv目录
+mkdir -p /opt/mongo6545
+chown -R mongo:mongo /opt/mongo6545
+
+15. 配置启动文件:
+
+16. 启动所有节点并初始化replicaSet
+
+# 初始化(只需要连到一个节点操作)
+
+# 等待local初始完成(确保所有节点都正常),添加用户
+
+# 状态正常,新建用户
+mongo 127.0.0.1:6543/admin
+db.addUser("xxx","xxxxx");
+
+# 新增业库blss务用户
+use digoal
+db.addUser("digoal","Fdigoal-")
+
+17. 查看日志
+
+18. 其他管理命令
+rs.?
+
+19. 切换,自动
+
+20. 配置监控(nagios)
+
+21. 控制是否要把READ请求发给slave
+Then, you can use the driver normally. By default, it will send all the requests, reads and writes, to the master. Bit you can configure the driver to send only writes to the master, the reads will be dispatched on the slaves. And it's only one line of code to do this:
+mongo.slaveOk();
+
+22. shard
+If we are sharding a collection with data in it, the data must have an index on the shard
+key. All documents must have a value for the shard key, too (and the value cannot be
+null). After you’ve sharded the collection, you can insert documents with a null shard
+key value.

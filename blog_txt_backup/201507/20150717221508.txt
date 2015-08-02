@@ -1,0 +1,190 @@
+PostgreSQL research
+
+use PostgreSQL trigger manage stock & offer infomation
+
+2015-07-17 22:15:08   查看原文>>
+
+使用触发器来管理订单和库存信息，可以简化数据交互过程。这个例子来自postgresql server programming。
+例如
+库存表存储一家水果超市的水果的库存总量数据，以及已供应的量数据，库存总量必须大于等于已供应的量。
+订单数据表存储每一笔水果的订单信息。
+涉及的操作包括新增订单，修改订单，撤销订单。
+新增订单，则需要增加库存表的已供应量字段信息，同时需要向订单表新增一条记录。
+修改订单，需要修改库存表的已供应量字段信息，同时需要修改订单记录。
+撤销订单，需要修改库存表的已供应量字段信息，同时需要删除对应的订单记录。
+例如：
+
+postgres=# create table stock (fruit name primary key, cnt int, offer int, check (cnt >= offer and cnt>=0 and offer>=0));
+CREATE TABLE
+postgres=# create table ordered (id serial primary key, fruit name references stock(fruit), cnt int, otime timestamp);
+CREATE TABLE
+
+
+创建库存信息：
+
+postgres=# insert into stock values ('orange',1000,0);
+INSERT 0 1
+postgres=# insert into stock values ('apple',1000,0);
+INSERT 0 1
+
+
+新增订单
+
+postgres=# begin;
+BEGIN
+postgres=# insert into ordered(fruit,cnt,otime) values ('orange',100,now() at time zone 'PRC') returning *;
+ id | fruit  | cnt |           otime            
+----+--------+-----+----------------------------
+  1 | orange | 100 | 2015-07-17 21:30:08.001544
+(1 row)
+INSERT 0 1
+postgres=# update stock set offer=offer+100 where fruit='orange';
+UPDATE 1
+postgres=# end;
+COMMIT
+
+
+修改订单
+
+postgres=# begin;
+BEGIN
+postgres=# select cnt from ordered where id=1;
+ cnt 
+-----
+ 100
+(1 row)
+postgres=# update stock set offer=offer-100 where fruit='orange';
+UPDATE 1
+postgres=# update ordered set cnt=500,otime=now() at time zone 'PRC' where id=1 returning *;
+ id | fruit  | cnt |           otime            
+----+--------+-----+----------------------------
+  1 | orange | 500 | 2015-07-17 21:33:30.384528
+(1 row)
+UPDATE 1
+postgres=# update stock set offer=offer+500 where fruit='orange';
+UPDATE 1
+postgres=# end;
+COMMIT
+
+
+撤销订单，回归库存
+
+postgres=# begin;
+BEGIN
+postgres=# delete from ordered where id=1 returning *;
+ id | fruit  | cnt |           otime            
+----+--------+-----+----------------------------
+  1 | orange | 500 | 2015-07-17 21:33:30.384528
+(1 row)
+DELETE 1
+postgres=# update stock set offer=offer-500 where fruit='orange';
+UPDATE 1
+postgres=# end;
+COMMIT
+
+postgres=# select * from stock ;
+ fruit  | cnt  | offer 
+--------+------+-------
+ apple  | 1000 |     0
+ orange | 1000 |     0
+(2 rows)
+
+
+
+我们看到以上操作非常的繁琐，需要交互很多次。
+在订单表上使用触发器可以解决这样的问题。
+
+postgres=# create or replace function tg_ordered() returns trigger as $$
+declare
+begin
+  IF TG_OP = 'INSERT' then
+    update stock set offer=offer+NEW.cnt where fruit=NEW.fruit;
+  ELSIF TG_OP = 'DELETE' then
+    update stock set offer=offer-OLD.cnt where fruit=OLD.fruit;
+  ELSIF TG_OP = 'UPDATE' then
+    update stock set offer=offer-OLD.cnt where fruit=OLD.fruit;
+    update stock set offer=offer+NEW.cnt where fruit=NEW.fruit;
+  end IF; 
+  return null;
+end;
+$$ language plpgsql strict;
+
+postgres=# create trigger tg1 after insert or update or delete on ordered for each row execute procedure tg_ordered();
+CREATE TRIGGER
+
+
+新增订单
+
+postgres=# insert into ordered(fruit,cnt,otime) values ('orange',100,now() at time zone 'PRC') returning *;
+ id | fruit  | cnt |           otime            
+----+--------+-----+----------------------------
+  1 | orange | 100 | 2015-07-17 22:08:32.897824
+(1 row)
+
+INSERT 0 1
+postgres=# select * from ordered;
+ id | fruit  | cnt |           otime            
+----+--------+-----+----------------------------
+  1 | orange | 100 | 2015-07-17 22:08:32.897824
+(1 row)
+
+postgres=# select * from stock ;
+ fruit  | cnt  | offer 
+--------+------+-------
+ apple  | 1000 |     0
+ orange | 1000 |   100
+(2 rows)
+
+
+当订单总量大于库存时，自动报错：
+
+postgres=# insert into ordered(fruit,cnt,otime) values ('orange',911,now() at time zone 'PRC') returning *;
+ERROR:  new row for relation "stock" violates check constraint "stock_check"
+DETAIL:  Failing row contains (orange, 1000, 1011).
+CONTEXT:  SQL statement "update stock set offer=offer+NEW.cnt where fruit=NEW.fruit"
+PL/pgSQL function tg_ordered() line 5 at SQL statement
+
+
+
+修改订单
+例如原来订单是100个桔子，改为999个苹果，自动修改库存。
+
+postgres=# update ordered set fruit='apple',cnt=999 where id=1;
+UPDATE 1
+postgres=# select * from stock ;
+ fruit  | cnt  | offer 
+--------+------+-------
+ orange | 1000 |     0
+ apple  | 1000 |   999
+(2 rows)
+postgres=# select * from ordered;
+ id | fruit | cnt |           otime            
+----+-------+-----+----------------------------
+  1 | apple | 999 | 2015-07-17 22:08:32.897824
+(1 row)
+
+
+
+撤销订单，撤销订单后，自动回归库存。
+
+postgres=# delete from ordered where id=1;
+DELETE 1
+postgres=# select * from ordered;
+ id | fruit | cnt | otime 
+----+-------+-----+-------
+(0 rows)
+
+postgres=# select * from stock ;
+ fruit  | cnt  | offer 
+--------+------+-------
+ orange | 1000 |     0
+ apple  | 1000 |     0
+(2 rows)
+
+
+本文介绍使用触发器自动维护库存表和订单表的关系，减少了应用层的处理逻辑，减少了网络层的交互。
+触发器的用法可以参考我以前写的BLOG：
+http://blog.163.com/digoal@126/blog/static/1638770402013283547959/
+http://blog.163.com/digoal@126/blog/static/1638770402013211102130526/
+
+Flag Counter

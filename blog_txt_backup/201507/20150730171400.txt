@@ -1,0 +1,225 @@
+PostgreSQL research
+
+PostgreSQL database cann't startup because memory overcommit
+
+2015-07-30 17:14:00   查看原文>>
+
+你可能遇到过类似的数据库无法启动的问题，
+postgres@digoal-> FATAL:  XX000: could not map anonymous shared memory: Cannot allocate memory
+HINT:  This error usually means that PostgreSQL's request for a shared memory segment exceeded available memory, swap space, or huge pages. To reduce the request size (currently 3322716160 bytes), reduce PostgreSQL's shared memory usage, perhaps by reducing shared_buffers or max_connections.
+LOCATION:  CreateAnonymousSegment, pg_shmem.c:398
+
+通过查看meminfo可以得到原因。
+CommitLimit: Based on the overcommit ratio ('vm.overcommit_ratio'),
+              this is the total amount of  memory currently available to
+              be allocated on the system. This limit is only adhered to
+              if strict overcommit accounting is enabled (mode 2 in
+              'vm.overcommit_memory').
+              The CommitLimit is calculated with the following formula:
+              CommitLimit = ([total RAM pages] - [total huge TLB pages]) *
+              overcommit_ratio / 100 + [total swap pages]
+              For example, on a system with 1G of physical RAM and 7G
+              of swap with a `vm.overcommit_ratio` of 30 it would
+              yield a CommitLimit of 7.3G.
+              For more details, see the memory overcommit documentation
+              in vm/overcommit-accounting.
+Committed_AS: The amount of memory presently allocated on the system.
+              The committed memory is a sum of all of the memory which
+              has been allocated by processes, even if it has not been
+              "used" by them as of yet. A process which malloc()'s 1G
+              of memory, but only touches 300M of it will show up as
+              using 1G. This 1G is memory which has been "committed" to
+              by the VM and can be used at any time by the allocating
+              application. With strict overcommit enabled on the system
+              (mode 2 in 'vm.overcommit_memory'),allocations which would
+              exceed the CommitLimit (detailed above) will not be permitted.
+              This is useful if one needs to guarantee that processes will
+              not fail due to lack of memory once that memory has been
+              successfully allocated.
+
+依据vm.overcommit_memory设置的值，
+当vm.overcommit_memory=0时，不允许普通用户overcommit, 但是允许root用户轻微的overcommit。
+当vm.overcommit_memory=1时，允许overcommit.
+当vm.overcommit_memory=2时，Committed_AS不能大于CommitLimit。
+commit 限制计算方法
+              The CommitLimit is calculated with the following formula:
+              CommitLimit = ([total RAM pages] - [total huge TLB pages]) *
+              overcommit_ratio / 100 + [total swap pages]
+              For example, on a system with 1G of physical RAM and 7G
+              of swap with a `vm.overcommit_ratio` of 30 it would
+              yield a CommitLimit of 7.3G.
+[root@digoal postgresql-9.4.4]# free
+             total       used       free     shared    buffers     cached
+Mem:       1914436     713976    1200460      72588      32384     529364
+-/+ buffers/cache:     152228    1762208
+Swap:      1048572     542080     506492
+[root@digoal ~]# cat /proc/meminfo |grep Commit
+CommitLimit:     2005788 kB
+Committed_AS:     132384 kB
+这个例子的2G就是以上公式计算得来。
+
+overcommit限制的初衷是malloc后，内存并不是立即使用掉，所以如果多个进程同时申请一批内存的话，不允许OVERCOMMIT可能导致某些进程申请内存失败，但实际上内存是还有的。所以Linux内核给出了几种选择，2是比较靠谱或者温柔的做法。1的话风险有点大，因为可能会导致OOM。
+
+所以当数据库无法启动时，要么你降低一下数据库申请内存的大小（例如降低shared_buffer或者max conn），要么就是修改一下overcommit的风格。
+
+[参考]
+1. kernel-doc-2.6.32/Documentation/filesystems/proc.txt
+    MemTotal: Total usable ram (i.e. physical ram minus a few reserved
+              bits and the kernel binary code)
+     MemFree: The sum of LowFree+HighFree
+MemAvailable: An estimate of how much memory is available for starting new
+              applications, without swapping. Calculated from MemFree,
+              SReclaimable, the size of the file LRU lists, and the low
+              watermarks in each zone.
+              The estimate takes into account that the system needs some
+              page cache to function well, and that not all reclaimable
+              slab will be reclaimable, due to items being in use. The
+              impact of those factors will vary from system to system.
+              This line is only reported if sysctl vm.meminfo_legacy_layout = 0
+     Buffers: Relatively temporary storage for raw disk blocks
+              shouldn't get tremendously large (20MB or so)
+      Cached: in-memory cache for files read from the disk (the
+              pagecache).  Doesn't include SwapCached
+  SwapCached: Memory that once was swapped out, is swapped back in but
+              still also is in the swapfile (if memory is needed it
+              doesn't need to be swapped out AGAIN because it is already
+              in the swapfile. This saves I/O)
+      Active: Memory that has been used more recently and usually not
+              reclaimed unless absolutely necessary.
+    Inactive: Memory which has been less recently used.  It is more
+              eligible to be reclaimed for other purposes
+   HighTotal:
+    HighFree: Highmem is all memory above ~860MB of physical memory
+              Highmem areas are for use by userspace programs, or
+              for the pagecache.  The kernel must use tricks to access
+              this memory, making it slower to access than lowmem.
+    LowTotal:
+     LowFree: Lowmem is memory which can be used for everything that
+              highmem can be used for, but it is also available for the
+              kernel's use for its own data structures.  Among many
+              other things, it is where everything from the Slab is
+              allocated.  Bad things happen when you're out of lowmem.
+   SwapTotal: total amount of swap space available
+    SwapFree: Memory which has been evicted from RAM, and is temporarily
+              on the disk
+       Dirty: Memory which is waiting to get written back to the disk
+   Writeback: Memory which is actively being written back to the disk
+   AnonPages: Non-file backed pages mapped into userspace page tables
+AnonHugePages: Non-file backed huge pages mapped into userspace page tables
+      Mapped: files which have been mmaped, such as libraries
+        Slab: in-kernel data structures cache
+SReclaimable: Part of Slab, that might be reclaimed, such as caches
+  SUnreclaim: Part of Slab, that cannot be reclaimed on memory pressure
+  PageTables: amount of memory dedicated to the lowest level of page
+              tables.
+NFS_Unstable: NFS pages sent to the server, but not yet committed to stable
+              storage
+      Bounce: Memory used for block device "bounce buffers"
+WritebackTmp: Memory used by FUSE for temporary writeback buffers
+ CommitLimit: Based on the overcommit ratio ('vm.overcommit_ratio'),
+              this is the total amount of  memory currently available to
+              be allocated on the system. This limit is only adhered to
+              if strict overcommit accounting is enabled (mode 2 in
+              'vm.overcommit_memory').
+              The CommitLimit is calculated with the following formula:
+              CommitLimit = ([total RAM pages] - [total huge TLB pages]) *
+              overcommit_ratio / 100 + [total swap pages]
+              For example, on a system with 1G of physical RAM and 7G
+              of swap with a `vm.overcommit_ratio` of 30 it would
+              yield a CommitLimit of 7.3G.
+              For more details, see the memory overcommit documentation
+              in vm/overcommit-accounting.
+Committed_AS: The amount of memory presently allocated on the system.
+              The committed memory is a sum of all of the memory which
+              has been allocated by processes, even if it has not been
+              "used" by them as of yet. A process which malloc()'s 1G
+              of memory, but only touches 300M of it will show up as
+              using 1G. This 1G is memory which has been "committed" to
+              by the VM and can be used at any time by the allocating
+              application. With strict overcommit enabled on the system
+              (mode 2 in 'vm.overcommit_memory'),allocations which would
+              exceed the CommitLimit (detailed above) will not be permitted.
+              This is useful if one needs to guarantee that processes will
+              not fail due to lack of memory once that memory has been
+              successfully allocated.
+VmallocTotal: total size of vmalloc memory area
+ VmallocUsed: amount of vmalloc area which is used
+VmallocChunk: largest contiguous block of vmalloc area which is free
+
+2. kernel-doc-2.6.32/Documentation/vm/overcommit-accounting
+The Linux kernel supports the following overcommit handling modes
+
+0       -       Heuristic overcommit handling. Obvious overcommits of
+                address space are refused. Used for a typical system. It
+                ensures a seriously wild allocation fails while allowing
+                overcommit to reduce swap usage.  root is allowed to 
+                allocate slighly more memory in this mode. This is the 
+                default.
+
+1       -       Always overcommit. Appropriate for some scientific
+                applications.
+
+2       -       Don't overcommit. The total address space commit
+                for the system is not permitted to exceed swap + a
+                configurable amount (default is 50%) of physical RAM.
+                Depending on the amount you use, in most situations
+                this means a process will not be killed while accessing
+                pages but will receive errors on memory allocation as
+                appropriate.
+
+The overcommit policy is set via the sysctl `vm.overcommit_memory'.
+
+The overcommit amount can be set via `vm.overcommit_ratio' (percentage)
+or `vm.overcommit_kbytes' (absolute value).
+
+The current overcommit limit and amount committed are viewable in
+/proc/meminfo as CommitLimit and Committed_AS respectively.
+
+Gotchas
+-------
+
+The C language stack growth does an implicit mremap. If you want absolute
+guarantees and run close to the edge you MUST mmap your stack for the 
+largest size you think you will need. For typical stack usage this does
+not matter much but it's a corner case if you really really care
+
+In mode 2 the MAP_NORESERVE flag is ignored. 
+
+
+How It Works
+------------
+
+The overcommit is based on the following rules
+
+For a file backed map
+        SHARED or READ-only     -       0 cost (the file is the map not swap)
+        PRIVATE WRITABLE        -       size of mapping per instance
+
+For an anonymous or /dev/zero map
+        SHARED                  -       size of mapping
+        PRIVATE READ-only       -       0 cost (but of little use)
+        PRIVATE WRITABLE        -       size of mapping per instance
+
+Additional accounting
+        Pages made writable copies by mmap
+        shmfs memory drawn from the same pool
+
+Status
+------
+
+o       We account mmap memory mappings
+o       We account mprotect changes in commit
+o       We account mremap changes in size
+o       We account brk
+o       We account munmap
+o       We report the commit status in /proc
+o       Account and check on fork
+o       Review stack handling/building on exec
+o       SHMfs accounting
+o       Implement actual limit enforcement
+
+To Do
+-----
+o       Account ptrace pages (this is hard)
+
+Flag Counter

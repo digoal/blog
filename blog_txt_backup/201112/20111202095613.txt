@@ -1,0 +1,193 @@
+PostgreSQL research
+
+业务逻辑的锁隐患一例
+
+2011-12-02 9:56:13   查看原文>>
+
+业务逻辑报的一堆deadlock异常 : 
+2011-11-01 08:44:26.047 CST,"freecoin","freecoin",16796,"172.16.4.44:30722",4eaf3c7c.419c,1,"SELECT",2011-11-01 08:25:32 CST,26/72093,15289517,ERROR,40P01,"deadlock detected","Process 16796 waits for ShareLock on transaction 15289518; blocked by process 16747.
+Process 16747 waits for ShareLock on transaction 15289517; blocked by process 16796.
+Process 16796: SELECT transfer FROM transfer($1,$2,$3,$4,$5,$6,$7)
+Process 16747: SELECT transfer FROM transfer($1,$2,$3,$4,$5,$6,$7)","See server log for query details.",,,"SQL statement ""update coin_accounts set income_amount=(income_amount-v_income_amount), recharge_amount=(recharge_amount-v_recharge_amount) ,total_amount=(total_amount-v_income_amount-v_recharge_amount) where
+current of v_cursor2""
+PL/pgSQL function ""transfer"" line 108 at SQL statement","SELECT transfer FROM transfer($1,$2,$3,$4,$5,$6,$7)",,,""
+
+2011-11-01 08:44:27.051 CST,"freecoin","freecoin",16953,"172.16.4.44:30800",4eaf3c8f.4239,1,"SELECT",2011-11-01 08:25:51 CST,106/30984,15289525,ERROR,40P01,"deadlock detected","Process 16953 waits for ExclusiveLock on tuple (454,16) of relation 19599 of database 16385; blocked by process 16870.
+Process 16870 waits for ShareLock on transaction 15289518; blocked by process 16747.
+Process 16747 waits for ShareLock on transaction 15289525; blocked by process 16953.
+Process 16953: SELECT transfer FROM transfer($1,$2,$3,$4,$5,$6,$7)
+Process 16870: SELECT transfer FROM transfer($1,$2,$3,$4,$5,$6,$7)
+Process 16747: SELECT transfer FROM transfer($1,$2,$3,$4,$5,$6,$7)","See server log for query details.",,,"SQL statement ""update coin_accounts set income_amount=(income_amount-v_income_amount), recharge_amount=(recharge_amount-v_recharge_amount) ,total_amount=(total_amount-v_income_amount-v_recharge_amount) where
+current of v_cursor2""
+PL/pgSQL function ""transfer"" line 108 at SQL statement","SELECT transfer FROM transfer($1,$2,$3,$4,$5,$6,$7)",,,""
+
+transfer函数中有大量的游标，更关键的是可能存在交错持错。
+下面是模拟场景 : 
+
+digoal=> create table user_balance_daily (uid int,expired date,balance numeric check (balance>=0),primary key (uid,expired));
+digoal=> create table user_balance_total (uid int primary key,balance numeric check (balance>=0));
+
+digoal=> select * from charge(1,current_date+1,100);
+digoal=> select * from charge(1,current_date+2,100);
+digoal=> select * from charge(1,current_date+3,100);
+digoal=> select * from charge(1,current_date+4,100);
+digoal=> select * from charge(1,current_date+5,100);
+digoal=> select * from charge(1,current_date+6,100);
+digoal=> select * from charge(1,current_date+7,100);
+digoal=> select * from charge(1,current_date+8,100);
+digoal=> select * from charge(1,current_date+9,100);
+digoal=> select * from charge(1,current_date+10,100);
+
+digoal=> select * from user_balance_daily ;
+ uid |  expired   | balance 
+-----+------------+---------
+   1 | 2011-12-03 |     100
+   1 | 2011-12-04 |     100
+   1 | 2011-12-05 |     100
+   1 | 2011-12-06 |     100
+   1 | 2011-12-07 |     100
+   1 | 2011-12-08 |     100
+   1 | 2011-12-09 |     100
+   1 | 2011-12-10 |     100
+   1 | 2011-12-11 |     100
+   1 | 2011-12-12 |     100
+(10 rows)
+
+digoal=> select * from user_balance_total ;
+ uid | balance 
+-----+---------
+   1 |    1000
+(1 row)
+
+create or replace function consume (i_uid int,i_balance numeric) returns int as $BODY$
+declare
+v_balance1 numeric;
+v_balance2 numeric;
+v_cursor1 refcursor;
+begin
+perform balance from user_balance_total where uid=i_uid and balance>=i_balance;
+IF FOUND THEN
+  update user_balance_total set balance=balance-i_balance where uid=i_uid;
+  -- 模拟慢查询
+  perform 1 from (select pg_sleep(5)) as t;
+  v_balance1 = i_balance;
+  raise notice 'v_balance1: %',v_balance1;
+  open v_cursor1 for select balance from user_balance_daily where uid=i_uid and expired >= current_date and balance>0 order by expired for update;
+  while v_balance1>0 LOOP
+    fetch from v_cursor1 into v_balance2;
+    update user_balance_daily set balance=(case when balance<=v_balance1 then balance-v_balance2 else balance-v_balance1 end) where current of v_cursor1;
+    v_balance1=v_balance1-v_balance2;
+    raise notice 'v_balance1: %',v_balance1;
+    raise notice 'v_balance2: %',v_balance2;
+  END LOOP;
+  CLOSE v_cursor1;
+else
+  return 1;
+end if;
+if v_balance1>0 then
+  raise EXCEPTION 'USER: % consume failed.', i_uid;
+  return 3;
+end if;
+return 0;
+exception
+when others then
+return 2;
+end;
+$BODY$ language plpgsql;
+
+
+create or replace function charge (i_uid int,i_expired date,i_balance numeric) returns int as $BODY$
+declare
+begin
+perform 1 from user_balance_daily where uid=i_uid and expired=i_expired;
+if found then
+update user_balance_daily set balance=balance+i_balance where uid=i_uid and expired=i_expired;
+else
+insert into user_balance_daily (uid,expired,balance) values (i_uid,i_expired,i_balance);
+end if;
+-- 模拟慢查询
+perform 1 from (select pg_sleep(5)) as t;
+perform 1 from user_balance_total where uid=i_uid;
+if found then
+update user_balance_total set balance=balance+i_balance where uid=i_uid;
+else
+insert into user_balance_total (uid,balance) values (i_uid,i_balance);
+end if;
+return 0;
+exception
+when others then
+return 1;
+end;
+$BODY$ language plpgsql;
+
+开启两个SESSION执行如下 : 
+SESSION A:
+digoal=> select * from charge(1,current_date+1,100);
+SESSION B:
+digoal=> select * from consume(1,200);
+
+将有一个SESSION被BLOCKED掉。
+更加清晰的如下 : 
+function A:
+digoal=> begin;
+BEGIN
+digoal=> update user_balance_total set balance =balance-200 where uid=1;
+UPDATE 1
+digoal=> update user_balance_daily set balance =balance-200 where uid=1 and expired='2011-12-03';
+ERROR:  deadlock detected
+DETAIL:  Process 13041 waits for ShareLock on transaction 350770604; blocked by process 12364.
+Process 12364 waits for ShareLock on transaction 350770605; blocked by process 13041.
+HINT:  See server log for query details.
+
+function B:
+digoal=> begin;
+BEGIN
+digoal=> update user_balance_daily set balance =balance+100 where uid=1 and expired='2011-12-03';
+UPDATE 1
+digoal=> update user_balance_total set balance =balance+100 where uid=1;
+UPDATE 1
+digoal=> 
+
+因此需要修改一下函数如下 : 
+使两个函数持锁的顺序一致,
+create or replace function consume (i_uid int,i_balance numeric) returns int as $BODY$
+declare
+v_balance1 numeric;
+v_balance2 numeric;
+v_cursor1 refcursor;
+begin
+perform balance from user_balance_total where uid=i_uid and balance>=i_balance;
+IF FOUND THEN
+  v_balance1 = i_balance;
+  raise notice 'v_balance1: %',v_balance1;
+  open v_cursor1 for select balance from user_balance_daily where uid=i_uid and expired >= current_date and balance>0 order by expired for update;
+  while v_balance1>0 LOOP
+    fetch from v_cursor1 into v_balance2;
+    update user_balance_daily set balance=(case when balance<=v_balance1 then balance-v_balance2 else balance-v_balance1 end) where current of v_cursor1;
+    v_balance1=v_balance1-v_balance2;
+    raise notice 'v_balance1: %',v_balance1;
+    raise notice 'v_balance2: %',v_balance2;
+  END LOOP;
+  -- 模拟慢查询
+  perform 1 from (select pg_sleep(5)) as t;
+  CLOSE v_cursor1;
+else
+  return 1;
+end if;
+if v_balance1>0 then
+  raise EXCEPTION 'USER: % consume failed.', i_uid;
+  return 3;
+end if;
+update user_balance_total set balance=balance-i_balance where uid=i_uid;
+return 0;
+exception
+when others then
+return 2;
+end;
+$BODY$ language plpgsql;
+
+这样就不会再有问题.
+
+【参考】
+http://www.postgresql.org/docs/9.1/static/view-pg-locks.html
+

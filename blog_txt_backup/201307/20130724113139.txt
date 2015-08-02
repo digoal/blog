@@ -1,0 +1,100 @@
+PostgreSQL research
+
+PostgreSQL 9.4 pgbench improve test target with --rate option
+
+2013-07-24 11:31:39   查看原文>>
+
+PostgreSQL 9.4 pgbench功能扩展, 新增对事务提交速率控制的选项.
+-R 或者--rate
+  -R, --rate=SPEC          target rate in transactions per second
+限定每秒提交多少事务数, 当限定的速率超过实际数据库能够处理的速率时, 限定不起作用.
+仅仅当限定速率小于数据库实际能够处理的速率时, 限定才会起到作用.
+限定速率可以观察数据库在各种压力下的使用情况, 如服务器的IO情况, CPU使用情况, 网络吞吐量等.
+速率限定采用泊松分布原理, 从客户端启动开始计时, 每个事务启动时都可以得知已经执行到第几个事务了, 除以时间流逝即可得知速率. 
+如果速率超过限定速率, 那么客户端线程会sleep一定时间再发起新的事物请求. 始终保持一定的速率运行.
+如果实际运行速率没有达到限定的速率, 那么就产生了lag, 后面的请求如果处理速度够快的话也许还能追上限定的速率, 否则后面都会造成lag.
+所有的lag时间除以所有lag的事务数就是平均的lag time, 最大lag time指lag的事务中的单个事务启动时已经lag的时间.
+例如 : 
+
+pg94@db-172-16-3-33-> pgbench  -M prepared -n -r -f ./test.sql -T 10 -c 8 -j 8 digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 10 s
+number of transactions actually processed: 2587983
+tps = 258720.166510 (including connections establishing)
+tps = 259010.954469 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.029530        select 1;
+
+
+下面的lag是速率限制造成的, 并不是数据库本身性能不行.
+
+pg94@db-172-16-3-33-> pgbench  -M prepared -n -r -f ./test.sql -R 200 -T 10 -c 8 -j 8 digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 10 s
+number of transactions actually processed: 1941
+average rate limit schedule lag: 0.556 ms (max 6.319 ms)
+tps = 191.575060 (including connections establishing)
+tps = 191.704861 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.053081        select 1;
+
+
+把速率限制提到超过实际可以处理的能力.
+速率限制将不会起作用.
+
+pg94@db-172-16-3-33-> pgbench  -M prepared -n -r -f ./test.sql -R 2000000 -T 10 -c 8 -j 8 digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 10 s
+number of transactions actually processed: 2586459
+tps = 258587.355823 (including connections establishing)
+tps = 258790.415038 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.029560        select 1;
+
+
+但是如果瞬时速率超过了限定速率的话, 限定也是会起作用的, 如下, 说明瞬时速率超过100W了. 
+
+pg94@db-172-16-3-33-> pgbench  -M prepared -n -r -f ./test.sql -R 1000000 -T 10 -c 8 -j 8 digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 10 s
+number of transactions actually processed: 2589450
+average rate limit schedule lag: 3801.223 ms (max 7589.034 ms)
+tps = 258859.058792 (including connections establishing)
+tps = 259074.909875 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.029103        select 1;
+
+
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=blobdiff;f=contrib/pgbench/pgbench.c;h=ad8e272c9109c755a67f32f6318b745a17fe4d10;hp=2ad8f0bb5b48411e2f8c5b5be76708f4a98768ac;hb=fc9f4e9f8c981bbc050e5566cf558112c938da2c;hpb=21e28e4531e761e7cdf1b9a0bbf0c06f6107686a
+2. http://www.postgresql.org/docs/devel/static/pgbench.html
+3. 
+
+-R rate
+--rate=rate
+Execute transactions targeting the specified rate instead of running as fast as possible (the default). The rate is given in transactions per second. If the targeted rate is above the maximum possible rate, the rate limit won't impact the results.
+
+The rate is targeted by starting transactions along a Poisson-distributed schedule time line. The expected finish time schedule moves forward based on when the client first started, not when the previous transaction ended. That approach means that when transactions go past their original scheduled end time, it is possible for later ones to catch up again.
+
+When throttling is active, the average and maximum transaction schedule lag time are reported in ms. This is the delay between the original scheduled transaction time and the actual transaction start times. The schedule lag shows whether a transaction was started on time or late. Once a client starts running behind its schedule, every following transaction can continue to be penalized for schedule lag. If faster transactions are able to catch up, it's possible for them to get back on schedule again. The lag measurement of every transaction is shown when pgbench is run with debugging output.
+
+High rate limit schedule lag values, that is lag values that are large compared to the actual transaction latency, indicate that something is amiss in the throttling process. High schedule lag can highlight a subtle problem there even if the target rate limit is met in the end. One possible cause of schedule lag is insufficient pgbench threads to handle all of the clients. To improve that, consider reducing the number of clients, increasing the number of threads in pgbench, or running pgbench on a separate host. Another possibility is that the database is not keeping up with the load at some point. When that happens, you will have to reduce the expected transaction rate to lower schedule lag.
+
+

@@ -1,0 +1,107 @@
+PostgreSQL research
+
+PostgreSQL 9.2 Can Send keepalive messages to standby servers
+
+2012-05-21 17:23:11   查看原文>>
+
+Send keepalive messages to standby servers (Simon Riggs)
+This allows administrators to accurately calculate streaming replication transfer and application latency.
+详见代码 : 
+
+【参考】
+1. src/backend/replication/walsender.c
+
+static void
+WalSndKeepalive(char *msgbuf)
+{
+        PrimaryKeepaliveMessage keepalive_message;
+
+        /* Construct a new message */
+        keepalive_message.walEnd = sentPtr;
+        keepalive_message.sendTime = GetCurrentTimestamp();
+
+        elog(DEBUG2, "sending replication keepalive");
+
+        /* Prepend with the message type and send it. */
+        msgbuf[0] = 'k';
+        memcpy(msgbuf + 1, &keepalive_message, sizeof(PrimaryKeepaliveMessage));
+        pq_putmessage_noblock('d', msgbuf, sizeof(PrimaryKeepaliveMessage) + 1);
+}
+
+...............
+
+                /*
+                 * We don't block if not caught up, unless there is unsent data
+                 * pending in which case we'd better block until the socket is
+                 * write-ready.  This test is only needed for the case where XLogSend
+                 * loaded a subset of the available data but then pq_flush_if_writable
+                 * flushed it all --- we should immediately try to send more.
+                 */
+                if (caughtup || pq_is_send_pending())
+                {
+                        TimestampTz timeout = 0;
+                        long            sleeptime = 10000; /* 10 s */
+                        int                     wakeEvents;
+
+                        wakeEvents = WL_LATCH_SET | WL_POSTMASTER_DEATH |
+                                WL_SOCKET_READABLE | WL_TIMEOUT;
+
+                        if (pq_is_send_pending())
+                                wakeEvents |= WL_SOCKET_WRITEABLE;
+                        else
+                        {
+                                WalSndKeepalive(output_message);
+                                /* Try to flush pending output to the client */
+                                if (pq_flush_if_writable() != 0)
+                                        break;
+                        }
+
+
+
+2. src/backend/replication/walreceiver.c
+
+
+                case 'k':                               /* Keepalive */
+                        {
+                                PrimaryKeepaliveMessage keepalive;
+
+                                if (len != sizeof(PrimaryKeepaliveMessage))
+                                        ereport(ERROR,
+                                                        (errcode(ERRCODE_PROTOCOL_VIOLATION),
+                                                         errmsg_internal("invalid keepalive message received from primary")));
+                                /* memcpy is required here for alignment reasons */
+                                memcpy(&keepalive, buf, sizeof(PrimaryKeepaliveMessage));
+
+                                ProcessWalSndrMessage(keepalive.walEnd, keepalive.sendTime);
+                                break;
+                        }
+
+........................
+
+/*
+ * Keep track of important messages from primary.
+ */
+static void
+ProcessWalSndrMessage(XLogRecPtr walEnd, TimestampTz sendTime)
+{
+        /* use volatile pointer to prevent code rearrangement */
+        volatile WalRcvData *walrcv = WalRcv;
+
+        TimestampTz lastMsgReceiptTime = GetCurrentTimestamp();
+
+        /* Update shared-memory status */
+        SpinLockAcquire(&walrcv->mutex);
+        walrcv->lastMsgSendTime = sendTime;
+        walrcv->lastMsgReceiptTime = lastMsgReceiptTime;
+        SpinLockRelease(&walrcv->mutex);
+
+        if (log_min_messages <= DEBUG2)
+                elog(DEBUG2, "sendtime %s receipttime %s replication apply delay %d ms transfer latency %d ms",
+                                        timestamptz_to_str(sendTime),
+                                        timestamptz_to_str(lastMsgReceiptTime),
+                                        GetReplicationApplyDelay(),
+                                        GetReplicationTransferLatency());
+}
+
+
+

@@ -1,0 +1,201 @@
+PostgreSQL research
+
+pgpool find primary node in master/slave stream replication mode
+
+2012-12-26 17:20:27   查看原文>>
+
+今天一位群里的兄弟遇到的pgpool的问题,
+pgpool的后端是两个数据库, 分别是master和standby. (用stream replication搭建好的两个数据库).
+pgpool 和主库放在同一个服务器上.
+pgpool 的几个关键配置摘录一下 : 
+
+listen_addresses = '*'
+port = 9999
+socket_dir = '/tmp'
+pcp_timeout = 1000
+pcp_port = 9898
+pcp_socket_dir = '/tmp'
+backend_hostname0 = '127.0.0.1'
+backend_port0 = 5433
+backend_weight0 = 1
+backend_data_directory0 = '/opt/PostgreSQL/9.1/data'
+backend_flag0 = 'ALLOW_TO_FAILOVER'
+backend_hostname1 = '10.10.0.214'
+backend_port1 = 5433
+backend_weight1 = 1
+backend_data_directory1 = '/opt/PostgreSQL/9.1/data'
+backend_flag1 = 'ALLOW_TO_FAILOVER'
+connection_cache = on
+replication_mode = off
+replicate_select = off
+load_balance_mode = on
+master_slave_mode = on
+master_slave_sub_mode = 'stream'
+sr_check_period = 0
+sr_check_user = 'nobody'
+sr_check_password = ''
+delay_threshold = 0
+parallel_mode = off
+
+
+
+配置好后连接pgpool的9999端口, 创建表或者UPDATE报错 : 
+
+postgres=> create table test(id int);
+ERROR:  cannot execute CREATE TABLE in a read-only transaction
+
+
+查看inet_server_addr()返回的是standby节点的IP. 也就是SQL发送到standby节点了.
+排错 : 
+pgpool找出primary节点是通过pg_is_in_recovery来的. 源码如下 : 
+main.c
+
+/*
+ * Find the primary node (i.e. not standby node) and returns its node
+ * id. If no primary node is found, returns -1.
+ */
+static int find_primary_node(void)
+{
+        BackendInfo *bkinfo;
+        POOL_CONNECTION_POOL_SLOT *s;
+        POOL_CONNECTION *con; 
+        POOL_STATUS status;
+        POOL_SELECT_RESULT *res;
+        bool is_standby;
+        int i;
+
+        /* Streaming replication mode? */
+        if (pool_config->master_slave_mode == 0 ||
+                strcmp(pool_config->master_slave_sub_mode, MODE_STREAMREP))
+        {
+                /* No point to look for primary node if not in streaming
+                 * replication mode.
+                 */
+                pool_debug("find_primary_node: not in streaming replication mode");
+                return -1;
+        }
+
+        for(i=0;i<NUM_BACKENDS;i++)
+        {
+                if (!VALID_BACKEND(i))
+                        continue;
+
+                /*
+                 * Check to see if this is a standby node or not.
+                 */
+                is_standby = false;
+
+                bkinfo = pool_get_node_info(i);
+                s = make_persistent_db_connection(bkinfo->backend_hostname, 
+                                                                                  bkinfo->backend_port,
+                                                                                  "postgres",
+                                                                                  pool_config->sr_check_user,
+                                                                                  pool_config->sr_check_password, true);
+                if (!s)
+                {
+                        pool_error("find_primary_node: make_persistent_connection failed");
+                        return -1;
+                }
+                con = s->con;
+#ifdef NOT_USED
+                status = do_query(con, "SELECT count(*) FROM pg_catalog.pg_proc AS p WHERE p.proname = 'pgpool_walrecrunning'",
+                                                  &res, PROTO_MAJOR_V3);
+                if (res->numrows <= 0)
+                {
+                        pool_log("find_primary_node: do_query returns no rows");
+                }
+                if (res->data[0] == NULL)
+                {
+                        pool_log("find_primary_node: do_query returns no data");
+                }
+                if (res->nullflags[0] == -1)
+                {
+                        pool_log("find_primary_node: do_query returns NULL");
+                }
+                if (res->data[0] && !strcmp(res->data[0], "0"))
+                {
+                        pool_log("find_primary_node: pgpool_walrecrunning does not exist");
+                        free_select_result(res);
+                        discard_persistent_db_connection(s);
+                        return -1;
+                }
+#endif
+                status = do_query(con, "SELECT pg_is_in_recovery()",
+                                                  &res, PROTO_MAJOR_V3);
+                if (res->numrows <= 0)
+                {
+                        pool_log("find_primary_node: do_query returns no rows");
+                }
+                if (res->data[0] == NULL)
+                {
+                        pool_log("find_primary_node: do_query returns no data");
+                }
+                if (res->nullflags[0] == -1)
+                {
+                        pool_log("find_primary_node: do_query returns NULL");
+                }
+                if (res->data[0] && !strcmp(res->data[0], "t"))
+                {
+                        is_standby = true;
+                }   
+                free_select_result(res);
+                discard_persistent_db_connection(s);
+
+                /*
+                 * If this is a standby, we continue to look for primary node.
+                 */
+                if (is_standby)
+                {
+                        pool_debug("find_primary_node: %d node is standby", i);
+                }
+                else
+                {
+                        break;
+                }
+        }
+
+        if (i == NUM_BACKENDS)
+        {
+                pool_debug("find_primary_node: no primary node found");
+                return -1;
+        }
+
+        pool_log("find_primary_node: primary node id is %d", i);
+        return i;
+}
+
+
+
+因为需要连到backend host 上去执行SQL, 所以需要在pgpool.conf中配置用户密码.
+因此直接连接到primary 节点创建一个普通用户, 
+
+psql -h 127.0.0.1 -p 5433
+create role nobody nosuperuser login encrypted password '123456';
+
+
+然后确认pg_hba.conf允许连接, 如果没有则添加条目, reload数据库.
+配置pgpool.conf, 
+
+sr_check_period = 10
+sr_check_user = 'nobody'
+sr_check_password = '123456'
+
+
+重启pgpool. 
+
+pgpool -m fast stop
+pgpool -f ./pgpool.conf -c
+
+
+再测就没问题了.
+使用pgbench压力测试, 查询语句将分布到两个节点.
+
+评论
+
+yukungis - 2015-05-08 16:33:49
+
+请教一个问题，postgresql做了主从后，当master挂掉，slave机自动升级为主机，该slave自动升级主机的时候，其相关配置不是主机的配置，如max_wal_senders,以及原来其他备机如何和这台刚升的主机做好流复制同步？
+
+德哥@Digoal 回复 yukungis - 2015-05-08 16:33:49
+
+请参考一下https://github.com/digoal/PostgreSQL_HA_with_primary_standby_2vip

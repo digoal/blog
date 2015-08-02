@@ -1,0 +1,415 @@
+PostgreSQL research
+
+PostgreS-XL don't support FDW yet
+
+2014-07-25 11:32:00   查看原文>>
+
+上次杭州PG交流的时候, 有朋友提出想把citusdb的cstore和hdfs fdw移植到pg-xl上面来,
+这样可以结合pg-xl的分布式运算和hdfs的存储能力, 达到比较好的效果.
+本文将测试一下是否可行.
+安装参考 : 
+http://blog.163.com/digoal@126/blog/static/16387704020146243755910/
+
+创建file fdw, 失败, 原因见代码 src/backend/tcop/utility.c.
+
+postgres=# \set VERBOSITY verbose
+postgres=# create extension file_fdw;
+ERROR:  0A000: Postgres-XL does not support FOREIGN DATA WRAPPER yet
+DETAIL:  The feature is not currently supported
+LOCATION:  standard_ProcessUtility, utility.c:869
+
+
+
+修改以下代码, 注释掉一些内容, 重新编译后, 可以创建fdw.
+src/backend/tcop/utility.c
+
+                case T_CreateFdwStmt:
+/* #ifdef PGXC
+                        ereport(ERROR,
+                                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+#ifdef XCP
+                                         errmsg("Postgres-XL does not support FOREIGN DATA WRAPPER yet"),
+#else
+                                         errmsg("Postgres-XC does not support FOREIGN DATA WRAPPER yet"),
+#endif
+                                         errdetail("The feature is not currently supported")));
+#endif
+*/
+                        CreateForeignDataWrapper((CreateFdwStmt *) parsetree);
+                        break;
+
+                case T_CreateForeignServerStmt:
+/* #ifdef PGXC
+                        ereport(ERROR,
+                                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+#ifdef XCP
+                                         errmsg("Postgres-XL does not support SERVER yet"),
+#else
+                                         errmsg("Postgres-XC does not support SERVER yet"),
+#endif
+                                         errdetail("The feature is not currently supported")));
+#endif
+*/
+                        CreateForeignServer((CreateForeignServerStmt *) parsetree);
+                        break;
+
+                case T_CreateUserMappingStmt:
+/* #ifdef PGXC
+                        ereport(ERROR,
+                                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+#ifdef XCP
+                                         errmsg("Postgres-XL does not support USER MAPPING yet"),
+#else
+                                         errmsg("Postgres-XC does not support USER MAPPING yet"),
+#endif
+                                         errdetail("The feature is not currently supported")));
+#endif
+*/
+                        CreateUserMapping((CreateUserMappingStmt *) parsetree);
+                        break;
+
+
+重新编译
+
+gmake world && gmake install-world
+
+
+现在可以创建fdw了.
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11921 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# create extension file_fdw;
+postgres=# \dx
+                        List of installed extensions
+   Name   | Version |   Schema   |                Description                
+----------+---------+------------+-------------------------------------------
+ file_fdw | 1.0     | public     | foreign-data wrapper for flat file access
+ plpgsql  | 1.0     | pg_catalog | PL/pgSQL procedural language
+(2 rows)
+
+
+数据节点的fdw也自动创建.
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11922 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# \dx
+                        List of installed extensions
+   Name   | Version |   Schema   |                Description                
+----------+---------+------------+-------------------------------------------
+ file_fdw | 1.0     | public     | foreign-data wrapper for flat file access
+ plpgsql  | 1.0     | pg_catalog | PL/pgSQL procedural language
+(2 rows)
+postgres=# select * from pg_foreign_data_wrapper ;
+ fdwname  | fdwowner | fdwhandler | fdwvalidator | fdwacl | fdwoptions 
+----------+----------+------------+--------------+--------+------------
+ file_fdw |       10 |      16471 |        16472 |        | 
+(1 row)
+
+
+
+接下来创建foreign server, 注意foreign server不会在数据节点自动创建.
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11921 postgres postgres
+postgres=# create server file foreign data wrapper file_fdw;
+CREATE SERVER
+postgres=# select * from pg_foreign_server ;
+ srvname | srvowner | srvfdw | srvtype | srvversion | srvacl | srvoptions 
+---------+----------+--------+---------+------------+--------+------------
+ file    |       10 |  16473 |         |            |        | 
+(1 row)
+
+
+
+所以需要手工在所有的数据节点创建foreign server.
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11922 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# select * from pg_foreign_server ;
+ srvname | srvowner | srvfdw | srvtype | srvversion | srvacl | srvoptions 
+---------+----------+--------+---------+------------+--------+------------
+(0 rows)
+
+
+在数据节点执行DML会失败, 原因是防止误操作, 数据节点默认是read only的.
+
+postgres=# \set VERBOSITY verbose
+postgres=# create server file foreign data wrapper file_fdw;
+ERROR:  25006: cannot execute CREATE SERVER in a read-only transaction
+LOCATION:  PreventCommandIfReadOnly, utility.c:296
+
+
+出错代码位置 : 
+
+/*
+ * PreventCommandIfReadOnly: throw error if XactReadOnly
+ *
+ * This is useful mainly to ensure consistency of the error message wording;
+ * most callers have checked XactReadOnly for themselves.
+ */
+void
+PreventCommandIfReadOnly(const char *cmdname)
+{
+        if (XactReadOnly)
+                ereport(ERROR,
+                                (errcode(ERRCODE_READ_ONLY_SQL_TRANSACTION),
+                /* translator: %s is name of a SQL command, eg CREATE */
+                                 errmsg("cannot execute %s in a read-only transaction",
+                                                cmdname)));
+}
+
+
+这个只要开启读写事务即可解决, 在所有的数据节点创建foreign server.
+
+postgres=# begin transaction read write;
+BEGIN
+postgres=# create server file foreign data wrapper file_fdw;
+CREATE SERVER
+postgres=# end;
+COMMIT
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11923 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# begin transaction read write;
+BEGIN
+postgres=# create server file foreign data wrapper file_fdw;
+CREATE SERVER
+postgres=# end;
+COMMIT
+postgres=# \q
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11924 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# begin transaction read write;
+BEGIN
+postgres=# create server file foreign data wrapper file_fdw;
+CREATE SERVER
+postgres=# end;
+COMMIT
+postgres=# \q
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11925 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# begin transaction read write;
+BEGIN
+postgres=# create server file foreign data wrapper file_fdw;
+CREATE SERVER
+postgres=# end;
+COMMIT
+postgres=# \q
+
+
+
+接下来在coordinator节点创建外部表.
+
+postgres=# begin transaction read write;
+BEGIN
+postgres=# CREATE FOREIGN TABLE ft_file1 (id int, info text, crt_time timestamp) server file options (filename '/home/pgxl/test.csv', format 'csv');
+CREATE FOREIGN TABLE
+postgres=# end;
+COMMIT
+
+
+外部表的定义会自动在所有的数据节点自动创建.
+接下来查询这个外部表, 报错. 错误代码出现在数据节点的DataNodeCopyFinish时.
+
+postgres=# select count(*) from ft_file1;
+ERROR:  XX000: Error while running COPY
+LOCATION:  DataNodeCopyFinish, execRemote.c:4624
+postgres=# \q
+
+
+报错信息, coordinator节点, 爆出来的实际上是datanode的错误.
+
+2014-07-25 10:59:38.688 CST,"postgres","postgres",9204,"127.0.0.1:19894",53d1c80a.23f4,8,"SELECT",2014-07-25 10:59:22 CST,2/168,25095,LOG,00000,"Connection error cannot copy to foreign table ""ft_file1""",,,,,,"select * from ft_file1 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+2014-07-25 10:59:38.688 CST,"postgres","postgres",9204,"127.0.0.1:19894",53d1c80a.23f4,9,"SELECT",2014-07-25 10:59:22 CST,2/168,25095,LOG,00000,"Connection error cannot copy to foreign table ""ft_file1""",,,,,,"select * from ft_file1 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+2014-07-25 10:59:38.688 CST,"postgres","postgres",9204,"127.0.0.1:19894",53d1c80a.23f4,10,"SELECT",2014-07-25 10:59:22 CST,2/168,25095,LOG,00000,"Connection error cannot copy to foreign table ""ft_file1""",,,,,,"select * from ft_file1 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+2014-07-25 10:59:38.688 CST,"postgres","postgres",9204,"127.0.0.1:19894",53d1c80a.23f4,11,"SELECT",2014-07-25 10:59:22 CST,2/168,25095,LOG,00000,"Connection error cannot copy to foreign table ""ft_file1""",,,,,,"select * from ft_file1 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+
+
+报错信息, 数据节点. 真正的错误原因是, datanode不允许 copy 到外部表, cannot copy to foreign table .
+但是为什么要copy到外部表呢? 看样子问题出在外部表的分布式执行计划上.
+
+2014-07-25 10:59:27.247 CST,,,9207,"",53d1c80f.23f7,1,"",2014-07-25 10:59:27 CST,,0,LOG,00000,"connection received: host=127.0.0.1 port=47287",,,,,,,,"BackendInitialize, postmaster.c:3742",""
+2014-07-25 10:59:28.248 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,2,"authentication",2014-07-25 10:59:27 CST,2/189,25081,LOG,00000,"Will fall back to local snapshot for XID = 25081, source = 0, gxmin = 0, autovac launch = 0, autovac = 0, normProcMode = 0, postEnv = 1",,,,,,,,"GetPGXCSnapshotData, procarray.c:2740",""
+2014-07-25 10:59:28.248 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,3,"authentication",2014-07-25 10:59:27 CST,2/189,25081,LOG,00000,"connection authorized: user=postgres database=postgres",,,,,,,,"PerformAuthentication, postinit.c:237",""
+2014-07-25 10:59:31.267 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,4,"BEGIN",2014-07-25 10:59:27 CST,2/192,0,LOG,00000,"duration: 4018.784 ms  statement: BEGIN",,,,,,,,"exec_simple_query, postgres.c:1356","pgxc"
+2014-07-25 10:59:31.268 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,5,"COPY",2014-07-25 10:59:27 CST,2/192,0,ERROR,42809,"cannot copy to foreign table ""ft_file1""",,,,,,"COPY public.ft_file1 FROM STDIN CSV",,"CopyFrom, copy.c:2100","pgxc"
+2014-07-25 10:59:31.269 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,6,"COMMIT",2014-07-25 10:59:27 CST,2/0,0,LOG,00000,"duration: 4018.698 ms  statement: COMMIT TRANSACTION",,,,,,,,"exec_simple_query, postgres.c:1356","pgxc"
+2014-07-25 10:59:31.270 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,7,"RESET",2014-07-25 10:59:27 CST,2/0,0,LOG,00000,"duration: 4019.029 ms  statement: RESET ALL;RESET SESSION AUTHORIZATION;RESET transaction_isolation;",,,,,,,,"exec_simple_query, postgres.c:1356","pgxc"
+2014-07-25 10:59:38.685 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,8,"SET",2014-07-25 10:59:27 CST,2/0,0,LOG,00000,"duration: 4018.958 ms  statement: SET global_session TO c11921_9204;",,,,,,,,"exec_simple_query, postgres.c:1356","pgxc"
+2014-07-25 10:59:38.688 CST,"postgres","postgres",9207,"127.0.0.1:47287",53d1c80f.23f7,9,"COPY",2014-07-25 10:59:27 CST,2/195,0,ERROR,42809,"cannot copy to foreign table ""ft_file1""",,,,,,"COPY public.ft_file1 FROM STDIN CSV",,"CopyFrom, copy.c:2100","pgxc"
+
+
+
+直接连接到数据节点, 查询外部表的定义, 或者直接查询数据都正常.
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11922 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# select * from pg_foreign_table ;
+ ftrelid | ftserver |                 ftoptions                 
+---------+----------+-------------------------------------------
+   16463 |    16462 | {filename=/home/pgxl/test.csv,format=csv}
+(1 row)
+postgres=# select count(*) from ft_file1;
+  count  
+---------
+ 1000000
+(1 row)
+
+
+
+在coordinator节点, 直接使用数据节点查询, 也是正常的.
+
+postgres=# execute direct on (d11922) $$select count(*) from ft_file1$$;
+  count  
+---------
+ 1000000
+(1 row)
+postgres=# \q
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11923 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# select count(*) from ft_file1;
+  count  
+---------
+ 1000000
+(1 row)
+
+
+
+接下来把文件改成5个文件, coordinator节点和datanode节点使用不同的文件名.
+
+-rw-r--r-- 1 pgxl pgxl  64M Jul 25 10:02 1.csv
+-rw-r--r-- 1 pgxl pgxl  64M Jul 25 09:43 2.csv
+-rw-r--r-- 1 pgxl pgxl  64M Jul 25 09:43 3.csv
+-rw-r--r-- 1 pgxl pgxl  64M Jul 25 09:43 4.csv
+drwxr-xr-x 6 root root 4.0K Jul 24 15:04 pgxl9.2
+-rw-r--r-- 1 pgxl pgxl  64M Jul 25 10:02 test.csv
+
+
+
+在datanode开启read write事务, 修改外部表定义, 指向不同的csv文件.
+
+psql -h 127.0.0.1 -p 11922 postgres postgres
+postgres=# alter foreign table ft_file1 options (set filename '/home/pgxl/1.csv');
+psql -h 127.0.0.1 -p 11923 postgres postgres
+postgres=# alter foreign table ft_file1 options (set filename '/home/pgxl/2.csv');
+psql -h 127.0.0.1 -p 11924 postgres postgres
+postgres=# alter foreign table ft_file1 options (set filename '/home/pgxl/3.csv');
+psql -h 127.0.0.1 -p 11925 postgres postgres
+postgres=# alter foreign table ft_file1 options (set filename '/home/pgxl/4.csv');
+
+
+
+创建普通表, 将数据节点的外部表名替换成普通表名.
+
+psql -h 127.0.0.1 -p 11921 postgres postgres
+postgres=# create table t4(id int, info text, crt_time timestamp) distribute by roundrobin to group gp1;
+CREATE TABLE
+
+
+
+所有数据节点, 将foreign table替换成t4. 不过执行会报错, 原因是file path不对.
+貌似缓存了filepath, 因为pgxc_class里面没有这部分的信息.
+
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11922 postgres postgres
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11923 postgres postgres
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11924 postgres postgres
+pgxl@db-172-16-3-150-> psql -h 127.0.0.1 -p 11925 postgres postgres
+psql (PGXL 9.2.0, based on PG 9.2.4 (Postgres-XL 9.2.0))
+Type "help" for help.
+postgres=# begin read write;
+BEGIN
+postgres=# drop table t4;
+DROP TABLE
+postgres=# alter foreign table ft_file1 rename to t4;
+ALTER FOREIGN TABLE
+postgres=# end;
+COMMIT
+
+postgres=# \set VERBOSITY verbose
+postgres=# select * from t4 limit 1;
+ERROR:  58P01: could not open file "base/12892/16463": No such file or directory
+LOCATION:  ExecRemoteSubplan, execRemote.c:8802
+postgres=# select pg_relation_filepath('t4');
+ pg_relation_filepath 
+----------------------
+ base/12892/16481
+(1 row)
+
+
+
+coordinator节点错误
+
+2014-07-25 10:47:24.135 CST,"postgres","postgres",8770,"[local]",53d1c4ce.2242,8,"SELECT",2014-07-25 10:45:34 CST,2/160,24943,LOG,00000,"Connection error could not open file ""base/12892/16463"": No such file or directory",,,,,,"select * from t4 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+2014-07-25 10:47:24.135 CST,"postgres","postgres",8770,"[local]",53d1c4ce.2242,9,"SELECT",2014-07-25 10:45:34 CST,2/160,24943,LOG,00000,"Connection error could not open file ""base/12892/16463"": No such file or directory",,,,,,"select * from t4 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+2014-07-25 10:47:24.135 CST,"postgres","postgres",8770,"[local]",53d1c4ce.2242,10,"SELECT",2014-07-25 10:45:34 CST,2/160,24943,LOG,00000,"Connection error could not open file ""base/12892/16463"": No such file or directory",,,,,,"select * from t4 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+2014-07-25 10:47:24.135 CST,"postgres","postgres",8770,"[local]",53d1c4ce.2242,11,"SELECT",2014-07-25 10:45:34 CST,2/160,24943,LOG,00000,"Connection error could not open file ""base/12892/16463"": No such file or directory",,,,,,"select * from t4 limit 1;",,"add_error_message, pgxcnode.c:2025","psql"
+2014-07-25 10:47:24.135 CST,"postgres","postgres",8770,"[local]",53d1c4ce.2242,12,"SELECT",2014-07-25 10:45:34 CST,2/160,24943,ERROR,58P01,"could not open file ""base/12892/16463"": No such file or directory",,,,,,"select * from t4 limit 1;",,"ExecRemoteSubplan, execRemote.c:8802","psql"
+
+
+
+数据节点错误日志
+
+2014-07-25 10:45:41.809 CST,,,8777,"",53d1c4d5.2249,1,"",2014-07-25 10:45:41 CST,,0,LOG,00000,"connection received: host=127.0.0.1 port=30853",,,,,,,,"BackendInitialize, postmaster.c:3742",""
+2014-07-25 10:45:42.809 CST,"postgres","postgres",8777,"127.0.0.1:30853",53d1c4d5.2249,2,"authentication",2014-07-25 10:45:41 CST,2/162,24932,LOG,00000,"Will fall back to local snapshot for XID = 24932, source = 0, gxmin = 0, autovac launch = 0, autovac = 0, normProcMode = 0, postEnv = 1",,,,,,,,"GetPGXCSnapshotData, procarray.c:2740",""
+2014-07-25 10:45:42.810 CST,"postgres","postgres",8777,"127.0.0.1:30853",53d1c4d5.2249,3,"authentication",2014-07-25 10:45:41 CST,2/162,24932,LOG,00000,"connection authorized: user=postgres database=postgres",,,,,,,,"PerformAuthentication, postinit.c:237",""
+2014-07-25 10:45:42.818 CST,"postgres","postgres",8777,"127.0.0.1:30853",53d1c4d5.2249,4,"BEGIN",2014-07-25 10:45:41 CST,2/165,0,LOG,00000,"duration: 5023.009 ms  statement: BEGIN",,,,,,,,"exec_simple_query, postgres.c:1356","pgxc"
+2014-07-25 10:45:42.819 CST,"postgres","postgres",8777,"127.0.0.1:30853",53d1c4d5.2249,5,"PLAN",2014-07-25 10:45:41 CST,2/165,0,LOG,00000,"duration: 5026.198 ms  parse p_1_2242_1: Remote Subplan",,,,,,,,"exec_plan_message, postgres.c:1802","pgxc"
+2014-07-25 10:45:42.819 CST,"postgres","postgres",8777,"127.0.0.1:30853",53d1c4d5.2249,6,"BIND",2014-07-25 10:45:41 CST,2/165,0,ERROR,58P01,"could not open file ""base/12892/16463"": No such file or directory",,,,,,"Remote Subplan",,"mdopen, md.c:579","pgxc"
+2014-07-25 10:45:42.820 CST,"postgres","postgres",8777,"127.0.0.1:30853",53d1c4d5.2249,7,"ROLLBACK",2014-07-25 10:45:41 CST,2/0,0,LOG,00000,"duration: 5025.866 ms  statement: ROLLBACK TRANSACTION",,,,,,,,"exec_simple_query, postgres.c:1356","pgxc"
+2014-07-25 10:45:42.821 CST,"postgres","postgres",8777,"127.0.0.1:30853",53d1c4d5.2249,8,"RESET",2014-07-25 10:45:41 CST,2/0,0,LOG,00000,"duration: 5026.020 ms  statement: RESET ALL;RESET SESSION AUTHORIZATION;RESET transaction_isolation;",,,,,,,,"exec_simple_query, postgres.c:1356","pgxc"
+
+
+
+postgres=# execute direct on (d11922) $$select count(*) from t4$$;
+ count  
+--------
+ 1000000
+(1 row)
+
+postgres=# execute direct on (d11923) $$select count(*) from t4$$;
+  count  
+---------
+ 1000000
+(1 row)
+
+postgres=# execute direct on (d11924) $$select count(*) from t4$$;
+  count  
+---------
+ 1000000
+(1 row)
+
+postgres=# execute direct on (d11925) $$select count(*) from t4$$;
+  count  
+---------
+ 1000000
+(1 row)
+
+
+
+接下来折腾一下cstoro插件.
+参考
+http://blog.163.com/digoal@126/blog/static/16387704020144141052312/
+显然不支持9.2, 停止折腾.
+
+[root@db-172-16-3-150 cstore_fdw]# export PATH=/home/pgxl/pgxl9.2/bin:$PATH
+[root@db-172-16-3-150 cstore_fdw]# which pg_config
+/home/pgxl/pgxl9.2/bin/pg_config
+[root@db-172-16-3-150 cstore_fdw]# gmake clean
+Makefile:42: *** PostgreSQL 9.3 or 9.4 is required to compile this extension.  Stop.
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/16387704020146243755910/
+2. src/backend/tcop/utility.c
+3. http://blog.163.com/digoal@126/blog/static/16387704020144141052312/
+
+Flag Counter

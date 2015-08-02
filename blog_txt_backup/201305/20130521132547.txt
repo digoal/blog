@@ -1,0 +1,241 @@
+PostgreSQL research
+
+PostgreSQL complex index's column position tuning case - 2
+
+2013-05-21 13:25:47   查看原文>>
+
+帮朋友优化的一个慢查询, 因为前导列用到范围查询, 导致索引扫描的page数大增, 因而降低了查询性能.
+
+表结构 : 
+
+digoal=> \d digoal.digoal_day_p_p
+    Table "digoal.digoal_day_p_p"
+    Column    |   Type    | Modifiers 
+--------------+-----------+-----------
+ digoal_date     | integer   | not null
+ a_id       | integer   | not null
+ a_vercd  | integer   | default 0
+ p_p    | integer[] | 
+ pe_timelen | integer[] | 
+ crt_date     | integer   | default 0
+Indexes:
+    "idx_digoal_day_p_p_1" btree (intarray_to_text(p_p), a_vercd, a_id, digoal_date), tablespace "tbs_digoal_idx"
+
+
+注意索引, 包含了以下SQL所有查询条件.
+查询1 : 
+
+digoal=> explain analyze select p_p[2] p1,count(*) count_total from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,' and a_id = 2  and digoal_date between 20130515 and 20130521 and a_vercd = 1  group by 1 order by count_total desc;
+                                                                                                      QUERY PLAN                    
+                                                                                   
+------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------
+ Sort  (cost=2923377.89..2923377.89 rows=1 width=45) (actual time=20290.412..20290.413 rows=8 loops=1)
+   Sort Key: (count(*))
+   Sort Method: quicksort  Memory: 25kB
+   ->  HashAggregate  (cost=2923377.87..2923377.88 rows=1 width=45) (actual time=20290.397..20290.399 rows=8 loops=1)
+         ->  Index Scan using idx_digoal_day_p_p_1 on digoal_day_p_p  (cost=1.19..2923377.84 rows=6 width=45) (actual time=0.1
+39..20287.888 rows=5085 loops=1)
+               Index Cond: ((intarray_to_text(p_p) >= '{0,'::text) AND (intarray_to_text(p_p) < '{0-'::text) AND (a_ve
+rcd = 1) AND (a_id = 2) AND (digoal_date >= 20130515) AND (digoal_date <= 20130521))
+               Filter: (intarray_to_text(p_p) ~ '^\{0,'::text)
+ Total runtime: 20290.460 ms
+(8 rows)
+
+
+查询2 : 
+
+digoal=> explain analyze select p_p[3] p1,count(*) count_total from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,5,' and a_id = 2  and digoal_date between 20130515 and 20130520 and a_vercd = 1  group by 1 order by count_total desc;
+                                                                                                        QUERY PLAN                  
+                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------
+ Sort  (cost=193.50..193.50 rows=1 width=45) (actual time=9.962..9.963 rows=6 loops=1)
+   Sort Key: (count(*))
+   Sort Method: quicksort  Memory: 25kB
+   ->  HashAggregate  (cost=193.48..193.49 rows=1 width=45) (actual time=9.893..9.894 rows=6 loops=1)
+         ->  Index Scan using idx_digoal_day_p_p_1 on digoal_day_p_p  (cost=1.19..193.47 rows=1 width=45) (actual time=0.333..
+9.752 rows=209 loops=1)
+               Index Cond: ((intarray_to_text(p_p) >= '{0,5,'::text) AND (intarray_to_text(p_p) < '{0,5-'::text) AND (ap
+p_vercd = 1) AND (a_id = 2) AND (digoal_date >= 20130515) AND (digoal_date <= 20130520))
+               Filter: (intarray_to_text(p_p) ~ '^\{0,5,'::text)
+ Total runtime: 10.035 ms
+(8 rows)
+
+
+以上两个查询除了digoal.intarray_to_text(p_p) ~ E'^\\{0,5,' 和 digoal.intarray_to_text(p_p) ~ E'^\\{0,' 不一样,
+其他条件都一样. 
+但是时间上相差了2000倍.  
+来看看索引各列的选择性.
+
+digoal=> select count(distinct(intarray_to_text(p_p))),count(distinct a_id),count(distinct a_vercd),count(distinct digoal_date),count(*) from digoal.digoal_day_p_p ;
+count  | count | count | count |  count   
+---------+-------+-------+-------+----------
+ 6706225 |    65 |   206 |   592 | 70435249
+(1 row)
+
+
+从选择性看, 这个索引这么做也没有什么不对.
+但是注意SQL中查询条件digoal.intarray_to_text(p_p) ~ 这个是范围查询. 因此这么看选择性好不好是不行的.
+因为前导列是范围查询, 所以范围越大, 扫描的索引page就越多.
+来看看两个条件分别指向了多少条记录就知道原因了.
+
+digoal=> select count(*) from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,';
+  count   
+----------
+ 70746931
+(1 row)
+digoal=> select count(*) from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,5,';
+ count 
+-------
+ 10061
+(1 row)
+
+
+数据相差了7000倍.
+
+前导列, 索引用到的是>=和<操作符.
+
+digoal=> explain select count(*) from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,5,';
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=10021.06..10021.07 rows=1 width=0)
+   ->  Index Scan using idx_digoal_day_p_p_1 on digoal_day_p_p  (cost=1.19..10011.57 rows=3794 width=0)
+         Index Cond: ((intarray_to_text(p_p) >= '{0,5,'::text) AND (intarray_to_text(p_p) < '{0,5-'::text))
+         Filter: (intarray_to_text(p_p) ~ '^\{0,5,'::text)
+(4 rows)
+
+
+
+# 剩余的3个条件的记录数 : 
+
+digoal=> select count(*) from digoal.digoal_day_p_p where a_id = 2;
+ count  
+--------
+ 390913
+(1 row)
+digoal=> select count(*) from digoal.digoal_day_p_p where digoal_date between 20130515 and 20130521;
+  count  
+---------
+ 1141898
+(1 row)
+digoal=> select count(*) from digoal.digoal_day_p_p where a_vercd = 1;
+ count  
+--------
+ 388849
+(1 row)
+
+
+注意digoal_date用到的也是范围查询, 不过它作为最后一个索引列, 影响不大.
+根据这个查询条件, 索引顺序改成 : 
+
+a_vercd, a_id, digoal_date, intarray_to_text(p_p)
+
+
+查询时间缩小 : 
+
+digoal=> create index idx_digoal_day_p_p_2 on digoal.digoal_day_p_p(a_vercd,a_id,digoal_date,intarray_to_text(p_p));
+CREATE INDEX
+digoal=> explain analyze select count(*) from (select p_p[2] p1,count(*) count_total from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,5' and a_id = 2  and digoal_date between 20130515 and 20130521 and a_vercd = 1  group by 1 order by count_total desc) t;
+                                                                                                          QUERY PLAN                
+                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+ Aggregate  (cost=5.62..5.63 rows=1 width=0) (actual time=10.545..10.545 rows=1 loops=1)
+   ->  Sort  (cost=5.60..5.61 rows=1 width=45) (actual time=10.543..10.543 rows=1 loops=1)
+         Sort Key: (count(*))
+         Sort Method: quicksort  Memory: 25kB
+         ->  HashAggregate  (cost=5.58..5.59 rows=1 width=45) (actual time=10.535..10.535 rows=1 loops=1)
+               ->  Index Scan using idx_digoal_day_p_p_2 on digoal_day_p_p  (cost=1.19..5.58 rows=1 width=45) (actual time=0.1
+39..10.056 rows=926 loops=1)
+                     Index Cond: ((a_vercd = 1) AND (a_id = 2) AND (digoal_date >= 20130515) AND (digoal_date <= 20130521) AND (inta
+rray_to_text(p_p) >= '{0,5'::text) AND (intarray_to_text(p_p) < '{0,6'::text))
+                     Filter: (intarray_to_text(p_p) ~ '^\{0,5'::text)
+ Total runtime: 10.604 ms
+(9 rows)
+Time: 11.890 ms
+digoal=> explain analyze select p_p[2] p1,count(*) count_total from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,' and a_id = 2  and digoal_date between 20130515 and 20130521 and a_vercd = 1  group by 1 order by count_total desc limit 1;
+                                                                                                         QUERY PLAN                 
+                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------
+ Limit  (cost=16.67..16.68 rows=1 width=45) (actual time=50.197..50.197 rows=1 loops=1)
+   ->  Sort  (cost=16.67..16.68 rows=1 width=45) (actual time=50.196..50.196 rows=1 loops=1)
+         Sort Key: (count(*))
+         Sort Method: top-N heapsort  Memory: 25kB
+         ->  HashAggregate  (cost=16.65..16.66 rows=1 width=45) (actual time=50.184..50.187 rows=8 loops=1)
+               ->  Index Scan using idx_digoal_day_p_p_2 on digoal_day_p_p  (cost=1.19..16.62 rows=6 width=45) (actual time=0.
+094..47.675 rows=5085 loops=1)
+                     Index Cond: ((a_vercd = 1) AND (a_id = 2) AND (digoal_date >= 20130515) AND (digoal_date <= 20130521) AND (inta
+rray_to_text(p_p) >= '{0,'::text) AND (intarray_to_text(p_p) < '{0-'::text))
+                     Filter: (intarray_to_text(p_p) ~ '^\{0,'::text)
+ Total runtime: 50.241 ms
+(9 rows)
+Time: 51.699 ms
+
+
+
+[小结]
+1. 在多列索引中, 除了考虑索引列的选择性以外, 还要结合查询条件来分析.
+例如本例中intarray_to_text(p_p), 这个的选择性确实是最好的. 但是查询条件并不是等于. 而是一个范围查询.
+当这个范围查询的范围非常大的时候, 做为前导列就没有任何优势了, 反而会拖累性能.
+where digoal.intarray_to_text(p_p) ~ E'^\\{0,5,'  这个范围有1多万数据, 耗时10毫秒.
+where digoal.intarray_to_text(p_p) ~ E'^\\{0,'  这个范围有7000多万数据, 耗时20秒.
+对于这种场景, intarray_to_text(p_p)不应该作为前导列, 而应该把它放到最后去, 或者直接从索引列中去除.
+去除intarray_to_text(p_p)后, 索引3列, 索引缩小一半. 查询速度还可以维持在毫秒以内.
+
+digoal=> drop index idx_digoal_day_p_p_1;
+digoal=> create index idx_digoal_day_p_p_1 on digoal.digoal_day_p_p(a_vercd,a_id,digoal_date) tablespace tbs_digoal_idx;
+CREATE INDEX
+digoal=> \di+ idx_digoal_day_p_p_1
+                                         List of relations
+ Schema |          Name           | Type  |   Owner    |       Table       |  Size   | Description 
+--------+-------------------------+-------+------------+-------------------+---------+-------------
+ digoal    | idx_digoal_day_p_p_1 | index | digoal | digoal_day_p_p | 2140 MB | 
+(1 row)
+
+digoal=> \di+ idx_digoal_day_p_p_2
+                                         List of relations
+ Schema |          Name           | Type  |   Owner    |       Table       |  Size   | Description 
+--------+-------------------------+-------+------------+-------------------+---------+-------------
+ digoal    | idx_digoal_day_p_p_2 | index | digoal | digoal_day_p_p | 4399 MB | 
+(1 row)
+
+digoal=> explain analyze select p_p[2] p1,count(*) count_total from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,5,' and a_id = 2  and digoal_date between 20130515 and 20130521 and a_vercd = 1  group by 1 order by count_total desc;
+                                                                        QUERY PLAN                                                  
+                       
+------------------------------------------------------------------------------------------------------------------------------------
+-----------------------
+ Sort  (cost=4.87..4.88 rows=1 width=46) (actual time=38.453..38.453 rows=1 loops=1)
+   Sort Key: (count(*))
+   Sort Method: quicksort  Memory: 25kB
+   ->  HashAggregate  (cost=4.85..4.86 rows=1 width=46) (actual time=38.445..38.446 rows=1 loops=1)
+         ->  Index Scan using idx_digoal_day_p_p_1 on digoal_day_p_p  (cost=0.57..4.85 rows=1 width=46) (actual time=0.259..38
+.370 rows=120 loops=1)
+               Index Cond: ((a_vercd = 1) AND (a_id = 2) AND (digoal_date >= 20130515) AND (digoal_date <= 20130521))
+               Filter: (intarray_to_text(p_p) ~ '^\{0,5,'::text)
+               Rows Removed by Filter: 4156
+ Total runtime: 38.511 ms
+(9 rows)
+Time: 39.707 ms
+digoal=> explain analyze select p_p[2] p1,count(*) count_total from digoal.digoal_day_p_p where digoal.intarray_to_text(p_p) ~ E'^\\{0,' and a_id = 2  and digoal_date between 20130515 and 20130521 and a_vercd = 1  group by 1 order by count_total desc;
+                                                                         QUERY PLAN                                                 
+                        
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------
+ Sort  (cost=4.87..4.88 rows=1 width=46) (actual time=43.573..43.574 rows=7 loops=1)
+   Sort Key: (count(*))
+   Sort Method: quicksort  Memory: 25kB
+   ->  HashAggregate  (cost=4.85..4.86 rows=1 width=46) (actual time=43.562..43.563 rows=7 loops=1)
+         ->  Index Scan using idx_digoal_day_p_p_1 on digoal_day_p_p  (cost=0.57..4.85 rows=1 width=46) (actual time=0.121..41
+.472 rows=4276 loops=1)
+               Index Cond: ((a_vercd = 1) AND (a_id = 2) AND (digoal_date >= 20130515) AND (digoal_date <= 20130521))
+               Filter: (intarray_to_text(p_p) ~ '^\{0,'::text)
+ Total runtime: 43.633 ms
+(8 rows)
+Time: 45.158 ms
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201332283735674/

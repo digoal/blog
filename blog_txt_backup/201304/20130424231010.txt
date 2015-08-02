@@ -1,0 +1,106 @@
+PostgreSQL research
+
+PostgreSQL A simple WAN disaster recovery implement
+
+2013-04-24 23:10:10   查看原文>>
+
+本文简单的讲述一下PostgreSQL跨广域网的容灾.
+1. 广域网首先要考虑网络稳定情况, 丢包率等.
+    使用PostgreSQL 流复制不依赖网络稳定情况, 所以比较有弹性. 
+    通过配置archive_command, 或者wal_keep_segments保证有足够的pg_xlog文件, 确保网络极度不稳定或者长时间中断的情况下不需要重做基础备份.
+2. 广域网环境同时还需要考虑数据被截取的可能.
+    使用ssh建立隧道, 加密传输数据.
+3. 广域网环境还需要考虑带宽的问题.
+    使用ssh建立隧道,  增加数据压缩选项.
+
+环境 : 
+IDC1
+IDC1_server1
+
+ssh-keygen -t rsa
+
+
+
+IDC2
+IDC2_server1
+将id_rsa.pub拷贝到~/.ssh/authorized_keys
+
+chmod 700 ~
+chmod 700 ~/.ssh
+chmod 400 ~/.ssh/authorized_keys
+
+
+
+IDC2_db1 : -- 主库
+
+IDC1_server1 : 
+
+ssh -o TCPKeepAlive=90 -o ServerAliveInterval=10 -o ServerAliveCountMax=10 -o CompressionLevel=9 -p 22 -CqTfnN -L *:17100:IDC2_db1_ip:5432 postgres@IDC2_server1_ip
+
+
+将在本地启动一个监听17100端口. 访问17100端口相当于通过IDC2_server1访问IDC2_db1_ip:5432端口.
+数据加密和压缩发生在IDC1_server1和IDC2_server1之间.
+数据库pg_hba.conf应该开放IDC2_server1的访问许可.
+
+[监控]
+# cat check_pg_rongzai.sh 
+
+#!/bin/bash
+
+export LANG=en_US.utf8
+export PGHOME=/opt/pgsql
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+export PATH=$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+alias rm='rm -i'
+alias ll='ls -lh'
+
+if [ $1 == "digoal" ]; then
+# 监控本地ssh代理监听端口
+  echo -e "192.168.1.2 PostgreSQL rongzai."
+  CNT=`netstat -anpo|grep 15432|grep -v grep|grep LISTEN|wc -l`
+  if [ $CNT -eq 0 ]; then
+    echo -e "15432 LISTEN Failed."
+    exit 2
+  fi
+# 监控数据库监听端口
+  CNT=`netstat -anpo|grep 5432|grep -v grep|grep LISTEN|wc -l`
+  if [ $CNT -eq 0 ]; then
+    echo -e "5432 LISTEN Failed."
+    exit 2
+  fi
+# 监控数据库流复制接收进程
+  CNT=`ps -ewf|grep -v grep|grep postgres|grep "wal receiver"|wc -l`
+  if [ $CNT -eq 0 ]; then
+    echo -e "postgres wal receiver Failed."
+    exit 2
+  fi
+# 监控流复制延迟
+  psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -c "select 'standby_good' as stat from (select (pg_stat_file('pg_xlog/'||i)).*,i from pg_ls_dir('pg_xlog') i)t where now()-modification< interval '12 min' limit 1;"|grep standby_good
+  if [ $? -ne 0 ]; then
+    echo -e "postgres standby lagged 30 minutes."
+    exit 2
+  fi
+  exit 0
+fi
+
+echo -e "参数错误"
+exit 1
+# Author: digoal.zhou
+
+
+配置nagios
+
+vi /usr/local/nagios/etc/nrpe.cfg
+command[check_pg_rongzai1]=/root/script/check_pg_rongzai.sh digoal
+
+service xinetd restart
+
+
+
+【参考】
+1. http://blog.163.com/digoal@126/blog/static/16387704020115294425540/
+2. http://blog.163.com/digoal@126/blog/static/163877040201152753352356/
+3. http://blog.163.com/digoal@126/blog/static/16387704020132279020755/
+4. http://www.psc.edu/index.php/hpn-ssh
+ssh 广域网加速补丁.

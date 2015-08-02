@@ -1,0 +1,506 @@
+PostgreSQL research
+
+PostgreSQL patch, add timing of buffer I/O requests SWITCH, but it have overhead
+
+2012-04-15 12:41:40   查看原文>>
+
+PostgreSQL patch, 添加了一个用于统计buffer I/O 读,写请求所消耗的时间的功能. 由track_iotiming参数控制开关. 默认是关闭的.
+可以使用explain analyze buffer来查看io请求的时间, 或者查看pg_stat_*, pg_stat_database和pg_stat_statements来查看累计的IO请求消耗的时间.
+
+同时还增加了一个extension, pg_test_timing,  可用于测试系统获取时间的开销, 以及测试系统是否存在时钟倒走的情况.
+我以前在一个IBM 3950的堆叠系统中发生过时钟倒走的情况, 有兴趣的朋友可以查看我的blog
+http://blog.163.com/digoal@126/blog/static/1638770402010112111635423/
+
+track_iotiming打开后, 系统会记录下每次读或写IO请求的时间, 需要调用gettimeofday获取IO请求开始的时间和结束的时间.
+因为多了一步gettimeofday, 所以开启后会有一定的性能影响.
+具体有多少影响可以通过pg_test_timing来测试. 通过测试发现和系统使用的clock计数器关系很大, 默认RHEL 5.X X64用的是jiffies .
+Linux系统无法动态的修改clocksource, 需要重启系统.
+某些bsd系统可以动态修改.
+
+[root@digoal postgresql-9.2devel]# cat /sys/devices/system/clocksource/clocksource0/available_clocksource 
+jiffies 
+[root@digoal postgresql-9.2devel]# cat /sys/devices/system/clocksource/clocksource0/current_clocksource 
+jiffies 
+
+
+我的一台AMD的机器的测试
+
+[root@digoal postgresql-9.2devel]# cat /proc/cpuinfo 
+processor       : 0
+vendor_id       : AuthenticAMD
+cpu family      : 15
+model           : 107
+model name      : AMD Athlon(tm) 64 X2 Dual Core Processor 4000+
+stepping        : 1
+cpu MHz         : 2094.906
+cache size      : 512 KB
+physical id     : 0
+siblings        : 2
+core id         : 0
+cpu cores       : 2
+apicid          : 0
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 1
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt rdtscp lm 3dnowext 3dnow pni cx16 lahf_lm cmp_legacy svm extapic cr8_legacy misalignsse
+bogomips        : 4189.81
+TLB size        : 1024 4K pages
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: ts fid vid ttp tm stc 100mhzsteps
+
+processor       : 1
+vendor_id       : AuthenticAMD
+cpu family      : 15
+model           : 107
+model name      : AMD Athlon(tm) 64 X2 Dual Core Processor 4000+
+stepping        : 1
+cpu MHz         : 2094.906
+cache size      : 512 KB
+physical id     : 0
+siblings        : 2
+core id         : 1
+cpu cores       : 2
+apicid          : 1
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 1
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt rdtscp lm 3dnowext 3dnow pni cx16 lahf_lm cmp_legacy svm extapic cr8_legacy misalignsse
+bogomips        : 4189.09
+TLB size        : 1024 4K pages
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: ts fid vid ttp tm stc 100mhzsteps
+
+
+测试结果如下 : 
+
+pg92@digoal-> pg_test_timing 
+Testing timing overhead for 3 seconds.
+Per loop time including overhead: 908.38 nsec
+Histogram of timing durations:
+   < usec:      count   percent
+      512:          1  0.00003%
+      256:          5  0.00015%
+      128:          5  0.00015%
+       64:         15  0.00045%
+       32:         54  0.00164%
+       16:         31  0.00094%
+        8:       3003  0.09093%
+        4:       3593  0.10879%
+        2:    2972328 89.99972%
+        1:     323562  9.79720%
+
+
+修改/boot/grub/grub.conf, 把clock修改为tsc, 
+
+        kernel /boot/vmlinuz-2.6.18-274.7.1.el5 ro root=LABEL=/ rhgb quiet clock=tsc
+
+
+结果如下 : 
+
+pg92@digoal-> pg_test_timing 
+Testing timing overhead for 3 seconds.
+Per loop time including overhead: 115.07 nsec
+Histogram of timing durations:
+   < usec:      count   percent
+     4096:          1  0.00000%
+     2048:          3  0.00001%
+     1024:          0  0.00000%
+      512:          3  0.00001%
+      256:          2  0.00001%
+      128:          8  0.00003%
+       64:         22  0.00008%
+       32:         84  0.00032%
+       16:       3051  0.01170%
+        8:         38  0.00015%
+        4:        538  0.00206%
+        2:    2956245 11.33914%
+        1:   23111154 88.64647%
+
+
+但是需要注意修改完clock=tsc并重启操作系统后, current_clocksource还是显示jiffies
+
+[root@digoal ~]# cat /sys/devices/system/clocksource/clocksource0/current_clocksource 
+jiffies 
+[root@digoal ~]# cat /sys/devices/system/clocksource/clocksource0/available_clocksource 
+jiffies 
+
+
+另一台CPU是至强的服务器
+
+# cat /proc/cpuinfo 
+processor       : 0
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 1
+siblings        : 4
+core id         : 0
+cpu cores       : 4
+apicid          : 16
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3990.10
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+processor       : 1
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 0
+siblings        : 4
+core id         : 0
+cpu cores       : 4
+apicid          : 0
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3989.48
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+processor       : 2
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 1
+siblings        : 4
+core id         : 1
+cpu cores       : 4
+apicid          : 18
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3989.54
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+processor       : 3
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 0
+siblings        : 4
+core id         : 1
+cpu cores       : 4
+apicid          : 2
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3989.47
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+processor       : 4
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 1
+siblings        : 4
+core id         : 2
+cpu cores       : 4
+apicid          : 20
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3989.47
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+processor       : 5
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 0
+siblings        : 4
+core id         : 2
+cpu cores       : 4
+apicid          : 4
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3989.48
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+processor       : 6
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 1
+siblings        : 4
+core id         : 3
+cpu cores       : 4
+apicid          : 22
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3989.45
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+processor       : 7
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 26
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+physical id     : 0
+siblings        : 4
+core id         : 3
+cpu cores       : 4
+apicid          : 6
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 11
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm syscall nx rdtscp lm constant_tsc nonstop_tsc pni monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3989.50
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management: [8]
+
+
+pg_test_timing的测试结果 : 
+修改clocksource前
+
+> pg_test_timing 
+Testing timing overhead for 3 seconds.
+Per loop time including overhead: 705.74 nsec
+Histogram of timing durations:
+   < usec:      count   percent
+      256:          1  0.00002%
+      128:        124  0.00292%
+       64:       2905  0.06834%
+       32:         19  0.00045%
+       16:        110  0.00259%
+        8:       2927  0.06886%
+        4:       5947  0.13990%
+        2:    2829957 66.57338%
+        1:    1408894 33.14355%
+
+
+修改clock=tsc后
+
+> pg_test_timing 
+Testing timing overhead for 3 seconds.
+Per loop time including overhead: 80.22 nsec
+Histogram of timing durations:
+   < usec:      count   percent
+      512:          1  0.00000%
+      256:          0  0.00000%
+      128:          0  0.00000%
+       64:          2  0.00001%
+       32:          3  0.00001%
+       16:       3000  0.00802%
+        8:         13  0.00003%
+        4:        614  0.00164%
+        2:    2969087  7.93915%
+        1:   34425324 92.05114%
+
+
+接下来在数据库中测试一下打开iotiming 后的效果, 用到的是至强的服务器.
+由于track_iotiming默认是关闭的, 所以要打开它然后进行测试. 修改后reload一下.
+在clocksource=jiffies的时候我测试的结果如下  : 
+
+postgres=# explain ( analyze on, buffers on) select count(*) from test1;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=15932.00..15932.01 rows=1 width=0) (actual time=1404.777..1404.778 rows=1 loops=1)
+   Buffers: shared hit=192 read=3791
+   I/O Timings: read=15.99
+   ->  Seq Scan on test1  (cost=0.00..13542.20 rows=955920 width=0) (actual time=0.045..715.611 rows=900000 loops=1)
+         Buffers: shared hit=192 read=3791
+         I/O Timings: read=15.99
+ Total runtime: 1404.819 ms
+(7 rows)
+
+
+在修改完clock=tsc后的测试结果 : 
+
+postgres=# select count(*) from test1;
+ count  
+--------
+ 900000
+(1 row)
+
+Time: 137.633 ms
+postgres=# explain ( analyze on, buffers on) select count(*) from test1;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=15932.00..15932.01 rows=1 width=0) (actual time=329.160..329.160 rows=1 loops=1)
+   Buffers: shared hit=416 read=3567
+   I/O Timings: read=12.91
+   ->  Seq Scan on test1  (cost=0.00..13542.20 rows=955920 width=0) (actual time=0.051..175.660 rows=900000 loops=1)
+         Buffers: shared hit=416 read=3567
+         I/O Timings: read=12.91
+ Total runtime: 329.203 ms
+(7 rows)
+
+
+explain analyze 和直接执行select相差的时间是329.203-137.633毫秒.
+可以计算出获取系统时间的overhead如下
+
+postgres=# select 1000000*(329.203-137.633)/900000;
+       ?column?       
+----------------------
+ 212.8555555555555556
+
+
+前面测试的iotiming overhead如下
+
+Per loop time including overhead: 115.07 nsec
+
+
+212.8555555555555556约为通过pg_test_timing测试出来的overhead 115.07nsec的一倍.
+
+对于一个频繁的系统，如每天有数十亿次QUERY的系统，trace_iotiming打开后预计会带来多少overhead呢?
+
+postgres=# select 1000000000*((329.203-137.633)/900000) ; 
+          ?column?           
+-----------------------------
+ 212855.55555555556000000000  毫秒. 
+
+
+看起来并不算太大.
+
+前面一直在说的都是trace_iotiming打开后会带来多少overhead.
+接下来就说说统计的io时间在哪里看.
+
+         I/O Timings: read=12.91
+
+
+表示io请求的读消耗了12.91毫秒
+
+另外可以通过查看pg_stat_statements或pg_stat_database获得累计的开销统计时间.
+
+postgres=# \d pg_stat_statements
+          View "public.pg_stat_statements"
+       Column        |       Type       | Modifiers 
+---------------------+------------------+-----------
+ userid              | oid              | 
+ dbid                | oid              | 
+ query               | text             | 
+ calls               | bigint           | 
+ total_time          | double precision | 
+ rows                | bigint           | 
+ shared_blks_hit     | bigint           | 
+ shared_blks_read    | bigint           | 
+ shared_blks_dirtied | bigint           | 
+ shared_blks_written | bigint           | 
+ local_blks_hit      | bigint           | 
+ local_blks_read     | bigint           | 
+ local_blks_dirtied  | bigint           | 
+ local_blks_written  | bigint           | 
+ temp_blks_read      | bigint           | 
+ temp_blks_written   | bigint           | 
+ time_read           | double precision | 
+ time_write          | double precision | 
+
+postgres=# \d pg_stat_database
+           View "pg_catalog.pg_stat_database"
+      Column      |           Type           | Modifiers 
+------------------+--------------------------+-----------
+ datid            | oid                      | 
+ datname          | name                     | 
+ numbackends      | integer                  | 
+ xact_commit      | bigint                   | 
+ xact_rollback    | bigint                   | 
+ blks_read        | bigint                   | 
+ blks_hit         | bigint                   | 
+ tup_returned     | bigint                   | 
+ tup_fetched      | bigint                   | 
+ tup_inserted     | bigint                   | 
+ tup_updated      | bigint                   | 
+ tup_deleted      | bigint                   | 
+ conflicts        | bigint                   | 
+ temp_files       | bigint                   | 
+ temp_bytes       | bigint                   | 
+ deadlocks        | bigint                   | 
+ block_read_time  | bigint                   | 
+ block_write_time | bigint                   | 
+ stats_reset      | timestamp with time zone | 
+
+
+
+【参考】
+src/backend/storage/buffer/bufmgr.c
+https://commitfest.postgresql.org/action/patch_view?id=788
+http://www.postgresql.org/docs/devel/static/pgstatstatements.html
+http://www.postgresql.org/docs/devel/static/runtime-config-statistics.html#GUC-TRACK-IOTIMING
+http://www.postgresql.org/docs/devel/static/pgtesttiming.html
+http://www.postgresql.org/docs/devel/static/monitoring-stats.html#PG-STAT-DATABASE-VIEW
+http://en.wikipedia.org/wiki/Jiffy_(time)
+http://en.wikipedia.org/wiki/Time_Stamp_Counter
+http://www.redhat.com/archives/rhl-list/2007-May/msg00937.html
+http://blog.163.com/digoal@126/blog/static/163877040201062810748700/
+
+In computing, a jiffy is the duration of one tick of the system timer interrupt. It is not an absolute time interval unit, since its duration depends on the clock interrupt frequency of the particular hardware platform.
+Early microcomputer systems such as the Commodore 64 and many game consoles (which use televisions as a display device) commonly synchronize the system interrupt timer with the vertical frequency of the local television standard, either 59.94 Hz with NTSC systems, or 50.0 Hz with most PAL systems. Within the Linux
+operating system kernel, since release 2.6.13, on the Intel i386 platform a jiffy is by default 4 ms, or 1/250 of a second.[4] The jiffy values for other Linux versions and platforms have typically varied between about 1 ms and 10 ms.

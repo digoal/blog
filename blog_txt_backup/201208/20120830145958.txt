@@ -1,0 +1,360 @@
+PostgreSQL research
+
+GPU used in PostgreSQL database
+
+2012-08-30 14:59:58   查看原文>>
+
+今天在看一篇The Future of PostgreSQL 9.2,9.3 and beyond.
+里面有介绍9.3或未来可能会将gpu加入到PostgreSQL的支持中.
+搜索了一些gpu 与数据库的相关资料, 记录一下:
+BOOK : 
+《CUDA Application Design and Development》
+《CUDA by Example: An Introduction to General-Purpose GPU Programming》
+
+a GPU database engin: alenka
+https://github.com/antonmks/Alenka
+https://github.com/kaigai/pg_strom/wiki/PG-Strom
+http://wiki.postgresql.org/wiki/PGStrom
+
+利用GPU进行运算(某些运算), CPU负责数据装载. (比以往CPU负责数据装载和运算快)
+
+Overview
+
+PG-Strom is a module of FDW (foreign data wrapper) of PostgreSQL database. It was designed to utilize GPU devices to accelarate sequential scan on massive amount of records with complex qualifiers. Its basic concept is CPU and GPU should focus on the workload with their advantage, and perform concurrently. CPU has
+much more flexibility, thus, it has advantage on complex stuff such as Disk-I/O, on the other hand, GPU has much more parallelism of numerical calculation, thus, it has advantage on massive but simple stuff such as check of qualifiers for each rows.
+
+The below figure is a basic concept of PG-Strom. Now, on sequential scan workload, vanilla PostgreSQL does iteration of fetch a tuple and checks of qualifiers for each tuples. If we could consign GPU the workload of green portion, it enables to reduce workloads of CPU, thus, it shall be able to load more tuples in
+advance. Eventually, it should allow to provide shorter response-time on complex queries towards large amount of data.
+
+Strom-fig-01.png
+
+In our measurement, it made possible to run a query with x10~x20 times shorter response-time that regular sequential-scan case, even though it depends on its workload, of course.
+
+postgres=# SELECT COUNT(*) FROM t1 WHERE sqrt((x-25.6)^2 + (y-12.8)^2) < 15;
+ count
+-------
+  6718
+(1 row)
+
+Time: 7019.855 ms
+
+postgres=# SELECT COUNT(*) FROM t2 WHERE sqrt((x-25.6)^2 + (y-12.8)^2) < 15;
+ count
+-------
+  6718
+(1 row)
+
+Time: 176.301 ms
+
+postgres=# SELECT * FROM t1 LIMIT 1;
+ a | b |  c   |              d              |    x    |    y
+---+---+------+-----------------------------+---------+---------
+ 1 | 1 | 8938 | example test string for [1] | 458.995 | 820.361
+(1 row)
+
+(*) t1 and t2 contain same contents with 10millions of records, but t1 is a regular table and t2 is a foreign table managed by PG-Strom
+
+Installation
+
+As a prerequisite, GPU device must support CUDA, thus, only NVidia's products are available now. Some of cloud providers supports CUDA supported GPU devices, so, it may be an option.
+
+ 1. Install CUDA Toolkit v4.0 (or later)
+      □ You can obtain CUDA Toolkit v4.0 here. It set up SDK and kernel drivers on your system. The default installation path is /ust/local/cuda. We recommend to keep the default installation path, as long as you don't have special reason.
+      □ Confirm the nvcc compiler is installed, and works fine.
+ 2. Check out the latest PostgreSQL tree.
+      □ You can obtain the latest PostgreSQL tree at git.postgresql.org. Even though SQL/MED has been supported since v9.1, PG-Strom uses some of internal APIs that was modified at v9.2devel. Thus, it is not compilable towards v9.1.
+      □ Build the PostgreSQL as usual. The pg_config should be installed on a directory listed on $PATH.
+ 3. Check out the latest PG-Strom tree.
+      □ You can obtain the latest PG-Strom tree at github.com.
+      □ Build the module with make. pg_config should be appeared in the $PATH. If CUDA was installed somewhere except for /usr/local/cuda, you should give the alternate installation path using CUDA_DIR
+      □ Install the module with make install.
+ 4. Edit the $PGDATA/postgresql.conf
+      □ PG-Strom must be loaded at shared_preload_library stage. So, '$libdir/pg_strom' shall be added to the shared_preload_library parameter.
+ 5. Restart PostgreSQL server.
+      □ Restart the server using pg_ctl restart
+ 6. Create an extension of PG-Strom
+      □ Run CREATE EXTENSION pg_strom to set up related foreign-data-wrapper, foreign-server, and functions.
+
+How to use
+
+Foreign tables including PG-Strom are not writeable right now, thus we have to set up the data store managed by PG-Strom; using an alternative way. We providepgstrom_data_load() to load contents of the regular table into data store managed by PG-Strom.
+
+We assume rtbl is a regular table, and ftbl is a foreign table managed by PG-Strom in the example below. These are defined as follows:
+
+postgres=# CREATE TABLE rtbl (
+               a int,
+               b int,
+               t text,
+               x float,
+               y float
+           );
+CREATE TABLE
+
+postgres=# CREATE FOREIGN TABLE ftbl (
+              a int,
+              b int,
+              t text,
+              x float,
+              y float
+           ) SERVER pg_strom;
+CREATE FOREIGN TABLE
+
+As you can see, both relations must have columns with same name and data type. If you try to load an existing data to PG-Strom, the foreign table must be declared in similarity form.
+
+Here, we try to generate an example data for test purpose, as follows:
+
+postgres=# INSERT INTO rtbl (SELECT code AS a, (code * 100 * random())::int % 57 AS b,
+                             md5(code::text) || ' is check sum of code: ' || code AS d,
+                             1000 * random() AS x, 1000 * random() AS y
+                             FROM generate_series(1,10000000) code);
+INSERT 0 10000000
+
+Next, we have to load the data, using pgstrom_data_load().
+
+postgres=# SELECT pgstrom_data_load('ftbl', 'rtbl');
+ pgstrom_data_load
+-------------------
+ t
+(1 row)
+
+After that, we can reference ftbl using regular SELECT statement.
+
+postgres=# SELECT COUNT(*) FROM rtbl WHERE sqrt((x-256)^2 + (y-128)^2) < 40;
+ count
+-------
+ 50208
+(1 row)
+
+Time: 12848.367 ms
+
+postgres=# SELECT COUNT(*) FROM ftbl WHERE sqrt((x-256)^2 + (y-128)^2) < 40;
+ count
+-------
+ 50208
+(1 row)
+
+Time: 756.152 ms
+
+All the data managed by PG-Strom shall be stored within shadow tables stored in pg_strom schema. It can be confirmed via pgstrom_shadow_relation VIEW.
+
+postgres=# SELECT * FROM pgstrom_shadow_relation ;
+  oid  |      relname      | relkind |  relsize
+-------+-------------------+---------+-----------
+ 24589 | public.ftbl.rowid | r       |     32768
+ 24592 | public.ftbl.idx   | i       |     16384
+ 24593 | public.ftbl.a.cs  | r       |  79994880
+ 24596 | public.ftbl.a.idx | i       |    237568
+ 24597 | public.ftbl.b.cs  | r       |  20004864
+ 24600 | public.ftbl.b.idx | i       |    237568
+ 24601 | public.ftbl.t.cs  | r       | 480083968
+ 24604 | public.ftbl.t.idx | i       |   3645440
+ 24605 | public.ftbl.x.cs  | r       | 159997952
+ 24608 | public.ftbl.x.idx | i       |    458752
+ 24609 | public.ftbl.y.cs  | r       | 159997952
+ 24612 | public.ftbl.y.idx | i       |    458752
+ 24613 | public.ftbl.seq   | S       |      8192
+(13 rows)
+
+It seems to me data compression does not works fine except for column b because of random data source. :-)
+
+Explain output
+
+EXPLAIN allows to confirm what GPU code is dynamically generated to evaluate the supplied qualifier.
+
+postgres=# EXPLAIN SELECT * FROM ftbl WHERE sqrt((x-256)^2 + (y-128)^2) < 40;
+
+                         QUERY PLAN
+
+-----------------------------------------------------------------------------
+Foreign Scan on ftbl  (cost=0.00..0.00 rows=1000 width=56)
+   Required Cols : a, b, t, x, y
+  Used in clause : x, y
+  constval[0]: 4643211215818981376
+  constval[1]: 4611686018427387904
+  constval[2]: 4638707616191610880
+  constval[3]: 4611686018427387904
+  constval[4]: 4630826316843712512
+     1: typedef unsigned long size_t;
+     2: typedef long __clock_t;
+     3: typedef __clock_t clock_t;
+     4: #include "crt/device_runtime.h"
+     5: #include "math_functions.h"
+     6:
+     7: double varref_double(unsigned char *errors, unsigned char bitmask,
+                             unsigned char isnull, double value)
+     8: {
+     9:     if (bitmask & isnull)
+    10:         *errors |= bitmask;
+    11:     return value;
+    12: }
+    13:
+    14: #define conref_double(conval)  __longlong_as_double(conval)
+    15:
+    16: __constant__ long constval[5];
+    17:
+    18: __global__ void
+    19: pgstrom_qual(unsigned int nitems,
+    20:              unsigned char rowmap[],
+    21:              double c4_values[],
+    22:              unsigned char c4_nulls[],
+    23:              double c5_values[],
+    24:              unsigned char c5_nulls[])
+    25: {
+    26:     int offset_base = blockIdx.x * blockDim.x + threadIdx.x;
+    27:     int offset = offset_base * 8;
+    28:     unsigned char result = rowmap[offset_base];
+    29:     unsigned char errors = 0;
+    30:     unsigned char cn4 = c4_nulls[offset_base];
+    31:     unsigned char cn5 = c5_nulls[offset_base];
+    32:     int bitmask;
+    33:
+    34:     if (offset >= nitems)
+    35:         return;
+    36:     for (bitmask=1; bitmask < 256; bitmask <<= 1)
+    37:     {
+    38:         double cv4 = c4_values[offset];
+    39:         double cv5 = c5_values[offset];
+    40:
+    41:         if ((result & bitmask) == 0 &&
+    42:             !(sqrt((pow((varref_double(&errors, bitmask, cn4, cv4) -
+                                 conref_double(constval[0])), conref_double(constval[1])) +
+                            pow((varref_double(&errors, bitmask, cn5, cv5) -
+                                 conref_double(constval[2])), conref_double(constval[3])))) <
+                      conref_double(constval[4])))
+    43:             result |= bitmask;
+    44:         offset++;
+    45:     }
+    46:     rowmap[offset_base] = (result | errors);
+    47: }
+(55 rows)
+
+GUC Options
+
+pg_strom.nvcc_command (string)
+    Path to the nvcc command; being used to just-in-time compile of GPU code.
+    The default is $(CUDA_DIR)/bin/nvcc. It requires to restart the postmaster to change this value.
+pg_strom.nvcc_cache_size (int)
+    Size of shared memory segment in KB; being used to cache pre-compiled GPU binary.
+    The default is 2048. It requires to restart the postmaster to change this value.
+pg_strom.max_async_chunks (int)
+    Maximum number of chunks to be processed concurrently. Even if host-side set up a request of asynchronous execution on device-side, it does not send any chunks concurrently with exceeds of this limitation.
+    The default is 3 * (num of GPU devices). It can be switched on run-time,
+pg_strom.min_async_chunks (int)
+    Minimum number of chunks to be processed concurrently. Host-side tries to keep chunks being asynchronously executed in device-side, as long as we still have chunks being read in this scan.
+    The default is (num of GPU devices). It can be switched on run-time,
+pg_strom.exec_profile (bool)
+    Switch on/off profiling mode. That shows total amount of times being consumed on the last query; for each components.
+    It can be switched on run-time.
+
+postgres=# SET pg_strom.exec_profile = on;
+SET
+postgres=# SELECT COUNT(*) FROM t2 WHERE sqrt((x-25.6)^2 + (y-12.8)^2) < 40;
+INFO:  PG-Strom Exec Profile on "t2"
+INFO:  Total PG-Strom consumed time: 181.761 ms
+INFO:  Time to JIT Compile GPU code: 0.045 ms
+INFO:  Time to initialize devices:   1.161 ms
+INFO:  Time to Load column-stores:   54.884 ms
+INFO:  Time to Scan column-stores:   11.482 ms
+INFO:  Time to Fetch virtual tuples: 86.346 ms
+INFO:  Time of GPU Synchronization:  27.701 ms
+INFO:  Time of Async memcpy:         31.233 ms
+INFO:  Time of Async kernel exec:    27.810 ms
+INFO:  Num of registers/thread [0]:  25
+INFO:  Constant memory usage [0]:    40 byte
+INFO:  Max device memory usage[0]:   536 KB
+ count
+-------
+ 30220
+(1 row)
+
+Functions
+
+pgstrom_data_load(regclass, regclass)
+
+This function loads the contents of source table (2nd argument) to the destination foreign-table (1st argument) managed by PG-Strom. The foreign-table must have columns with same name and type of the source table. We assume it is a tentative solution until writable foreign-table getting supported by PostgreSQL.
+
+pgstrom_device_info(int)
+
+This function shows properties of installed devices. If 1st argument is 0, it lists properties of all the devices. Elsewhere, it shows properties of a particular device, or raise an error when the specified device id is not found.
+
+postgres=# SELECT * FROM pgstrom_device_info(0);
+ devid |          name           |         value
+-------+-------------------------+-----------------------
+     1 | name                    | GeForce GTS 450
+     1 | capability              | 2.1
+     1 | num of procs            | 4
+     1 | wrap per proc           | 32
+     1 | clock of proc           | 1200 MHz
+     1 | global mem size         | 1023 MB
+     1 | global mem width        | 128 bits
+     1 | global mem clock        | 667 MHz
+     1 | shared mem size         | 48 KB
+     1 | L2 cache size           | 256 KB
+     1 | const mem size          | 64 KB
+     1 | max block size          | {1024, 1024, 64}
+     1 | max grid size           | {65535, 65535, 65535}
+     1 | max threads per proc    | 1536
+     1 | max registers per block | 32768
+     1 | integrated memory       | no
+     1 | unified address         | yes
+     1 | map host memory         | yes
+     1 | concurrent kernel       | yes
+     1 | concurrent memcpy       | yes
+     1 | pci bus-id              | 16
+     1 | pci device-id           | 0
+(22 rows)
+
+Architecture
+
+Characteristic of hardware components is an important factor to determine whole of system design. Even though GPU device has TFlops class capability of calculation, data being calculated has to be loaded to device memory; its capacity is usually smaller than host memory, and smaller bandwidth compared to the one
+between CPU and host-memory.
+
+Strom-fig-02.png
+
+Thus, we need to exercise wisdom; how to copy data more fast between host and device. One idea is not to transfer data being unused to calculation. In case of a foreign-table of PG-Strom has 5 columns, but only 2 of them used to evaluation of qualifier, it is waste of bandwidth to copy contents of the rest of 3
+columns being unused. In addition, we like to minimize number of disk-i/o because its latency and bandwidth are much slower. It requires us higher density of data on storage.
+
+Strom-fig-03.png
+
+PG-Strom adopts column-oriented data structure. When a foreign-table managed by PG-Strom is defined, it implicitly creates shadow tables for each columns and table, under the pg_strom schema.
+
+These shadow tables have rowid and a chunk of values represented as bytea value. Each tuples within shadow table contains nitem of elements within isnull bitmap andvalues array, PG-Strom can fetch a set of values from the database so fast. Note that a memcpy() enables to copy a chunk of values from database buffer to
+DMA buffer; being transferred to/from GPU device asynchronously. It is a great advantage that does not need to deform a tuple to fetch a particular field.
+
+Strom-fig-04.png
+
+The above figure shows the mechanism. PG-Strom load data into chunk-buffer from shadow tables behind of the column referenced to the supplied qualifier, but nothing are loaded to used column. Then, the data loaded to chunk-buffer shall be copied to GPU device, it calculate the given data, and results shall be
+written-back. The series of steps shall be executed asynchronously, thus, CPU is available to load data onto the next chunk-buffer concurrently.
+
+As a preferable side-effects, we can expect data compression and reduction of total amount of i/o, although it depends on characteristics of data set.
+
+Strom-fig-05.png
+
+One other characteristic is run-time code generation of GPU. The query planner invokes the PlanForeignScan callback of PG-Strom. At that time, PG-Strom checks whether the supplied qualifier is executable on GPU, then, it generates a source code to implement a function equivalent to the qualifier, but it follows the
+manner of CUDA.
+
+Then, the executor invokes executor callbacks of PG-Strom to scan the foreign-table. PG-Strom has three stages to scan underlying shadow tables. The first step is initialization; that initializes the GPU device and compile the automatically generated source code using nvcc compiler. It generates GPU executable binary.
+We tend to use same queries multiple times, so, it is worthwhile to cache the binary code. The second step is load; that load data being used in calculation from shadow tables to chunk-buffer, then kicks asynchronous memory copy and device execution. The chunk being kicked shall be calculated by GPU during CPU load
+the next chunk, then, CPU scan the shadow tables (if columns not referenced by qualifiers are required) according to the result of this calculation. All we need to fetch is tuples with particular row-id that is evaluated to be visible.
+
+Strom-fig-06.png
+
+Future Development
+
+The following three are highest priority for me; to be discussed on v9.3 development cycle.
+
+  • Writable PG-Strom table
+      □ Using pgstrom_data_load() to set data on shadow tables are not cool. So, we'd like to pay efforts to support writable foreign-table in v9.3 development.
+  • Table inheritance between regular and foreign table
+      □ One idea to hide bad write-performance is using a regular table to store new tuples tentatively until number of tuples exceeds threshold. But existing implementation does not support table inheritance between regular and foreign tables.
+  • Sort & Aggregate push-down
+      □ It gave us more performance gain to move processor bounds type workload into GPU device from CPU, according to my observation. I believe push-down of sort & aggregate into PG-Strom enables to accelerate complex query on big data, although existing FDW allows to push down qualifiers only.
+
+
+Nvidia CUDA : 
+http://developer.nvidia.com/cuda/cuda-downloads
+http://www.nvidia.com/object/cuda_home_new.html
+http://en.wikipedia.org/wiki/CUDA
+
+【其他参考】
+http://pbbakkum.com/db/bakkum.sql.db.gpu.pdf

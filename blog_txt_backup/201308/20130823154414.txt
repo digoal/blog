@@ -1,0 +1,379 @@
+PostgreSQL research
+
+PostgreSQL WHY modify numeric scale must rewrite table
+
+2013-08-23 15:44:14   查看原文>>
+
+前段时间写过一篇关于如何从typmod取出numeric长度和精度的文章, 本文也有牵涉, 所以有兴趣的朋友可以先预读此文 : 
+http://blog.163.com/digoal@126/blog/static/163877040201371763839672/
+本文要讲的是今天群里一位朋友提到的, PostgreSQL在修改numeric类型精度的时候, 很慢的问题.
+很慢的原因是修改精度的时候底层的数据变更了, 需要重建表. 所以如果数据量很大的表, 改精度是会很慢的.
+首先来做个实验, 为什么要rewrite表的原因后面具体给出.
+测试表
+
+digoal=# create table t(id numeric(10,2));
+CREATE TABLE
+digoal=# insert into t select generate_series(1,10000);
+INSERT 0 10000
+digoal=# select pg_relation_filepath('t'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/17542
+(1 row)
+
+
+当扩展长度时, 没有rewrite table.
+
+digoal=# alter table t alter column id type numeric(11,2);
+ALTER TABLE
+digoal=# select pg_relation_filepath('t'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/17542
+(1 row)
+
+
+当降低长度时,发生了rewrite.
+
+digoal=# alter table t alter column id type numeric(9,2);
+ALTER TABLE
+digoal=# select pg_relation_filepath('t'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/17545
+(1 row)
+
+digoal=# alter table t alter column id type numeric(8,2);
+ALTER TABLE
+digoal=# select pg_relation_filepath('t'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/17548
+(1 row)
+
+
+当修改了精度时, 也需要rewrite table.
+
+digoal=# alter table t alter column id type numeric(19,3);
+ALTER TABLE
+digoal=# select pg_relation_filepath('t'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/17551
+(1 row)
+
+
+降低精度和扩展精度一样, 都会rewrite table.
+
+digoal=# alter table t alter column id type numeric(19,2);
+ALTER TABLE
+digoal=# select pg_relation_filepath('t'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/17554
+(1 row)
+
+
+
+在oracle中的测试如下 : 
+
+SQL> create table t(id numeric(10,2));
+Table created.
+SQL> insert into t select rownum from dual connect by level <=10000;
+10000 rows created.
+SQL> set pagesize 1000 linesize 190
+SQL> select * from dba_extents where segment_name='T';
+
+OWNER                          SEGMENT_NAME                                                                      PARTITION_NAME SEGMENT_TYPE
+------------------------------ --------------------------------------------------------------------------------- ------------------------------ ------------------
+TABLESPACE_NAME                 EXTENT_ID    FILE_ID   BLOCK_ID      BYTES     BLOCKS RELATIVE_FNO
+------------------------------ ---------- ---------- ---------- ---------- ---------- ------------
+SYS                            TTABLE
+SYSTEM                                  0          1      61513      65536          8            1
+
+SYS                            TTABLE
+SYSTEM                                  1          1      61521      65536          8            1
+
+SYS                            TTABLE
+SYSTEM                                  2          1      61529      65536          8            1
+
+
+扩展精度不会带来rewrite table.
+
+SQL> alter table t modify id numeric(12,3);
+Table altered.
+SQL> select * from dba_extents where segment_name='T';
+
+OWNER                          SEGMENT_NAME                                                                      PARTITION_NAME SEGMENT_TYPE
+------------------------------ --------------------------------------------------------------------------------- ------------------------------ ------------------
+TABLESPACE_NAME                 EXTENT_ID    FILE_ID   BLOCK_ID      BYTES     BLOCKS RELATIVE_FNO
+------------------------------ ---------- ---------- ---------- ---------- ---------- ------------
+SYS                            TTABLE
+SYSTEM                                  0          1      61513      65536          8            1
+
+SYS                            TTABLE
+SYSTEM                                  1          1      61521      65536          8            1
+
+SYS                            TTABLE
+SYSTEM                                  2          1      61529      65536          8            1
+
+
+在不增加长度的情况下, 不允许扩展长度.
+
+SQL> alter table t modify id numeric(12,4);
+alter table t modify id numeric(12,4)
+                     *
+ERROR at line 1:
+ORA-01440: column to be modified must be empty to decrease precision or scale
+
+
+长度和精度同时扩展, 不会rewrite table.
+
+SQL> alter table t modify id numeric(13,4);
+Table altered.
+SQL> select * from dba_extents where segment_name='T';
+
+OWNER                          SEGMENT_NAME                                                                      PARTITION_NAME SEGMENT_TYPE
+------------------------------ --------------------------------------------------------------------------------- ------------------------------ ------------------
+TABLESPACE_NAME                 EXTENT_ID    FILE_ID   BLOCK_ID      BYTES     BLOCKS RELATIVE_FNO
+------------------------------ ---------- ---------- ---------- ---------- ---------- ------------
+SYS                            TTABLE
+SYSTEM                                  0          1      61513      65536          8            1
+
+SYS                            TTABLE
+SYSTEM                                  1          1      61521      65536          8            1
+
+SYS                            TTABLE
+SYSTEM                                  2          1      61529      65536          8            1
+
+
+
+PostgreSQL中为什么修改scale, 也就是精度会导致rewrite table 呢?
+来看看物理存储(cstring), 4个有效小数位, 末尾会存储00
+
+digoal=# select numeric_out(100.12::numeric(10,4));
+ numeric_out 
+-------------
+ 100.1200
+(1 row)
+
+
+3个有效位, 末尾多一个0
+
+digoal=# select numeric_out(100.12::numeric(10,3));
+ numeric_out 
+-------------
+ 100.120
+(1 row)
+
+
+5个有效位, 末尾多3个0
+
+digoal=# select numeric_out(100.12::numeric(10,5));
+ numeric_out 
+-------------
+ 100.12000
+(1 row)
+
+
+当扩展长度时, 存储的数字和前面一样, 因为只存储了有效数字.
+
+digoal=# select numeric_out(100.12::numeric(20,5));
+ numeric_out 
+-------------
+ 100.12000
+(1 row)
+
+
+
+下面通过物理存储来得到面向用户的输出, 首先我们如果要输出numeric(10,2)这样的数据. 先得到typmod.
+
+digoal=# select numerictypmodin(_cstring '{10,2}');
+ numerictypmodin 
+-----------------
+          655366
+(1 row)
+
+
+然后使用numeric_in得到面向用户的输出.
+
+digoal=# select numeric_in('100.1200',1700,655366);
+ numeric_in 
+------------
+     100.12
+(1 row)
+digoal=# select numeric_in('100.1550',1700,655366);
+ numeric_in 
+------------
+     100.16
+(1 row)
+
+
+在物理存储和typmod不匹配的情况下, 输出的值和物理存储不一致.
+因此PostgreSQL这套数字物理存储, 就决定了在修改精度时必须要rewrite table.
+
+如果通过修改catalog来达到修改长度的目的, 可以这么做.
+
+digoal=# \d t1
+         Table "public.t1"
+ Column |     Type      | Modifiers 
+--------+---------------+-----------
+ id     | numeric(10,3) | 
+
+digoal=# select * from t1;
+   id    
+---------
+ 123.556
+(1 row)
+假设我们要缩小精度到numeric(10,2).
+digoal=# select numerictypmodin(_cstring '{10,2}');
+ numerictypmodin 
+-----------------
+          655366
+(1 row)
+digoal=# select * from pg_attribute where attrelid ='t1'::regclass and attname='id';
+-[ RECORD 1 ]-+-------
+attrelid      | 16481
+attname       | id
+atttypid      | 1700
+attstattarget | -1
+attlen        | -1
+attnum        | 1
+attndims      | 0
+attcacheoff   | -1
+atttypmod     | 655367
+attbyval      | f
+attstorage    | m
+attalign      | i
+attnotnull    | f
+atthasdef     | f
+attisdropped  | f
+attislocal    | t
+attinhcount   | 0
+attcollation  | 0
+attacl        | 
+attoptions    | 
+attfdwoptions | 
+调整catalog后, 精度修改了.
+digoal=# update pg_attribute set atttypmod=655366 where attrelid ='t1'::regclass and attname='id';
+UPDATE 1
+digoal=# select * from t1;
+-[ RECORD 1 ]
+id | 123.556
+digoal=# \d t1
+         Table "public.t1"
+ Column |     Type      | Modifiers 
+--------+---------------+-----------
+ id     | numeric(10,2) | 
+因为是通过修改catalog达到调整精度的目的, 所以原值不变, 从numeric的物理存储结构来看已经包含了typmod的存储, 见本文末尾, 所以原始值输出的时候numeric_in, 得到的值是123.556, 而不是123.56.
+digoal=# insert into t1 values (123.5555);
+INSERT 0 1
+digoal=# select * from t1;
+-[ RECORD 1 ]
+id | 123.556
+-[ RECORD 2 ]
+id | 123.56
+
+
+
+但是对于扩长度是很有效的, 不会破坏逻辑规则(如上面缩小精度带来的输出原始值123.556的问题), 同时规避了rewrite table的问题.
+
+digoal=# select numerictypmodin(_cstring '{10,4}');
+-[ RECORD 1 ]---+-------
+numerictypmodin | 655368
+
+digoal=# update pg_attribute set atttypmod=655368 where attrelid ='t1'::regclass and attname='id';
+UPDATE 1
+digoal=# \d t1
+         Table "public.t1"
+ Column |     Type      | Modifiers 
+--------+---------------+-----------
+ id     | numeric(10,4) | 
+
+digoal=# select * from t1;
+-[ RECORD 1 ]
+id | 123.556
+-[ RECORD 2 ]
+id | 123.56
+
+digoal=# insert into t1 values (123.55555);
+INSERT 0 1
+digoal=# select * from t1;
+-[ RECORD 1 ]
+id | 123.556
+-[ RECORD 2 ]
+id | 123.56
+-[ RECORD 3 ]
+id | 123.5556
+
+
+
+[小结]
+1. 在精度调整方面, PostgreSQL目前还是需要改进的, 因为扩展精度不会造成数据变更. 所以可以不rewrite table. 
+当然如果对PG熟悉的话, 可以通过调整catalog定义来绕过rewrite table, 对普通用户不太实用. 
+2. oracle不允许表有数据的情况下降低精度, 原因是降低精度会带来数据的变更, 
+例如 : 
+
+digoal=# select numeric_in('100.1550',1700,655366);
+ numeric_in 
+------------
+     100.16
+(1 row)
+
+
+显然数据已经不一样了.
+但是PostgreSQL允许你降低精度,并且没有提示, 这个确实有待改进,
+
+digoal=# create table t1 (id numeric(10,5));
+CREATE TABLE
+digoal=# insert  into t1 values (123.5555);
+INSERT 0 1
+digoal=# select * from t1;
+    id     
+-----------
+ 123.55550
+(1 row)
+digoal=# alter table t1 alter column id type numeric(10,3);
+ALTER TABLE
+digoal=# select * from t1;
+   id    
+---------
+ 123.556
+(1 row)
+
+
+修改精度后, 数据实际上变更了.
+3. 另一方面, oracle扩展精度时, 底层存储的数据并未修改, 在输出时输出也未包含末尾的0, 也就是说oracle没有严格按照字段定义的有效位数来输出. 这也要批评一下oracle了. 
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201371763839672/
+2. src/backend/utils/adt/numeric.c
+物理存储.
+
+struct NumericShort
+{
+        uint16          n_header;               /* Sign + display scale + weight */
+        NumericDigit n_data[1];         /* Digits */
+};
+
+struct NumericLong
+{
+        uint16          n_sign_dscale;  /* Sign + display scale */
+        int16           n_weight;               /* Weight of 1st digit  */
+        NumericDigit n_data[1];         /* Digits */
+};
+
+union NumericChoice
+{
+        uint16          n_header;               /* Header word */
+        struct NumericLong n_long;      /* Long form (4-byte header) */
+        struct NumericShort n_short;    /* Short form (2-byte header) */
+};
+
+struct NumericData
+{
+        int32           vl_len_;                /* varlena header (do not touch directly!) */
+        union NumericChoice choice; /* choice of format */
+};
+
+

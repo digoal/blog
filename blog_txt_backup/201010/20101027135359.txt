@@ -1,0 +1,105 @@
+PostgreSQL research
+
+One minute io hang when Add ISL Trunking License to Brocade Fabric
+
+2010-10-27 13:53:59   查看原文>>
+
+有一个SAN环境，edge层的交换机需要添加ISL的许可，（CORE层的交换机已经有了ISL许可）。
+
+环境如下:
+
+One minute io hang when Add ISL Trunking License to Brocade Fabric - 德哥@Digoal - The Heart,The World.
+
+ 在Core层的交换机上switchshow可以看到与另一个Core互联的ISL口如下:
+
+ 20  20   id    N8   Online           E-Port  (Trunk port, master is Port 23 )
+ 21  21   id    N8   Online           E-Port  (Trunk port, master is Port 23 )
+ 22  22   id    N8   Online           E-Port  (Trunk port, master is Port 23 )
+ 23  23   id    N8   Online           E-Port  10:00:00:xx:xx:xx:xx:xx "fabric2-core-e07-192168162023" (upstream)(Trunk master)
+
+在Edge层的交换机上switchshow可以看到连接Core层交换机的几个口状态如下:
+
+ 20  20   0a0600   id    N8   Online      FC  E-Port  10:00:00:xx:xx:xx:xx:xx "fabric2-core-e08-192168162028"
+ 21  21   0a0400   id    N8   Online      FC  E-Port  10:00:00:xx:xx:xx:xx:xx "fabric2-core-e08-192168162028"
+ 22  22   0a0200   id    N8   Online      FC  E-Port  10:00:00:xx:xx:xx:xx:xx "fabric2-core-e08-192168162028"
+ 23  23   0a0000   id    N8   Online      FC  E-Port  10:00:00:xx:xx:xx:xx:xx "fabric2-core-e08-192168162028" (upstream)
+
+添加license：
+
+首先要到博科的网站上申请许可，申请完后通过licenseadd添加。添加完后会提示使用portdisable portenable 或switchdisable switchenable来生效。
+
+由于只涉及到EDGE与CORE交换机互联的几个口子。所以使用portdisable 20;portenable 20;portdisable 21;portenable 21;portdisable 22;portenable 22;portdisable 23;portenable 23;来激活对应口子的ISL。
+
+激活后查看相关PORT状态:
+
+edge:
+
+ 20  20   090600   id    N8   Online      FC  E-Port  10:00:00:xx:xx:xx:xx:xx "fabric2-core-e07-192168162023" (upstream)(Trunk master) 
+ 21  21   090400   id    N8   Online      FC  E-Port  (Trunk port, master is Port 20 )
+ 22  22   090200   id    N8   Online      FC  E-Port  (Trunk port, master is Port 20 )
+ 23  23   090000   id    N8   Online      FC  E-Port  (Trunk port, master is Port 20 )
+
+core与edge连接口:
+
+ 16  16   id    N8   Online           E-Port  10:00:00:xx:xx:xx:xx:xx "fabric2-edge-e11-192168162046" (downstream)(Trunk master) 
+ 17  17   id    N8   Online           E-Port  (Trunk port, master is Port 16 )
+ 18  18   id    N8   Online           E-Port  (Trunk port, master is Port 16 )
+ 19  19   id    N8   Online           E-Port  (Trunk port, master is Port 16 )
+
+操作完以后在上层的服务器上看到一些异常输出：
+
+服务器的DMESG输出（与操作时间吻合）：
+
+Oct 27 10:32:43 db_192_168_173_62_logdb kernel: qla2xxx 0000:07:00.0: scsi(0:0:1): Abort command issued -- 1 5309a0 2002.
+
+查看PostgreSQL数据库日志,发现有一堆如下日志输出，持续时间约60秒:
+
+2010-10-27 10:31:54.299 CST,"xxxx","xxxx",32212,"192.168.169.33:36466",4cbd13c4.7dd4,28,"INSERT waiting",2010-10-19 11:43:00 CST,9/461231,100827970,LOG,00000,"process 32212 still waiting for ExclusiveLock on extension of relation 22650 of database 22240 after 1000.889 ms",,,,,,"INSERT INTO tbl_download_stat
+.......................
+
+从数据库日志上看正在等待数据库对象物理存储扩展的操作。根据PRIMARY KEY查看这些记录在数据库中的物理存储位置，发现都是新建BLOCK的操作。
+
+如：select ctid,cmin,cmax,xmin,xmax,* from tbl_download_stat where pk_column='';
+
+..............................
+
+返回结果如:
+
+(364981,1)
+(364982,1)
+(364983,1)
+(364984,1)
+(364985,1)
+(364986,1)
+
+格式为(block number in the file,tuple id in the block),从结果上看这些操作都是新建BLOCK的操作。
+
+说明对存储的写操作被堵了1分钟左右。否则不会有大量的申请新建BLOCK的操作。
+
+process 32212 still waiting for ExclusiveLock on extension of relation 22650 of database 22240 after 1000.889 ms
+
+deadlock_timeout = 1s这个参数决定等待超过1秒的都会输出到数据库日志.
+
+这里的ExclusiveLock和数据库逻辑层面的锁是两回事,可以使用Dynamic Tracing来跟踪。
+
+【附】
+
+A Fabric License allows you to connect two or more switches to form a fabric.
+Trunking allows a frame-level load sharing on two or more ISLs (Inter Switch Links) between two switches.
+A Fibre Channel environment usually requires that all frames are received in the same order they were sent. By default, traffic between any two devices uses only one ISL (Inter Switch Link), even if two or more interconnects exist to avoid that a frame gets ahead of one that was sent earlier.
+Trunking uses special hardware features within a switch and has some requirements, e.g. only a subset of ports can form a trunking group or the distance of all ISLs within a trunk must be within a certain range.
+
+ISL是帧级别的负载共享机制。但并不是所有的帧都可以用到多端口来共享负载，因为还有接收顺序的关系（可能和源地址有关系）。
+
+评论
+
+Charlie@VMware - 2010-10-29 1:37:41
+
+是的，因为在加入新的ISL链接的时候，交换机会重新计算路由，也就是常说的Fabric reconfigure, 对正在运行IO是会有一定的Hang，但是正常的Fabirc中，Hang的时候会很短，绝大多数主机应该不会有IO的报错（一个IO Time OUT之内）
+
+楼主有想交流可以通过：msn联系我 zjcailidong@163.com
+
+德哥@Digoal 回复 Charlie@VMware - 2010-10-29 1:37:41
+
+太感谢了，以后请Charlie@VMware兄弟多多指教。
+

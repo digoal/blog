@@ -1,0 +1,512 @@
+PostgreSQL research
+
+PostgreSQL's pgsql_tmp like oracle's temp tablespace
+
+2011-07-22 22:17:27   查看原文>>
+
+  在Oracle里面，不同的用户可以指定不同的默认临时表空间。
+  在PostgreSQL里面，临时目录pgsql_tmp。是放在数据库的默认表空间里面。如果建数据库的时候没有指定默认表空间，那么pgsql_tmp放在
+$PGDATA/base/pgsql_tmp，如果指定了默认表空间，那么放在默认表空间里面.
+如 : 
+digoal=> \db
+                   List of tablespaces
+    Name    |  Owner   |            Location             
+------------+----------+---------------------------------
+ pg_default | postgres | 
+ pg_global  | postgres | 
+ tbs_digoal | digoal   | /home/pgdata/pg_root/tbs_digoal
+digoal数据库的默认表空间是tbs_digoal,那么在/home/pgdata/pg_root/tbs_digoal里面肯定有一个pgsql_tmp目录.
+postgres@db5-> ll /home/pgdata/pg_root/tbs_digoal/PG_9.1_201105231/
+total 16K
+drwx------ 2 postgres postgres  12K Jul 22 15:52 16386
+drwx------ 2 postgres postgres 4.0K Jul 22 16:29 pgsql_tmp
+
+  pgsql_tmp功能与Oracle数据库的temp tablespace功能类似，用于存放排序,hash表等产生的临时数据,如order by,group by,distinct,merge join等操作。
+  pgsql_tmp目录中，文件格式如下:
+pgsql_tmpPPP.NNN
+其中PPP表示数据库backend process的PID，NNN表示这个BACKEND PROCESS产生的第N个临时文件。
+pgsql_tmp中的使用和work_mem参数至关重要，work_mem很小时，如果排序操作超出work_mem定制的SIZE,那么会使用到pgsql_tmp。不仅如此,PostgreSQL不是说work_mem能满足就一定不写pgsql_tmp目录，有时候还是会用到pgsql_tmp。下面举例来看看是什么情况:
+
+首先建立测试数据 : 
+digoal=> create table user_info (id bigint,firstname text,lastname text,corp text,post text,age int,crt_time timestamp without time zone,comment text);
+CREATE TABLE
+digoal=> insert into user_info select generate_series(1,5000000),'zhou','digoal'||generate_series(2,5000001),'sky-mobi','dba team leader',28,clock_timestamp(),'flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj'||generate_series(3,5000002);
+INSERT 0 5000000
+digoal=> analyze user_info;
+ANALYZE
+digoal=> select pg_relation_size('user_info')/1024/1024;
+ ?column? 
+----------
+      831
+下面这个表主要是测算ID所占用的空间大概是多少。（待会用ID来做group by或distinct,我们可以看看数据库需要多少临时空间来处理这种SQL操作.最终你会发现，数据库需要的空间和实际排序用到的空间差不多）
+digoal=> create table user_id (id bigint);
+CREATE TABLE
+digoal=> insert into user_id select generate_series(1,5000000);
+INSERT 0 5000000
+digoal=> select pg_relation_size('user_id')/1024/1024;
+ ?column? 
+----------
+      172
+因为有PAGE和tuple的头部信息，所以实际上ID占用的空间约120MB
+
+查看当前的work_mem配置 : 
+digoal=> show work_mem;
+ work_mem 
+----------
+ 1MB
+
+因为ID内容约120MB，这里使用ID来分组或DISTINCT的话，我们可以想象，肯定是用到pgsql_tmp的。如下验证了我们的猜想。
+# Sort Method: external sort  Disk: 87984kB
+digoal=> explain analyze verbose select distinct id from user_info;
+                                                                QUERY PLAN                                                          
+      
+------------------------------------------------------------------------------------------------------------------------------------
+------
+ Unique  (cost=859215.04..884215.22 rows=5000036 width=8) (actual time=10747.954..20153.818 rows=5000000 loops=1)
+   Output: id
+   ->  Sort  (cost=859215.04..871715.13 rows=5000036 width=8) (actual time=10747.951..14051.498 rows=5000000 loops=1)
+         Output: id
+         Sort Key: user_info.id
+         Sort Method: external sort  Disk: 87984kB
+         ->  Seq Scan on digoal.user_info  (cost=0.00..156383.36 rows=5000036 width=8) (actual time=0.014..3689.517 rows=5000000 loo
+ps=1)
+               Output: id
+ Total runtime: 22895.580 ms
+(9 rows)
+
+在执行过程中在/home/pgdata/pg_root/tbs_digoal/PG_9.1_201105231/pgsql_tmp中产生文件pgsql_tmp23123.0 大小就是87984kB。
+执行完这个文件自动删除。
+
+然后我们来加大work_mem到120MB看看还用不用pgsql_tmp
+digoal=> set work_mem='120 MB';
+SET
+digoal=> explain analyze verbose select distinct id from user_info;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=168883.45..218883.81 rows=5000036 width=8) (actual time=8561.560..13222.270 rows=5000000 loops=1)
+   Output: id
+   ->  Seq Scan on digoal.user_info  (cost=0.00..156383.36 rows=5000036 width=8) (actual time=0.021..3665.240 rows=5000000 loops=1)
+         Output: id
+ Total runtime: 16016.834 ms
+显然已经不使用disk文件了。
+
+然后我们换一句SQL，distinct id,comment看看会不会用disk。因为id+comment是当前的排序操作内容，大于120MB。我们预计是会使用DISK的。
+结果与我们预期的一致：
+digoal=> explain analyze verbose select distinct id,comment from user_info;
+                                                                QUERY PLAN                                                          
+       
+------------------------------------------------------------------------------------------------------------------------------------
+-------
+ Unique  (cost=883625.04..921125.31 rows=5000036 width=83) (actual time=14416.251..25803.966 rows=5000000 loops=1)
+   Output: id, comment
+   ->  Sort  (cost=883625.04..896125.13 rows=5000036 width=83) (actual time=14416.248..18399.329 rows=5000000 loops=1)
+         Output: id, comment
+         Sort Key: user_info.id, user_info.comment
+         Sort Method: external merge  Disk: 458352kB
+         ->  Seq Scan on digoal.user_info  (cost=0.00..156383.36 rows=5000036 width=83) (actual time=0.011..4205.069 rows=5000000 lo
+ops=1)
+               Output: id, comment
+ Total runtime: 28704.160 ms
+(9 rows)
+接下来我们加大work_mem到458352kB+120MB看看是什么情况?
+digoal=> explain analyze verbose select distinct id,comment from user_info;
+                                                             QUERY PLAN                                                             
+ 
+------------------------------------------------------------------------------------------------------------------------------------
+-
+ HashAggregate  (cost=181383.54..231383.90 rows=5000036 width=83) (actual time=10108.302..14901.176 rows=5000000 loops=1)
+   Output: id, comment
+   ->  Seq Scan on digoal.user_info  (cost=0.00..156383.36 rows=5000036 width=83) (actual time=0.020..4080.396 rows=5000000 loops=1)
+         Output: id, comment
+ Total runtime: 17653.570 ms
+(5 rows)
+显然，不需要使用DISK了。
+
+再次调整work_mem到 < 458352kB的值如370 MB.看看什么情况?
+digoal=> set work_mem='370 MB';
+SET
+digoal=> explain analyze verbose select distinct id,comment from user_info;
+                                                                QUERY PLAN                                                          
+       
+------------------------------------------------------------------------------------------------------------------------------------
+-------
+ Unique  (cost=883625.04..921125.31 rows=5000036 width=83) (actual time=14656.450..25803.112 rows=5000000 loops=1)
+   Output: id, comment
+   ->  Sort  (cost=883625.04..896125.13 rows=5000036 width=83) (actual time=14656.447..18389.175 rows=5000000 loops=1)
+         Output: id, comment
+         Sort Key: user_info.id, user_info.comment
+         Sort Method: external merge  Disk: 458352kB
+         ->  Seq Scan on digoal.user_info  (cost=0.00..156383.36 rows=5000036 width=83) (actual time=0.014..4138.056 rows=5000000 lo
+ops=1)
+               Output: id, comment
+ Total runtime: 28735.377 ms
+是不是很奇怪？没错work_mem的370MB没有被使用，直接使用磁盘了。说明work_mem不满足需求的时候，就全部使用磁盘了。
+
+再次调整work_mem到一个极其大的数字，目的是看看work_mem是不是一次性allocate的，还是需要多少用多少？为确保公正，我们重新开一个session。
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+psql (9.1beta2)
+Type "help" for help.
+
+digoal=> select pg_backend_pid();
+ pg_backend_pid 
+----------------
+          23496
+查看23496这个backend process当前使用的内存是多少.如下，结果是4176KB。
+postgres@db5-> ps -eo pid,rss,cmd|grep 23496
+23496  4176 postgres: digoal digoal 127.0.0.1(2486) idle
+
+下面执行一个SQL，看看RSS的变化。
+digoal=> set work_mem='10240 MB';
+SET
+digoal=> explain analyze verbose select distinct id,comment from user_info;
+                                                             QUERY PLAN                                                             
+ 
+------------------------------------------------------------------------------------------------------------------------------------
+-
+ HashAggregate  (cost=181383.54..231383.90 rows=5000036 width=83) (actual time=10480.524..15375.754 rows=5000000 loops=1)
+   Output: id, comment
+   ->  Seq Scan on digoal.user_info  (cost=0.00..156383.36 rows=5000036 width=83) (actual time=0.052..4387.955 rows=5000000 loops=1)
+         Output: id, comment
+ Total runtime: 18207.895 ms
+(5 rows)
+查看内存消耗等于1767168KB ,约1.7GB。
+postgres@db5-> ps -eo pid,rss,cmd|grep 23496
+23496 1767168 postgres: digoal digoal 127.0.0.1(2486) EXPLAIN
+SQL执行完后,内存消耗降低到877276KB ，约870MB。也就是说刚才的distinct操作用掉了约830MB内存。
+postgres@db5-> ps -eo pid,rss,cmd|grep 23496
+23496 877276 postgres: digoal digoal 127.0.0.1(2486) idle
+为什么内存要用掉830MB,而磁盘只需要458352kB呢?将近一倍。
+原因很简单，回想一下这个表是不是约830MB呢，再看看两次的执行计划，是不是不一样呢？而且执行完后进程还保留了870MB左右的内存，实际上就是user_info表的数据占据的空间以及其他分配给backend process的内存。而使用磁盘的时候，只用到了id和comment字段的内容，约458352kB。
+我们再往表里插入一些数据来证实一下这个想法：
+digoal=> insert into user_info select generate_series(1,5000000),'zhou','digoal'||generate_series(2,5000001),'sky-mobi','dba team leader',28,clock_timestamp(),'flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj'||generate_series(3,5000002);
+INSERT 0 5000000
+digoal=> analyze user_info;
+ANALYZE
+digoal=> select pg_relation_size('user_info')/1024/1024;
+ ?column? 
+----------
+     1698
+此时表的SIZE是1698MB,同样我们执行如下SQL
+
+digoal=> explain analyze verbose select distinct id,comment from user_info;
+                                                              QUERY PLAN                                                            
+   
+------------------------------------------------------------------------------------------------------------------------------------
+---
+ HashAggregate  (cost=369825.15..471442.58 rows=10161743 width=86) (actual time=20834.803..30828.287 rows=10000000 loops=1)
+   Output: id, comment
+   ->  Seq Scan on digoal.user_info  (cost=0.00..319016.43 rows=10161743 width=86) (actual time=0.021..8309.780 rows=10000000 loops=
+1)
+         Output: id, comment
+ Total runtime: 36475.840 ms
+再次查看内存的使用，没错现在的使用是3.6GB
+postgres@db5-> ps -eo pid,rss,cmd|grep 23496
+23496 3632540 postgres: digoal digoal 127.0.0.1(2486) EXPLAIN
+执行完后驻留了1.8GB。是不是刚好排序使用的是1698MB呢。没错。
+postgres@db5-> ps -eo pid,rss,cmd|grep 23496
+23496 1858568 postgres: digoal digoal 127.0.0.1(2486) idle
+注意，1858568这部分被驻留的内存应该是操作系统OS CACHE。驻留的behavior可以通过posix来调整.pg_fincore就是不错的一个软件。
+
+接下来我们要测试一下pgsql_tmp这个里面的文件,在执行过程中删掉会怎么样?
+首先把work_mem调下来,
+digoal=> set work_mem='1 MB';
+SET
+然后执行如下SQL
+digoal=> select distinct id,comment from user_info limit 100;
+然后马上到/home/pgdata/pg_root/tbs_digoal/PG_9.1_201105231/pgsql_tmp删除pgsql_tmp23496.*
+神奇的事情发生了，结果可以正常返回。
+ id |                                  comment                                   
+----+----------------------------------------------------------------------------
+  1 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj3
+  1 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj3
+  2 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj4
+  2 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj4
+  3 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj5
+  3 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj5
+  4 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj6
+  4 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj6
+  5 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj7
+  5 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj7
+  6 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj8
+  6 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj8
+  7 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj9
+  7 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj9
+  8 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj10
+  8 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj10
+  9 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj11
+  9 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj11
+ 10 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj12
+ 10 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj12
+ 11 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj13
+ 11 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj13
+ 12 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj14
+ 12 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj14
+ 13 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj15
+ 13 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj15
+ 14 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj16
+ 14 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj16
+ 15 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj17
+ 15 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj17
+ 16 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj18
+ 16 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj18
+ 17 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj19
+ 17 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj19
+ 18 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj20
+ 18 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj20
+ 19 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj21
+ 19 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj21
+ 20 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj22
+ 20 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj22
+ 21 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj23
+ 21 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj23
+ 22 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj24
+ 22 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj24
+ 23 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj25
+ 23 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj25
+ 24 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj26
+ 24 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj26
+ 25 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj27
+ 25 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj27
+ 26 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj28
+ 26 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj28
+ 27 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj29
+ 27 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj29
+ 28 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj30
+ 28 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj30
+ 29 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj31
+ 29 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj31
+ 30 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj32
+ 30 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj32
+ 31 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj33
+ 31 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj33
+ 32 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj34
+ 32 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj34
+ 33 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj35
+ 33 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj35
+ 34 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj36
+ 34 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj36
+ 35 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj37
+ 35 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj37
+ 36 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj38
+ 36 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj38
+ 37 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj39
+ 37 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj39
+ 38 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj40
+ 38 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj40
+ 39 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj41
+ 39 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj41
+ 40 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj42
+ 40 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj42
+ 41 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj43
+ 41 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj43
+ 42 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj44
+ 42 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj44
+ 43 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj45
+ 43 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj45
+ 44 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj46
+ 44 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj46
+ 45 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj47
+ 45 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj47
+ 46 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj48
+ 46 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj48
+ 47 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj49
+ 47 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj49
+ 48 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj50
+ 48 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj50
+ 49 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj51
+ 49 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj51
+ 50 | flkejwkhnlkjahg()JIOlk  fkljkejhnKHJLKJHFKWEhgfoi2o43it09KHKJFnhrksj52
+ 50 | flkejwkhnlkjahgJLIJFOIJOIJEGF fkljkejhnKHJL你好Ehgfoi2o43it09KHKJFnhrksj52
+(100 rows)
+
+那么pgsql_tmp里面的文件存储的到底是啥呢？
+在源代码中我找到了这个相关的。
+src/include/storage/fd.h
+/* Filename components for OpenTemporaryFile */
+#define PG_TEMP_FILES_DIR "pgsql_tmp"
+#define PG_TEMP_FILE_PREFIX "pgsql_tmp"
+src/backend/storage/file/fd.c
+/*
+ * Remove temporary and temporary relation files left over from a prior
+ * postmaster session
+ *
+ * This should be called during postmaster startup.  It will forcibly
+ * remove any leftover files created by OpenTemporaryFile and any leftover
+ * temporary relation files created by mdcreate.
+ *
+ * NOTE: we could, but don't, call this during a post-backend-crash restart
+ * cycle.  The argument for not doing it is that someone might want to examine
+ * the temp files for debugging purposes.  This does however mean that
+ * OpenTemporaryFile had better allow for collision with an existing temp
+ * file name.
+ */
+        /*
+         * In EXEC_BACKEND case there is a pgsql_tmp directory at the top level of
+         * DataDir as well.
+         */
+#ifdef EXEC_BACKEND
+        RemovePgTempFilesInDir(PG_TEMP_FILES_DIR);
+#endif
+/* Process one pgsql_tmp directory for RemovePgTempFiles */
+static void
+RemovePgTempFilesInDir(const char *tmpdirname)
+{
+        DIR                *temp_dir;
+        struct dirent *temp_de;
+        char            rm_path[MAXPGPATH];
+
+        temp_dir = AllocateDir(tmpdirname);
+        if (temp_dir == NULL)
+        {
+                /* anything except ENOENT is fishy */
+                if (errno != ENOENT)
+                        elog(LOG,
+                                 "could not open temporary-files directory \"%s\": %m",
+                                 tmpdirname);
+                return;
+        }
+
+        while ((temp_de = ReadDir(temp_dir, tmpdirname)) != NULL)
+        {
+                if (strcmp(temp_de->d_name, ".") == 0 ||
+                        strcmp(temp_de->d_name, "..") == 0)
+                        continue;
+
+                snprintf(rm_path, sizeof(rm_path), "%s/%s",
+                                 tmpdirname, temp_de->d_name);
+
+                if (strncmp(temp_de->d_name,
+                                        PG_TEMP_FILE_PREFIX,
+                                        strlen(PG_TEMP_FILE_PREFIX)) == 0)
+                        unlink(rm_path);        /* note we ignore any error */
+                else
+                        elog(LOG,
+                                 "unexpected file found in temporary-files directory: \"%s\"",
+                                 rm_path);
+        }
+
+        FreeDir(temp_dir);
+}
+
+相信在src/backend/storage/file/fd.c中可以找到答案.
+
+另外我们再来验证一下手册上说的work_mem的内容不会复用。
+Session 1 : 
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+psql (9.1beta2)
+Type "help" for help.
+
+digoal=> set work_mem='10240 MB';
+SET
+digoal=> explain analyze verbose select distinct id,comment from user_info order by id,comment desc;
+                                                                 QUERY PLAN                                                         
+         
+------------------------------------------------------------------------------------------------------------------------------------
+---------
+ Unique  (cost=1501672.83..1577885.90 rows=10161743 width=86) (actual time=24547.376..44742.270 rows=10000000 loops=1)
+   Output: id, comment
+   ->  Sort  (cost=1501672.83..1527077.19 rows=10161743 width=86) (actual time=24547.371..31096.446 rows=10000000 loops=1)
+         Output: id, comment
+         Sort Key: user_info.id, user_info.comment
+         Sort Method: quicksort  Memory: 1799467kB
+         ->  Seq Scan on digoal.user_info  (cost=0.00..319016.43 rows=10161743 width=86) (actual time=0.028..8872.090 rows=10000000 
+loops=1)
+               Output: id, comment
+ Total runtime: 51242.900 ms
+(9 rows)
+
+Session 2 : 
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+psql (9.1beta2)
+Type "help" for help.
+
+digoal=> set work_mem='10240 MB';
+SET
+digoal=> explain analyze verbose select distinct id,comment from user_info order by id,comment desc;
+                                                                 QUERY PLAN                                                         
+         
+------------------------------------------------------------------------------------------------------------------------------------
+---------
+ Unique  (cost=1501672.83..1577885.90 rows=10161743 width=86) (actual time=24529.584..44689.774 rows=10000000 loops=1)
+   Output: id, comment
+   ->  Sort  (cost=1501672.83..1527077.19 rows=10161743 width=86) (actual time=24529.579..31043.949 rows=10000000 loops=1)
+         Output: id, comment
+         Sort Key: user_info.id, user_info.comment
+         Sort Method: quicksort  Memory: 1799467kB
+         ->  Seq Scan on digoal.user_info  (cost=0.00..319016.43 rows=10161743 width=86) (actual time=0.021..8925.400 rows=10000000 
+loops=1)
+               Output: id, comment
+ Total runtime: 51170.098 ms
+(9 rows)
+# 注意到这里又用到了一种新的Sort Method :  quicksort  Memory: 1799467kB
+下面来分析一下OS层监控到的内存使用情况,
+1. 执行explain analyze之前
+top - 07:01:00 up 17 days, 15:30,  3 users,  load average: 0.54, 0.57, 0.25
+Tasks: 160 total,   1 running, 159 sleeping,   0 stopped,   0 zombie
+Cpu(s):  0.1%us,  0.1%sy,  0.0%ni, 99.8%id,  0.0%wa,  0.0%hi,  0.0%si,  0.0%st
+Mem:  16438912k total,  9507680k used,  6931232k free,   163756k buffers
+Swap: 16777208k total,    18432k used, 16758776k free,  8979204k cached
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 4444 postgres  15   0 2324m 3672 2060 S    0  0.0   0:00.00 postgres: digoal digoal 127.0.0.1(42278) idle                                                      
+ 4446 postgres  15   0 2324m 3672 2060 S    0  0.0   0:00.00 postgres: digoal digoal 127.0.0.1(42279) idle                          
+2. 执行explain analyze过程中
+top - 07:01:54 up 17 days, 15:31,  3 users,  load average: 1.20, 0.73, 0.32
+Tasks: 160 total,   3 running, 157 sleeping,   0 stopped,   0 zombie
+Cpu(s): 25.0%us,  0.1%sy,  0.0%ni, 74.7%id,  0.1%wa,  0.0%hi,  0.0%si,  0.0%st
+Mem:  16438912k total, 12805700k used,  3633212k free,   163848k buffers
+Swap: 16777208k total,    18432k used, 16758776k free,  8979204k cached
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 4444 postgres  25   0 4085m 3.3g 1.7g R  100 20.8   0:41.43 postgres: digoal digoal 127.0.0.1(42278) EXPLAIN                       
+ 4446 postgres  25   0 4085m 3.3g 1.7g R   99 20.8   0:42.97 postgres: digoal digoal 127.0.0.1(42279) EXPLAIN     
+# 可以注意到free有变化,总体使用了约3.2G(=3.3-1.7 + 3.3-1.7)，shr=1.7G(user_info表的OS-FS cache用掉的,所以我们看到cached前后没有变化)                  
+3. 执行完explain analyze之后
+top - 07:02:07 up 17 days, 15:31,  3 users,  load average: 1.22, 0.76, 0.34
+Tasks: 160 total,   1 running, 159 sleeping,   0 stopped,   0 zombie
+Cpu(s):  0.1%us,  0.0%sy,  0.0%ni, 99.6%id,  0.2%wa,  0.0%hi,  0.0%si,  0.0%st
+Mem:  16438912k total,  9518956k used,  6919956k free,   163868k buffers
+Swap: 16777208k total,    18432k used, 16758776k free,  8979196k cached
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+4444 postgres  25   0 2324m 1.7g 1.7g S    0 10.8   0:51.15 postgres: digoal digoal 127.0.0.1(42278) idle                          
+4446 postgres  25   0 2324m 1.7g 1.7g S    0 10.8   0:51.17 postgres: digoal digoal 127.0.0.1(42279) idle 
+    执行完后，我们看到free回到执行前的水平,并且进程的res和SHR现在是相同的，原因是user_info表仍在OS-FS的cache里面。这部分是共享的开销。使用pg_fincore提供的pgfadv_willnotneed调整USER_INFO表的behavior，就能看到它很快被释放(不推荐这么做，因为PG很需要OS的CACHE)。
+    由此可以解释，sort用到的work_mem不共享或者说不复用。
+
+接下来我们把work_mem调到1MB,更能清晰的反映这个问题。
+set work_mem='1 MB';
+然后同样执行上面的两个SESSION，执行过程中会在表空间目录的pgsql_tmp   /home/pgdata/pg_root/tbs_digoal/PG_9.1_201105231/pgsql_tmp 里面产生两个临时文件pgsql_tmp4444.0和pgsql_tmp4446.0。显然不是共享的。
+
+总结 : 
+1. work_mem配多大不要紧，因为不会一次全部分配掉。manual中的as much as这个让我在之前对work_mem有所误解。
+2. work_mem配大了，确实可能造成内存的过度开销，就像上面看到的一样。
+3. Oracle早前的进程工作内存也是这么来设置的，后来引入了PGA的概念，可以将所有进程的WORK_MEM的总和圈定在一个范围内，而不用限定某一个进程的使用大小。这样的好处是显而易见的。不知道PostgreSQL什么时候会改进这个机制。
+
+
+【参考】
+Oracle : 
+
+A temporary tablespace contains transient data that persists only for the duration of the session. Temporary tablespaces can improve the concurrency of multiple sort operations, reduce their overhead, and avoid Oracle Database space management operations. A temporary tablespace can be assigned to users with the CREATE
+USER or ALTER USER statement and can be shared by multiple users.
+
+Within a temporary tablespace, all sort operations for a given instance and tablespace share a single sort segment. Sort segments exist for every instance that performs sort operations within a given tablespace. The sort segment is created by the first statement that uses a temporary tablespace for sorting, after
+startup, and is released only at shutdown. An extent cannot be shared by multiple transactions.
+
+You can view the allocation and deallocation of space in a temporary tablespace sort segment using the V$SORT_SEGMENT view. The V$TEMPSEG_USAGE view identifies the current sort users in those segments.
+
+You cannot explicitly create objects in a temporary tablespace.
+
+
+PostgreSQL : 
+
+http://www.postgresql.org/docs/9.0/static/runtime-config-resource.html#RUNTIME-CONFIG-RESOURCE-MEMORY
+
+Temporary files (for operations such as sorting more data than can fit in memory) are created within PGDATA/base/pgsql_tmp, or within a pgsql_tmp subdirectory of a tablespace directory if a tablespace other than pg_default is specified for them. The name of a temporary file has the form pgsql_tmpPPP.NNN, where PPP is
+the PID of the owning backend andNNN distinguishes different temporary files of that backend.
+
+http://www.postgresql.org/docs/9.0/static/runtime-config-resource.html#RUNTIME-CONFIG-RESOURCE-MEMORY
+work_mem (integer)
+
+    Specifies the amount of memory to be used by internal sort operations and hash tables before writing to temporary disk files. The value defaults to one megabyte (1MB). Note that for a complex query, several sort or hash operations might be running in parallel; each operation will be allowed to use as much memory
+    as this value specifies before it starts to write data into temporary files. Also, several running sessions could be doing such operations concurrently. Therefore, the total memory used could be many times the value of work_mem; it is necessary to keep this fact in mind when choosing the value. Sort operations are
+    used for ORDER BY, DISTINCT, and merge joins. Hash tables are used in hash joins, hash-based aggregation, and hash-based processing of IN subqueries.
+
+

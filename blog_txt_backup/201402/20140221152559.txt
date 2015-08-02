@@ -1,0 +1,258 @@
+PostgreSQL research
+
+test luasql's postgresql driver performance (not better than pgbench)
+
+2014-02-21 15:25:59   查看原文>>
+
+测试数据库性能的方法很多, 例如使用pgbench, sysbench.
+对PostgreSQL而言, pgbench是性能损失最小的一种测试工具, 本文将使用lua以及luasql驱动测试一下, 我们对比一下使用lua和pgbench测试的结果, 看看lua会带来多少性能损失.
+
+本文测试环境 : 
+
+Lua 5.2.3
+CentOS 6.4 x64
+PostgreSQL 9.3.1
+CPU
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.010
+
+
+
+使用2号CPU启动lua, 单线程测试. 因为0号CPU负面影响太大, 影响测试结果.
+原因见 : 
+http://blog.163.com/digoal@126/blog/static/1638770402013102610150692
+测试结果
+
+[root@db-172-16-3-150 lib]# taskset -c 2 lua
+Lua 5.2.3  Copyright (C) 1994-2013 Lua.org, PUC-Rio
+> luasql = require "luasql.postgres"
+> env = assert(luasql.postgres())
+> con = assert(env:connect("host=/ssd1/pg931/pg_root dbname=digoal user=digoal password=digoal port=1922"))
+> print(con:execute([[select 10]]):fetch())
+10
+> print(con:execute([[select 11]]):fetch())
+11
+> function foo(cnt) 
+>>  local var1 = os.time()
+>>  for i = 1,cnt do
+>>    con:execute([[select 10]])
+>>  end
+>>  return (os.time()-var1)
+>> end
+> print(foo(100))
+0
+> print(foo(100000))
+8
+> print(foo(1000000))
+84
+> print(1000000/84.0)
+11904.761904762 TPS
+
+
+
+测试过程中LUA的CPU开销 : 
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  P COMMAND                                                              
+ 6767 root      20   0  169m 5740 2328 R 21.5  0.0   0:54.69 2 lua
+
+
+
+pg_stat_activity输出, 连接为unix socket.
+
+digoal=# select * from pg_stat_activity;
+-[ RECORD 1 ]----+--------------------------------
+datid            | 16386
+datname          | digoal
+pid              | 6793
+usesysid         | 16523
+usename          | digoal
+application_name | 
+client_addr      | 
+client_hostname  | 
+client_port      | -1
+backend_start    | 2014-02-21 14:54:59.29801+08
+xact_start       | 
+query_start      | 2014-02-21 14:57:35.449137+08
+state_change     | 2014-02-21 14:57:35.44919+08
+waiting          | f
+state            | idle
+query            | select 10
+
+
+
+同样使用2号CPU, 直接使用pgbench的测试结果 : 
+
+pg931@db-172-16-3-150-> taskset -c 2 pgbench -M prepared -n -r -c 1 -j 1 -T 30 -f ./test.sql -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 1
+number of threads: 1
+duration: 30 s
+number of transactions actually processed: 430052
+tps = 14335.022228 (including connections establishing)
+tps = 14336.394217 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.068411        select 10;
+
+
+显然使用lua测试只有pgbench测试性能的83%. 损失了17%的性能.
+这个问题显然不是来自循环, 因为循环一亿次差不多也只要1秒.
+
+> function foo(cnt)                        
+ local var1 = os.time()
+ for i = 1,cnt do
+   -- con:execute([[select 10]])
+ end
+ return (os.time()-var1)
+end
+> print(foo(100000000))
+1
+
+
+那么问题出在哪里呢? 经过了解, luasql不支持prepared sql, 
+
+    (Lua SQL still makes me very sad by lacking parameterized queries
+    though. Yes, it's better than nothing, Which backends can't support a
+    norrmalized form for the most common statements?
+
+        DBMS's are very different in this aspect.
+
+        PostgreSQL [1]:
+
+PREPARE fooplan (int, text, bool, numeric) AS
+    INSERT INTO foo VALUES($1, $2, $3, $4);
+EXECUTE fooplan(1, 'Hunter Valley', 't', 200.00);
+
+        MySQL [2]:
+
+PREPARE stmt1 FROM 'SELECT SQRT(POW(?,2) + POW(?,2)) AS hypotenuse';
+SET @a = 3;
+SET @b = 4;
+EXECUTE stmt1 USING @a, @b;
+
+        Oracle OCI8 [3]:
+
+INSERT INTO emp VALUES
+    (:empno, :ename, :job, :sal, :deptno)
+
+        I think LuaSQL should not define any of these forms, thus exposing
+the incompatibilities between the databases.  Anyway, to offer an API
+for prepared statements, LuaSQL must define a _standard_ way to declare,
+bind the values and execute a prepared statement.  We have discussed that
+before, but anyone had time to spend on that front :-(
+
+        Regards,
+                Tomás
+
+LuaDBI [1] has prepared statements support built into the API. For the couple databases I have used in on, it appears to work great for me.
+
+-Josh
+
+[1] http://code.google.com/p/luadbi/
+
+
+使用stap可以跟踪到这个现象
+详见
+http://blog.163.com/digoal@126/blog/static/1638770402013916101117367/
+
+stap -e '
+probe process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__start") {
+  println(pn(), user_string($arg1), pid())
+}
+probe process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__parse__start") {
+  println(pn(), user_string($arg1), pid())
+}
+probe process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__rewrite__start") {
+  println(pn(), user_string($arg1), pid())
+}
+probe process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__plan__start") {
+  println(pn(), pid())
+}
+probe process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start") {
+  println(pn(), pid())
+}'
+
+
+结果很明显, 没有使用prepared sql.
+
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__start")select 108312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__parse__start")select 108312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__rewrite__start")select 108312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__plan__start")8312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8312
+... 略 
+
+
+
+那么使用postgresql原生的prepared看看性能会不会有改观 : 
+
+> con:execute([[prepare p(int) as select $1]])
+> print(con:execute([[execute p(1)]]):fetch())
+1
+> print(con:execute([[execute p(99)]]):fetch())
+99
+> function foo(cnt) 
+ local var1 = os.time()
+ for i = 1,cnt do
+   con:execute([[execute p(10)]]) 
+ end
+ return (os.time()-var1)
+end
+> print(foo(1000000))
+92
+
+
+情况并没有好转, 原因是依旧没有使用prepared sql. 那么使用luasql这个驱动和直接使用pgbench测试的性能差异这么明显原因就在这里了.
+
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__start")prepare p(int) as select $18312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__parse__start")prepare p(int) as select $18312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__rewrite__start")prepare p(int) as select $18312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__start")execute p(10)8312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__parse__start")execute p(10)8312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__rewrite__start")execute p(10)8312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__plan__start")8312
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8312
+... 略
+
+
+而使用pgbench的-M prepared则显然用了prepared sql.
+
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__parse__start")select 10;8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__plan__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")8495
+... 略
+
+
+
+我后面将再测试一下luapgsql, luadbi这几个驱动看看性能如何.
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/1638770402014121115734665/
+2. http://blog.163.com/digoal@126/blog/static/163877040201341441042613/
+3. http://blog.163.com/digoal@126/blog/static/1638770402013102610150692
+4. http://lua-users.org/lists/lua-l/2012-01/msg00671.html
+5. http://blog.163.com/digoal@126/blog/static/1638770402013916101117367/
+
+评论
+
+alexsunchenchen - 2014-04-10 23:45:52
+
+lua的生态环境比较恶劣，淘宝有个牛人把lua和nginx组合到一起弄了个openresty，里面的PostgreSQL驱动也没实现prepared sql~。
+
+德哥@Digoal 回复 alexsunchenchen - 2014-04-10 23:45:52
+
+恩,alex应该对lua比较了解吧,我胡乱看看的相当浅显.

@@ -1,0 +1,543 @@
+PostgreSQL research
+
+PostgreSQL drop|clear shared buffer with specific database or filenode
+
+2013-09-14 17:06:36   查看原文>>
+
+用过Oracle的同学应该知道oracle可以通过sql清除shared buffer中的数据.
+有网友问过我这个问题, 找了一下互联网, 国外也有朋友关心过这样的问题. 摘录如下 : 
+
+Is there a particular one of Oracle's memory clearning features you want to use in PostgreSQL? In Oracle you cannot flush the entire SGA without a restart, but you can flush three parts of the SGA using three separate commands.
+1. In Oracle you can flush the redo buffer by issuing a COMMIT or by rotating the logs. You can force a log switch in PostgreSQL using "select pg_switch_xlog();".
+2. In Oracle when you flush the shared pool this does three things: (a) removes sql and pl/sql statements from the shared library cache, (b) flushes the dictionary cache of object info and security data, and (c) flushes the query result cache (11g only). I am relatively new to PostgreSQL and have not seen an equivalent in PostgreSQL to these things. Based on other replies it does not seem possible to flush the catalog cache in PostgreSQL.
+3. In Oracle when you request a flush of the buffer cache it signals a checkpoint to ensure all dirty buffers are written out AND later it will remove the dirty buffers from memory. This can take anywhere from a few seconds on very small systems to several minutes on VLDB systems, per my observations. The Oracle checkpoint is fast, and the SQL prompt comes back very fast, but the removal of dirty buffers from memory runs in the background with a low priority over a long period of time. If you are planning to use "alter system flush buffer_cache" to clear memory in between tests you actually have no way to know when memory is clear except to wait a long time and then assume all is well (yes, this is also true with ASM and direct i/o to raw devices). In PostgreSQL, you can checkpoint manually to signal bgwriter to flush dirty pages to the operating system's cache and from there you will see a lazy write to disk (e.g., watch pdflush on linux), so immediately re-running a query will still get some caching benefits eventhough the checkpoint is complete. There are operating system commands that you could use for that ("cat /proc/meminfo" to see what's there, "sync" to write dirty pages to disk, then "echo 3 > /proc/sys/vm/drop_caches" to remove the now clean pages, and then "cat /proc/meminfo" one more time). And, if you are using SAN consider array based caching as well.
+Sincerely,
+Mark R. Johnson
+Owner, Remington Database Solutions, LLC
+Author, Oracle Database 10g: From Nuts to Soup
+
+
+PostgreSQL目前没有提供安全的清除掉shared buffer中的内容的SQL或者接口.
+老唐曾经写过一篇文章测试清理(为什么不叫flush呢?因为是直接drop的, 没有flush的动作)postgresql shared buffer, 由于"手段相当残忍", 开个玩笑, 意思就是说别在生产上这么搞, 因为是用了PG truncate table或者drop database时用到的直接丢弃缓存的做法. 不考虑是否dirty, 是否需要flush到disk. 确实有点残忍.
+如果要清除shared buffer中的内容, 为了安全, 需要确保这个buffer是clear的, 而不是dirty的. 
+PostgreSQL自带一个插件名为pg_buffercache, 可以查看当前shared buffer中内容, 如下. 
+
+digoal=# select * from pg_buffercache limit 6;
+ bufferid | relfilenode | reltablespace | reldatabase | relforknumber | relblocknumber | isdirty | usagecount 
+----------+-------------+---------------+-------------+---------------+----------------+---------+------------
+        1 |       12691 |          1664 |           0 |             0 |              0 | f       |          5
+        2 |       12449 |          1664 |           0 |             0 |              0 | f       |          5
+        3 |       12464 |          1663 |       12698 |             0 |              0 | f       |          5
+        4 |       12464 |          1663 |       12698 |             0 |              1 | f       |          5
+        5 |       12464 |          1663 |       12698 |             0 |              2 | f       |          5
+        6 |       12464 |          1663 |       12698 |             0 |              3 | f       |          5
+
+
+pg_buffercache中遍历了整个shared buffer, 所以有多大的shared buffer, 这里就有多少记录.
+
+digoal=# select count(*) from pg_buffercache;
+ count  
+--------
+ 262144
+(1 row)
+
+
+所以这个值刚好等于shared buffer配置的值.
+
+postgres=# select name,setting,unit from pg_settings where name ~ 'shared';
+-[ RECORD 1 ]---------------------
+name    | shared_buffers
+setting | 262144
+unit    | 8kB
+
+
+
+接下来进入正题, 如何清除shared buffer呢?
+本文的做法是通过修改pg_buffercache, 添加清除shared buffer的几个函数(也是用到老唐提到的那两个函数, 同时增加清除缓存列表的功能), 当然手段也比一样残忍, 请勿在生产中使用.
+代码修改如下 : 
+cd postgresql-9.1.1/contrib/pg_buffercache
+vi pg_buffercache--1.0.sql
+
+/* contrib/pg_buffercache/pg_buffercache--1.0.sql */
+
+-- Register the function.
+CREATE FUNCTION pg_buffercache_pages()
+RETURNS SETOF RECORD
+AS 'MODULE_PATHNAME', 'pg_buffercache_pages'
+LANGUAGE C;
+-- add by digoal
+CREATE FUNCTION pg_flush_database(dbid oid)
+RETURNS void
+AS 'MODULE_PATHNAME', 'pg_flush_database'
+LANGUAGE C;
+-- add by digoal
+CREATE FUNCTION pg_flush_filenode(spc oid, db oid, filenode oid)
+RETURNS void
+AS 'MODULE_PATHNAME', 'pg_flush_filenode'
+LANGUAGE C;
+
+-- Create a view for convenient access.
+CREATE VIEW pg_buffercache AS
+        SELECT P.* FROM pg_buffercache_pages() AS P
+        (bufferid integer, relfilenode oid, reltablespace oid, reldatabase oid,
+         relforknumber int2, relblocknumber int8, isdirty bool, usagecount int2);
+
+-- Don't want these to be available to public.
+REVOKE ALL ON FUNCTION pg_buffercache_pages() FROM PUBLIC;
+REVOKE ALL ON pg_buffercache FROM PUBLIC;
+-- add by digoal
+REVOKE ALL ON FUNCTION pg_flush_database(oid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION pg_flush_filenode(oid,oid,oid) FROM PUBLIC;
+
+
+
+vi pg_buffercache_pages.c
+
+#include "utils/relcache.h"
+// add by digoal
+#include "utils/inval.h"
+
+Datum           pg_buffercache_pages(PG_FUNCTION_ARGS);
+// add by digoal
+void            pg_flush_database(PG_FUNCTION_ARGS);
+void            pg_flush_filenode(PG_FUNCTION_ARGS);
+
+PG_FUNCTION_INFO_V1(pg_buffercache_pages);
+// add by digoal
+PG_FUNCTION_INFO_V1(pg_flush_database);
+PG_FUNCTION_INFO_V1(pg_flush_filenode);
+
+void
+pg_flush_database(PG_FUNCTION_ARGS)
+{
+  DropDatabaseBuffers(PG_GETARG_OID(0));
+}
+// 这几个参数很好理解, 就是表空间id, 数据库id, 以及filenode.
+void
+pg_flush_filenode(PG_FUNCTION_ARGS)
+{
+  RelFileNodeBackend v_nb;
+  v_nb.backend=InvalidBackendId;
+  v_nb.node.spcNode=PG_GETARG_OID(0);
+  v_nb.node.dbNode=PG_GETARG_OID(1);
+  v_nb.node.relNode=PG_GETARG_OID(2);
+  DropRelFileNodeBuffers(v_nb, MAIN_FORKNUM, 0);
+  CacheInvalidateSmgr(v_nb);
+}
+
+
+编译安装 : 
+
+su - root
+export PATH=/opt/pgsql/bin:$PATH
+which pg_config
+/opt/pgsql/bin/pg_config
+gmake clean
+gmake
+gmake install
+
+su - postgres
+pg_ctl restart
+psql digoal postgres
+create extension pg_buffercache;
+\df
+ public | pg_buffercache_pages     | SETOF record     |                                                                             
+                                                                                                                                    
+                                                                                                                                    
+     | normal
+ public | pg_flush_database        | void             | dbid oid                                                                    
+                                                                                                                                    
+                                                                                                                                    
+     | normal
+ public | pg_flush_filenode        | void             | spc oid, db oid, filenode oid                                               
+                                                                                                                                    
+                                                                                                                                    
+     | normal
+
+
+清缓存测试 : 
+创建测试表
+
+digoal=# create table t2(id int);
+CREATE TABLE
+
+
+插入测试数据
+
+digoal=# insert into t2 select generate_series(1,1000);
+INSERT 0 1000
+
+
+查找数据库oid, 要用于查找shared buffer信息.
+
+digoal=# select oid from pg_database where datname ='digoal';
+  oid  
+-------
+ 12698
+(1 row)
+
+
+查找刚才创建的测试表在shared buffer中的信息, 可以看到有7个数据块. 有一些是脏的数据块
+
+digoal=# select * from pg_buffercache where reldatabase=12698 and relfilenode=pg_relation_filenode('t2'::regclass) order by relblocknumber;
+ bufferid | relfilenode | reltablespace | reldatabase | relforknumber | relblocknumber | isdirty | usagecount 
+----------+-------------+---------------+-------------+---------------+----------------+---------+------------
+      298 |     1412335 |          1663 |       12698 |             1 |              0 | f       |          4
+      296 |     1412335 |          1663 |       12698 |             0 |              0 | t       |          5
+      299 |     1412335 |          1663 |       12698 |             0 |              1 | t       |          5
+      297 |     1412335 |          1663 |       12698 |             1 |              2 | f       |          4
+      300 |     1412335 |          1663 |       12698 |             0 |              2 | t       |          5
+      301 |     1412335 |          1663 |       12698 |             0 |              3 | t       |          5
+      302 |     1412335 |          1663 |       12698 |             0 |              4 | t       |          5
+(7 rows)
+
+
+为了安全的把他们从shared buffer中剔除, 先做一次checkpoint , 把脏数据库写到磁盘, (其实这样还不是最安全的, 最好再把这个表给锁了, 不让任何程序操作它, 这里就不演示了.)
+
+digoal=# checkpoint;
+CHECKPOINT
+
+
+执行完checkpoint后, 这个表的数据都变成clean的了, isdirty=f;
+
+digoal=# select * from pg_buffercache where reldatabase=12698 and relfilenode=pg_relation_filenode('t2'::regclass) order by relblocknumber;
+ bufferid | relfilenode | reltablespace | reldatabase | relforknumber | relblocknumber | isdirty | usagecount 
+----------+-------------+---------------+-------------+---------------+----------------+---------+------------
+      298 |     1412335 |          1663 |       12698 |             1 |              0 | f       |          4
+      296 |     1412335 |          1663 |       12698 |             0 |              0 | f       |          5
+      299 |     1412335 |          1663 |       12698 |             0 |              1 | f       |          5
+      297 |     1412335 |          1663 |       12698 |             1 |              2 | f       |          4
+      300 |     1412335 |          1663 |       12698 |             0 |              2 | f       |          5
+      301 |     1412335 |          1663 |       12698 |             0 |              3 | f       |          5
+      302 |     1412335 |          1663 |       12698 |             0 |              4 | f       |          5
+(7 rows)
+
+
+接下来就可以用pg_flush_filenode这个函数来清除它的缓存了. 输入spcid, dbid, filenodeid. (这些信息在上面都有了 )
+
+digoal=# select pg_flush_filenode(1663,12698,1412335);
+ pg_flush_filenode 
+-------------------
+ 
+(1 row)
+
+
+清除完后再次查看, 还有两条记录, 怎么回事呢?
+
+digoal=# select * from pg_buffercache where reldatabase=12698 and relfilenode=pg_relation_filenode('t2'::regclass) order by relblocknumber;
+ bufferid | relfilenode | reltablespace | reldatabase | relforknumber | relblocknumber | isdirty | usagecount 
+----------+-------------+---------------+-------------+---------------+----------------+---------+------------
+      298 |     1412335 |          1663 |       12698 |             1 |              0 | f       |          4
+      297 |     1412335 |          1663 |       12698 |             1 |              2 | f       |          4
+(2 rows)
+
+
+因为我们的代码中固定了只清除mainfork, 不清除fsm和visibility map.
+如果要清除另外两个, 可以修改一下代码(把relforknumber=0,1,2的都清除掉).
+
+void
+pg_flush_filenode(PG_FUNCTION_ARGS)
+{
+  RelFileNodeBackend v_nb;
+  v_nb.backend=InvalidBackendId;
+  v_nb.node.spcNode=PG_GETARG_OID(0);
+  v_nb.node.dbNode=PG_GETARG_OID(1);
+  v_nb.node.relNode=PG_GETARG_OID(2);
+  DropRelFileNodeBuffers(v_nb, MAIN_FORKNUM, 0);
+  DropRelFileNodeBuffers(v_nb, FSM_FORKNUM, 0);
+  DropRelFileNodeBuffers(v_nb, VISIBILITYMAP_FORKNUM, 0);
+  CacheInvalidateSmgr(v_nb);
+}
+
+
+gmake
+gmake install
+
+
+这样就可以了.
+另一种测试方法, 把大表的OS cache清除后, 但是不清除pg shared buffer, 查询速度还是很快.
+第一次查询
+
+postgres=# select count(*) from t2;
+  count   
+----------
+ 10003000
+(1 row)
+Time: 3197.338 ms
+
+
+第二次查询
+
+postgres=# select count(*) from t2;
+  count   
+----------
+ 10003000
+(1 row)
+Time: 1324.868 ms
+
+
+查看有多少个块在shared buffer中.
+
+postgres=# select count(*) from pg_buffercache where reldatabase=12698 and relfilenode=pg_relation_filenode('t2'::regclass);
+ count 
+-------
+ 44262
+(1 row)
+Time: 147.996 ms
+
+
+shared buffer中的数据块和这个表的大小相当
+
+postgres=# select 44274*8*1024;
+ ?column?  
+-----------
+ 362692608
+(1 row)
+Time: 0.108 ms
+postgres=# select pg_relation_size('t2'::regclass);
+ pg_relation_size 
+------------------
+        362594304
+(1 row)
+Time: 0.752 ms
+
+
+清除os 缓存 : 
+
+# echo 3 > /proc/sys/vm/drop_caches
+
+
+再次查询, 速度还是很快, 因为shared buffer还没有清除.
+
+postgres=# select count(*) from t2;
+  count   
+----------
+ 10003000
+(1 row)
+Time: 1324.843 ms
+
+
+
+只有当OS cache和pg shared buffer都清除后查询速度才会下降(因为落到磁盘了).
+
+# echo 3 > /proc/sys/vm/drop_caches
+postgres=# select pg_flush_filenode(1663,12698,relfilenode) from (select distinct relfilenode from pg_buffercache where reldatabase=12698 and relfilenode=pg_relation_filenode('t2'::regclass))t;
+ pg_flush_filenode 
+-------------------
+ 
+(1 row)
+Time: 184.753 ms
+
+
+都清除后, 速度降了.
+
+postgres=# select count(*) from t2;
+  count   
+----------
+ 10003000
+(1 row)
+Time: 3191.493 ms
+
+
+
+[参考]
+1. http://grokbase.com/t/postgresql/pgsql-general/115373p5n4/can-we-flush-the-postgres-shared-memory
+2. http://stackoverflow.com/questions/1216660/see-and-clear-postgres-caches-buffers
+3. http://www.kennygorman.com/wordpress/?p=250
+4. http://linux-mm.org/Drop_Caches
+5. http://blog.osdba.net/?p=90
+6. src/backend/storage/buffer/bufmgr.c
+
+/* ---------------------------------------------------------------------
+ *              DropRelFileNodeBuffers
+ *
+ *              This function removes from the buffer pool all the pages of the
+ *              specified relation that have block numbers >= firstDelBlock.
+ *              (In particular, with firstDelBlock = 0, all pages are removed.)
+ *              Dirty pages are simply dropped, without bothering to write them
+ *              out first.      Therefore, this is NOT rollback-able, and so should be
+ *              used only with extreme caution!
+ *
+ *              Currently, this is called only from smgr.c when the underlying file
+ *              is about to be deleted or truncated (firstDelBlock is needed for
+ *              the truncation case).  The data in the affected pages would therefore
+ *              be deleted momentarily anyway, and there is no point in writing it.
+ *              It is the responsibility of higher-level code to ensure that the
+ *              deletion or truncation does not lose any data that could be needed
+ *              later.  It is also the responsibility of higher-level code to ensure
+ *              that no other process could be trying to load more pages of the
+ *              relation into buffers.
+ *
+ *              XXX currently it sequentially searches the buffer pool, should be
+ *              changed to more clever ways of searching.  However, this routine
+ *              is used only in code paths that aren't very performance-critical,
+ *              and we shouldn't slow down the hot paths to make it faster ...
+ * --------------------------------------------------------------------
+ */
+void
+DropRelFileNodeBuffers(RelFileNodeBackend rnode, ForkNumber forkNum,
+                                           BlockNumber firstDelBlock)
+{
+        int                     i;
+
+        if (rnode.backend != InvalidBackendId)
+        {
+                if (rnode.backend == MyBackendId)
+                        DropRelFileNodeLocalBuffers(rnode.node, forkNum, firstDelBlock);
+                return;
+        }
+
+        for (i = 0; i < NBuffers; i++)
+        {
+                volatile BufferDesc *bufHdr = &BufferDescriptors[i];
+
+                LockBufHdr(bufHdr);
+                if (RelFileNodeEquals(bufHdr->tag.rnode, rnode.node) &&
+                        bufHdr->tag.forkNum == forkNum &&
+                        bufHdr->tag.blockNum >= firstDelBlock)
+                        InvalidateBuffer(bufHdr);       /* releases spinlock */
+                else
+                        UnlockBufHdr(bufHdr);
+        }
+}
+
+/* ---------------------------------------------------------------------
+ *              DropDatabaseBuffers
+ *
+ *              This function removes all the buffers in the buffer cache for a
+ *              particular database.  Dirty pages are simply dropped, without
+ *              bothering to write them out first.      This is used when we destroy a
+ *              database, to avoid trying to flush data to disk when the directory
+ *              tree no longer exists.  Implementation is pretty similar to
+ *              DropRelFileNodeBuffers() which is for destroying just one relation.
+ * --------------------------------------------------------------------
+ */
+void
+DropDatabaseBuffers(Oid dbid)
+{
+        int                     i;
+        volatile BufferDesc *bufHdr;
+
+        /*
+         * We needn't consider local buffers, since by assumption the target
+         * database isn't our own.
+         */
+
+        for (i = 0; i < NBuffers; i++)
+        {
+                bufHdr = &BufferDescriptors[i];
+                LockBufHdr(bufHdr);
+                if (bufHdr->tag.rnode.dbNode == dbid)
+                        InvalidateBuffer(bufHdr);       /* releases spinlock */
+                else
+                        UnlockBufHdr(bufHdr);
+        }
+}
+
+
+
+7. src/backend/storage/smgr/smgr.c
+
+/*
+ *      smgrtruncate() -- Truncate supplied relation to the specified number
+ *                                        of blocks
+ *
+ * The truncation is done immediately, so this can't be rolled back.
+ */
+void
+smgrtruncate(SMgrRelation reln, ForkNumber forknum, BlockNumber nblocks)
+{
+        /*
+         * Get rid of any buffers for the about-to-be-deleted blocks. bufmgr will
+         * just drop them without bothering to write the contents.
+         */
+        DropRelFileNodeBuffers(reln->smgr_rnode, forknum, nblocks);
+
+        /*
+         * Send a shared-inval message to force other backends to close any smgr
+         * references they may have for this rel.  This is useful because they
+         * might have open file pointers to segments that got removed, and/or
+         * smgr_targblock variables pointing past the new rel end.      (The inval
+         * message will come back to our backend, too, causing a
+         * probably-unnecessary local smgr flush.  But we don't expect that this
+         * is a performance-critical path.)  As in the unlink code, we want to be
+         * sure the message is sent before we start changing things on-disk.
+         */
+        CacheInvalidateSmgr(reln->smgr_rnode);
+
+        /*
+         * Do the truncation.
+         */
+        (*(smgrsw[reln->smgr_which].smgr_truncate)) (reln, forknum, nblocks);
+}
+
+
+
+8. utils/inval.h
+
+9. src/backend/utils/cache/inval.c
+
+/*
+ * CacheInvalidateSmgr
+ *              Register invalidation of smgr references to a physical relation.
+ *
+ * Sending this type of invalidation msg forces other backends to close open
+ * smgr entries for the rel.  This should be done to flush dangling open-file
+ * references when the physical rel is being dropped or truncated.      Because
+ * these are nontransactional (i.e., not-rollback-able) operations, we just
+ * send the inval message immediately without any queuing.
+ *
+ * Note: in most cases there will have been a relcache flush issued against
+ * the rel at the logical level.  We need a separate smgr-level flush because
+ * it is possible for backends to have open smgr entries for rels they don't
+ * have a relcache entry for, e.g. because the only thing they ever did with
+ * the rel is write out dirty shared buffers.
+ *
+ * Note: because these messages are nontransactional, they won't be captured
+ * in commit/abort WAL entries.  Instead, calls to CacheInvalidateSmgr()
+ * should happen in low-level smgr.c routines, which are executed while
+ * replaying WAL as well as when creating it.
+ *
+ * Note: In order to avoid bloating SharedInvalidationMessage, we store only
+ * three bytes of the backend ID using what would otherwise be padding space.
+ * Thus, the maximum possible backend ID is 2^23-1.
+ */
+void
+CacheInvalidateSmgr(RelFileNodeBackend rnode)
+{
+        SharedInvalidationMessage msg;
+
+        msg.sm.id = SHAREDINVALSMGR_ID;
+        msg.sm.backend_hi = rnode.backend >> 16;
+        msg.sm.backend_lo = rnode.backend & 0xffff;
+        msg.sm.rnode = rnode.node;
+        SendSharedInvalidMessages(&msg, 1);
+}
+
+
+
+10. src/include/storage/relfilenode.h
+
+/*
+ * The physical storage of a relation consists of one or more forks. The
+ * main fork is always created, but in addition to that there can be
+ * additional forks for storing various metadata. ForkNumber is used when
+ * we need to refer to a specific fork in a relation.
+ */
+typedef enum ForkNumber
+{
+        InvalidForkNumber = -1,
+        MAIN_FORKNUM = 0,
+        FSM_FORKNUM,
+        VISIBILITYMAP_FORKNUM,
+        INIT_FORKNUM
+
+        /*
+         * NOTE: if you add a new fork, change MAX_FORKNUM below and update the
+         * forkNames array in catalog.c
+         */
+} ForkNumber;
+
+#define MAX_FORKNUM             INIT_FORKNUM
+
+

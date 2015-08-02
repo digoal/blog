@@ -1,0 +1,199 @@
+PostgreSQL research
+
+PostgreSQL dbms_stats used for FIX object's Statistics.
+
+2015-02-18 22:53:39   查看原文>>
+
+dbms_stats这个名字对于Oracle的用户应该比较熟悉, 但是PG的用户可能并不了解这是个啥?
+PostgreSQL统计信息是随用户配置的阈值伴随着对象数据的变更而变更的, 也就是说, 不需要人为的干预, 数据发生变化时, 会自动收集统计信息. 这么做的目的是让数据库的统计信息适时更新, 所以一般情况下, PG很少因为数据突然变化导致统计信息不准确从而执行计划不优的情况.
+但是如果数据分布, 数据使用比较有规律的话, 实际上我们并不需要过多的进行analyze. 
+那么PostgreSQL能否有计划的收集统计信息, 并将统计信息保存起来, 未来可以直接导入使用呢?
+通过dbms_stats插件, 可以实现这样的功能.
+dbms_stats可以备份统计信息, 还原统计信息. 
+
+dbms_stats应用场景举例, 当我们使用pg_upgrade升级数据块大版本时, 最后一步是生成统计信息, 但是如果有了dbms_stats, 我们可以导出统计信息, 并导入到新库中(假设统计信息相关字段, 统计信息表在跨版本时未发生定义上的变化). 从而大大的减少统计信息的生成时间.
+
+测试 : 
+
+wget http://sourceforge.jp/frs/redir.php?m=jaist&f=%2Fpgdbmsstats%2F62363%2Fpg_dbms_stats-1.3.6.tar.gz
+tar -zxvf pg_dbms_stats-1.3.6.tar.gz 
+cd pg_dbms_stats-1.3.6
+export PATH=/opt/pgsql/bin:$PATH
+gmake clean
+gmake
+gmake install
+
+su - postgres
+cd $PGDATA
+vi postgresql.conf
+shared_preload_libraries = 'pg_hint_plan, pg_dbms_stats'
+pg_dbms_stats.use_locked_stats = on
+
+pg_ctl restart -m fast
+
+postgres@db-172-16-3-150-> psql
+psql (9.4.1)
+Type "help" for help.
+
+postgres=# create extension pg_dbms_stats;  
+
+
+为了使用dbms_stats管理的统计信息, 首先需要生成合理的统计信息, 然后备份, 然后锁定.
+还原统计信息时自动锁定.
+创建测试表
+
+postgres=# create table a(id int, info text, crt_time timestamp);
+CREATE TABLE
+postgres=# insert into a select g.id,'a_'||md5(random()::text), clock_timestamp() from generate_series(1,100000) g(id);
+INSERT 0 100000
+
+
+生成最新的统计信息, 更新pg_catalog.pg_class, pg_catalog.pg_statistic
+
+postgres=# analyze a;
+ANALYZE
+
+
+备份当前a表的统计信息
+
+postgres=# select * from dbms_stats.backup_table_stats('public','a','comment');
+ backup_table_stats 
+--------------------
+                  4
+(1 row)
+
+
+查看备份离散
+
+postgres=# select * from dbms_stats.backup_history;
+ id |             time              | unit | comment 
+----+-------------------------------+------+---------
+  4 | 2015-02-18 22:39:37.444274+08 | t    | comment
+(1 row)
+
+
+查看当前是否锁定了A表的统计信息
+
+postgres=#   select * from dbms_stats.relation_stats_locked ;
+ relid | relname | relpages | reltuples | relallvisible | curpages | last_analyze | last_autoanalyze 
+-------+---------+----------+-----------+---------------+----------+--------------+------------------
+(0 rows)
+
+
+未锁定A表的统计信息, 所以会使用系统的统计信息pg_catalog.pg_class, pg_catalog.statistic
+注意评估行数为1
+
+postgres=# explain select * from a where id=1;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Seq Scan on a  (cost=0.00..1483.00 rows=1 width=47)
+   Filter: (id = 1)
+(2 rows)
+
+
+接下来重新生成A的记录, ID值全部一样, 都为1.
+
+postgres=# truncate a;
+TRUNCATE TABLE
+postgres=# insert into a select 1,'a_'||md5(random()::text), clock_timestamp() from generate_series(1,100000) g(id);
+INSERT 0 100000
+postgres=# analyze a;
+ANALYZE
+
+
+我们看到执行计划输出, 评估行数变成了100000.
+
+postgres=# explain select * from a where id=1;
+                        QUERY PLAN                        
+----------------------------------------------------------
+ Seq Scan on a  (cost=0.00..1483.00 rows=100000 width=47)
+   Filter: (id = 1)
+(2 rows)
+
+
+接下来是关键操作, 我们要把A表的统计信息还原到之前, 即表中的所有ID唯一的情况
+
+postgres=# SELECT dbms_stats.restore_table_stats('public.a', '2015-02-18 22:39:37.444274+08');
+ restore_table_stats 
+---------------------
+ a
+(1 row)
+
+
+可以看到还原后, 自动锁定了A表的统计信息, dbms_stats.relation_stats_locked这个表有个触发器, 在删除, 新增, 修改时触发, 用于干预PostgreSQL backend是否使用dbms_stats 中的统计信息.
+
+postgres=# \d dbms_stats.relation_stats_locked
+        Table "dbms_stats.relation_stats_locked"
+      Column      |           Type           | Modifiers 
+------------------+--------------------------+-----------
+ relid            | oid                      | not null
+ relname          | text                     | not null
+ relpages         | integer                  | 
+ reltuples        | real                     | 
+ relallvisible    | integer                  | 
+ curpages         | integer                  | 
+ last_analyze     | timestamp with time zone | 
+ last_autoanalyze | timestamp with time zone | 
+Indexes:
+    "relation_stats_locked_pkey" PRIMARY KEY, btree (relid)
+Referenced by:
+    TABLE "dbms_stats.column_stats_locked" CONSTRAINT "column_stats_locked_starelid_fkey" FOREIGN KEY (starelid) REFERENCES dbms_stats.relation_stats_locked(relid) ON DELETE CASCADE
+Triggers:
+    invalidate_relation_cache BEFORE INSERT OR DELETE OR UPDATE ON dbms_stats.relation_stats_locked FOR EACH ROW EXECUTE PROCEDURE dbms_stats.invalidate_relation_cache()
+
+
+
+postgres=#   select * from dbms_stats.relation_stats_locked ;
+ relid | relname  | relpages | reltuples | relallvisible | curpages |         last_analyze         | last_autoanalyze 
+-------+----------+----------+-----------+---------------+----------+------------------------------+------------------
+ 16566 | public.a |      233 |    100000 |             0 |      233 | 2015-02-18 22:37:04.35998+08 | 
+(1 row)
+
+
+接下来看执行计划, 评估的行数变成了1, 显然用了锁定的统计信息即dbms_stats.relation_stats_backup .
+
+postgres=# explain select * from a where id=1;
+                     QUERY PLAN                      
+-----------------------------------------------------
+ Seq Scan on a  (cost=0.00..1483.00 rows=1 width=47)
+   Filter: (id = 1)
+(2 rows)
+
+
+接下来解锁统计信息, 解锁后, 会使用系统的统计信息og_catalog.statistic , pg_catalog.pg_class.
+
+postgres=# select dbms_stats.unlock_table_stats('public.a');
+ unlock_table_stats 
+--------------------
+ a
+(1 row)
+
+postgres=#   select * from dbms_stats.relation_stats_locked ;
+ relid | relname | relpages | reltuples | relallvisible | curpages | last_analyze | last_autoanalyze 
+-------+---------+----------+-----------+---------------+----------+--------------+------------------
+(0 rows)
+
+postgres=# explain select * from a where id=1;
+                        QUERY PLAN                        
+----------------------------------------------------------
+ Seq Scan on a  (cost=0.00..1483.00 rows=100000 width=47)
+   Filter: (id = 1)
+(2 rows)
+
+
+也就是说, 有对象在dbms_stats.relation_stats_locked时, 将使用dbms_stats中锁定的指定备份集的统计信息.
+不在dbms_stats.relation_stats_locked的对象, 将使用系统的统计信息pg_catalog.statistic和pg_catalog.pg_class
+
+[其他]
+用法详解
+http://pgdbmsstats.sourceforge.jp/pg_dbms_stats-en.html
+对象的统计信息被锁定时, 优化器使用锁定中记录的dbms_stats中的统计信息, 
+对象的统计信息未锁定时, 优化器照样使用数据库原始的统计信息pg_catalog.statistic , pg_catalog.pg_class.
+PostgreSQL dbms_stats used for FIX objects Statistics. - 德哥@Digoal - PostgreSQL research
+
+[参考]
+1. http://pgdbmsstats.sourceforge.jp/pg_dbms_stats-en.html
+2. http://pgdbmsstats.sourceforge.jp/objects-en.html
+3 .http://sourceforge.jp/projects/pgdbmsstats/releases/
+4. pg_dbms_stats代码
+Flag Counter

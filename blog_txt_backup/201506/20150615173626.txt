@@ -1,0 +1,95 @@
+PostgreSQL research
+
+PostgreSQL 9.5 new feature - vacuum log the number of pages skipped due to pins , pinskipped_pages
+
+2015-06-15 17:36:26   查看原文>>
+
+vacuum新增计数器pinskipped_pages，记录由于某些原因导致vacuum进程不对某些页进行垃圾回收处理。
+
+src/backend/commands/vacuumlazy.c
+
+typedef struct LVRelStats
+{
+        /* hasindex = true means two-pass strategy; false means one-pass */
+        bool            hasindex;
+        /* Overall statistics about rel */
+        BlockNumber old_rel_pages;      /* previous value of pg_class.relpages */
+        BlockNumber rel_pages;          /* total number of pages */
+        BlockNumber scanned_pages;      /* number of pages we examined */
+
+        /*  新增计数器  */
+        BlockNumber pinskipped_pages;           /* # of pages we skipped due to a pin */
+
+        double          scanned_tuples; /* counts only tuples on scanned pages */
+        double          old_rel_tuples; /* previous value of pg_class.reltuples */
+        double          new_rel_tuples; /* new estimated total # of tuples */
+        double          new_dead_tuples;        /* new estimated total # of dead tuples */
+        BlockNumber pages_removed;
+        double          tuples_deleted;
+        BlockNumber nonempty_pages; /* actually, last nonempty page + 1 */
+        /* List of TIDs of tuples we intend to delete */
+        /* NB: this list is ordered by TID address */
+        int                     num_dead_tuples;        /* current # of entries */
+        int                     max_dead_tuples;        /* # slots allocated in array */
+        ItemPointer dead_tuples;        /* array of ItemPointerData */
+        int                     num_index_scans;
+        TransactionId latestRemovedXid;
+        bool            lock_waiter_detected;
+} LVRelStats;
+
+
+
+某些情况下会跳过一些PAGE的垃圾回收，例如非scan all page,  或者非防止wraparound。归为pinskipped_pages，计数器加1。
+
+                /* We need buffer cleanup lock so that we can prune HOT chains. */
+                if (!ConditionalLockBufferForCleanup(buf))
+                {
+                        /*
+                         * If we're not scanning the whole relation to guard against XID
+                         * wraparound, it's OK to skip vacuuming a page.  The next vacuum
+                         * will clean it up.
+                         */
+                        if (!scan_all)
+                        {
+                                ReleaseBuffer(buf);
+                                vacrelstats->pinskipped_pages++;
+                                continue;
+                        }
+
+                        /*
+                         * If this is a wraparound checking vacuum, then we read the page
+                         * with share lock to see if any xids need to be frozen. If the
+                         * page doesn't need attention we just skip and continue. If it
+                         * does, we wait for cleanup lock.
+                         *
+                         * We could defer the lock request further by remembering the page
+                         * and coming back to it later, or we could even register
+                         * ourselves for multiple buffers and then service whichever one
+                         * is received first.  For now, this seems good enough.
+                         */
+                        LockBuffer(buf, BUFFER_LOCK_SHARE);
+                        if (!lazy_check_needs_freeze(buf))
+                        {
+                                UnlockReleaseBuffer(buf);
+                                vacrelstats->scanned_pages++;
+                                vacrelstats->pinskipped_pages++;
+                                continue;
+                        }
+
+
+例子：
+
+postgres=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+新增如下：
+Skipped 0 pages due to buffer pins.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+
+
+
+Flag Counter

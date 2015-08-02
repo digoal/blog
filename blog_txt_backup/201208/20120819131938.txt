@@ -1,0 +1,416 @@
+PostgreSQL research
+
+pipe implemented in shell command line
+
+2012-08-19 13:19:38   查看原文>>
+
+我们知道pipe和fifo(first in first out named pipe)都是进程间通信的一种方式.
+那么除了在程序中写pipe之外, 在命令行中也经常会用到, 例如cat /tmp/test.log | grep abcd 这里|就是一个管道连接符. 表示前一条命令的stdout作为后一条命令的stdin.
+又例如: 
+( cmd1 | cmd2 | cmd3 | cmd4 ) >$1 2>$2 <$3 
+这条命: cmd4的stdout重定向到$1, stderr 重定向到$2.  cmd1的stdin重定向到$1 . 无论有多少管道连接符, 都与此类似.
+
+那么在指向这个命令的时候, 对于终端来说, 又发生了什么呢?
+接下来通过ltrace来跟踪执行这个命令的终端进程. 看看发生了什么?
+wikipedia是这么解释的 : 
+A pipeline of three programs run on a text terminal.
+如图 : 
+这里program 1 指的是shell终端. 使用who -u可以查看进程号.
+pipe implemented in shell command line - 德哥@Digoal - The Heart,The World.
+ 
+下面是跟踪到的情况 : 
+测试程序, sleep(1000)秒, 便于跟踪.
+
+[root@db-172-16-3-150 zzz]# cat a.c
+#include <stdio.h>
+#include <unistd.h>
+
+int main() {
+  fprintf(stdout, "please enter a number:");
+  sleep(1000);
+  return 0;
+}
+gcc -O3 -Wall -Wextra -Werror -g ./a.c -o abcd
+
+
+SESSION 1执行 : 
+
+./abcd | grep number
+
+
+
+SESSION 2查看进程号. abcd, grep的父进程就是SESSION的进程号4715.
+
+[root@db-172-16-3-150 ~]# ps -ewf|grep abcd
+root      4787  4715  0 09:21 pts/5    00:00:00 ./abcd
+
+[root@db-172-16-3-150 ~]# ps -ewf|grep grep
+root      4788  4715  0 09:21 pts/5    00:00:00 grep number
+
+
+
+查看file descriptor列表. 
+可以看到abcd的标准输出被重定向到pipe:[8668962]
+grep的标准输入被重定向到pipe:[8668962]
+注意这个其实是4715 调用pipe系统调用产生的管道, 有两端, 其中一端只能用于写入, 另一端只能用于读取. 然后4715进程fork了两个进程, 分别关闭了这个pipe的一端, 并分别将另一端dup2到标准输入, 输出 . 然后exec调用abcd和grep. 
+这样就造成了以下看到的fd.
+
+[root@db-172-16-3-150 ~]# ll /proc/4787/fd
+total 0
+lrwx------ 1 root root 64 Aug 19 09:25 0 -> /dev/pts/5
+l-wx------ 1 root root 64 Aug 19 09:25 1 -> pipe:[8668962]
+lrwx------ 1 root root 64 Aug 19 09:25 2 -> /dev/pts/5
+[root@db-172-16-3-150 ~]# ll /proc/4788/fd
+total 0
+lr-x------ 1 root root 64 Aug 19 09:25 0 -> pipe:[8668962]
+lrwx------ 1 root root 64 Aug 19 09:25 1 -> /dev/pts/5
+lrwx------ 1 root root 64 Aug 19 09:25 2 -> /dev/pts/5
+[root@db-172-16-3-150 ~]# ll /proc/4715/fd
+total 0
+lrwx------ 1 root root 64 Aug 19 09:20 0 -> /dev/pts/5
+lrwx------ 1 root root 64 Aug 19 09:25 1 -> /dev/pts/5
+lrwx------ 1 root root 64 Aug 19 09:25 2 -> /dev/pts/5
+lrwx------ 1 root root 64 Aug 19 09:25 255 -> /dev/pts/5
+
+
+
+使用ltrace的跟踪(./abcd | grep number) 结果 : 
+
+_IO_putc('\n', 0x345fd52860)                                                     = 10
+fflush(0x345fd52860)                                                             = 0
+free(0xf204980)                                                                  = <void>
+free(0xf205f50)                                                                  = <void>
+free(0xf205f20)                                                                  = <void>
+free(0xf22abe0)                                                                  = <void>
+free(0xf22ac90)                                                                  = <void>
+free(0xf22ac60)                                                                  = <void>
+free(0xf203c00)                                                                  = <void>
+free(0xf212530)                                                                  = <void>
+free(0xf22ab70)                                                                  = <void>
+free(0xf200070)                                                                  = <void>
+free(0xf20fe10)                                                                  = <void>
+free(0xf22ad00)                                                                  = <void>
+free(0xf1ffd30)                                                                  = <void>
+strlen("./abcd |grep number")                                                    = 19
+malloc(20)                                                                       = 0xf200070
+strcpy(0xf200070, "./abcd |grep number")                                         = 0xf200070
+sigemptyset(0x6be9e0)                                                            = 0
+sigemptyset(0x6bea60)                                                            = 0
+sigaddset(0x6be9e0, 2)                                                           = 0
+sigprocmask(0, 0x6be9e0, 0x6bea60)                                               = 0
+fileno(0x345fd526a0)                                                             = 0
+fflush(0x345fd52860)                                                             = 0
+tcsetattr(0, 1, 0x6beb20)                                                        = 0
+sigprocmask(2, 0x6bea60, NULL)                                                   = 0
+sigemptyset(0x7fff1b2c10d8)                                                      = 0
+sigaction(2, 0x6bf020, 0x7fff1b2c10d0)                                           = 0
+sigaction(15, 0x6bf0c0, 0x7fff1b2c10d0)                                          = 0
+sigaction(3, 0x6bf200, 0x7fff1b2c10d0)                                           = 0
+sigaction(14, 0x6bf160, 0x7fff1b2c10d0)                                          = 0
+sigaction(20, 0x6bf2a0, 0x7fff1b2c10d0)                                          = 0
+sigaction(22, 0x6bf340, 0x7fff1b2c10d0)                                          = 0
+sigaction(21, 0x6bf3e0, 0x7fff1b2c10d0)                                          = 0
+sigemptyset(0x7fff1b2c10d8)                                                      = 0
+sigaction(28, 0x6bf480, 0x7fff1b2c10d0)                                          = 0
+strlen("./abcd |grep number")                                                    = 19
+socket(16, 3, 9)                                                                 = 3
+sendmsg(3, 0x7fff1b2c1180, 0, -1, 0xfefefefefefefeff)                            = 36
+close(3)                                                                         = 0
+sigemptyset(0x7fff1b2c1168)                                                      = 0
+sigemptyset(0x7fff1b2c10c8)                                                      = 0
+sigaction(2, 0x7fff1b2c1160, 0x7fff1b2c10c0)                                     = 0
+strlen("./abcd |grep number")                                                    = 19
+realloc(0xf200070, 21)                                                           = 0xf200070
+strlen("./abcd |grep number")                                                    = 19
+free(0xf22abc0)                                                                  = <void>
+malloc(20)                                                                       = 0xf22abc0
+mbrtowc(0, 0xf205300, 1, 0x7fff1b2c11f0, 0)                                      = 1
+mbrtowc(0, 0xf205301, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205302, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205303, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205304, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205305, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205306, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205307, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205308, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205309, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530a, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530b, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530c, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530d, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530e, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530f, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205310, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205311, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205312, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+free(0xf1ffe00)                                                                  = <void>
+free(0xf201b40)                                                                  = <void>
+free(0xf211540)                                                                  = <void>
+time(NULL)                                                                       = 1345339289
+__snprintf_chk(0x7fff1b2c10f0, 63, 1, 64, 0x49fc5b)                              = 11
+malloc(12)                                                                       = 0xf211540
+strcpy(0xf211540, "X1345339289")                                                 = 0xf211540
+malloc(24)                                                                       = 0xf201b40
+strlen("./abcd |grep number")                                                    = 19
+malloc(20)                                                                       = 0xf22abe0
+strcpy(0xf22abe0, "./abcd |grep number")                                         = 0xf22abe0
+strlen("./abcd |grep number\n")                                                  = 20
+free(0xf22abc0)                                                                  = <void>
+malloc(21)                                                                       = 0xf22abc0
+mbrtowc(0, 0xf205300, 1, 0x7fff1b2c11f0, 0)                                      = 1
+mbrtowc(0, 0xf205301, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205302, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205303, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205304, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205305, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205306, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205307, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205308, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205309, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530a, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530b, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530c, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530d, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530e, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf20530f, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205310, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205311, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205312, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+mbrtowc(0, 0xf205313, 1, 0x7fff1b2c11f0, 0x7fff1b2c1194)                         = 1
+malloc(16)                                                                       = 0xf22aba0
+malloc(7)                                                                        = 0xf204050
+strcpy(0xf204050, "./abcd")                                                      = 0xf204050
+__ctype_b_loc()                                                                  = 0x2b0058087f08
+strcmp(".", "./abcd")                                                            = -1
+malloc(32)                                                                       = 0xf1ffe00
+malloc(24)                                                                       = 0xf204a20
+malloc(16)                                                                       = 0xf1fffd0
+malloc(5)                                                                        = 0xf22ada0
+strcpy(0xf22ada0, "grep")                                                        = 0xf22ada0
+__ctype_b_loc()                                                                  = 0x2b0058087f08
+strcmp("getopts", "grep")                                                        = -1
+malloc(16)                                                                       = 0xf200090
+malloc(7)                                                                        = 0xf2049b0
+strcpy(0xf2049b0, "number")                                                      = 0xf2049b0
+__ctype_b_loc()                                                                  = 0x2b0058087f08
+malloc(32)                                                                       = 0xf1ffd30
+malloc(24)                                                                       = 0xf2049d0
+malloc(32)                                                                       = 0xf22ad00
+malloc(32)                                                                       = 0xf20fe10
+malloc(16)                                                                       = 0xf238490
+malloc(32)                                                                       = 0xf22ab70
+memset(0xf22ab70, '\000', 32)                                                    = 0xf22ab70
+malloc(32)                                                                       = 0xf203c00
+malloc(32)                                                                       = 0xf22ac60
+sigemptyset(0x7fff1b2c2050)                                                      = 0
+sigaddset(0x7fff1b2c2050, 17)                                                    = 0
+sigemptyset(0x7fff1b2c1fd0)                                                      = 0
+sigprocmask(0, 0x7fff1b2c2050, 0x7fff1b2c1fd0)                                   = 0
+pipe(0x7fff1b2c20d0)                                                             = 0
+malloc(16)                                                                       = 0xf2384b0
+malloc(32)                                                                       = 0xf22ac90
+memset(0xf22ac90, '\000', 32)                                                    = 0xf22ac90
+memcpy(0xf22ac90, "", 32)                                                        = 0xf22ac90
+malloc(32)                                                                       = 0xf205f20
+malloc(32)                                                                       = 0xf204980
+malloc(32)                                                                       = 0xf2384d0
+malloc(32)                                                                       = 0xf238500
+malloc(32)                                                                       = 0xf238530
+strlen("%s%s")                                                                   = 4
+strlen("./abcd")                                                                 = 6
+memcpy(0xf2058b0, "./abcd", 6)                                                   = 0xf2058b0
+strlen("")                                                                       = 0
+free(0xf22acc0)                                                                  = <void>
+strlen("./abcd")                                                                 = 6
+malloc(7)                                                                        = 0xf22acc0
+strcpy(0xf22acc0, "./abcd")                                                      = 0xf22acc0
+strlen("./abcd")                                                                 = 6
+malloc(7)                                                                        = 0xf238560
+strcpy(0xf238560, "./abcd")                                                      = 0xf238560
+sigemptyset(0x7fff1b2c1db0)                                                      = 0
+sigaddset(0x7fff1b2c1db0, 17)                                                    = 0
+sigaddset(0x7fff1b2c1db0, 2)                                                     = 0
+sigemptyset(0x7fff1b2c1d30)                                                      = 0
+sigprocmask(0, 0x7fff1b2c1db0, 0x7fff1b2c1d30)                                   = 0
+pipe(0x6b3298)                                                                   = 0
+fork( <unfinished ...>
+malloc(32)                                                                       = 0xf238580
+sigprocmask(2, 0x7fff1b2c1d30, NULL)                                             = 0
+close(4)                                                                         = 0
+strcmp("_", "_")                                                                 = 0
+malloc(1)                                                                        = 0xf2385b0
+free(0xf1ffff0)                                                                  = <void>
+close(4)                                                                         = -1
+free(0xf22ac90)                                                                  = <void>
+free(0xf2384b0)                                                                  = <void>
+free(0xf238530)                                                                  = <void>
+free(0xf238500)                                                                  = <void>
+free(0xf2384d0)                                                                  = <void>
+free(0xf204980)                                                                  = <void>
+strcmp("pipe-file-descriptors", "pipe-file-descriptors")                         = 0
+free(0xf205f20)                                                                  = <void>
+strlen("%s%s")                                                                   = 4
+strlen("grep")                                                                   = 4
+memcpy(0xf2058b0, "grep", 4)                                                     = 0xf2058b0
+strlen(" ")                                                                      = 1
+memcpy(0xf2058b4, " ", 1)                                                        = 0xf2058b4
+strlen("%s%s")                                                                   = 4
+strlen("number")                                                                 = 6
+memcpy(0xf2058b5, "number", 6)                                                   = 0xf2058b5
+strlen("")                                                                       = 0
+free(0xf22acc0)                                                                  = <void>
+strlen("grep number")                                                            = 11
+malloc(12)                                                                       = 0xf22acc0
+strcpy(0xf22acc0, "grep number")                                                 = 0xf22acc0
+strlen("grep number")                                                            = 11
+malloc(12)                                                                       = 0xf2384b0
+strcpy(0xf2384b0, "grep number")                                                 = 0xf2384b0
+sigemptyset(0x7fff1b2c1db0)                                                      = 0
+sigaddset(0x7fff1b2c1db0, 17)                                                    = 0
+sigaddset(0x7fff1b2c1db0, 2)                                                     = 0
+sigemptyset(0x7fff1b2c1d30)                                                      = 0
+sigprocmask(0, 0x7fff1b2c1db0, 0x7fff1b2c1d30)                                   = 0
+fork( <unfinished ...>
+malloc(32)                                                                       = 0xf205f20
+sigprocmask(2, 0x7fff1b2c1d30, NULL)                                             = 0
+close(3)                                                                         = 0
+strcmp("_", "_")                                                                 = 0
+malloc(1)                                                                        = 0xf1ffff0
+free(0xf2385b0)                                                                  = <void>
+sigemptyset(0x7fff1b2c1e70)                                                      = 0
+sigaddset(0x7fff1b2c1e70, 17)                                                    = 0
+sigemptyset(0x7fff1b2c1df0)                                                      = 0
+sigprocmask(0, 0x7fff1b2c1e70, 0x7fff1b2c1df0)                                   = 0
+close(5)                                                                         = 0
+close(6)                                                                         = 0
+malloc(56)                                                                       = 0xf212530
+strcmp("PWD", "PWD")                                                             = 0
+strlen("/root/zzz")                                                              = 9
+malloc(10)                                                                       = 0xf2385b0
+strcpy(0xf2385b0, "/root/zzz")                                                   = 0xf2385b0
+sigemptyset(0x7fff1b2c1c40)                                                      = 0
+sigaddset(0x7fff1b2c1c40, 22)                                                    = 0
+sigaddset(0x7fff1b2c1c40, 21)                                                    = 0
+sigaddset(0x7fff1b2c1c40, 20)                                                    = 0
+sigaddset(0x7fff1b2c1c40, 17)                                                    = 0
+sigemptyset(0x7fff1b2c1bc0)                                                      = 0
+sigprocmask(0, 0x7fff1b2c1c40, 0x7fff1b2c1bc0)                                   = 0
+tcsetpgrp(255, 4787, 0, -1, 128)                                                 = 0
+sigprocmask(2, 0x7fff1b2c1bc0, NULL)                                             = 0
+sigprocmask(2, 0x7fff1b2c1df0, NULL)                                             = 0
+sigemptyset(0x7fff1b2c1e80)                                                      = 0
+sigaddset(0x7fff1b2c1e80, 17)                                                    = 0
+sigemptyset(0x7fff1b2c1e00)                                                      = 0
+sigprocmask(0, 0x7fff1b2c1e80, 0x7fff1b2c1e00)                                   = 0
+
+
+
+下面使用一个程序b来模拟这个过程 : 
+
+[root@db-172-16-3-150 zzz]# cat b.c
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/wait.h>
+
+int i;
+int fd[2];
+pid_t p[2];
+int p_stat[2];
+
+int main() {
+  if ( pipe(fd) == -1 ) {
+    fprintf(stdout, "pipe error: %s\n", strerror(errno));
+    return 1;
+  }
+  p[0] = fork();
+  if ( p[0] == -1 ) {
+    fprintf(stdout, "fork error: %s\n", strerror(errno));
+    return 1;
+  }
+  else if ( p[0] == 0 ) {
+    if ( close(fd[0]) == -1) {
+      fprintf(stdout, "close error: %s\n", strerror(errno));
+      return 1;
+    }
+    if ( dup2(fd[1], 1) == -1 ) {
+      fprintf(stdout, "dup2 error: %s\n", strerror(errno));
+      return 1;
+    }
+    if ( execl("/root/zzz/abcd", "/root/zzz/abcd", NULL) == -1 ) {
+      fprintf(stdout, "execl error: %s\n", strerror(errno));
+      return 1;
+    }
+    return 0;
+  }
+  p[1] = fork();
+  if ( p[1] == -1 ) {
+    fprintf(stdout, "fork error: %s\n", strerror(errno));
+    return 1;
+  }
+  else if ( p[1] == 0 ) {
+    if ( close(fd[1]) == -1) {
+      fprintf(stdout, "close error: %s\n", strerror(errno));
+      return 1;
+    }
+    if ( dup2(fd[0], 0) == -1 ) {
+      fprintf(stdout, "dup2 error: %s\n", strerror(errno));
+      return 1;
+    }
+    if ( execl("/bin/grep", "/bin/grep", "number", NULL) == -1 ) {
+      fprintf(stdout, "execl error: %s\n", strerror(errno));
+      return 1;
+    }
+    return 0;
+  }
+// 一定要先关闭fd[1], 也就是abcd用到的输出管道, 再进入waitpid(p[1]) 也就是grep. 否则grep不会终止. 因为管道未关闭写端, grep接收不到end of file的标记.
+  if ( waitpid(p[0], &p_stat[0], 0) == -1 ) {
+    fprintf(stdout, "waitpid error: %s\n", strerror(errno));
+  }
+  if ( close(fd[1]) == -1 ) {
+    fprintf(stdout, "close error: %s\n", strerror(errno));
+  }
+  if ( waitpid(p[1], &p_stat[1], 0) == -1 ) {
+    fprintf(stdout, "waitpid error: %s\n", strerror(errno));
+  }
+  if ( close(fd[0]) == -1 ) {
+    fprintf(stdout, "close error: %s\n", strerror(errno));
+  }
+  return 0;
+}
+
+
+
+编译 : 
+gcc -O3 -Wall -Wextra -Werror -g ./b.c -o b
+执行 : 
+./b
+结果 : 
+[root@db-172-16-3-150 zzz]# ./b
+please enter a number:
+
+
+ltrace ./b跟踪结果 : 
+
+[root@db-172-16-3-150 zzz]# ltrace ./b
+__libc_start_main(0x400730, 1, 0x7fff8f6625b8, 0x400940, 0x400930 <unfinished ...>
+pipe(0x600d9c)                                                                   = 0
+fork( <unfinished ...>
+--- SIGCHLD (Child exited) ---
+close(4)                                                                         = 0
+waitpid(9073, 0x600da8, 0please enter a number:
+ <unfinished ...>
+--- SIGCHLD (Child exited) ---
+<... waitpid resumed> )                                                          = 9073
+close(3)                                                                         = 0
++++ exited (status 0) +++
+
+
+
+
+【参考】
+http://en.wikipedia.org/wiki/Pipeline_(Unix)
+
+

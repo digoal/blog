@@ -1,0 +1,193 @@
+PostgreSQL research
+
+use Docker as OpenStack Cloud Operating System Compute Node - Nova's Hypervisor
+
+2014-12-05 17:01:09   查看原文>>
+
+OpenStack现已支持Docker作为Nova的Hypervisor, 同时支持将image存储在Glance中, 目前的版本还需要使用docker-registry来代理请求到glance获取image.
+未来可能会去掉registry, 直接从glance获取image.
+
+use Docker as OpenStack Cloud Operating System Compute Node - Novas Hypervisor - 德哥@Digoal - PostgreSQL research
+
+部署步骤 : 
+1. Nova节点安装Docker server, 赋予nova用户docker组权限.
+2. 安装nova docker驱动
+3. 在nova配置中, 改为默认使用docker driver
+4. compute_driver = novadocker.virt.docker.DockerDriver
+5. 让nova控制网络, 即使有netns, --net=none启动容器.
+6. Glance配置, 添加docker镜像支持.
+使用 : 
+1. 下载docker镜像
+2. 将docker镜像导入glance(例子)
+docker pull samalba/hipache
+docker save samalba/hipache | glance image-create --is-public=True --container-format=docker --disk-format=raw --name samalba/hipache
+3. 使用nova启动容器(没有看到镜像下载过程, 已经在本地了, 如果镜像不在本地, 还需要配置registry, glance, 此处略)
+nova boot --image "samalba/hipache" --flavor m1.tiny test
+
+
+Configure OpenStack to enable Docker
+
+Installing Docker for OpenStack
+
+The first requirement is to install Docker on your compute hosts.
+
+In order for Nova to communicate with Docker over its local socket, add nova to the docker group and restart the compute service to pick up the change:
+
+usermod -G docker nova
+service openstack-nova-compute restart
+
+You will also need to install the driver:
+
+pip install -e git+https://github.com/stackforge/nova-docker#egg=novadocker
+
+You should then install the required modules
+
+cd src/novadocker/
+python setup.py install
+
+You may optionally choose to create operating-system packages for this, or use another appropriate installation method for your deployment.
+
+Nova configuration
+
+Nova needs to be configured to use the Docker virt driver.
+
+Edit the configuration file /etc/nova/nova.conf according to the following options:
+
+[DEFAULT]
+compute_driver = novadocker.virt.docker.DockerDriver
+
+Create the directory /etc/nova/rootwrap.d, if it does not already exist, and inside that directory create a file "docker.filters" with the following content:
+
+# nova-rootwrap command filters for setting up network in the docker driver
+# This file should be owned by (and only-writeable by) the root user
+
+[Filters]
+# nova/virt/docker/driver.py: 'ln', '-sf', '/var/run/netns/.*'
+ln: CommandFilter, /bin/ln, root
+
+Glance configuration
+
+Glance needs to be configured to support the "docker" container format. It's important to leave the default ones in order to not break an existing glance install.
+
+[DEFAULT]
+container_formats = ami,ari,aki,bare,ovf,docker
+
+Deployment with DevStack
+
+Using Docker hypervisor through DevStack replaces all manual configuration needed above.
+
+Before running DevStack's stack.sh script, configure the following options in the "localrc" file:
+
+VIRT_DRIVER=docker
+
+Then, run follow instructions in the README.rst
+
+Finally, run stack.sh from devstack directory:
+
+$ ./stack.sh
+
+How to use it
+
+Once you configured Nova to use the docker driver, the flow is the same as any other driver.
+
+$ glance image-list
++-------------------------------+---------------------------------+-------------+------------------+----------+--------+
+| ID                            | Name                            | Disk Format | Container Format | Size     | Status |
++-------------------------------+---------------------------------+-------------+------------------+----------+--------+
+| f5049d8b-93cf-49ab-af56-e7... | cirros-0.3.1-x86_64-uec         | ami         | ami              | 25165824 | active |
+| 0f1ec86c-157f-4f22-9889-c0... | cirros-0.3.1-x86_64-uec-kernel  | aki         | aki              | 4955792  | active |
+| 03a54807-2e35-4864-a337-45... | cirros-0.3.1-x86_64-uec-ramdisk | ari         | ari              | 3714968  | active |
+| 77083f3c-d320-46e3-bcba-0c... | docker-busybox:latest           | raw         | docker           | 2271596  | active |
++-------------------------------+---------------------------------+-------------+------------------+----------+--------+
+
+Only images with a "docker" container format will be bootable. The image contains basically a tarball of the container filesystem.
+
+It's recommended to add new images to Glance by using Docker. For instance, here is how you can fetch images from the public registry and push them back to Glance in order to boot a Nova instance with it:
+
+ $ docker search hipache
+Found 3 results matching your query ("hipache")
+NAME                             DESCRIPTION
+samalba/hipache                  https://github.com/dotcloud/hipache
+
+Then, pull the image and push it to Glance:
+
+ $ docker pull samalba/hipache
+ $ docker save samalba/hipache | glance image-create --is-public=True --container-format=docker --disk-format=raw --name samalba/hipache
+
+NOTE: The name you provide to glance must match the name by which the image is known to docker.
+
+ $ glance image-list
++-------------------------------+---------------------------------+-------------+------------------+----------+--------+
+| ID                            | Name                            | Disk Format | Container Format | Size     | Status |
++-------------------------------+---------------------------------+-------------+------------------+----------+--------+
+| f5049d8b-93cf-49ab-af56-e7... | cirros-0.3.1-x86_64-uec         | ami         | ami              | 25165824 | active |
+| 0f1ec86c-157f-4f22-9889-c0... | cirros-0.3.1-x86_64-uec-kernel  | aki         | aki              | 4955792  | active |
+| 03a54807-2e35-4864-a337-45... | cirros-0.3.1-x86_64-uec-ramdisk | ari         | ari              | 3714968  | active |
+| 77083f3c-d320-46e3-bcba-0c... | docker-busybox:latest           | raw         | docker           | 2271596  | active |
+| 998f52ba-fe03-46b0-b5a6-4b... | samalba/hipache               | raw         | docker           | 486      | active |
++-------------------------------+---------------------------------+-------------+------------------+----------+--------+
+
+You can obviously boot instances from nova cli:
+
+ $ nova boot --image "samalba/hipache" --flavor m1.tiny test
++--------------------------------------+--------------------------------------+
+| Property                             | Value                                |
++--------------------------------------+--------------------------------------+
+| OS-EXT-STS:task_state                | scheduling                           |
+| image                                | samalba/hipache                |
+| OS-EXT-STS:vm_state                  | building                             |
+| OS-EXT-SRV-ATTR:instance_name        | instance-0000002d                    |
+| OS-SRV-USG:launched_at               | None                                 |
+| flavor                               | m1.micro                             |
+| id                                   | 31086c50-f937-4f80-9790-045096ecb32c |
+| security_groups                      | [{u'name': u'default'}]              |
+| user_id                              | 1a3eed38d1344e869dd019b3636db12b     |
+| OS-DCF:diskConfig                    | MANUAL                               |
+| accessIPv4                           |                                      |
+| accessIPv6                           |                                      |
+| progress                             | 0                                    |
+| OS-EXT-STS:power_state               | 0                                    |
+| OS-EXT-AZ:availability_zone          | nova                                 |
+| config_drive                         |                                      |
+| status                               | BUILD                                |
+| updated                              | 2013-08-25T00:22:32Z                 |
+| hostId                               |                                      |
+| OS-EXT-SRV-ATTR:host                 | None                                 |
+| OS-SRV-USG:terminated_at             | None                                 |
+| key_name                             | None                                 |
+| OS-EXT-SRV-ATTR:hypervisor_hostname  | None                                 |
+| name                                 | test                                 |
+| adminPass                            | QwczSPAAT6Mm                         |
+| tenant_id                            | 183a9b7ed7c6465f97387458d693ca4c     |
+| created                              | 2013-08-25T00:22:31Z                 |
+| os-extended-volumes:volumes_attached | []                                   |
+| metadata                             | {}                                   |
++--------------------------------------+--------------------------------------+
+
+Once the instance is booted:
+
+$ nova list
++--------------------------------------+------+--------+------------+-------------+------------------+
+| ID                                   | Name | Status | Task State | Power State | Networks         |
++--------------------------------------+------+--------+------------+-------------+------------------+
+| 31086c50-f937-4f80-9790-045096ecb32c | test | ACTIVE | None       | Running     | private=10.0.0.2 |
++--------------------------------------+------+--------+------------+-------------+------------------+
+
+You can also see the corresponding container on docker:
+
+$ docker ps
+docker ps
+ID              IMAGE                                  COMMAND      CREATED             STATUS          PORTS
+f337c7fec5ff    samalba/hipache              sh           10 seconds ago      Up 10 seconds
+
+The command used here is the one configured in the image. Each container image can have a command configured for the run. The driver does not usually override this. You can image booting an apache2 instance, it will start the apache process if the image is authored properly via a Dockerfile.
+
+Resources
+
+  • Nickoloff, Jeff; Docker in Action, Manning Publications, 2014, ISBN 978-1-6334-3023-5
+
+
+
+[参考]
+1. https://wiki.openstack.org/wiki/Docker
+2. http://blog.163.com/digoal@126/blog/static/163877040201411514759357/

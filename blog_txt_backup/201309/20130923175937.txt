@@ -1,0 +1,477 @@
+PostgreSQL research
+
+PostgreSQL history table use unlogged table performance tuning case
+
+2013-09-23 17:59:37   查看原文>>
+
+unlogged table不写xlog, 同时在数据库崩溃后进入recovery阶段时会清除unlogged table的数据.
+由于unlogged table不写xlog , 所以也不能通过流复制或者log shipping复制到standby中.
+一般的应用场景是用来记录历史数据, 但是这也有一个弊端, 但任何情况下数据库发生crash , 需要recovery的话, unlogged table会被清除掉. 清除的动作在xlog.c中, 详见
+src/backend/access/transam/xlog.c
+
+ResetUnloggedRelations(UNLOGGED_RELATION_CLEANUP);
+        /*
+         * Reset initial contents of unlogged relations.  This has to be done
+         * AFTER recovery is complete so that any unlogged relations created
+         * during recovery also get picked up.
+         */
+        if (InRecovery)
+                ResetUnloggedRelations(UNLOGGED_RELATION_INIT);
+
+
+但是你会发现注释掉这两行ResetUnloggedRelations也没有效果, 同样可能丢数据.
+原因是, checkpoint的时候, unlogged table的脏块不一定会flush到磁盘.
+
+如果又要利用unlogged table的不写xlog的高效性, 同时还不能让他被数据库recovery时清除掉怎么办呢?
+这里有个办法, 就是在使用时将表改成unlogged table, 使用后改成持久化表.
+但是这也不是非常安全的, 因为init文件可能会自动生成. (例如truncate表然后vacuum表后, 会自动生成init文件)
+测试如下 : 
+
+pg93@db-172-16-3-39-> psql
+psql (9.3beta2)
+Type "help" for help.
+digoal=# create unlogged table t4 (id int);
+CREATE TABLE
+digoal=# insert into t4 select generate_series(1,1000000);
+INSERT 0 1000000
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# update pg_class set relpersistence ='p' where relname='t4';
+UPDATE 1
+digoal=# checkpoint;
+CHECKPOINT
+
+
+先正常关闭数据库.
+
+pg93@db-172-16-3-39-> pg_ctl stop -m fast
+waiting for server to shut down.... done
+server stopped
+pg93@db-172-16-3-39-> pg_ctl start
+server starting
+pg93@db-172-16-3-39-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1296
+
+
+正常关闭数据库再启动, unlogged table的数据还在.
+
+pg93@db-172-16-3-39-> psql
+psql (9.3beta2)
+Type "help" for help.
+digoal=# select count(*) from t4;
+  count  
+---------
+ 1000000
+(1 row)
+digoal=# \q
+
+
+非正常关闭数据库, 
+
+pg93@db-172-16-3-39-> pg_ctl restart -m immediate
+waiting for server to shut down.... done
+server stopped
+server starting
+pg93@db-172-16-3-39-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1296
+
+
+显然数据丢失了.  也就是说初始创建的unlogged表仅仅使用更新pg_class.relpersistence 不能达到持久化的目的.
+
+pg93@db-172-16-3-39-> psql
+psql (9.3beta2)
+Type "help" for help.
+digoal=# select count(*) from t4;
+ count 
+-------
+     0
+(1 row)
+
+
+
+如果初始创建的表是logged的, 情况又不一样了. 
+
+digoal=# create table t3(id int);
+CREATE TABLE
+
+
+正常的插入
+
+digoal=# insert into t3 select generate_series(1,1000000);
+INSERT 0 1000000
+digoal=# checkpoint;
+CHECKPOINT
+
+
+改成unlogged后插入
+
+digoal=# update pg_class set relpersistence ='u' where relname='t3';
+UPDATE 1
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# insert into t3 select generate_series(1,1000000);
+INSERT 0 1000000
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# update pg_class set relpersistence ='p' where relname='t3';
+UPDATE 1
+digoal=# checkpoint;
+CHECKPOINT
+
+
+先正常关闭数据库, 
+
+pg93@db-172-16-3-39-> pg_ctl stop -m fast
+waiting for server to shut down.... done
+server stopped
+pg93@db-172-16-3-39-> pg_ctl start
+server starting
+pg93@db-172-16-3-39-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1296
+
+
+启动后数据还在.
+
+pg93@db-172-16-3-39-> psql
+psql (9.3beta2)
+Type "help" for help.
+digoal=# select count(*) from t3;
+  count  
+---------
+ 2000000
+(1 row)
+
+
+异常关闭数据库后, 使用unlogged方式插入的数据也还在.
+
+digoal=# \q
+pg93@db-172-16-3-39-> pg_ctl restart -m immediate
+waiting for server to shut down.... done
+server stopped
+server starting
+pg93@db-172-16-3-39-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1296
+pg93@db-172-16-3-39-> 
+pg93@db-172-16-3-39-> psql
+psql (9.3beta2)
+Type "help" for help.
+digoal=# select count(*) from t3;
+  count  
+---------
+ 2000000
+
+
+
+那么初始表是logged table , 改成unlogged table后, xlog的生产量和以前是否有节省?
+
+digoal=# create table t3(id int);
+CREATE TABLE
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 0/51EBACE0
+(1 row)
+digoal=# insert into t3 select generate_series(1,10000000);
+INSERT 0 10000000
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 0/781FA3A0
+(1 row)
+digoal=# select pg_xlog_location_diff('0/781FA3A0', '0/51EBACE0');
+ pg_xlog_location_diff 
+-----------------------
+             640939712
+(1 row)
+使用unlogged插入.
+digoal=# update pg_class set relpersistence ='u' where relname='t3';
+UPDATE 1
+digoal=# truncate t3;
+TRUNCATE TABLE
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 0/78208760
+(1 row)
+digoal=# insert into t3 select generate_series(1,10000000);
+INSERT 0 10000000
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# select pg_current_xlog_location();
+ pg_current_xlog_location 
+--------------------------
+ 0/7820A690
+(1 row)
+digoal=# select pg_xlog_location_diff('0/7820A690', '0/78208760');
+ pg_xlog_location_diff 
+-----------------------
+                  7984
+(1 row)
+改回logged
+digoal=# update pg_class set relpersistence ='p' where relname='t3';
+UPDATE 1
+
+
+显然起到了节约xlog的作用.
+为什么不会被清除, 原因是普通表创建时不会生成init文件. 小结部分会讲到.
+
+[小结]
+1. 初始创建的表必须是logged table, 而不是unlogged table. 原因常见第三点.
+2. 使用unlogged 模式插入的数据, 部分数据可能在shared buffer中, 没有flush到磁盘, 如果此时down机, 是可能造成部分数据丢失的. 即使使用checkpoint也无法做到, checkpoint时对于unlogged table在shared buffer中的数据不会flush到disk中.
+    这些数据只有当所有的shared buffer中的数据 flush到磁盘后才不会丢失. 因为pg_xlog中没有这些数据可以用作恢复.
+    在测试时pg_ctl stop -m fast正好起到了flush shared buffer的目的.
+3. 为什么unlogged table改成logged后, 遇到数据库crash还是会遭到初始话处理呢?
+原因在这里, unlogged table比普通表多了个文件.
+
+digoal=# create unlogged table u_log1(id int);
+CREATE TABLE
+digoal=# insert into u_log1 select generate_series(1,10000);
+INSERT 0 10000
+digoal=# checkpoint;
+digoal=# select pg_relation_filepath('u_log1'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/24600
+(1 row)
+pg94@db-172-16-3-39-> cd $PGDATA/
+pg94@db-172-16-3-39-> ll base/16384/24600*
+-rw------- 1 pg94 pg94 360K Sep 23 18:07 base/16384/24600
+-rw------- 1 pg94 pg94  24K Sep 23 18:07 base/16384/24600_fsm
+-rw------- 1 pg94 pg94    0 Sep 23 18:07 base/16384/24600_init
+
+
+24600_init这个文件是unlogged 表的标签文件.
+Unlogged tables and indexes have a third fork, known as the initialization fork, which is stored in a fork with the suffix _init
+这个文件表示数据库在recovery阶段会替换掉main fork, 也就是recovery阶段清理unlogged table的数据的作用.
+下面创建普通表 : 
+
+digoal=# create table log1(id int);
+CREATE TABLE
+digoal=# insert into log1 select generate_series(1,10000);
+INSERT 0 10000
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# select pg_relation_filepath('log1'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/16384/24603
+(1 row)
+pg94@db-172-16-3-39-> ll base/16384/24603*
+-rw------- 1 pg94 pg94 360K Sep 23 18:08 base/16384/24603
+-rw------- 1 pg94 pg94  24K Sep 23 18:08 base/16384/24603_fsm
+
+
+普通表没有init结尾的文件.
+如果把unlogged表的init文件删除掉, 那么数据库恢复时这个unlogged 表就不会被初始化了.
+
+pg94@db-172-16-3-39-> rm base/16384/24600_init
+rm: remove regular empty file `base/16384/24600_init'? y
+
+pg94@db-172-16-3-39-> pg_ctl stop -m fast
+waiting for server to shut down....DEBUG:  00000: logger shutting down
+LOCATION:  SysLoggerMain, syslogger.c:517
+ done
+server stopped
+pg94@db-172-16-3-39-> pg_ctl start
+server starting
+pg94@db-172-16-3-39-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1297
+LOG:  00000: redirecting log output to logging collector process
+HINT:  Future log output will appear in directory "pg_log".
+LOCATION:  SysLogger_Start, syslogger.c:649
+
+digoal=# select count(*) from u_log1 ;
+ count 
+-------
+ 10000
+(1 row)
+
+
+非正常重启数据库, unlogged表的数据未被清除掉.
+
+pg94@db-172-16-3-39-> pg_ctl restart -m immediate
+waiting for server to shut down....DEBUG:  00000: logger shutting down
+LOCATION:  SysLoggerMain, syslogger.c:517
+ done
+server stopped
+server starting
+pg94@db-172-16-3-39-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1297
+LOG:  00000: redirecting log output to logging collector process
+HINT:  Future log output will appear in directory "pg_log".
+LOCATION:  SysLogger_Start, syslogger.c:649
+
+pg94@db-172-16-3-39-> psql
+psql (9.4devel)
+Type "help" for help.
+digoal=# select count(*) from u_log1 ;
+ count 
+-------
+ 10000
+(1 row)
+
+
+4. 如果真的要用unlogged table, 并且又要保证数据在crash后不丢失. 可以这么来做, 当然我非常不建议大家这样做.
+unlogged table目前的初衷就不是这么来用的.
+未来大家如果都有这方面的需求, 也许pg会改进代码.
+
+1. 修改源代码, 注释src/backend/access/transam/xlog.c中的ResetUnloggedRelations, 重新make , make install
+2. 创建普通的logged table
+3. 修改对应表和索引的 pg_class.relpersistence='u'
+4. 导入数据, 此时是不会写xlog的.
+5. 正常重启数据库, 目的是把shared buffer中的unlogged table 的dirty page flush到磁盘, 或者以后还有什么方法可以做到手工的flush unlogged table的dirty page到磁盘. 目前看来只有重启数据库, 因为checkpoint对unlogged table dirty page不感冒.
+6. 现在开始数据是安全的了.
+7. 但是在表被truncate或者其他方式重写表后, 可能会自动生成init文件, 不过已经改了源码, 绕过了resetunlogged表的函数, 所以就没有关系了.
+
+
+为什么说 checkpoint对unlogged table的脏块不感冒, 来看个测试
+
+digoal=# truncate u;
+TRUNCATE TABLE
+digoal=# insert into u select generate_series(1,100000);
+INSERT 0 100000
+digoal=# select * from pg_stat_file(pg_relation_filepath('u')), pg_relation_filepath('u');
+  size   |         access         |      modification      |         change         | creation | isdir | pg_relation_filepath 
+---------+------------------------+------------------------+------------------------+----------+-------+----------------------
+ 3629056 | 2013-12-23 17:08:36+08 | 2013-12-23 17:08:40+08 | 2013-12-23 17:08:40+08 |          | f     | base/16399/114695
+(1 row)
+digoal=# checkpoint;
+CHECKPOINT
+
+
+看到checkpoint之后, 数据文件没有变化, 修改的时间戳不变.
+
+digoal=# select * from pg_stat_file(pg_relation_filepath('u')), pg_relation_filepath('u');
+  size   |         access         |      modification      |         change         | creation | isdir | pg_relation_filepath 
+---------+------------------------+------------------------+------------------------+----------+-------+----------------------
+ 3629056 | 2013-12-23 17:08:36+08 | 2013-12-23 17:08:40+08 | 2013-12-23 17:08:40+08 |          | f     | base/16399/114695
+(1 row)
+pg94@db-172-16-3-150-> pg_ctl restart -m fast
+
+
+但是正常的重启数据库后, 时间戳变了, 说明正常的关库发生的checkpoint会处理unlogged table的脏块.
+
+pg94@db-172-16-3-150-> psql
+psql (9.4devel)
+Type "help" for help.
+digoal=# select * from pg_stat_file(pg_relation_filepath('u')), pg_relation_filepath('u');
+  size   |         access         |      modification      |         change         | creation | isdir | pg_relation_filepath 
+---------+------------------------+------------------------+------------------------+----------+-------+----------------------
+ 3629056 | 2013-12-23 17:08:36+08 | 2013-12-23 17:08:52+08 | 2013-12-23 17:08:52+08 |          | f     | base/16399/114695
+(1 row)
+
+
+如果是普通表, checkpoint会把它在shared buffer中的脏块写到磁盘上
+
+digoal=# update pg_class set relpersistence ='p' where relname='u';
+UPDATE 1
+digoal=# insert into u select generate_series(1,100000);
+INSERT 0 100000
+digoal=# select * from pg_stat_file(pg_relation_filepath('u')), pg_relation_filepath('u');
+  size   |         access         |      modification      |         change         | creation | isdir | pg_relation_filepath 
+---------+------------------------+------------------------+------------------------+----------+-------+----------------------
+ 7258112 | 2013-12-23 17:20:17+08 | 2013-12-23 17:21:27+08 | 2013-12-23 17:21:27+08 |          | f     | base/16399/114696
+(1 row)
+
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# select * from pg_stat_file(pg_relation_filepath('u')), pg_relation_filepath('u');
+  size   |         access         |      modification      |         change         | creation | isdir | pg_relation_filepath 
+---------+------------------------+------------------------+------------------------+----------+-------+----------------------
+ 7258112 | 2013-12-23 17:20:17+08 | 2013-12-23 17:21:32+08 | 2013-12-23 17:21:32+08 |          | f     | base/16399/114696
+(1 row)
+
+
+
+一共有几种checkpoint, 如下 : 
+src/include/access/xlog.h
+
+/* These directly affect the behavior of CreateCheckPoint and subsidiaries */
+#define CHECKPOINT_IS_SHUTDOWN  0x0001  /* Checkpoint is for shutdown */
+#define CHECKPOINT_END_OF_RECOVERY      0x0002          /* Like shutdown checkpoint,
+                                                                                                 * but issued at end of WAL
+                                                                                                 * recovery */
+#define CHECKPOINT_IMMEDIATE    0x0004  /* Do it without delays */
+#define CHECKPOINT_FORCE                0x0008  /* Force even if no activity */
+/* These are important to RequestCheckpoint */
+#define CHECKPOINT_WAIT                 0x0010  /* Wait for completion */
+/* These indicate the cause of a checkpoint request */
+#define CHECKPOINT_CAUSE_XLOG   0x0020  /* XLOG consumption */
+#define CHECKPOINT_CAUSE_TIME   0x0040  /* Elapsed time */
+
+
+请求checkpoint时, 调用src/backend/postmaster/checkpointer.c:RequestCheckpoint(int flags)
+
+/*
+ * RequestCheckpoint
+ *              Called in backend processes to request a checkpoint
+ *
+ * flags is a bitwise OR of the following:
+ *      CHECKPOINT_IS_SHUTDOWN: checkpoint is for database shutdown.
+ *      CHECKPOINT_END_OF_RECOVERY: checkpoint is for end of WAL recovery.
+ *      CHECKPOINT_IMMEDIATE: finish the checkpoint ASAP,
+ *              ignoring checkpoint_completion_target parameter.
+ *      CHECKPOINT_FORCE: force a checkpoint even if no XLOG activity has occurred
+ *              since the last one (implied by CHECKPOINT_IS_SHUTDOWN or
+ *              CHECKPOINT_END_OF_RECOVERY).
+ *      CHECKPOINT_WAIT: wait for completion before returning (otherwise,
+ *              just signal checkpointer to do it, and return).
+ *      CHECKPOINT_CAUSE_XLOG: checkpoint is requested due to xlog filling.
+ *              (This affects logging, and in particular enables CheckPointWarning.)
+ */
+void
+RequestCheckpoint(int flags)
+{
+        /* use volatile pointer to prevent code rearrangement */
+        volatile CheckpointerShmemStruct *cps = CheckpointerShmem;
+        int                     ntries;
+        int                     old_failed,
+                                old_started;
+
+
+写脏块的函数 : 
+src/backend/storage/buffer/bufmgr.c
+
+/*
+ * BufferSync -- Write out all dirty buffers in the pool.
+ *
+ * This is called at checkpoint time to write out all dirty shared buffers.
+ * The checkpoint request flags should be passed in.  If CHECKPOINT_IMMEDIATE
+ * is set, we disable delays between writes; if CHECKPOINT_IS_SHUTDOWN is
+ * set, we write even unlogged buffers, which are otherwise skipped.  The
+ * remaining flags currently have no effect here.
+ */
+static void
+BufferSync(int flags)
+{
+        int                     buf_id;
+        int                     num_to_scan;
+        int                     num_to_write;
+        int                     num_written;
+        int                     mask = BM_DIRTY;
+
+        /* Make sure we can handle the pin inside SyncOneBuffer */
+        ResourceOwnerEnlargeBuffers(CurrentResourceOwner);
+
+        /*
+         * Unless this is a shutdown checkpoint, we write only permanent, dirty
+         * buffers.  But at shutdown or end of recovery, we write all dirty
+         * buffers.
+         */
+        if (!((flags & CHECKPOINT_IS_SHUTDOWN) || (flags & CHECKPOINT_END_OF_RECOVERY)))
+                mask |= BM_PERMANENT;
+
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/16387704020121210128345/
+2. http://blog.163.com/digoal@126/blog/static/163877040201151402832128/
+3. http://blog.163.com/digoal@126/blog/static/16387704020133274380469/
+4. src/backend/storage/file/reinit.c

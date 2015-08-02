@@ -1,0 +1,179 @@
+PostgreSQL research
+
+Thinking PostgreSQL's Column Compress
+
+2011-08-01 12:47:34   查看原文>>
+
+  今天我同事给了我一份表结构的数据，其中涉及到几个字段如下
+  create_time character varying(14) not null,                   --创建时间
+  modify_time character varying(14) not null,                   --修改时间
+  这里用到了varchar来存储时间的值，后来下面从效率，存储的信息量，耗费的字节数，使用的便捷性几个方面来比较一下VARCHAR和timestamp without time zone在这个场景的应用。
+  1. 信息量:
+  varchar(14) 存的信息 yyyymmddhh24miss 精确到秒。
+  timestamp without time zone 存的信息 yyyymmddhh24miss.ssssss 精确到百万分之一秒.
+  2. 耗费的字节数
+digoal=> create table tbl_test(col1 character varying(14),col2 timestamp without time zone);
+CREATE TABLE
+digoal=> insert into tbl_test values ('20110801091904',clock_timestamp());
+INSERT 0 1
+digoal=> select pg_column_size(col1),pg_column_size(col2) from tbl_test ;
+ pg_column_size | pg_column_size 
+----------------+----------------
+             15 |              8
+(1 row)
+varchar(14) 耗费15字节
+timestamp without time zone 耗费8字节
+  3. 写入效率
+分别插入100万记录，从执行时间上来比较一下效率。
+为了保持数据更加有说服力，我们这里都采用应用端生成的时间值来插入。而不使用now()或者其他的数据库函数来生成时间数据。
+digoal=> create table tbl_test (id int,crt_time varchar(14));
+CREATE TABLE
+digoal=> insert into tbl_test select generate_series(1,1000000),'20110801100731';
+INSERT 0 1000000
+Time: 1608.014 ms
+digoal=> create table tbl_test (id int,crt_time timestamp without time zone);
+CREATE TABLE
+digoal=> insert into tbl_test select generate_series(1,1000000),'2011-08-01 10:07:31'::timestamp without time zone;
+INSERT 0 1000000
+Time: 1421.685 ms
+timestamp without time zone 耗费的时间小于 varchar(14)耗费的时间。说明timestamp without time zone 效率高一点点。
+
+如果是使用数据库的时间，比如now(),clock_timestamp()来生成时间。效率又如何？
+digoal=> create table tbl_test (id int,crt_time varchar(14));
+CREATE TABLE
+digoal=> insert into tbl_test select generate_series(1,1000000),to_char(now(),'yyyymmddhh24miss');
+INSERT 0 1000000
+Time: 4370.596 ms
+digoal=> create table tbl_test (id int,crt_time timestamp without time zone);
+CREATE TABLE
+digoal=> insert into tbl_test select generate_series(1,1000000),now();
+INSERT 0 1000000
+Time: 1895.120 ms
+采用varchar类型，时间比原来多了一倍多，
+采用timestamp without time zone 时间比原来多了约30%。
+  4. 使用的便捷性
+首先是索引，如果要进行时间上的比较，VARCHAR类型不得不使用函数索引。
+然后是时间字段可以使用丰富的函数。
+
+前面好像扯了一些和这篇BLOG不太相关的话题，其实看第二点和第三点就有一点点关系了。
+  我们来把环境再延伸到操作系统层和住几层，假设服务器的内存是12GB。
+  表一和表二存储的信息一致。用varchar存储时间的表15GB，用timestamp without time zone存储时间的表8GB。
+  假设有一半的是活跃数据，那么varchar存储时间的表,文件系统CACHE可能用掉7.5GB；
+   而用timestamp without time zone存储时间的表,文件系统CACHE可能用掉4GB。
+  没错，说明数据库的压缩技术是很重要的，特别是CPU资源很富裕,但是内存很紧缺的情况下。
+
+  之前写过一篇关于PostgreSQL TOAST的博客,也是关于数据压缩的,如下,
+http://blog.163.com/digoal@126/blog/static/163877040201122910531988/
+  有些重复的东西就不谈了，大家可以参考上面这篇BLOG。
+
+接下来浮想联翩或者泛泛而谈一下（其实优点类似数据集得加密解密）:
+1. 数据库端压缩
+优点，标准统一
+缺点，耗费数据库CPU，传输RAW数据
+2. 数据库驱动层压缩
+优点，不占用数据库CPU，传输压缩后的数据
+缺点，标准不容易统一，
+3. 客户端压缩
+优点，不占用数据库CPU，传输压缩后的数据
+缺点，标准不容易统一，
+4. 网络传输层压缩
+优点，传输压缩后的数据，
+缺点，数据库存储RAW数据，
+另外，压缩和解压缩不一定要在同一端完成，如可以在数据库端压缩，但是在驱动端解压。等等
+
+最后来测试一下Oracle 11G R2和PostgreSQL9.1 beta2在数据压缩方面的技术。
+为了做到尽量公正,
+Oracle fctfree=0
+PostgreSQL fillfactor=100
+
+以下测试content插入704个字符.
+先来看看Oracle
+SQL> create table tbl_test (id int,author varchar2(32),title varchar2(256),content varchar2(4000)) pctfree 0 compress basic ; 
+SQL> insert into tbl_test select rownum,'digoal'||rownum,'TOAST,The Oversized-Attribute Storage Technique'||rownum,'This section provides an overview of TOAST (The Oversized-Attribute Storage Technique).  PostgreSQL uses a fixed page size (commonly 8 kB), and does not allow tuples to span multiple pages. Therefore, it
+is not possible to store very large field values directly. To overcome this limitation, large field values are compressed and/or broken up into multiple physical rows. This happens transparently to the user, with only small impact on most of the backend code. The technique is affectionately known as TOAST (or "the
+best thing since sliced bread").  Only certain data types support TOAST — there is no need to impose the overhead on data types that cannot produce large field values. To support TOAST'||rownum from dual connect by level<=1000000;
+SQL> select sum(bytes)/1024/1024||'MB' from dba_segments where segment_name='TBL_TEST' ; 
+784MB
+插入耗时 9890ms
+占用空间 784MB (实际没有压缩)
+另外compress for oltp  在这个测试中都没有起到作用。
+而compress for archive和compress for query需要Exadata存储支持。
+SQL> create table tbl_test (id int,author varchar2(32),title varchar2(256),content varchar2(4000)) pctfree 0 compress for archive;
+create table tbl_test (id int,author varchar2(32),title varchar2(256),content varchar2(4000)) pctfree 0 compress for archive
+*
+ERROR at line 1:
+ORA-64307: hybrid columnar compression is only supported in tablespaces
+residing on Exadata storage
+
+以下测试content插入704个字符.
+接下来看看PostgreSQL的表现
+digoal=> create table tbl_test (id int,author varchar(32),title varchar(256),content varchar(4000)) with(fillfactor=100);
+CREATE TABLE
+Time: 33.107 ms
+digoal=> \d+ tbl_test;
+                        Table "digoal.tbl_test"
+ Column  |          Type           | Modifiers | Storage  | Description 
+---------+-------------------------+-----------+----------+-------------
+ id      | integer                 |           | plain    | 
+ author  | character varying(32)   |           | extended | 
+ title   | character varying(256)  |           | extended | 
+ content | character varying(4000) |           | extended | 
+Has OIDs: no
+Options: fillfactor=100
+varchar字段默认就是压缩存储的。
+digoal=> insert into tbl_test select generate_series(1,1000000),'digoal'||generate_series(1,1000000),'TOAST,The Oversized-Attribute Storage Technique'||generate_series(1,1000000),'This section provides an overview of TOAST (The Oversized-Attribute Storage Technique).  PostgreSQL uses a fixed page size (commonly 8 kB),
+and does not allow tuples to span multiple pages. Therefore, it is not possible to store very large field values directly. To overcome this limitation, large field values are compressed and/or broken up into multiple physical rows. This happens transparently to the user, with only small impact on most of the backend
+code. The technique is affectionately known as TOAST (or "the best thing since sliced bread").  Only certain data types support TOAST — there is no need o impose the overhead on data types that cannot produce large field values. To support TOAST'||generate_series(1,1000000);
+INSERT 0 1000000
+Time: 6593.629 ms
+digoal=> select pg_total_relation_size('tbl_test'::regclass)/1024/1024;
+ ?column? 
+----------
+      867
+下面来看看Pg不压缩的情况
+alter table tbl_test alter column author set storage plain;
+alter table tbl_test alter column title set storage plain;
+alter table tbl_test alter column content set storage plain;
+digoal=> insert into tbl_test select generate_series(1,1000000),'digoal'||generate_series(1,1000000),'TOAST,The Oversized-Attribute Storage Technique'||generate_series(1,1000000),'This section provides an overview of TOAST (The Oversized-Attribute Storage Technique).  PostgreSQL uses a fixed page size (commonly 8 kB),
+and does not allow tuples to span multiple pages. Therefore, it is not possible to store very large field values directly. To overcome this limitation, large field values are compressed and/or broken up into multiple physical rows. This happens transparently to the user, with only small impact on most of the backend
+code. The technique is affectionately known as TOAST (or "the best thing since sliced bread").  Only certain data types support TOAST — there is no need o impose the overhead on data types that cannot produce large field values. To support TOAST'||generate_series(1,1000000);
+INSERT 0 1000000
+Time: 6611.137 ms
+digoal=> select pg_total_relation_size('tbl_test'::regclass)/1024/1024;
+ ?column? 
+----------
+      867
+(1 row)
+从上面的测试看出，ORACLE和PG在插入的字段长度约700字符的时候，都没有在这里使用压缩.
+
+那么插入7000个字符看看,已经超出ORACLE的VARCHAR2最大允许长度，所以不考虑ORACLE在这里的测试。下面来看看PG的表现。
+digoal=> insert into tbl_test select generate_series(1,1000000),'digoal'||generate_series(1,1000000),'TOAST,The Oversized-Attribute Storage Technique'||generate_series(1,1000000),'此处省略7000字'||generate_series(1,1000000);
+耗费时间354343ms
+digoal=> select pg_relation_size('tbl_test'::regclass)/1024/1024;
+ ?column? 
+----------
+      119
+(1 row)
+digoal=> select relname,reltoastrelid from pg_class where relname='tbl_test';
+ relname  | reltoastrelid 
+----------+---------------
+ tbl_test |       1096285
+(1 row)
+digoal=> select pg_relation_size(1096285)/1024/1024;
+ ?column? 
+----------
+     3906
+(1 row)
+digoal=> select pg_total_relation_size('tbl_test'::regclass)/1024/1024;
+ ?column? 
+----------
+     4069
+(1 row)
+这里用到了TOAST表，插入量是刚才的10倍，总的数据大小是刚才的4.8倍，压缩了一半。
+
+【参考】
+PostgreSQL
+http://www.postgresql.org/docs/9.0/static/storage-toast.html
+src/backend/utils/adt/pg_lzcompress.c
+Oracle 11G : 
+/E11882_01/server.112/e17118/statements_7002.htm

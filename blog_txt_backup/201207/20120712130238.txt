@@ -1,0 +1,134 @@
+PostgreSQL research
+
+Why use age(xid) function in standby emit error message : cannot assign TransactionIds during recovery
+
+2012-07-12 13:02:38   查看原文>>
+
+今天早上的时候QQ群里有位兄弟问了一个问题如下 : 
+
+pg 9.1 使用stream 方式 做主备 ，在备库日志中每隔5分钟就出现：
+CSTERROR:  cannot assign TransactionIds during recovery
+ CSTSTATEMENT:  SET statement_timeout=30000;BEGIN;SET statement_timeout=30000;COMMIT;SELECT datname, age(datfrozenxid) FROM pg_database WHERE datallowconn ORDER BY 1, 2
+大家有没遇到过这样的问题呢
+
+
+先不谈每隔5分钟, 和它没关系, 可能是什么定时任务触发了这个查询. 还是先找找这个出错的SQL是哪个, 
+
+postgres=# \set VERBOSITY verbose
+postgres=# SELECT datname, age(datfrozenxid) FROM pg_database WHERE datallowconn ORDER BY 1, 2;
+ERROR:  XX000: cannot assign TransactionIds during recovery
+LOCATION:  GetNewTransactionId, varsup.c:64
+
+
+这里我们看到出错的是这个SQL (SELECT datname, age(datfrozenxid) FROM pg_database WHERE datallowconn ORDER BY 1, 2;)，但是为什么会出错呢?
+从错误日志来看，找到varsup.c里面的GetNewTransactionId函数 : 
+
+/*
+ * Allocate the next XID for a new transaction or subtransaction.
+ *
+ * The new XID is also stored into MyProc before returning.
+ *
+ * Note: when this is called, we are actually already inside a valid
+ * transaction, since XIDs are now not allocated until the transaction
+ * does something.      So it is safe to do a database lookup if we want to
+ * issue a warning about XID wrap.
+ */
+TransactionId
+GetNewTransactionId(bool isSubXact)
+{
+        TransactionId xid;
+
+        /*
+         * During bootstrap initialization, we return the special bootstrap
+         * transaction id.
+         */
+        if (IsBootstrapProcessingMode())
+        {
+                Assert(!isSubXact);
+                MyProc->xid = BootstrapTransactionId;
+                return BootstrapTransactionId;
+        }
+
+
+
+-- 执行到下面这个判断报的错.
+
+        /* safety check, we should never get this far in a HS slave */
+        if (RecoveryInProgress())
+                elog(ERROR, "cannot assign TransactionIds during recovery");
+
+        LWLockAcquire(XidGenLock, LW_EXCLUSIVE);
+
+        xid = ShmemVariableCache->nextXid;
+
+        /*----------
+         * Check to see if it's safe to assign another XID.  This protects against
+         * catastrophic data loss due to XID wraparound.  The basic rules are:
+         *
+
+
+那么为什么要调用这个函数呢, GetNewTransactionId, 这个函数是获取一个新的事务ID。
+也就是说age(xid)函数在执行时要获取一个新的事务ID，为什么呢？
+因为算一个XID的年龄必须要知道当前的事务号才有得比较。
+我们可以在一个PostgreSQL 9.1.3 的primary数据库中执行, 看看是不是执行完age(xid)后, 事务号会发生变化.
+
+postgres=# select datname,age(datfrozenxid) from pg_database where datname='postgres';
+ datname  |   age    
+----------+----------
+ postgres | 14686244
+(1 row)
+确保没有其他客户端连接的情况下，再次执行
+postgres=# select datname,age(datfrozenxid) from pg_database where datname='postgres';
+ datname  |   age    
+----------+----------
+ postgres | 14686245
+(1 row)
+
+
+年龄增长了1.
+也就是说PostgreSQL 9.1 中age()函数需要调用GetNewTransactionId 去获取当前事务ID。
+那么我们到9.3的数据库中试试会不会这样呢?
+
+postgres=# select datname,age(datfrozenxid) from pg_database where datname='postgres';
+ datname  | age 
+----------+-----
+ postgres |  33
+(1 row)
+确保没有其他客户端连接的情况下，再次执行
+postgres=# select datname,age(datfrozenxid) from pg_database where datname='postgres';
+ datname  | age 
+----------+-----
+ postgres |  33
+(1 row)
+
+
+9.3 没有发生这样的情况. age(xid) 函数显然没有去获取一个新的XID。
+经证实PostgreSQL9.2beta2 中age函数也不需要获取一个新的XID。
+
+其他age函数则不会出现这个问题 : 
+
+postgres=# select age(timestamp '2011-01-01');
+          age          
+-----------------------
+ 1 year 6 mons 11 days
+(1 row)
+
+postgres=# select age(timestamp '2011-01-01',now());
+                    age                     
+--------------------------------------------
+ -1 years -6 mons -11 days -13:04:46.049847
+(1 row)
+
+postgres=# \df *.*age*
+                                                     List of functions
+   Schema   |          Name          | Result data type |                   Argument data types                    |  Type  
+------------+------------------------+------------------+----------------------------------------------------------+--------
+ pg_catalog | age                    | interval         | timestamp with time zone                                 | normal
+ pg_catalog | age                    | interval         | timestamp with time zone, timestamp with time zone       | normal
+ pg_catalog | age                    | interval         | timestamp without time zone                              | normal
+ pg_catalog | age                    | interval         | timestamp without time zone, timestamp without time zone | normal
+ pg_catalog | age                    | integer          | xid                                                      | normal
+
+
+
+Flag Counter

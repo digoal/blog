@@ -1,0 +1,139 @@
+PostgreSQL research
+
+PostgreSQL 9.5 new feature - allow standby archives all files it receives from the primary.
+
+2015-05-25 16:19:11   查看原文>>
+
+有些应用场景，我们可能需要standby角色也执行归档的动作，例如当我们将standby作为备份节点来使用时，备份基础文件的同时还要归档。
+在PostgreSQL 9.5之前，当数据库处于恢复状态时，是不会执行归档的，见代码，如果要让standby调用归档命令，我们可以能需要修改一下以下代码：
+http://blog.163.com/digoal@126/blog/static/163877040201452004721783/
+1. src/backend/postmaster/postmaster.c
+
+                if (XLogArchivingActive() && PgArchPID == 0 )
+                if (XLogArchivingActive() && PgArchPID == 0 && pmState == PM_RUN)
+                        PgArchPID = pgarch_start();
+...
+                        if (XLogArchivingActive())
+                        if (XLogArchivingActive() && pmState == PM_RUN)
+                                PgArchPID = pgarch_start();
+
+
+
+2. src/backend/replication/walreceiver.c
+
+                        /*
+                         * Create .done file forcibly to prevent the streamed segment from
+                         * being archived later.
+                         */
+                        XLogFileName(xlogfname, recvFileTLI, recvSegNo);
+                        XLogArchiveForceDone(xlogfname);
+                        XLogArchiveNotify(xlogfname);
+....
+                                /*
+                                 * Create .done file forcibly to prevent the streamed segment
+                                 * from being archived later.
+                                 */
+                                XLogFileName(xlogfname, recvFileTLI, recvSegNo);
+                                XLogArchiveForceDone(xlogfname);
+                                XLogArchiveNotify(xlogfname);
+
+
+PostgreSQL 9.5允许standby角色调用归档命令，需要配置archive_mode=always.
+
+-#archive_mode = off        # allows archiving to be done
++#archive_mode = off        # enables archiving; off, on, or always
+
+
+代码：
+
+index 9c7710f..41e57f2 100644 (file)
+--- a/src/backend/replication/walreceiver.c
++++ b/src/backend/replication/walreceiver.c
+@@ -540,7 +540,10 @@ WalReceiverMain(void)
+             * being archived later.
+             */
+            XLogFileName(xlogfname, recvFileTLI, recvSegNo);
+-           XLogArchiveForceDone(xlogfname);
++           if (XLogArchiveMode != ARCHIVE_MODE_ALWAYS)
++               XLogArchiveForceDone(xlogfname);
++           else
++               XLogArchiveNotify(xlogfname);
+        }
+        recvFile = -1;
+ 
+@@ -897,7 +900,10 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
+                 * from being archived later.
+                 */
+                XLogFileName(xlogfname, recvFileTLI, recvSegNo);
+-               XLogArchiveForceDone(xlogfname);
++               if (XLogArchiveMode != ARCHIVE_MODE_ALWAYS)
++                   XLogArchiveForceDone(xlogfname);
++               else
++                   XLogArchiveNotify(xlogfname);
+            }
+
+--- a/src/backend/access/transam/xlogarchive.c
++++ b/src/backend/access/transam/xlogarchive.c
+@@ -480,7 +480,10 @@ KeepFileRestoredFromArchive(char *path, char *xlogfname)
+     * Create .done file forcibly to prevent the restored segment from being
+     * archived again later.
+     */
+-   XLogArchiveForceDone(xlogfname);
++   if (XLogArchiveMode != ARCHIVE_MODE_ALWAYS)
++       XLogArchiveForceDone(xlogfname);
++   else
++       XLogArchiveNotify(xlogfname);
+
+--- a/doc/src/sgml/high-availability.sgml
++++ b/doc/src/sgml/high-availability.sgml
+@@ -1220,6 +1220,45 @@ primary_slot_name = 'node_a_slot'
+ 
+    </sect3>
+   </sect2>
++
++  <sect2 id="continuous-archiving-in-standby">
++   <title>Continuous archiving in standby</title>
++
++   <indexterm>
++     <primary>continuous archiving</primary>
++     <secondary>in standby</secondary>
++   </indexterm>
++
++   <para>
++     When continuous WAL archiving is used in a standby, there are two
++     different scenarios: the WAL archive can be shared between the primary
++     and the standby, or the standby can have its own WAL archive. When
++     the standby has its own WAL archive, set <varname>archive_mode</varname>
++     to <literal>always</literal>, and the standby will call the archive
++     command for every WAL segment it receives, whether it's by restoring
++     from the archive or by streaming replication. The shared archive can
++     be handled similarly, but the archive_command must test if the file
++     being archived exists already, and if the existing file has identical
++     contents. This requires more care in the archive_command, as it must
++     be careful to not overwrite an existing file with different contents,
++     but return success if the exactly same file is archived twice. And
++     all that must be done free of race conditions, if two servers attempt
++     to archive the same file at the same time.
++   </para>
++
++   </para>
++     If <varname>archive_mode</varname> is set to <literal>on</>, the
++     archiver is not enabled during recovery or standby mode. If the standby
++     server is promoted, it will start archiving after the promotion, but
++     will not archive any WAL it did not generate itself. To get a complete
++     series of WAL files in the archive, you must ensure that all WAL is
++     archived, before it reaches the standby. This is inherently true with
++     file-based log shipping, as the standby can only restore files that
++     are found in the archive, but not if streaming replication is enabled.
++     When a server is not in recovery mode, there is no difference between
++     <literal>on</literal> and <literal>always</literal> modes.
++   </para>
++  </sect2>
+
+
+PostgreSQL 9.5 为大家提供了一种更好的归档选择，你可以让standby参与归档，或者让它不参与归档。
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=ffd37740ee6fcd434416ec0c5461f7040e0a11de
+2. http://blog.163.com/digoal@126/blog/static/163877040201452004721783/
+Flag Counter

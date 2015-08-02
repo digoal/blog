@@ -1,0 +1,261 @@
+PostgreSQL research
+
+some limits when we use monetdb
+
+2014-08-30 14:15:32   查看原文>>
+
+使用monetdb时的一些注意事项, 
+1. m-funnel的返回结果集不能超过80K.
+
+man monetdbd
+MULTIPLEX-FUNNELS
+       Monetdbd  implements multiplex-funnel capabilities.  As the name suggests two techniques are combined, the mul-
+       tiplexer and the funnel.
+
+       The funnel capability limits the access to the database to one client at a time.  That is, if multiple  clients
+       connect  to  the  funnel, their queries will be serialized such that they are executed one after the other.  An
+       effect of this approach is that clients no longer have an exclusive channel to the database, which  means  that
+       individual queries from one client may have been interleaved with queries from others.  This most notably makes
+       SQL transaction blocks unreliable with a funnel.  The funnel, hence, is meant to scale down a large  amount  of
+       clients that perform short-running (read-only) queries, as typically seen in web-based query loads.
+
+       When a funnel is defined to use multiple databases, the funnel adds a multiplexer to its query channel.  A mul-
+       tiplex-funnel sends each query to all of the defined databases.  This behavior can be quite confusing at first,
+       but  proves  to be useful in typical sharding configurations, where in particular simple selection queries have
+       to be performed on each of the shards.  The multiplexer combines the answers from all defined databases in  one
+       single  answer  that it sends back to the client.  However, this combining is without any smart logic, that is,
+       the multiplexer does not evaluate the query it is running, but just combines all answers it receives  from  the
+       databases.   This  results  in  e.g.  as many return tuples for a SELECT COUNT(*) query, as there are databases
+       defined.
+
+       Due to the two above mentioned characteristics, a multiplex-funnel has some limitations.  As mentioned  before,
+       transactions over multiple queries are likely not to result in the desired behavior.  This is due to each query
+       to the funnel is required to be self-contained.  Further, since for  each  query,  the  results  from  multiple
+       servers  have  to  be  combined  into one, that query must only return a single response, i.e.  multi-statement
+       queries are most likely causing the funnel to respond with an error, or return garbled results.  Last, the size
+       of  each query is limited to currently about 80K.  While this size should be sufficient for most queries, it is
+       likely not enough for e.g. COPY INTO statements.  Apart from the data transfer  implications,  such  statements
+       should not be used with the funnel, as the results will be undefined due to the limited query buffer.  Applica-
+       tions using the funnel should aim for short and single-statement queries that require no transactions.
+
+       See the create command in the monetdb(1) man-page for details on how to setup a multiplex-funnel.
+
+
+
+2. 使用宽表时需要注意, 表越宽, 插入越慢, 因为monetdb是列存储的, 为了把所有的列串成1行, 插入新行时, 哪怕只有1个列有值, 其他列为空, 其他列也是耗费空间的.
+我们来建2个2万个字段的宽表. 其中一个有默认值, 另一个没有默认值.
+
+[root@db-172-16-3-221 ~]# vi test.sql
+#!/bin/bash
+
+echo "drop table t1;"|mclient test
+sql="create table t1(id int"
+
+for ((i=1;i<20000;i++))
+do
+  sql="$sql, c$i int default 100"
+done
+
+sql="$sql);"
+echo "$sql"|mclient test
+
+[root@db-172-16-3-221 ~]# chmod 500 test.sql
+[root@db-172-16-3-221 ~]# ./test.sql
+
+
+
+对比一下这两个表的性能
+插入测试
+t1, 插入时其他19999个字段默认为100.
+
+sql>insert into t1(id) values (1);
+1 affected rows (25.1s)
+sql>insert into t1(id) values (2);
+1 affected rows (8.4s)
+sql>insert into t1(id) values (3);
+1 affected rows (8.4s)
+sql>insert into t1(id) values (4);
+1 affected rows (8.4s)
+
+
+t2, 插入时, 其他19999个字段为空.
+
+sql>insert into t2(id) values (1);
+1 affected rows (20.4s)
+sql>insert into t2(id) values (2);
+1 affected rows (2.7s)
+sql>insert into t2(id) values (3);
+1 affected rows (2.7s)
+sql>insert into t2(id) values (4);
+1 affected rows (2.7s)
+
+
+从插入性能来看, t1略差, 但是t2也好不到哪里去, 因为每个列都被操作了(即使为空).
+从测试来看, 宽表的缺陷就在于插入效率太差. 
+批量插入测试 : 
+
+sql>insert into t2 select * from t1;
+4 affected row (40.3s)
+sql>insert into t2 select * from t2;
+16 affected row (1m 8s)
+sql>insert into t2 select * from t2;
+32 affected row (23.0s)
+sql>insert into t2 select * from t2;
+64 affected row (22.4s)
+sql>insert into t2 select * from t2;
+128 affected row (13.5s)
+sql>insert into t2 select * from t2;
+256 affected row (13.5s)
+sql>insert into t2 select * from t2;
+512 affected row (20.3s)
+sql>insert into t2 select * from t2;
+1024 affected row (20.0s)
+sql>insert into t2 select * from t2;
+2048 affected row (18.5s)
+sql>insert into t2 select * from t2;
+4096 affected row (20.8s)
+sql>insert into t2 select * from t2;
+8192 affected row (20.3s)
+sql>insert into t2 select * from t2;
+16384 affected row (23.0s)
+sql>insert into t2 select * from t2;
+32768 affected row (45.3s)
+
+
+
+添加字段测试, 因为行少, 所以添加速度很快. 当行多的时候, 添加速度就很慢了.
+
+sql>alter table t1 add column c20001 int;
+operation successful (41.356ms)
+sql>alter table t2 add column c20001 int;
+operation successful (49.784ms)
+
+
+
+sql>create table t3(id int);
+operation successful (17.365ms)
+sql>insert into t3 values (1);
+1 affected rows (14.385ms)
+sql>insert into t3 select * from t3;
+1 affected rows (6.774ms)
+sql>insert into t3 select * from t3;
+2 affected row (6.641ms)
+.......
+sql>insert into t3 select * from t3;
+536870912 affected row (14.8s)
+sql>alter table t3 add column c1 int;  -- 当已经有10亿记录时, 添加一行变得很慢. 因为要格式化列存储. 即使没有默认值.
+operation successful (4m 7s)
+sql>alter table t3 add column c2 int;
+operation successful (4m 9s)
+-- 新增的列虽然没有数据, 但是空间需要预分配, 所以当前表有多少行, 就要分配多少空间, 行越多的表, 新增列越慢.
+sql>select * from sys.storage where "table"='t3';
++--------+-------+--------+------+-------------+------------+-----------+------------+----------+---------+--------+
+| schema | table | column | type | location    | count      | typewidth | columnsize | heapsize | indices | sorted |
++========+=======+========+======+=============+============+===========+============+==========+=========+========+
+| sys    | t3    | id     | int  | 01/30/13054 | 1073741824 |         4 | 4294967296 |        0 |       0 | true   |
+| sys    | t3    | c1     | int  | 01/12/11233 | 1073741824 |         4 | 4294967296 |        0 |       0 | true   |
+| sys    | t3    | c2     | int  | 01/26/12651 | 1073741824 |         4 | 4294967296 |        0 |       0 | true   |
++--------+-------+--------+------+-------------+------------+-----------+------------+----------+---------+--------+
+3 tuples (6.1s)
+sql>select * from t3 limit 5;
++------+------+------+
+| id   | c1   | c2   |
++======+======+======+
+|    1 | null | null |
+|    1 | null | null |
+|    1 | null | null |
+|    1 | null | null |
+|    1 | null | null |
++------+------+------+
+5 tuples (29.136ms)
+
+
+
+更新测试, 对已经存在的记录更新效率明显比插入记录的效率高多了. 因为只涉及到更新列的操作, 插入则是所有列的操作. 
+
+sql>update t1 set c20001=1 where id=1;
+1 affected rows (16.535ms)
+sql>update t2 set c20001=1 where id=1;
+3 affected row (16.722ms)
+
+
+虽然单条记录更新看起来不快, 但是可以批量更新以提升性能.
+
+sql>update t2 set c1=c2 ;
+65536 affected row (48.002ms)
+sql>update t2 set c1=1 ;
+65536 affected row (61.021ms)
+例如使用函数来批量更新列.
+update t2 set c1=function(传入参数) ;
+
+
+
+返回多列(2万)大数据量的查询测试 : 
+
+[root@db-172-16-3-221 ~]# mclient test -H
+Welcome to mclient, the MonetDB/SQL interactive terminal (Jan2014-SP3)
+Database: MonetDB v11.17.21 (Jan2014-SP3), 'mapi:monetdb://db-172-16-3-221:50000/test'
+Type \q to quit, \? for a list of available commands
+auto commit mode: on
+sql>\?
+\?      - show this message
+\<file  - read input from file
+\>file  - save response in file, or stdout if no file is given
+\|cmd   - pipe result to process, or stop when no command is given
+\h      - show the readline history
+\D table- dumps the table, or the complete database if none given.
+\d[Stvsfn]+ [obj] - list database objects, or describe if obj given
+\A      - enable auto commit
+\a      - disable auto commit
+\e      - echo the query in sql formatting mode
+\f      - format using a built-in renderer {csv,tab,raw,sql,xml}
+\w#     - set maximal page width (-1=unlimited, 0=terminal width, >0=limit to num)
+\r#     - set maximum rows per page (-1=raw)
+\L file - save client/server interaction
+\X      - trace mclient code
+\q      - terminate session
+sql>\>/dev/null
+sql>select 1;
+1 tuple (7.138ms)
+sql>\w-1
+sql>select * from t1;  -- 2万个列全量查询很慢, 几乎无法完成
+1个小时没处理完.
+sql>select id,c2000 from t1;  -- 减少列的话, 速度可以接受.
+524292 tuples (31.110ms)
+
+
+
+[其他]
+1. 如果使用PostgreSQL的话, 就不要对宽表抱有希望了, 因为PostgreSQL不允许行跨数据块存储, 所以对字段数做了限制.
+例如一个8K的数据块, 如果每个字段4字节(例如int类型)的话, 可以存储2000个字段, 这还没有计算行头, 块头信息. 所以实际限制是1600或更小, 参考代码 : 
+src/include/access/htup_details.h
+
+/*
+ * MaxTupleAttributeNumber limits the number of (user) columns in a tuple.
+ * The key limit on this value is that the size of the fixed overhead for
+ * a tuple, plus the size of the null-values bitmap (at 1 bit per column),
+ * plus MAXALIGN alignment, must fit into t_hoff which is uint8.  On most
+ * machines the upper limit without making t_hoff wider would be a little
+ * over 1700.  We use round numbers here and for MaxHeapAttributeNumber
+ * so that alterations in HeapTupleHeaderData layout won't change the
+ * supported max number of columns.
+ */
+#define MaxTupleAttributeNumber 1664    /* 8 * 208 */
+
+/*
+ * MaxHeapAttributeNumber limits the number of (user) columns in a table.
+ * This should be somewhat less than MaxTupleAttributeNumber.  It must be
+ * at least one less, else we will fail to do UPDATEs on a maximal-width
+ * table (because UPDATE has to form working tuples that include CTID).
+ * In practice we want some additional daylight so that we can gracefully
+ * support operations that add hidden "resjunk" columns, for example
+ * SELECT * FROM wide_table ORDER BY foo, bar, baz.
+ * In any case, depending on column data types you will likely be running
+ * into the disk-block-based limit on overall tuple size if you have more
+ * than a thousand or so columns.  TOAST won't help.
+ */
+#define MaxHeapAttributeNumber  1600    /* 8 * 200 */
+
+
+
+Flag Counter

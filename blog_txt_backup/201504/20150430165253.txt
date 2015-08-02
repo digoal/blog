@@ -1,0 +1,170 @@
+PostgreSQL research
+
+some timestamp parse in gram.y (' ' AT TIME ZONE ' ')
+
+2015-04-30 16:52:53   查看原文>>
+
+去哪儿的AVEN兄弟提到的一个问题：
+为什么当前时区是+8的情况，结果感觉上有点不对劲？
+
+postgres=# show timezone;
+ TimeZone 
+----------
+ PRC
+(1 row)
+postgres=# select extract(epoch from 'today'::timestamptz);
+ date_part  
+------------
+ 1430323200
+(1 row)
+postgres=# select extract(epoch from 'today' at time zone '0');
+ date_part  
+------------
+ 1430323200
+(1 row)
+postgres=# select extract(epoch from 'today' at time zone '8');
+ date_part  
+------------
+ 1430294400
+(1 row)
+
+
+我们首先要看一下这个语法是怎么解析的。
+src/backend/parser/gram.y
+EXTRACT的写法会解析为调用函数date_part
+
+                        | EXTRACT '(' extract_list ')'
+                                {
+                                        $$ = (Node *) makeFuncCall(SystemFuncName("date_part"), $3, @1);
+                                }
+
+
+extract_list:
+                        extract_arg FROM a_expr
+                                {
+                                        $$ = list_make2(makeStringConst($1, @1), $3);
+                                }
+                        | /*EMPTY*/                                                             { $$ = NIL; }
+                ;
+
+
+而 AT TIME ZONE的写法实际调用了函数timezone
+
+                        | a_expr AT TIME ZONE a_expr                    %prec AT
+                                {
+                                        $$ = (Node *) makeFuncCall(SystemFuncName("timezone"),
+                                                                                           list_make2($5, $1),
+                                                                                           @2);
+                                }
+
+
+这两个函数如下：
+
+postgres=# \df+ date_part
+                                                                                                                       List of funct
+ions
+   Schema   |   Name    | Result data type |        Argument data types        |  Type  | Security | Volatility |  Owner   | Languag
+e |                               Source code                                |                 Description
+------------+-----------+------------------+-----------------------------------+--------+----------+------------+----------+--------
+--+--------------------------------------------------------------------------+---------------------------------------------
+ pg_catalog | date_part | double precision | text, abstime                     | normal | invoker  | stable     | postgres | sql
+  | select pg_catalog.date_part($1, cast($2 as timestamp with time zone))    | extract field from abstime
+ pg_catalog | date_part | double precision | text, date                        | normal | invoker  | immutable  | postgres | sql
+  | select pg_catalog.date_part($1, cast($2 as timestamp without time zone)) | extract field from date
+ pg_catalog | date_part | double precision | text, interval                    | normal | invoker  | immutable  | postgres | interna
+l | interval_part                                                            | extract field from interval
+ pg_catalog | date_part | double precision | text, reltime                     | normal | invoker  | stable     | postgres | sql
+  | select pg_catalog.date_part($1, cast($2 as pg_catalog.interval))         | extract field from reltime
+ pg_catalog | date_part | double precision | text, time with time zone         | normal | invoker  | immutable  | postgres | interna
+l | timetz_part                                                              | extract field from time with time zone
+ pg_catalog | date_part | double precision | text, time without time zone      | normal | invoker  | immutable  | postgres | interna
+l | time_part                                                                | extract field from time
+ pg_catalog | date_part | double precision | text, timestamp with time zone    | normal | invoker  | stable     | postgres | interna
+l | timestamptz_part                                                         | extract field from timestamp with time zone
+ pg_catalog | date_part | double precision | text, timestamp without time zone | normal | invoker  | immutable  | postgres | interna
+l | timestamp_part                                                           | extract field from timestamp
+(8 rows)
+
+postgres=# \df+ timezone
+                                                                                                List of functions
+   Schema   |   Name   |      Result data type       |          Argument data types          |  Type  | Security | Volatility |  Own
+er   | Language |    Source code    |              Description
+------------+----------+-----------------------------+---------------------------------------+--------+----------+------------+-----
+-----+----------+-------------------+----------------------------------------
+ pg_catalog | timezone | time with time zone         | interval, time with time zone         | normal | invoker  | immutable  | post
+gres | internal | timetz_izone      | adjust time with time zone to new zone
+ pg_catalog | timezone | timestamp without time zone | interval, timestamp with time zone    | normal | invoker  | immutable  | post
+gres | internal | timestamptz_izone | adjust timestamp to new time zone
+ pg_catalog | timezone | timestamp with time zone    | interval, timestamp without time zone | normal | invoker  | immutable  | post
+gres | internal | timestamp_izone   | adjust timestamp to new time zone
+ pg_catalog | timezone | time with time zone         | text, time with time zone             | normal | invoker  | volatile   | post
+gres | internal | timetz_zone       | adjust time with time zone to new zone
+ pg_catalog | timezone | timestamp without time zone | text, timestamp with time zone        | normal | invoker  | immutable  | post
+gres | internal | timestamptz_zone  | adjust timestamp to new time zone
+ pg_catalog | timezone | timestamp with time zone    | text, timestamp without time zone     | normal | invoker  | immutable  | post
+gres | internal | timestamp_zone    | adjust timestamp to new time zone
+(6 rows)
+
+
+我们接下来分解一下以上查询：
+
+postgres=# select 
+extract(epoch from 'today'::timestamptz), 
+date_part('epoch', 'today'::timestamptz),
+'today'::timestamptz;
+ date_part  | date_part  |      timestamptz       
+------------+------------+------------------------
+ 1430323200 | 1430323200 | 2015-04-30 00:00:00+08
+(1 row)
+
+postgres=# select pg_typeof('today'::timestamptz);
+        pg_typeof
+--------------------------
+ timestamp with time zone
+(1 row)
+
+
+这个查询用到了timestamptz_part
+
+对于AT TIME ZONE的写法，因为对应的timezone函数可能输出带时区，或不带时区的值，所以我们需要区分一下，
+但是对于date_part来说，结果是一样的，因为date_part也支持带时区和不带时区的参数。
+
+postgres=# select
+extract(epoch from 'today' at time zone '0'),
+date_part('epoch', timezone('0', 'today'::timestamptz)),
+timezone('0', 'today'::timestamptz),
+timezone('0', 'today');
+ date_part  | date_part  |      timezone       |      timezone
+------------+------------+---------------------+---------------------
+ 1430323200 | 1430323200 | 2015-04-29 16:00:00 | 2015-04-29 16:00:00
+(1 row)
+
+postgres=# select pg_typeof(timezone('0', 'today'));
+          pg_typeof
+-----------------------------
+ timestamp without time zone
+(1 row)
+
+
+这个查询用到了timestamp_part，timestamptz_zone
+结果一致的原因非常明显，因为我们用到的时间：2015-04-30 00:00:00+08 等于 2015-04-29 16:00:00。
+调用的函数分别为：
+timestamptz_part(text, timestamp with time zone)
+timestamp_part(text, timestamp without time zone)
+现在可以解释为什么extract(epoch from 'today' at time zone '8')的结果有点问题了。
+
+postgres=# select 
+date_part('epoch', timezone('8', 'today')), 
+timezone('8', 'today');
+ date_part  |      timezone       
+------------+---------------------
+ 1430294400 | 2015-04-29 08:00:00
+(1 row)
+
+
+
+[参考]
+1. timestamptz_part，timestamp_part，timestamptz_zone
+src/backend/utils/adt/timestamp.c
+2. src/backend/parser/gram.y
+Flag Counter

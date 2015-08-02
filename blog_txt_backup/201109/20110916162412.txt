@@ -1,0 +1,161 @@
+PostgreSQL research
+
+PostgreSQL 9.1 serializable isolation conflict occur condition and compared with Oracle
+
+2011-09-16 16:24:12   查看原文>>
+
+PostgreSQL 9.1 隔离级别为serializable时，事务冲突检测条件 : 
+1. 首先圈定发生冲突的事务的隔离级别 : = serializable 。
+换句话说冲突只会在serializable 和serializable的事务之间发生，不会发生在serializable和read committed的事务之间等等。后面会有例子。
+2. 发生冲突的事务必须存在至少同一个表的操作交集。（一个事务查询了某些记录，另一个事务更新或删除了这些记录中的部分或全部。或者两个事务同时查询了相同的记录。）
+3. 发生冲突的事务必须对产生交集的表都有写的操作(insert,delete,update之一) ，并且每个事务的写操作必须至少影响1行记录及以上。
+4. 发生冲突的事务都必须有2条或以上SQL(当DML和DSL没有已经存在的行交集时)，或者其中一个SESSION的DML（update,delete）与另一个SESSION有行交集。
+
+其实是事务提交时, 会检测预加锁是否有冲突.  例如页的冲突, 行的冲突, 对象的冲突等等.
+
+当冲突发生时，第一时间提交的事务可以成功返回，在冲突域里面，后提交的所有事务都被自动ROLLBACK。并且报错：
+ERROR:  could not serialize access due to read/write dependencies among transactions
+DETAIL:  Reason code: Canceled on identification as a pivot, during commit attempt . 
+HINT:  The transaction might succeed if retried . 
+
+serializable可以认为是把原子操作带入到逻辑层面。此话怎讲，看完例子就明白了。
+为了测试方便，设置PostgreSQL数据库的 default_transaction_isolation 参数 = 'serializable' 。
+
+1.  统计，更新操作。
+测试表 : 
+
+create table isolation_test (id int,consume numeric,crt_time timestamp without time zone default now()) ;
+insert into isolation_test(id,consume) select generate_series(1,10),100;
+create table isolation_test_1 (id int,consume numeric,crt_time timestamp without time zone default now()) ;
+
+
+以下是PostgreSQL 9.1 下面的测试。
+设置PostgreSQL数据库的 default_transaction_isolation 参数 = 'serializable'
+
+SESSION A : 
+digoal=> begin ; 
+BEGIN
+digoal=> select sum(consume) from isolation_test where id=1;
+ sum 
+-----
+ 100
+(1 row)
+
+SESSION B : 
+digoal=> begin ; 
+BEGIN
+digoal=> select sum(consume) from isolation_test where id=1;
+ sum 
+-----
+ 100
+(1 row)
+
+
+
+# 此时A和B存在交集 isolation_test where id=1 
+# 确保每个事务对产生交集的表都有写的操作，接下来对产生交集的表都进行操作。
+
+SESSION A : 
+digoal=> insert into isolation_test values (11,200);
+INSERT 0 1
+
+SESSION B : 
+digoal=> insert into isolation_test values (12,200);
+INSERT 0 1
+commit; (先提交的事务成功)
+
+SESSION A : 
+digoal=> commit; (后提交的事务失败)
+ERROR:  could not serialize access due to read/write dependencies among transactions
+DETAIL:  Reason code: Canceled on identification as a pivot, during commit attempt.
+HINT:  The transaction might succeed if retried.
+
+
+错误代码 40001
+┌──────┬───────────────────────┐
+│40001 │serialization_failure  │
+└──────┴───────────────────────┘
+
+以下是 PostgreSQL 9.0 下面的测试。
+略，结果是两个SESSION都可以提交成功。也就是说隔离级别serializable在9.0里面没有实现。
+
+以下是 Oracle 10.2.0.4 下面的测试。
+
+SQL> create table isolation_test (id int,consume numeric,crt_time date default sysdate);
+SQL> create table isolation_test_1 (id int,consume numeric,crt_time date default sysdate);
+SQL> insert into isolation_test (id,consume) select rownum,100 from dual connect by level<=100;
+SESSION A : 
+SQL> conn digoal/digoal_123
+Connected.
+SQL> set transaction isolation level serializable;
+Transaction set.
+
+SESSION B : 
+SQL> conn digoal/digoal_123
+Connected.
+SQL> set transaction isolation level serializable;
+Transaction set.
+
+SESSION A : 
+SQL> insert into isolation_test(id,consume) values (101,200);
+1 row created.
+
+SESSION B : 
+SQL> insert into isolation_test(id,consume) values (101,200);
+1 row created.
+SQL> commit;
+Commit complete.
+
+SESSION A : 
+SQL> commit;
+Commit complete.
+
+
+
+结果两个SESSION都可以提交成功。Oracle并没有实现严格的Serializable隔离级别. 只实现了SQL92定义的serializable隔离级别.
+以下是Oracle的测试.
+
+SESSION A : 
+SQL> set transaction isolation level serializable;
+Transaction set.
+SQL> update isolation_test set crt_time=sysdate where id=1;
+2 rows updated.
+
+
+
+# 在A提交前，启动SESSION B的事务。
+
+SESSION B : 
+SQL> set transaction isolation level serializable;
+Transaction set.
+
+SESSION A : 
+SQL> commit;
+Commit complete.
+
+SESSION B : 
+SQL> update isolation_test set crt_time=sysdate where id=1;
+update isolation_test set crt_time=sysdate where id=1
+*
+ERROR at line 1:
+ORA-08177: can't serialize access for this transaction
+
+
+
+那么PostgreSQL 9.0 和 9.1 有没有实现SQL92所提到的serializable隔离级别呢 ?
+当然实现了, 只是PostgreSQL中repeatable read隔离级别就已经实现了SQL92标准的serializable隔离级别.
+9.1则在此之上追加了更加严格的隔离级别, 实现了真正的serializable隔离级别.
+只是需要注意的是, PostgreSQL开始一个事务并不是在BEGIN后就马上开始, 而是BEGIN后的第一条SQL发出的时候开始的.
+参考
+http://blog.163.com/digoal@126/blog/static/163877040201192715948181/
+所以在测试时需要非常注意.
+
+【参考】
+http://wiki.postgresql.org/wiki/Serializable
+http://wiki.postgresql.org/wiki/SSI
+http://en.wikipedia.org/wiki/Serializable_(databases)
+
+ORACLE : 
+The SERIALIZABLE setting specifies serializable transaction isolation mode as defined in the SQL92 standard. If a serializable transaction contains data manipulation language (DML) that attempts to update any resource that may have been updated in a transaction uncommitted at the start of the serializable transaction,
+then the DML statement fails.
+

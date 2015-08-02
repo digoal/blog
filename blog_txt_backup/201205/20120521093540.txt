@@ -1,0 +1,165 @@
+PostgreSQL research
+
+PostgreSQL 9.2 improve prepared statements plan's selectivity
+
+2012-05-21 9:35:40   查看原文>>
+
+ PostgreSQL 9.2 beta的release note中提到9.2 中prepared statements选择执行计划时, 将根据输入的参数值计算出走generic plan的COST, 如果这个COST值与generic plan执行计划的COST值接近或更小时将直接走generic plan, 而不需要再经过重新plan的过程.
+如果这个COST值相差较大, 则会重新plan, 选择合适的执行计划.
+原文如下 : 
+
+Improve the ability of the planner to choose parameterized plans (Tom Lane)
+A prepared statement is now parsed, analyzed, and rewritten, but not necessarily planned. When the prepared plan is executed with parameters, the planner might replan it for every constant, or it might execute a generic plan if its cost is close to that of a constant-specific plan.
+
+
+在9.2版本以前, 所有的prepared statements都不需要经过plan的过程, 也就是说无论输入的参数是什么都之后选择generic plan执行计划. 因此可能得到不好的执行计划, 我在以前写过一篇BLOG来说明这个情况, 
+WHY prepared Statement running slower in some situation, 有兴趣的朋友可以参阅以下.
+http://blog.163.com/digoal@126/blog/static/16387704020111168855258/ 
+下面来看看PostgreSQL 9.2是如何改进这个弊端的，分别在9.1和9.2中测试看看结果怎么样?
+新建测试表 : 
+
+create table t1 (id int,info text);
+
+
+插入测试数据, 其中100W的info记录唯一, 2000W的info记录重复. 因此查询2000W的info记录时理论上走全表的COST可能更低, 而100W记录中的info时走索引比较合理.
+
+insert into t1 select generate_series(1,1000000),'digoal'||generate_series(1,1000000);
+insert into t1 select generate_series(1,20000000),'digoal';
+create index idx_t1_info on t1(info);
+
+
+分析表,收集统计信息 : 
+
+analyze t1;
+
+
+先测试非prepared statements, 过滤条件中使用常量, 当过滤条件为info='digoal'时走全表扫描, 这个和PostgreSQL 9.2测试结果一致, 没有异议 : 
+PostgreSQL 9.1 : 
+
+pgdba2000@db-172-16-3-33-> psql test test
+psql (9.1.3)
+Type "help" for help.
+
+test=> explain analyze select * from t1 where info='digoal1';
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_t1_info on t1  (cost=0.00..641.30 rows=667 width=11) (actual time=0.078..0.079 rows=1 loops=1)
+   Index Cond: (info = 'digoal1'::text)
+ Total runtime: 0.128 ms
+(3 rows)
+
+test=> explain analyze select * from t1 where info='digoal';
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Seq Scan on t1  (cost=0.00..376894.60 rows=20010461 width=11) (actual time=141.161..4736.356 rows=20000000 loops=1)
+   Filter: (info = 'digoal'::text)
+ Total runtime: 6183.044 ms
+(3 rows)
+
+
+PostgreSQL 9.2
+
+pg92@db-172-16-3-33-> psql digoal postgres
+psql (9.2beta1)
+Type "help" for help.
+
+digoal=# explain analyze select * from t1 where info='digoal1';
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_t1_info on t1  (cost=0.00..675.51 rows=666 width=11) (actual time=0.030..0.030 rows=1 loops=1)
+   Index Cond: (info = 'digoal1'::text)
+ Total runtime: 0.085 ms
+(3 rows)
+
+digoal=# explain analyze select * from t1 where info='digoal';
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Seq Scan on t1  (cost=0.00..376878.25 rows=19959515 width=11) (actual time=144.177..4723.445 rows=20000000 loops=1)
+   Filter: (info = 'digoal'::text)
+   Rows Removed by Filter: 1000000
+ Total runtime: 6095.258 ms
+(4 rows)
+
+
+
+接下来测试prepared statements, 此时, PostgreSQL 9.1中参数是digoal,和digoal1都选择了索引扫描, 而且cost值是一样的, cost值显然与事实不符. 
+而PostgreSQL 9.2中, 参数是digoal时选择了全表扫描, digoal1则选择了索引扫描, cost值与事实相符, 而不是一个generic plan的cost. 
+PostgreSQL 9.1
+
+test=> prepare pre_t1 (text) as select * from t1 where info=$1;
+PREPARE
+test=> explain analyze execute pre_t1('digoal1');
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_t1_info on t1  (cost=0.00..12792.77 rows=14133 width=11) (actual time=0.021..0.023 rows=1 loops=1)
+   Index Cond: (info = $1)
+ Total runtime: 0.065 ms
+(3 rows)
+
+test=> explain analyze execute pre_t1('digoal');
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_t1_info on t1  (cost=0.00..12792.77 rows=14133 width=11) (actual time=0.092..6092.897 rows=20000000 loops=1)
+   Index Cond: (info = $1)
+ Total runtime: 7452.769 ms
+(3 rows)
+
+
+PostgreSQL 9.2
+
+digoal=# prepare pre_t1 (text) as select * from t1 where info=$1;
+PREPARE
+digoal=# explain analyze execute pre_t1('digoal1');
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_t1_info on t1  (cost=0.00..675.51 rows=666 width=11) (actual time=0.016..0.017 rows=1 loops=1)
+   Index Cond: (info = 'digoal1'::text)
+ Total runtime: 0.043 ms
+(3 rows)
+
+digoal=# explain analyze execute pre_t1('digoal');
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Seq Scan on t1  (cost=0.00..376878.25 rows=19959515 width=11) (actual time=151.538..4705.948 rows=20000000 loops=1)
+   Filter: (info = 'digoal'::text)
+   Rows Removed by Filter: 1000000
+ Total runtime: 6059.682 ms
+(4 rows)
+
+
+
+【小结】
+1. PostgreSQL 9.2对待prepared statements时, 并不是每次执行时输入的参数(constants)都会replan, 只有当cost大于generic plan cost很多时才需要replan, 比如上面的digoal参数传入时, 按照generic plan(Index Scan)计算出来的COST是多少呢?
+如下 : 
+
+digoal=# set enable_seqscan=off;
+SET
+digoal=# explain analyze select * from t1 where info='digoal';
+                                                                 QUERY PLAN                                                         
+         
+------------------------------------------------------------------------------------------------------------------------------------
+---------
+ Bitmap Heap Scan on t1  (cost=266266.23..630142.17 rows=19959515 width=11) (actual time=3264.632..8201.932 rows=20000000 loops=1)
+   Recheck Cond: (info = 'digoal'::text)
+   Rows Removed by Index Recheck: 4
+   ->  Bitmap Index Scan on idx_t1_info  (cost=0.00..261276.35 rows=19959515 width=0) (actual time=3262.561..3262.561 rows=20000000 
+loops=1)
+         Index Cond: (info = 'digoal'::text)
+ Total runtime: 9581.296 ms
+(6 rows)
+
+
+generic plan cost是多少呢? 参考9.1的explain analyze execute pre_t1('$any_value');的COST.
+如下 : 
+
+test=> explain analyze execute pre_t1('any_value');
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_t1_info on t1  (cost=0.00..12792.77 rows=14133 width=11) (actual time=0.018..0.018 rows=0 loops=1)
+   Index Cond: (info = $1)
+
+
+因此两者相差 630142.17-12792.77 = 617349.40. 因此PostgreSQL 9.2 在执行prepared statement pre_t1('digoal')时, 选择了replan. 因此在replan后选择了COST=376878.25的全表扫描.
+2. PostgreSQL 9.2和老版本执行prepared statements的差别其实就在PostgreSQL会根据传入参数(constant)去计算走generic plan的成本, 只有当成本高于很多generic plan cost时才会发生replan, 因此9.2处理prepared statements带来的额外开销(根据传入参数(constant)去计算走generic plan的成本)并不多, 并且使得prepared statement不会在出现不合
+理执行计划的情况.
+

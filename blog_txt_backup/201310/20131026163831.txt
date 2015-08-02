@@ -1,0 +1,612 @@
+PostgreSQL research
+
+PostgreSQL bulk COPY load Bottleneck by extend lock waiting
+
+2013-10-26 16:38:31   查看原文>>
+
+今天在pg大会上和一位兄弟聊天的时候了解到他们有大的数据入库需求, 入库文件约300MB每个, 但是导入数据库速度只有约100MB每秒, 即使使用unlogged table也没有多大的提高, 而硬盘拷贝的速度远远不止这个速度. 
+接下来分析一下原因. 从分析来看, 目前批量数据导入到瓶颈是在数据文件的扩展上. 
+测试场景 : 
+服务器 8核, 144GB内存, 硬盘ssd.
+
+Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+降频到1.6GHz 
+
+
+数据库 9.3.1
+配置  : 
+
+pg93@db-172-16-3-150-> pg_config 
+BINDIR = /home/pg93/pgsql9.3.1/bin
+DOCDIR = /home/pg93/pgsql9.3.1/share/doc
+HTMLDIR = /home/pg93/pgsql9.3.1/share/doc
+INCLUDEDIR = /home/pg93/pgsql9.3.1/include
+PKGINCLUDEDIR = /home/pg93/pgsql9.3.1/include
+INCLUDEDIR-SERVER = /home/pg93/pgsql9.3.1/include/server
+LIBDIR = /home/pg93/pgsql9.3.1/lib
+PKGLIBDIR = /home/pg93/pgsql9.3.1/lib
+LOCALEDIR = /home/pg93/pgsql9.3.1/share/locale
+MANDIR = /home/pg93/pgsql9.3.1/share/man
+SHAREDIR = /home/pg93/pgsql9.3.1/share
+SYSCONFDIR = /home/pg93/pgsql9.3.1/etc
+PGXS = /home/pg93/pgsql9.3.1/lib/pgxs/src/makefiles/pgxs.mk
+CONFIGURE = '--prefix=/home/pg93/pgsql9.3.1' '--with-pgport=1921' '--with-perl' '--with-tcl' '--with-python' '--with-openssl' '--with-pam' '--without-ldap' '--with-libxml' '--with-libxslt' '--enable-thread-safety' '--with-wal-blocksize=16' '--enable-dtrace' '--enable-debug'
+CC = gcc
+CPPFLAGS = -D_GNU_SOURCE -I/usr/include/libxml2
+CFLAGS = -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -g
+CFLAGS_SL = -fpic
+LDFLAGS = -L../../../src/common -Wl,--as-needed -Wl,-rpath,'/home/pg93/pgsql9.3.1/lib',--enable-new-dtags
+LDFLAGS_EX = 
+LDFLAGS_SL = 
+LIBS = -lpgport -lpgcommon -lxslt -lxml2 -lpam -lssl -lcrypto -lz -lreadline -lcrypt -ldl -lm 
+VERSION = PostgreSQL 9.3.1
+
+
+操作系统 CentOS 6.4 x64
+数据库配置 : 
+
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+max_connections = 100                   # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directories = '.'   # comma-separated list of directories
+shared_buffers = 2048MB                 # min 128kB
+maintenance_work_mem = 1024MB           # min 1MB
+max_stack_depth = 8MB                   # min 100kB
+vacuum_cost_delay = 10                  # 0-100 milliseconds
+vacuum_cost_limit = 10000               # 1-10000 credits
+bgwriter_delay = 10ms                   # 10-10000ms between rounds
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # synchronization level;
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+wal_writer_delay = 10ms         # 1-10000 milliseconds
+checkpoint_segments = 256       # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+max_wal_senders = 32            # max number of walsender processes
+random_page_cost = 1.0                  # same scale as above
+effective_cache_size = 128000MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = 'pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+autovacuum_freeze_max_age = 1900000000  # maximum XID age before forced vacuum
+vacuum_freeze_min_age = 50000000
+vacuum_freeze_table_age = 1500000000
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+
+
+pg_xlog和表空间,索引表空间放在3个不同的ssd硬盘.
+测试表 : 
+
+digoal=# create table t (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 timestamp);
+CREATE TABLE
+
+
+测试数据 : 
+
+digoal=# insert into t select generate_series(1,10000), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), clock_timestamp();
+INSERT 0 10000
+
+
+每个数据块8KB存储18条记录.  平均每条记录455字节.
+
+digoal=# select ctid from t;
+   ctid   
+----------
+ (0,1)
+ (0,2)
+ (0,3)
+ (0,4)
+ (0,5)
+ (0,6)
+ (0,7)
+ (0,8)
+ (0,9)
+ (0,10)
+ (0,11)
+ (0,12)
+ (0,13)
+ (0,14)
+ (0,15)
+ (0,16)
+ (0,17)
+ (0,18)
+ (1,1)
+
+
+插入60万条测试数据
+
+digoal=# insert into t select generate_series(1,600000), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), md5(random()::text), clock_timestamp();
+INSERT 0 600000
+
+
+创建1个btree索引.
+
+digoal=# create index idx_t_id on t(id);
+
+
+表达大小265MB
+
+digoal=# \dt+
+                     List of relations
+  Schema  | Name | Type  |  Owner   |  Size  | Description 
+----------+------+-------+----------+--------+-------------
+ postgres | t    | table | postgres | 265 MB | 
+(1 row)
+
+
+把数据拷贝到硬盘 
+
+digoal=# copy t to '/home/pg93/t.dmp' with (header off);
+COPY 0 610000
+digoal=# \! ls -lh /home/pg93/t.dmp
+-rw-r--r-- 1 pg93 pg93 250M Oct 26 15:07 /home/pg93/t.dmp
+
+
+创建pgbench测试脚本, 
+
+pg93@db-172-16-3-150-> vi test.sql
+copy t from '/home/pg93/t.dmp' with (header off);
+
+
+使用8个并发连接, 每个执行4遍.
+
+pg93@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 4 
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 32/32
+tps = 0.365815 (including connections establishing)
+tps = 0.365846 (excluding connections establishing)
+statement latencies in milliseconds:
+        21834.036437    copy t from '/home/pg93/t.dmp' with (header off);
+
+
+每秒约导入91MB 或 22.3万条记录.
+使用unlogged table再次测试 : 
+
+digoal=# update pg_class set relpersistence='u' where relname='t';
+digoal=# update pg_class set relpersistence='u' where relname='idx_t_id';
+
+
+测试结果 : 
+
+pg93@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 4 
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 32/32
+tps = 0.423626 (including connections establishing)
+tps = 0.423670 (excluding connections establishing)
+statement latencies in milliseconds:
+        18879.816156    copy t from '/home/pg93/t.dmp' with (header off);
+
+
+每秒约导入106MB 或 25.8万条记录.
+
+测试过程中发现有大量的copy waiting.
+
+21551 pg93      20   0 2271m 1.9g 1.9g S 24.1  2.0   0:12.54 postgres: postgres digoal [local] COPY waiting                         
+21553 pg93      20   0 2271m 1.9g 1.9g S 24.1  2.0   0:12.51 postgres: postgres digoal [local] COPY waiting                         
+21554 pg93      20   0 2271m 1.9g 1.9g R 24.1  2.0   0:12.70 postgres: postgres digoal [local] COPY                                 
+21560 pg93      20   0 2271m 1.9g 1.9g S 24.1  2.0   0:12.69 postgres: postgres digoal [local] COPY waiting                         
+21548 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.70 postgres: postgres digoal [local] COPY waiting                         
+21549 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.72 postgres: postgres digoal [local] COPY waiting                         
+21550 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.65 postgres: postgres digoal [local] COPY waiting                         
+21552 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.76 postgres: postgres digoal [local] COPY waiting                         
+21555 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.71 postgres: postgres digoal [local] COPY waiting                         
+21557 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.62 postgres: postgres digoal [local] COPY waiting                         
+21558 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.45 postgres: postgres digoal [local] COPY waiting                         
+21559 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.77 postgres: postgres digoal [local] COPY waiting                         
+21561 pg93      20   0 2271m 1.9g 1.9g R 20.7  2.0   0:12.63 postgres: postgres digoal [local] COPY                                 
+21562 pg93      20   0 2271m 1.9g 1.9g R 20.7  2.0   0:12.83 postgres: postgres digoal [local] COPY                                 
+21563 pg93      20   0 2271m 1.9g 1.9g S 20.7  2.0   0:12.71 postgres: postgres digoal [local] COPY waiting                         
+21556 pg93      20   0 2271m 1.9g 1.9g S 17.2  2.0   0:12.58 postgres: postgres digoal [local] COPY waiting
+
+
+通过pg_locks, 发现是存储扩展锁.
+
+digoal=# select * from pg_locks where not granted;
+ locktype | database | relation | page | tuple | virtualxid | transactionid | classid | objid | objsubid | virtualtransaction |  pid
+  |     mode      | granted | fastpath 
+----------+----------+----------+------+-------+------------+---------------+---------+-------+----------+--------------------+-----
+--+---------------+---------+----------
+ extend   |    16384 |    65765 |      |       |            |               |         |       |          | 6/30               | 2159
+6 | ExclusiveLock | f       | f
+ extend   |    16384 |    65765 |      |       |            |               |         |       |          | 9/30               | 2159
+9 | ExclusiveLock | f       | f
+ extend   |    16384 |    65765 |      |       |            |               |         |       |          | 8/30               | 2159
+8 | ExclusiveLock | f       | f
+ extend   |    16384 |    65765 |      |       |            |               |         |       |          | 3/49               | 2159
+3 | ExclusiveLock | f       | f
+ extend   |    16384 |    65765 |      |       |            |               |         |       |          | 2/143              | 2159
+2 | ExclusiveLock | f       | f
+(5 rows)
+
+
+并发越大, 锁概率越大, 下面我们使用stap来跟踪, 锁耗费了多少时间.
+
+pg93@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 16 -j 4 -t 1 
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+number of transactions per client: 1
+number of transactions actually processed: 16/16
+tps = 0.261183 (including connections establishing)
+tps = 0.261247 (excluding connections establishing)
+statement latencies in milliseconds:
+        61234.802062    copy t from '/home/pg93/t.dmp' with (header off);
+
+
+一次copy的时间是61秒.
+锁耗费的时间是47.5秒.
+
+stap -e '
+global arr1%[12000] , arr2%[12000]
+probe process("/home/pg93/pgsql9.3.1/bin/postgres").mark("lock__wait__start") {
+  arr1[pid(),$arg1,$arg2,$arg3,$arg4,$arg5,$arg6] = gettimeofday_us()
+}
+probe process("/home/pg93/pgsql9.3.1/bin/postgres").mark("lock__wait__done") {
+  t = gettimeofday_us()
+  pid = pid()
+  lv = arr1[pid,$arg1,$arg2,$arg3,$arg4,$arg5,$arg6]
+  if ( lv )
+    arr2[pid,$arg1,$arg2,$arg3,$arg4,$arg5,$arg6] <<< t - lv
+}
+probe timer.s(1) {
+  println("-----")
+  foreach([a,b,c,d,e,f,g] in arr1)
+    printf("pid: %d; obj: %d, %d, %d, %d; objtype:%d, locktype: %d, waitcnt:%d, waitus:%d\n", a, b, c, d, e, f, g, @count(arr2[a,b,c,d,e,f,g]), @sum(arr2[a,b,c,d,e,f,g]))
+}'
+
+
+pid: 21549; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33978, waitus:47513070
+pid: 21552; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33969, waitus:47575317
+pid: 21553; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33967, waitus:47946887
+pid: 21551; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33981, waitus:48020588
+pid: 21556; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33971, waitus:47723644
+pid: 21554; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33984, waitus:47569972
+pid: 21558; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33973, waitus:47941600
+pid: 21560; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33966, waitus:47576161
+pid: 21562; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33967, waitus:47137802
+pid: 21550; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33981, waitus:47695491
+pid: 21548; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33971, waitus:47685924
+pid: 21555; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33972, waitus:47581269
+pid: 21561; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33981, waitus:47614633
+pid: 21557; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33971, waitus:47644666
+pid: 21559; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33986, waitus:47157181
+pid: 21563; obj: 16384, 65765, 0, 0; objtype:1, locktype: 7, waitcnt:33977, waitus:47592679
+
+
+显然PostgreSQL 扩展main fork时. 每次仅仅申请1个块(8KB).
+
+digoal=# select 33978*8/1024;
+ ?column? 
+----------
+      265
+(1 row)
+
+
+
+锁对象类型和锁类型如下 : 
+
+LOCKTAG_RELATION_EXTEND,        /* the right to extend a relation */
+#define ExclusiveLock                   7    
+
+
+参考 : 
+http://blog.163.com/digoal@126/blog/static/163877040201391674922879/
+
+我们保留最后一行, 把前面的数据使用delete删除掉, 可以达到类似初始化的目的. 避免main fork 扩展. 
+然后测试一下性能 : 
+
+digoal=# select 2168900*8/1024/1024||'GB';
+ ?column? 
+----------
+ 16GB
+(1 row)
+
+digoal=# select max(ctid) from t;
+     max      
+--------------
+ (2168900,16)
+(1 row)
+
+digoal=# delete from t where ctid<>'(2168900,16)';
+
+digoal=# vacuum (freeze,verbose,analyze) t;
+WARNING:  pgstat wait timeout
+INFO:  vacuuming "postgres.t"
+INFO:  scanned index "idx_t_id" to remove 39039999 row versions
+DETAIL:  CPU 0.41s/23.03u sec elapsed 24.84 sec.
+INFO:  "t": removed 39039999 row versions in 2168901 pages
+DETAIL:  CPU 15.37s/7.40u sec elapsed 180.92 sec.
+INFO:  index "idx_t_id" now contains 1 row versions in 135228 pages
+DETAIL:  39039999 index row versions were removed.
+134262 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "t": found 39039999 removable, 1 nonremovable row versions in 2168901 out of 2168901 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 31.58s/41.81u sec elapsed 337.35 sec.
+INFO:  vacuuming "pg_toast.pg_toast_65765"
+INFO:  index "pg_toast_65765_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_65765": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  analyzing "postgres.t"
+INFO:  "t": scanned 30000 of 2168901 pages, containing 0 live rows and 0 dead rows; 0 rows in sample, 1 estimated total rows
+VACUUM
+
+digoal=# checkpoint;
+CHECKPOINT
+
+
+digoal=# \dt+ t
+                    List of relations
+  Schema  | Name | Type  |  Owner   | Size  | Description 
+----------+------+-------+----------+-------+-------------
+ postgres | t    | table | postgres | 17 GB | 
+(1 row)
+
+pg93@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 16 -j 4 -t 4
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 64/64
+tps = 0.750399 (including connections establishing)
+tps = 0.750523 (excluding connections establishing)
+statement latencies in milliseconds:
+        20898.632172    copy t from '/home/pg93/t.dmp' with (header off);
+
+
+在没有main fork extend的情况下(有少量的index main fork extend).
+每秒约导入188MB 或 45.77万条记录.
+
+将硬盘更换为ocz REVOdrive3 240G pci-e 速度再次提升 : 
+
+pg93@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 4
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 32/32
+tps = 0.891562 (including connections establishing)
+tps = 0.891753 (excluding connections establishing)
+statement latencies in milliseconds:
+        8830.211750     copy t from '/home/pg93/t.dmp' with (header off);
+
+
+每秒约导入236MB 或 54.3万条记录.
+
+删除索引后, 纯粹的文本导入. 性能再次提升 : 
+
+digoal=# drop index idx_t_id;
+pg93@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 4
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 32/32
+tps = 1.077338 (including connections establishing)
+tps = 1.077610 (excluding connections establishing)
+statement latencies in milliseconds:
+        7243.755187     copy t from '/home/pg93/t.dmp' with (header off);
+
+
+每秒约导入285.5MB 或 65.7万条记录.
+
+同样场景下, 接下来要做的是将blocksize调成最大(即32KB), wal block也调整成最大(64KB), 并且不初始化表的情况下来压一下, 看看性能有多少提升. 理论上会有一定的提升.
+对比每秒约导入106MB 或 25.8万条记录, 这个测试结果.
+ 场景中除了wal和block块大小不一样其他都一样.
+
+./configure --prefix=/home/pg931/pgsql9.3.1 --with-pgport=1922 --with-perl --with-tcl --with-python --with-openssl --with-pam --without-ldap --with-libxml --with-libxslt --enable-thread-safety --with-wal-blocksize=64 --with-blocksize=32 --enable-dtrace --enable-debug
+
+[root@db-172-16-3-150 ssd1]# mkdir -p /ssd1/pg931/pg_root
+[root@db-172-16-3-150 ssd1]# mkdir -p /ssd2/pg931/pg_xlog
+[root@db-172-16-3-150 ssd1]# mkdir -p /ssd3/pg931/tbs_digoal
+[root@db-172-16-3-150 ssd1]# mkdir -p /ssd4/pg931/tbs_digoal_idx
+[root@db-172-16-3-150 postgresql-9.3.1]# chown -R pg931:pg931 /ssd*/pg931
+
+[root@db-172-16-3-150 postgresql-9.3.1]# su - pg931
+pg931@db-172-16-3-150-> initdb -D $PGDATA -E UTF8 --locale=C -U postgres -W -X /ssd2/pg931/pg_xlog
+[root@db-172-16-3-150 postgresql-9.3.1]# cp /ssd1/pg93/pg_root/postgresql.conf /ssd1/pg931/pg_root/
+cp: overwrite `/ssd1/pg931/pg_root/postgresql.conf'? y
+[root@db-172-16-3-150 postgresql-9.3.1]# cp /ssd1/pg93/pg_root/pg_hba.conf /ssd1/pg931/pg_root/
+cp: overwrite `/ssd1/pg931/pg_root/pg_hba.conf'? y
+chown -R pg931:pg931 /ssd1/pg931
+vi postgresql.conf
+port = 1922
+pg_ctl start
+psql
+postgres=# create role digoal;
+CREATE ROLE
+postgres=# create tablespace tbs_digoal location '/ssd3/pg931/tbs_digoal';
+CREATE TABLESPACE
+postgres=# create tablespace tbs_digoal_idx location '/ssd4/pg931/tbs_digoal_idx';
+CREATE TABLESPACE
+postgres=# create database digoal template template0 encoding 'UTF8' tablespace tbs_digoal;
+
+postgres=# \c digoal
+You are now connected to database "digoal" as user "postgres".
+digoal=# create table t (id int, c1 text, c2 text, c3 text, c4 text, c5 text, c6 text, c7 text, c8 text, c9 text, c10 text, c11 text, c12 text, c13 timestamp);
+CREATE TABLE
+digoal=# create index idx_t_id on t(id);
+CREATE INDEX
+digoal=# update pg_class set relpersistence='u' where relname='t';
+UPDATE 1
+digoal=# update pg_class set relpersistence='u' where relname='idx_t_id';
+UPDATE 1
+
+[root@db-172-16-3-150 ~]# cp /home/pg93/test.sql /home/pg93/t.dmp /home/pg931/
+chown pg931:pg931 /home/pg931/*
+pg931@db-172-16-3-150-> vi test.sql
+copy t from '/home/pg931/t.dmp' with (header off);
+
+pg931@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 4
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 32/32
+tps = 0.799815 (including connections establishing)
+tps = 0.799973 (excluding connections establishing)
+statement latencies in milliseconds:
+        9899.317000     copy t from '/home/pg931/t.dmp' with (header off);
+
+
+性能提升非常明显
+每秒约导入212MB 或 48.8万条记录.
+使用32KB的blocksize, 同时使用unlogged table, 并且删除索引. 导入速度还有提升  : 
+
+pg931@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 4
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 32/32
+tps = 1.245248 (including connections establishing)
+tps = 1.245620 (excluding connections establishing)
+statement latencies in milliseconds:
+        6414.338875     copy t from '/home/pg931/t.dmp' with (header off);
+
+
+每秒约导入330MB 或 76万条记录.
+
+下面使用初始化main fork, 测试速度再次提升 : 
+
+digoal=# select max(ctid) from t;
+    max     
+------------
+ (520544,4)
+(1 row)
+digoal=# delete from t where ctid <> '(520544,4)';
+DELETE 39039999
+digoal=# vacuum (analyze,verbose) t;
+
+pg931@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -c 8 -j 4 -t 4
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 4
+number of transactions actually processed: 32/32
+tps = 1.384007 (including connections establishing)
+tps = 1.384453 (excluding connections establishing)
+statement latencies in milliseconds:
+        5759.885594     copy t from '/home/pg931/t.dmp' with (header off);
+
+
+每秒约导入367MB 或 84.4万条记录.
+除此之外还有可以提升的方面是CPU核数以及CPU 频率. 有条件的朋友也可以自己测试一下.
+以下是一台32核的机器测试的结果 : 
+CPU
+Intel(R) Xeon(R) CPU           X7560  @ 2.27GHz
+内存: 32GB
+
+pg93@db-192-168-100-34-> ll
+-rw-r--r-- 1 pg93 pg93 205M Oct 28 13:49 t.dmp
+-rw-rw-r-- 1 pg93 pg93   48 Oct 28 12:32 test.sql
+pg93@db-192-168-100-34-> wc -l t.dmp 
+500000 t.dmp
+pg93@db-192-168-100-34-> pgbench -M prepared -n -r -f ./test.sql -c 32 -j 32 -t 2
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 32
+number of transactions per client: 2
+number of transactions actually processed: 64/64
+tps = 5.352594 (including connections establishing)
+tps = 5.358381 (excluding connections establishing)
+statement latencies in milliseconds:
+        5918.995641     copy t from '/dev/shm/t.dmp' with (header off);
+
+
+每秒约导入1097.3MB 或 267.6 万条记录(平均每条记录455字节). 
+
+[小结]
+对于大数据量的copy导入, 性能优化的方法可以考虑以下几个方面.
+1. auto analyze 调整(尽量减少或者导入阶段关闭后续再打开)
+2. table blocksize(如果业务形态是以大批量导入数据为主, 可以调整到最大)
+3. unlogged table, (使用unlogged table可以减少wal flush带来的负担, 注意删除fork init文件, 避免db crash后删数据. )
+4. 初始化table, (这不是一个常规用法, 仅用于本文测试, 如果pg可以做到设置extended的块个数, 则可以减少waiting)
+5. shared buffer, wal buffer, 加大checkpoint_segments.
+6. oscache fadvise(will not need, 减少os cache占用).
+7. 提高硬盘写入速度
+8. 如果pg可以做到设置extended的块个数, 那么就可以通过提高cpu核数. 提高并行度. 从而提高导入速度.
+9. 或者支持异步io写入也许会有提高.
+man aio_write
+http://www.wikivs.com/wiki/MySQL_vs_PostgreSQL#PostgreSQL_Synchronous_Replication
+http://www.postgresql.org/docs/devel/static/libpq-async.html
+http://grokbase.com/t/postgresql/pgsql-hackers/984pzfvztr/hackers-async-io-description
+http://blog.sina.com.cn/s/blog_742eb90201010yul.html
+http://linux.die.net/man/3/aio_write
+
+[其他注意事项]
+1. 如果要调大block_size, 需要考虑几个问题.
+-- 每次checkpoint后, 第一次变更的block需要写整个page页到wal日志(这个block后续变更都是增量写的). 所以block_size调大会使得wal的产量也变大一些.
+-- block_size变大后, 对shared buffer的需求也会变大, 因为shared buffer用量的最小单位是以数据块为单位的, (例如一个表有10000个8K数据块, 离散活跃数据在shared buffer中可能占用100个块, 数据块变32K后, 这个表虽然只有2500个数据块, 但是离散活跃数据在shared buffer中可能还是占用100个块, 这个需求其实无形中放大了4倍).
+-- block_size变大后, 某些查询的效率可能受到影响, 同样因为shared buffer用量的最小单位是以数据块为单位的, 对数据块个数有同样需求的场景, 无形中放大了数据块操作的成本.
+-- block_size变大后, 数据块的锁冲突也会更明显, 因为存储的数据条目更多了.
+https://community.oracle.com/thread/687418?start=0&tstart=0
+http://www.dba-oracle.com/s_oracle_block_size.htm
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201391674922879/
+2. http://postgresql.1045698.n5.nabble.com/COPY-extend-ExclusiveLock-td5587556.html
+3. http://postgresql.1045698.n5.nabble.com/Process-11812-still-waiting-for-ExclusiveLock-on-extension-of-relation-td5716947.html
+Flag Counter
+
+评论
+
+renny - 2014-12-19 17:19:26
+
+看起来德哥好想要oracle里面的那个next参数……
+
+德哥@Digoal 回复 renny - 2014-12-19 17:19:26
+
+[face1]太了解我了

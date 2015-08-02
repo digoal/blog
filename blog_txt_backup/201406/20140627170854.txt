@@ -1,0 +1,772 @@
+PostgreSQL research
+
+PostgreSQL 9.4 BDR(Bi-Directional Replication), LLSR(Logical Log Stream Replication)
+
+2014-06-27 17:08:54   查看原文>>
+
+非常感谢2ND团队的辛勤付出, PostgreSQL 9.4的逻辑流复制模块BDR已经小有所成, 本文将演示一下bdr的使用.
+bi-directional replication顾名思义, 就是互相复制的意思(也称为逻辑流复制), 同样需要利用WAL, 目前为单进程, 以后可能会改进到多进程, 不过即使单进程, 也比目前的其他第三方复制快很多(如slony-I, londiste3). 
+目前BDR逻辑流复制的最小粒度为数据库级别, 而PG9.0以来的物理流复制是整个集群级别的.
+
+注意目前BDR还处于开发阶段, 还没有整合到9.4的主版本中, 大家需要去git.postgresql.org的2nd分支下载进行测试.
+下载地址如下 : 
+http://git.postgresql.org/gitweb/?p=2ndquadrant_bdr.git;a=summary
+http://git.postgresql.org/gitweb/?p=2ndquadrant_bdr.git;a=shortlog;h=refs/heads/bdr-next
+本文的测试架构
+PostgreSQL BDR(Bi-Directional Replication), LLSR(Logical Log Stream Replication) - 德哥@Digoal - PostgreSQL
+ 
+
+复制节点术语, 同一个数据库可能处于多重身份, 视数据流(wal)的方向决定.
+up-stream 指上游节点(类似master)
+down-stream 指复制的下游节点(类似slave)
+但实际上两个节点可以相互复制, 是属于multi-master结构.
+
+安装简单步骤 : 
+
+# useradd bdr
+# tar -zxvf 2ndquadrant_bdr-ac5795e.tar.gz
+# cd 2ndquadrant_bdr-ac5795e
+# ./configure --prefix=/home/bdr/pgsql --with-pgport=1314 --with-perl --with-tcl --with-python --with-openssl --with-pam --with-ldap --with-libxml --with-libxslt --enable-thread-safety --enable-dtrace --enable-debug --enable-cassert
+# gmake
+# gmake install
+# cd contrib
+# gmake
+# gmake install
+
+
+
+创建数据库集群目录
+
+[root@db-172-16-3-150 contrib]# mkdir /ssd4/bdr
+[root@db-172-16-3-150 contrib]# chown bdr:bdr /ssd4/bdr
+
+
+环境变量.
+
+# vi /home/bdr/.bash_profile
+export PS1="$USER@`/bin/hostname -s`-> "
+export PGPORT=1314
+export PGDATA=/ssd4/bdr/pg_root1314
+export LANG=en_US.utf8
+export PGHOME=/home/bdr/pgsql
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+export PGUSER=postgres
+export PGHOST=$PGDATA
+export PGDATABASE=digoal
+alias rm='rm -i'
+alias ll='ls -lh'
+
+
+初始化数据库1
+
+# su - bdr
+bdr@db-172-16-3-150-> which psql
+~/pgsql/bin/psql
+
+bdr@db-172-16-3-150-> initdb -D /ssd4/bdr/pg_root1314 -E UTF8 --locale=C -U postgres -W
+bdr@db-172-16-3-150-> cd $PGDATA
+bdr@db-172-16-3-150-> ll
+total 108K
+drwx------ 5 bdr bdr 4.0K Jun 27 13:29 base
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 global
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_clog
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_committs
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_dynshmem
+-rw------- 1 bdr bdr 4.4K Jun 27 13:29 pg_hba.conf
+-rw------- 1 bdr bdr 1.6K Jun 27 13:29 pg_ident.conf
+drwx------ 5 bdr bdr 4.0K Jun 27 13:29 pg_llog  # 新增了这个目录, 相比9.4
+drwx------ 4 bdr bdr 4.0K Jun 27 13:29 pg_multixact
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_notify
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_replslot
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_serial
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_snapshots
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_stat
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_stat_tmp
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_subtrans
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_tblspc
+drwx------ 2 bdr bdr 4.0K Jun 27 13:29 pg_twophase
+-rw------- 1 bdr bdr    4 Jun 27 13:29 PG_VERSION
+drwx------ 3 bdr bdr 4.0K Jun 27 13:29 pg_xlog
+-rw------- 1 bdr bdr   88 Jun 27 13:29 postgresql.auto.conf
+-rw------- 1 bdr bdr  21K Jun 27 13:29 postgresql.conf
+
+
+
+版本是bdr0601
+
+bdr@db-172-16-3-150-> psql -V
+psql (PostgreSQL) 9.4beta1_bdr0601
+
+
+新增模块的动态链接库
+
+bdr@db-172-16-3-150-> ll $PGHOME/lib/bdr*
+-rwxr-xr-x 1 root root  148K Jun 27 13:28 bdr_output.so
+-rwxr-xr-x 1 root root  614K Jun 27 13:28 bdr.so
+
+
+新增的几个bin
+
+bdr@db-172-16-3-150-> ll $PGHOME/bin/bdr*
+-rwxr-xr-x 1 root root 146K Jun 27 13:28 /home/bdr/pgsql/bin/bdr_init_copy
+-rwxr-xr-x 1 root root 2.2K Jun 27 13:28 /home/bdr/pgsql/bin/bdr_initial_load
+
+
+
+bdr@db-172-16-3-150-> bdr_initial_load --help
+Usage: bdr_replica --source <dsn> --target <dsn> [--snapshot <name>] --dir /path/to/dir [--jobs N]
+<dsn> is a libpq conninfo string, e.g. "host=/tmp post=5433 dbnae=xxx"
+bdr@db-172-16-3-150-> bdr_init_copy --help
+bdr_init_copy initializes bdr from PostgreSQL instance made using pg_basebackup.
+
+Usage:
+  bdr_init_copy [OPTION]...
+
+General options:
+  -D, --pgdata=DIRECTORY base backup directory
+
+Connection options:
+  -d, --dbname=CONNSTR   connection string
+  -h, --host=HOSTNAME    database server host or socket directory
+  -p, --port=PORT        database server port number
+  -U, --username=NAME    connect as specified database user
+
+
+配置bdr的参数模板
+
+bdr@db-172-16-3-150-> cat $PGHOME/share/doc/extension/bdr.conf.sample
+#
+# This configuration file was installed by the postgresql94-bdr package
+#
+# It enables BDR in PostgreSQL, though it doesn't set up any peers to replicate
+# to/from.
+#
+# To learn how to configure BDR, see:
+# https://wiki.postgresql.org/wiki/BDR_User_Guide
+
+# Load BDR its self
+shared_preload_libraries = 'bdr'
+
+# Force WAL logging at logical replication level
+wal_level = 'logical'
+
+# Enable commit timestamps, which BDR requires
+track_commit_timestamp = on
+
+# Maximum number of replication slots that may exist. You should set this to
+# the number of nodes you expect to have, plus a reasonable margin for growth.
+#
+# This is a suitable setting for a small installation.
+max_replication_slots = 8
+
+# Generally you want to set max_wal_senders to the same value plus a few for
+# pg_basebackup runs, streaming replicas, etc.
+# 
+# This is a suitable setting for a small installation.
+max_wal_senders = 10
+
+# Do you want to record conflicts to the bdr.bdr_conflict_history table, not
+# just the log file?
+#bdr.log_conflicts_to_table = off
+
+# Configure connections to other BDR nodes. See below for a couple of examples.
+bdr.connections = ''
+
+
+#-------------------------------------------------------------------------
+# Remember that you must also add a replication entry to pg_hba.conf; see
+# https://wiki.postgresql.org/wiki/BDR_User_Guide#Configuration
+#-------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------
+# Example connection configuration:
+#-------------------------------------------------------------------------
+#
+# bdr.connections = 'node2,node3'
+#
+# bdr.node2_dsn = 'host=node2 dbname=mydb'
+# # Take our initial copy of the data from node2
+# bdr.node2_init_replica=on
+# # and apply it to the local db using this dsn
+# bdr.node2_replica_local_dsn="dbname=mydb user=postgres"
+# 
+# bdr.node3_dsn = "host=node3 dbname=mydb"
+#
+
+
+启动上游节点, 创建数据库, 用户(注意复制用户目前需要超级用户, 因为需要读bdr schema下面的一些表)
+创建几个测试表和数据.
+
+bdr@db-172-16-3-150-> pg_ctl start
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1314 -U postgres postgres
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+postgres=# create role digoal superuser replication login encrypted password 'digoal';
+CREATE ROLE
+postgres=# create database digoal01;
+CREATE DATABASE
+postgres=# \c digoal01 digoal 
+You are now connected to database "digoal01" as user "digoal".
+digoal01=# create table tbl1(id int primary key, info text, crt_time timestamp);
+CREATE TABLE
+digoal01=# insert into tbl1 select generate_series(1,100000), md5(random()::text), clock_timestamp();
+INSERT 0 100000
+
+
+初始化下游节点的数据库, 创建下游数据库(注意我们用到不一样的库名, 所以配置上需要特殊化处理)
+
+bdr@db-172-16-3-150-> initdb -D /ssd4/bdr/pg_root1315 -E UTF8 --locale=C -U postgres -W
+bdr@db-172-16-3-150-> pg_ctl start -D /ssd4/bdr/pg_root1315 -o "-p 1315"
+server starting
+bdr@db-172-16-3-150-> LOG:  database system was shut down at 2014-06-27 16:14:39 CST
+LOG:  autovacuum launcher started
+LOG:  database system is ready to accept connections
+
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1315 -U postgres postgres
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+postgres=# create role digoal superuser replication login encrypted password 'digoal';
+CREATE ROLE
+postgres=# create database digoal02;
+CREATE DATABASE
+
+
+
+配置上游戏节点
+
+cd /ssd4/bdr/pg_root1314
+vi postgresql.conf
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 1314                             # (change requires restart)
+max_connections = 100                   # (change requires restart)
+unix_socket_directories = '.'   # comma-separated list of directories
+tcp_keepalives_idle = 60                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 10            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 10               # TCP_KEEPCNT;
+shared_buffers = 512MB                  # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+dynamic_shared_memory_type = posix # the default is the first option
+shared_preload_libraries = 'bdr'                # (change requires restart)
+vacuum_cost_delay = 10                  # 0-100 milliseconds
+vacuum_cost_limit = 10000               # 1-10000 credits
+bgwriter_delay = 10ms                   # 10-10000ms between rounds
+wal_level = logical                     # minimal, archive, hot_standby or logical
+checkpoint_segments = 32                # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+max_wal_senders = 32            # max number of walsender processes
+max_replication_slots = 10      # max number of replication slots.
+track_commit_timestamp = on     # collect timestamp of transaction commit
+effective_cache_size = 96GB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+bdr.connections = 'digoal1315'  # 如果不需要双向复制的话, upstream节点只需要开启bdr shared lib, 其他的这里都不需要配置. 另外需要注意, upstream节点没有配置这里的反向链接的话, down-stream节点的这个库就无法执行写SQL. 只能读.
+bdr.digoal1315_dsn = 'hostaddr=127.0.0.1 dbname=digoal02 user=digoal port=1315'
+bdr.digoal1315_local_dbname = 'digoal01'
+bdr.synchronous_commit = off
+bdr.log_conflicts_to_table = on
+
+vi pg_hba.conf
+host replication digoal 127.0.0.1/32 trust
+
+
+
+配置下游节点
+
+cd /ssd4/bdr/pg_root1315
+vi postgresql.conf
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 1315                             # (change requires restart)
+max_connections = 100                   # (change requires restart)
+unix_socket_directories = '.'   # comma-separated list of directories
+tcp_keepalives_idle = 60                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 10            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 10               # TCP_KEEPCNT;
+shared_buffers = 512MB                  # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+dynamic_shared_memory_type = posix # the default is the first option
+shared_preload_libraries = 'bdr'                # (change requires restart)
+vacuum_cost_delay = 10                  # 0-100 milliseconds
+vacuum_cost_limit = 10000               # 1-10000 credits
+bgwriter_delay = 10ms                   # 10-10000ms between rounds
+wal_level = logical                     # minimal, archive, hot_standby or logical
+checkpoint_segments = 32                # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+max_wal_senders = 32            # max number of walsender processes
+max_replication_slots = 10      # max number of replication slots.
+track_commit_timestamp = on     # collect timestamp of transaction commit
+effective_cache_size = 96GB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+bdr.connections = 'digoal1314'
+bdr.synchronous_commit = off # 是否开启异步复制, 默认为同步复制.
+bdr.log_conflicts_to_table = on  # 冲突数据记录到bdr,bdr_conflict_history表.
+bdr.digoal1314_dsn = 'hostaddr=127.0.0.1 dbname=digoal01 user=digoal port=1314'
+bdr.digoal1314_local_dbname = 'digoal02'  # 当本地库名和远程连接的不一样时, 需要配置
+bdr.digoal1314_init_replica = on  # 是否需要初始化复制
+bdr.digoal1314_replica_local_dsn = 'hostaddr=127.0.0.1 dbname=digoal02 user=digoal port=1315'  # 初始化复制需要的连接参数
+
+vi pg_hba.conf
+host replication digoal 127.0.0.1/32 trust
+
+
+
+重启上游节点和下游节点
+
+bdr@db-172-16-3-150-> pg_ctl start -D /ssd4/bdr/pg_root1314
+server starting
+bdr@db-172-16-3-150-> LOG:  00000: registering background worker "bdr: digoal02"
+LOCATION:  RegisterBackgroundWorker, bgworker.c:732
+LOG:  00000: redirecting log output to logging collector process
+HINT:  Future log output will appear in directory "pg_log".
+LOCATION:  SysLogger_Start, syslogger.c:656
+
+bdr@db-172-16-3-150-> pg_ctl start -D /ssd4/bdr/pg_root1315
+server starting
+bdr@db-172-16-3-150-> LOG:  00000: registering background worker "bdr: digoal01"
+LOCATION:  RegisterBackgroundWorker, bgworker.c:732
+LOG:  00000: redirecting log output to logging collector process
+HINT:  Future log output will appear in directory "pg_log".
+LOCATION:  SysLogger_Start, syslogger.c:656
+
+
+
+查看下游节点是否已经成功复制
+
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1315 -U digoal digoal02
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+
+digoal02=# \dt
+       List of relations
+ Schema | Name | Type  | Owner  
+--------+------+-------+--------
+ public | tbl1 | table | digoal
+(1 row)
+
+digoal02=# select count(*) from tbl1;
+ count  
+--------
+ 100000
+(1 row)
+
+digoal02=# \q
+
+
+新增表测试, 查看是否成功复制 : 
+
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1314 -U digoal digoal01
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+
+digoal01=# create table tbl2(id int primary key, info text);
+CREATE TABLE
+digoal01=# insert into tbl2 select generate_series(1,10000);
+INSERT 0 10000
+digoal01=# \q
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1315 -U digoal digoal02
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+
+digoal02=# \dt
+       List of relations
+ Schema | Name | Type  | Owner  
+--------+------+-------+--------
+ public | tbl1 | table | digoal
+ public | tbl2 | table | digoal
+(2 rows)
+
+digoal02=# select count(*) from tbl2;
+ count 
+-------
+ 10000
+(1 row)
+
+
+
+其他的有兴趣的朋友搭建来玩一玩吧.
+
+复制进程, 一个数据库需要一个连接. bdr作为work process随数据库实例一起启动.
+
+bdr      23520     1  0 16:41 pts/0    00:00:00 /home/bdr/pgsql/bin/postgres -D /ssd4/bdr/pg_root1314
+bdr      23528 23520  0 16:41 ?        00:00:00 postgres: logger process                             
+bdr      23530 23520  0 16:41 ?        00:00:00 postgres: checkpointer process                       
+bdr      23531 23520  0 16:41 ?        00:00:00 postgres: writer process                             
+bdr      23532 23520  0 16:41 ?        00:00:00 postgres: wal writer process                         
+bdr      23533 23520  0 16:41 ?        00:00:00 postgres: autovacuum launcher process                
+bdr      23534 23520  0 16:41 ?        00:00:00 postgres: archiver process   last was 000000010000000000000005
+bdr      23535 23520  0 16:41 ?        00:00:00 postgres: stats collector process                    
+bdr      23536 23520  0 16:41 ?        00:00:00 postgres: bgworker: bdr: digoal01                    
+bdr      23542     1  0 16:41 pts/0    00:00:00 /home/bdr/pgsql/bin/postgres -D /ssd4/bdr/pg_root1315
+bdr      23588 23542  0 16:41 ?        00:00:00 postgres: logger process                             
+bdr      23597 23542  0 16:41 ?        00:00:00 postgres: checkpointer process                       
+bdr      23599 23542  0 16:41 ?        00:00:00 postgres: writer process                             
+bdr      23601 23542  0 16:41 ?        00:00:00 postgres: wal writer process                         
+bdr      23603 23542  0 16:41 ?        00:00:00 postgres: autovacuum launcher process                
+bdr      23604 23542  0 16:41 ?        00:00:00 postgres: archiver process                           
+bdr      23605 23542  0 16:41 ?        00:00:00 postgres: stats collector process                    
+bdr      23607 23542  0 16:41 ?        00:00:00 postgres: bgworker: bdr: digoal02                    
+bdr      23651 23542  0 16:42 ?        00:00:00 postgres: bgworker: bdr (6029519363330269950,1,16385,): digoal1314: apply   
+bdr      23652 23520  0 16:42 ?        00:00:02 postgres: wal sender process digoal 127.0.0.1(40480) idle
+bdr      23671 23520  0 16:42 ?        00:00:04 postgres: bgworker: bdr (6029521270843008333,1,16385,): digoal1315: apply   
+bdr      23672 23542  0 16:42 ?        00:00:01 postgres: wal sender process digoal 127.0.0.1(10525) idle
+
+
+
+反向复制 : 
+
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1315 -U digoal digoal02
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+digoal02=# create table tbl3(id int primary key, info text);
+CREATE TABLE
+digoal02=# insert into tbl3 select * from tbl2;
+INSERT 0 10000
+
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1314 -U digoal digoal01
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+digoal01=# \dt
+       List of relations
+ Schema | Name | Type  | Owner  
+--------+------+-------+--------
+ public | tbl1 | table | digoal
+ public | tbl2 | table | digoal
+ public | tbl3 | table | digoal
+(3 rows)
+digoal01=# select count(*) from tbl3;
+ count 
+-------
+ 10000
+(1 row)
+
+
+其他测试 : 
+
+digoal01=# truncate tbl3;
+TRUNCATE TABLE
+
+digoal02=# select count(*) from tbl3;
+ count 
+-------
+     0
+(1 row)
+
+digoal01=# create schema test;
+CREATE SCHEMA
+
+digoal02=# \dn
+  List of schemas
+  Name  |  Owner   
+--------+----------
+ bdr    | postgres
+ public | postgres
+ test   | digoal
+(3 rows)
+
+
+冲突表
+
+digoal01=# \dn
+  List of schemas
+  Name  |  Owner   
+--------+----------
+ bdr    | postgres
+ public | postgres
+ test   | digoal
+(3 rows)
+
+digoal01=# \dt bdr.bdr_
+bdr.bdr_conflict_handlers   bdr.bdr_nodes               bdr.bdr_sequence_elections  
+bdr.bdr_conflict_history    bdr.bdr_queued_commands     bdr.bdr_sequence_values     
+bdr.bdr_global_locks        bdr.bdr_queued_drops        bdr.bdr_votes               
+digoal01=# \dt bdr.bdr_conflict_history 
+                List of relations
+ Schema |         Name         | Type  |  Owner   
+--------+----------------------+-------+----------
+ bdr    | bdr_conflict_history | table | postgres
+(1 row)
+
+digoal01=# \d bdr.bdr_conflict_history 
+                                                Table "bdr.bdr_conflict_history"
+          Column          |            Type             |                               Modifiers                               
+--------------------------+-----------------------------+-----------------------------------------------------------------------
+ conflict_id              | bigint                      | not null default nextval('bdr.bdr_conflict_history_id_seq'::regclass)
+ local_node_sysid         | text                        | not null
+ local_conflict_xid       | xid                         | not null
+ local_conflict_lsn       | pg_lsn                      | not null
+ local_conflict_time      | timestamp with time zone    | not null
+ object_schema            | text                        | 
+ object_name              | text                        | 
+ remote_node_sysid        | text                        | not null
+ remote_txid              | xid                         | not null
+ remote_commit_time       | timestamp with time zone    | not null
+ remote_commit_lsn        | pg_lsn                      | not null
+ conflict_type            | bdr.bdr_conflict_type       | not null
+ conflict_resolution      | bdr.bdr_conflict_resolution | not null
+ local_tuple              | json                        | 
+ remote_tuple             | json                        | 
+ local_tuple_xmin         | xid                         | 
+ local_tuple_origin_sysid | text                        | 
+ error_message            | text                        | 
+ error_sqlstate           | text                        | 
+ error_querystring        | text                        | 
+ error_cursorpos          | integer                     | 
+ error_detail             | text                        | 
+ error_hint               | text                        | 
+ error_context            | text                        | 
+ error_columnname         | text                        | 
+ error_typename           | text                        | 
+ error_constraintname     | text                        | 
+ error_filename           | text                        | 
+ error_lineno             | integer                     | 
+ error_funcname           | text                        | 
+Indexes:
+    "bdr_conflict_history_pkey" PRIMARY KEY, btree (local_node_sysid, conflict_id)
+Check constraints:
+    "bdr_conflict_history_error_sqlstate_check" CHECK (length(error_sqlstate) = 5)
+
+
+
+复制插槽, 插槽名内包含数据库唯一ID,
+
+bdr@db-172-16-3-150-> psql -h 127.0.0.1 -p 1315 -U digoal digoal02
+psql (9.4beta1_bdr0601)
+Type "help" for help.
+digoal02=# select * from pg_replication_slots ;
+                slot_name                |   plugin   | slot_type | datoid | database | active | xmin | catalog_xmin | restart_lsn 
+-----------------------------------------+------------+-----------+--------+----------+--------+------+--------------+-------------
+ bdr_16385_6029521270843008333_1_16385__ | bdr_output | logical   |  16385 | digoal02 | t      |      |         2015 | 0/D038E78
+(1 row)
+
+bdr@db-172-16-3-150-> pg_controldata 
+pg_control version number:            937
+Catalog version number:               201405111
+Database system identifier:           6029521270843008333
+
+digoal01=# select * from pg_replication_slots ;
+                slot_name                |   plugin   | slot_type | datoid | database | active | xmin | catalog_xmin | restart_lsn 
+-----------------------------------------+------------+-----------+--------+----------+--------+------+--------------+-------------
+ bdr_16385_6029519363330269950_1_16385__ | bdr_output | logical   |  16385 | digoal01 | t      |      |         2063 | 0/12CE88D8
+(1 row)
+bdr@db-172-16-3-150-> pg_controldata /ssd4/bdr/pg_root1315
+pg_control version number:            937
+Catalog version number:               201405111
+Database system identifier:           6029519363330269950
+
+
+
+暂停
+在任意节点执行 bdr.bdr_apply_pause(), bdr.bdr_apply_resume()
+
+临时停止逻辑复制
+shutdown downstream数据库, upstream数据库的pg_xlog不会被删除, 所以不能停太久, 否则upstream的xlog可能占满磁盘空间.
+
+删除逻辑复制
+在upstream节点执行 SELECT pg_drop_replication_slot('slotname') 删除插槽.
+通过pg_replication_slots查看插槽.
+digoal01=# select * from pg_replication_slots ;
+                slot_name                |   plugin   | slot_type | datoid | database | active | xmin | catalog_xmin | restart_lsn 
+-----------------------------------------+------------+-----------+--------+----------+--------+------+--------------+-------------
+ bdr_16385_6029519363330269950_1_16385__ | bdr_output | logical   |  16385 | digoal01 | t      |      |         2063 | 0/12CE88D8
+(1 row)
+digoal02=# select * from pg_replication_slots ;
+                slot_name                |   plugin   | slot_type | datoid | database | active | xmin | catalog_xmin | restart_lsn 
+-----------------------------------------+------------+-----------+--------+----------+--------+------+--------------+-------------
+ bdr_16385_6029521270843008333_1_16385__ | bdr_output | logical   |  16385 | digoal02 | t      |      |         2015 | 0/D038E78
+(1 row)
+
+[效率测试]
+
+psql -h 127.0.0.1 -p 1314 -U digoal digoal01
+create table test(id int primary key, info text, crt_time timestamp);
+create or replace function f(v_id int) returns void as $$
+declare
+begin
+  update test set info=md5(now()::text),crt_time=now() where id=v_id;
+  if not found then
+    insert into test(id,info,crt_time) values(v_id,md5(now()::text),now());
+  end if;
+  exception when others then
+    return;
+end;
+$$ language plpgsql strict;
+
+vi test.sql
+\setrandom v_id 1 5000000
+select f(:v_id);
+
+pgbench -M prepared -f ./test.sql -n -r -h 127.0.0.1 -p 1314 -U digoal -c 8 -j 4 -T 30 digoal01
+
+同步提交延迟, 注意取pgbench结束时与复制完成后的location差异, 大约50MB;
+digoal01=# select * from pg_stat_replication ;
+-[ RECORD 1 ]----+--------------------------------------------
+ pid              | 3563                                        
+ usesysid         | 16384                                       
+ usename          | digoal                                      
+ application_name | bdr (6029519363330269950,1,16385,): receive 
+ client_addr      | 127.0.0.1                                   
+ client_hostname  |                                             
+ client_port      | 41869                                       
+ backend_start    | 2014-06-27 23:24:18.86267+08                
+ backend_xmin     |                                             
+ state            | streaming                                   
+ sent_location    | 0/1612B060                                  
+ write_location   | 0/160A9C20                                  
+ flush_location   | 0/160A9C20                                  
+ replay_location  | 0/160A9C20                                  
+ sync_priority    | 0                                           
+ sync_state       | async
+
+同步提交TPS
+pgbench -M prepared -f ./test.sql -n -r -h 127.0.0.1 -p 1314 -U digoal -c 8 -j 4 -T 30 digoal01
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+duration: 30 s
+number of transactions actually processed: 136383
+latency average: 1.760 ms
+tps = 4545.667101 (including connections establishing)
+tps = 4546.989202 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003936        \setrandom v_id 1 5000000
+        1.752829        select f(:v_id);
+
+synchronous_commit = off
+异步提交延迟, 注意取pgbench结束时与复制完成后的location差异, 大约50MB;
+digoal01=# select * from pg_stat_replication ;
+-[ RECORD 1 ]----+--------------------------------------------
+ pid              | 3563                                        
+ usesysid         | 16384                                       
+ usename          | digoal                                      
+ application_name | bdr (6029519363330269950,1,16385,): receive 
+ client_addr      | 127.0.0.1                                   
+ client_hostname  |                                             
+ client_port      | 41869                                       
+ backend_start    | 2014-06-27 23:24:18.86267+08                
+ backend_xmin     |                                             
+ state            | streaming                                   
+ sent_location    | 0/1C861E80                                  
+ write_location   | 0/1C7A7F40                                  
+ flush_location   | 0/1C7A7F40                                  
+ replay_location  | 0/1C7A7F40                                  
+ sync_priority    | 0                                           
+ sync_state       | async
+
+
+synchronous_commit = off
+异步提交TPS
+pgbench -M prepared -f ./test.sql -n -r -h 127.0.0.1 -p 1314 -U digoal -c 8 -j 4 -T 30 digoal01
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+duration: 30 s
+number of transactions actually processed: 322561
+latency average: 0.744 ms
+tps = 10751.245625 (including connections establishing)
+tps = 10754.180674 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003695        \setrandom v_id 1 5000000
+        0.737776        select f(:v_id);
+
+关闭逻辑复制(注意本案逻辑复制的另一台节点在同一台主机, 所以对测试结果有一定影响, 理论上逻辑复制带来的TPS差异没有这么明显)
+同步提交TPS
+pgbench -M prepared -f ./test.sql -n -r -h 127.0.0.1 -p 1314 -U digoal -c 8 -j 4 -T 30 digoal01
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+duration: 30 s
+number of transactions actually processed: 168087
+latency average: 1.428 ms
+tps = 5602.641345 (including connections establishing)
+tps = 5604.156779 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003864        \setrandom v_id 1 5000000
+        1.421089        select f(:v_id);
+
+关闭逻辑复制
+异步提交TPS
+pgbench -M prepared -f ./test.sql -n -r -h 127.0.0.1 -p 1314 -U digoal -c 8 -j 4 -T 30 digoal01
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+duration: 30 s
+number of transactions actually processed: 437412
+latency average: 0.549 ms
+tps = 14579.955311 (including connections establishing)
+tps = 14584.159189 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003585        \setrandom v_id 1 5000000
+        0.542548        select f(:v_id);
+
+
+
+
+[其他]
+1. 被复制的库, 所有的对象必须有主键或者非空唯一索引.
+2. 复制效率高于SQL replay模式, The apply process makes changes directly rather than generating SQL text and then parse/plan/executing SQL.
+3. 可复制create, insert, update, delete, truncate等SQL.
+4. 不复制unlogged table数据
+5. 不复制temp表定义
+6. down-stream节点如果与apply发生冲突, 将导致复制延迟(与PLSR类似).
+7. 复制对象必须有非空唯一约束或主键.
+8. 支持自定义类型, 注意保持OID一致, (未来版本可能没有这个要求)
+9. down-stream 节点wal replay的顺序遵循commit顺序.
+10. 目前大事务在提交前产生的事务数据在upstream节点存放, 所以容易导致复制延迟, 未来会把这部分数据在down stream节点处理, 以提高replay速度. Larger transactions spill to disk on the upstream master once they reach a certain size. Currently, large transactions can cause increased latency. Future enhancement will be to
+stream changes to downstream master once they fill the upstream memory buffer, though this is likely to be implemented in 9.5.
+11. notify 不会在down stream节点被接收.
+
+
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=2ndquadrant_bdr.git;a=summary
+2. http://git.postgresql.org/gitweb/?p=2ndquadrant_bdr.git;a=shortlog;h=refs/heads/bdr-next
+3. https://wiki.postgresql.org/wiki/BDR_Parameter_Reference
+4. https://wiki.postgresql.org/wiki/BDR_Administration
+5. https://wiki.postgresql.org/wiki/Logical%20Log%20Streaming%20Replication?nocache=0.75704200+1403840368
+6. https://wiki.postgresql.org/wiki/BDR_Reference
+7. https://wiki.postgresql.org/wiki/BDR_User_Guide
+8. https://wiki.postgresql.org/wiki/BDR_Quick_Start
+
+
+Flag Counter

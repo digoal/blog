@@ -1,0 +1,445 @@
+PostgreSQL research
+
+PostgreSQL HOT STANDBY using log shipping
+
+2010-12-30 17:38:25   查看原文>>
+
+PostgreSQL HOT STANDBY by log shipping 测试:
+一、准备硬件
+1. 主节点硬件配置
+DISK : 146GB*6
+MEM : 14GB
+CPU : 2.83GHz*8
+2. standby节点硬件配置
+DISK : 146GB*4
+MEM : 8GB
+CPU : 2.0GHz*8
+
+二、准备环境
+1. 系统
+Red Hat Enterprise Linux Server release 5.5 (Tikanga) x64
+2. 时钟同步
+8 * * * * /usr/sbin/ntpdate asia.pool.ntp.org && /sbin/hwclock --systohc
+3. 配置目录
+mkdir -p /database/pgdata/tbs1
+mkdir -p /database/pgdata/tbs2
+mkdir -p /database/pgdata/tbs3
+mkdir -p /database/pgdata/tbs4
+mkdir -p /database/pgdata/tbs5
+fdisk
+mkfs.ext3
+mount /dev/cciss/c0d1p1 /database/pgdata/tbs1
+mount /dev/cciss/c0d2p1 /database/pgdata/tbs2
+mount /dev/cciss/c0d3p1 /database/pgdata/tbs3
+mount /dev/cciss/c0d4p1 /database/pgdata/tbs4
+mount /dev/cciss/c0d5p1 /database/pgdata/tbs5
+master节点:
+[root@db-172-16-3-33 ~]# df -h
+Filesystem            Size  Used Avail Use% Mounted on
+/dev/cciss/c0d0p1      31G  8.1G   21G  29% /
+/dev/cciss/c0d0p3      88G  1.7G   81G   3% /opt
+tmpfs                 6.9G     0  6.9G   0% /dev/shm
+/dev/cciss/c0d1p1     135G   76M  128G   1% /database/pgdata/tbs1
+/dev/cciss/c0d2p1     135G  6.1G  122G   5% /database/pgdata/tbs2
+/dev/cciss/c0d3p1     135G  3.3G  125G   3% /database/pgdata/tbs3
+/dev/cciss/c0d4p1     135G  5.6G  123G   5% /database/pgdata/tbs4
+/dev/cciss/c0d5p1     135G   16G  113G  13% /database/pgdata/tbs5
+
+slave节点:
+Filesystem            Size  Used Avail Use% Mounted on
+/dev/sda1              31G  3.5G   26G  13% /
+/dev/sda3              94G  386M   89G   1% /opt
+tmpfs                 3.9G     0  3.9G   0% /dev/shm
+/dev/sdb1             134G   76M  128G   1% /database/pgdata/tbs1
+/dev/sdc1             134G  188M  127G   1% /database/pgdata/tbs2
+/dev/sdd1             134G  2.9G  125G   3% /database/pgdata/tbs3
+172.16.3.33:/database/pgdata/tbs4
+                      135G  5.6G  123G   5% /database/pgdata/tbs4
+
+vi /etc/fstab
+4. 在主节点配置nfs,将wal归档目录export出去,
+(这里没有使用中央日志服务器,有条件的话还是需要一个比较大的日志服务器为好,以便支持更多的slave节点)
+/database/pgdata/tbs4 172.16.3.39/32(rw,no_root_squash,sync)
+  slave节点mount这个目录.
+  确保master节点和slave节点的postgres用户gid uid相同,否则可能有权限的问题.
+5. 配置内核参数等
+kernel.shmmni = 4096
+kernel.sem = 501000 6412800000 501000 12800
+fs.file-max = 767246
+net.ipv4.ip_local_port_range = 1024 65000
+net.core.rmem_default = 1048576
+net.core.rmem_max = 1048576
+net.core.wmem_default = 262144
+net.core.wmem_max = 262144
+net.ipv4.tcp_tw_recycle=1
+net.ipv4.tcp_max_syn_backlog=4096
+net.core.netdev_max_backlog=10000
+vm.overcommit_memory=0
+net.ipv4.ip_conntrack_max=655360
+
+*  soft    nofile  131072
+*  hard    nofile  131072
+*  soft    nproc   131072
+*  hard    nproc   131072
+*  soft    core    unlimited
+*  hard    core    unlimited
+*  soft    memlock 50000000
+*  hard    memlock 50000000
+
+6. 配置系统服务
+chkconfig --level 35 nfs on
+chkconfig --level 35 portmap pn
+
+7. 配置防火墙
+vi /etc/sysconfig/iptables
+
+8. 升级操作系统补丁,驱动等
+
+三、安装PostgreSQL 9.0.2
+1. postgres user profile:
+export PS1="$USER@`/bin/hostname -s`-> "
+export PGPORT=1921
+export PGDATA=/database/pgdata/tbs1/pg_root
+export PGARCHIVE=/database/pgdata/tbs4/pg_arch
+
+export LANG=en_US.utf8
+
+export PGHOME=/opt/pgsql
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+alias rm='rm -i'
+alias ll='ls -lh'
+
+2. 配置数据库相关目录
+2.1 log
+  /var/applog/pg_log
+2.2 pghome
+  /opt/pgsql
+2.3 pgdata
+  /database/pgdata/tbs1/pg_root
+2.4 pgarchive
+  /database/pgdata/tbs4/pg_arch
+
+3. 初始化数据库
+initdb -D /database/pgdata/tbs1/pg_root -E UTF8 --locale=C -U postgres -X /database/pgdata/tbs2/pg_xlog -W
+
+四、配置master节点
+1. pg_hba.conf
+# "local" is for Unix domain socket connections only
+local   all             all                                     trust
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            trust
+# IPv6 local connections:
+# host    all             all             ::1/128                 trust
+host all all 0.0.0.0/0  md5
+
+2. postgresql.conf
+
+listen_addresses = '*'          # what IP address(es) to listen on;
+port = 1921                             # (change requires restart)
+max_connections = 2000                  # (change requires restart)
+unix_socket_directory = '/database/pgdata/tbs1/pg_root'         # (change requires restart)
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+password_encryption = on
+shared_buffers = 2048MB                 # min 128kB
+maintenance_work_mem = 2048MB           # min 1MB
+max_stack_depth = 8MB                   # min 100kB
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # immediate fsync at commit
+wal_sync_method = fdatasync             # the default is the first option
+wal_buffers = 128000kB                  # min 32kB
+wal_writer_delay = 20ms                 # 1-10000 milliseconds
+checkpoint_segments = 64                # in logfile segments, min 1, 16MB each
+checkpoint_timeout = 30min              # range 30s-1h
+archive_mode = on               # allows archiving to be done
+archive_command = 'cp %p $PGARCHIVE/%f'         # command to use to archive a logfile segment
+max_wal_senders = 30            # max number of walsender processes
+random_page_cost = 2.0                  # same scale as above
+effective_cache_size = 12800MB
+constraint_exclusion = partition        # on, off, or partition
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = '/var/applog/pg_log'            # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_truncate_on_rotation = on           # If on, an existing log file of the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_min_duration_statement = 1000ms     # -1 is disabled, 0 logs all statements
+log_checkpoints = on
+log_lock_waits = on                     # log lock waits >= deadlock_timeout
+log_statement = 'ddl'                   # none, ddl, mod, all
+track_activity_query_size = 2048        # (change requires restart)
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+check_function_bodies = on
+bytea_output = 'escape'                 # hex, escape
+datestyle = 'iso, mdy'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+deadlock_timeout = 1s
+
+
+
+3. 启动主节点.
+
+五、传输基础文件至slave节点,模拟一个正在运行的数据库生成复制库的操作.
+1. on the master
+select pg_start_backup('replication backup');
+2. on the master
+scp $PGDATA $SLAVE_IP:$PGDATA
+3. on the master
+select pg_stop_backup();
+
+六、配置slave节点
+1. on the slave
+chown -R postgres:postgres $PGDATA
+su - postgres
+cd $PGDATA
+rm postmaster.pid
+rm -rf pg_xlog
+ln -s /database/pgdata/tbs2/pg_xlog ./pg_xlog
+2. 配置postgresql.conf
+
+listen_addresses = '*'          # what IP address(es) to listen on;
+port = 1921                             # (change requires restart)
+max_connections = 2000                  # (change requires restart)
+unix_socket_directory = '/database/pgdata/tbs1/pg_root'         # (change requires restart)
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+password_encryption = on
+shared_buffers = 2048MB                 # min 128kB
+maintenance_work_mem = 2048MB           # min 1MB
+max_stack_depth = 8MB                   # min 100kB
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # immediate fsync at commit
+wal_sync_method = fdatasync             # the default is the first option
+wal_buffers = 128000kB                  # min 32kB
+wal_writer_delay = 20ms                 # 1-10000 milliseconds
+checkpoint_segments = 64                # in logfile segments, min 1, 16MB each
+checkpoint_timeout = 30min              # range 30s-1h
+archive_mode = on               # allows archiving to be done
+archive_command = 'cp %p $PGARCHIVE/%f'         # command to use to archive a logfile segment
+max_wal_senders = 30            # max number of walsender processes
+hot_standby = off                        # 这个参数在初始化slave的时候关闭是比较明智的选择,在初始同步完成后在开启
+random_page_cost = 2.0                  # same scale as above
+effective_cache_size = 12800MB
+constraint_exclusion = partition        # on, off, or partition
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = '/var/applog/pg_log'            # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_truncate_on_rotation = on           # If on, an existing log file of the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_min_duration_statement = 1000ms     # -1 is disabled, 0 logs all statements
+log_checkpoints = on
+log_lock_waits = on                     # log lock waits >= deadlock_timeout
+log_statement = 'ddl'                   # none, ddl, mod, all
+track_activity_query_size = 2048        # (change requires restart)
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+check_function_bodies = on
+bytea_output = 'escape'                 # hex, escape
+datestyle = 'iso, mdy'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+deadlock_timeout = 1s
+
+
+
+3. 配置recovery.conf
+restore_command = 'cp $PGARCHIVE/%f %p'         # e.g. 'cp /mnt/server/archivedir/%f %p'
+archive_cleanup_command = 'pg_archivecleanup $PGARCHIVE %r'
+standby_mode = 'on'
+trigger_file = '/database/pgdata/tbs1/pg_root/postgresql.trigger.1921'
+
+4. 启动slave节点
+
+启动完后,可以通过top看到slave节点在拼命的恢复pg_start_backup以来的所有wal.
+恢复完后修改hot_standby = on,重启slave节点
+
+七、测试
+1. (on master)新建用户
+create role digoal nosuperuser login encrypted password 'digoal';
+2. 新建表空间
+on master
+su - postgres
+mkdir /database/pgdata/tbs3/tbs_test
+on slave
+su - postgres
+mkdir /database/pgdata/tbs3/tbs_test
+on master
+create tablespace tbs_digoal owner test location '/database/pgdata/tbs3/tbs_digoal';
+3. (on master)新建数据库
+create database digoal with owner digoal template template0 encoding 'UTF8' tablespace tbs_digoal;
+4. (on master)新建schema
+\c digoal digoal
+create schema digoal authorization digoal;
+5. (on master)新建表
+\c digoal digoal
+create table tbl_users (id int8 , nick varchar(32));
+6. (on master)插入测试数据
+insert into tbl_users select generate_series(1,10000000),'digoal';
+由于插入数据量比较大,可以很明显的看到pg_arch目录中的WAL在增加,如
+-rw------- 1 postgres postgres      254 Dec 30 15:17 000000010000000000000004.00000020.backup
+-rw------- 1 postgres postgres 67108864 Dec 30 15:19 000000010000000100000024
+-rw------- 1 postgres postgres 67108864 Dec 30 15:19 000000010000000100000025
+生成WAL后,slave节点又开始recover事件,recover完成后等待下一个wal如:
+25456 postgres  18   0 2389m 1364  736 S  0.0  0.0   0:00.00 postgres: startup process   waiting for 00000001000000010000000E
+
+7. (on master)使用DDL测试冲突
+on master
+alter table tbl_users add column first_name default 'zhou';
+alter table tbl_users add column last_name default 'digoal';
+在slave恢复期间,在slave节点执行 select count(*) from tbl_users;发生等待事件.
+
+on slave /var/applog/pg_log中查看最近一个日志文件,
+2010-12-30 15:04:01.462 CST,"digoal","digoal",25240,"127.0.0.1:43079",4d1c2edf.6298,1,"SELECT waiting",2010-12-30 15:03:59 CST,2/14,0,LOG,00000,"process 25240 still waiting for AccessShareLock on relation 16388 of database 16386 after 1000.564 ms",,,,,,"select count(*) from tbl_users;",22,,"psql"
+
+如果数据库没有其他操作了,不再发生ARCHIVE操作时,你可能会发现主节点已经alter完了,slave节点还是在等待.
+原因是alter完的log信息存在的XLOG还没有发生归档,slave节点会一直等待下去(这时可以手工执行pg_switch_xlog).
+
+8. (on master)测试checkpoint
+在PostgreSQL中发生checkpoint后,在此之前的WAL在做数据库恢复时就用不到了,因为确保数据都写入数据文件了.
+pg_archivecleanup也是根据checkpoint来判断和删除不需要的WAL的.
+
+9. (on slave)测试cleanarchive
+在做checkpoint前,去看$PGARCHIVE目录,已经被apply的文件还存在,并没有被pg_archivecleanup命令清除掉,原因就是这些文件是最近一次checkpoint以来的WAL文件,在数据库恢复时是需要用到的.
+如果你手工执行pg_archivecleanup $PGARCHIVE 000000010000000200000031 (假设000000010000000200000031这个是在$PGARCHIVE中的一个WAL的文件名)
+这条命令将删除000000010000000200000031以前生成的所有WAL文件,一定要小心操作,万一不小心把最近一次CHECKPOINT以来的WAL删除了,
+补救的方法是赶紧到master上做一次checkpoint,让slave知道这次checkpoint,否则的话下次slave启动还会读到000000010000000200000031这个文件以前的文件,那时候就只能找到这些文件或重建slave了.
+
+10. (on slave)测试active slave
+激活SLAVE很简单,了解到已经apply了最新的WAL后,执行以下
+su - postgres
+touch /database/pgdata/tbs1/pg_root/postgresql.trigger.1921
+数据库会触发激活的动作,激活后/database/pgdata/tbs1/pg_root/postgresql.trigger.1921这个文件会自动删掉,并且recovery.conf被重命名为recovery.done.
+激活后的slave不可逆转为slave了.需要重建.
+
+11. 监控
+
+pg_current_xlog_insert_location
+pg_current_xlog_location
+pg_last_xlog_receive_location
+pg_last_xlog_replay_location
+top
+CREATE OR REPLACE VIEW pg_stat_replication AS
+    SELECT
+            S.procpid,
+            S.usesysid,
+            U.rolname AS usename,
+            S.application_name,
+            S.client_addr,
+            S.client_port,
+            S.backend_start
+    FROM pg_stat_get_activity(NULL) AS S, pg_authid U
+    WHERE S.usesysid = U.oid AND S.datid = 0;
+
+
+
+八、附pgctl.sh脚本
+
+#!/bin/bash
+
+# environment.
+# Get the aliases and functions
+if [ -f ~/.bashrc ]; then
+        . ~/.bashrc
+fi
+
+# User specific environment and startup programs
+
+export PGHOME=/opt/pgsql
+export PATH=$PGHOME/bin:$PATH
+export PGDATA=/database/pgdata/tbs1/pg_root
+export PGPORT=1921
+export LANG='en_US.utf8'
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+
+RETVAL=1
+
+start() {
+su - postgres -c "/usr/bin/nohup $PGHOME/bin/postgres -D $PGDATA -p $PGPORT >/dev/null 2>>/var/applog/pg_log/start_err.log  </dev/null &"
+         RETVAL=$?
+         return $RETVAL
+}
+
+stop() {
+su - postgres -c "$PGHOME/bin/pg_ctl stop -D $PGDATA -m fast"
+         RETVAL=$?
+         return $RETVAL
+}
+
+reload() {
+su - postgres -c "$PGHOME/bin/pg_ctl reload -D $PGDATA"
+         RETVAL=$?
+         return $RETVAL
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  restart)
+        stop
+        start
+        ;;
+  reload)
+        reload
+        ;;
+  *)
+        echo $"Usage: $prog {start|stop|restart|reload}"
+        exit 2
+esac
+
+exit $RETVAL
+# Auth Digoal.Zhou
+# Corp. Sky-Mobi
+
+
+
+久、其他
+1. 自9.0以后,PostgreSQL引入了一个叫pg_archivecleanup的模块,简化了standby的配置.以前通过pg_standby来实现的.
+2. 第二象限开发的基于PostgreSQL 内部复制的产品
+http://projects.2ndquadrant.com/repmgr
+3. other blog
+PostgreSQL 9.1 Allow standby recovery to switch to a new timeline automatically
+http://blog.163.com/digoal@126/blog/static/163877040201182395310376/
+
+PostgreSQL 9.2 devel adding cascading replication support
+http://blog.163.com/digoal@126/blog/static/1638770402012012361519/
+
+PostgreSQL HOT STANDBY using Stream
+http://blog.163.com/digoal@126/blog/static/16387704020110442050808/
+
+PostgreSQL cluster role switchover between primary and standby
+http://blog.163.com/digoal@126/blog/static/163877040201141154024306/
+
+We can ignore the performance influence when use sync replication in PostgreSQL 9.1  
+http://blog.163.com/digoal@126/blog/static/163877040201192203458765/
+
+PostgreSQL 9.1 Replication role privilege change to REPLICATION from SUPERUSER
+http://blog.163.com/digoal@126/blog/static/16387704020114112379185/
+
+PostgreSQL 9.0.2 Replication Best Practices
+http://blog.163.com/digoal@126/blog/static/1638770402010113034232645/
+
+PostgreSQL replication monitor
+http://blog.163.com/digoal@126/blog/static/163877040201141134748660/
+
+New replication mode: async, write, fsync, replay
+http://blog.163.com/digoal@126/blog/static/16387704020121231117557/
+
+PostgreSQL HOT STANDBY using log shipping
+http://blog.163.com/digoal@126/blog/static/1638770402010113053825671/

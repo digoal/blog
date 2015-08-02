@@ -1,0 +1,213 @@
+PostgreSQL research
+
+PostgreSQL Use rsync instead of pg_basebackup when create standby in wan environment
+
+2013-04-27 9:30:16   查看原文>>
+
+上一篇BLOG简单的介绍了一下PostgreSQL广域网的容灾.
+http://blog.163.com/digoal@126/blog/static/1638770402013324103828603/
+里面介绍的主要是standby搭建好之后的一些注意要点, 本文主要介绍一下广域网搭建standby的注意要点.
+广域网对本案影响最大的问题如下 : 
+问题1. 带宽
+广域网带宽小将致使创建standby的整个数据复制过程变长, 时间越长, 主库在这段时间的变化量也就, xlog文件越多. 
+带来的后果是standby基础备份做好后要恢复大量的xlog文件.
+如果主库没有对pg_xlog做archive的话, 那么复制可能无效, 因为需要的pg_xlog已经被覆盖了.
+解决办法1:
+    加大主库的wal_keep_segments, 确保基础备份的时间段内pg_xlog不会被覆盖.
+解决办法2:
+    在主库添加pg_xlog归档. 
+解决办法3:
+    在备库或其他地方使用pg_receivexlog实时接收主库产生的xlog文件.
+以上三种解决办法都是为了保留standby需要的最早的pg_xlog文件开始的所有pg_xlog文件.
+
+问题2. 稳定性
+广域网的稳定性也是一个问题, 我这几天在使用pg_basebackup创建standby的过程中发现, 网络会不定期的被断开连接.
+断开时在主库看到的日志信息 : 
+
+2013-04-27 05:26:14.729 CST,"digoal","",27083,"192.1.1.1:58679",5179c9ad.69cb,4,"sending backup ""pg_basebackup base backup""",2013-04-26 08:26:21 CST,59/0,0,LOG,08006,"could not send data to client: Connection reset by peer",,,,,,,,"internal_flush, pqcomm.c:1253","pg_basebackup"
+2013-04-27 05:26:14.729 CST,"digoal","",27083,"192.1.1.1:58679",5179c9ad.69cb,5,"sending backup ""pg_basebackup base backup""",2013-04-26 08:26:21 CST,59/0,0,FATAL,XX000,"base backup could not send data, aborting backup",,,,,,,,"sendFile, basebackup.c:1027","pg_basebackup"
+2013-04-27 05:26:14.729 CST,"digoal","",27083,"192.1.1.1:58679",5179c9ad.69cb,6,"sending backup ""pg_basebackup base backup""",2013-04-26 08:26:21 CST,59/0,0,LOG,08006,"could not send data to client: Broken pipe",,,,,,,,"internal_flush, pqcomm.c:1253","pg_basebackup"
+2013-04-27 05:26:14.729 CST,"digoal","",27083,"192.1.1.1:58679",5179c9ad.69cb,7,"sending backup ""pg_basebackup base backup""",2013-04-26 08:26:21 CST,59/0,0,FATAL,08006,"connection to client lost",,,,,,,,"ProcessInterrupts, postgres.c:2867","pg_basebackup"
+2013-04-27 05:26:14.729 CST,"digoal","",27083,"192.1.1.1:58679",5179c9ad.69cb,8,"sending backup ""pg_basebackup base backup""",2013-04-26 08:26:21 CST,,0,LOG,00000,"disconnection: session time: 20:59:52.949 user=digoal database= host=192.1.1.1 port=58679",,,,,,,,"log_disconnections, postgres.c:4366","pg_basebackup"
+
+
+原因不明.
+尝试了3次使用pg_basebackup做备份, 都断开了, 而且断开时没有明显特点, 传输速率并没有达到最高时断开过, 传输到3%时断开过, 传输到90%时断开过. 
+解决办法 : 
+   使用rsync代替pg_basebackup, 因为pg_basebackup没有断点续传的功能, 每次失败后都要重新来过. 并且pg_basebackup拷贝的文件时间戳不会保留, 所以即使要做断点续传也比较麻烦.
+   rsync 有几个好处, 1. 它可以保留时间戳, 这样的话如果断掉还可以做断点续传. 因为单个数据文件的大小可以在编译数据库时指定, 默认是1GB. 所以即使断掉, 单个文件最多再多传输1次, 而其他的已经传输完整的文件不需要重传, 即使改变了也不需要重传, 因为可以通过pg_xlog恢复.
+    需要注意的是rsync如果中途中断, 未传完的临时文件会保留在目的端, 所以全部结束后需要清除这些临时文件. 
+临时文件清除参考:
+http://blog.163.com/digoal@126/blog/static/163877040201011794210567/
+    使用rsync注意tcp心跳的设置, 必须要小于经过的所有网络设备的链接超时时间. 否则链接可能被网络设备给关闭掉.
+    修改客户端 : 
+
+/etc/sysctl.conf
+net.ipv4.tcp_keepalive_time=90
+sysctl -p
+
+
+建立连接后检查 : 
+
+netstat -anpo|grep ssh
+tcp        0      0 127.0.0.1:29568             127.0.0.1:22212             ESTABLISHED 18653/ssh           keepalive (23.06/0/0)
+tcp        0      0 127.0.0.1:29571             127.0.0.1:22212             ESTABLISHED 18726/ssh           keepalive (37.48/0/0)
+tcp        0      0 127.0.0.1:29570             127.0.0.1:22212             ESTABLISHED 18724/ssh           keepalive (18.71/0/0)
+tcp        0      0 127.0.0.1:29573             127.0.0.1:22212             ESTABLISHED 18730/ssh           keepalive (69.39/0/0)
+tcp        0      0 127.0.0.1:29572             127.0.0.1:22212             ESTABLISHED 18728/ssh           keepalive (73.43/0/0)
+
+
+【rsync创建standby举例】
+1. 在standby节点创建表空间目录以及$PGDATA目录,pg_xlog等等目录. 修改权限
+在主库上获得需要的目录:
+
+postgres@db-192-1-1-5-> cd $PGDATA
+postgres@db-192-1-1-5-> pwd
+/data02/pg_root
+postgres@db-192-1-1-5-> ll|grep pg_xlog
+lrwxrwxrwx 1 postgres postgres   27 Dec 13 18:54 pg_xlog -> /data01/pg_xlog
+postgres@db-192-1-1-5-> cd $PGDATA/pg_tblspc
+postgres@db-192-1-1-5-> ll
+lrwxrwxrwx 1 postgres postgres 24 Feb 20 14:22 16387 -> /data09/digoal
+lrwxrwxrwx 1 postgres postgres 31 Mar  6 11:11 16388 -> /data06/tbs_digoal_old
+lrwxrwxrwx 1 postgres postgres 28 Dec 13 18:55 16381 -> /data03/tbs_digoal
+lrwxrwxrwx 1 postgres postgres 32 Dec 13 18:55 16382 -> /data04/tbs_digoal_idx
+lrwxrwxrwx 1 postgres postgres 29 Dec 13 18:56 16389 -> /data05/tbs_digoal1
+postgres@db-192-1-1-5-> cat $PGDATA/postgresql.conf|grep log_directory
+log_directory = '/var/applog/pg_log'               # directory where log files are written,
+
+
+在standby服务器上创建这些目录:
+
+mkdir -p /data02/pg_root
+mkdir -p /data01/pg_xlog
+mkdir -p /data09/digoal
+mkdir -p /data06/tbs_digoal_old
+mkdir -p /data03/tbs_digoal
+mkdir -p /data04/tbs_digoal_idx
+mkdir -p /data05/tbs_digoal1
+mkdir -p /var/applog/pg_log
+
+
+# 修改为数据库启动用户权限
+
+chown -R postgres:postgres /data02/pg_root
+chown -R postgres:postgres /data01/pg_xlog
+chown -R postgres:postgres /data09/digoal
+chown -R postgres:postgres /data06/tbs_digoal_old
+chown -R postgres:postgres /data03/tbs_digoal
+chown -R postgres:postgres /data04/tbs_digoal_idx
+chown -R postgres:postgres /data05/tbs_digoal1
+chown -R postgres:postgres /var/applog/pg_log
+
+
+# 修改为700
+
+chmod -R 700  /data02/pg_root
+chmod -R 700  /data01/pg_xlog
+chmod -R 700  /data09/digoal
+chmod -R 700  /data06/tbs_digoal_old
+chmod -R 700  /data03/tbs_digoal
+chmod -R 700  /data04/tbs_digoal_idx
+chmod -R 700  /data05/tbs_digoal1
+chmod -R 700  /var/applog/pg_log
+
+2. 在standby 节点创建秘钥
+
+postgres@db-192-1-1-1-> ssh-keygen -t rsa
+
+
+3. 将公钥拷贝到master节点
+
+su - postgres
+chmod 700 ~
+cd ~/.ssh
+vi authorized_keys
+#standby节点上~/.ssh/id_rsa.pub内容拷贝到这里
+chmod 700 ~/.ssh
+chmod 400 ~/.ssh/authorized_keys
+
+# 确保master节点允许公钥验证.
+
+[root@db-192-1-1-5 ~]# cat /etc/ssh/sshd_config |grep Pub
+PubkeyAuthentication yes
+
+
+# 如果如果有超时关闭连接的设备, 建议建立隧道.
+
+ssh -o ServerAliveInterval=90 -o ServerAliveCountMax=60 -o CompressionLevel=9 -p remote_direct_ip_ssh_port -CqTfnN -L *:10022:remote_dest_ip:remote_dest_ssh_port postgres@remote_direct_ip
+
+
+4. 在standby 节点执行pg_receivexlog (早于pg_start_backup开始, 可以拿到所有需要的pg_xlog文件)
+
+pg_receivexlog -D $PGDATA/pg_xlog -v -h 192.1.1.5 -p 5432 -s 60 -U replica
+
+
+5. 在master节点执行开始备份
+
+psql
+psql (9.2.4)
+Type "help" for help.
+postgres=# select pg_start_backup(now()::text);
+
+
+6. master节点执行完pg_start_backup后, 在standby节点执行rsync.
+
+nohup rsync -acvz --progress --rsh='ssh -p 10022' --delete --exclude=pg_xlog* --exclude=*.pid postgres@192.1.1.5:/data02/pg_root/ /data02/pg_root >>/home/postgres/pg_root.log 2>&1 &
+nohup rsync -acvz --progress --rsh='ssh -p 10022' --delete postgres@192.1.1.5:/data09/digoal/ /data09/digoal >>/home/postgres/digoal.log 2>&1 &
+nohup rsync -acvz --progress --rsh='ssh -p 10022' --delete postgres@192.1.1.5:/data03/tbs_digoal/ /data03/tbs_digoal >>/home/postgres/tbs_digoal.log 2>&1 &
+nohup rsync -acvz --progress --rsh='ssh -p 10022' --delete postgres@192.1.1.5:/data05/tbs_digoal1/ /data05/tbs_digoal1 >>/home/postgres/tbs_digoal1.log 2>&1 &
+nohup rsync -acvz --progress --rsh='ssh -p 10022' --delete postgres@192.1.1.5:/data04/tbs_digoal_idx/ /data04/tbs_digoal_idx >>/home/postgres/tbs_digoal_idx.log 2>&1 &
+nohup rsync -acvz --progress --rsh='ssh -p 10022' --delete postgres@192.1.1.5:/data06/tbs_digoal_old/ /data06/tbs_digoal_old >>/home/postgres/tbs_digoal_old.log 2>&1 &
+
+7. standby收尾
+检查pg_xlog软链接是否正常
+修改postgresql.conf, 监听端口不要与其他端口冲突, standby相关参数等等.
+修改recovery.conf
+停掉pg_receivexlog
+主节点数据库执行pg_stop_backup();
+
+8. 启动standby
+
+【其他】
+1. http://repmgr.org/
+这个管理软件可以用于管理PostgreSQL standby环境, 也可以调用rsync做数据同步.
+有兴趣的朋友可以研究一下, instagram也是用的这个管理软件.
+
+【参考】
+1. http://www.blog.163.com/digoal@126/blog/static/163877040201162541727318/
+2. http://blog.163.com/digoal@126/blog/static/163877040201182885211344/
+3. http://blog.163.com/digoal@126/blog/static/1638770402013324103828603/
+4. http://blog.163.com/digoal@126/blog/static/16387704020115294425540/
+5. http://blog.163.com/digoal@126/blog/static/163877040201152753352356/
+6. http://blog.163.com/digoal@126/blog/static/16387704020132279020755/
+7. http://blog.163.com/digoal@126/blog/static/163877040201011794210567/
+8. 
+
+pg173212@db-192-168-20-4-> pg_receivexlog --help
+pg_receivexlog receives PostgreSQL streaming transaction logs.
+
+Usage:
+  pg_receivexlog [OPTION]...
+
+Options:
+  -D, --directory=DIR    receive transaction log files into this directory
+  -n, --no-loop          do not loop on connection lost
+  -v, --verbose          output verbose messages
+  -V, --version          output version information, then exit
+  -?, --help             show this help, then exit
+
+Connection options:
+  -h, --host=HOSTNAME    database server host or socket directory
+  -p, --port=PORT        database server port number
+  -s, --status-interval=INTERVAL
+                         time between status packets sent to server (in seconds)
+  -U, --username=NAME    connect as specified database user
+  -w, --no-password      never prompt for password
+  -W, --password         force password prompt (should happen automatically)
+Report bugs to <pgsql-bugs@postgresql.org>.
+
+
+9. http://repmgr.org/
+
+Flag Counter

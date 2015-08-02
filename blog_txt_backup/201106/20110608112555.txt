@@ -1,0 +1,198 @@
+PostgreSQL research
+
+use dblink extension's function building insert/delete/update SQL
+
+2011-06-08 11:25:55   查看原文>>
+
+dblink 模块有几个比较有意思的函数 : 
+dblink_get_pkey(text relname) returns setof dblink_pkey_results
+用于获得表的主键信息
+
+dblink_build_sql_insert(text relname,
+                        int2vector primary_key_attnums,
+                        integer num_primary_key_atts,
+                        text[] src_pk_att_vals_array,
+                        text[] tgt_pk_att_vals_array) returns text
+用于获取构建符合条件的insert语句
+
+dblink_build_sql_delete(text relname,
+                        int2vector primary_key_attnums,
+                        integer num_primary_key_atts,
+                        text[] tgt_pk_att_vals_array) returns text
+用于获取构建符合条件的delete语句
+
+dblink_build_sql_update(text relname,
+                        int2vector primary_key_attnums,
+                        integer num_primary_key_atts,
+                        text[] src_pk_att_vals_array,
+                        text[] tgt_pk_att_vals_array) returns text
+用于获取构建符合条件的update语句
+
+用法举例 : 
+
+
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+psql (9.1beta1)
+Type "help" for help.
+
+digoal=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# create extension dblink;
+CREATE EXTENSION
+digoal=# \c digoal digoal
+You are now connected to database "digoal" as user "digoal".
+
+digoal=> create table tbl_user_info (id int primary key,firstname text,lastname text,corp text);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "tbl_user_info_pkey" for table "tbl_user_info"
+CREATE TABLE
+digoal=> insert into tbl_user_info select generate_series(1,10000),'zhou'||generate_series(1,10000),'digoal'||generate_series(1,10000),'sky-mobi';
+digoal=> select dblink_get_pkey('tbl_user_info');
+ dblink_get_pkey 
+-----------------
+ (1,id)
+(1 row)
+
+
+下面的例子说明了dblink_get_pkey返回的列顺序是什么顺序?
+digoal=> create table tbl_music (id int,zone text,gender text,singer text,song text,primary key(song,singer,zone,gender));
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "tbl_music_pkey" for table "tbl_music"
+CREATE TABLE
+digoal=> select attnum,attname from pg_attribute where attrelid=(select oid from pg_class where relname='tbl_music');
+ attnum | attname  
+--------+----------
+     -7 | tableoid
+     -6 | cmax
+     -5 | xmax
+     -4 | cmin
+     -3 | xmin
+     -1 | ctid
+      1 | id
+      2 | zone
+      3 | gender
+      4 | singer
+      5 | song
+digoal=> select dblink_get_pkey('tbl_music');
+ dblink_get_pkey 
+-----------------
+ (1,song)
+ (2,singer)
+ (3,zone)
+ (4,gender)
+
+因此dblink_get_pkey获得的顺序是定义PK时的顺序，而不是物理顺序。
+
+dblink_build_sql_insert 举例 : 
+# 需要注意的是,这里面用到的attnum来自于pg_attribute，而不是dblink_get_pkey函数的返回值.
+digoal=> SELECT dblink_build_sql_insert('tbl_user_info', '1', 1, '{1}', '{2}');
+                                    dblink_build_sql_insert                                     
+------------------------------------------------------------------------------------------------
+ INSERT INTO tbl_user_info(id,firstname,lastname,corp) VALUES('2','zhou1','digoal1','sky-mobi')
+(1 row)
+
+digoal=> select * from tbl_user_info where id=1;
+ id | firstname | lastname |   corp   
+----+-----------+----------+----------
+  1 | zhou1     | digoal1  | sky-mobi
+(1 row)
+
+digoal=> insert into tbl_music select generate_series(1,10000),'China','man','Andy','TianYi'||generate_series(1,10000);
+INSERT 0 10000
+digoal=> SELECT dblink_build_sql_insert('tbl_music', '5 4 2 3', 4, '{"TianYi1","Andy","China","man"}', '{"TianYi1","Andy","China","man"}');
+                                   dblink_build_sql_insert                                    
+----------------------------------------------------------------------------------------------
+ INSERT INTO tbl_music(id,zone,gender,singer,song) VALUES('1','China','man','Andy','TianYi1')
+(1 row)
+
+# '{"TianYi1","Andy","China","man"}', '{"TianYi1","Andy","China","man"}' 这两个参数值，前面的是用于搜索到需要生成SQL的ROW，后面的参数
+用于生成SQL后替换。如下(把Andy替换成Jack):
+digoal=> SELECT dblink_build_sql_insert('tbl_music', '5 4 2 3', 4, '{"TianYi1","Andy","China","man"}', '{"TianYi1","Jack","China","man"}');
+                                   dblink_build_sql_insert                                    
+----------------------------------------------------------------------------------------------
+ INSERT INTO tbl_music(id,zone,gender,singer,song) VALUES('1','China','man','Jack','TianYi1')
+(1 row)
+
+
+dblink_build_sql_delete和dblink_build_sql_update用法与此类似，不举例了。
+下面结合DBLINK举例怎么把一个表复制到另一个数据库。
+将digoal库的tbl_music复制到postgres库.
+
+# 首先在目标库创建表结构
+digoal=> \c postgres postgres
+You are now connected to database "postgres" as user "postgres".
+postgres=# create table tbl_music (id int,zone text,gender text,singer text,song text,primary key(song,singer,zone,gender));
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "tbl_music_pkey" for table "tbl_music"
+CREATE TABLE
+
+# 在源库创建生成SQL的函数
+CREATE OR REPLACE FUNCTION cp_tbl_music_sql()
+ RETURNS SETOF text
+ LANGUAGE plpgsql
+AS $function$
+declare 
+i_zone text;
+i_gender text;
+i_singer text;
+i_song text;
+begin
+for i_zone,i_gender,i_singer,i_song in select zone,gender,singer,song from tbl_music loop
+return query execute $$select dblink_build_sql_insert('tbl_music', '2 3 4 5', 4,'{"$$||i_zone||$$","$$||i_gender||$$","$$||i_singer||$$","$$||i_song||$$"}','{"$$||i_zone||$$","$$||i_gender||$$","$$||i_singer||$$","$$||i_song||$$"}')$$;
+end loop;
+return;
+end;
+$function$;
+
+# 在源库创建远程执行SQL的函数,需要调用dblink_exec
+CREATE OR REPLACE FUNCTION cp_tbl_music()
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+declare
+i_sql text;
+begin
+for i_sql in select cp_tbl_music_sql() loop
+execute 'select dblink_exec(''myconn'', $$'||i_sql||'$$);';
+end loop;
+return;
+end;
+$function$;
+
+# 复制操作
+# 因为连接目标库使用了超级用户,所以用普通用户DIGOAL建立DBLNK的时候需要用到dblink_connect_u函数,这个需要得到赋权.
+digoal=> \c digoal postgres
+digoal=# grant execute on function dblink_connect_u(text,text) to digoal; 
+GRANT
+digoal=# \c digoal digoal
+You are now connected to database "digoal" as user "digoal".
+digoal=# \c digoal digoal
+You are now connected to database "digoal" as user "digoal".
+# 创建dblink(当前SESSION有效).
+digoal=> SELECT dblink_connect_u('myconn', 'hostaddr=127.0.0.1 port=1921 dbname=postgres user=postgres password=postgres');
+ dblink_connect_u 
+------------------
+ OK
+(1 row)
+# 执行复制函数
+digoal=> select cp_tbl_music();
+ cp_tbl_music 
+--------------
+ 
+(1 row)
+
+# 验证复制是否正常
+digoal=> \c postgres postgres
+You are now connected to database "postgres" as user "postgres".
+postgres=# select count(*) from tbl_music;
+ count 
+-------
+ 10000
+(1 row)
+
+postgres=# select * from tbl_music limit 3;
+ id | zone  | gender | singer |  song   
+----+-------+--------+--------+---------
+  1 | China | man    | Andy   | TianYi1
+  2 | China | man    | Andy   | TianYi2
+  3 | China | man    | Andy   | TianYi3
+(3 rows)
+
+当然这种复制操作不灵活,不太适合生产上面使用.

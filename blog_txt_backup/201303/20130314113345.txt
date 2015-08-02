@@ -1,0 +1,505 @@
+PostgreSQL research
+
+PostgreSQL 9.3 Writeable Foreign Table with postgres_fdw extension
+
+2013-03-14 11:33:45   查看原文>>
+
+PostgreSQL 9.3 新增了postgres_fdw模块, 前段时间写了一篇BLOG详细的介绍和测试这个extension, 如下 : 
+http://blog.163.com/digoal@126/blog/static/163877040201312544919858/
+前几天postgres_fdw新增了外部表可写的功能. 
+本文将拿上一篇文章中用到的例子, 对外部表的写做一下测试, 测试环境请到上一篇文章中找.
+-- 测试插入
+
+digoal=> \d ft2
+         Foreign table "digoal.ft2"
+ Column |  Type   | Modifiers | FDW Options 
+--------+---------+-----------+-------------
+ c2     | text    |           | 
+ c1     | integer | not null  | 
+Server: s1
+FDW Options: (schema_name 'digoal', table_name 'test2')
+digoal=> insert into ft2 values ('abc',100);
+ERROR:  duplicate key value violates unique constraint "t2_pkey"
+DETAIL:  Key (c1)=(100) already exists.
+CONTEXT:  Remote SQL command: INSERT INTO digoal.test2(c2, c1) VALUES ($1, $2)
+digoal=> insert into ft2 values ('abc',100000);
+INSERT 0 1
+digoal=> select * from ft2 where c1=100000;
+ c2  |   c1   
+-----+--------
+ abc | 100000
+(1 row)
+digoal=> insert into ft2 select 'digoal',generate_series(10000,10010);
+INSERT 0 11
+
+
+
+-- 执行计划
+
+digoal=> explain verbose insert into ft2 values ('abc',100000);
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Insert on digoal.ft2  (cost=0.00..0.01 rows=1 width=0)
+   Remote SQL: INSERT INTO digoal.test2(c2, c1) VALUES ($1, $2)
+   ->  Result  (cost=0.00..0.01 rows=1 width=0)
+         Output: 'abc'::text, 100000
+(4 rows)
+
+
+
+-- 更新
+
+digoal=> update ft2 set c2='new' where c1=1;
+UPDATE 1
+digoal=> select * from ft2 where c1=1;
+ c2  | c1 
+-----+----
+ new |  1
+(1 row)
+
+digoal=> explain verbose update ft2 set c2='new' where c1=1;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Update on digoal.ft2  (cost=100.00..140.35 rows=12 width=10)
+   Remote SQL: UPDATE digoal.test2 SET c2 = $2 WHERE ctid = $1
+   ->  Foreign Scan on digoal.ft2  (cost=100.00..140.35 rows=12 width=10)
+         Output: 'new'::text, c1, ctid
+         Remote SQL: SELECT NULL, c1, ctid FROM digoal.test2 WHERE ((c1 = 1)) FOR UPDATE
+(5 rows)
+
+
+-- 注意更新时, 先是for update. 取出ctid. 再使用ctid作为唯一条件进行更新.
+
+-- 删除
+
+digoal=> explain verbose delete from ft2 where c1=1;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Delete on digoal.ft2  (cost=100.00..144.40 rows=14 width=6)
+   Remote SQL: DELETE FROM digoal.test2 WHERE ctid = $1
+   ->  Foreign Scan on digoal.ft2  (cost=100.00..144.40 rows=14 width=6)
+         Output: ctid
+         Remote SQL: SELECT NULL, NULL, ctid FROM digoal.test2 WHERE ((c1 = 1)) FOR UPDATE
+(5 rows)
+
+digoal=> delete from ft2 where c1=1;
+DELETE 1
+digoal=> select * from ft2 where c1=1;
+ c2 | c1 
+----+----
+(0 rows)
+
+
+-- 删除与更新类似, 使用了for update. 以及使用ctid定位行. 
+
+-- 测试savepoint;
+
+digoal=> begin;
+BEGIN
+digoal=> delete from ft2 where c1=2;
+DELETE 1
+digoal=> savepoint s1;
+SAVEPOINT
+digoal=> delete from ft2 where c1=3;
+DELETE 1
+digoal=> savepoint s2;
+SAVEPOINT
+digoal=> insert into ft2 select 'digoal',generate_series(10000,10010);
+ERROR:  duplicate key value violates unique constraint "t2_pkey"
+DETAIL:  Key (c1)=(10000) already exists.
+CONTEXT:  Remote SQL command: INSERT INTO digoal.test2(c2, c1) VALUES ($1, $2)
+digoal=> delete from ft2 where c1=4;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+digoal=> rollback to savepoint s2;
+ROLLBACK
+digoal=> end;
+COMMIT
+
+
+
+【参考】
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=21734d2fb896e0ecdddd3251caa72a3576e2d415
+2. http://blog.163.com/digoal@126/blog/static/163877040201312544919858/
+3. 自测输出
+
+-- test writable foreign table stuff
+-- ===================================================================
+EXPLAIN (verbose, costs off)
+INSERT INTO ft2 (c1,c2,c3) SELECT c1+1000,c2+100, c3 || c3 FROM ft2 LIMIT 20;
+                                                                                                                    QUERY PLAN                                                                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Insert on public.ft2
+   Remote SQL: INSERT INTO "S 1"."T 1"("C 1", c2, c3, c4, c5, c6, c7, c8) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+   ->  Subquery Scan on "*SELECT*"
+         Output: "*SELECT*"."?column?", "*SELECT*"."?column?_1", NULL::integer, "*SELECT*"."?column?_2", NULL::timestamp with time zone, NULL::timestamp without time zone, NULL::character varying, 'ft2       '::character(10), NULL::user_enum
+         ->  Limit
+               Output: ((ft2_1.c1 + 1000)), ((ft2_1.c2 + 100)), ((ft2_1.c3 || ft2_1.c3))
+               ->  Foreign Scan on public.ft2 ft2_1
+                     Output: (ft2_1.c1 + 1000), (ft2_1.c2 + 100), (ft2_1.c3 || ft2_1.c3)
+                     Remote SQL: SELECT "C 1", c2, c3, NULL, NULL, NULL, NULL, NULL FROM "S 1"."T 1"
+(9 rows)
+
+INSERT INTO ft2 (c1,c2,c3) SELECT c1+1000,c2+100, c3 || c3 FROM ft2 LIMIT 20;
+INSERT INTO ft2 (c1,c2,c3)
+  VALUES (1101,201,'aaa'), (1102,202,'bbb'), (1103,203,'ccc') RETURNING *;
+  c1  | c2  | c3  | c4 | c5 | c6 |     c7     | c8 
+------+-----+-----+----+----+----+------------+----
+ 1101 | 201 | aaa |    |    |    | ft2        | 
+ 1102 | 202 | bbb |    |    |    | ft2        | 
+ 1103 | 203 | ccc |    |    |    | ft2        | 
+(3 rows)
+
+INSERT INTO ft2 (c1,c2,c3) VALUES (1104,204,'ddd'), (1105,205,'eee');
+UPDATE ft2 SET c2 = c2 + 300, c3 = c3 || '_update3' WHERE c1 % 10 = 3;
+UPDATE ft2 SET c2 = c2 + 400, c3 = c3 || '_update7' WHERE c1 % 10 = 7 RETURNING *;
+  c1  | c2  |         c3         |              c4              |            c5            | c6 |     c7     | c8  
+------+-----+--------------------+------------------------------+--------------------------+----+------------+-----
+    7 | 407 | 00007_update7      | Thu Jan 08 00:00:00 1970 PST | Thu Jan 08 00:00:00 1970 | 7  | 7          | foo
+   17 | 407 | 00017_update7      | Sun Jan 18 00:00:00 1970 PST | Sun Jan 18 00:00:00 1970 | 7  | 7          | foo
+   27 | 407 | 00027_update7      | Wed Jan 28 00:00:00 1970 PST | Wed Jan 28 00:00:00 1970 | 7  | 7          | foo
+...略
+ 1007 | 507 | 0000700007_update7 |                              |                          |    | ft2        | 
+ 1017 | 507 | 0001700017_update7 |                              |                          |    | ft2        | 
+(102 rows)
+EXPLAIN (verbose, costs off)
+UPDATE ft2 SET c2 = ft2.c2 + 500, c3 = ft2.c3 || '_update9', c7 = DEFAULT
+  FROM ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 9;
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on public.ft2
+   Remote SQL: UPDATE "S 1"."T 1" SET c2 = $2, c3 = $3, c7 = $4 WHERE ctid = $1
+   ->  Hash Join
+         Output: ft2.c1, (ft2.c2 + 500), NULL::integer, (ft2.c3 || '_update9'::text), ft2.c4, ft2.c5, ft2.c6, 'ft2       '::character(10), ft2.c8, ft2.ctid, ft1.*
+         Hash Cond: (ft2.c2 = ft1.c1)
+         ->  Foreign Scan on public.ft2
+               Output: ft2.c1, ft2.c2, ft2.c3, ft2.c4, ft2.c5, ft2.c6, ft2.c8, ft2.ctid
+               Remote SQL: SELECT "C 1", c2, c3, c4, c5, c6, NULL, c8, ctid FROM "S 1"."T 1" FOR UPDATE
+         ->  Hash
+               Output: ft1.*, ft1.c1
+               ->  Foreign Scan on public.ft1
+                     Output: ft1.*, ft1.c1
+                     Remote SQL: SELECT "C 1", c2, c3, c4, c5, c6, c7, c8 FROM "S 1"."T 1" WHERE ((("C 1" % 10) = 9))
+(13 rows)
+
+UPDATE ft2 SET c2 = ft2.c2 + 500, c3 = ft2.c3 || '_update9', c7 = DEFAULT
+  FROM ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 9;
+DELETE FROM ft2 WHERE c1 % 10 = 5 RETURNING *;
+  c1  | c2  |     c3     |              c4              |            c5            | c6 |     c7     | c8  
+------+-----+------------+------------------------------+--------------------------+----+------------+-----
+    5 |   5 | 00005      | Tue Jan 06 00:00:00 1970 PST | Tue Jan 06 00:00:00 1970 | 5  | 5          | foo
+   15 |   5 | 00015      | Fri Jan 16 00:00:00 1970 PST | Fri Jan 16 00:00:00 1970 | 5  | 5          | foo
+   25 |   5 | 00025      | Mon Jan 26 00:00:00 1970 PST | Mon Jan 26 00:00:00 1970 | 5  | 5          | foo
+   35 |   5 | 00035      | Thu Feb 05 00:00:00 1970 PST | Thu Feb 05 00:00:00 1970 | 5  | 5          | foo
+   45 |   5 | 00045      | Sun Feb 15 00:00:00 1970 PST | Sun Feb 15 00:00:00 1970 | 5  | 5          | foo
+... 略
+  995 |   5 | 00995      | Mon Apr 06 00:00:00 1970 PST | Mon Apr 06 00:00:00 1970 | 5  | 5          | foo
+ 1005 | 105 | 0000500005 |                              |                          |    | ft2        | 
+ 1015 | 105 | 0001500015 |                              |                          |    | ft2        | 
+ 1105 | 205 | eee        |                              |                          |    | ft2        | 
+(103 rows)
+
+EXPLAIN (verbose, costs off)
+DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Delete on public.ft2
+   Remote SQL: DELETE FROM "S 1"."T 1" WHERE ctid = $1
+   ->  Hash Join
+         Output: ft2.ctid, ft1.*
+         Hash Cond: (ft2.c2 = ft1.c1)
+         ->  Foreign Scan on public.ft2
+               Output: ft2.ctid, ft2.c2
+               Remote SQL: SELECT NULL, c2, NULL, NULL, NULL, NULL, NULL, NULL, ctid FROM "S 1"."T 1" FOR UPDATE
+         ->  Hash
+               Output: ft1.*, ft1.c1
+               ->  Foreign Scan on public.ft1
+                     Output: ft1.*, ft1.c1
+                     Remote SQL: SELECT "C 1", c2, c3, c4, c5, c6, c7, c8 FROM "S 1"."T 1" WHERE ((("C 1" % 10) = 2))
+(13 rows)
+
+DELETE FROM ft2 USING ft1 WHERE ft1.c1 = ft2.c2 AND ft1.c1 % 10 = 2;
+SELECT c1,c2,c3,c4 FROM ft2 ORDER BY c1;
+  c1  | c2  |         c3         |              c4              
+------+-----+--------------------+------------------------------
+    1 |   1 | 00001              | Fri Jan 02 00:00:00 1970 PST
+    3 | 303 | 00003_update3      | Sun Jan 04 00:00:00 1970 PST
+    4 |   4 | 00004              | Mon Jan 05 00:00:00 1970 PST
+    6 |   6 | 00006              | Wed Jan 07 00:00:00 1970 PST
+    7 | 407 | 00007_update7      | Thu Jan 08 00:00:00 1970 PST
+    8 |   8 | 00008              | Fri Jan 09 00:00:00 1970 PST
+    9 | 509 | 00009_update9      | Sat Jan 10 00:00:00 1970 PST
+   10 |   0 | 00010              | Sun Jan 11 00:00:00 1970 PST
+   11 |   1 | 00011              | Mon Jan 12 00:00:00 1970 PST
+ 1008 | 708 | 0000800008_trig_update      |                              |                          |      | ft2        | 
+ 1018 | 708 | 0001800018_trig_update      |                              |                          |      | ft2        | 
+ 1208 | 818 | fff_trig_update_trig_update |                              |                          |      | ft2        | 
+ 1218 | 818 | ggg_trig_update_trig_update |                              |                          | (--; | ft2        | 
+(104 rows)
+
+-- Test errors thrown on remote side during update
+ALTER TABLE "S 1"."T 1" ADD CONSTRAINT c2positive CHECK (c2 >= 0);
+INSERT INTO ft1(c1, c2) VALUES(11, 12);  -- duplicate key
+ERROR:  duplicate key value violates unique constraint "t1_pkey"
+DETAIL:  Key ("C 1")=(11) already exists.
+CONTEXT:  Remote SQL command: INSERT INTO "S 1"."T 1"("C 1", c2, c3, c4, c5, c6, c7, c8) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO ft1(c1, c2) VALUES(1111, -2);  -- c2positive
+ERROR:  new row for relation "T 1" violates check constraint "c2positive"
+DETAIL:  Failing row contains (1111, -2, null, null, null, null, ft1       , null).
+CONTEXT:  Remote SQL command: INSERT INTO "S 1"."T 1"("C 1", c2, c3, c4, c5, c6, c7, c8) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+UPDATE ft1 SET c2 = -c2 WHERE c1 = 1;  -- c2positive
+ERROR:  new row for relation "T 1" violates check constraint "c2positive"
+DETAIL:  Failing row contains (1, -1, 00001_trig_update, 1970-01-02 08:00:00+00, 1970-01-02 00:00:00, 1, 1         , foo).
+CONTEXT:  Remote SQL command: UPDATE "S 1"."T 1" SET c2 = $2 WHERE ctid = $1
+-- Test savepoint/rollback behavior
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   0 |   100
+   1 |   100
+   4 |   100
+   6 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+select c2, count(*) from "S 1"."T 1" where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   0 |   100
+   1 |   100
+   4 |   100
+   6 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+begin;
+update ft2 set c2 = 42 where c2 = 0;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   4 |   100
+   6 |   100
+  42 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+savepoint s1;
+update ft2 set c2 = 44 where c2 = 4;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+release savepoint s1;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+savepoint s2;
+update ft2 set c2 = 46 where c2 = 6;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+  42 |   100
+  44 |   100
+  46 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+rollback to savepoint s2;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+release savepoint s2;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+savepoint s3;
+update ft2 set c2 = -2 where c2 = 42 and c1 = 10; -- fail on remote side
+ERROR:  new row for relation "T 1" violates check constraint "c2positive"
+DETAIL:  Failing row contains (10, -2, 00010_trig_update_trig_update, 1970-01-11 08:00:00+00, 1970-01-11 00:00:00, 0, 0         , foo).
+CONTEXT:  Remote SQL command: UPDATE "S 1"."T 1" SET c2 = $2 WHERE ctid = $1
+rollback to savepoint s3;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+release savepoint s3;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+-- none of the above is committed yet remotely
+select c2, count(*) from "S 1"."T 1" where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   0 |   100
+   1 |   100
+   4 |   100
+   6 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+commit;
+select c2, count(*) from ft2 where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+select c2, count(*) from "S 1"."T 1" where c2 < 500 group by 1 order by 1;
+ c2  | count 
+-----+-------
+   1 |   100
+   6 |   100
+  42 |   100
+  44 |   100
+ 100 |     2
+ 101 |     2
+ 104 |     2
+ 106 |     2
+ 201 |     1
+ 204 |     1
+ 303 |   100
+ 403 |     2
+ 407 |   100
+(13 rows)
+
+
+

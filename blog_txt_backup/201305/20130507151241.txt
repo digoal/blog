@@ -1,0 +1,387 @@
+PostgreSQL research
+
+PostgreSQL 9.3 Improve vacuum, Update visibility map in the second phase of vacuum.
+
+2013-05-07 15:12:41   查看原文>>
+
+Update visibility map in the second phase of vacuum.
+
+There's a high chance that a page becomes all-visible when the second phase
+of vacuum removes all the dead tuples on it, so it makes sense to check for
+that. Otherwise the visibility map won't get updated until the next vacuum.
+Pavan Deolasee, reviewed by Jeff Janes.
+
+
+PostgreSQL 9.3 对vacuum的改进, 在vacuum中加入了更新vm的操作. 因为大多数块在vacuum后会变成所有tuple对所有事务可见, 那么下一次vacuum时可以根据vm的信息过滤掉扫描这些数据块. 因此这样可以大大的减少下一次vacuum的扫描块的数量(当然prevent xid wrapped触发的vacuum除外).
+可以减少vacuum带来的io请求数量. 提升整体性能.
+
+[测试]
+关闭autovacuum
+
+vi postgresql.conf
+autovacuum=off
+pg_ctl reload
+
+
+-- 测试表
+
+digoal=# create table test (id int) ;
+CREATE TABLE
+digoal=# insert into test select generate_series(1,1000);
+INSERT 0 1000
+digoal=# vacuum analyze test;
+ANALYZE
+
+
+-- 占用5个数据块.
+
+digoal=# select min(ctid),max(ctid) from test;
+  min  |  max   
+-------+--------
+ (0,1) | (4,96)
+(1 row)
+digoal=# create extension pageinspect;
+
+
+
+PostgreSQL 9.2 : 
+
+digoal=# select substr((get_raw_page('test','vm',0))::text,0,64);
+                             substr                              
+-----------------------------------------------------------------
+ \x01000000b05dde33010000001800002000200420000000001f00000000000
+(1 row)
+digoal=# select md5(substr((get_raw_page('test','vm',0))::text,0,64));
+               md5                
+----------------------------------
+ 9f551b6b3b46c592075aebaa62534a4e
+(1 row)
+digoal=# delete from test where id<400;
+
+
+DELETE 399
+-- 删除399行, 然后vacuum
+
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": removed 399 row versions in 2 pages
+INFO:  "test": found 399 removable, 601 nonremovable row versions in 5 out of 5 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+
+
+-- 查看contents
+
+digoal=# select * from fsm_page_contents(get_raw_page('test','vm',0));
+ fsm_page_contents 
+-------------------
+ fp_next_slot: 28 +
+ 
+(1 row)
+digoal=# select md5(substr((get_raw_page('test','vm',0))::text,0,64));
+               md5                
+----------------------------------
+ c1ebb9f135102f32068e0e70a4043a5c
+(1 row)
+digoal=# select substr((get_raw_page('test','vm',0))::text,0,64);
+                             substr                              
+-----------------------------------------------------------------
+ \x01000000b05dde33010000001800002000200420000000001c00000000000
+(1 row)
+
+
+-- 第二次vacuum, vm又有变化
+
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 601 nonremovable row versions in 5 out of 5 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 399 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+
+
+-- 第二次vacuum后查看contents
+
+digoal=# select * from fsm_page_contents(get_raw_page('test','vm',0));
+ fsm_page_contents 
+-------------------
+ fp_next_slot: 31 +
+ 
+(1 row)
+digoal=# select substr((get_raw_page('test','vm',0))::text,0,64);
+                             substr                              
+-----------------------------------------------------------------
+ \x0100000050bede33010000001800002000200420000000001f00000000000
+(1 row)
+
+digoal=# select md5(substr((get_raw_page('test','vm',0))::text,0,64));
+               md5                
+----------------------------------
+ 0d8fa9003392fee1cda798d7ac061429
+(1 row)
+
+
+
+PostgreSQL 9.3 : 
+
+digoal=# select substr((get_raw_page('test','vm',0))::text,0,64);
+                             substr                              
+-----------------------------------------------------------------
+ \x0100000030d59bdf000000001800002000200420000000001f00000000000
+(1 row)
+
+digoal=# select md5(substr((get_raw_page('test','vm',0))::text,0,64));
+               md5                
+----------------------------------
+ 51a5ed00cf78970907ddd3a07dea219c
+(1 row)
+digoal=# delete from test where id<400;
+DELETE 399
+
+
+-- 第一次vacuum
+
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": removed 399 row versions in 2 pages
+INFO:  "test": found 399 removable, 601 nonremovable row versions in 5 out of 5 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+digoal=# select * from fsm_page_contents(get_raw_page('test','vm',0));
+ fsm_page_contents 
+-------------------
+ fp_next_slot: 31 +
+ 
+(1 row)
+digoal=# select md5(substr((get_raw_page('test','vm',0))::text,0,64));
+               md5                
+----------------------------------
+ f37183dadd74c22f1f1d3c9337ee4a7f
+(1 row)
+digoal=# select substr((get_raw_page('test','vm',0))::text,0,64);
+                             substr                              
+-----------------------------------------------------------------
+ \x0100000018589cdf000000001800002000200420000000001f00000000000
+(1 row)
+
+
+-- 第二次vacuum , vm无变化
+
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 601 nonremovable row versions in 5 out of 5 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 399 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+digoal=# select * from fsm_page_contents(get_raw_page('test','vm',0));
+ fsm_page_contents 
+-------------------
+ fp_next_slot: 31 +
+ 
+(1 row)
+digoal=# select md5(substr((get_raw_page('test','vm',0))::text,0,64));
+               md5                
+----------------------------------
+ f37183dadd74c22f1f1d3c9337ee4a7f
+(1 row)
+
+digoal=# select substr((get_raw_page('test','vm',0))::text,0,64);
+                             substr                              
+-----------------------------------------------------------------
+ \x0100000018589cdf000000001800002000200420000000001f00000000000
+(1 row)
+
+
+-- 加大数据块查看效率.
+PostgreSQL 9.2 : 
+
+postgres=# truncate test;
+TRUNCATE TABLE
+postgres=# \timing
+Timing is on.
+postgres=# insert into test select generate_series(1,10000000);
+INSERT 0 10000000
+Time: 15647.142 ms
+postgres=# update test set id=id+1;
+UPDATE 10000000
+Time: 33479.629 ms
+postgres=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": removed 10000000 row versions in 44248 pages
+INFO:  "test": found 10000000 removable, 10000000 nonremovable row versions in 88496 out of 88496 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.08s/2.05u sec elapsed 2.41 sec.
+VACUUM
+Time: 2646.817 ms
+-- 第二次vacuum为141毫秒
+postgres=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 48 nonremovable row versions in 44248 out of 88496 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 10000000 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.11u sec elapsed 0.11 sec.
+VACUUM
+Time: 141.580 ms
+-- 第三次vacuum才缩短为11毫秒.
+postgres=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 0 nonremovable row versions in 0 out of 88496 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+Time: 11.776 ms
+
+PostgreSQL 9.3 : 
+
+postgres=# truncate test;
+TRUNCATE TABLE
+postgres=# insert into test select generate_series(1,10000000);
+INSERT 0 10000000
+postgres=# \timing
+Timing is on.
+postgres=# update test set id=id+1;
+UPDATE 10000000
+Time: 42543.687 ms
+postgres=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": removed 10000000 row versions in 44248 pages
+INFO:  "test": found 10000000 removable, 10000000 nonremovable row versions in 88496 out of 88496 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.73s/2.33u sec elapsed 3.88 sec.
+VACUUM
+Time: 3900.918 ms
+-- 第二次vacuum已经缩短为12毫秒
+postgres=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 0 nonremovable row versions in 0 out of 88496 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+Time: 12.663 ms
+
+-- 使用gdb来看
+跟踪heap_page_is_all_visible
+略
+
+[参考]
+1. http://www.postgresql.org/docs/devel/static/pageinspect.html
+2. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=fdf9e21196a6f58c6021c967dc5776a16190f295
+3. src/backend/access/heap/visibilitymap.c
+4. src/backend/commands/vacuumlazy.c
+
++/*
++ * Check if every tuple in the given page is visible to all current and future
++ * transactions. Also return the visibility_cutoff_xid which is the highest
++ * xmin amongst the visible tuples.
++ */
++static bool
++heap_page_is_all_visible(Buffer buf, TransactionId *visibility_cutoff_xid)
++{
++   Page         page = BufferGetPage(buf);
++   OffsetNumber offnum,
++                maxoff;
++   bool         all_visible = true;
++
++   *visibility_cutoff_xid = InvalidTransactionId;
++
++   /*
++    * This is a stripped down version of the line pointer scan in
++    * lazy_scan_heap(). So if you change anything here, also check that
++    * code.
++    */
++   maxoff = PageGetMaxOffsetNumber(page);
++   for (offnum = FirstOffsetNumber;
++           offnum <= maxoff && all_visible;
++           offnum = OffsetNumberNext(offnum))
++   {
++       ItemId          itemid;
++       HeapTupleData   tuple;
++
++       itemid = PageGetItemId(page, offnum);
++
++       /* Unused or redirect line pointers are of no interest */
++       if (!ItemIdIsUsed(itemid) || ItemIdIsRedirected(itemid))
++           continue;
++
++       ItemPointerSet(&(tuple.t_self), BufferGetBlockNumber(buf), offnum);
++
++       /*
++        * Dead line pointers can have index pointers pointing to them. So they
++        * can't be treated as visible
++        */
++       if (ItemIdIsDead(itemid))
++       {
++           all_visible = false;
++           break;
++       }
++
++       Assert(ItemIdIsNormal(itemid));
++
++       tuple.t_data = (HeapTupleHeader) PageGetItem(page, itemid);
++
++       switch (HeapTupleSatisfiesVacuum(tuple.t_data, OldestXmin, buf))
++       {
++           case HEAPTUPLE_LIVE:
++               {
++                   TransactionId xmin;
++
++                   /* Check comments in lazy_scan_heap. */
++                   if (!(tuple.t_data->t_infomask & HEAP_XMIN_COMMITTED))
++                   {
++                       all_visible = false;
++                       break;
++                   }
++
++                   /*
++                    * The inserter definitely committed. But is it old
++                    * enough that everyone sees it as committed?
++                    */
++                   xmin = HeapTupleHeaderGetXmin(tuple.t_data);
++                   if (!TransactionIdPrecedes(xmin, OldestXmin))
++                   {
++                       all_visible = false;
++                       break;
++                   }
++
++                   /* Track newest xmin on page. */
++                   if (TransactionIdFollows(xmin, *visibility_cutoff_xid))
++                       *visibility_cutoff_xid = xmin;
++               }
++               break;
++
++           case HEAPTUPLE_DEAD:
++           case HEAPTUPLE_RECENTLY_DEAD:
++           case HEAPTUPLE_INSERT_IN_PROGRESS:
++           case HEAPTUPLE_DELETE_IN_PROGRESS:
++               all_visible = false;
++               break;
++
++           default:
++               elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
++               break;
++       }
++   }                       /* scan along page */
++
++   return all_visible;
++}
+
+

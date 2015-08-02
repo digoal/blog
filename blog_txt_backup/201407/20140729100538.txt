@@ -1,0 +1,321 @@
+PostgreSQL research
+
+iops performance loss by network and hypervisor
+
+2014-07-29 10:05:38   查看原文>>
+
+本文测试一下Linux NFS 网络文件系统, 以及在此之上跑虚拟机镜像的话, 会带来多少性能损失.
+网络环境, 1000MB - 1000MB
+
+[root@39 ~]# ethtool em1
+Settings for em1:
+        Supported ports: [ TP ]
+        Supported link modes:   10baseT/Half 10baseT/Full 
+                                100baseT/Half 100baseT/Full 
+                                1000baseT/Full 
+        Supported pause frame use: No
+        Supports auto-negotiation: Yes
+        Advertised link modes:  10baseT/Half 10baseT/Full 
+                                100baseT/Half 100baseT/Full 
+                                1000baseT/Full 
+        Advertised pause frame use: No
+        Advertised auto-negotiation: Yes
+        Speed: 1000Mb/s
+        Duplex: Full
+        Port: Twisted Pair
+        PHYAD: 1
+        Transceiver: internal
+        Auto-negotiation: on
+        MDI-X: Unknown
+        Supports Wake-on: g
+        Wake-on: d
+        Link detected: yes
+
+[root@db-172-16-3-150 ~]# ethtool em1
+Settings for em1:
+        Supported ports: [ TP ]
+        Supported link modes:   10baseT/Half 10baseT/Full 
+                                100baseT/Half 100baseT/Full 
+                                1000baseT/Full 
+        Supported pause frame use: No
+        Supports auto-negotiation: Yes
+        Advertised link modes:  10baseT/Half 10baseT/Full 
+                                100baseT/Half 100baseT/Full 
+                                1000baseT/Full 
+        Advertised pause frame use: No
+        Advertised auto-negotiation: Yes
+        Speed: 1000Mb/s
+        Duplex: Full
+        Port: Twisted Pair
+        PHYAD: 1
+        Transceiver: internal
+        Auto-negotiation: on
+        MDI-X: Unknown
+        Supports Wake-on: g
+        Wake-on: d
+        Link detected: yes
+
+
+
+测试用到两台主机. 分别安装CentOS 6.5 x64系统. 使用的nfs版本v4.
+
+以下是直接在物理机测试的fsync iops.
+
+postgres@39-> pg_test_fsync 
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                   13045.448 ops/sec      77 usecs/op
+        fdatasync                       11868.601 ops/sec      84 usecs/op
+        fsync                           10328.985 ops/sec      97 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                       12770.329 ops/sec      78 usecs/op
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                    6756.800 ops/sec     148 usecs/op
+        fdatasync                        7194.768 ops/sec     139 usecs/op
+        fsync                            8578.939 ops/sec     117 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                        7332.250 ops/sec     136 usecs/op
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write       11257.611 ops/sec      89 usecs/op
+         2 *  8kB open_sync writes       7350.213 ops/sec     136 usecs/op
+         4 *  4kB open_sync writes       4408.333 ops/sec     227 usecs/op
+         8 *  2kB open_sync writes       2445.520 ops/sec     409 usecs/op
+        16 *  1kB open_sync writes       1279.382 ops/sec     782 usecs/op
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close             10004.640 ops/sec     100 usecs/op
+        write, close, fsync              9898.087 ops/sec     101 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                           245738.151 ops/sec       4 usecs/op
+
+# iostat -x 1
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.13    0.00    2.32    6.58    0.00   90.97
+Device:         rrqm/s   wrqm/s     r/s     w/s   rsec/s   wsec/s avgrq-sz avgqu-sz   await  svctm  %util
+sda               0.00     0.00    0.00 11772.00     0.00 174344.00    14.81     0.93    0.08   0.08  92.40
+
+
+
+以下是通过nfs挂载之后测试的iops.
+
+/etc/exports
+/data01/test    172.16.3.150/32(rw,no_root_squash,sync)
+[root@db-172-16-3-150 mnt]# /home/pg94/pgsql9.4devel/bin/pg_test_fsync 
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                      1290.779 ops/sec     775 usecs/op
+        fdatasync                          1341.710 ops/sec     745 usecs/op
+        fsync                              1346.306 ops/sec     743 usecs/op
+        fsync_writethrough                              n/a
+        open_sync                          1264.165 ops/sec     791 usecs/op
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                       644.248 ops/sec    1552 usecs/op
+        fdatasync                          1122.779 ops/sec     891 usecs/op
+        fsync                              1076.848 ops/sec     929 usecs/op
+        fsync_writethrough                              n/a
+        open_sync                           683.841 ops/sec    1462 usecs/op
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write          1053.214 ops/sec     949 usecs/op
+         2 *  8kB open_sync writes          658.339 ops/sec    1519 usecs/op
+         4 *  4kB open_sync writes          354.917 ops/sec    2818 usecs/op
+         8 *  2kB open_sync writes          186.181 ops/sec    5371 usecs/op
+        16 *  1kB open_sync writes           82.643 ops/sec   12100 usecs/op
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close                 738.896 ops/sec    1353 usecs/op
+        write, close, fsync                 703.973 ops/sec    1421 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                               905.961 ops/sec    1104 usecs/op
+
+# iostat -x 1
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.00    0.00    3.62    0.62    0.00   95.76
+Device:         rrqm/s   wrqm/s     r/s     w/s   rsec/s   wsec/s avgrq-sz avgqu-sz   await  svctm  %util
+sda               0.00     0.00    0.00 2202.97     0.00 22514.85    10.22     0.25    0.11   0.11  25.05
+
+
+
+以下还是通过nfs挂载后的iops, 只是挂载option不一样, (这是ovirt的默认挂载项).
+
+/data01/ovirt/img       172.16.3.0/24(rw,no_root_squash,sync)
+172.16.3.39:/data01/ovirt/img on /rhev/data-center/mnt/172.16.3.39:_data01_ovirt_img type nfs (rw,soft,nosharecache,timeo=600,retrans=6,vers=4,addr=172.16.3.39,clientaddr=172.16.3.150)
+
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                      1336.481 ops/sec     748 usecs/op
+        fdatasync                          1145.994 ops/sec     873 usecs/op
+        fsync                              1194.759 ops/sec     837 usecs/op
+        fsync_writethrough                              n/a
+        open_sync                          1172.206 ops/sec     853 usecs/op
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                       559.062 ops/sec    1789 usecs/op
+        fdatasync                           975.115 ops/sec    1026 usecs/op
+        fsync                               985.847 ops/sec    1014 usecs/op
+        fsync_writethrough                              n/a
+        open_sync                           585.583 ops/sec    1708 usecs/op
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write          1067.647 ops/sec     937 usecs/op
+         2 *  8kB open_sync writes          609.935 ops/sec    1640 usecs/op
+         4 *  4kB open_sync writes          339.455 ops/sec    2946 usecs/op
+         8 *  2kB open_sync writes          185.299 ops/sec    5397 usecs/op
+        16 *  1kB open_sync writes          104.726 ops/sec    9549 usecs/op
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close                1030.954 ops/sec     970 usecs/op
+        write, close, fsync                1013.457 ops/sec     987 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                              1036.263 ops/sec     965 usecs/op
+
+
+
+以下是在此NFS挂载项上的虚拟机镜像测出来的IOPS.
+虚拟机启动参数
+
+/usr/libexec/qemu-kvm -name g1 -S -M rhel6.5.0 -cpu Nehalem -enable-kvm -m 1024 -realtime mlock=off -smp 1,maxcpus=160,sockets=160,cores=1,threads=1 -uuid 6afb8820-86e1-4a1b-8cb9-12393c0bab37 -smbios type=1,manufacturer=oVirt,product=oVirt Node,version=6-4.el6.centos.10,serial=4C4C4544-0056-4D10-8047-C2C04F513258,uuid=6afb8820-86e1-4a1b-8cb9-12393c0bab37 -nodefconfig -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/g1.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=2014-07-29T00:52:36,driftfix=slew -no-shutdown -device piix3-usb-uhci,id=usb,bus=pci.0,addr=0x1.0x2 -device virtio-serial-pci,id=virtio-serial0,bus=pci.0,addr=0x4 -drive if=none,media=cdrom,id=drive-ide0-1-0,readonly=on,format=raw,serial= -device ide-drive,bus=ide.1,unit=0,drive=drive-ide0-1-0,id=ide0-1-0 -drive file=/var/run/vdsm/payload/6afb8820-86e1-4a1b-8cb9-12393c0bab37.9edde721e117ec46626a8c802f905637.img,if=none,media=cdrom,id=drive-ide0-1-1,readonly=on,format=raw,serial= -device ide-drive,bus=ide.1,unit=1,drive=drive-ide0-1-1,id=ide0-1-1 -drive file=/rhev/data-center/mnt/172.16.3.39:_data01_ovirt_img/612c7631-d7a2-417c-96d3-dc1593578ba6/images/46ffc38f-b3bf-4beb-8697-4af8e8cc9232/0406d4c5-2a73-4932-aec1-cfe1519cfc18,if=none,id=drive-virtio-disk0,format=raw,serial=46ffc38f-b3bf-4beb-8697-4af8e8cc9232,cache=none,werror=stop,rerror=stop,aio=threads -device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x5,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1 -netdev tap,fd=31,id=hostnet0,vhost=on,vhostfd=32 -device virtio-net-pci,netdev=hostnet0,id=net0,mac=00:1a:4a:24:8b:0e,bus=pci.0,addr=0x3 -chardev socket,id=charchannel0,path=/var/lib/libvirt/qemu/channels/6afb8820-86e1-4a1b-8cb9-12393c0bab37.com.redhat.rhevm.vdsm,server,nowait -device virtserialport,bus=virtio-serial0.0,nr=1,chardev=charchannel0,id=channel0,name=com.redhat.rhevm.vdsm -chardev socket,id=charchannel1,path=/var/lib/libvirt/qemu/channels/6afb8820-86e1-4a1b-8cb9-12393c0bab37.org.qemu.guest_agent.0,server,nowait -device virtserialport,bus=virtio-serial0.0,nr=2,chardev=charchannel1,id=channel1,name=org.qemu.guest_agent.0 -chardev spicevmc,id=charchannel2,name=vdagent -device virtserialport,bus=virtio-serial0.0,nr=3,chardev=charchannel2,id=channel2,name=com.redhat.spice.0 -spice port=5901,tls-port=5902,addr=0,x509-dir=/etc/pki/vdsm/libvirt-spice,tls-channel=main,tls-channel=display,tls-channel=inputs,tls-channel=cursor,tls-channel=playback,tls-channel=record,tls-channel=smartcard,tls-channel=usbredir,seamless-migration=on -k en-us -vga qxl -global qxl-vga.ram_size=67108864 -global qxl-vga.vram_size=33554432
+
+
+
+5 seconds per test
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                     813.548 ops/sec    1229 usecs/op
+        fdatasync                         759.011 ops/sec    1318 usecs/op
+        fsync                             288.231 ops/sec    3469 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                         848.325 ops/sec    1179 usecs/op
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                     470.237 ops/sec    2127 usecs/op
+        fdatasync                         708.728 ops/sec    1411 usecs/op
+        fsync                             268.268 ops/sec    3728 usecs/op
+        fsync_writethrough                            n/a
+        open_sync                         462.780 ops/sec    2161 usecs/op
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+         1 * 16kB open_sync write         805.561 ops/sec    1241 usecs/op
+         2 *  8kB open_sync writes        422.592 ops/sec    2366 usecs/op
+         4 *  4kB open_sync writes        232.728 ops/sec    4297 usecs/op
+         8 *  2kB open_sync writes        128.599 ops/sec    7776 usecs/op
+        16 *  1kB open_sync writes         75.055 ops/sec   13324 usecs/op
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close               310.241 ops/sec    3223 usecs/op
+        write, close, fsync               272.654 ops/sec    3668 usecs/op
+
+Non-Sync'ed 8kB writes:
+        write                           149844.011 ops/sec       7 usecs/op
+
+
+从测试结果来看, NFS对于IOPS的性能损失大概有75%, 虚拟机(KVM)的IOPS性能损失约39%.
+当然不管虚拟机还是NFS还有优化的空间. 
+从ping 一个8K的包来看, 每秒可以达到2000个包, 而到IOPS层, 就变成了1336. 也就是说物理设备IO的耗时是0.25毫秒.
+
+[root@db-172-16-3-150 ~]# ping -s 8192 172.16.3.39
+PING 172.16.3.39 (172.16.3.39) 8192(8220) bytes of data.
+8200 bytes from 172.16.3.39: icmp_seq=1 ttl=64 time=0.477 ms
+8200 bytes from 172.16.3.39: icmp_seq=2 ttl=64 time=0.502 ms
+8200 bytes from 172.16.3.39: icmp_seq=3 ttl=64 time=0.467 ms
+8200 bytes from 172.16.3.39: icmp_seq=4 ttl=64 time=0.511 ms
+
+
+到虚拟机层面IOPS变成了813, 出去网络和IO的耗时, 整个虚拟机的耗时约0.48毫秒.
+所以在虚拟机看来, 一个8KB的同步写IO请求约1.23毫秒, 其中NFS网络开销0.5毫秒, 物理存储IO开销0.25毫秒, 虚拟机开销0.48毫秒.
+如果要优化的话, 虚拟机和网络占大头. (不过千兆网应该没这么烂, 这里的场景算出来只能达到每秒传输2000个8K的包, 才16MB/s.)
+
+如果需要更细致的跟踪, 可以使用systemtap输出各个调用的开销进行针对性的优化.
+
+补充一个ISCSI设备(联想的iscsi存储)的iops测试结果. 相比FC设备, IOPS确实不行.
+存储提供了8个千兆连接, 服务器使用1个独立千兆网卡连接iscsi存储.
+
+O_DIRECT supported on this platform for open_datasync and open_sync.
+
+Compare file sync methods using one 8kB write:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                                 n/a
+        fdatasync                        1942.958 ops/sec
+        fsync                            1899.279 ops/sec
+        fsync_writethrough                            n/a
+        open_sync                        1994.626 ops/sec
+
+Compare file sync methods using two 8kB writes:
+(in wal_sync_method preference order, except fdatasync
+is Linux's default)
+        open_datasync                                 n/a
+        fdatasync                        1582.740 ops/sec
+        fsync                            1580.616 ops/sec
+        fsync_writethrough                            n/a
+        open_sync                         985.265 ops/sec
+
+Compare open_sync with different write sizes:
+(This is designed to compare the cost of writing 16kB
+in different write open_sync sizes.)
+        16kB open_sync write             1658.610 ops/sec
+         8kB open_sync writes             984.499 ops/sec
+         4kB open_sync writes             535.445 ops/sec
+         2kB open_sync writes             245.684 ops/sec
+         1kB open_sync writes             125.642 ops/sec
+
+Test if fsync on non-write file descriptor is honored:
+(If the times are similar, fsync() can sync data written
+on a different descriptor.)
+        write, fsync, close              1906.081 ops/sec
+        write, close, fsync              1866.847 ops/sec
+
+Non-Sync'ed 8kB writes:
+        write                           173154.176 ops/sec
+
+
+
+[参考]
+1. man nfs
+2. http://en.wikipedia.org/wiki/Iscsi
+Flag Counter

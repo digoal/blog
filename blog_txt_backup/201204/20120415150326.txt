@@ -1,0 +1,241 @@
+PostgreSQL research
+
+use pgsql_fdw create PostgreSQL Foreign Table
+
+2012-04-15 15:03:26   查看原文>>
+
+以前有写过在PostgreSQL数据库中创建redis, oracle, mysql, csv等外部表的BLOG, 有兴趣的朋友可以参考如下
+PostgreSQL Foreign Table - pgsql_fdw
+http://blog.163.com/digoal@126/blog/static/163877040201231514057303/
+PostgreSQL Foreign Table - oracle_fdw 1
+http://blog.163.com/digoal@126/blog/static/163877040201181505331588/
+PostgreSQL Foreign Table - oracle_fdw 2
+http://blog.163.com/digoal@126/blog/static/16387704020118151162340/
+PostgreSQL Foreign Table - oracle_fdw 3
+http://blog.163.com/digoal@126/blog/static/16387704020118951953408/
+PostgreSQL Foreign Table - file_fdw
+http://blog.163.com/digoal@126/blog/static/163877040201141641148311/
+PostgreSQL Foreign Table - redis_fdw
+http://blog.163.com/digoal@126/blog/static/16387704020119181188247/
+PostgreSQL Foreign Table - mysql_fdw 1
+http://blog.163.com/digoal@126/blog/static/1638770402011111233524987/
+PostgreSQL Foreign Table - mysql_fdw 2
+http://blog.163.com/digoal@126/blog/static/16387704020121108551698/
+
+今天主要是讲一下使用pgsql_fdw来创建PostgreSQL外部表的情况,
+pgsql_fdw下载地址
+http://download.opensuse.org/repositories//server:/database:/postgresql/openSUSE_12.1/src/
+下载后执行如下进行安装
+
+su - root
+rpm -ivh pgsql_fdw-1.0-1.2.src.rpm
+cd /usr/src/redhat/SOURCES/
+tar -zxvf pgsql_fdw-1.0.tar.gz
+chown -R postgres:postgres pgsql_fdw-1.0
+mv pgsql_fdw-1.0 /opt/soft_bak/postgresql-9.1.3/contrib/
+cd /opt/soft_bak/postgresql-9.1.3/contrib/pgsql_fdw
+. /home/postgres/.bash_profile
+USE_PGXS=1 make
+USE_PGXS=1 make install
+
+
+创建 pgsql_fdw extension
+
+postgres=# create extension pgsql_fdw;
+
+
+在远程库创建测试数据
+
+test=# create table user_info (id int,info text);
+CREATE TABLE
+test=# insert into user_info select generate_series(1,1000000),'digoal';
+INSERT 0 1000000
+
+
+在本地库创建SERVER
+
+postgres=# CREATE SERVER test FOREIGN DATA WRAPPER pgsql_fdw
+postgres-# OPTIONS (host '172.16.3.150', port '5432', dbname 'test');
+CREATE SERVER
+
+
+在本地库创建user mapping
+
+postgres=# CREATE USER MAPPING FOR postgres SERVER test
+postgres-# OPTIONS (user 'postgres', password 'postgres');
+CREATE USER MAPPING
+
+
+创建foreign table
+
+postgres=# CREATE FOREIGN TABLE user_info (
+postgres(# id int,
+postgres(# info text) server test
+postgres-# ;
+CREATE FOREIGN TABLE
+postgres=# select count(*) from user_info ;
+  count  
+---------
+ 1000000
+(1 row)
+
+
+执行计划 : 
+1 . 未用到的列以null替代.
+2. 远程SQL使用的是declare scroll cursor的SQL.
+
+postgres=# explain verbose select count(*) from user_info ;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=13817.72..13817.73 rows=1 width=0)
+   Output: count(*)
+   ->  Foreign Scan on public.user_info  (cost=100.00..12155.38 rows=664938 width=0)
+         Output: id, info
+         Remote SQL: DECLARE pgsql_fdw_cursor_3 SCROLL CURSOR FOR SELECT NULL, NULL FROM public.user_info
+(5 rows)
+
+postgres=# explain verbose select * from user_info ;
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+ Foreign Scan on public.user_info  (cost=100.00..12155.38 rows=664938 width=36)
+   Output: id, info
+   Remote SQL: DECLARE pgsql_fdw_cursor_4 SCROLL CURSOR FOR SELECT id, info FROM public.user_info
+(3 rows)
+
+
+查询完后pgsql_fdw 不会离开释放远程连接, 以便后来的SQL可以服用这个连接. 但是如果事务abort的话会释放.
+查看当前已经存在的连接
+
+postgres=# select * from pgsql_fdw_get_connections();
+ srvid | usesysid 
+-------+----------
+ 25420 |       10
+(1 row)
+postgres=# select oid,* from pg_foreign_server ;
+  oid  | srvname | srvowner | srvfdw | srvtype | srvversion | srvacl |                srvoptions                 
+-------+---------+----------+--------+---------+------------+--------+-------------------------------------------
+ 25420 | test    |       10 |  25407 |         |            |        | {host=172.16.3.150,port=1921,dbname=test}
+(1 row)
+
+
+强制断开连接 : 
+
+postgres=# select * from pgsql_fdw_disconnect(25420,10);
+ pgsql_fdw_disconnect 
+----------------------
+ OK
+(1 row)
+
+postgres=# select * from pgsql_fdw_get_connections();
+ srvid | usesysid 
+-------+----------
+(0 rows)
+
+
+
+同一个SQL语句中如果使用了多个FOREIGN TABLE并且对应的FOREIGN SERVER是同一个，那么可以共享一个连接.
+
+【其他】
+1. server, user mapping, foreign table可用的参数参考README.
+2. 事务相关参考README.
+
+【参考】
+http://interdbconnect.sourceforge.net/pgsql_fdw/pgsql_fdw-en.html
+http://archives.postgresql.org/message-id/4F7D8BBF.4050004@gmail.com
+http://download.opensuse.org/repositories//server:/database:/postgresql/openSUSE_12.1/src/
+README
+
+SQL sent to remote PostgreSQL
+-----------------------------
+
+Foreign tables can be used in any SELECT statement, including CTE, subquery and
+PREPARE statement.  Currently pgsql_fdw sends SELECT query for each foreign
+table appears in the local query.  This means that every join is done on local
+side.
+
+Some kind of query can be optimized by pgsql_fdw.
+
+    1) unused column reference would be replaced with "NULL".
+    2) some part of WHERE/JOIN clause, which consists of limited elements, can
+       be sent and evaluated on remote side.  Expressions can be sent are:
+            * constant value
+            * array, if every elements suit these rules recursively
+            * immutable built-in functions, if every arguments suit these rules
+              recursively
+            * built-in operators implemented with immutable functions, if every
+              operands suit these rules recursively
+            * Boolean expressions such as AND, OR and NOT
+            * x IS NULL and x IS NOT NULL
+            * x IS DISTINCT FROM y
+            * scalar op ANY/ALL (array), if op is immutable and built-in
+            * argument of EXECUTE statement
+            * reference to the column of the foreign table
+
+The pgsql_fdw always uses DECLARE statement to declare a cursor for each scan,
+and fetches result separately when next bunch of result is required.
+
+FDW options
+-----------
+
+The pgsql_fdw accepts various FDW options, and they can be classified to some
+groups.
+
+* Connection options
+The pgsql_fdw reads connection information from FDW options of foreign
+server and user mapping.  The pgsql_fdw accepts subset of libpq connection
+options:
+
+    * For server option
+    authtype, service, connect_timeout, dbname, host, hostaddr, port, tty,
+    options, application_name, keepalives, keepalives_idle,
+    keepalives_interval, keepalives_count, requiressl, sslmode, sslcert,
+    sslkey, sslrootcert, sslcrl, requirepeer, krbsrvname, gsslib
+
+    * For user mapping option
+    user, password
+
+Note: If you omit connection information, pgsql_fdw takes the alternatives from
+environment variables of the user who launched the postgres server.  Usually
+such omission would cause unexpected result, so it's strongly recommended to
+specify connection information explicitly as much as you can.
+
+* Object name options
+You can specify schema name and relation name of a remote table as foreign
+table's FDW option nspname and relname respectively.  These options allow
+you to define local foreign tables with different name from remote side.
+
+* Cursor options
+You can control number of rows fetched at a time by specifying fetch_count FDW
+option on foreign table or foreign server.  If you specified on both, setting
+of foreign table is used.  Default value is 10000.
+
+Connection management
+---------------------
+
+Connection to a foreign server is established in the beginning of first query
+which uses a foreign server, and it is kept even though the query has finished.
+The pgsql_fdw shares a connection when multiple foreign tables are used in a
+local query and they belong to same foreign server.
+
+However, if local transaction aborts, all connections are discarded
+automatically.  This behavior would avoid possible connection leak on error
+cases.
+
+When you want to discard persistent connection at arbitrary timing, use
+pgsql_fdw_disconnect() with server oid and user oid in the session which has
+established the connection.  You can also see list of active connections via
+pgsql_fdw_connections view.
+
+Transaction management
+----------------------
+
+The pgsql_fdw executes BEGIN when a new connection has established.  This means
+that all remote queries are executed in a transaction.  Since the default
+transaction isolation level is READ COMMITTED, multiple foreign scans in a
+local query might produce inconsistent results.
+
+To avoid this inconsistency, you can use SERIALIZABLE level for remote
+transaction with setting default_transaction_isolation for the user used for
+pgsql_fdw connection on remote side.
+
+

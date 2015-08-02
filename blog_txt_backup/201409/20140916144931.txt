@@ -1,0 +1,346 @@
+PostgreSQL research
+
+ganglia gweb AUTH configure with nginx
+
+2014-09-16 14:49:31   查看原文>>
+
+ganglia的认证是基于Zend框架来写的, 权限分布可见lib/GangliaAcl.php. (默认所有集群归属于ALL_CLUSTERS, 所有用户归属于GUEST, 默认GUEST角色有所有cluster的VIEW权限, 没有EDIT权限. ADMIN角色有所有cluster的VIEW和EDIT权限; 私有cluster: GUEST没有私有cluster的任何权限(其实是回收了VIEW权限))
+参考 : 
+http://framework.zend.com/manual/1.12/en/zend.acl.html
+
+[root@db-172-16-3-221 ganglia-web]# pwd
+/data01/web/ganglia-web
+[root@db-172-16-3-221 ganglia-web]# cat lib/GangliaAcl.php 
+<?php
+require_once 'Zend/Acl.php';
+
+class GangliaAcl extends Zend_Acl {
+  private static $acl;
+  
+  // resources
+  const ALL_RESOURCES = 'all_resources';
+  const  ALL_CLUSTERS = 'all_clusters';
+  const     ALL_VIEWS = 'all_views';
+  
+  // privileges
+  const          VIEW = 'view';
+  const          EDIT = 'edit';
+  
+  // roles
+  const         ADMIN = 'admin';
+  const         GUEST = 'guest';
+  
+  public static function getInstance() {
+    if(is_null(self::$acl)) {
+      self::$acl = new GangliaAcl();
+    }
+    return self::$acl;
+  }
+  
+  public function __construct() {
+    // define default groups
+    $this->addRole( new Zend_Acl_Role(GangliaAcl::GUEST))
+         ->addRole( new Zend_Acl_Role(GangliaAcl::ADMIN));
+    
+    // define default resources
+    // all clusters should be children of GangliaAcl::ALL_CLUSTERS
+    $this->add( new Zend_Acl_Resource(GangliaAcl::ALL_RESOURCES) );
+    $this->add( new Zend_Acl_Resource(GangliaAcl::ALL_CLUSTERS), GangliaAcl::ALL_RESOURCES);
+    $this->add( new Zend_Acl_Resource(GangliaAcl::ALL_VIEWS), GangliaAcl::ALL_RESOURCES);
+    
+    // guest can view everything and edit nothing.
+    $this->allow(GangliaAcl::GUEST, GangliaAcl::ALL_RESOURCES, GangliaAcl::VIEW);
+    $this->deny(GangliaAcl::GUEST, GangliaAcl::ALL_RESOURCES, GangliaAcl::EDIT);
+    
+    $this->allow(GangliaAcl::ADMIN, GangliaAcl::ALL_RESOURCES, GangliaAcl::EDIT);
+    $this->allow(GangliaAcl::ADMIN, GangliaAcl::ALL_RESOURCES, GangliaAcl::VIEW);
+  }
+  
+  public function addPrivateCluster($cluster) {
+    $this->add( new Zend_Acl_Resource($cluster), self::ALL_CLUSTERS );
+    //$this->allow(self::ADMIN, $cluster, 'edit');
+    $this->deny(self::GUEST, $cluster);
+  }
+}
+?>
+
+
+如果配置了认证, 并且没有集群的查询权限的话
+(if( ! checkAccess( $resource, GangliaAcl::VIEW, $conf ) ) {), 
+WEB页面会报错, 见index.php
+
+[root@db-172-16-3-221 ganglia-web]# less index.php 
+<?php
+include_once "./eval_conf.php";
+# ATD - function.php must be included before get_context.php.  It defines some needed functions.
+include_once "./functions.php";
+include_once "./get_context.php";
+include_once "./ganglia.php";
+include_once "./get_ganglia.php";
+include_once "./dwoo/dwooAutoload.php";
+
+$resource = GangliaAcl::ALL_CLUSTERS;
+if( $context == "grid" ) {
+  $resource = $grid;
+} else if ( $context == "cluster" || $context == "host" ) {
+  $resource = $clustername; 
+}
+if( ! checkAccess( $resource, GangliaAcl::VIEW, $conf ) ) {
+  header( "HTTP/1.1 403 Access Denied" );
+  die("<html><head><title>Access Denied</title><body><h4>Sorry, you do not have access to this resource.</h4></body></html>");
+}
+
+
+报错如下 : 
+ganglia gweb AUTH configure with nginx - 德哥@Digoal - PostgreSQL research
+
+登录相关的php, login.php文件 : 
+
+login.php
+<?php
+require_once 'eval_conf.php';
+
+if($conf['auth_system'] == 'enabled' && isSet($_SERVER['REMOTE_USER']) && !empty($_SERVER['REMOTE_USER']) ){
+  $auth = GangliaAuth::getInstance();
+  $auth->setAuthCookie($_SERVER['REMOTE_USER']);
+  $redirect_to = isSet( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : 'index.php';
+  header("Location: $redirect_to");
+  die();
+}
+?>
+<html>
+<head>
+  <title>Authentication Failed</title>
+</head>
+<body>
+  <h1>We were unable to log you in.</h1>
+  <div>
+    <?php if( ! isSet($conf['auth_system'] ) ) { ?>
+      <code>$conf['auth_system']</code> is not defined.<br/>  Please notify an administrator.
+    <?php } else if($conf['auth_system'] == 'disabled' || $conf['auth_system'] == 'readonly') { ?>
+      Authentication is disabled by Ganglia configuration.<br/>
+      <code>$conf['auth_system'] = '<?php echo $conf['auth_system']; ?>';</code>
+    <?php } else { ?>
+      Authentication is not configured correctly.  The web server must provide an authenticated username.
+    <?php } ?>
+  </div>
+</body>
+</html>
+
+
+
+下面是一个简单的配置过程 : 
+首先要安装一个httpd-tools工具, 用htpasswd命令生成加密的密码 : 
+
+# yum install -y httpd-tools
+[root@db-172-16-3-221 ganglia-web]# htpasswd -h
+Usage:
+        htpasswd [-cmdpsD] passwordfile username
+        htpasswd -b[cmdpsD] passwordfile username password
+
+        htpasswd -n[mdps] username
+        htpasswd -nb[mdps] username password
+ -c  Create a new file.
+ -n  Don't update file; display results on stdout.
+ -m  Force MD5 encryption of the password.
+ -d  Force CRYPT encryption of the password (default).
+ -p  Do not encrypt the password (plaintext).
+ -s  Force SHA encryption of the password.
+ -b  Use the password from the command line rather than prompting for it.
+ -D  Delete the specified user.
+On Windows, NetWare and TPF systems the '-m' flag is used by default.
+On all other systems, the '-p' flag will probably not work.
+
+
+生成一个密码, 例如使用SHA1封装 : 
+
+[root@db-172-16-3-221 ganglia-web]# htpasswd -nms digoal
+New password: 输入DIGOAL123
+Re-type new password: 输入DIGOAL123
+digoal:{SHA}Jh72pRIlkvfUk6oy1iOvxHmRMVg=
+
+
+编辑密码文件: 
+
+# vi /opt/nginx1.6.0/conf/htpasswd
+# comment
+#name1:password1
+#name2:password2:comment
+#name3:password3
+digoal:{SHA}Jh72pRIlkvfUk6oy1iOvxHmRMVg=
+
+
+修改密码文件权限如下 : 
+
+[root@db-172-16-3-221 ganglia-web]# chown root:nobody /opt/nginx1.6.0/conf/htpasswd 
+[root@db-172-16-3-221 ganglia-web]# chmod 640 /opt/nginx1.6.0/conf/htpasswd 
+[root@db-172-16-3-221 ganglia-web]# ll /opt/nginx1.6.0/conf/htpasswd 
+-rw-r----- 1 root nobody 110 Sep 16 10:35 /opt/nginx1.6.0/conf/htpasswd
+
+
+
+按照ganglia的说明, 配置nginx : 
+
+# vi /opt/nginx1.6.0/conf/nginx.conf
+user  nobody;
+worker_processes  3;
+
+error_log  logs/error.log;
+
+pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    sendfile        on;
+
+    keepalive_timeout  65;
+
+    server {
+        listen       80;
+        server_name  localhost;
+        root   /data01/web/ganglia-web;
+
+        location / {
+            index  index.html index.htm index.php;
+        }
+
+        # redirect server error pages to the static page /50x.html
+        #
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   html;
+        }
+
+        # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+        #
+        location /login.php  {
+            auth_basic            "Ganglia Access";    # 提示字符串
+            auth_basic_user_file  /opt/nginx1.6.0/conf/htpasswd;      #  密码文件
+            fastcgi_param  REMOTE_USER    $remote_user;   # 登录用户名
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass   127.0.0.1:9000;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+            include        fastcgi_params;
+            fastcgi_param  ganglia_secret   MAFweifwf123_2rfj;    #  使用这个字符串和username结合加密, 存储cookie
+        }
+    }
+}
+
+
+重载nginx
+
+# nginx -s reload
+
+
+修改gweb的conf.php : 
+把认证打开.
+
+#
+# 'readonly': No authentication is required.  All users may view all resources.  No edits are allowed.
+#  'enabled': Guest users may view public clusters.  Login is required to make changes.  
+#             An administrator must configure an authentication scheme and ACL rules.
+# 'disabled': Guest users may perform any actions, including edits.  No authentication is required.
+$conf['auth_system'] = 'enabled';
+
+# 添加到末尾部分, ?>之前
+#add by digoal
+$acl = GangliaAcl::getInstance();
+$acl->addRole( 'digoal', GangliaAcl::ADMIN );   # 新增一个用户名为digoal, 密码在前面配置了.
+$acl->addPrivateCluster( 'test' );    # test是我们环境中的clustername, 配置在gmond中. 即把test的GUEST的VIEW权限收回.
+
+?>
+
+
+因为环境中只有一个test集群, 所以GUEST用户没有了VIEW权限, 也没有看到登录界面, 直接返回错误.
+ganglia gweb AUTH configure with nginx - 德哥@Digoal - PostgreSQL research
+但是使用login.php也提示错误, 
+ganglia gweb AUTH configure with nginx - 德哥@Digoal - PostgreSQL research
+这个错误时login.php爆出的, 原因待查.
+浏览器的cookie也清除了, 还是照旧.
+
+如果不把test集群加入私有集群的话, 页面可以打开, 但是问题来了, EVENT可以添加, 貌似没有起到EDIT的限制. 并且点击login爆同样的错误.
+ganglia gweb AUTH configure with nginx - 德哥@Digoal - PostgreSQL research
+
+登录同样报错 : 
+ganglia gweb AUTH configure with nginx - 德哥@Digoal - PostgreSQL research
+也没有登录界面弹出.
+ganglia gweb AUTH configure with nginx - 德哥@Digoal - PostgreSQL research
+
+conf.php中可配置的访问控制介绍 : 
+
+Access Controls
+
+The default access control setup has the following properties: * Guests may view all public clusters. * Admins may view all public & private clusters, and edit configuration (views) for them. * Guests may not view private clusters.
+
+Additional rules may be configured as required. This configuration should go in conf.php. GangliaAcl is based on Zend_Acl. More documentation is available at http://framework.zend.com/manual/en/zend.acl.html.
+
+Note that there is no built-in distinction between a user and a group in Zend_Acl. Both are implemented as roles. The system supports the configuration of heirarchical sets of ACL rules. We implement user/group semantics by making all user roles children of the GangliaAcl::GUEST role, and all clusters children
+ofGangliaAcl::ALL.
+
+ Constants
+
+          Name                                                                              Meaning
+GangliaAcl::ALL_CLUSTERS Every cluster should descend from this role. Guests have view access onGangliaAcl::ALL_CLUSTERS.
+
+GangliaAcl::GUEST        Every user should descend from this role. (Users may also have other roles, but this one grants global view privileges to public clusters.)
+
+GangliaAcl::ADMIN        Admins may access all private clusters and edit configuration for any cluster.
+
+GangliaAcl::VIEW         This permission is granted to guests on all clusters, and then selectively denied for private clusters.
+
+GangliaAcl::EDIT         This permission is used to determine if a user may update views and perform any other configuration tasks.
+
+ Actions
+
+Currently we only support two actions, view and edit. These are applied on a per-cluster basis. So one user may have view access to all clusters, but edit access to only one.
+
+ Examples
+
+These should go in your conf.php file. The usernames you use will be the ones provided by whatever authentication system you are using in Apache. If you want to explicitly allow/deny access to certain clusters, you need to spell that out here.
+
+ Accessing the ACL
+
+All later examples assume you have this code to start with:
+
+$acl = GangliaAcl::getInstance();
+
+ Making a user an admin
+
+$acl->addRole( 'username', GangliaAcl::ADMIN );
+
+ Defining a private cluster
+
+$acl->addPrivateCluster( 'clustername' );
+
+ Granting certain users access to a private cluster
+
+$acl->addPrivateCluster( 'clustername' );
+$acl->addRole( 'username', GangliaAcl::GUEST );
+$acl->allow( 'username', 'clustername', GangliaAcl::VIEW );
+
+ Granting users access to edit some clusters
+
+$acl->addRole( 'username', GangliaAcl::GUEST );
+$acl->add( new Zend_Acl_Resource( 'clustername' ), GangliaAcl::ALL_CLUSTERS );
+$acl->allow( 'username', 'clustername', GangliaAcl::EDIT );
+
+
+
+[参考]
+1. https://github.com/ganglia/ganglia-web/wiki/Authorization-System
+2. http://wiki.nginx.org/HttpAuthBasicModule
+3. http://nginx.org/en/docs/http/ngx_http_auth_basic_module.html
+4. http://nginx.org/en/docs/http/ngx_http_access_module.html
+5. http://nginx.org/en/docs/http/ngx_http_auth_request_module.html
+6. http://framework.zend.com/manual/1.12/en/zend.acl.html
+
+Flag Counter

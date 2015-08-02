@@ -1,0 +1,235 @@
+PostgreSQL research
+
+PostgreSQL limit 1 tuple output influenced by access method
+
+2014-03-20 14:51:29   查看原文>>
+
+如何输出表的第一行, 这个SQL怎么写, 今天群里有朋友问到这个问题.
+首先第一行是什么意思呢? 可以有两种理解.
+1. 物理存储位置的第一行, 也就是ctid最小的记录.
+2. 第一行插入的数据, 也就是最早插入的一条记录.
+我们这里分两种情况来说明如何获得想要的第一行.
+1. 物理存储位置的第一行, 也就是ctid最小的记录. 
+最简单的方法是select * from tbl order by ctid limit 1;
+但是这样显然会全表扫描, 然后按照ctid排序, 然后再取第一行, 表大的话, 开销极大, 例如 : 
+
+digoal=# create table test(id int, info text, crt_time timestamp);
+CREATE TABLE
+digoal=# insert into test select generate_series(1,1000000),md5(random()::text),clock_timestamp();
+INSERT 0 1000000
+digoal=# explain analyze select * from test order by ctid limit 1;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=17326.00..17326.00 rows=1 width=51) (actual time=706.818..706.819 rows=1 loops=1)
+   ->  Sort  (cost=17326.00..19826.00 rows=1000000 width=51) (actual time=706.806..706.806 rows=1 loops=1)
+         Sort Key: ctid
+         Sort Method: top-N heapsort  Memory: 25kB
+         ->  Seq Scan on test  (cost=0.00..12326.00 rows=1000000 width=51) (actual time=0.040..292.568 rows=1000000 loops=1)
+ Total runtime: 706.884 ms
+(6 rows)
+digoal=# select ctid,* from test order by ctid limit 1;
+ ctid  | id |               info               |         crt_time          
+-------+----+----------------------------------+---------------------------
+ (0,1) |  1 | 981e4fafc8a787e813a4560e933f955a | 2014-03-20 14:17:15.25116
+(1 row)
+
+
+其实, 使用全表扫描的话, heap tuple get的方法就是从第一个数据块开始的, 所以这里完全没有必要order by ctid后limit 1.
+得到的数据也是按数据块顺序扫描的第一条有效记录.
+
+digoal=# select ctid,* from test limit 1;
+ ctid  | id |               info               |         crt_time          
+-------+----+----------------------------------+---------------------------
+ (0,1) |  1 | 981e4fafc8a787e813a4560e933f955a | 2014-03-20 14:17:15.25116
+(1 row)
+
+
+例如我们删掉前面的数据, 再次使用limit 1进行取数, 只要执行计划是全表扫描, 那么得到的数据也是按数据块顺序扫描的第一条有效记录.
+
+digoal=# delete from test where id<90000;
+DELETE 89999
+digoal=# select ctid,* from test limit 1;
+   ctid    |  id   |               info               |          crt_time          
+-----------+-------+----------------------------------+----------------------------
+ (209,130) | 90000 | 934649c297a1c475c442385cb5ae8602 | 2014-03-20 14:17:15.888583
+(1 row)
+
+
+我们这里提到了执行计划, 因为扫描节点是seq scan, 所以要去了解对应的扫描方法.
+因此得知根据seq scan limit 1这里得到的肯定是第一条物理行. 省去了order by ctid limit 1 的开销.
+但是, 如果是带where条件的查询, 要取第一个物理行就需要斟酌了, 因为可能走索引扫描. 
+我们重新创建一个表来测试这个场景, ID无序插入几条记录.
+
+digoal=# create table test(id int, info text, crt_time timestamp);
+CREATE TABLE
+digoal=# insert into test values (9,'test',now());
+INSERT 0 1
+digoal=# insert into test values (7,'test',now());
+INSERT 0 1
+digoal=# insert into test values (10,'test',now());
+INSERT 0 1
+digoal=# insert into test values (4,'test',now());
+INSERT 0 1
+digoal=# insert into test values (1,'test',now());
+INSERT 0 1
+digoal=# insert into test values (100,'test',now());
+INSERT 0 1
+digoal=# insert into test values (10,'test',now());
+INSERT 0 1
+digoal=# insert into test values (19,'test',now());
+INSERT 0 1
+digoal=# select ctid,* from test;
+ ctid  | id  | info |          crt_time          
+-------+-----+------+----------------------------
+ (0,1) |   9 | test | 2014-03-20 14:25:10.940698
+ (0,2) |   7 | test | 2014-03-20 14:25:13.966694
+ (0,3) |  10 | test | 2014-03-20 14:25:16.991702
+ (0,4) |   4 | test | 2014-03-20 14:25:22.027702
+ (0,5) |   1 | test | 2014-03-20 14:25:24.634616
+ (0,6) | 100 | test | 2014-03-20 14:25:27.908709
+ (0,7) |  10 | test | 2014-03-20 14:25:31.186769
+ (0,8) |  19 | test | 2014-03-20 14:25:33.597672
+(8 rows)
+
+
+在ID列创建索引
+
+digoal=# create index idx_test_1 on test(id);
+CREATE INDEX
+digoal=# insert into test select generate_series(1000,2000),'test',clock_timestamp();
+INSERT 0 1001
+
+
+ID列过滤条件进行查询, 走索引的情况下, limit 1取到的是索引定义顺序的第一条记录.
+
+digoal=# explain select * from test where id<100 limit 1;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Limit  (cost=0.15..0.83 rows=1 width=17)
+   ->  Index Scan using idx_test_1 on test  (cost=0.15..2.20 rows=3 width=17)
+         Index Cond: (id < 100)
+(3 rows)
+
+
+这条记录的ID=1, 符合<100的条件, 并且在索引顺序中排在第一位, 物理行为(0,5).
+
+digoal=# select ctid,* from test where id<100 limit 1;
+ ctid  | id | info |          crt_time          
+-------+----+------+----------------------------
+ (0,5) |  1 | test | 2014-03-20 14:25:24.634616
+(1 row)
+
+
+如果关闭索引扫描, 将走位图排序扫描.
+
+digoal=# set enable_indexscan=off;
+SET
+digoal=# explain select * from test where id<100 limit 1;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Limit  (cost=1.17..1.85 rows=1 width=17)
+   ->  Bitmap Heap Scan on test  (cost=1.17..3.21 rows=3 width=17)
+         Recheck Cond: (id < 100)
+         ->  Bitmap Index Scan on idx_test_1  (cost=0.00..1.17 rows=3 width=0)
+               Index Cond: (id < 100)
+(5 rows)
+
+
+位图排序扫描的话, 将符合条件的ctid排序后取tuple, 因此本例得到的是(0,1)的记录. 
+
+digoal=# select ctid,* from test where id<100 limit 1;
+ ctid  | id | info |          crt_time          
+-------+----+------+----------------------------
+ (0,1) |  9 | test | 2014-03-20 14:25:10.940698
+(1 row)
+
+
+关闭位图扫描的话, 走全表扫描, 得到的是第一个符合条件的数据块的记录, 和位图扫描结果一致.
+
+digoal=# set enable_bitmapscan=off;
+SET
+digoal=# explain select * from test where id<100 limit 1;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Limit  (cost=0.00..4.87 rows=1 width=17)
+   ->  Seq Scan on test  (cost=0.00..14.61 rows=3 width=17)
+         Filter: (id < 100)
+(3 rows)
+digoal=# select ctid,* from test where id<100 limit 1;
+ ctid  | id | info |          crt_time          
+-------+----+------+----------------------------
+ (0,1) |  9 | test | 2014-03-20 14:25:10.940698
+(1 row)
+
+
+因此在带条件的情况下, 要得到第一条物理记录, 可以选择位图扫描或者全表扫描的方法, 效果是一样的.
+
+2. 第一行插入的数据, 也就是最早插入的一条记录.
+这个就不能使用ctid来判断了, 可以考虑使用xid或者增加一个时间字段存储数据插入时间来判断.
+使用xid来判断的话, 取xmin最小的, 但是需要注意一点, 数据库的vacuum freeze会把这部分信息擦除, 变成FrozenXID.
+例如在未擦除前, xmin存储了这条记录插入时的事务ID. 越小的话, 说明记录越早被插入.
+
+digoal=# select xmin,* from test limit 10;
+    xmin    |  id  | info |          crt_time          
+------------+------+------+----------------------------
+ 3268512800 |    9 | test | 2014-03-20 14:25:10.940698
+ 3268512801 |    7 | test | 2014-03-20 14:25:13.966694
+ 3268512802 |   10 | test | 2014-03-20 14:25:16.991702
+ 3268512803 |    4 | test | 2014-03-20 14:25:22.027702
+ 3268512804 |    1 | test | 2014-03-20 14:25:24.634616
+ 3268512805 |  100 | test | 2014-03-20 14:25:27.908709
+ 3268512806 |   10 | test | 2014-03-20 14:25:31.186769
+ 3268512807 |   19 | test | 2014-03-20 14:25:33.597672
+ 3268512809 | 1000 | test | 2014-03-20 14:26:55.513254
+ 3268512809 | 1001 | test | 2014-03-20 14:26:55.51336
+(10 rows)
+
+
+取出时序上的第一条记录 : 
+
+digoal=# select xmin,* from test order by xmin::text::int8 limit 1;
+    xmin    | id | info |          crt_time          
+------------+----+------+----------------------------
+ 3268512800 |  9 | test | 2014-03-20 14:25:10.940698
+(1 row)
+
+
+那么如果被擦除了的话, 这个方法就无效了.
+
+digoal=# vacuum freeze test;
+VACUUM
+digoal=# select xmin,* from test limit 10;
+ xmin |  id  | info |          crt_time          
+------+------+------+----------------------------
+    2 |    9 | test | 2014-03-20 14:25:10.940698
+    2 |    7 | test | 2014-03-20 14:25:13.966694
+    2 |   10 | test | 2014-03-20 14:25:16.991702
+    2 |    4 | test | 2014-03-20 14:25:22.027702
+    2 |    1 | test | 2014-03-20 14:25:24.634616
+    2 |  100 | test | 2014-03-20 14:25:27.908709
+    2 |   10 | test | 2014-03-20 14:25:31.186769
+    2 |   19 | test | 2014-03-20 14:25:33.597672
+    2 | 1000 | test | 2014-03-20 14:26:55.513254
+    2 | 1001 | test | 2014-03-20 14:26:55.51336
+(10 rows)
+
+
+这个时候需要使用crt_time字段, 为了加快速度, 可以在这个列加索引.
+
+digoal=# select xmin,* from test order by crt_time limit 1;
+ xmin | id | info |          crt_time          
+------+----+------+----------------------------
+    2 |  9 | test | 2014-03-20 14:25:10.940698
+(1 row)
+
+
+
+正因为数据库各种访问方法的固定性, 所以如果要随机的取数, 就必须依赖某些字段来加速.
+以下是我以前写的一篇文章, 管理离散数据的取法的优化.
+http://blog.163.com/digoal@126/blog/static/163877040201111292628555/
+
+[参考]
+1. src/backend/access/heap
+2. http://www.postgresql.org/docs/9.3/static/storage-page-layout.html
+3. src/include/storage/bufpage.h
+4. src/backend/access/heap/heapam.c

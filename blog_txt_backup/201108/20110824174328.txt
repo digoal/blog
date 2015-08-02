@@ -1,0 +1,303 @@
+PostgreSQL research
+
+Test PostgreSQL 9.1's Merge duplicate fsync - 1
+
+2011-08-24 17:43:28   查看原文>>
+
+PostgreSQL 9.1 有一个性能方面的性能改进策略如下：
+
+Merge duplicate fsync requests (Robert Haas, Greg Smith)
+
+This greatly improves performance under heavy write loads.
+
+    首先bgwriter和walwriter都可能频繁的产生fsync的操作请求，把BUFFER里面的内容写入磁盘（非易失存储）。
+    FSYNC基本上属于随机IO请求，机械盘的IOPS能力非常有限，所以一般OLTP数据库的瓶颈大都出现在磁盘上面。降低IO读请求可以通过提高数据库的缓存命中率；而降低IO写请求的方法就比较有限，对于XLOG来说，如果独立给XLOG分配磁盘的话，那XLOG写请求可以认为是连续的IO请求，这个IOPS就比较高了；如果是 XLOG和DATAFILE混用的话，XLOG的写请求
+随机度就升高了，因为受到DATAFILE 写入的干扰，连续变离散。
+    提高XLOG的FSYNC性能的方法，
+1. 就是前面说的给XLOG独立的磁盘或磁盘组，
+2. 可以通过合并IO请求来减少IO请求的次数，（#commit_delay和#commit_siblings ，或异步提交）
+    提高DATAFILE的FSYNC性能的方法，
+1. 使用SSD磁盘提高随机IOPS能力
+2. 想办法降低IO请求次数，如9.1提到的Merge duplicate fsync。
+3. 想办法在离散的IO请求里面尽量去匹配物理存储的顺序，按顺序执行IO写入。
+
+不太清楚这里表达的merge duplicate 是什么意思，
+如果Merge duplicate fsync用于WALWRITER写XLOG的场景，那么表现应该是XLOG的写入量会降低（保证满足PITR的前提下）。
+如果是用于BGWRITER写SHARED BUFFER的场景的话，数据文件的写入量应该减少。
+猜得很累，想起了国产零零漆里面的台词，周星驰拿着一只鞋，其实是只吹风机，掏出一把枪，其实是个打火机，再掏出一只大哥大，其实是个刮胡刀。
+
+我猜测有几种可能 (当然直接去代码里找到相应改动是最好的) ：
+1. XLOG的多次FSYNC请求合并成少量FSYNC请求？( 这个可能性不大 , 因为需要调整#commit_delay和#commit_siblings参数 )
+2. 数据文件的重复的block的fsync写请求合并成少量fsync请求？(这个可能性比较大，例如一个8K的block对应磁盘的16个扇区,如果16个扇区在一个bgwriter周期内都被修改过的话，可能出现16个FSYNC请求甚至更多，如果可以将多次fsync变一次或几次,性能将有所提升，在同样的压力状态下体现出来的w/s + wrqm/s 应该比9.0更少。)
+3. 这里所指也许完全不是前面两种场景，数据库什么时候可能产生完全相同的fsync请求 ? ( 同样的数据写入同样的磁盘块？不同的数据写入同样的磁盘块？同样的磁盘块内，不同的部分写入不同的数据？如一次性往表里面插入大量数据，数据库的BLOCK被逐渐填充，可能有合并bgwriter的FSYNC请求的可能。).
+
+不管哪种可能，从字面理解，最终的体现应该是FSYNC请求变少了，写磁盘的字节数可能不变也可能减少。
+
+下面来验证测试一下和9.0的对比。
+测试环境 : 
+一、用户信息表
+
+CREATE TABLE user_info 
+(userid int primary key,
+firstname text,
+lastname text,
+age smallint,
+sex text check (sex in ('female','male')),
+mobile text,
+address text,
+corp text,
+quarters text,
+kb numeric check (kb >= 0),
+last_login_ip inet,
+crt_time timestamp without time zone,
+mod_time timestamp without time zone);
+
+
+
+二、日志表
+
+CREATE TABLE success_log 
+(userid int,
+consume_kb numeric,
+last_login_ip inet,
+crt_time timestamp without time zone);
+
+CREATE TABLE failed_log 
+(userid int,
+consume_kb numeric,
+last_login_ip inet,
+crt_time timestamp without time zone);
+
+
+
+
+测试点 : 
+三、用户消费
+
+CREATE OR REPLACE FUNCTION digoal.consume_kb(i_userid integer, i_consume_kb numeric, i_last_login_ip inet)
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+BEGIN
+UPDATE user_info SET kb=kb-i_consume_kb,last_login_ip=i_last_login_ip,mod_time=now() WHERE userid=i_userid;
+INSERT INTO success_log(userid,consume_kb,last_login_ip,crt_time) 
+VALUES (i_userid,i_consume_kb,i_last_login_ip,now());
+RETURN 0;
+EXCEPTION
+WHEN others THEN 
+INSERT INTO failed_log(userid,consume_kb,last_login_ip,crt_time) 
+VALUES (i_userid,i_consume_kb,i_last_login_ip,now()); 
+RETURN 1;
+END;
+$function$
+
+
+四、获取用户信息
+
+SELECT * from user_info where userid=$?;
+
+
+
+五、测试数据
+
+INSERT INTO user_info 
+SELECT generate_series(1,50000000),
+'zhou'||generate_series(1,50000000),
+'digoal'||generate_series(1,50000000),
+28,
+'male',
+'13999999999',
+'杭州市紫荆花路2号联合大厦B座11楼',
+'杭州斯凯',
+'DBA Team Leader',
+100000,
+'192.168.1.100',
+now(),
+now();
+
+
+
+六、连接池
+pgbouncer
+
+七、测试程序
+
+nohup pgbench -M extended -c 500 -f /home/postgres/pgbench/get_user_info.sql -j 100 -n -T 120 -h 127.0.0.1 -p 1922 -U digoal digoal >>//home/postgres/pgbench/get_user_info.log 2>&1 &
+nohup pgbench -M extended -c 500 -f /home/postgres/pgbench/consume_kb.sql -j 100 -n -T 120 -h 127.0.0.1 -p 1921 -U digoal digoal >>//home/postgres/pgbench/consume_kb.log 2>&1 &
+
+
+
+# consume_kb.sql 
+# 这里使用的随机USERID 1到5000W，所以重复更新一部分BLOCK的概率较小。后面改成1到1000看看结果的不一样之处。
+
+\setrandom i_userid 1 50000000
+\setrandom i_consume_kb -10000000 10000000
+SELECT consume_kb(:i_userid,:i_consume_kb,'192.168.1.2');
+
+
+
+# get_user_info.sql 
+
+\setrandom i_userid 1 50000000
+SELECT * from user_info where userid=:i_userid;
+
+
+
+数据库几个和本文相关的参数,未指明的使用默认值 : 
+
+shared_buffers = 2048MB
+bgwriter_delay = 200ms
+fsync = on
+synchronous_commit = on
+wal_sync_method = fdatasync
+full_page_writes = on
+wal_buffers = 16384kB
+checkpoint_segments = 128
+checkpoint_timeout = 15min
+archive_mode = off
+
+
+
+测试结果 : 
+
+9.0 
+测试过程中xlog盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+683 , 163 , 6772 , 97
+
+9.1 
+测试过程中xlog盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+831 , 161 , 7942 , 97 
+
+
+9.0 
+checkpoint时数据表user_info对应的磁盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+457 , 861 , 10506 , 82
+时长16秒
+
+9.1 
+checkpoint时数据表user_info对应的磁盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+941 , 1492 , 19474 , 99
+时长76秒
+
+# 以下这里使用的随机USERID 改成1到1000看看结果的不一样之处。
+\setrandom i_userid 1 1000
+\setrandom i_consume_kb -10000000 10000000
+SELECT consume_kb(:i_userid,:i_consume_kb,'192.168.1.2');
+
+9.0 
+测试过程中xlog盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+679 , 162 , 6739 , 97
+
+9.1 
+测试过程中xlog盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+536 , 163 , 5603 , 97
+
+9.0 
+checkpoint时数据表user_info对应的磁盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+511 , 957 , 11755 , 87
+
+9.1 
+checkpoint时数据表user_info对应的磁盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+1358 , 1771 , 25050 , 99
+
+测试第三种可能(一次性往表里面插入大量数据，数据库的BLOCK被逐渐填充，可能有合并bgwriter的FSYNC请求的可能):
+insert into tbl_fsync_merge_test select generate_series(1,5000000),'Merge test!';
+9.0 
+测试过程中xlog盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+11814 , 133 , 96350 , 84
+
+9.1 
+测试过程中xlog盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+12912 , 145 , 103026 , 84
+
+9.0 
+checkpoint时数据表user_info对应的磁盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+26761 , 257 , 194700 , 92
+时长21秒
+
+9.1 
+checkpoint时数据表user_info对应的磁盘的 wrqm/s w/s wsec/s %util 性能视图
+
+平均值
+17851 , 195 , 144370 , 76
+时长98秒
+
+
+
+更新操作的PGBENCH报告 :
+从结果上看，两者是在同等压力下测试的，有可比较性。
+PostgreSQL 9.1
+
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 500
+number of threads: 100
+duration: 60 s
+number of transactions actually processed: 10076
+tps = 159.677377 (including connections establishing)
+tps = 159.854173 (excluding connections establishing)
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 500
+number of threads: 100
+duration: 60 s
+number of transactions actually processed: 10240
+tps = 162.491570 (including connections establishing)
+tps = 162.670016 (excluding connections establishing)
+
+
+
+PostgreSQL 9.0.4
+
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 500
+number of threads: 100
+duration: 60 s
+number of transactions actually processed: 10053
+tps = 159.484973 (including connections establishing)
+tps = 159.683664 (excluding connections establishing)
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 500
+number of threads: 100
+duration: 60 s
+number of transactions actually processed: 10191
+tps = 161.729913 (including connections establishing)
+tps = 161.917860 (excluding connections establishing)
+
+
+总结:
+1. postgresql 9.1rc1 checkpoint耗时明显比9.0.4长。
+2. 在随机数是1到1000，也就是DUPLICATE可能性较大的情况下，WRQ/S，W/S，wsec/s比9.0略小，但是不明显，反而CHECKPOINT时间长了几倍，所以总的来说写入量增加了。
+3. 在随机数是1到5000W时，没有明显差异。
+4. 在BULK插入时，没有明显差异。
+总之没有得到预期的效果，反而感觉比9.0.4略差。
+

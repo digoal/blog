@@ -1,0 +1,132 @@
+PostgreSQL research
+
+PostgreSQL bgwriter process introduction
+
+2011-04-13 11:06:53   查看原文>>
+
+bgwriter 的全称 background writer process .
+bgwriter的功能分为两类，
+第一类，
+写dirty shared buffers , 可以减少因缺少空闲buffer而导致的"backend process请求读入新的page时需要写dirty shared buffers"发生。PostgreSQL提供参数调整bgwriter的写频度和写的量的多少。
+bgwriter的一项工作是用来减轻 backend process 负载的。这样的话backend process可以不用担心申请不到shared buffer而需要亲自来写dirty shared buffers到磁盘从而腾出free shared buffer 。
+第二类，
+bgwriter 同时还需要应付所有的checkpoint请求（主动的或被动的）。
+主动的checkpoint : 每隔一段时间或达到一定的系统设置的阀值之后,bgwriter会主动的开始一次checkpoint,
+被动的checkpoint : 其他进程请求checkpoint , bgwriter会接收到checkpoint请求的信号,(这些都是通过一个共享的内存区域和checkpoint的FLAG来控制的)
+在Oracle中checkpoint是由专门的进程来负责,ckpt.而PostgreSQL目前是由bgwriter来兼职做这个事情。
+从Oracle的进展来看，随着新版本的发布，实例里面也包含越来越多的系统进程，换句话说功能越来越细分，并且新版本往往比以前更加耗内存。
+
+bgwriter进程的启动与停止，很好理解，如下 :
+ * The bgwriter is started by the postmaster as soon as the startup subprocess
+ * finishes, or as soon as recovery begins if we are doing archive recovery.
+ * It remains alive until the postmaster commands it to terminate.
+ * Normal termination is by SIGUSR2, which instructs the bgwriter to execute
+ * a shutdown checkpoint and then exit(0).      (All backends must be stopped
+ * before SIGUSR2 is issued!)  Emergency termination is by SIGQUIT; like any
+ * backend, the bgwriter will simply abort and exit on SIGQUIT.
+
+bgwriter异常退出的话，数据库将干啥 :
+ * If the bgwriter exits unexpectedly, the postmaster treats that the same
+ * as a backend crash: shared memory may be corrupted, so remaining backends
+ * should be killed by SIGQUIT and then a recovery cycle started.  (Even if
+ * shared memory isn't corrupted, we have lost information about which
+ * files need to be fsync'd for the next checkpoint, and so a system
+ * restart needs to be forced.)
+
+前面有提到一个共享内存区域，用于bgwriter和backend process通信的区域。其中包含如下数据结构 :
+
+typedef struct
+{
+        pid_t           bgwriter_pid;   /* PID of bgwriter (0 if not started) */
+
+        slock_t         ckpt_lck;               /* protects all the ckpt_* fields */
+
+        int                     ckpt_started;   /* advances when checkpoint starts */
+        int                     ckpt_done;              /* advances when checkpoint done */
+        int                     ckpt_failed;    /* advances when checkpoint fails */
+
+        int                     ckpt_flags;             /* checkpoint flags, as defined in xlog.h */
+
+        uint32          num_backend_writes;             /* counts non-bgwriter buffer writes */
+
+        int                     num_requests;   /* current # of requests */
+        int                     max_requests;   /* allocated array size */
+        BgWriterRequest requests[1];    /* VARIABLE LENGTH ARRAY */
+} BgWriterShmemStruct;
+
+
+bgwriter是如何处理checkpoint请求的?
+ * The ckpt counters allow backends to watch for completion of a checkpoint
+ * request they send.  Here's how it works:
+ *      * At start of a checkpoint, bgwriter reads (and clears) the request flags
+ *        and increments ckpt_started, while holding ckpt_lck.
+ *      * On completion of a checkpoint, bgwriter sets ckpt_done to
+ *        equal ckpt_started.
+ *      * On failure of a checkpoint, bgwriter increments ckpt_failed
+ *        and sets ckpt_done to equal ckpt_started.
+这里有三个非常重要的字段 : ckpt_started , ckpt_done , ckpt_failed .
+这三个计数类似于sequence的cycle.是可以循环的，因此比较的时候使用取模后的值。
+
+backend是如何请求和跟踪checkpoint的?
+ * The algorithm for backends is:
+ *      1. Record current values of ckpt_failed and ckpt_started, and
+ *         set request flags, while holding ckpt_lck.
+ *      2. Send signal to request checkpoint.
+ *      3. Sleep until ckpt_started changes.  Now you know a checkpoint has
+ *         begun since you started this algorithm (although *not* that it was
+ *         specifically initiated by your signal), and that it is using your flags.
+ *      4. Record new value of ckpt_started.
+ *      5. Sleep until ckpt_done >= saved value of ckpt_started.  (Use modulo
+ *         arithmetic here in case counters wrap around.)  Now you know a
+ *         checkpoint has started and completed, but not whether it was
+ *         successful.
+ *      6. If ckpt_failed is different from the originally saved value,
+ *         assume request failed; otherwise it was definitely successful.
+ *
+ * ckpt_flags holds the OR of the checkpoint request flags sent by all
+ * requesting backends since the last checkpoint start.  The flags are
+ * chosen so that OR'ing is the correct way to combine multiple requests.
+ *
+ * num_backend_writes is used to count the number of buffer writes performed
+ * by non-bgwriter processes.  This counter should be wide enough that it
+ * can't overflow during a single bgwriter cycle.
+ *
+ * The requests array holds fsync requests sent by backends and not yet
+ * absorbed by the bgwriter.
+ *
+ * Unlike the checkpoint fields, num_backend_writes and the requests
+ * fields are protected by BgWriterCommLock.
+
+注意到前面提到的ckpt_flags , 在xlog.c中有以下介绍 :
+ * flags is a bitwise OR of the following :
+ *      CHECKPOINT_IS_SHUTDOWN: checkpoint is for database shutdown.
+ *      CHECKPOINT_END_OF_RECOVERY: checkpoint is for end of WAL recovery.
+ *      CHECKPOINT_IMMEDIATE: finish the checkpoint ASAP,
+ *              ignoring checkpoint_completion_target parameter.
+ *      CHECKPOINT_FORCE: force a checkpoint even if no XLOG activity has occured
+ *              since the last one (implied by CHECKPOINT_IS_SHUTDOWN or
+ *              CHECKPOINT_END_OF_RECOVERY).
+ *
+ * Note: flags contains other bits, of interest here only for logging purposes.
+ * In particular note that this routine is synchronous and does not pay
+ * attention to CHECKPOINT_WAIT.
+
+由于没有办法很方便的能看到FLAG，只能简单的测试一下bgwriter在checkpoint的时候确实是在做事情的：
+digoal=> create table tbl_test (id int);
+CREATE TABLE
+digoal=> insert into tbl_user_info_single select generate_series(1,5000000),'zhou','digoal','sky-mobi',28;
+INSERT 0 5000000
+digoal=> checkpoint;
+ERROR:  must be superuser to do CHECKPOINT
+digoal=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# checkpoint;
+CHECKPOINT
+
+checkpoint的时候top的输出 :
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                              
+17625 postgres  15   0 2328m 2.1g 2.1g S  5.0 15.3   0:07.41 postgres: writer process
+
+参考 :
+bgwriter.c
+xlog.c

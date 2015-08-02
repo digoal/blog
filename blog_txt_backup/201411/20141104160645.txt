@@ -1,0 +1,218 @@
+PostgreSQL research
+
+Dockerfile best practices
+
+2014-11-04 16:06:45   查看原文>>
+
+使用Dockerfile创建image前, 建议遵循的一些规则.
+1. container是阅后即焚式的, 即运行一次后, 如果停掉了, 那么重新运行一个(全新的). 
+这点和虚拟机有点不一样, 虚拟机有自己的东西, 可以存在虚拟机内部, 如果虚拟机停掉, 再起来, 在虚拟机运行过程中的变更是会被保留的.
+但是container不一样, container产生的变更都会"消失", 除非挂载外部的volume并将变更写入外部volume. 
+所以设计时应该考虑到container的特性, image只是一个只读的环境而已, container每次启动就是一个全新的环境. 
+为了打破这个问题, 例如要将container的数据持久化, 那么必须挂载外部volume来保存, 在container停止或rm后, 还可以启动其他的container来挂载这个volume.
+例如数据库的数据文件, 建议外挂volume.
+image我们可以只作为一个运行环境来设计, 例如数据库的image就只有数据库软件; WEB服务的image就只有web服务对应的软件; 而数据文件以及WEB站点文件夹都应该外挂的方式来访问. 这样的话, 当container rm后, 数据还在. 再启动container即可.
+
+2. 使用,dockerignore文件排除建立image不需要的文件和文件夹.
+或者使用空文件夹来放Dockerfile.
+
+3. 在image中避免安装不必要的包, 例如database image不需要text edit包. 尽量使image小一点.
+
+4. 每个container只允许一个进程, 如果一个服务有多个进程并且需要相互访问的话, 建议起多个container, 并使用container link来将各个进程连接起来. 方便container的重用.
+参考
+http://blog.163.com/digoal@126/blog/static/163877040201492710339762/
+
+5. 简化Dockerfile层次, 提高可读性.
+
+6. 当指令比较长时, 建议分行
+例如
+RUN apt-get update && apt-get install -y \
+  bzr \
+  cvs \
+  git \
+  mercurial \
+  subversion
+
+7. 使用镜像缓存注意, 在指令执行前, 判断是否有镜像缓存可以直接使用
+例如 : 
+ADD a /
+将检查a文件的checksum , 对比以前是否调用过同样的指令, 并且checksum一致.
+以上指令将产生一个镜像, 但是在执行前, 可以检查docker server中是否已经存在该image, 那么就直接使用. 而不需要重新生成一个新的中间过程image.
+--no-cache=true 表示不使用cache,
+
+8. 指令使用建议 
+FROM
+
+建议使用最小化的image.
+
+
+
+RUN
+
+有依赖的指令, 最好使用&&写在一条指令中, 例如
+RUN apt-get update && apt-get install -y package-bar package-foo package-baz
+
+比较长的指令, 最好分行, 并排序
+RUN apt-get update && apt-get install -y \
+    aufs-tools \
+    automake \
+    btrfs-tools \
+    build-essential \
+    curl \
+    dpkg-sig \
+    git \
+    iptables \
+    libapparmor-dev \
+    libcap-dev \
+    libsqlite3-dev \
+    lxc=1.0* \
+    mercurial \
+    parallel \
+    reprepro \
+    ruby1.9.1 \
+    ruby1.9.1-dev \
+    s3cmd=1.1.0*
+
+
+
+ENV
+
+可用于设置路径, 软件需要的特殊环境变量, 或者便于管理的环境变量等.
+使用docker inspect可查.
+For example, ENV PATH /usr/local/nginx/bin:$PATH will ensure that CMD [“nginx”] just works.
+The ENV instruction is also useful for providing required environment variables specific to services you wish to containerize, such as Postgres’s PGDATA.
+Lastly, ENV can also be used to set commonly used version numbers so that version bumps are easier to maintain, as seen in the following example:
+
+ENV PG_MAJOR 9.3
+ENV PG_VERSION 9.3.4
+RUN curl -SL http://example.com/postgres-$PG_VERSION.tar.xz | tar -xJC /usr/src/postgress && …
+ENV PATH /usr/local/postgres-$PG_MAJOR/bin:$PATH
+
+
+
+ADD & COPY
+
+一般建议使用COPY, 如果要下载URL到image, 建议使用wget或curl ,然后解压.
+For example, you should avoid doing things like:
+ADD http://example.com/big.tar.xz /usr/src/things/
+RUN tar -xJf /usr/src/things/big.tar.xz -C /usr/src/things
+RUN make -C /usr/src/things all
+
+And instead, do something like:
+RUN mdkir -p /usr/src/things \
+    && curl -SL http://example.com/big.tar.gz \
+    | tar -xJC /usr/src/things \
+    && make -C /usr/src/things all
+
+不需要帮忙自动解压的地方, 建议使用COPY.
+
+
+
+ENTRYPOINT
+一般建议在末尾加上exec "$@" 那么将传递给ENTRYPOINT脚本.
+例如 postgresql的Dockerfile对应的ENTRYPOINT脚本 : 
+https://github.com/docker-library/postgres
+
+#!/bin/bash
+set -e
+
+if [ "$1" = 'postgres' ]; then
+    chown -R postgres "$PGDATA"
+
+    if [ -z "$(ls -A "$PGDATA")" ]; then
+        gosu postgres initdb
+    fi
+
+    exec gosu postgres "$@"
+fi
+
+exec "$@"
+
+
+
+另一个例子 : 
+
+(for example, docker run -it mysql mysqld --some --flags will transparently run mysqld --some --flags after ENTRYPOINT runs initdb).
+
+
+mysql的ENTRYPOINT脚本 : 
+
+#!/bin/bash
+set -e
+
+if [ -z "$(ls -A /var/lib/mysql)" -a "${1%_safe}" = 'mysqld' ]; then
+        if [ -z "$MYSQL_ROOT_PASSWORD" ]; then
+                echo >&2 'error: database is uninitialized and MYSQL_ROOT_PASSWORD not set'
+                echo >&2 '  Did you forget to add -e MYSQL_ROOT_PASSWORD=... ?'
+                exit 1
+        fi
+
+        mysql_install_db --user=mysql --datadir=/var/lib/mysql
+
+        # These statements _must_ be on individual lines, and _must_ end with
+        # semicolons (no line breaks or comments are permitted).
+        # TODO proper SQL escaping on ALL the things D:
+        TEMP_FILE='/tmp/mysql-first-time.sql'
+        cat > "$TEMP_FILE" <<-EOSQL
+                DELETE FROM mysql.user ;
+                CREATE USER 'root'@'%' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' ;
+                GRANT ALL ON *.* TO 'root'@'%' WITH GRANT OPTION ;
+                DROP DATABASE IF EXISTS test ;
+        EOSQL
+
+        if [ "$MYSQL_DATABASE" ]; then
+                echo "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE ;" >> "$TEMP_FILE"
+        fi
+
+        if [ "$MYSQL_USER" -a "$MYSQL_PASSWORD" ]; then
+                echo "CREATE USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD' ;" >> "$TEMP_FILE"
+
+                if [ "$MYSQL_DATABASE" ]; then
+                        echo "GRANT ALL ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%' ;" >> "$TEMP_FILE"
+                fi
+        fi
+
+        echo 'FLUSH PRIVILEGES ;' >> "$TEMP_FILE"
+
+        set -- "$@" --init-file="$TEMP_FILE"
+fi
+
+chown -R mysql:mysql /var/lib/mysql
+exec "$@"
+
+
+
+使用例子 : 
+
+COPY ./docker-entrypoint.sh /
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+
+
+VOLUME
+The VOLUME instruction should be used to expose any database storage area, configuration storage, or files/folders created by your docker container. You are strongly encouraged to use VOLUME for any mutable and/or user-serviceable parts of your image.
+
+USER
+如果服务不需要使用root权限, 那么建议使用非root用户执行,
+避免使用sudo(可能引起问题).
+不要频繁的变更USER, 会带来更多的层级. 
+
+WORKDIR
+改变工作目录可以使用WORKDIR, 或者在同一条指令中执行, 例如 : 
+RUN cd … && do-something
+但是为了提高可读性, 建议使用WORKDIR指令.
+
+ONBUILD
+ONBUILD一般用于后续会有其他image要基于该image来创建, 并需要依赖一些环境的情况(那么这些依赖的环境可以写在ONBUILD中安装执行)
+ONBUILD is only useful for images that are going to be built FROM a given image. For example, you would use ONBUILD for a language stack image that builds arbitrary user software written in that language within the Dockerfile, as you can see in Ruby’s ONBUILD variants.
+
+Images built from ONBUILD should get a separate tag, for example: ruby:1.9-onbuild or ruby:2.0-onbuild.
+
+Be careful when putting ADD or COPY in ONBUILD. The “onbuild” image will fail catastrophically if the new build's context is missing the resource being added. Adding a separate tag, as recommended above, will help mitigate this by allowing the Dockerfile author to make a choice.
+不建议在ONBUILD中使用ADD COPY.
+
+
+[参考]
+1. https://docs.docker.com/articles/dockerfile_best-practices/
+2. https://github.com/docker-library/postgres
+Flag Counter

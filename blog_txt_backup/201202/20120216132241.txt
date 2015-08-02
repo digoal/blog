@@ -1,0 +1,340 @@
+PostgreSQL research
+
+how difference when update a table's column which it in TOAST or BASETABLE
+
+2012-02-16 13:22:41   查看原文>>
+
+今天一位合作商的同事找到我, 问了一个关于数据库优化的问题.
+问题是这样的 : 
+    我现在在优化数据库操作, 我的一个role表结构里, 有几个比较大的text. 
+    然后我现在只修改一个role里的int字段, 你上次说整条role记录就会拷贝一次是么,
+    这个拷贝是不是影响数据库的操作时间啊?
+
+我们知道PostgreSQL的MVCC机制是通过行版本来做的, 每次删除操作, 是修改了TUPLE上的xmax标签.
+检索TUPLE时根据（xmax的标签和当前的txid snapshot）与当前事务ID进行比较, 以及事务隔离级别来辨别这条TUPLE对本事务是否可见。
+
+例如 : 
+SESSION A : 
+
+digoal=> insert into t1 values(1,'digoal','DIGOAL');
+INSERT 0 1
+
+
+
+SESSION B : 
+
+digoal=> select xmin,xmax,ctid,cmin,cmax,* from t1;
+   xmin    | xmax | ctid  | cmin | cmax | id | info1  | info2  
+-----------+------+-------+------+------+----+--------+--------
+ 562469017 |    0 | (0,1) |    0 |    0 |  1 | digoal | DIGOAL
+
+
+
+SESSION A :
+
+digoal=> begin;
+BEGIN
+digoal=> delete from t1 where id=1;
+DELETE 1
+
+
+暂时不要COMMIT。
+
+SESSION B : 
+
+digoal=> select xmin,xmax,ctid,cmin,cmax,* from t1;
+   xmin    |   xmax    | ctid  | cmin | cmax | id | info1  | info2  
+-----------+-----------+-------+------+------+----+--------+--------
+ 562469017 | 562469018 | (0,1) |    0 |    0 |  1 | digoal | DIGOAL
+
+
+这个时候在SESSION B看到这条记录的xmax已经改变了. 但是当前是可见的.
+
+当SESSION A commit之后，SESSION B就看不到这条记录了。
+但是即使commit, 这条数据还留在PAGE里面(假设我没有开启AUTOVACUUM, 否则这条记录会被vacuum掉.). 我们可以通过pageinspect中的函数来查看t1表的PAGE raw数据。如下，
+
+digoal=#  select * from heap_page_items(get_raw_page('digoal.t1',0)); # 参数0来自ctid中的PAGE号.
+ lp | lp_off | lp_flags | lp_len |  t_xmin   |  t_xmax   | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+-----------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8144 |        1 |     42 | 562469017 | 562469018 |        0 | (0,1)  |           3 |       1282 |     24 |        |      
+(1 row)
+
+
+
+UPDATE操作和DELETE操作类似，如下 : 
+SESSION A : 
+
+digoal=> truncate t1;
+TRUNCATE TABLE
+digoal=> insert into t1 values(1,'digoal','DIGOAL');
+INSERT 0 1
+
+
+
+SESSION A : 
+
+digoal=> begin;
+BEGIN
+digoal=> update t1 set id=2 where id=1;
+UPDATE 1
+
+
+先不要提交,
+
+SESSION B : 
+
+digoal=> select xmin,xmax,ctid,cmin,cmax,* from t1;
+   xmin    |   xmax    | ctid  | cmin | cmax | id | info1  | info2  
+-----------+-----------+-------+------+------+----+--------+--------
+ 562469030 | 562469031 | (0,1) |    0 |    0 |  1 | digoal | DIGOAL
+(1 row)
+
+
+
+SESSION A : 
+
+digoal=> commit; 
+
+
+A提交之后,插入了一条新的记录, 老的还在, 只是看不到了.
+
+SESSION B :
+
+ digoal=> select xmin,xmax,ctid,cmin,cmax,* from t1;
+   xmin    | xmax | ctid  | cmin | cmax | id | info1  | info2  
+-----------+------+-------+------+------+----+--------+--------
+ 562469031 |    0 | (0,2) |    0 |    0 |  2 | digoal | DIGOAL
+
+
+好了罗嗦了一堆，只是要说明PostgreSQL的MVCC机制。
+接下来进入本文重点.
+那么在更新一条记录的时候, 我们看到重新插入了一条记录（携带被修改的值）进去, 有几个疑问.
+1. 更新的时候插入的记录是不是整条记录, (例如一个5个字段的表, 更新了1个字段, 新插入的记录是不是完整的5个字段的记录, 还是只新插入了这个被更新的字段)
+2. 当表中有TOAST相关的字段时, 是否也需要重新插入一次.
+
+解答  : 
+1. PostgreSQL为行存储的风格, 所以是整条记录的所有字段被新插入(但是不包含未被更新的TOAST字段).
+2. 当一条记录中的某变长字段的值在压缩后还超过2K（1/4块大小,近似2K），并且选择了TOAST存储, 如external或者extended时。那么这条记录中的这个字段将会使用TOAST存储。也就是说, 并不是字段选择了external或者extended就一定会存储到TOAST中。
+3. 因此存储在TOAST中的值被更新时并不影响其他存储在TOAST中未被更新的内容, 但是会影响指向这条TOAST记录的基表中的记录。那条记录是需要删除(修改XMAX)并新插入的。
+
+下面来看个测试 : 
+先关闭AUTOVACUUM，以便能看到测试效果。
+
+digoal=> create table storage_test (id int primary key,info1 text,info2 text);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "storage_test_pkey" for table "storage_test"
+CREATE TABLE
+
+
+查看存储选项, 显示extended, 表示info1和info2的字段大于2K时(近似2K bytes) 存储到TOAST中.
+
+digoal=> \d+ storage_test
+              Table "digoal.storage_test"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ id     | integer | not null  | plain    | 
+ info1  | text    |           | extended | 
+ info2  | text    |           | extended | 
+Indexes:
+    "storage_test_pkey" PRIMARY KEY, btree (id)
+Has OIDs: no
+
+
+
+插入测试数据 : 
+
+digoal=> insert into storage_test select generate_series(1,10000),'此处省略1W字','此处省略1W字');
+
+
+查看storage_test表的TOAST表 : 
+
+digoal=> select reltoastrelid,reltoastidxid from pg_class where relname='storage_test';
+ reltoastrelid | reltoastidxid 
+---------------+---------------
+      19403055 |             0
+
+
+查看storage_test表的空间大小 : 
+
+digoal=> select pg_relation_size('storage_test');
+ pg_relation_size 
+------------------
+           688128
+(1 row)
+
+
+查看storage_test表的共计(包含索引,TOAST,FSM,VM等)空间大小 : 
+
+digoal=> select pg_total_relation_size('storage_test');
+ pg_total_relation_size 
+------------------------
+               83771392
+(1 row)
+
+
+查看它的TOAST表的空间大小 : 
+
+digoal=> select pg_relation_size(19403055);
+ pg_relation_size 
+------------------
+         81920000
+(1 row)
+
+
+从空间大小上可以看出,info1和info2字段已经存储到TOAST中了。
+不信可以看看column_size : 
+
+digoal=> select pg_column_size(info1),pg_column_size(info2) from storage_test limit 1;
+ pg_column_size | pg_column_size 
+----------------+----------------
+           3134 |           3134
+(1 row)
+
+
+列长3134字节, 已经超出2K了，显然是在TOAST中存着。
+
+接下来更新info1字段, 看看要不要把info2字段也拷贝一份生成一条新的记录 . 
+
+digoal=> update storage_test set info1=info2 ;
+UPDATE 10000
+digoal=> analyze storage_test ;
+ANALYZE
+digoal=> select pg_relation_size(19403055);
+ pg_relation_size 
+------------------
+        122880000
+(1 row)
+
+
+TOAST表变大了, 大了多少呢 ? 
+
+digoal=> select 122880000-81920000;
+ ?column? 
+----------
+ 40960000
+(1 row)
+
+
+大了一半, 也就是说info1的更新不需要拷贝info2.
+那么看看info1的更新会不会影响基表. 
+
+digoal=> select pg_relation_size('storage_test');
+ pg_relation_size 
+------------------
+          1368064
+(1 row)
+
+
+显然影响了, storage_test基表变大了,
+
+digoal=> select 1368064-688128;
+ ?column? 
+----------
+   679936
+(1 row)
+
+
+除去PAGE头信息应该刚好大一倍。
+也就是说每条TUPLE对应的TOAST发生更新之后，基表的TUPLE中指向TOAST的地址发生了变化，因此需要重新生成一条新的TUPLE。
+
+接下来我们把info1和info2都改到基表中存储.
+
+digoal=> alter table storage_test alter column info1 set storage main;
+ALTER TABLE
+digoal=> alter table storage_test alter column info2 set storage main;
+ALTER TABLE
+digoal=> vacuum full storage_test ;
+VACUUM
+digoal=> select reltoastrelid,reltoastidxid from pg_class where relname='storage_test';
+ reltoastrelid | reltoastidxid 
+---------------+---------------
+      19403055 |             0
+(1 row)
+
+digoal=> select pg_relation_size('storage_test');
+ pg_relation_size 
+------------------
+         81920000
+(1 row)
+
+digoal=> select pg_total_relation_size('storage_test');
+ pg_total_relation_size 
+------------------------
+               82173952
+(1 row)
+
+digoal=> select pg_relation_size(19403055);
+ pg_relation_size 
+------------------
+                0
+(1 row)
+
+
+修改完后, 已经确认数据现在都存储在基表了.
+
+接下来修改info1的内容，看看要不要把info2也拷贝一份重新生成一条记录.
+
+digoal=> update storage_test set info1=info2 ;
+UPDATE 10000
+digoal=> select pg_relation_size('storage_test');
+ pg_relation_size 
+------------------
+        163840000
+(1 row)
+digoal=> select 163840000-81920000;
+ ?column? 
+----------
+ 81920000
+(1 row)
+
+
+storage_test变大了一倍,说明info1更新时也需要拷贝info2的内容生成一条新的记录.
+
+
+【小结】
+1. 从前面的测试可用看出当info1和info2字段都在TOAST中存储时, 更新info1不需要拷贝info2的内容. 但是需要拷贝基表中的所有字段. 
+2. 当info1和info2 都在基表中存储时，更新任何一个字段，这两个字段的内容都需要拷贝. 如 : 
+
+digoal=> vacuum full storage_test ;
+VACUUM
+digoal=> update storage_test set id=id ;
+UPDATE 10000
+digoal=> select pg_relation_size('storage_test');
+ pg_relation_size 
+------------------
+        163840000
+(1 row)
+
+
+3. 
+到底一个字段的更新在插入新数据时，会不会涉及到拷贝其他字段的内容。取决于其他字段的存储方式，在基础tuple中是一个指针，还是真实数据存储在基础TUPLE中。
+在基表中存储的字段存储选项如(main)，如果字段内容大于2k, 指向这些字段的是一个指针，而不是多个指针。
+例如 : 
+a表的某 tuple : column1(main)(3k), column2(main)(3k), column3(extended)(3k)
+update a set column1=?;
+这条SQL新插入的记录需要拷贝column2的内容,新增column1的内容, 但不需要拷贝column3的内容.因为column3在tuple中是一个指针.
+update a set column3=?;
+这条SQL新插入的记录需要新增column3的内容, 不需要拷贝column1和column2的内容. 因为column1和column2在tuple中是一个指针.
+
+当字段存储选项如(extended)，如果字段内容大于2k, 指向这些字段的是多个指针(每个字段一个)，而不是一个指针。
+例如 : 
+a表的某 tuple : column1(main)(3k), column2(extended)(3k), column3(extended)(3k)
+update a set column1=?;
+这条SQL新插入的记录需要新增column1的内容, 不需要拷贝column2和column3的内容. 因为column2和column3在tuple中是2个指针.
+update a set column2=?;
+这条SQL新插入的记录需要新增column2的内容, 不需要拷贝column1和column3的内容. 因为column1和column3在tuple中是2个指针.
+
+
+4. 对于这方面的性能优化如何考虑呢  ? 
+4.1. 如果一个表中的大部分字段(指基表中的字段)都可能被更新时, 并且不是在一条SQL中更新多个字段, 而是在多条SQL中更新不同字段.
+那么考虑把这个表拆成多个表比较好.
+4.2. 由于不管怎么更新都会涉及到基表的记录重新插入，所以不建议频繁分开字段更新的表字段太多。大部分字段集中在一条SQL语句中不考虑在内。
+
+【参考】
+以前写过几篇关于PostgreSQL PAGE DUMP的文章 : 
+Use pageinspect EXTENSION view PostgreSQL Page's raw infomation
+http://blog.163.com/digoal@126/blog/static/16387704020114273265960/
+use pg_filedump dump block contents
+http://blog.163.com/digoal@126/blog/static/163877040201142610215685/
+
+
+

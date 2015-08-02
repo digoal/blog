@@ -1,0 +1,351 @@
+PostgreSQL research
+
+concurrently rebuild bloated indexes
+
+2012-04-17 9:24:33   查看原文>>
+
+autovacuum和vacuum可以回收表的dead tuple. 但是无法回收索引的dead tuple .
+(PostgreSQL 9.0 vacuum full 除外, 老的PG版本vacuum full不会重建索引, 反而膨胀更厉害.)
+所以在DML操作频繁的数据库中会遇到索引膨胀的情况.
+为了避免索引膨胀, PostgreSQL很早就有了HOT的机制, HOT的概念参考如下BLOG或源码.
+http://blog.163.com/digoal@126/blog/static/163877040201121624816721/ 
+http://blog.163.com/digoal@126/blog/static/163877040201041261116323/ 
+在一个频繁更新的表上, 如果更新操作不是HOT的, 那么索引也需要被更新 . 因此会产生垃圾数据, 并且无法回收.
+例如 : 
+创建测试表 : 
+
+digoal=# create table user_info(id int primary key, username text unique,info text);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "user_info_pkey" for table "user_info"
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "user_info_username_key" for table "user_info"
+CREATE TABLE
+
+
+插入测试数据 : 
+
+digoal=# insert into user_info select generate_series(1,100000),'digoal'||generate_series(1,100000),'test';
+INSERT 0 100000
+
+
+查看表和索引目前的大小 : 
+
+digoal=# \dt+ user_info 
+                       List of relations
+ Schema |   Name    | Type  |  Owner   |  Size   | Description 
+--------+-----------+-------+----------+---------+-------------
+ public | user_info | table | postgres | 5128 kB | 
+(1 row)
+
+digoal=# \di+ user_info_*
+                                   List of relations
+ Schema |          Name          | Type  |  Owner   |   Table   |  Size   | Description 
+--------+------------------------+-------+----------+-----------+---------+-------------
+ public | user_info_pkey         | index | postgres | user_info | 2208 kB | 
+ public | user_info_username_key | index | postgres | user_info | 3104 kB | 
+(2 rows)
+
+
+使用delete删除所有数据后, vacuum, 并查看表和索引的大小
+
+digoal=# delete from user_info;
+DELETE 100000
+digoal=# vacuum user_info;
+VACUUM
+digoal=# \dt+ user_info 
+                      List of relations
+ Schema |   Name    | Type  |  Owner   | Size  | Description 
+--------+-----------+-------+----------+-------+-------------
+ public | user_info | table | postgres | 24 kB | 
+(1 row)
+
+digoal=# \di+ user_info_*
+                                   List of relations
+ Schema |          Name          | Type  |  Owner   |   Table   |  Size   | Description 
+--------+------------------------+-------+----------+-----------+---------+-------------
+ public | user_info_pkey         | index | postgres | user_info | 2208 kB | 
+ public | user_info_username_key | index | postgres | user_info | 5360 kB | 
+(2 rows)
+
+
+vacuum full后再查看index的大小
+
+digoal=# vacuum full user_info ;
+VACUUM
+digoal=# \di+ user_info_*
+                                     List of relations
+ Schema |          Name          | Type  |  Owner   |   Table   |    Size    | Description 
+--------+------------------------+-------+----------+-----------+------------+-------------
+ public | user_info_pkey         | index | postgres | user_info | 8192 bytes | 
+ public | user_info_username_key | index | postgres | user_info | 8192 bytes | 
+(2 rows)
+
+
+
+接下来举一个non-HOT update的例子
+
+digoal=# create table hot_test (id int primary key,username text unique,phonenum numeric,info text) with(fillfactor=50);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "hot_test_pkey" for table "hot_test"
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "hot_test_username_key" for table "hot_test"
+CREATE TABLE
+digoal=# create index idx_hot_phonenum on hot_test(phonenum);
+CREATE INDEX
+digoal=# insert into hot_test select generate_series(1,100000),'digoal'||generate_series(1,100000),123456,'test';
+INSERT 0 100000
+
+
+表和索引大小
+
+digoal=# \dt+ hot_test 
+                     List of relations
+ Schema |   Name   | Type  |  Owner   | Size  | Description 
+--------+----------+-------+----------+-------+-------------
+ public | hot_test | table | postgres | 12 MB | 
+(1 row)
+
+digoal=# \di+ *hot*
+                                  List of relations
+ Schema |         Name          | Type  |  Owner   |  Table   |  Size   | Description 
+--------+-----------------------+-------+----------+----------+---------+-------------
+ public | hot_test_pkey         | index | postgres | hot_test | 2208 kB | 
+ public | hot_test_username_key | index | postgres | hot_test | 5360 kB | 
+ public | idx_hot_phonenum      | index | postgres | hot_test | 2752 kB | 
+(3 rows)
+
+
+更新任意有索引的任意一列的值, 达到non-HOT update的目的,
+
+digoal=# update hot_test set phonenum = 654321;
+UPDATE 100000
+digoal=# vacuum hot_test ;
+VACUUM
+digoal=# \dt+ hot_test 
+                     List of relations
+ Schema |   Name   | Type  |  Owner   | Size  | Description 
+--------+----------+-------+----------+-------+-------------
+ public | hot_test | table | postgres | 12 MB | 
+(1 row)
+
+digoal=# \di+ *hot*
+                                  List of relations
+ Schema |         Name          | Type  |  Owner   |  Table   |  Size   | Description 
+--------+-----------------------+-------+----------+----------+---------+-------------
+ public | hot_test_pkey         | index | postgres | hot_test | 6600 kB | 
+ public | hot_test_username_key | index | postgres | hot_test | 6400 kB | 
+ public | idx_hot_phonenum      | index | postgres | hot_test | 5552 kB | 
+(3 rows)
+
+
+non-HOT  update使得所有索引都膨胀了,
+
+再举一个HOT update的例子
+
+digoal=# truncate table hot_test ;
+TRUNCATE TABLE
+digoal=# insert into hot_test select generate_series(1,100000),'digoal'||generate_series(1,100000),123456,'test';
+INSERT 0 100000
+digoal=# \dt+ hot_test 
+                     List of relations
+ Schema |   Name   | Type  |  Owner   | Size  | Description 
+--------+----------+-------+----------+-------+-------------
+ public | hot_test | table | postgres | 12 MB | 
+(1 row)
+
+digoal=# \di+ *hot*
+                                  List of relations
+ Schema |         Name          | Type  |  Owner   |  Table   |  Size   | Description 
+--------+-----------------------+-------+----------+----------+---------+-------------
+ public | hot_test_pkey         | index | postgres | hot_test | 2208 kB | 
+ public | hot_test_username_key | index | postgres | hot_test | 5360 kB | 
+ public | idx_hot_phonenum      | index | postgres | hot_test | 2840 kB | 
+(3 rows)
+
+digoal=# update hot_test set info='test1';
+UPDATE 100000
+digoal=# vacuum hot_test ;
+VACUUM
+digoal=# \dt+ hot_test 
+                     List of relations
+ Schema |   Name   | Type  |  Owner   | Size  | Description 
+--------+----------+-------+----------+-------+-------------
+ public | hot_test | table | postgres | 12 MB | 
+(1 row)
+
+digoal=# \di+ *hot*
+                                  List of relations
+ Schema |         Name          | Type  |  Owner   |  Table   |  Size   | Description 
+--------+-----------------------+-------+----------+----------+---------+-------------
+ public | hot_test_pkey         | index | postgres | hot_test | 2208 kB | 
+ public | hot_test_username_key | index | postgres | hot_test | 5360 kB | 
+ public | idx_hot_phonenum      | index | postgres | hot_test | 2840 kB | 
+(3 rows)
+
+
+HOT update后, 索引没有任何膨胀.
+细心的朋友一定会看到我前面创建的hot_test 表用了fillfactor=50的参数, 这个会造成空间的浪费, 但是对于频繁进行HOT update的表, 可以有效的控制它的索引膨胀, 下面把fillfactor改成100试试, 你会发现HOT update不成功, 因为HOT update要求被更新的tuple插入与老的tuple相同的块里面, 而fillfactor=100使得本地块没有任何空间可以满足插入一条
+tuple. 所以HOT UPDATE成功, 索引照样膨胀.
+
+digoal=# alter table hot_test set (fillfactor=100);
+ALTER TABLE
+digoal=# truncate hot_test ;
+TRUNCATE TABLE
+digoal=# insert into hot_test select generate_series(1,100000),'digoal'||generate_series(1,100000),123456,'test';
+INSERT 0 100000
+digoal=# \dt+ hot_test 
+                      List of relations
+ Schema |   Name   | Type  |  Owner   |  Size   | Description 
+--------+----------+-------+----------+---------+-------------
+ public | hot_test | table | postgres | 5920 kB | 
+(1 row)
+
+digoal=# \di+ *hot*
+                                  List of relations
+ Schema |         Name          | Type  |  Owner   |  Table   |  Size   | Description 
+--------+-----------------------+-------+----------+----------+---------+-------------
+ public | hot_test_pkey         | index | postgres | hot_test | 2208 kB | 
+ public | hot_test_username_key | index | postgres | hot_test | 5360 kB | 
+ public | idx_hot_phonenum      | index | postgres | hot_test | 2728 kB | 
+(3 rows)
+
+digoal=# update hot_test set info='test1';
+UPDATE 100000
+digoal=# VACUUM hot_test ;
+VACUUM
+digoal=# \dt+ hot_test 
+                     List of relations
+ Schema |   Name   | Type  |  Owner   | Size  | Description 
+--------+----------+-------+----------+-------+-------------
+ public | hot_test | table | postgres | 12 MB | 
+(1 row)
+
+digoal=# \di+ *hot*
+                                  List of relations
+ Schema |         Name          | Type  |  Owner   |  Table   |  Size   | Description 
+--------+-----------------------+-------+----------+----------+---------+-------------
+ public | hot_test_pkey         | index | postgres | hot_test | 6600 kB | 
+ public | hot_test_username_key | index | postgres | hot_test | 6400 kB | 
+ public | idx_hot_phonenum      | index | postgres | hot_test | 5488 kB | 
+(3 rows)
+
+
+
+接下来是进入正题了, 既然知道索引会膨胀, 我们如何来给索引瘦身呢?
+1. 首先不能影响业务, 不加锁. 所以要用到concurrently.
+2. PostgreSQL允许我们在同一个表的同一个列上面建立多个索引. 
+利用以上两点可以达到给索引瘦身的目的.(其实还依赖于PostgreSQL支持把DDL放在事务中, 而Oracle是不支持DDL在事务中的)
+测试表
+
+digoal=# \d+ user_info
+                Table "public.user_info"
+  Column  |  Type   | Modifiers | Storage  | Description 
+----------+---------+-----------+----------+-------------
+ id       | integer | not null  | plain    | 
+ username | text    |           | extended | 
+ info     | text    |           | extended | 
+Indexes:
+    "user_info_pkey" PRIMARY KEY, btree (id)
+    "user_info_username_key" UNIQUE CONSTRAINT, btree (username)
+    "idx_user_info" btree (info)
+Has OIDs: no
+
+
+1. 给idx_user_info瘦身
+digoal=# create index concurrently idx_user_info_1 on user_info(info);
+CREATE INDEX
+digoal=# drop index idx_user_info;
+DROP INDEX
+
+2. 给user_info_username_key瘦身
+digoal=# create unique index concurrently user_info_username_key_1 on user_info(username);
+CREATE INDEX
+digoal=# begin;
+BEGIN
+digoal=# alter table user_info drop constraint user_info_username_key;
+ALTER TABLE
+digoal=# alter table user_info add constraint user_info_username_key unique using index user_info_username_key_1;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "user_info_username_key_1" to "user_info_username_key"
+ALTER TABLE
+digoal=# end;
+COMMIT
+
+3. 给user_info_pkey瘦身
+digoal=# create unique index concurrently user_info_pkey_1 on user_info(id);
+CREATE INDEX
+digoal=# begin;
+BEGIN
+digoal=# alter table user_info drop constraint user_info_pkey;
+ALTER TABLE
+digoal=# alter table user_info add constraint user_info_pkey primary key using index user_info_pkey_1;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "user_info_pkey_1" to "user_info_pkey"
+ALTER TABLE
+digoal=# end;
+COMMIT
+
+
+
+最后查看一下表的状态 : 
+
+digoal=# \d+ user_info
+                Table "public.user_info"
+  Column  |  Type   | Modifiers | Storage  | Description 
+----------+---------+-----------+----------+-------------
+ id       | integer | not null  | plain    | 
+ username | text    |           | extended | 
+ info     | text    |           | extended | 
+Indexes:
+    "user_info_pkey" PRIMARY KEY, btree (id)
+    "user_info_username_key" UNIQUE CONSTRAINT, btree (username)
+    "idx_user_info_1" btree (info)
+Has OIDs: no
+
+
+
+如果你的PostgreSQL版本不支持
+
+and table_constraint_using_index is:
+
+    [ CONSTRAINT constraint_name ]
+    { UNIQUE | PRIMARY KEY } USING INDEX index_name
+
+
+语法, 还有一种方法来给primar key瘦身, 那就是修改pg_class定义, 下面是pg 9 administration cookbook上的例子 : 
+但是用修改pg_class的方法需要确保新建的索引和老的索引在同一个表空间下.
+
+That seems pretty good, yet it doesn't work on primary keys. Why not? Because you can't add 
+a primary index to a table concurrently, in PostgreSQL 9.0 at least.
+So we have another trick, slightly more complex than the last. First, we create another index 
+with the same definition as the primary key as follows:
+  f CREATE UNIQUE INDEX new_pkey ON test (id);
+and check internal identifiers again as follows:
+SELECT oid, relname, relfilenode
+FROM pg_class
+WHERE oid in (SELECT indexrelid
+     FROM pg_index
+     WHERE indrelid = 'test'::regclass);
+  oid  |      relname      | relfilenode
+-------+-------------------+-------------
+ 16639 | test_pkey         |       16639
+ 16642 | test_category_idx |       16642
+ 16643 | new_pkey          |       16643
+(3 rows)
+Now we're going to swap the two indexes over, so that all the primary key constraints stay 
+active and so do all of the foreign keys that depend upon them. So, we need to swap the 
+relfilenode values as follws:
+BEGIN;
+LOCK TABLE test;
+UPDATE pg_class SET relfilenode = 16643 WHERE oid = 16639;
+UPDATE pg_class SET relfilenode = 16639 WHERE oid = 16643;
+DROP INDEX new_pkey;
+COMMIT;
+which we confirm has succeeded using the following:
+SELECT oid, relname, relfilenode
+FROM pg_class
+WHERE oid in (SELECT indexrelid
+     FROM pg_index
+     WHERE indrelid = 'test'::regclass);
+  oid  |      relname      | relfilenode
+-------+-------------------+-------------
+ 16639 | test_pkey         |       16643
+ 16642 | test_category_idx |       16642
+ 16643 | new_pkey          |       16639
+(3 rows)
+
+

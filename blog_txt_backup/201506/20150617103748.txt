@@ -1,0 +1,90 @@
+PostgreSQL research
+
+PostgreSQL auto cast int,int8,... to numeric when use overflow digital compare with it
+
+2015-06-17 10:37:48   查看原文>>
+
+群里一位兄弟提到的一个问题，当表存储的是INT，或者其他如INT8类型时，如果用户请求的值溢出了，会导致不走索引，或者即使走索引也很慢。
+例子：
+
+postgres=# create table t3(id int);
+CREATE TABLE
+postgres=# insert into t3 select generate_series(1,10000000);
+INSERT 0 10000000
+postgres=# create index idx_t3_id on t3(id);
+CREATE INDEX
+
+
+使用一个溢出的数字，范围扫描或者相等查询：
+
+postgres=# explain analyze select * from t3 where id>999999999999999999999999999999999;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using idx_t3_id on t3  (cost=0.43..238213.43 rows=3333333 width=4) (actual time=4052.914..4052.914 rows=0 loops=1)
+   Filter: ((id)::numeric > '999999999999999999999999999999999'::numeric)
+   Rows Removed by Filter: 10000000
+   Heap Fetches: 10000000
+ Planning time: 0.283 ms
+ Execution time: 4052.944 ms
+(6 rows)
+
+postgres=# explain analyze select * from t3 where id=999999999999999999999999999999999;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using idx_t3_id on t3  (cost=0.43..238213.43 rows=50000 width=4) (actual time=3907.391..3907.391 rows=0 loops=1)
+   Filter: ((id)::numeric = '999999999999999999999999999999999'::numeric)
+   Rows Removed by Filter: 10000000
+   Heap Fetches: 10000000
+ Planning time: 0.103 ms
+ Execution time: 3907.421 ms
+(6 rows)
+
+
+因为这里的操作符是numeric op numeric, 即id和条件都自动转换为numeric了，而索引是int的，所以即使走索引，也需要filter，类似lossy index。因此效率极差。
+那么怎么解决这个问题呢？
+1. 修改SQL，强制条件使用与列类型一致。
+
+postgres=# explain analyze select * from t3 where id=999999999999999999999999999999999::int;
+ERROR:  int out of range
+
+
+2. 创建一个partial index来解决这个问题，这个索引是空索引，因为不会有任何引用。
+范围使用溢出范围。(+-)2^31-1
+
+postgres=# create index idx_t3_id_2 on t3(id) where id::numeric<-2147483647 or id::numeric>2147483647;
+CREATE INDEX
+
+postgres=# \dt+
+                    List of relations
+ Schema | Name | Type  |  Owner   |  Size  | Description 
+--------+------+-------+----------+--------+-------------
+ public | t3   | table | postgres | 344 MB | 
+
+postgres=# \di+
+                            List of relations
+ Schema |    Name     | Type  |  Owner   | Table |  Size   | Description 
+--------+-------------+-------+----------+-------+---------+-------------
+ public | idx_t3_id   | index | postgres | t3    | 213 MB  | 
+ public | idx_t3_id_2 | index | postgres | t3    | 32 kB   | 
+
+
+postgres=# explain analyze select * from t3 where id=999999999999999999999999999999999;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using idx_t3_id_2 on t3  (cost=0.12..89453.47 rows=50000 width=4) (actual time=0.011..0.011 rows=0 loops=1)
+   Filter: ((id)::numeric = '999999999999999999999999999999999'::numeric)
+   Heap Fetches: 0
+ Planning time: 0.343 ms
+ Execution time: 0.038 ms
+(5 rows)
+
+
+OR
+
+postgres=# create index idx_t3_id_3 on t3(cast(id as numeric)) where id::numeric<-2147483647 or id::numeric>2147483647;
+CREATE INDEX
+
+
+
+3. 当然，你也可以在应用程序端控制，过滤overflow的值。
+Flag Counter

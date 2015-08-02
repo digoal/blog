@@ -1,0 +1,260 @@
+PostgreSQL research
+
+PostgreSQL V8.4 Warm-Standby design and implement
+
+2011-07-21 22:50:30   查看原文>>
+
+虽然现在PostgreSQL 9.0已经很成熟了，但是很多企业还是在用PostgreSQL 8.4的版本。
+那么8.4怎么设计和实施一个数据库standby以及备份策略呢，下面简单的拿一个案例来分享一下 : 
+PostgreSQL V8.4 Warm-Standby design and implement - 德哥@Digoal - The Heart,The World.
+ 
+以上分为三台主机，实际使用中，备份机和Standby库的主机可以是同一台机器。
+以下是配置部分 : 
+主节点 10.0.0.10
+远程NFS归档目录(postgres用户读写权限) /data/recoverydir/pg_arch
+本地归档目录(postgres用户读写权限) /data1/archivedir/pg_arch
+备份目录(postgres用户读写权限) /data1/pg_backup
+日志目录(postgres用户读写权限) /data1/pg_run_log ; ln -s /data1/pg_run_log /var/log/pg_run_log
+  df
+/dev/sdb1 670G 48G 589G 8% /data1
+10.0.0.20:/data1/archivedir 670G 66G 571G 11% /data/recoverydir
+  /etc/fstab
+10.0.0.20:/data1/archivedir /data/recoverydir nfs  rw,rsize=8192,wsize=8192,noatime       1 3
+  /etc/exports
+/data1/archivedir 10.0.0.20/32(rw,sync,wdelay,no_root_squash,anonuid=0,anongid=0)
+exportfs -av
+固定nfs监听端口,如修改 /etc/services
+# Local services
+mountd 845/tcp #rpc.mountd
+mountd 842/udp #rpc.mountd
+rquotad 790/tcp #rpc.rquotad
+rquotad 787/udp #rpc.rquotad
+
+
+备节点 10.0.0.20
+远程NFS归档目录(postgres用户读写权限) /data/recoverydir/pg_arch
+本地归档目录(postgres用户读写权限) /data1/archivedir/pg_arch
+备份目录(postgres用户读写权限) /data1/pg_backup
+日志目录(postgres用户读写权限) /data1/pg_run_log ; ln -s /data1/pg_run_log /var/log/pg_run_log
+  df
+/dev/sdb1 670G 48G 589G 8% /data1
+10.0.0.10:/data1/archivedir 670G 66G 571G 11% /data/recoverydir
+  /etc/fstab
+10.0.0.10:/data1/archivedir /data/recoverydir nfs  rw,rsize=8192,wsize=8192,noatime       1 3
+  /etc/exports
+/data1/archivedir 10.0.0.10/32(rw,sync,wdelay,no_root_squash,anonuid=0,anongid=0)
+固定nfs监听端口,如修改 /etc/services
+# Local services
+mountd 845/tcp #rpc.mountd
+mountd 842/udp #rpc.mountd
+rquotad 790/tcp #rpc.rquotad
+rquotad 787/udp #rpc.rquotad
+
+
+# On 备库节点,配置rsync
+# Rsyncd On Standby Database Server & Backup Server
+cat /etc/rsyncd.postgres.conf 
+# Rsyncd On Standby Database Server & Backup Server
+port = 873
+hosts deny = 0.0.0.0/0
+read only = false
+write only = false
+gid = 0
+uid = 0
+use chroot = no
+max connections = 10
+pid file = /var/run/rsync.pid
+lock file = /var/run/rsync.lock
+log file = /var/log/rsync.log
+
+[pgdata]
+path = /data1/pg_data
+comment = Building Database Dir.
+hosts allow = 10.0.0.20,10.0.0.10
+
+[pgbackup]
+path = /data1/pg_backup
+comment = Database Backup Dir.
+hosts allow = 10.0.0.20,10.0.0.10
+
+# On 备库节点,开启rsync后台进程,如果配置修改的话重新执行一遍以下程序,表示reload
+rsync -v --daemon --config=/etc/rsyncd.postgres.conf
+
+# On 主库节点,开启归档
+fsync = on
+full_page_writes = on
+archive_mode = on
+archive_command = 'cp -f %p /data1/archivedir/pg_arch/%f 2>>/var/log/pg_run_log/archive_cp_5432.log' 
+archive_timeout = 300
+
+# 如果原来archive_mode = off , 修改后需要重启数据库,否则只需要reload配置
+
+# On 备库节点,新建standby, 1.删除已经存在的数据文件目录,(用于重新建立)
+rm -rf /data1/pg_data
+# On 主库节点,同步数据文件到备库
+psql -h 127.0.0.1 postgres postgres -c "select pg_start_backup(now()::text);"
+rsync -acvz --exclude=pg_xlog /data1/pg_data/* 10.0.0.20::pgdata
+psql -h 127.0.0.1 postgres postgres -c "select pg_stop_backup();"
+
+# On 备库节点,新建standby, 2.配置standby
+# recovery.conf
+restore_command = 'pg_standby -d -s 2 -t /tmp/pgsql.trigger.5432 /data/recoverydir/pg_arch %f %p 2>>/var/log/pg_run_log/restore_standby_5432.log'
+recovery_target_timeline = 'latest'
+recovery_end_command = 'rm -f /tmp/pgsql.trigger.5432'
+# 新建目录
+mkdir /data1/pg_data/pg_xlog
+rm -f /data1/pg_data/recovery.done
+chown -R postgres:postgres /data1/pg_data
+chmod -R 700 /data1/pg_data
+# 启动standby库,进入recovery模式
+pg_ctl start -D /data1/pg_data
+
+# 至此,standby就建立好了.
+
+下面来谈谈怎么做备份 : 
+
+# On 主库节点,备份数据库,一周一次,crontab: 1 3 * * 2 /usr/local/postgres/backupsh/backup_database_5432.sh >>/var/log/pg_run_log/backup_database_5432.log 2>&1
+vi /usr/local/postgres/backupsh/backup_database_5432.sh
+chmod 500 /usr/local/postgres/backupsh/backup_database_5432.sh
+#!/bin/bash
+DATE=`date +%Y%m%d`
+TIME=`date +%F`
+echo -e "$TIME : select pg_start_backup();\n"
+psql -h 127.0.0.1 postgres postgres -c "select pg_start_backup(now()::text);"
+RESULT=$?
+echo -e "$TIME : select pg_start_backup(); result:$RESULT\n"
+if [ $RESULT -ne 0 ]; then
+exit $RESULT
+fi
+echo -e "$TIME : Backup Database use rsync.\n"
+rsync -acvz --exclude=pg_xlog /data1/pg_data/* 10.0.0.20::pgbackup/data_backup_$DATE
+RESULT=$?
+echo -e "$TIME : Backup Database use rsync. result:$RESULT\n"
+echo -e "$TIME : select pg_stop_backup();\n"
+psql -h 127.0.0.1 postgres postgres -c "select pg_stop_backup();"
+RESULT=$?
+echo -e "$TIME : select pg_stop_backup(); result:$RESULT\n"
+exit $RESULT
+
+# On 主库节点,备份归档日志,一天一次,crontab: 1 1 * * * /usr/local/postgres/backupsh/backup_archive_5432.sh >>/var/log/pg_run_log/backup_archive_5432.log 2>&1
+vi /usr/local/postgres/backupsh/backup_archive_5432.sh
+chmod 500 /usr/local/postgres/backupsh/backup_archive_5432.sh
+#!/bin/bash
+TIME=`date +%F`
+echo -e "$TIME : Backup archivelog use rsync.\n"
+rsync -acvz /data1/archivedir/pg_arch/* 10.0.0.20::pgbackup/arch_backup
+RESULT=$?
+echo -e "$TIME : Backup archivelog use rsync. result:$RESULT\n"
+exit $RESULT
+
+# 至此,备份就做好了
+下面来谈谈怎么做一个策略,定期清理历史备份.假设清理15天前的备份.
+
+# On 备库节点,清理超过保留时间窗口的数据,一天一次,crontab: 1 6 * * * /usr/local/postgres/backupsh/purge_backup.sh >>/var/log/pg_run_log/purge_backup_5432.log 2>&1
+vi /usr/local/postgres/backupsh/purge_backup_5432.sh
+chmod 500 /usr/local/postgres/backupsh/purge_backup_5432.sh
+#!/bin/bash
+TIME=`date +%F`
+echo -e "$TIME : Delete Archivelog From Primary Host Dir.\n"
+find /data/recoverydir/pg_arch/* -mtime +15 -exec rm -rf {} \;
+echo -e "$TIME : Delete Archivelog From Backup Host Dir.\n"
+find /data1/pg_backup/arch_backup/* -mtime +15 -exec rm -rf {} \;
+echo -e "$TIME : Delete Datafile From Backup Host Dir.\n"
+for i in `ls -1rt /data1/pg_backup/|grep data_backup_|head --lines=-1`
+do
+rm -rf /data1/pg_backup/$i
+done
+
+# 至此,清楚历史备份也部署好了.
+下面来谈谈PITR,基于时间点的恢复测试.
+
+# On 备库节点,数据恢复测试,数据恢复
+mkdir /data1/pg_backup/data_backup_$DATE/pg_xlog
+chown -R postgres:postgres /data1/pg_backup
+chmod 700 /data1/pg_backup/data_backup_$DATE
+rm -f /data1/pg_backup/data_backup_$DATE/recovery.done
+# 编辑配置文件postgresql.conf,修改监听端口与本地已经存在的端口分开.
+port = 5433
+archive_command = 'cp -f %p /data1/archivedir/pg_arch/%f 2>>/var/log/pg_run_log/archive_cp_5433.log'
+# 编辑配置文件,recovery.conf
+restore_command = 'pg_standby -d -s 2 -t /tmp/pgsql.trigger.5433 /data/recoverydir/pg_arch %f %p 2>>/var/log/pg_run_log/restore_standby_5433.log'
+# recovery_target_timeline = 'latest'
+# 以下时间来自数据库select now()这种的输出,然后推算;
+recovery_target_time = '2011-07-20 11:13:15.64642+02'
+recovery_target_inclusive = 'true'
+recovery_end_command = 'rm -f /tmp/pgsql.trigger.5433'
+
+# 启动备库开始恢复
+pg_ctl start -D /data1/pg_backup/data_backup_$DATE
+# 触发激活(三选一,空文件默认smart,fast表示立刻激活,不找下一个WAL文件.smart表示自动找下一个wal文件,找到就APPLY,直到没有下一个WAL了就激活)
+touch /tmp/pgsql.trigger.5433
+echo "fast" > /tmp/pgsql.trigger.5433
+echo "smart" > /tmp/pgsql.trigger.5433
+# On 备库节点,数据恢复测试,reindex HASH索引
+
+# 至此,PITR的测试结束,
+下面谈谈应该监控哪些日志.
+
+# 监控日志文件
+# 主库节点
+/var/log/pg_run_log/archive_cp_5432.log
+/var/log/pg_run_log/backup_database_5432.log
+/var/log/pg_run_log/backup_archive_5432.log
+# 备节点
+/var/log/pg_run_log/restore_standby_5432.log
+/var/log/rsync.log
+/var/log/pg_run_log/purge_backup_5432.log
+
+【note】
+由于备份对系统的IO有一定影响，建议在执行备份脚本的时候或者脚本里面的rsync前面加上nice -n 19。这样对系统影响最小.
+Nicenesses range from -20 (most favorable scheduling) to 19 (least favorable).
+
+【补充】
+其他测试点:
+数据文件备份crontab脚本测试
+归档文件备份crontab脚本测试
+清理超过保留时间窗口的数据crontab脚本测试
+时间点恢复测试,激活时smart和fast对比,是否达到一致效果
+standby激活测试
+存储空间测算
+监控日志文件
+时间线文件删掉之后是否可以做恢复,是否可以做standby等
+
+【参考】
+http://www.postgresql.org/docs/8.4/static/pgstandby.html
+pg_standby的激活模式 : 
+Smart Failover
+In smart failover, the server is brought up after applying all WAL files available in the archive. This results in zero data loss, even if the standby server has fallen behind, but if there is a lot of unapplied WAL it can be a long time before the standby server becomes ready. To trigger a smart failover, create a
+trigger file containing the word smart, or just create it and leave it empty.
+
+Fast Failover
+In fast failover, the server is brought up immediately. Any WAL files in the archive that have not yet been applied will be ignored, and all transactions in those files are lost. To trigger a fast failover, create a trigger file and write the word fast into it. pg_standby can also be configured to execute a fast
+failover automatically if no new WAL file appears within a defined interval.
+
+#恢复文件格式 ,recovery.conf example
+#recovery_target_timeline = '33'  # number or 'latest'
+#recovery_target_inclusive = 'true'             # 'true' or 'false'
+#recovery_target_xid = '1100842'
+#recovery_target_time = '2004-07-14 22:39:00 EST' # 可用select now();输出格式
+#recovery_end_command = ''
+#restore_command = 'cp /mnt/server/archivedir/%f %p'
+
+【注意】
+http://www.postgresql.org/docs/8.4/static/continuous-archiving.html
+
+24.3.6. Caveats
+
+At this writing, there are several limitations of the continuous archiving technique. These will probably be fixed in future releases:
+
+  • Operations on hash indexes are not presently WAL-logged, so replay will not update these indexes. The recommended workaround is to manually REINDEX each such index after completing a recovery operation.
+
+  • If a CREATE DATABASE command is executed while a base backup is being taken, and then the template database that the CREATE DATABASE copied is modified while the base backup is still in progress, it is possible that recovery will cause those modifications to be propagated into the created database as well. This is
+    of course undesirable. To avoid this risk, it is best not to modify any template databases while taking a base backup.
+
+  • CREATE TABLESPACE commands are WAL-logged with the literal absolute path, and will therefore be replayed as tablespace creations with the same absolute path. This might be undesirable if the log is being replayed on a different machine. It can be dangerous even if the log is being replayed on the same machine, but
+    into a new data directory: the replay will still overwrite the contents of the original tablespace. To avoid potential gotchas of this sort, the best practice is to take a new base backup after creating or dropping tablespaces.
+
+It should also be noted that the default WAL format is fairly bulky since it includes many disk page snapshots. These page snapshots are designed to support crash recovery, since we might need to fix partially-written disk pages. Depending on your system hardware and software, the risk of partial writes might be small
+enough to ignore, in which case you can significantly reduce the total volume of archived logs by turning off page snapshots using the full_page_writes parameter. (Read the notes and warnings inChapter 28 before you do so.) Turning off page snapshots does not prevent use of the logs for PITR operations. An area for
+future development is to compress archived WAL data by removing unnecessary page copies even when full_page_writes is on. In the meantime, administrators might wish to reduce the number of page snapshots included in WAL by increasing the checkpoint interval parameters as much as feasible.
+

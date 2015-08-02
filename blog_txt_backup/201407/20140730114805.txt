@@ -1,0 +1,174 @@
+PostgreSQL research
+
+GlusterFS on ZFS on CentOS 6.x x64
+
+2014-07-30 11:48:05   查看原文>>
+
+原文如下, 但是这里有几点不推荐按照原文来做.
+1. zfs set sync=disabled sp1  (不推荐)
+如果没有UPS的话, 不推荐关闭sync, 因为任何异常都可能会导致数据丢失. 
+            sync=standard | always | disabled
+           Controls  the  behavior  of  synchronous  requests  (e.g. fsync, O_DSYNC).  
+           1. standard is the POSIX specified behavior of ensuring all synchronous requests are written to stable storage and all devices are flushed  to ensure  data  is  not  cached  by device controllers (this is the default). 
+           2. always causes every file system transaction to be written and flushed before its system call returns. This has a large performance penalty.
+           3. disabled disables synchronous requests. File system transactions are only committed to stable storage periodically. This option will give the highest performance.  However, it is very dangerous  as  ZFS  would  be ignoring  the  synchronous  transaction  demands  of applications such as databases or NFS.
+ Administrators should only use this option when the risks are understood.
+
+2. Disable read prefetch because it is almost completely useless and does nothing in our environment but work the drives unnecessarily. I see <10% prefetch cache hits, so it's really not required and actually hurts performance. (需要斟酌)
+    和应用程序有关, 如果是流媒体服务或者需要读取大文件的服务(例如OLAP). 建议打开, 如果是小的离散IO读, 则建议关闭(例如数据库的OLTP) , 如果是GlusterFS for 虚拟化应用, 跑的是虚拟机镜像, 建议打开prefetch. 最终还是看具体应用.
+
+GlusterOnZFS
+
+This is a step-by-step set of instructions to install Gluster on top of ZFS as the backing file store. There are some commands which were specific to my installation, specifically, the ZFS tuning section. Moniti estis.
+
+Preparation
+
+  • Install CentOS 6.3
+  • Assumption is that your hostname is gfs01
+  • Run all commands as the root user
+  • yum update
+  • Disable IP Tables
+
+chkconfig iptables off
+service iptables stop
+
+  • Disable SELinux
+      □ edit /etc/selinux/config
+      □ set SELINUX=disabled
+      □ reboot
+
+Install ZFS on Linux
+
+yum groupinstall "Development Tools"
+
+  • Download & unpack latest SPL and ZFS tarballs from zfsonlinux.org
+
+Install DKMS
+
+We want automatically rebuild the kernel modules when we upgrade the kernel, so you definitely want DKMS with ZFS on Linux.
+
+  • Download latest RPM from http://linux.dell.com/dkms
+  • Install DKMS
+
+    rpm -Uvh dkms*.rpm
+
+Build & Install SPL
+
+  • Enter SPL source directory
+  • The following commands create two source & three binary RPMs. Remove the static module RPM (we are using DKMS) and install the rest:
+
+./configure
+make rpm
+rm spl-modules-0.6.0*.x86_64.rpm
+rpm -Uvh spl*.x86_64.rpm spl*.noarch.rpm
+
+Build & Install ZFS
+
+  • If you plan to use the 'xattr=sa' filesystem option, make sure you have the ZFS fix forhttps://github.com/zfsonlinux/zfs/issues/1648 so your symlinks don't get corrupted.
+  • Enter ZFS source directory
+  • The following commands create two source & five binary RPMs. Remove the static module RPM and install the rest. Note we have a few preliminary packages to install before we can compile.
+
+yum install zlib-devel libuuid-devel libblkid-devel libselinux-devel parted lsscsi
+./configure
+make rpm
+rm zfs-modules-0.6.0*.x86_64.rpm
+rpm -Uvh zfs*.x86_64.rpm zfs*.noarch.rpm
+
+Finish ZFS Configuration
+
+  • Reboot to allow all changes to take effect, if desired
+  • Create ZFS storage pool. This is a simple example of 4 HDDs in RAID10. NOTE: Check the latest ZFS on Linux FAQ about configuring the /etc/zfs/zdev.conf file. You want to create mirrored devices across controllers to maximize performance. Make sure to run udevadm trigger after creating zdev.conf.
+
+zpool create -f sp1 mirror A0 B0 mirror A1 B1
+zpool status sp1
+df -h
+
+  • You should see the /sp1 mount point
+  • Enable ZFS compression to save disk space:
+
+zfs set compression=on sp1
+
+  • Completely disable the ZIL. NOTE: Requires the storage server to have a UPS backup unless you like losing the last 5 seconds or so of data.
+
+zfs set sync=disabled sp1
+
+  • Set ZFS tunables. This is specific to my environment.
+      □ Set ARC cache min to 33% and max to 75% of installed RAM. Since this is a dedicated storage node, I can get away with this. In my case my servers have 24G of RAM. More RAM is better with ZFS.
+      □ We use SATA drives which do not accept command tagged queuing, therefore set the min and max pending requests to 1
+      □ Disable read prefetch because it is almost completely useless and does nothing in our environment but work the drives unnecessarily. I see <10% prefetch cache hits, so it's really not required and actually hurts performance.
+      □ Set transaction group timeout to 5 seconds instead of the default of 30 to prevent the volume from appearing to freeze due to a large batch of writes
+      □ Ignore client flush/sync commands; let ZFS handle this with the transaction group timeout flush. NOTE: Requires a UPS backup solution unless you don't mind losing that 5 seconds worth of data.
+
+echo "options zfs zfs_arc_min=8G zfs_arc_max=18G zfs_vdev_min_pending=1 zfs_vdev_max_pending=1 zfs_prefetch_disable=1 zfs_txg_timeout=5 zfs_nocacheflush=1" > /etc/modprobe.d/zfs.conf
+reboot
+
+Install GlusterFS
+
+wget -P /etc/yum.repos.d http://download.gluster.org/pub/gluster/glusterfs/LATEST/EPEL.repo/glusterfs-epel.repo
+yum install glusterfs{-fuse,-server}
+service glusterd start
+service glusterd status
+chkconfig glusterd on
+
+  • Continue with your GFS peer probe, volume creation, &c.
+  • To mount GFS volumes automatically after reboot, add these lines to /etc/rc.local (assuming your gluster volume is called "export" and your desired mount point is /export:
+
+# Mount GFS Volumes
+mount -t glusterfs gfs01:/export /export
+
+Miscellaneous Notes & TODO
+
+Daily e-mail status reports
+
+Python script source; put your desired e-mail address in the 'toAddr' variable. Add a crontab entry to run this daily.
+
+#!/usr/bin/python
+import datetime,socket,smtplib,subprocess
+
+def doShellCmd(cmd):
+  subproc=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,)
+  cmdOutput=subproc.communicate()[0]
+  return cmdOutput
+
+hostname=socket.gethostname()
+statusLine="Status of " + hostname + " at " + str(datetime.datetime.now())
+zpoolList=doShellCmd('zpool list')
+zpoolStatus=doShellCmd('zpool status')
+zfsList=doShellCmd('zfs list')
+
+report=(statusLine + "\n" +
+        "-----------------------------------------------------------\n" +
+        zfsList +
+        "-----------------------------------------------------------\n" +
+        zpoolList +
+        "-----------------------------------------------------------\n" +
+        zpoolStatus)
+
+fromAddr="From: root@" + hostname + "\r\n"
+toAddr="To: user@your.com\r\n"
+subject="Subject: ZFS Status from " + hostname + "\r\n"
+msg = (subject + report)
+
+server = smtplib.SMTP('localhost')
+server.set_debuglevel(1)
+server.sendmail(fromAddr, toAddr, msg)
+server.quit()
+
+Restoring files from ZFS Snapshots
+
+Show which node a file is on (for restoring files from ZFS snapshots):
+
+getfattr -n trusted.glusterfs.pathinfo <file>
+
+Recurring ZFS Snapshots
+
+Since the community site will not let me actually post the script due to some random bug with Akismet spam blocking, I'll just post links instead.
+
+  • Recurring ZFS Snapshots
+  • Or use https://github.com/zfsonlinux/zfs-auto-snapshot
+
+
+[参考]
+1. http://www.gluster.org/community/documentation/index.php/GlusterOnZFS
+
+Flag Counter

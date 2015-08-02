@@ -1,0 +1,365 @@
+PostgreSQL research
+
+PostgreSQL 9.2 reduce need to rewrite tables and indexes for various alter table operations
+
+2012-05-24 9:29:25   查看原文>>
+
+PostgreSQL 9.2 beta1 release notes 里面提到如下
+Reduce need to rebuild tables and indexes for various ALTER TABLE operations (Noah Misch) DUPLICATE?
+在以前的版本中ALTER TABLE的操作大部分需要rewrite table. 具体测试可用参考如下BLOG : 
+Which ALTER TABLE Operation will rewrite the whole tables
+http://blog.163.com/digoal@126/blog/static/163877040201111644133716/
+9.2 beta1做了哪些修改呢?
+创建测试表, 插入测试数据. 通过查看pg_class的relfilenode分辨是否有rewrite操作, 并能清晰的看到rewrite全表还是toast表还是index.还是heap表.
+测试过程中注意relfilenode的变化.
+
+test=> create table rewrite_test(id int primary key,info text unique,c1 numeric(10));
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "rewrite_test_pkey" for table "rewrite_test"
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "rewrite_test_info_key" for table "rewrite_test"
+CREATE TABLE
+test=> insert into rewrite_test select generate_series(1,100000),repeat('digoal',200)||generate_series(1,100000),generate_series(1,100000);
+INSERT 0 100000
+
+
+
+一、9.1 的测试结果 : 
+
+test=> select relname from pg_class where oid=(select reltoastrelid from pg_class where relname='rewrite_test');
+    relname     
+----------------
+ pg_toast_24672
+(1 row)
+
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24682
+ pg_toast_24672        |       24683
+ rewrite_test_pkey     |       24684
+ rewrite_test_info_key |       24685
+(4 rows)
+
+
+-- 从int4到int8(注意这不是扩字段长度, 而是变更字段类型.) 需要rewrite heap,toast,index.
+
+test=> alter table rewrite_test alter column id type int8;
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24689
+ rewrite_test_info_key |       24695
+ rewrite_test_pkey     |       24696
+ pg_toast_24672        |       24692
+(4 rows)
+
+
+-- 从text到varchar(4096)  需要rewrite heap,toast,index.
+
+test=> alter table rewrite_test alter column info type varchar(4096);
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24707
+ rewrite_test_pkey     |       24713
+ rewrite_test_info_key |       24714
+ pg_toast_24672        |       24710
+(4 rows)
+
+
+-- 从varchar(4096)到varchar(8192)  需要rewrite heap,toast,index.
+
+test=> alter table rewrite_test alter column info type varchar(8192);
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24717
+ rewrite_test_pkey     |       24723
+ rewrite_test_info_key |       24724
+ pg_toast_24672        |       24720
+(4 rows)
+
+
+-- 从varchar(8192)到text(注意这不是扩字段长度, 而是变更字段类型.但是显然PG里面varchar和text底层存储结构是一样的, 所以没有rewrite heap和toast)  需要rewrite 扩充长度的字段上的index.
+
+test=> alter table rewrite_test alter column info type text;
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24717
+ rewrite_test_pkey     |       24723
+ pg_toast_24672        |       24720
+ rewrite_test_info_key |       24725
+(4 rows)
+
+
+-- 从text到text  需要rewrite alter column的字段上的index.
+
+test=> alter table rewrite_test alter column info type text;
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24717
+ rewrite_test_pkey     |       24723
+ pg_toast_24672        |       24720
+ rewrite_test_info_key |       24727
+(4 rows)
+
+
+-- 从numeric(10)到numeric(11)   需要rewrite heap,toast,index.
+
+test=> alter table rewrite_test alter column c1 type numeric(11);
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24729
+ rewrite_test_pkey     |       24735
+ rewrite_test_info_key |       24736
+ pg_toast_24672        |       24732
+(4 rows)
+
+
+-- 从numeric(11)到numeric(11)   不需要rewrite.
+
+test=> alter table rewrite_test alter column c1 type numeric(11);
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       24729
+ rewrite_test_pkey     |       24735
+ rewrite_test_info_key |       24736
+ pg_toast_24672        |       24732
+(4 rows)
+
+
+-- 删除text字段上的索引后, 从text到text   不需要rewrite.
+
+test=> alter table rewrite_test drop constraint rewrite_test_info_key;
+ALTER TABLE
+test=> alter table rewrite_test alter column info type text;
+ALTER TABLE
+test=> select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_24672');
+      relname      | relfilenode 
+-------------------+-------------
+ rewrite_test      |       24729
+ rewrite_test_pkey |       24735
+ pg_toast_24672    |       24732
+(3 rows)
+
+
+
+二、PostgreSQL 9.2 beta1 测试结果 : 
+
+digoal=# select relname from pg_class where oid=(select reltoastrelid from pg_class where relname='rewrite_test');
+    relname     
+----------------
+ pg_toast_17142
+(1 row)
+
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       17142
+ pg_toast_17142        |       17145
+ rewrite_test_pkey     |       17148
+ rewrite_test_info_key |       17150
+(4 rows)
+
+
+-- 从int4到int8(注意这不是扩字段长度, 而是变更字段类型.) 需要rewrite heap,toast,index.
+
+digoal=# alter table rewrite_test alter column id type int8;
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ pg_toast_17142        |       17157
+ rewrite_test          |       17154
+ rewrite_test_info_key |       17160
+ rewrite_test_pkey     |       17161
+(4 rows)
+
+
+-- 从text到varchar(4096) 需要rewrite heap,toast,index.
+
+digoal=# alter table rewrite_test alter column info type varchar(4096);
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       17164
+ rewrite_test_info_key |       17171
+ rewrite_test_pkey     |       17170
+ pg_toast_17142        |       17167
+(4 rows)
+
+
+-- 从varchar(4096)到varchar(8192) 不需要rewrite.
+
+digoal=# alter table rewrite_test alter column info type varchar(8192);
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test_info_key |       17171
+ rewrite_test          |       17164
+ rewrite_test_pkey     |       17170
+ pg_toast_17142        |       17167
+(4 rows)
+
+
+-- 从varchar(8192)到text(注意这不是扩字段长度, 而是变更字段类型.但是显然PG里面varchar和text底层存储结构是一样的, 所以没有rewrite heap和toast) 不需要rewrite.
+
+digoal=# alter table rewrite_test alter column info type text;
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       17164
+ rewrite_test_pkey     |       17170
+ pg_toast_17142        |       17167
+ rewrite_test_info_key |       17171
+(4 rows)
+
+
+-- 从text到text 不需要rewrite.
+
+digoal=# alter table rewrite_test alter column info type text;
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       17164
+ rewrite_test_pkey     |       17170
+ pg_toast_17142        |       17167
+ rewrite_test_info_key |       17171
+(4 rows)
+
+
+-- 从numeric(10)到numeric(11) 不需要rewrite.
+
+digoal=# alter table rewrite_test alter column c1 type numeric(11);
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       17164
+ rewrite_test_pkey     |       17170
+ pg_toast_17142        |       17167
+ rewrite_test_info_key |       17171
+(4 rows)
+
+
+-- 从numeric(11)到numeric(11) 不需要rewrite.
+
+digoal=# alter table rewrite_test alter column c1 type numeric(11);
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+        relname        | relfilenode 
+-----------------------+-------------
+ rewrite_test          |       17164
+ rewrite_test_pkey     |       17170
+ pg_toast_17142        |       17167
+ rewrite_test_info_key |       17171
+(4 rows)
+
+
+-- 删除text字段上的索引后, 从text到text   不需要rewrite.
+
+digoal=# alter table rewrite_test drop constraint rewrite_test_info_key;
+ALTER TABLE
+digoal=# alter table rewrite_test alter column info type text;
+ALTER TABLE
+digoal=# select relname,relfilenode from pg_class where relname in ('rewrite_test','rewrite_test_pkey','rewrite_test_info_key','pg_toast_17142');
+      relname      | relfilenode 
+-------------------+-------------
+ rewrite_test      |       17164
+ rewrite_test_pkey |       17170
+ pg_toast_17142    |       17167
+(3 rows)
+
+
+
+【小结】
+1. PostgreSQL 9.1 并不是每次alter table .. alter column type都会rewrite所有的对象(heap,index,toast). 某些操作只会rewrite 相应对象, 如索引.
+2. PostgreSQL 9.2 扩字段长度 ( varchar->text, numeric(小)->numeric(大) ) 不需要rewrite heap,toast,index.
+3. PostgreSQL 9.2 alter column type 不改变字段类型及长度的情况下不需要rewrite heap,toast,index. PostgreSQL 9.1则可能需要reindex 对应的索引.
+4. 变更字段类型会不会重写表, 和底层的存储结构由关系, 如int4和int8底层存储结构不一致(分别占用4字节和8字节). 因此需要rewrite.
+而varchar和text底层存储结构应该是一致的, 所以扩字段长度不需要rewrite heap和toast.
+
+【参考】
+src/backend/commands/tablecmds.c
+9.2 很多注释并没有修改掉, 保留和和以前版本一样的注释, 不完全可信.
+
+                        case AT_AddColumn:      /* may rewrite heap, in some cases and visible
+                                                                 * to SELECT */
+                        case AT_DropColumn:     /* change visible to SELECT */
+                        case AT_AddColumnToView:        /* CREATE VIEW */
+                        case AT_AlterColumnType:        /* must rewrite heap */
+                        case AT_DropConstraint:         /* as DROP INDEX */
+                        case AT_AddOids:        /* must rewrite heap */
+                        case AT_DropOids:       /* calls AT_DropColumn */
+                        case AT_EnableAlwaysRule:       /* may change SELECT rules */
+                        case AT_EnableReplicaRule:      /* may change SELECT rules */
+                        case AT_EnableRule:     /* may change SELECT rules */
+                        case AT_DisableRule:            /* may change SELECT rules */
+                        case AT_ChangeOwner:            /* change visible to SELECT */
+                        case AT_SetTableSpace:          /* must rewrite heap */
+                        case AT_DropNotNull:            /* may change some SQL plans */
+
+
+ALTER TABLE 分三个阶段, rewrite表在第三个阶段完成 : 
+
+/*
+ * AlterTable
+ *              Execute ALTER TABLE, which can be a list of subcommands
+ *
+ * ALTER TABLE is performed in three phases:
+ *              1. Examine subcommands and perform pre-transformation checking.
+ *              2. Update system catalogs.
+ *              3. Scan table(s) to check new constraints, and optionally recopy
+ *                 the data into new table(s).
+ * Phase 3 is not performed unless one or more of the subcommands requires
+ * it.  The intention of this design is to allow multiple independent
+ * updates of the table schema to be performed with only one pass over the
+ * data.
+ *
+ * ATPrepCmd performs phase 1.  A "work queue" entry is created for
+ * each table to be affected (there may be multiple affected tables if the
+ * commands traverse a table inheritance hierarchy).  Also we do preliminary
+ * validation of the subcommands, including parse transformation of those
+ * expressions that need to be evaluated with respect to the old table
+ * schema.
+ *
+ * ATRewriteCatalogs performs phase 2 for each affected table.  (Note that
+ * phases 2 and 3 normally do no explicit recursion, since phase 1 already
+ * did it --- although some subcommands have to recurse in phase 2 instead.)
+ * Certain subcommands need to be performed before others to avoid
+ * unnecessary conflicts; for example, DROP COLUMN should come before
+ * ADD COLUMN.  Therefore phase 1 divides the subcommands into multiple
+ * lists, one for each logical "pass" of phase 2.
+ *
+ * ATRewriteTables performs phase 3 for those tables that need it.
+ *
+ * Thanks to the magic of MVCC, an error anywhere along the way rolls back
+ * the whole operation; we don't have to do anything special to clean up.
+ *
+ * The caller must lock the relation, with an appropriate lock level 
+ * for the subcommands requested. Any subcommand that needs to rewrite
+ * tuples in the table forces the whole command to be executed with
+ * AccessExclusiveLock (actually, that is currently required always, but
+ * we hope to relax it at some point).  We pass the lock level down
+ * so that we can apply it recursively to inherited tables. Note that the
+ * lock level we want as we recurse might well be higher than required for
+ * that specific subcommand. So we pass down the overall lock requirement,
+ * rather than reassess it at lower levels.
+ */
+
+
+ATRewriteTables和ATRewriteTable这两个函数在9.1.3和9.2 beta1中完全一致.

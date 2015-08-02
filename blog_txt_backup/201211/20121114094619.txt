@@ -1,0 +1,805 @@
+PostgreSQL research
+
+PostgreSQL row lock and htup.t_infomask thinking
+
+2012-11-14 9:46:19   查看原文>>
+
+群里聊到的关于PostgreSQL范围锁的话题. 大概是这样的 : 
+
+BEGIN;
+update t set c1=? where c2>? ;
+
+
+在COMMIT或者ROLLBACK之前, 这种SQL可能会锁上很多行?
+1. 在这种情况下会不会升级成表锁?
+2. 如果要锁的行数非常多会不会造成内存资源的开销非常大?
+3. 如果这条SQL要更新100000行, 那么是不是需要100000个锁对象? 
+首先, 锁的管理非常复杂, 三言两语也讲不清楚,  这里只涉及非常小的一部分（Regular Lock(a/k/a heavyweight locks)）, 未涉及到spin lock和lwlock. 所以需要深入研究的朋友情参考本文末尾的参考部分.
+至于前面提到的两个问题, 
+1. 在这种情况下会不会升级成表锁?  这个肯定是不会的. 
+2. 如果要锁的行数非常多会不会造成内存资源的开销非常大?  
+
+A LOCK object exists for each lockable object that currently has locks held or requested on it.  
+A PROCLOCK struct exists for each backend that is holding or requesting lock(s) on each LOCK object.
+
+
+从这句话来看,  锁对象越多必然会增加内存的开销, 但是事实上并不是这样的, 因为lock hash table的size是有限的(等于max_locks_per_transaction * (max_connections + max_prepared_transactions)). 后面会讲到, 真是柳暗花明又一村的感觉. (第三个问题也在后面会有解释. 在lock hash table中理论上不会有100000个锁对象存在(见
+heap_lock_tuple).)
+但是有必要把大量的tuple lock自动升级成table lock锁吗? 我认为没必要, 这种场景应该人为来控制, 而不是让数据库来自动升锁级别, 包括Oracle也不会这么干. 但是MySQL锁的处理就比较差了, 可参看这里的测试: http://blog.163.com/digoal@126/blog/static/163877040201042683410679/
+LOCK对象的数据结构如下 : 
+
+typedef struct LOCK
+{
+        /* hash key */
+        LOCKTAG         tag;                    /* unique identifier of lockable object */
+
+        /* data */
+        LOCKMASK        grantMask;              /* bitmask for lock types already granted */
+        LOCKMASK        waitMask;               /* bitmask for lock types awaited */
+        SHM_QUEUE       procLocks;              /* list of PROCLOCK objects assoc. with lock */
+        PROC_QUEUE      waitProcs;              /* list of PGPROC objects waiting on lock */
+        int                     requested[MAX_LOCKMODES];               /* counts of requested locks */
+        int                     nRequested;             /* total of requested[] array */
+        int                     granted[MAX_LOCKMODES]; /* counts of granted locks */
+        int                     nGranted;               /* total of granted[] array */
+} LOCK;
+
+
+从tag也就是LOCKTAG的数据结构能够看出tuple也在类型之中, 这也印证了PostgreSQL的锁粒度确实是到达了行级别的.
+
+typedef struct LOCKTAG
+{
+        uint32          locktag_field1; /* a 32-bit ID field */
+        uint32          locktag_field2; /* a 32-bit ID field */
+        uint32          locktag_field3; /* a 32-bit ID field */
+        uint16          locktag_field4; /* a 16-bit ID field */
+        uint8           locktag_type;   /* see enum LockTagType */
+        uint8           locktag_lockmethodid;   /* lockmethod indicator */
+} LOCKTAG;
+
+
+枚举LockTagType定义如下 : 
+
+/*
+ * LOCKTAG is the key information needed to look up a LOCK item in the
+ * lock hashtable.      A LOCKTAG value uniquely identifies a lockable object.
+ *
+ * The LockTagType enum defines the different kinds of objects we can lock.
+ * We can handle up to 256 different LockTagTypes.
+ */
+typedef enum LockTagType
+{
+        LOCKTAG_RELATION,                       /* whole relation */
+        /* ID info for a relation is DB OID + REL OID; DB OID = 0 if shared */
+        LOCKTAG_RELATION_EXTEND,        /* the right to extend a relation */
+        /* same ID info as RELATION */
+        LOCKTAG_PAGE,                           /* one page of a relation */
+        /* ID info for a page is RELATION info + BlockNumber */
+        LOCKTAG_TUPLE,                          /* one physical tuple */
+        /* ID info for a tuple is PAGE info + OffsetNumber */
+        LOCKTAG_TRANSACTION,            /* transaction (for waiting for xact done) */
+        /* ID info for a transaction is its TransactionId */
+        LOCKTAG_VIRTUALTRANSACTION, /* virtual transaction (ditto) */
+        /* ID info for a virtual transaction is its VirtualTransactionId */
+        LOCKTAG_OBJECT,                         /* non-relation database object */
+        /* ID info for an object is DB OID + CLASS OID + OBJECT OID + SUBID */
+
+        /*
+         * Note: object ID has same representation as in pg_depend and
+         * pg_description, but notice that we are constraining SUBID to 16 bits.
+         * Also, we use DB OID = 0 for shared objects such as tablespaces.
+         */
+        LOCKTAG_USERLOCK,                       /* reserved for old contrib/userlock code */
+        LOCKTAG_ADVISORY                        /* advisory user locks */
+} LockTagType;
+
+
+以下这个macro则是用来设置tuple锁对象的值的.
+
+#define SET_LOCKTAG_TUPLE(locktag,dboid,reloid,blocknum,offnum) \
+        ((locktag).locktag_field1 = (dboid), \
+         (locktag).locktag_field2 = (reloid), \
+         (locktag).locktag_field3 = (blocknum), \
+         (locktag).locktag_field4 = (offnum), \
+         (locktag).locktag_type = LOCKTAG_TUPLE, \
+         (locktag).locktag_lockmethodid = DEFAULT_LOCKMETHOD)
+
+
+LOCK的锁信息存储在共享内存中的hash表中, 键值为LOCKTAG 进行检索.
+为了减少冲突, hash表做了分区处理 : 
+
+* The shared-memory hash tables for LOCKs and PROCLOCKs are organized so that different partitions use different hash chains, 
+and thus there is no conflict in working with objects in different partitions.  
+This is supported directly by dynahash.c's "partitioned table" mechanism for the LOCK table: 
+we need only ensure that the partition number is taken from the low-order bits of the dynahash hash value for the LOCKTAG.
+To make it work for PROCLOCKs, we have to ensure that a PROCLOCK's hash value has the same low-order bits as its associated LOCK.  
+This requires a specialized hash function (see proclock_hash).
+
+
+除了共享的lock hash table之外, 每个bacnekd 还维护非共享的本地hash table. 包含了已经获得的锁信息以及请求中的锁信息.
+
+Each backend also maintains an unshared LOCALLOCK structure for each lockable
+object and lock mode that it is currently holding or requesting.  The shared
+lock structures only allow a single lock grant to be made per lockable
+object/lock mode/backend.  Internally to a backend, however, the same lock may
+be requested and perhaps released multiple times in a transaction, and it can
+also be held both transactionally and session-wide.  The internal request
+counts are held in LOCALLOCK so that the shared data structures need not be
+accessed to alter them.
+
+
+数据结构如下 : 
+
+/*
+ * Each backend also maintains a local hash table with information about each
+ * lock it is currently interested in.  In particular the local table counts
+ * the number of times that lock has been acquired.  This allows multiple
+ * requests for the same lock to be executed without additional accesses to
+ * shared memory.  We also track the number of lock acquisitions per
+ * ResourceOwner, so that we can release just those locks belonging to a
+ * particular ResourceOwner.
+ */
+typedef struct LOCALLOCKTAG
+{
+        LOCKTAG         lock;                   /* identifies the lockable object */
+        LOCKMODE        mode;                   /* lock mode for this table entry */
+} LOCALLOCKTAG;
+
+typedef struct LOCALLOCKOWNER
+{
+        /*
+         * Note: if owner is NULL then the lock is held on behalf of the session;
+         * otherwise it is held on behalf of my current transaction.
+         *
+         * Must use a forward struct reference to avoid circularity.
+         */
+        struct ResourceOwnerData *owner;
+        int64           nLocks;                 /* # of times held by this owner */
+} LOCALLOCKOWNER;
+
+typedef struct LOCALLOCK
+{
+        /* tag */
+        LOCALLOCKTAG tag;                       /* unique identifier of locallock entry */
+
+        /* data */
+        LOCK       *lock;                       /* associated LOCK object in shared mem */
+        PROCLOCK   *proclock;           /* associated PROCLOCK object in shmem */
+        uint32          hashcode;               /* copy of LOCKTAG's hash value */
+        int64           nLocks;                 /* total number of times lock is held */
+        int                     numLockOwners;  /* # of relevant ResourceOwners */
+        int                     maxLockOwners;  /* allocated size of array */
+        bool            holdsStrongLockCount;   /* bumped FastPathStrongRelatonLocks? */
+        LOCALLOCKOWNER *lockOwners; /* dynamically resizable array */
+} LOCALLOCK;
+
+#define LOCALLOCK_LOCKMETHOD(llock) ((llock).tag.lock.locktag_lockmethodid)
+
+
+因为不涉及冲突, 所以本地hash table不需要做分区处理. 另外就是数据结构相比LOCK和LOCKTAG简化了许多. 但是同样会消耗内存.
+接下来看看PostgreSQL在哪里调用了 SET_LOCKTAG_TUPLE 来请求tuple lock.
+
+/*
+ *              LockTuple
+ *
+ * Obtain a tuple-level lock.  This is used in a less-than-intuitive fashion
+ * because we can't afford to keep a separate lock in shared memory for every
+ * tuple.  See heap_lock_tuple before using this!
+ */
+void
+LockTuple(Relation relation, ItemPointer tid, LOCKMODE lockmode)
+{
+        LOCKTAG         tag;
+
+        SET_LOCKTAG_TUPLE(tag,
+                                          relation->rd_lockInfo.lockRelId.dbId,
+                                          relation->rd_lockInfo.lockRelId.relId,
+                                          ItemPointerGetBlockNumber(tid),
+                                          ItemPointerGetOffsetNumber(tid));
+
+        (void) LockAcquire(&tag, lockmode, false, false);
+}
+
+
+注意到, we can't afford to keep a separate lock in shared memory for every tuple. 为什么呢?
+
+ * NOTES: because the shared-memory lock table is of finite size, but users
+ * could reasonably want to lock large numbers of tuples, we do not rely on
+ * the standard lock manager to store tuple-level locks over the long term.
+
+
+全文 : 
+
+/*
+ *      heap_lock_tuple - lock a tuple in shared or exclusive mode
+ *
+ * Note that this acquires a buffer pin, which the caller must release.
+ *
+ * Input parameters:
+ *      relation: relation containing tuple (caller must hold suitable lock)
+ *      tuple->t_self: TID of tuple to lock (rest of struct need not be valid)
+ *      cid: current command ID (used for visibility test, and stored into
+ *              tuple's cmax if lock is successful)
+ *      mode: indicates if shared or exclusive tuple lock is desired
+ *      nowait: if true, ereport rather than blocking if lock not available
+ *
+ * Output parameters:
+ *      *tuple: all fields filled in
+ *      *buffer: set to buffer holding tuple (pinned but not locked at exit)
+ *      *ctid: set to tuple's t_ctid, but only in failure cases
+ *      *update_xmax: set to tuple's xmax, but only in failure cases
+ *
+ * Function result may be:
+ *      HeapTupleMayBeUpdated: lock was successfully acquired
+ *      HeapTupleSelfUpdated: lock failed because tuple updated by self
+ *      HeapTupleUpdated: lock failed because tuple updated by other xact
+ *
+ * In the failure cases, the routine returns the tuple's t_ctid and t_xmax.
+ * If t_ctid is the same as t_self, the tuple was deleted; if different, the
+ * tuple was updated, and t_ctid is the location of the replacement tuple.
+ * (t_xmax is needed to verify that the replacement tuple matches.)
+ *
+ *
+ * NOTES: because the shared-memory lock table is of finite size, but users
+ * could reasonably want to lock large numbers of tuples, we do not rely on
+ * the standard lock manager to store tuple-level locks over the long term.
+ * Instead, a tuple is marked as locked by setting the current transaction's
+ * XID as its XMAX, and setting additional infomask bits to distinguish this
+ * usage from the more normal case of having deleted the tuple.  When
+ * multiple transactions concurrently share-lock a tuple, the first locker's
+ * XID is replaced in XMAX with a MultiTransactionId representing the set of
+ * XIDs currently holding share-locks.
+ *
+ * When it is necessary to wait for a tuple-level lock to be released, the
+ * basic delay is provided by XactLockTableWait or MultiXactIdWait on the
+ * contents of the tuple's XMAX.  However, that mechanism will release all
+ * waiters concurrently, so there would be a race condition as to which
+ * waiter gets the tuple, potentially leading to indefinite starvation of
+ * some waiters.  The possibility of share-locking makes the problem much
+ * worse --- a steady stream of share-lockers can easily block an exclusive
+ * locker forever.      To provide more reliable semantics about who gets a
+ * tuple-level lock first, we use the standard lock manager.  The protocol
+ * for waiting for a tuple-level lock is really
+ *              LockTuple()
+ *              XactLockTableWait()
+ *              mark tuple as locked by me
+ *              UnlockTuple()
+ * When there are multiple waiters, arbitration of who is to get the lock next
+ * is provided by LockTuple().  However, at most one tuple-level lock will
+ * be held or awaited per backend at any time, so we don't risk overflow
+ * of the lock table.  Note that incoming share-lockers are required to
+ * do LockTuple as well, if there is any conflict, to ensure that they don't
+ * starve out waiting exclusive-lockers.  However, if there is not any active
+ * conflict for a tuple, we don't incur any extra overhead.
+ */
+
+
+在分析PostgreSQL怎么处理行锁前. 首先我们要分析的是tuple head 结构, 取自src/include/access/htup.h, 如下 : 
+
+typedef struct HeapTupleHeaderData
+{
+        union
+        {
+                HeapTupleFields t_heap;
+                DatumTupleFields t_datum;
+        }                       t_choice;
+
+        ItemPointerData t_ctid;         /* current TID of this or newer tuple */
+
+        /* Fields below here must match MinimalTupleData! */
+
+        uint16          t_infomask2;    /* number of attributes + various flags */
+
+        uint16          t_infomask;             /* various flag bits, see below */
+
+        uint8           t_hoff;                 /* sizeof header incl. bitmap, padding */
+
+        /* ^ - 23 bytes - ^ */
+
+        bits8           t_bits[1];              /* bitmap of NULLs -- VARIABLE LENGTH */
+
+        /* MORE DATA FOLLOWS AT END OF STRUCT */
+} HeapTupleHeaderData;
+
+
+其中HeapTupleFields的数据结构如下(这里包含了cid和xmin,xmax的信息, MVCC与之息息相关) : 
+
+typedef struct HeapTupleFields
+{
+        TransactionId t_xmin;           /* inserting xact ID */
+        TransactionId t_xmax;           /* deleting or locking xact ID */
+
+        union
+        {
+                CommandId       t_cid;          /* inserting or deleting command ID, or both */
+                TransactionId t_xvac;   /* old-style VACUUM FULL xact ID */
+        }                       t_field3;
+} HeapTupleFields;
+
+
+其中t_infomask的允许值组合如下, 锁信息将存储在这里面 : 
+
+/*
+ * information stored in t_infomask:
+ */
+#define HEAP_HASNULL                    0x0001  /* has null attribute(s) */
+#define HEAP_HASVARWIDTH                0x0002  /* has variable-width attribute(s) */
+#define HEAP_HASEXTERNAL                0x0004  /* has external stored attribute(s) */
+#define HEAP_HASOID                             0x0008  /* has an object-id field */
+/* bit 0x0010 is available */
+#define HEAP_COMBOCID                   0x0020  /* t_cid is a combo cid */
+#define HEAP_XMAX_EXCL_LOCK             0x0040  /* xmax is exclusive locker */
+#define HEAP_XMAX_SHARED_LOCK   0x0080  /* xmax is shared locker */
+/* if either LOCK bit is set, xmax hasn't deleted the tuple, only locked it */
+#define HEAP_IS_LOCKED  (HEAP_XMAX_EXCL_LOCK | HEAP_XMAX_SHARED_LOCK)
+#define HEAP_XMIN_COMMITTED             0x0100  /* t_xmin committed */
+#define HEAP_XMIN_INVALID               0x0200  /* t_xmin invalid/aborted */
+#define HEAP_XMAX_COMMITTED             0x0400  /* t_xmax committed */
+#define HEAP_XMAX_INVALID               0x0800  /* t_xmax invalid/aborted */
+#define HEAP_XMAX_IS_MULTI              0x1000  /* t_xmax is a MultiXactId */
+#define HEAP_UPDATED                    0x2000  /* this is UPDATEd version of row */
+#define HEAP_MOVED_OFF                  0x4000  /* moved to another place by pre-9.0
+                                                                                 * VACUUM FULL; kept for binary
+                                                                                 * upgrade support */
+#define HEAP_MOVED_IN                   0x8000  /* moved from another place by pre-9.0
+                                                                                 * VACUUM FULL; kept for binary
+                                                                                 * upgrade support */
+#define HEAP_MOVED (HEAP_MOVED_OFF | HEAP_MOVED_IN)
+
+#define HEAP_XACT_MASK                  0xFFE0  /* visibility-related bits */
+
+
+因为行锁的信息在PostgreSQL的pg_locks里面无法检索到, 所以接下来我们看看PostgreSQL提供的pgrowlocks模块是怎么检索行锁信息的?
+取自contrib/pgrowlocks/pgrowlocks.c : 
+截取pgrowlocks(PG_FUNCTION_ARGS)一段如下 : 
+
+/* scan the relation */
+        while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+        {
+                /* must hold a buffer lock to call HeapTupleSatisfiesUpdate */
+                LockBuffer(scan->rs_cbuf, BUFFER_LOCK_SHARE);
+
+                if (HeapTupleSatisfiesUpdate(tuple->t_data,
+                                                                         GetCurrentCommandId(false),
+                                                                         scan->rs_cbuf) == HeapTupleBeingUpdated)
+                {
+
+                        char      **values;
+                        int                     i;
+
+                        values = (char **) palloc(mydata->ncolumns * sizeof(char *));
+
+                        i = 0;
+                        values[i++] = (char *) DirectFunctionCall1(tidout, PointerGetDatum(&tuple->t_self));
+
+                        if (tuple->t_data->t_infomask & HEAP_XMAX_SHARED_LOCK)
+                                values[i++] = pstrdup("Shared");
+                        else
+                                values[i++] = pstrdup("Exclusive");
+                        values[i] = palloc(NCHARS * sizeof(char));
+                        snprintf(values[i++], NCHARS, "%d", HeapTupleHeaderGetXmax(tuple->t_data));
+
+
+显然pgrowlocks需要遍历全表, 通过HeapTupleSatisfiesUpdate判断正在被更新/删除的行以及这个tuple head的t_infomask信息是否带有HEAP_XMAX_SHARED_LOCK来判断是Shared LOCK还是Exclusive LOCK. 
+所以在update和select ... for update时, 必定会涉及到tuple head的t_infomask部分信息的更新以及xmin, xmax的更新. 
+1. 对于update, 无疑是修改了"原tuple head"并且也新增了tuple以及tuple head (这又涉及到MVCC了).
+2. 而对于select ... for update呢, 则只涉及到"原tuple head"的t_infomask信息的修改.
+以上两点我们可以通过pgrowlocks以及pageinspect来观察.
+
+为了更好的理解本文的意思, 建议读者可以去了解一下PostgreSQL的MVCC机制, 本文就不多介绍了. 我之前写过一些BLOG专门介绍MVCC, 有兴趣的朋友可以参考《PostgreSQL XLOG fsync simple introduce》的"三、which tuples can be saw by client? must satisfied two factors below at the same time." 部分的介绍. 
+
+接下来我们可以通过pgrowlocks和pageinspect来观察, 观察t_infomask时需要对照头文件中定义的常量解析出对应的常量名.
+测试三种场景, 我这里用到的是PostgreSQL 9.2.0版本进行的测试 : 
+
+1. select ... for share
+2. select ... for update
+3. update ...
+
+
+首先创建测试表 : 
+
+digoal=> create table pg_lock_test (id int, info text);
+CREATE TABLE
+
+
+插入1000W条测试记录
+
+digoal=> insert into pg_lock_test select generate_series(1,10000000),'digoal';
+INSERT 0 10000000
+
+
+创建pgrowlocks以及pageinspect  extension, 我这里以及创建了, 就不重复叙述了.
+
+digoal=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# \dx
+                                List of installed extensions
+    Name     | Version |   Schema   |                      Description                      
+-------------+---------+------------+-------------------------------------------------------
+ pageinspect | 1.0     | public     | inspect the contents of database pages at a low level
+ pgrowlocks  | 1.0     | public     | show row-level locking information
+ plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
+ uuid-ossp   | 1.0     | public     | generate universally unique identifiers (UUIDs)
+(4 rows)
+
+
+
+先定位一条需要测试到的记录, 记住这里的ctid,xmin,xmax : 
+注意这里用到了全表扫描耗时是1376毫秒, 后面我们能注意到pgrowlocks差不多也需要耗时1376毫秒, 因为它也是需要遍历全表的.
+
+digoal=> select ctid,cmin,cmax,xmin,xmax,* from pg_lock_test where id=1;
+ ctid  | cmin | cmax |   xmin    | xmax | id |  info  
+-------+------+------+-----------+------+----+--------
+ (0,1) |    0 |    0 | 171985481 |    0 |  1 | digoal
+(1 row)
+Time: 1376.308 ms
+
+
+
+一、接下来测试select ... for share
+SESSION A : 
+
+digoal=> begin;
+BEGIN
+Time: 0.181 ms
+digoal=> select ctid,cmin,cmax,xmin,xmax,* from pg_lock_test where id=1 for share;
+ ctid  | cmin | cmax |   xmin    | xmax | id |  info  
+-------+------+------+-----------+------+----+--------
+ (0,1) |    0 |    0 | 171985481 |    0 |  1 | digoal
+(1 row)
+Time: 1402.846 ms
+digoal=> select * from pg_backend_pid();
+ pg_backend_pid 
+----------------
+           1934
+(1 row)
+Time: 0.406 ms
+
+
+SESSION B : 
+
+digoal=# select * from pgrowlocks('digoal.pg_lock_test');
+ locked_row | lock_type |  locker   | multi |    xids     |  pids  
+------------+-----------+-----------+-------+-------------+--------
+ (0,1)      | Shared    | 171985482 | f     | {171985482} | {1934}
+(1 row)
+Time: 1171.961 ms
+
+
+我们看到, 
+1. pgrowlocks('digoal.pg_lock_test') 的耗时为1171毫秒. 和遍历全表的时间差不多, 比SELECT时间略小是因为SELECT语句还加了判断需要耗费更多的资源, 并且pgrowlocks只需要看tuple head.
+2. digoal.pg_lock_test的行锁有1条, 锁这行的事务的事务号为171985482. pid=1934.
+3. 锁类型为 Shared. 对pgrowlocks应代码里面的 "tuple->t_data->t_infomask & HEAP_XMAX_SHARED_LOCK" . 一会我们从pageinspect的结果中就能看到.
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',0)) where lp=1;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   |  t_xmax   | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+-----------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 | 171985481 | 171985482 |        0 | (0,1)  |           2 |        386 |     24 |        |      
+(1 row)
+Time: 0.751 ms
+
+
+这里 lp=1 对应的是ctid(0,1)里面的1. 而get_raw_page('digoal.pg_lock_test',0) 对应的是ctid(0,1)里的0号page.
+t_infomask=386 转成16进制就是0x0182 包含了如下组合 : 
+
+HEAP_XMAX_SHARED_LOCK
+HEAP_HASVARWIDTH
+HEAP_XMIN_COMMITTED
+
+
+接下来分析一下select ... for share会不会产生新的tuple版本.
+从下面的t_xmin中没有171985482可以看出select ... for share 没有产生新的tuple版本.
+
+digoal=# select max(ctid) from digoal.pg_lock_test;
+    max     
+------------
+ (54054,10)
+(1 row)
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',54054));
+ lp | lp_off | lp_flags | lp_len |  t_xmin   | t_xmax | t_field3 |   t_ctid   | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+--------+----------+------------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 | 171985481 |      0 |        0 | (54054,1)  |           2 |       2306 |     24 |        |      
+  2 |   8112 |        1 |     35 | 171985481 |      0 |        0 | (54054,2)  |           2 |       2306 |     24 |        |      
+  3 |   8072 |        1 |     35 | 171985481 |      0 |        0 | (54054,3)  |           2 |       2306 |     24 |        |      
+  4 |   8032 |        1 |     35 | 171985481 |      0 |        0 | (54054,4)  |           2 |       2306 |     24 |        |      
+  5 |   7992 |        1 |     35 | 171985481 |      0 |        0 | (54054,5)  |           2 |       2306 |     24 |        |      
+  6 |   7952 |        1 |     35 | 171985481 |      0 |        0 | (54054,6)  |           2 |       2306 |     24 |        |      
+  7 |   7912 |        1 |     35 | 171985481 |      0 |        0 | (54054,7)  |           2 |       2306 |     24 |        |      
+  8 |   7872 |        1 |     35 | 171985481 |      0 |        0 | (54054,8)  |           2 |       2306 |     24 |        |      
+  9 |   7832 |        1 |     35 | 171985481 |      0 |        0 | (54054,9)  |           2 |       2306 |     24 |        |      
+ 10 |   7792 |        1 |     35 | 171985481 |      0 |        0 | (54054,10) |           2 |       2306 |     24 |        |      
+(10 rows)
+
+
+
+回滚SESSION A后, pgrowlocks就看不到digoal.pg_lock_test的锁信息了.
+
+digoal=# select * from pgrowlocks('digoal.pg_lock_test');
+ locked_row | lock_type | locker | multi | xids | pids 
+------------+-----------+--------+-------+------+------
+(0 rows)
+Time: 1178.131 ms
+
+
+再观察ctid(0,1)的tuple head信息.
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',0)) where lp=1;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   |  t_xmax   | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+-----------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 | 171985481 | 171985482 |        0 | (0,1)  |           2 |        2434 |     24 |        |      
+(1 row)
+Time: 0.689 ms
+
+
+t_xmax 变成了171985482, t_infomask变更为2434 转成16进制就是982 是以下组合 : 
+
+HEAP_XMIN_COMMITTED
+HEAP_XMAX_INVALID
+HEAP_HASVARWIDTH
+HEAP_XMAX_SHARED_LOCK
+
+
+说明这条记录的xmax是无效的(这里的t_xman记录了锁/回滚这条记录的事务ID, 回滚后t_xmax标记为无效, 所以锁也随之失效).
+
+二、接下来测试select ... for update, 这次我们取ID=2的记录.
+
+SESSION A : 
+
+digoal=> begin;
+BEGIN
+Time: 0.174 ms
+digoal=> select ctid,cmin,cmax,xmin,xmax,* from pg_lock_test where id=2 for update;
+ ctid  | cmin | cmax |   xmin    |   xmax    | id |  info  
+-------+------+------+-----------+-----------+----+--------
+ (0,2) |    0 |    0 | 171985481 | 171985483 |  2 | digoal
+(1 row)
+Time: 1231.744 ms
+digoal=> select * from pg_backend_pid();
+ pg_backend_pid 
+----------------
+           1934
+(1 row)
+Time: 0.373 ms
+
+
+SESSION B : 
+
+digoal=# select * from pgrowlocks('digoal.pg_lock_test');
+ locked_row | lock_type |  locker   | multi |    xids     |  pids  
+------------+-----------+-----------+-------+-------------+--------
+ (0,2)      | Exclusive | 171985490 | f     | {171985490} | {1934}
+(1 row)
+Time: 1185.471 ms
+
+
+我们看到, 
+1. digoal.pg_lock_test的行锁有1条, 锁这行的事务的事务号为171985490. pid=1934.
+2. 锁类型为 Exclusive.
+查看ctid=(0,2)的tuple head信息
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',0)) where lp=2;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   |  t_xmax   | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+-----------+----------+--------+-------------+------------+--------+--------+-------
+  2 |   8112 |        1 |     35 | 171985481 | 171985490 |        0 | (0,2)  |           2 |        322 |     24 |        |      
+(1 row)
+Time: 0.697 ms
+
+
+t_infomask=322 转成16进制就是0x0142 包含了如下组合 : 
+
+HEAP_XMAX_EXCL_LOCK
+HEAP_HASVARWIDTH
+HEAP_XMIN_COMMITTED
+
+
+接下来分析一下select ... for update会不会产生新的tuple版本. 因为根据MVCC机制新的tuple SESSION B是看不到的, 所以我这里要检索整个块.
+从下面的t_xmin中没有171985490可以看出select ... for update 没有产生新的tuple版本.
+
+digoal=# select max(ctid) from digoal.pg_lock_test;
+    max     
+------------
+ (54054,10)
+(1 row)
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',54054));
+ lp | lp_off | lp_flags | lp_len |  t_xmin   | t_xmax | t_field3 |   t_ctid   | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+--------+----------+------------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 | 171985481 |      0 |        0 | (54054,1)  |           2 |       2306 |     24 |        |      
+  2 |   8112 |        1 |     35 | 171985481 |      0 |        0 | (54054,2)  |           2 |       2306 |     24 |        |      
+  3 |   8072 |        1 |     35 | 171985481 |      0 |        0 | (54054,3)  |           2 |       2306 |     24 |        |      
+  4 |   8032 |        1 |     35 | 171985481 |      0 |        0 | (54054,4)  |           2 |       2306 |     24 |        |      
+  5 |   7992 |        1 |     35 | 171985481 |      0 |        0 | (54054,5)  |           2 |       2306 |     24 |        |      
+  6 |   7952 |        1 |     35 | 171985481 |      0 |        0 | (54054,6)  |           2 |       2306 |     24 |        |      
+  7 |   7912 |        1 |     35 | 171985481 |      0 |        0 | (54054,7)  |           2 |       2306 |     24 |        |      
+  8 |   7872 |        1 |     35 | 171985481 |      0 |        0 | (54054,8)  |           2 |       2306 |     24 |        |      
+  9 |   7832 |        1 |     35 | 171985481 |      0 |        0 | (54054,9)  |           2 |       2306 |     24 |        |      
+ 10 |   7792 |        1 |     35 | 171985481 |      0 |        0 | (54054,10) |           2 |       2306 |     24 |        |      
+(10 rows)
+Time: 0.589 ms
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',54055));
+ERROR:  block number 54055 is out of range for relation "pg_lock_test"
+Time: 0.463 ms
+
+
+块超出,说明54054已经是最大块了, 没有遗漏. 说明select ... for update绝对不可能产生了新的tuple.
+
+回滚SESSION A后, pgrowlocks就看不到digoal.pg_lock_test的锁信息了.
+
+digoal=# select * from pgrowlocks('digoal.pg_lock_test');
+ locked_row | lock_type | locker | multi | xids | pids 
+------------+-----------+--------+-------+------+------
+(0 rows)
+Time: 1178.131 ms
+
+
+再观察ctid(0,2)的tuple head信息.
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',0)) where lp=2;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   |  t_xmax   | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+-----------+----------+--------+-------------+------------+--------+--------+-------
+  2 |   8112 |        1 |     35 | 171985481 | 171985490 |        0 | (0,2)  |           2 |       2370 |     24 |        |      
+(1 row)
+Time: 0.689 ms
+
+
+t_xmax 变成了171985490, t_infomask变更为2370 转成16进制就是942 是以下组合 : 
+
+HEAP_XMIN_COMMITTED
+HEAP_XMAX_INVALID
+HEAP_HASVARWIDTH
+HEAP_XMAX_EXCL_LOCK
+
+
+说明这条记录的xmax是无效的(这里的t_xman记录了锁/回滚这条记录的事务ID, 回滚后t_xmax标记为无效, 所以锁也随之失效).
+
+三、最后要测试update. 这是会产生新的tuple的操作. 这次我们取ID=3的记录.
+SESSION A : 
+
+digoal=> begin;
+BEGIN
+Time: 0.178 ms
+digoal=> select ctid,cmin,cmax,xmin,xmax,* from pg_lock_test where id=3;
+ ctid  | cmin | cmax |   xmin    |   xmax    | id |  info  
+-------+------+------+-----------+-----------+----+--------
+ (0,3) |    0 |    0 | 171985481 | 171985483 |  3 | digoal
+(1 row)
+Time: 1242.763 ms
+digoal=> select * from pg_backend_pid();
+ pg_backend_pid 
+----------------
+           1934
+(1 row)
+Time: 0.294 ms
+digoal=> update pg_lock_test set info='test' where id=3;
+UPDATE 1
+Time: 1227.698 ms
+
+
+-- 这里会话A看到的是自己修改过的但是尚未提交的id=3的记录, 所以xmin=171985491. ctid是在BLOCKs的最末端插入的=(54054,11) .
+
+digoal=> select ctid,cmin,cmax,xmin,xmax,* from pg_lock_test where id=3;
+    ctid    | cmin | cmax |   xmin    | xmax | id | info 
+------------+------+------+-----------+------+----+------
+ (54054,11) |    0 |    0 | 171985491 |    0 |  3 | test
+(1 row)
+Time: 1235.105 ms
+
+
+
+SESSION B : 
+
+digoal=# select * from pgrowlocks('digoal.pg_lock_test');
+ locked_row | lock_type |  locker   | multi |    xids     |  pids  
+------------+-----------+-----------+-------+-------------+--------
+ (0,3)      | Exclusive | 171985491 | f     | {171985491} | {1934}
+(1 row)
+Time: 1182.028 ms
+
+
+我们看到, 
+1. digoal.pg_lock_test的行锁有1条, 锁这行的事务的事务号为171985491. pid=1934.
+2. 锁类型为 Exclusive.
+查看这里被锁的行ctid=(0,3)的tuple head信息
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',0)) where lp=3;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   |  t_xmax   | t_field3 |   t_ctid   | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+-----------+----------+------------+-------------+------------+--------+--------+-------
+  3 |   8072 |        1 |     35 | 171985481 | 171985491 |        0 | (54054,11) |           2 |        258 |     24 |        |      
+(1 row)
+Time: 0.716 ms
+
+
+t_infomask=258 转成16进制就是0x0102 包含了如下组合 : 
+
+HEAP_HASVARWIDTH
+HEAP_XMIN_COMMITTED
+
+
+注意这里的t_ctid=54054,11 说明这条记录还指向了另一条tuple. 那就是update后新插入的tuple, tuple头信息如下 : 
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',54054)) where lp=11;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   | t_xmax | t_field3 |   t_ctid   | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+--------+----------+------------+-------------+------------+--------+--------+-------
+ 11 |   7752 |        1 |     33 | 171985491 |      0 |        0 | (54054,11) |           2 |      10242 |     24 |        |      
+(1 row)
+Time: 0.599 ms
+
+
+t_infomask=10242 转成16进制就是0x2802 包含了如下组合 : 
+
+HEAP_UPDATED
+HEAP_XMAX_INVALID
+HEAP_HASVARWIDTH
+
+
+说明还未提交. 
+
+回滚SESSION A后, pgrowlocks就看不到digoal.pg_lock_test的锁信息了.
+
+digoal=# select * from pgrowlocks('digoal.pg_lock_test');
+ locked_row | lock_type | locker | multi | xids | pids 
+------------+-----------+--------+-------+------+------
+(0 rows)
+Time: 1178.131 ms
+
+
+再观察ctid(0,3)的tuple head信息.
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',0)) where lp=3;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   |  t_xmax   | t_field3 |   t_ctid   | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+-----------+----------+------------+-------------+------------+--------+--------+-------
+  3 |   8072 |        1 |     35 | 171985481 | 171985491 |        0 | (54054,11) |           2 |       2306 |     24 |        |      
+(1 row)
+Time: 0.711 ms
+
+
+t_xmax 变成了171985491, t_infomask变更为2306 转成16进制就是902 是以下组合 : 
+
+HEAP_XMIN_COMMITTED
+HEAP_XMAX_INVALID
+HEAP_HASVARWIDTH
+
+
+再观察ctid(54054,11)的tuple head信息.
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.pg_lock_test',54054)) where lp=11;
+ lp | lp_off | lp_flags | lp_len |  t_xmin   | t_xmax | t_field3 |   t_ctid   | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+-----------+--------+----------+------------+-------------+------------+--------+--------+-------
+ 11 |   7752 |        1 |     33 | 171985491 |      0 |        0 | (54054,11) |           2 |      10754 |     24 |        |      
+(1 row)
+Time: 0.624 ms
+
+
+t_xmax 变成了171985491, t_infomask变更为10754 转成16进制就是2A02 是以下组合 : 
+
+HEAP_UPDATED
+HEAP_XMIN_INVALID
+HEAP_XMAX_INVALID
+HEAP_HASVARWIDTH
+
+
+
+【参考】
+1. src/include/access/htup.h
+2. src/include/utils/tqual.h
+3. backend/storage/lmgr
+4. src/include/access/heapam.h
+5. src/include/storage/lmgr.h
+6. src/include/storage/lock.h
+7. src/backend/access/heap/heapam.c
+8. contrib/pgrowlocks/pgrowlocks.c
+9. http://blog.163.com/digoal@126/blog/static/163877040201291575523922/
+10. src/tools/backend/index.html
+11. http://momjian.us/main/writings/pgsql/locking.pdf 讲得比较浅, 那几个视图还是比较有用的.
+12. shared hash lock table : 
+
+max_locks_per_transaction (integer)
+The shared lock table tracks locks on max_locks_per_transaction * (max_connections + max_prepared_transactions) objects (e.g., tables); 
+hence, no more than this many distinct objects can be locked at any one time. This parameter controls the average number of object locks allocated for each transaction; 
+individual transactions can lock more objects as long as the locks of all transactions fit in the lock table. This is not the number of rows that can be locked; that value is unlimited. The default, 64, has historically proven sufficient, but you might need to raise this value if you have clients that touch many different tables in a single transaction. This parameter can only be set at server start.
+
+Increasing this parameter might cause PostgreSQL to request more System V shared memory than your operating system's default configuration allows. See Section 17.4.1 for information on how to adjust those parameters, if necessary.
+
+When running a standby server, you must set this parameter to the same or higher value than on the master server. Otherwise, queries will not be allowed in the standby server.
+
+
+

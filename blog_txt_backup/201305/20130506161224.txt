@@ -1,0 +1,109 @@
+PostgreSQL research
+
+PostgreSQL 9.3 Improve concurrency of hash indexes
+
+2013-05-06 16:12:24   查看原文>>
+
+Improve concurrency of hash indexes (Robert Haas)
+9.3的又一个亮点 : 性能提升3.36倍.
+在hash索引访问方法中, 减少重量级锁的使用, 详见参考部分.
+
+[测试]
+postgresql.conf
+
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+wal_level = minimal                     # minimal, archive, or hot_standby
+synchronous_commit = on         # synchronization level;
+wal_sync_method = fdatasync             # the default is the first option
+commit_delay = 10                       # range 0-100000, in microseconds
+commit_siblings = 5                     # range 1-1000
+checkpoint_segments = 32                # in logfile segments, min 1, 16MB each
+autovacuum = off
+
+
+-- 测试表, 测试数据 , hash索引
+
+postgres=# create table hash_idx_test(id int primary key, info text);
+CREATE TABLE
+postgres=# insert into hash_idx_test select generate_series(1,1000000), md5(random()::text);
+INSERT 0 1000000
+postgres=# create index idx_1 on hash_idx_test using hash(info);
+CREATE INDEX
+
+
+
+-- 测试脚本, 更新hash索引值.
+vi up.sql
+
+\setrandom id 1 1000000
+update hash_idx_test set info=md5(random()::text) where id=:id;
+
+
+[测试结果]
+PostgreSQL 9.3 : 
+
+pg93@db-172-16-3-33-> pgbench -M prepared -f ./up.sql -n -r -h $PGDATA -U postgres -c 32 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 771818
+tps = 12852.268715 (including connections establishing)
+tps = 12861.817834 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001732        \setrandom id 1 1000000
+        2.482609        update hash_idx_test set info=md5(random()::text) where id=:id;
+
+PostgreSQL 9.2 : 
+
+pg92@db-172-16-3-33-> pgbench -M prepared -f ./up.sql -n -r -h $PGDATA -U postgres -c 32 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 229621
+tps = 3824.023476 (including connections establishing)
+tps = 3826.975575 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001834        \setrandom id 1 1000000
+        8.353279        update hash_idx_test set info=md5(random()::text) where id=:id;
+
+
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=76837c1507cb5a5a0048046233568447729e66dd
+
+Reduce use of heavyweight locking inside hash AM.
+
+Avoid using LockPage(rel, 0, lockmode) to protect against changes to
+the bucket mapping.  Instead, an exclusive buffer content lock is now
+viewed as sufficient permission to modify the metapage, and a shared
+buffer content lock is used when such modifications need to be
+prevented.  This more relaxed locking regimen makes it possible that,
+when we're busy getting a heavyweight bucket on the bucket we intend
+to search or insert into, a bucket split might occur underneath us.
+To compenate for that possibility, we use a loop-and-retry system:
+release the metapage content lock, acquire the heavyweight lock on the
+target bucket, and then reacquire the metapage content lock and check
+that the bucket mapping has not changed.   Normally it hasn't, and
+we're done.  But if by chance it has, we simply unlock the metapage,
+release the heavyweight lock we acquired previously, lock the new
+bucket, and loop around again.  Even in the worst case we cannot loop
+very many times here, since we don't split the same bucket again until
+we've split all the other buckets, and 2^N gets big pretty fast.
+
+This results in greatly improved concurrency, because we're
+effectively replacing two lwlock acquire-and-release cycles in
+exclusive mode (on one of the lock manager locks) with a single
+acquire-and-release cycle in shared mode (on the metapage buffer
+content lock).  Testing shows that it's still not quite as good as
+btree; for that, we'd probably have to find some way of getting rid
+of the heavyweight bucket locks as well, which does not appear
+straightforward.
+
+

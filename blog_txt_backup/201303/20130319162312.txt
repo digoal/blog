@@ -1,0 +1,397 @@
+PostgreSQL research
+
+CitusDB, PostgreSQLs Use Hadoop Distribute Query - 2 : CitusDB file_fdw usage
+
+2013-03-19 16:23:12   查看原文>>
+
+本文的安装以及测试基于上一篇BLOG《CitusDB, PostgreSQLs Use Hadoop Distribute Query - 1 : Single HOST CitusDB Cluster install》的环境.
+http://blog.163.com/digoal@126/blog/static/1638770402013219840831/
+CitusDB安装完后, 并没有附带file_fdw. 这里所说的file_fdw并不是PostgreSQL自带的那个file_fdw, 而是经过CitusDB修改的, 目的是要配合CitusDB来使用.
+
+1. 下载(master节点和worker节点都需要)
+
+wget --no-check-certificate https://github.com/citusdata/file_fdw/archive/master.zip
+citusdb@db-172-16-3-150-> unzip master 
+Archive:  master
+0256d5176163b6698444c45c03a94307ef21da2f
+   creating: file_fdw-master/
+  inflating: file_fdw-master/Makefile  
+  inflating: file_fdw-master/README.md  
+   creating: file_fdw-master/data/
+  inflating: file_fdw-master/data/agg.bad  
+  inflating: file_fdw-master/data/agg.csv  
+ extracting: file_fdw-master/data/agg.data  
+  inflating: file_fdw-master/data/text.csv  
+   creating: file_fdw-master/expected/
+ extracting: file_fdw-master/expected/.gitignore  
+  inflating: file_fdw-master/file_fdw--1.0.sql  
+  inflating: file_fdw-master/file_fdw.c  
+  inflating: file_fdw-master/file_fdw.control  
+   creating: file_fdw-master/input/
+  inflating: file_fdw-master/input/file_fdw.source  
+   creating: file_fdw-master/output/
+  inflating: file_fdw-master/output/file_fdw.source  
+   creating: file_fdw-master/sql/
+ extracting: file_fdw-master/sql/.gitignore 
+
+
+
+2. 安装(master节点和worker节点都需要)
+
+su - root
+. /home/citusdb/.bash_profile
+[root@db-172-16-3-150 data05]# . /home/citusdb/.bash_profile 
+root@db-172-16-3-150-> which pg_config
+/opt/citusdb/2.0/bin/pg_config
+root@db-172-16-3-150-> cd /home/citusdb/file_fdw-master/
+root@db-172-16-3-150-> gmake USE_PGXS=1
+root@db-172-16-3-150-> gmake USE_PGXS=1 install
+
+
+
+3. 创建extension
+
+[root@db-172-16-3-150 ~]# su - citusdb
+citusdb@db-172-16-3-150-> psql -h 127.0.0.1 -p 9900 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+digoal=# \dx
+                 List of installed extensions
+  Name   | Version |   Schema   |         Description          
+---------+---------+------------+------------------------------
+ plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
+(1 row)
+
+digoal=# create extension file_fdw;
+CREATE EXTENSION
+
+citusdb@db-172-16-3-150-> psql -h 1.1.1.1 -p 9901
+psql (9.2.1)
+Type "help" for help.
+digoal=# \dx
+                 List of installed extensions
+  Name   | Version |   Schema   |         Description          
+---------+---------+------------+------------------------------
+ plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
+(1 row)
+
+
+# 以下步骤可以省略, 执行\STAGE时会自动在对应的worker节点创建file_fdw extension.
+
+citusdb@db-172-16-3-150-> psql -h 1.1.1.1 -p 9901 -U postgres digoal -c "create extension file_fdw;"
+CREATE EXTENSION
+citusdb@db-172-16-3-150-> psql -h 1.1.1.1 -p 9902 -U postgres digoal -c "create extension file_fdw;"
+CREATE EXTENSION
+citusdb@db-172-16-3-150-> psql -h 1.1.1.1 -p 9903 -U postgres digoal -c "create extension file_fdw;"
+CREATE EXTENSION
+citusdb@db-172-16-3-150-> psql -h 1.1.1.1 -p 9904 -U postgres digoal -c "create extension file_fdw;"
+CREATE EXTENSION
+
+
+
+4. 在主节点创建server, distributed外部表.
+
+citusdb@db-172-16-3-150-> psql -h 127.0.0.1 -p 9900 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+digoal=# CREATE SERVER file_server FOREIGN DATA WRAPPER file_fdw;
+digoal=# CREATE FOREIGN TABLE ft_customer_reviews
+(
+    customer_id TEXT not null,
+    review_date DATE not null,
+    review_rating INTEGER not null,
+    review_votes INTEGER,
+    review_helpful_votes INTEGER,
+    product_id CHAR(10) not null,
+    product_title TEXT not null,
+    product_sales_rank BIGINT,
+    product_group TEXT,
+    product_category TEXT,
+    product_subcategory TEXT,
+    similar_product_ids CHAR(10)[]
+)
+DISTRIBUTE BY APPEND (review_date)
+SERVER file_server
+OPTIONS (filename '', format 'csv');
+
+
+# 注意这里的filename为空.
+# 不需要在worker节点执行.
+
+5. "导入数据", 实际上并没有真正的导入数据到数据库中, 而是生成shard元数据. 
+但是可能涉及worker节点间的数据拷贝.
+从worker01节点连接master节点, 并且只需\STAGE导入数据.
+从worker01节点去连master, 只需\STAGE的意思是worker01节点有数据要载入CitusDB, 因此原始数据必须在worker01节点上.
+这里的shard_replication_factor取默认的2, 所以会产生一份数据拷贝. 这份数据拷贝会放到另一个worker节点的$PGDATA/pg_foreign_file目录下面. 后面会看到这个信息 : 
+
+citusdb@db-172-16-3-150-> psql -h 1.1.1.1 -p 9900 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+\STAGE ft_customer_reviews FROM '/home/citusdb/customer_reviews_1998.csv'
+NOTICE:  extension "file_fdw" already exists, skipping
+NOTICE:  extension "file_fdw" already exists, skipping
+
+
+# 导入数据时会在worker节点创建file_fdw, 因为前面已经创建了, 所以跳过这个步骤, NOTICE信息可以看出这一点.
+
+digoal=# \set VERBOSITY verbose
+digoal=# \STAGE ft_customer_reviews FROM '/home/citusdb/customer_reviews_1999.csv'
+NOTICE:  extension "file_fdw" already exists, skipping
+NOTICE:  extension "file_fdw" already exists, skipping
+
+
+
+# 查看外部表的oid
+
+digoal=# select * from pg_foreign_table ;
+ ftrelid | ftserver |       ftoptions        
+---------+----------+------------------------
+   16845 |    16844 | {filename=,format=csv}
+(1 row)
+
+digoal=# select * from pg_class where oid=16845;
+       relname       | relnamespace | reltype | reloftype | relowner | relam | relfilenode | reltablespace | relpages | reltuples | 
+relallvisible | reltoastrelid | reltoastidxid | relhasindex | relisshared | relpersistence | relkind | relnatts | relchecks | relhas
+oids | relhaspkey | relhasrules | relhastriggers | relhassubclass | relfrozenxid | relacl | reloptions 
+---------------------+--------------+---------+-----------+----------+-------+-------------+---------------+----------+-----------+-
+--------------+---------------+---------------+-------------+-------------+----------------+---------+----------+-----------+-------
+-----+------------+-------------+----------------+----------------+--------------+--------+------------
+ ft_customer_reviews |         2200 |   16847 |         0 |    16395 |     0 |       16845 |             0 |        0 |         0 | 
+            0 |             0 |             0 | f           | f           | p              | f       |       12 |         0 | f     
+     | f          | f           | f              | f              |            0 |        | 
+(1 row)
+
+
+# 查看导入的数据和实际的数据是否一致.
+
+digoal=# select count(*) from ft_customer_reviews ;
+  count  
+---------
+ 1762502
+(1 row)
+citusdb@db-172-16-3-150-> wc -l customer_reviews_199*.csv
+   589859 customer_reviews_1998.csv
+  1172645 customer_reviews_1999.csv
+  1762504 total
+# 差2行因为COPY时去除了头行. 如果文件中不包含列名, 则可以加HEADER false.
+
+
+
+6. 查看外部表的shard信息 : 
+默认的shard_replication_factor=2, 所以导入时会有1份拷贝.1份原版.
+
+digoal=# select * from pg_dist_shard where logicalrelid='ft_customer_reviews'::regclass;
+ logicalrelid | shardid | shardstorage | shardalias | shardminvalue | shardmaxvalue 
+--------------+---------+--------------+------------+---------------+---------------
+        16845 |  102037 | f            |            | 1999-01-01    | 1999-12-31
+        16845 |  102036 | f            |            | 1970-12-30    | 1998-12-31
+(2 rows)
+
+digoal=# select * from pg_dist_shard_placement where shardid in (select shardid from pg_dist_shard where logicalrelid='ft_customer_reviews'::regclass);
+ shardid | shardstate | shardlength | nodename | nodeport 
+---------+------------+-------------+----------+----------
+  102037 |          1 |   198247156 | work02   |     9902
+  102037 |          1 |   198247156 | work01   |     9901
+  102036 |          1 |   101299118 | work04   |     9904
+  102036 |          1 |   101299118 | work01   |     9901
+(4 rows)
+
+
+
+# 查看拷贝, 前面提到了, shard_replication_factor=2, 所以导入数据时会产生一份拷贝, 这份拷贝在上面的shard信息中已经体现了.
+
+citusdb@db-172-16-3-150-> psql -h 1.1.1.1 -p 9902 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+digoal=# \det+
+                                                                List of foreign tables
+ Schema |           Table            |       Server       |                                 FDW Options                             
+     | Description 
+--------+----------------------------+--------------------+-------------------------------------------------------------------------
+-----+-------------
+ public | ft_customer_reviews_102037 | file_server_102037 | (filename 'pg_foreign_file/cached/ft_customer_reviews_102037', format 'c
+sv') | 
+(1 row)
+
+
+# 这个拷贝是从work01节点拷贝来的, 放在pg_foreign_file/cached/ft_customer_reviews_102037
+
+# 查看原版信息 : 
+
+digoal=# \det+
+                                                           List of foreign tables
+ Schema |           Table            |       Server       |                            FDW Options                             | Des
+cription 
+--------+----------------------------+--------------------+--------------------------------------------------------------------+----
+---------
+ public | ft_customer_reviews_102036 | file_server_102036 | (filename '/home/citusdb/customer_reviews_1998.csv', format 'csv') | 
+ public | ft_customer_reviews_102037 | file_server_102037 | (filename '/home/citusdb/customer_reviews_1999.csv', format 'csv') | 
+ public | ft_customer_reviews_102038 | file_server_102038 | (filename '/home/citusdb/customer_reviews_1999.csv', format 'csv') | 
+(3 rows)
+
+
+# 因为导入的时候是从worker01节点连接到master节点进行的操作, 所以原版信息在work01节点.
+
+7. 测试SQL : 
+
+digoal=# SELECT
+    width_bucket(length(product_title), 1, 50, 5) title_length_bucket,
+    round(avg(review_rating), 2) AS review_average,
+    count(*)
+FROM
+   customer_reviews
+WHERE
+    product_group = 'Book'
+GROUP BY
+    title_length_bucket
+ORDER BY
+    title_length_bucket;
+ title_length_bucket | review_average | count  
+---------------------+----------------+--------
+                   1 |           4.26 | 139034
+                   2 |           4.24 | 411318
+                   3 |           4.34 | 245671
+                   4 |           4.32 | 167361
+                   5 |           4.30 | 118422
+                   6 |           4.40 | 116412
+(6 rows)
+
+digoal=# SELECT
+    customer_id, review_date, review_rating, product_id, product_title
+FROM                                               
+    customer_reviews
+WHERE
+    product_title LIKE '%Dune%' AND
+    review_votes >= 10 AND
+    review_date >= '1998-03-01' AND
+    review_date < date '1998-03-01' + interval '3' month;
+  customer_id   | review_date | review_rating | product_id |                 product_title                 
+----------------+-------------+---------------+------------+-----------------------------------------------
+ A34HP4SZ0PQVHN | 1998-05-03  |             1 | 0399128964 | Dune (Dune Chronicles (Econo-Clad Hardcover))
+ A34HP4SZ0PQVHN | 1998-05-03  |             1 | 044100590X | Dune
+ A34HP4SZ0PQVHN | 1998-05-03  |             1 | 0441172717 | Dune (Dune Chronicles, Book 1)
+ A34HP4SZ0PQVHN | 1998-05-03  |             1 | 0881036366 | Dune (Dune Chronicles (Econo-Clad Hardcover))
+ A34HP4SZ0PQVHN | 1998-05-03  |             1 | 1559949570 | Dune Audio Collection
+(5 rows)
+
+
+
+8. 将shard_replication_factor设置为1, "导入数据". 那么数据只有1份拷贝.
+
+digoal=# set shard_replication_factor=1;
+SET
+digoal=# \STAGE ft_customer_reviews FROM '/home/citusdb/customer_reviews_1999.csv'
+NOTICE:  extension "file_fdw" already exists, skipping
+digoal=# select * from pg_dist_shard where logicalrelid='ft_customer_reviews'::regclass;
+ logicalrelid | shardid | shardstorage | shardalias | shardminvalue | shardmaxvalue 
+--------------+---------+--------------+------------+---------------+---------------
+        16845 |  102038 | f            |            | 1999-01-01    | 1999-12-31
+        16845 |  102037 | f            |            | 1999-01-01    | 1999-12-31
+        16845 |  102036 | f            |            | 1970-12-30    | 1998-12-31
+(3 rows)
+
+digoal=# select * from pg_dist_shard_placement where shardid in (select shardid from pg_dist_shard where logicalrelid='ft_customer_reviews'::regclass);
+ shardid | shardstate | shardlength | nodename | nodeport 
+---------+------------+-------------+----------+----------
+  102038 |          1 |   198247156 | work01   |     9901
+  102037 |          1 |   198247156 | work02   |     9902
+  102037 |          1 |   198247156 | work01   |     9901
+  102036 |          1 |   101299118 | work04   |     9904
+  102036 |          1 |   101299118 | work01   |     9901
+(5 rows)
+
+digoal=# select count(*) from ft_customer_reviews ;
+  count  
+---------
+ 2935146
+(1 row)
+
+
+
+# 从worker02连到master节点, 重新导入 : 
+
+citusdb@db-172-16-3-150-> psql -h 1.1.1.2 -p 9900 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+
+digoal=# \STAGE ft_customer_reviews FROM '/home/citusdb/customer_reviews_1999.csv'
+NOTICE:  extension "file_fdw" already exists, skipping
+NOTICE:  extension "file_fdw" already exists, skipping
+
+
+# 查看原版和拷贝的信息 : 
+
+citusdb@db-172-16-3-150-> psql -h 1.1.1.2 -p 9900 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+digoal=# select * from pg_dist_shard_placement where shardid in (select shardid from pg_dist_shard where logicalrelid='ft_customer_reviews'::regclass);
+ shardid | shardstate | shardlength | nodename | nodeport 
+---------+------------+-------------+----------+----------
+  102039 |          1 |   198247156 | work03   |     9903
+  102039 |          1 |   198247156 | work02   |     9902
+digoal=# select count(*) from ft_customer_reviews ;
+  count  
+---------
+ 4107790
+(1 row)
+citusdb@db-172-16-3-150-> psql -h 1.1.1.2 -p 9902 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+
+
+
+# 此时原版数据就在worker02节点了, 
+
+digoal=# \det+
+                                                                List of foreign tables
+ Schema |           Table            |       Server       |                                 FDW Options                             
+     | Description 
+--------+----------------------------+--------------------+-------------------------------------------------------------------------
+-----+-------------
+ public | ft_customer_reviews_102037 | file_server_102037 | (filename 'pg_foreign_file/cached/ft_customer_reviews_102037', format 'c
+sv') | 
+ public | ft_customer_reviews_102039 | file_server_102039 | (filename '/home/citusdb/customer_reviews_1999.csv', format 'csv')      
+     | 
+(2 rows)
+
+
+
+# 查看拷贝信息, 在worker03节点'pg_foreign_file/cached/ft_customer_reviews_102039'.
+
+digoal=# \q
+citusdb@db-172-16-3-150-> psql -h 1.1.1.2 -p 9903 -U digoal digoal
+psql (9.2.1)
+Type "help" for help.
+
+digoal=# \det+
+                                                                List of foreign tables
+ Schema |           Table            |       Server       |                                 FDW Options                             
+     | Description 
+--------+----------------------------+--------------------+-------------------------------------------------------------------------
+-----+-------------
+ public | ft_customer_reviews_102039 | file_server_102039 | (filename 'pg_foreign_file/cached/ft_customer_reviews_102039', format 'c
+sv') | 
+(1 row)
+
+
+
+【小结】
+1. 为什么CitusDB的\STAGE导入数据需要从worker节点连接到master节点来操作, 这个操作的意思就是此时的导入正是这个worker节点的数据.
+2. \STAGE的图例如下 : 
+CitusDB, PostgreSQLs Use Hadoop Distribute Query - 2 : CitusDB file_fdw install - 德哥@Digoal - The Heart,The World.
+3. 目前CitusDB file_fdw版本为beta版本, 相比原始的file_fdw有几个需要注意的地方 : 
+This module makes three changes to the original file_fdw that are still in Beta form. 
+First, we add another option to file_fdw to accept hdfs_directory_path as an argument. Users creating the distributed foreign table on the master node use this option to associate the table with an HDFS directory path.
+新增了1个option, hdfs_directory_path, 用来配置HDFS的目录.
+Second, file_fdw skips a malformed line and emits a debug message instead of erroring out on it. This is similar to Apache Hive's behavior, but isn't safe. In the future, we may error out if the number of malformed lines exceeds a certain threshold.
+目前如果遇到非法的行信息, 目前不会中断数据读取, 而是发出DEBUG信息. 以后可能会修改为非法数据达到一定阈值则中断读取.
+Third, CitusDB currently associates one HDFS block with one foreign table, and executes the entire SQL query locally on that block. If bytes for the last record in an HDFS block spill over to the next one, we currently don't fetch those bytes and instead skip the last record. This is a limitation we intend to fix in
+CitusDB 2.1.
+最后需要注意的是, 如果使用HDFS的话, 每个BLOCK对应1个外部表, 如果1条记录跨BLOCK存储了, 那么这条记录将会被忽略掉, 需要在下一个版本改进.
+
+【参考】
+1. https://github.com/citusdata/file_fdw
+2. http://www.citusdata.com/docs/sql-on-hadoop
+3. http://citusdata.com/docs/foreign-data
+4. http://citusdata.com/blog/50-postgresql-foreign-file-performance
+5. http://homepages.cwi.nl/~idreos/NoDBsigmod2012.pdf

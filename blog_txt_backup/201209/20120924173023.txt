@@ -1,0 +1,136 @@
+PostgreSQL research
+
+match ip address from text
+
+2012-09-24 17:30:23   查看原文>>
+
+今天一位网友问到规则表达式能不能把IP地址从字符串中匹配出来.
+先提供一个参考, 完全用规则表达式来实现应该来说也是可以的, 只是对IP地址的校验会比较麻烦, 如1.1.1.1000它不是一个IP.
+但是(\d+\.\d+\.\d+\.\d+) 来匹配时能够匹配.
+下面提供一个函数给大家一个思路, 使用数据库的类型转换来检验IP地址的合法性, 当然这个肯定是可以直接掉C的接口来实现的, 暂时不多说了 : 
+
+1.1.1.1000格式正确但是IP地址不合法 : 
+
+postgres=# do language plpgsql
+$$
+declare 
+  i_ip text;
+begin
+  select substring('abc1.1.1.1000.100def','(\d+\.\d+\.\d+\.\d+)') into i_ip; 
+  raise notice 'ip: %', i_ip::inet; 
+  exception
+  when others then
+    raise notice '% is not a ip', i_ip;
+end;
+$$;
+NOTICE:  1.1.1.1000 is not a ip
+DO
+
+
+1.1.1.100格式正确并且IP地址合法 : 
+
+postgres=# do language plpgsql
+$$
+declare 
+  i_ip text;
+begin
+  select substring('abc1.1.1.100.100def','(\d+\.\d+\.\d+\.\d+)') into i_ip; 
+  raise notice 'ip: %', i_ip::inet;  
+  exception
+  when others then
+    raise notice '% is not a ip', i_ip;
+end;
+$$;
+NOTICE:  ip: 1.1.1.100
+DO
+
+
+所以写成通用的函数如下 : 
+
+create or replace function conv_text_to_inetv4 (i_text text) returns inet as $$
+declare
+  v_ip_str text;
+  v_ip inet;
+begin
+  select substring(i_text, '(\d+\.\d+\.\d+\.\d+)') into v_ip_str;
+  v_ip := v_ip_str::inet;
+  return v_ip;
+  exception
+  when others then
+    return null;
+end;
+$$ language plpgsql;
+
+
+
+测试如下 : 
+
+postgres=# select conv_text_to_inetv4('abc1.1.1.100dee');
+ conv_text_to_inetv4 
+---------------------
+ 1.1.1.100
+(1 row)
+
+postgres=# select conv_text_to_inetv4('abc1.1.1.1000dee');
+ conv_text_to_inetv4 
+---------------------
+ 
+(1 row)
+
+
+
+【参考】
+1. http://www.postgresql.org/docs/9.2/static/functions-matching.html
+2. src/backend/utils/adt/network.c
+
+/*
+ * Common INET/CIDR input routine
+ */
+static inet *
+network_in(char *src, bool is_cidr)
+{
+        int                     bits;
+        inet       *dst;
+
+        dst = (inet *) palloc0(sizeof(inet));
+
+        /*
+         * First, check to see if this is an IPv6 or IPv4 address.      IPv6 addresses
+         * will have a : somewhere in them (several, in fact) so if there is one
+         * present, assume it's V6, otherwise assume it's V4.
+         */
+
+        if (strchr(src, ':') != NULL)
+                ip_family(dst) = PGSQL_AF_INET6;
+        else
+                ip_family(dst) = PGSQL_AF_INET;
+
+        bits = inet_net_pton(ip_family(dst), src, ip_addr(dst),
+                                                 is_cidr ? ip_addrsize(dst) : -1);
+        if ((bits < 0) || (bits > ip_maxbits(dst)))
+                ereport(ERROR,
+                                (errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+                /* translator: first %s is inet or cidr */
+                                 errmsg("invalid input syntax for type %s: \"%s\"",
+                                                is_cidr ? "cidr" : "inet", src)));
+
+        /*
+         * Error check: CIDR values must not have any bits set beyond the masklen.
+         */
+        if (is_cidr)
+        {
+                if (!addressOK(ip_addr(dst), bits, ip_family(dst)))
+                        ereport(ERROR,
+                                        (errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+                                         errmsg("invalid cidr value: \"%s\"", src),
+                                         errdetail("Value has bits set to right of mask.")));
+        }
+
+        ip_bits(dst) = bits;
+        SET_INET_VARSIZE(dst);
+
+        return dst;
+}
+
+
+Flag Counter

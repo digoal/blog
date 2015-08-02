@@ -1,0 +1,139 @@
+PostgreSQL research
+
+PostgreSQL avoid trigger Infinite loop case - 1
+
+2013-09-17 16:30:22   查看原文>>
+
+在上一篇BLOG中提到外部表写入时, 如果重名了, 会造成死循环写入, 类似触发器死循环差不多的效果.
+本文将模拟一个触发器的死循环, 并举例如何来解决死循环的问题.
+
+digoal=# create table t2 (id int, info text, crt_time timestamp);
+CREATE TABLE
+
+digoal=# create or replace function f_tg1() returns trigger as $$
+declare
+begin
+  -- 以下insert将造成死循环
+  insert into t2(id,info,crt_time) values (new.*); 
+  raise notice '%', new;
+  return new;
+end;
+$$ language plpgsql strict;
+
+digoal=# create trigger tg1 before insert on t2 for each row execute procedure f_tg1();
+CREATE TRIGGER
+
+
+死循环, 耗尽stack空间.
+
+digoal=# insert into t2 values (1,'test',now());
+ERROR:  stack depth limit exceeded
+HINT:  Increase the configuration parameter "max_stack_depth" (currently 2048kB), after ensuring the platform's stack depth limit is adequate.
+CONTEXT:  SQL statement "insert into t2(id,info,crt_time) values (new.*)"
+PL/pgSQL function f_tg1() line 4 at SQL statement
+SQL statement "insert into t2(id,info,crt_time) values (new.*)"
+PL/pgSQL function f_tg1() line 4 at SQL statement
+....
+
+
+显然插入不成功.
+
+digoal=# select count(*) from t2;
+ count 
+-------
+     0
+(1 row)
+
+
+破解方法是, 增加1列, 这列用来记录触发器函数被调用的次数.
+
+digoal=# alter table t2 add column call_cnt int default 0;
+ALTER TABLE
+
+digoal=# drop trigger tg1 on t2;
+DROP TRIGGER
+
+
+修改触发器函数如下, 每次调用触发器函数, 它的值会增加1.
+
+create or replace function f_tg1() returns trigger as $$
+declare
+begin
+  new.call_cnt := new.call_cnt+1;
+  insert into t2(id,info,crt_time,call_cnt) values (new.id,new.info,new.crt_time,new.call_cnt); 
+  raise notice '%', new;
+  return new;
+end;
+$$ language plpgsql strict;
+
+
+新建触发器, 加上when条件, 当new.call_cnt<1时允许触发这个触发器. 否则不会触发.
+
+digoal=# create trigger tg1 before insert on t2 for each row when (new.call_cnt<1) execute procedure f_tg1();
+CREATE TRIGGER
+
+digoal=# insert into t2 values (1,'test',now());
+NOTICE:  (1,test,"2013-09-17 16:03:35.85393",1)
+INSERT 0 1
+digoal=# select * from t2;
+ id | info |         crt_time          | call_cnt 
+----+------+---------------------------+----------
+  1 | test | 2013-09-17 16:03:35.85393 |        1
+  1 | test | 2013-09-17 16:03:35.85393 |        1
+(2 rows)
+
+
+
+如果把触发器的when条件改成<2, 会触发2次.
+
+digoal=# drop trigger tg1 on t2;
+DROP TRIGGER
+digoal=# create trigger tg1 before insert on t2 for each row when (new.call_cnt<2) execute procedure f_tg1();
+CREATE TRIGGER
+digoal=# insert into t2 values (2,'test',now());
+NOTICE:  (2,test,"2013-09-17 16:26:09.994301",2)
+CONTEXT:  SQL statement "insert into t2(id,info,crt_time,call_cnt) values (new.id,new.info,new.crt_time,new.call_cnt)"
+PL/pgSQL function f_tg1() line 5 at SQL statement
+NOTICE:  (2,test,"2013-09-17 16:26:09.994301",1)
+INSERT 0 1
+digoal=# select * from t2;
+ id | info |          crt_time          | call_cnt 
+----+------+----------------------------+----------
+  2 | test | 2013-09-17 16:26:09.994301 |        2
+  2 | test | 2013-09-17 16:26:09.994301 |        2
+  2 | test | 2013-09-17 16:26:09.994301 |        1
+(3 rows)
+
+
+如果把触发器的when条件改成<3, 会触发3次.
+
+digoal=# drop trigger tg1 on t2;
+DROP TRIGGER
+digoal=# create trigger tg1 before insert on t2 for each row when (new.call_cnt<3) execute procedure f_tg1();
+CREATE TRIGGER
+digoal=# insert into t2 values (3,'test',now());
+NOTICE:  (3,test,"2013-09-17 16:26:52.969295",3)
+CONTEXT:  SQL statement "insert into t2(id,info,crt_time,call_cnt) values (new.id,new.info,new.crt_time,new.call_cnt)"
+PL/pgSQL function f_tg1() line 5 at SQL statement
+SQL statement "insert into t2(id,info,crt_time,call_cnt) values (new.id,new.info,new.crt_time,new.call_cnt)"
+PL/pgSQL function f_tg1() line 5 at SQL statement
+NOTICE:  (3,test,"2013-09-17 16:26:52.969295",2)
+CONTEXT:  SQL statement "insert into t2(id,info,crt_time,call_cnt) values (new.id,new.info,new.crt_time,new.call_cnt)"
+PL/pgSQL function f_tg1() line 5 at SQL statement
+NOTICE:  (3,test,"2013-09-17 16:26:52.969295",1)
+INSERT 0 1
+digoal=# select * from t2;
+ id | info |          crt_time          | call_cnt 
+----+------+----------------------------+----------
+  2 | test | 2013-09-17 16:26:09.994301 |        2
+  2 | test | 2013-09-17 16:26:09.994301 |        2
+  2 | test | 2013-09-17 16:26:09.994301 |        1
+  3 | test | 2013-09-17 16:26:52.969295 |        3
+  3 | test | 2013-09-17 16:26:52.969295 |        3
+  3 | test | 2013-09-17 16:26:52.969295 |        2
+  3 | test | 2013-09-17 16:26:52.969295 |        1
+(7 rows)
+
+
+这种方法不适合statement级的触发器场景, 仅仅适合for each row的触发器场景. 
+

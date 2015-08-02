@@ -1,0 +1,424 @@
+PostgreSQL research
+
+PostgreSQL index page reclaim must vacuum twice ?
+
+2014-03-28 16:03:05   查看原文>>
+
+我在测试一个索引页的回收利用时, 发现索引页必须两次vacuum才能被复用.
+第一次vacuum时, main fork的freespace map文件会生成, 但是不生成索引的free space map文件. 
+具体原因参见 : 
+src/backend/access/nbtree/README
+索引page的回收分两个阶段, 第一个阶段把页面变成half dead状态, 第二个阶段才回收它.
+
+索引页的重复利用必须符合1个条件, 页面中没有任何引用才行.
+http://www.postgresql.org/docs/9.3/static/routine-reindex.html
+
+B-tree index pages that have become completely empty are reclaimed for re-use. However, there is still a possibility of inefficient use of space: if all but a few index keys on a page have been deleted, the page remains allocated. Therefore, a usage pattern in which most, but not all, keys in each range are eventually deleted will see poor use of space. For such usage patterns, periodic reindexing is recommended.
+
+
+
+我们需要一个工具来观察索引页的引用或条目.
+同时为了观察方便, 先把autovacuum关闭.
+
+digoal=# create extension pageinspect;
+CREATE EXTENSION
+
+
+创建测试表
+
+digoal=# create table test(id int primary key, info text, crt_time timestamp);
+CREATE TABLE
+digoal=# insert into test select generate_series(1,5000000),md5(random()::text),clock_timestamp();
+INSERT 0 5000000
+
+
+查看索引metapage的信息
+
+digoal=# select * from bt_metap('test_pkey');
+ magic  | version | root | level | fastroot | fastlevel 
+--------+---------+------+-------+----------+-----------
+ 340322 |       2 | 1640 |     2 |     1640 |         2
+(1 row)
+
+
+查看索引页1的状态信息
+
+digoal=# select * from bt_page_stats('test_pkey', 1);
+ blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo | btpo_flags 
+-------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------+------------
+     1 | l    |       1472 |          0 |            16 |     32768 |      3284 |         0 |         2 |    0 |          1
+(1 row)
+
+
+查看索引页2的状态信息
+
+digoal=# select * from bt_page_stats('test_pkey', 2);
+ blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo | btpo_flags 
+-------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------+------------
+     2 | l    |       1472 |          0 |            16 |     32768 |      3284 |         1 |         4 |    0 |          1
+(1 row)
+
+
+查看索引页的引用信息 : 
+
+digoal=# select * from bt_page_items('test_pkey', 1);
+ itemoffset |  ctid   | itemlen | nulls | vars |          data           
+------------+---------+---------+-------+------+-------------------------
+          1 | (3,182) |      16 | f     | f    | c0 05 00 00 00 00 00 00
+          2 | (0,1)   |      16 | f     | f    | 01 00 00 00 00 00 00 00
+          3 | (0,2)   |      16 | f     | f    | 02 00 00 00 00 00 00 00
+          4 | (0,3)   |      16 | f     | f    | 03 00 00 00 00 00 00 00
+          5 | (0,4)   |      16 | f     | f    | 04 00 00 00 00 00 00 00
+          6 | (0,5)   |      16 | f     | f    | 05 00 00 00 00 00 00 00
+          7 | (0,6)   |      16 | f     | f    | 06 00 00 00 00 00 00 00
+          8 | (0,7)   |      16 | f     | f    | 07 00 00 00 00 00 00 00
+    ..... 中间 略去
+       1471 | (3,180) |      16 | f     | f    | be 05 00 00 00 00 00 00
+       1472 | (3,181) |      16 | f     | f    | bf 05 00 00 00 00 00 00
+(1472 rows)
+
+
+删除数据, 仅保留一行.
+
+digoal=# delete from test where id<>5000000;
+DELETE 4999999
+
+
+第一次vacuum , 注意3398 index pages have been deleted, 0 are currently reusable.
+重用页为0, 为什么呢?
+
+digoal=# vacuum verbose analyze test;
+INFO:  vacuuming "public.test"
+INFO:  scanned index "test_pkey" to remove 4999999 row versions
+DETAIL:  CPU 0.00s/1.75u sec elapsed 1.77 sec.
+INFO:  "test": removed 4999999 row versions in 11628 pages
+DETAIL:  CPU 0.00s/0.19u sec elapsed 0.22 sec.
+INFO:  index "test_pkey" now contains 1 row versions in 3404 pages
+DETAIL:  4999999 index row versions were removed.
+3398 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "test": found 4999999 removable, 1 nonremovable row versions in 11628 out of 11628 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.01s/2.83u sec elapsed 2.91 sec.
+INFO:  vacuuming "pg_toast.pg_toast_16432"
+INFO:  index "pg_toast_16432_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_16432": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  analyzing "public.test"
+INFO:  "test": scanned 11628 of 11628 pages, containing 1 live rows and 0 dead rows; 1 rows in sample, 1 estimated total rows
+VACUUM
+
+
+为什么重用页为0呢? 我们要使用pageinspect插件来看看第一次vacuum后的索引页的内容.
+
+digoal=# select * from bt_metap('test_pkey');
+ magic  | version | root | level | fastroot | fastlevel 
+--------+---------+------+-------+----------+-----------
+ 340322 |       2 | 1640 |     2 |     3403 |         0
+(1 row)
+
+
+标记为删除状态的索引页状态信息, d表示已删除, 理论上来说, 这个状态的页可以回收重复利用 : 
+
+digoal=# select * from bt_page_stats('test_pkey', 1);
+ blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo | btpo_flags 
+-------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------+------------
+     1 | d    |          0 |          0 |             0 |     32768 |         0 |        -1 |        -1 | 1857 |          0
+(1 row)
+digoal=# select * from bt_page_stats('test_pkey', 2);
+ blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo | btpo_flags 
+-------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------+------------
+     2 | d    |          0 |          0 |             0 |     32768 |         0 |        -1 |        -1 | 1857 |          0
+(1 row)
+
+
+保留的root页和leaf页信息 : 
+
+digoal=# select * from bt_page_stats('test_pkey', 1640);
+ blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo | btpo_flags 
+-------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------+------------
+  1640 | r    |          1 |          0 |             8 |     32768 |     32712 |         0 |         0 |    2 |          2
+(1 row)
+digoal=# select * from bt_page_stats('test_pkey', 3403);
+ blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo | btpo_flags 
+-------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------+------------
+  3403 | l    |          1 |          0 |            16 |     32768 |     32704 |         0 |         0 |    0 |          1
+(1 row)
+
+
+对于标记为删除的索引页, 我们看看它的引用, 保留了第一条引用, 其他的都删除了
+
+digoal=# select * from bt_page_items('test_pkey', 1);
+NOTICE:  page is deleted
+ itemoffset |  ctid   | itemlen | nulls | vars |          data           
+------------+---------+---------+-------+------+-------------------------
+          1 | (3,182) |      16 | f     | f    | c0 05 00 00 00 00 00 00
+(1 row)
+digoal=# select * from bt_page_items('test_pkey', 2);
+NOTICE:  page is deleted
+ itemoffset |  ctid   | itemlen | nulls | vars |          data           
+------------+---------+---------+-------+------+-------------------------
+          1 | (6,363) |      16 | f     | f    | 7f 0b 00 00 00 00 00 00
+(1 row)
+
+
+保留页的前后页也被删除了 : 
+
+digoal=# select * from bt_page_items('test_pkey', 1640);
+ itemoffset |   ctid   | itemlen | nulls | vars | data 
+------------+----------+---------+-------+------+------
+          1 | (2786,1) |       8 | f     | f    | 
+(1 row)
+digoal=# select * from bt_page_items('test_pkey', 1641);
+NOTICE:  page is deleted
+ itemoffset |    ctid    | itemlen | nulls | vars |          data           
+------------+------------+---------+-------+------+-------------------------
+          1 | (5603,209) |      16 | f     | f    | 1b c4 24 00 00 00 00 00
+(1 row)
+digoal=# select * from bt_page_items('test_pkey', 3403);
+ itemoffset |    ctid     | itemlen | nulls | vars |          data           
+------------+-------------+---------+-------+------+-------------------------
+          1 | (11627,390) |      16 | f     | f    | 40 4b 4c 00 00 00 00 00
+(1 row)
+digoal=# select * from bt_page_items('test_pkey', 3402);
+NOTICE:  page is deleted
+ itemoffset |    ctid     | itemlen | nulls | vars |          data           
+------------+-------------+---------+-------+------+-------------------------
+          1 | (11624,139) |      16 | f     | f    | 3b 45 4c 00 00 00 00 00
+(1 row)
+
+
+保留的索引页, 只有leaf页是能检索到数据的.
+
+digoal=# select * from test where ctid='(11627,390)';
+   id    |               info               |          crt_time          
+---------+----------------------------------+----------------------------
+ 5000000 | 50695277872b9da4d56b962a747556c2 | 2014-03-28 14:31:58.849432
+(1 row)
+digoal=# select * from test where ctid='(2786,1)';
+ id | info | crt_time 
+----+------+----------
+(0 rows)
+
+
+第一次vacuum后, 索引占用的pages不变 : 
+
+digoal=# select relpages from pg_class where relname='test_pkey';
+ relpages 
+----------
+     3404
+(1 row)
+
+
+这个时候, 如果往这个表插入数据, 被删除的索引页不会被重用, 原因是它们还保留了1条引用, 所以这个索引页是不能被重用的.
+
+digoal=# insert into test select generate_series(1,4999999),md5(random()::text),clock_timestamp();
+INSERT 0 4999999
+digoal=# \di+
+                          List of relations
+ Schema |   Name    | Type  |  Owner   | Table |  Size  | Description 
+--------+-----------+-------+----------+-------+--------+-------------
+ public | test_pkey | index | postgres | test  | 213 MB | 
+(1 row)
+
+
+
+接下来, 我们测试同样的场景, 只是在删除数据后, 执行两次vacuum.
+
+digoal=# truncate test;
+TRUNCATE TABLE
+digoal=# insert into test select generate_series(1,5000000),md5(random()::text),clock_timestamp();
+INSERT 0 5000000
+digoal=# delete from test where id<>5000000;
+DELETE 4999999
+
+
+第一次vacuum, 注意看3398 index pages have been deleted, 0 are currently reusable.
+
+digoal=# vacuum verbose analyze test;
+INFO:  vacuuming "public.test"
+INFO:  scanned index "test_pkey" to remove 4999999 row versions
+DETAIL:  CPU 0.00s/1.75u sec elapsed 1.77 sec.
+INFO:  "test": removed 4999999 row versions in 11628 pages
+DETAIL:  CPU 0.00s/0.19u sec elapsed 0.22 sec.
+INFO:  index "test_pkey" now contains 1 row versions in 3404 pages
+DETAIL:  4999999 index row versions were removed.
+3398 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "test": found 4999999 removable, 1 nonremovable row versions in 11628 out of 11628 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/2.84u sec elapsed 2.91 sec.
+INFO:  vacuuming "pg_toast.pg_toast_16432"
+INFO:  index "pg_toast_16432_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_16432": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  analyzing "public.test"
+INFO:  "test": scanned 11628 of 11628 pages, containing 1 live rows and 0 dead rows; 1 rows in sample, 1 estimated total rows
+VACUUM
+
+
+第一次vacuum后, 没有生成索引的free space map文件.
+
+digoal=# select * from fsm_page_contents(get_raw_page('test_pkey','fsm',0));
+ERROR:  could not open file "base/16384/16471_fsm": No such file or directory
+digoal=# select * from fsm_page_contents(get_raw_page('test_pkey','fsm',1));
+ERROR:  could not open file "base/16384/16471_fsm": No such file or directory
+digoal=# select * from fsm_page_contents(get_raw_page('test_pkey','fsm',2));
+ERROR:  could not open file "base/16384/16471_fsm": No such file or directory
+
+
+
+第二次vacuum, 注意看3400 index pages have been deleted, 3400 are currently reusable.
+
+digoal=# vacuum verbose analyze test;
+INFO:  vacuuming "public.test"
+INFO:  index "test_pkey" now contains 1 row versions in 3404 pages
+DETAIL:  0 index row versions were removed.
+3400 index pages have been deleted, 3400 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "test": found 0 removable, 0 nonremovable row versions in 0 out of 11628 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  vacuuming "pg_toast.pg_toast_16432"
+INFO:  index "pg_toast_16432_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_16432": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  analyzing "public.test"
+INFO:  "test": scanned 11628 of 11628 pages, containing 1 live rows and 0 dead rows; 1 rows in sample, 1 estimated total rows
+VACUUM
+
+
+第二次vacuum后, 我们看一下被删除的索引页的引用是否被全部清除了. 因为如果被全部清除了, 才能被重用.
+
+digoal=# select * from bt_page_items('test_pkey', 1);
+NOTICE:  page is deleted
+ itemoffset |  ctid   | itemlen | nulls | vars |          data           
+------------+---------+---------+-------+------+-------------------------
+          1 | (3,182) |      16 | f     | f    | c0 05 00 00 00 00 00 00
+(1 row)
+digoal=# select * from bt_page_items('test_pkey', 2);
+NOTICE:  page is deleted
+ itemoffset |  ctid   | itemlen | nulls | vars |          data           
+------------+---------+---------+-------+------+-------------------------
+          1 | (6,363) |      16 | f     | f    | 7f 0b 00 00 00 00 00 00
+(1 row)
+
+
+使用pageinspece看不出来和第一次vacuum的差别. 但是free space map文件生成了.
+(值得注意的是, 第一次vacuum时, main fork的freespace map文件会生成, 但是为什么不生成索引的free space map文件呢?)
+
+digoal=# select * from fsm_page_contents(get_raw_page('test_pkey','fsm',0));
+ fsm_page_contents 
+-------------------
+ 0: 255           +
+ 1: 255           +
+ 3: 255           +
+ 7: 255           +
+ 15: 255          +
+ 31: 255          +
+ 63: 255          +
+ 127: 255         +
+ 255: 255         +
+ 511: 255         +
+ 1023: 255        +
+ 2047: 255        +
+ 4095: 255        +
+ 8191: 255        +
+ 16383: 255       +
+ fp_next_slot: 0  +
+ 
+(1 row)
+
+digoal=# select * from fsm_page_contents(get_raw_page('test_pkey','fsm',1));
+ fsm_page_contents 
+-------------------
+ 0: 255           +
+ 1: 255           +
+ 3: 255           +
+ 7: 255           +
+ 15: 255          +
+ 31: 255          +
+ 63: 255          +
+ 127: 255         +
+ 255: 255         +
+ 511: 255         +
+ 1023: 255        +
+ 2047: 255        +
+ 4095: 255        +
+ 8191: 255        +
+ 16383: 255       +
+ fp_next_slot: 0  +
+ 
+(1 row)
+
+digoal=# select * from fsm_page_contents(get_raw_page('test_pkey','fsm',2));
+ fsm_page_contents 
+-------------------
+ 0: 255           +
+ 1: 255           +
+ 3: 255           +
+ 7: 255           +
+ 15: 255          +
+ 31: 255          +
+ 63: 255          +
+ 64: 255          +
+ 127: 255         +
+ 128: 255         +
+... 略去
+
+
+第二次vacuum后, 插入数据, 索引页清除并更新了free space map, 所以重新插入数据是, 索引页从fsm取, 不需要extend index main fork, 因此索引没有膨胀.
+
+digoal=# insert into test select generate_series(1,4999999),md5(random()::text),clock_timestamp();
+INSERT 0 4999999
+digoal=# \di+
+                          List of relations
+ Schema |   Name    | Type  |  Owner   | Table |  Size  | Description 
+--------+-----------+-------+----------+-------+--------+-------------
+ public | test_pkey | index | postgres | test  | 106 MB | 
+(1 row)
+
+
+
+[参考]
+1. http://www.postgresql.org/docs/9.3/static/routine-reindex.html
+2. src/backend/access/nbtree/README
+
+评论
+
+xmarker - 2014-06-23 13:57:51
+
+德哥，这个问题怎么解决呢，只能靠两次vacuum么，这算是pg的bug吧？
+
+
+德哥@Digoal 回复 xmarker - 2014-06-23 13:57:51
+
+目前是的.
+
+德哥@Digoal 回复 xmarker - 2014-06-23 13:57:51
+
+不是BUG.

@@ -1,0 +1,90 @@
+PostgreSQL research
+
+a foolish sync method about sync data from PostgreSQL to Oracle
+
+2011-05-11 13:54:06   查看原文>>
+
+使用以下脚步从PostgreSQL同步到Oracle的数据不一致。
+ 原因分析在后面
+
+#!/bin/bash
+
+. /home/enterprisedb/.bash_profile
+EMAIL="noc@xxx.com dba@xxx.com"
+
+# check running mark
+test -f /home/enterprisedb/script/run/tbl_charge_xxxx.run
+if [ $? -eq 0 ]; then
+SYNC_TIME_CHECK="'`ls -1 -l --time-style=+%F\ %T /home/enterprisedb/script/run/tbl_charge_xxxx.run|awk '{print $6" "$7}'`'" 
+psql -t -h /tmp -p 1921 -U enterprisedb -d edb <<EOF 1>/home/enterprisedb/script/tbl_charge_xxxx.timeoutstats 2>&1
+select 'sync_time_out' where now()-$SYNC_TIME_CHECK::timestamp without time zone>interval '1 hour';
+EOF
+TIME_OUT_ERROR=0
+TIME_OUT_ERROR=`grep -c "sync_time_out" /home/enterprisedb/script/tbl_charge_xxxx.timeoutstats`
+if [ $TIME_OUT_ERROR -ne 0 ]; then
+echo -e "`cat /home/enterprisedb/script/tbl_charge_xxxx.timeoutstats`\n\n`date +%F%T`\n sync xxxx xltj.msss.sa_sales_info_xxxx timeout!\n\nPlease Call Digoal!\n"|mutt -s "Sync xxxx XLTJ timeout!" $EMAIL
+echo -e "sync timeout"
+fi
+exit 3
+fi
+
+# create running mark
+touch /home/enterprisedb/script/run/tbl_charge_xxxx.run
+
+MAX_T="'`psql -t -h /tmp -p 1921 -U enterprisedb -d edb -c "select max(id) from msss.tbl_charge_xxxx_recent@edb.xl_local"|sed -e 's/ //g'`'"
+echo $MAX_T
+
+psql -t -h /tmp -p 1921 -U enterprisedb -d edb <<EOF 1>/home/enterprisedb/script/tbl_charge_xxxx.stats 2>&1
+begin;
+select 'start sync: '||now();
+delete from msss.tbl_charge_xxxx_recent@edb.xl_local 
+where 
+id < $MAX_T ;
+
+insert into msss.tbl_charge_xxxx_recent@edb.xl_local 
+(id,mobile,xxxxxx,xxxx,mobi_factory,mobi_mode,hsv,org_id,ver,send_date,create_date,MODEVER,BUILDTIME) 
+select id,trim(coalesce(phonenum,'nvl')),trim(xxxxxx),trim(xxxx),trim(coalesce(hsman,'nvl')),trim(coalesce(hstype,'nvl')),to_number(hsversion,'99999999999999999999'),trim(hsman),to_number(appversion,'99999999999999999999'),to_char(motime,'yyyymmddhh24miss'),to_char(createtime,'yyyymmddhh24miss'),trim(coalesce(SOFTVERSION,'nvl')),trim(coalesce(SOFTCOMPILETIME,'nvl'))
+from xxxx.tbl_charge_xxxx@edb.xxxx_pg 
+where
+id > ${MAX_T}
+and appid=810007
+;
+
+insert into msss.SA_SALES_INFO_xxxx@edb.xl_local 
+(id,mobile,xxxxxx,xxxx,mobi_factory,mobi_mode,hsv,org_id,ver,mccid,MODEVER,BUILDTIME)
+select
+id,coalesce(mobile,'nvl'),xxxxxx,xxxx,coalesce(mobi_factory,'nvl'),coalesce(mobi_mode,'nvl'),hsv,org_id,ver,case substring(xxxx,1,3) when ('234','235') then '234' when ('310','311','312','313','314','315','316') then '310' when ('430','431') then '430' when ('440','441') then '440' when ('460','461') then '460' else substring(xxxx,1,3) end,MODEVER,BUILDTIME
+from msss.tbl_charge_xxxx_recent@edb.xl_local
+where 
+id > ${MAX_T} ;
+commit;
+EOF
+
+# logging
+cat /home/enterprisedb/script/tbl_charge_xxxx.stats >> /home/enterprisedb/script/tbl_charge_xxxx.log
+
+# delete running mark
+sleep 10
+rm -f /home/enterprisedb/script/run/tbl_charge_xxxx.run
+
+ERROR=0
+ERROR=`grep -c "ROLLBACK" /home/enterprisedb/script/tbl_charge_xxxx.stats`
+if [ $ERROR -ne 0 ]; then
+echo -e "`cat /home/enterprisedb/script/tbl_charge_xxxx.stats`\n\n`date +%F%T`\n sync xxxx xltj error!\n\nPlease Call Digoal!\n"|mutt -s "Sync xxxx XLTJ error!" $EMAIL
+echo -e "sync error"
+fi
+
+
+
+逻辑大概是这样的:
+根据PostgreSQL里面需要同步的表的PK，增量同步数据到Oracle。
+看起来很美好，增量的，健康的。
+问题就出在增量这里。如果系统中只有一个SESSION对这个表操作时，ID确实是随着时间递增的。
+但是当有多个SESSION同时操作一个表时，SEQUENCE分配给多个SESSION，但是SESSION的COMMIT顺序可能与SEQUENCE的分配顺序不一致。从而抽取数据时会出现空隙的现象。
+例如，有两个SESSION
+session 1 获取到得SEQID是1-10
+session 2 获取到得SEQID是11-20
+session 2先提交，在session 1提交之前，数据同步到ORACLE了。
+接下来同步取id>20的数据，因此1-10的数据就漏掉了。
+
+另外，使用记录创建时间来抽取也存在类似问题，因为记录创建时间是事务的启动时间，不是提交时间。

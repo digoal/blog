@@ -1,0 +1,191 @@
+PostgreSQL research
+
+PostgreSQL performance affected by NUMA - 2
+
+2012-06-07 15:00:44   查看原文>>
+
+前一篇写的是NUMA的三种策略和PostgreSQL按主键读的操作的性能对比. 如下 : 
+http://blog.163.com/digoal@126/blog/static/1638770402012571831555/
+这篇测试一下按主键写和三种NUMA策略下的性能比较.
+
+-- 测试表如下
+
+psql digoal digoal
+create schema digoal;
+create table user_info (id int, info text);
+insert into user_info select generate_series(1,50000000),'digoal'||generate_series(1,50000000);
+alter table user_info add primary key (id);
+
+
+-- 加载如OS CACHE的SQL, 需要用到pgfincore, 不熟悉的朋友可以参考我以前写过的关于pgfincore的BLOG.
+
+select pgfadvise_willneed('pg_toast.'||relname) from pg_class where oid in (select reltoastrelid from pg_class where relname='user_info');
+select * from pgfadvise_willneed('digoal.user_info');
+select * from pgfadvise_willneed('digoal.user_info_pkey');
+
+
+
+-- pgbench用于测试update的脚本
+
+postgres@172_16_3_52-> vi upd.sql
+\setrandom id 1 50000000
+update digoal.user_info set info='DIGOAL' where id=:id;
+
+
+
+-- pgbench 测试语句
+
+postgres@172_16_3_52-> pgbench -M prepared -n -f ./upd.sql -h 127.0.0.1 -U digoal -r -T 60 -c 8 -j 8 digoal
+
+
+
+-- 为了避免硬盘IO造成瓶颈, 开启异步提交(synchronous_commit = off) ,
+-- 数据文件移至/dev/shm, pg_xlog不需要移动.
+
+#export PGDATA=/opt/pgdata/pg_root
+export PGDATA=/dev/shm/pg_root
+-- 把pg_xlog移出$PGDATA, 在/dev/shm/pg_root中作为软连接 (ln -s /opt/pgdata/pg_xlog /dev/shm/pg_root/pg_xlog)
+cp -r /opt/pgdata/pg_root /dev/shm
+
+
+
+一、default
+-- 首先把数据库关掉
+
+pg_ctl stop -m fast
+
+
+-- 清除OS缓存, 以清理分配出去的内存.
+
+echo 3 > /proc/sys/vm/drop_caches
+
+
+-- 启动数据库
+
+pg_ctl start
+
+
+-- vacuum 测试表, checkpoint, 加载数据至os cache
+
+psql digoal postgres
+vacuum digoal.user_info ;
+checkpoint;
+select pgfadvise_willneed('pg_toast.'||relname) from pg_class where oid in (select reltoastrelid from pg_class where relname='user_info');
+select * from pgfadvise_willneed('digoal.user_info');
+select * from pgfadvise_willneed('digoal.user_info_pkey');
+
+
+
+-- 压力测试结果
+
+postgres@172_16_3_52-> pgbench -M prepared -n -f ./upd.sql -h 127.0.0.1 -U digoal -r -T 60 -c 8 -j 8 digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 2195789
+tps = 36595.562345 (including connections establishing)
+tps = 36599.364313 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002844        \setrandom id 1 50000000
+        0.212967        update digoal.user_info set info='DIGOAL' where id=:id;
+
+
+
+二、interleave=all
+-- 首先把数据库关掉
+
+pg_ctl stop -m fast
+
+
+-- 清除OS缓存, 以清理分配出去的内存.
+
+echo 3 > /proc/sys/vm/drop_caches
+
+
+-- 启动数据库, 注意此时选择numa策略interleave=all
+
+postgres@172_16_3_52-> numactl --interleave=all pg_ctl start
+
+
+-- vacuum 测试表, checkpoint, 加载数据至os cache
+
+psql digoal postgres
+vacuum digoal.user_info ;
+checkpoint;
+select pgfadvise_willneed('pg_toast.'||relname) from pg_class where oid in (select reltoastrelid from pg_class where relname='user_info');
+select * from pgfadvise_willneed('digoal.user_info');
+select * from pgfadvise_willneed('digoal.user_info_pkey');
+
+
+
+-- 压力测试结果
+
+postgres@172_16_3_52-> pgbench -M prepared -n -f ./upd.sql -h 127.0.0.1 -U digoal -r -T 60 -c 8 -j 8 digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 2159559
+tps = 35991.452684 (including connections establishing)
+tps = 36000.155507 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002853        \setrandom id 1 50000000
+        0.216709        update digoal.user_info set info='DIGOAL' where id=:id;
+
+
+
+三、localalloc
+-- 首先把数据库关掉
+
+pg_ctl stop -m fast
+
+
+-- 清除OS缓存, 以清理分配出去的内存.
+
+echo 3 > /proc/sys/vm/drop_caches
+
+
+-- 启动数据库, 注意此时选择numa策略localalloc
+
+postgres@172_16_3_52-> numactl --localalloc pg_ctl start
+
+
+-- vacuum 测试表, checkpoint, 加载数据至os cache
+
+psql digoal postgres
+vacuum digoal.user_info ;
+checkpoint;
+select pgfadvise_willneed('pg_toast.'||relname) from pg_class where oid in (select reltoastrelid from pg_class where relname='user_info');
+select * from pgfadvise_willneed('digoal.user_info');
+select * from pgfadvise_willneed('digoal.user_info_pkey');
+
+
+
+-- 压力测试结果
+
+postgres@172_16_3_52-> pgbench -M prepared -n -f ./upd.sql -h 127.0.0.1 -U digoal -r -T 60 -c 8 -j 8 digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 2244693
+tps = 37410.793055 (including connections establishing)
+tps = 37414.993972 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002920        \setrandom id 1 50000000
+        0.208161        update digoal.user_info set info='DIGOAL' where id=:id;
+
+
+
+【小结】
+1. 测试结果来看, NUMA策略性能分布 :  localalloc > default > interleave  .
+    如果觉得测试时间不够长, 可以把-T 调大一点, 这样出来的值更有可信度.
+2. Linux I/O 调度算法和性能也有一定关系, 关于调度算法RHEL 5里面有4种.
+http://blog.163.com/digoal@126/blog/static/163877040201192483154563/

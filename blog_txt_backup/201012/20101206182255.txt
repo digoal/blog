@@ -1,0 +1,121 @@
+PostgreSQL research
+
+Increasing the OpLog Size in MongoDB(don't need full resync)
+
+2010-12-06 18:22:55   查看原文>>
+
+OpLog用于MongoDB数据库复制场合,特征:
+1. 设置容量上限,
+2. 循环使用
+3. local数据库专用
+
+对于MongoDB来说设置好适当的OpLog上限是非常有必要的，因为加大OpLog Size需要重启Master和Slave数据库，并且Slave数据库需要重新同步(full sync).
+如果不做FULL SYNC，看看会出现什么样的情况:
+MASTER:
+[root@db6 data1]# /opt/mongodb-linux-x86_64-1.6.4/bin/mongo 127.0.0.1:5282/test
+MongoDB shell version: 1.6.4
+connecting to: 127.0.0.1:5282/test
+> db.tbl_test.insert({"id":2,"name":"digoal"})    
+> exit
+bye
+
+SlAVE
+[root@db6 data1]# /opt/mongodb-linux-x86_64-1.6.4/bin/mongo 127.0.0.1:5283/test
+MongoDB shell version: 1.6.4
+connecting to: 127.0.0.1:5283/test
+> db.tbl_test.find()
+{ "_id" : ObjectId("4cfcbbffb405701a1a121820"), "id" : 1, "name" : "digoal.zhou" }
+已经无法完成同步:
+分析原因:
+MASTER:
+> db.printReplicationInfo()    
+configured oplog size:   990MB
+log length start to end: 91secs (0.03hrs)
+oplog first event time:  Mon Dec 06 2010 18:38:14 GMT+0800 (CST)
+oplog last event time:   Mon Dec 06 2010 18:39:45 GMT+0800 (CST)
+now:                     Mon Dec 06 2010 18:39:52 GMT+0800 (CST)
+> exit
+
+SLAVE:
+> db.printSlaveReplicationInfo()
+source:   db6:5282
+         syncedTo: Mon Dec 06 2010 18:34:41 GMT+0800 (CST)
+                 = 286secs ago (0.08hrs)
+> exit
+bye
+时间已经错过了,取不到所要的数据.
+解决办法:
+(首先确保MASTER SLAVE在关闭时数据是一致的，否则数据还是会有问题)
+在删除OpLog后，启动MASTER前调整MASTER服务器的时间到db.printSlaveReplicationInfo()输出的时间之前(Mon Dec 06 2010 18:34:41 GMT+0800 (CST)),这样的话启动MASTER得到的db.printReplicationInfo()时间会比SLAVE需要的时间早,数据会继续同步.确认同步后再把两台服务器的时间同步一下.以正确的时间为准.（OPLOG里面是存储时间戳
+的,oplog.$main具体的字段如下）
+ts
+Timestamp for the operation. The timestamp type is an internal type used to track
+when operations are performed. It is composed of a 4-byte timestamp and a 4-byte
+incrementing counter.
+op
+Type of operation performed as a 1-byte code (e.g., “i” for an insert).
+ns
+Namespace (collection name) where the operation was performed.
+o
+Document further specifying the operation to perform. For an insert, this would
+be the document to insert.
+
+
+加大OpLog Size的几个原因分析:
+1. Slave长时间Down机或与Master断开连接，超过OpLog轮循时间。
+ 如，在SLAVE节点执行
+> db.printSlaveReplicationInfo();
+    source:   localhost:27017
+    syncedTo: Tue Mar 30 2010 16:44:01 GMT-0400 (EDT)
+    = 12secs ago (0hrs)
+同步截至12秒前。如果OpLog中最早的记录比 Tue Mar 30 2010 16:44:01 GMT-0400 (EDT)  还要新的话,完蛋,需要做full sync。
+2. SLAVE数据库做FULL SYNC的时间过长，超过了OpLog可以容纳的操作时间。
+如: 在SLAVE数据库使用如下命令开始从master数据库full sync :
+> use admin
+> db.runCommand({resync: 1})
+或调用--autoresync参数重启SLAVE: mongod --slave --autoresync
+
+例 : 增加OpLog SIZE
+
+1. 查看Master OpLog Size
+
+> db.printReplicationInfo();
+configured oplog size:   1048.576MB
+log length start to end: 7200secs (2hrs)
+oplog first event time:  Wed Mar 03 2010 16:20:39 GMT-0500 (EST)
+oplog last event time:   Wed Mar 03 2010 18:20:39 GMT-0500 (EST)
+now:                     Wed Mar 03 2010 18:40:34 GMT-0500 (EST)
+
+2. 关闭master mongod
+$ # Stop mongod - killall mongod or kill -2 or ctrl-c) - then:
+$ rm /data/db/local.*
+$ mongod --oplog=8038 --master
+加到8G
+
+3. 重启slave
+mongod --slave --autoresync
+
+例 :  Manually Allocating OpLog Files
+MongoDB允许在数据库开启前先手工分配OpLog 文件.可能是出于文件在DISK上存储连续性的考虑吧.(猜测)
+1. 生成文件 (20GB)
+cd /tmp/local
+  for i in {0..9}
+      do
+      echo $i
+      head -c 2146435072 /dev/zero > local.$i
+      done
+
+Note that the datafiles aren't exactly 2GB due MongoDB's max int size.
+
+2. 关闭master mongodb
+
+3. 移动文件 (假设$MONGODB = /data/db )
+
+$ mv /data/db/local.* /safe/place
+$ mv /tmp/local/* /data/db/
+
+4. 重启master
+
+$ mongod --master --oplogSize=20000
+
+5. Finally, resync the slave. This can be done by shutting down the slave, deleting all its datafiles, and restarting it.

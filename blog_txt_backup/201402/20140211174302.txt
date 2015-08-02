@@ -1,0 +1,101 @@
+PostgreSQL research
+
+order by limit x offset y performance tuning
+
+2014-02-11 17:43:02   查看原文>>
+
+再一次证明和开发人员沟通, 其乐无穷.
+今天一位开发的同事给我一个SQL, 问我为什么只改了一个条件, 查询速度居然从毫秒就慢到几十秒了,
+如下 : 
+
+SELECT *                                                                                
+  FROM tbl
+  where create_time>='2014-02-08' and create_time<'2014-02-11'
+  and x=3
+  and id != '123'
+  and id != '321'
+  and y > 0 order by create_time limit 1 offset 0;
+
+
+运行结果100毫秒左右.
+执行计划 : 
+
+Limit  (cost=0.56..506.19 rows=1 width=1038)
+   ->  Index Scan using idx on tbl  (cost=0.56..2381495.60 rows=4710 width=1038)
+         Index Cond: ((create_time >= '2014-02-08 00:00:00'::timestamp without time zone) AND (create_time < '2014-02-11 00:00:00'::timestamp without time zone))
+         Filter: (((id)::text <> '123'::text) AND ((id)::text <> '321'::text) AND (y > 0) AND (x = 3))
+
+
+
+改成如下 : 
+
+SELECT *                                                                                
+  FROM tbl
+  where create_time>='2014-02-08' and create_time<'2014-02-11'
+  and x=3
+  and id != '123'
+  and id != '321'
+  and y > 0 order by create_time limit 1 offset 10;
+
+
+运行几十秒.
+执行计划如下 : 
+
+Limit  (cost=5056.98..5562.62 rows=1 width=1038)
+   ->  Index Scan using idx on tbl  (cost=0.56..2382076.78 rows=4711 width=1038)
+         Index Cond: ((create_time >= '2014-02-08 00:00:00'::timestamp without time zone) AND (create_time < '2014-02-11 00:00:00'::timestamp without time zone))
+         Filter: (((id)::text <> '11622'::text) AND ((id)::text <> '13042'::text) AND (y > 0) AND (x = 3))
+
+
+
+我们看到两个SQL执行计划是一样的, 但是走索引扫描的记录却千差万别. 第二个SQL扫描了多少行呢?
+我们来看看第二个查询得到的create_time值是多少:
+
+select create_time from tbl 
+  where create_time>='2014-02-08' and create_time<'2014-02-11'
+  and x=3
+  and id != '123'
+  and id != '321'
+  and y > 0 order by create_time limit 1 offset 10;
+
+
+结果 : 
+
+'2014-02-08 18:38:35.79'
+
+
+那么它扫描了多少行(或者说多少个数据块)呢? 通过explain verbose可以输出. 
+当然使用以下查询也可以估算出来 : 
+
+select count(*) from tbl where create_time<='2014-02-08 18:38:35.79' and create_time>='2014-02-08';
+  count  
+---------
+ 1448081
+(1 row)
+
+
+
+也就是说本例的SQL中的WHERE条件的数据在create_time这个字段顺序上的分布比较零散, 并且数据量比较庞大.
+所以offset 10后, 走create_time这个索引自然就慢了.
+仔细的了解了一下开发人员的需求, 是要做类似翻页的需求. 
+
+优化方法1, 在不新增任何索引的前提下, 还是走create_time这个索引, 减少重复扫描的数据.
+需要得到每次取到的最大的create_time值, 以及可以标示这条记录的唯一ID.
+下次取的时候, 不要使用offset 下一页, 而是加上这两个条件.
+例如 : 
+
+select create_time from tbl 
+  where create_time>='2014-02-08' and create_time<'2014-02-11'
+  and x=3
+  and id != '123'
+  and id != '321'
+  and pk not in (?)  -- 这个ID是上次取到的create_time最大的值的所有记录的pk值.
+  and y > 0 
+  and create_time >= '2014-02-08 18:38:35.79'  -- 这个时间是上次取到的数据的最大的时间值.
+  order by create_time limit ? offset 0;
+
+
+通过这种方法, 可以减少limit x offset y这种方法取后面的分页数据带来的大量数据块离散扫描.
+以前写的一些关于分页优化的例子 : 
+http://blog.163.com/digoal@126/blog/static/163877040201111694355822/
+http://blog.163.com/digoal@126/blog/static/1638770402012520105855757/

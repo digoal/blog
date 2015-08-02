@@ -1,0 +1,197 @@
+PostgreSQL research
+
+PostgreSQL Random Query Tuning
+
+2011-02-12 10:22:35   查看原文>>
+
+    在某些场景可能会需要随机的从表中取出记录。方法比较多，简单的方法可能给数据库带来巨大的开销，下面开始举例说明，看看如何优化一个随机查询。
+测试表:
+
+create table tbl_user(id serial8 primary key,firstname varchar(32),lastname varchar(32),corp varchar(32),age smallint);
+
+
+ID列被作为优化随机查询的选择列.唯一，有索引，非空是比较好的选择.
+测试记录:
+
+insert into tbl_user select generate_series(1,999999),'zhou','digoal','sky-mobi',27;
+
+
+随机查询方法举例:
+方法    1. 最简单的随机查询，查询出1条记录。
+
+digoal=> select * from tbl_user order by random() limit 1;
+   id   | firstname | lastname |   corp   | age
+--------+-----------+----------+----------+-----
+ 809085 | zhou      | digoal   | sky-mobi |  27
+(1 row)
+Time: 411.856 ms
+
+
+执行计划:
+
+digoal=> explain select * from tbl_user order by random() limit 1;
+                                  QUERY PLAN                                 
+------------------------------------------------------------------------------
+ Limit  (cost=24852.98..24852.99 rows=1 width=31)
+   ->  Sort  (cost=24852.98..27352.98 rows=999999 width=31)
+         Sort Key: (random())
+         ->  Seq Scan on tbl_user  (cost=0.00..19852.99 rows=999999 width=31)
+(4 rows)
+
+
+简单是简单，缺点也很明显，这种随机查询在大表上跑数据库肯定是吃不消的。
+
+以下列举利用索引列进行优化的方法。
+方法    2.  随机取出n条记录,以下取出5条随机记录
+
+digoal=> select * from tbl_user
+digoal->  where id in
+digoal->         (select floor(random() * (max_id - min_id))::int
+digoal(>                 + min_id
+digoal(>            from generate_series(1,5),
+digoal(>                 (select max(id) as max_id,
+digoal(>                         min(id) as min_id
+digoal(>                    from tbl_user) s1
+digoal(>         )
+digoal-> limit 5;
+   id   | firstname | lastname |   corp   | age
+--------+-----------+----------+----------+-----
+ 965638 | zhou      | digoal   | sky-mobi |  27
+ 193491 | zhou      | digoal   | sky-mobi |  27
+ 294286 | zhou      | digoal   | sky-mobi |  27
+ 726263 | zhou      | digoal   | sky-mobi |  27
+ 470713 | zhou      | digoal   | sky-mobi |  27
+(5 rows)
+Time: 0.670 ms
+
+
+执行计划:
+
+digoal=> explain select * from tbl_user
+digoal->  where id in
+digoal->         (select floor(random() * (max_id - min_id))::int
+digoal(>                 + min_id
+digoal(>            from generate_series(1,5),
+digoal(>                 (select max(id) as max_id,
+digoal(>                         min(id) as min_id
+digoal(>                    from tbl_user) s1
+digoal(>         )
+digoal-> limit 5;
+                                                              QUERY PLAN                                                           
+ 
+------------------------------------------------------------------------------------------------------------------------------------
+--
+ Limit  (cost=50.08..69.63 rows=5 width=31)
+   ->  Nested Loop  (cost=50.08..832.26 rows=200 width=31)
+         ->  HashAggregate  (cost=50.08..52.08 rows=200 width=8)
+               ->  Nested Loop  (cost=0.06..37.58 rows=1000 width=16)
+                     ->  Result  (cost=0.06..0.07 rows=1 width=0)
+                           InitPlan 1 (returns $0)
+                             ->  Limit  (cost=0.00..0.03 rows=1 width=8)
+                                   ->  Index Scan Backward using tbl_user_pkey on tbl_user  (cost=0.00..27844.29 rows=999999 width=8
+)
+                                         Index Cond: (id IS NOT NULL)
+                           InitPlan 2 (returns $1)
+                             ->  Limit  (cost=0.00..0.03 rows=1 width=8)
+                                   ->  Index Scan using tbl_user_pkey on tbl_user  (cost=0.00..27844.29 rows=999999 width=8)
+                                         Index Cond: (id IS NOT NULL)
+                     ->  Function Scan on generate_series  (cost=0.00..10.00 rows=1000 width=0)
+         ->  Index Scan using tbl_user_pkey on tbl_user  (cost=0.00..3.89 rows=1 width=31)
+               Index Cond: (digoal.tbl_user.id = (((floor((random() * ((($0) - ($1)))::double precision)))::integer + ($1))))
+(16 rows)
+
+
+
+方法   3. 取出N条连续的随机记录.(此处用到函数)
+
+digoal=> create or replace function f_get_random (i_range int) returns setof record as $BODY$
+digoal$> declare
+digoal$> v_result record;
+digoal$> v_max_id int;
+digoal$> v_min_id int;
+digoal$> v_random numeric;
+digoal$> begin
+digoal$> select random() into v_random;
+digoal$> select max(id),min(id) into v_max_id,v_min_id from tbl_user;
+digoal$> for v_result in select * from tbl_user where id between (v_min_id+(v_random*(v_max_id-v_min_id))::int) and (v_min_id+(v_random*(v_max_id-v_min_id))::int+i_range)
+digoal$> loop
+digoal$> return next v_result;
+digoal$> end loop;
+digoal$> return;
+digoal$> end
+digoal$> $BODY$ language plpgsql;
+CREATE FUNCTION
+
+
+以下举例取出10条连续的随机记录
+
+digoal=> select * from f_get_random(9) as (id bigint,firstname varchar(32),lastname varchar(32),corp varchar(32),age smallint);
+   id   | firstname | lastname |   corp   | age
+--------+-----------+----------+----------+-----
+ 694686 | zhou      | digoal   | sky-mobi |  27
+ 694687 | zhou      | digoal   | sky-mobi |  27
+ 694688 | zhou      | digoal   | sky-mobi |  27
+ 694689 | zhou      | digoal   | sky-mobi |  27
+ 694690 | zhou      | digoal   | sky-mobi |  27
+ 694691 | zhou      | digoal   | sky-mobi |  27
+ 694692 | zhou      | digoal   | sky-mobi |  27
+ 694693 | zhou      | digoal   | sky-mobi |  27
+ 694694 | zhou      | digoal   | sky-mobi |  27
+ 694695 | zhou      | digoal   | sky-mobi |  27
+(10 rows)
+Time: 0.418 ms
+
+
+执行计划:
+
+digoal=> explain select * from tbl_user where id between 694686 and 694695;
+                                  QUERY PLAN                                  
+-------------------------------------------------------------------------------
+ Index Scan using tbl_user_pkey on tbl_user  (cost=0.00..4.48 rows=9 width=31)
+   Index Cond: ((id >= 694686) AND (id <= 694695))
+(2 rows)
+
+digoal=> explain select max(id),min(id) from tbl_user;
+                                                  QUERY PLAN                                                 
+--------------------------------------------------------------------------------------------------------------
+ Result  (cost=0.06..0.07 rows=1 width=0)
+   InitPlan 1 (returns $0)
+     ->  Limit  (cost=0.00..0.03 rows=1 width=8)
+           ->  Index Scan Backward using tbl_user_pkey on tbl_user  (cost=0.00..27844.29 rows=999999 width=8)
+                 Index Cond: (id IS NOT NULL)
+   InitPlan 2 (returns $1)
+     ->  Limit  (cost=0.00..0.03 rows=1 width=8)
+           ->  Index Scan using tbl_user_pkey on tbl_user  (cost=0.00..27844.29 rows=999999 width=8)
+                 Index Cond: (id IS NOT NULL)
+(9 rows)
+
+
+
+其他的方法不再一一列举，方法2和方法3可以满足大多数的需求了。开销和运行时间均比方法1下降1000倍以上.
+注意事项:
+1. 索引列的类型和查询条件的类型必须匹配.
+2. random() 取值范围 0.0 到 1.0
+3. id between x and y 的写法等同于 id>= x and id<=y .
+    id BETWEEN SYMMETRIC x and y 的写法等同于 (id >= x and id <= y) or (id >= y and id <= x)
+因此两者的执行计划是完全不一样的,如下:
+
+digoal=> explain select * from tbl_user where id BETWEEN SYMMETRIC 3 and 2;
+                                    QUERY PLAN                                   
+----------------------------------------------------------------------------------
+ Bitmap Heap Scan on tbl_user  (cost=4.63..6.65 rows=1 width=31)
+   Recheck Cond: (((id >= 3) AND (id <= 2)) OR ((id >= 2) AND (id <= 3)))
+   ->  BitmapOr  (cost=4.63..4.63 rows=1 width=0)
+         ->  Bitmap Index Scan on tbl_user_pkey  (cost=0.00..2.31 rows=1 width=0)
+               Index Cond: ((id >= 3) AND (id <= 2))
+         ->  Bitmap Index Scan on tbl_user_pkey  (cost=0.00..2.31 rows=1 width=0)
+               Index Cond: ((id >= 2) AND (id <= 3))
+(7 rows)
+
+digoal=> explain select * from tbl_user where id BETWEEN 2 and 3;
+                                  QUERY PLAN                                  
+-------------------------------------------------------------------------------
+ Index Scan using tbl_user_pkey on tbl_user  (cost=0.00..4.32 rows=1 width=31)
+   Index Cond: ((id >= 2) AND (id <= 3))
+(2 rows)
+
+

@@ -1,0 +1,332 @@
+PostgreSQL research
+
+PostgreSQL Daily Maintenance - reindex
+
+2013-05-30 15:11:59   查看原文>>
+
+Reindex日志维护
+随着DML的发生, 索引会出现碎片.  持续膨胀.  降低效率. 虽然PostgreSQL有vacuum机制, 但是索引不像heap表, vacuum后的dead tuple占用的空间可以被马上回收复用, 以b-tree索引为例, 一个b-tree page只有当所有的item全部变成不可用后这个page才能被复用. 所以索引膨胀的概率比表大很多.
+例一 : 
+
+digoal=# truncate tbl;
+TRUNCATE TABLE
+Time: 1070.523 ms
+digoal=# insert into tbl select generate_series(1,1000000),'test';
+INSERT 0 1000000
+Time: 4534.320 ms
+digoal=# analyze tbl;
+ANALYZE
+Time: 58.228 ms
+digoal=# select pg_relation_size('tbl');
+ pg_relation_size 
+------------------
+         44285952
+(1 row)
+Time: 0.371 ms
+digoal=# select pg_relation_size('idx_tbl_1');
+ pg_relation_size 
+------------------
+         22487040
+(1 row)
+Time: 0.304 ms
+digoal=# update tbl set id=id+1000000;
+UPDATE 1000000
+Time: 5786.052 ms
+digoal=# select pg_relation_size('tbl');
+ pg_relation_size 
+------------------
+         88563712
+(1 row)
+Time: 0.281 ms
+digoal=# select pg_relation_size('idx_tbl_1');
+ pg_relation_size 
+------------------
+         44941312
+(1 row)
+Time: 0.308 ms
+
+
+第一次全量更新后, 表和索引都膨胀了1倍.
+
+digoal=# vacuum tbl;
+VACUUM
+Time: 17.052 ms
+
+
+vacuum后表的垃圾会回收, 但是索引的不会被回收.
+所以第二次全量更新, 表不会再膨胀了, 但是索引继续膨胀.
+
+digoal=# update tbl set id=id-1000000;
+UPDATE 1000000
+Time: 6063.763 ms
+digoal=# select pg_relation_size('tbl');
+ pg_relation_size 
+------------------
+         88563712
+(1 row)
+Time: 0.814 ms
+digoal=# select pg_relation_size('idx_tbl_1');
+ pg_relation_size 
+------------------
+         65585152
+(1 row)
+Time: 0.353 ms
+
+
+第三次vacuum与第二次类似.
+
+digoal=# vacuum tbl;
+VACUUM
+Time: 2111.606 ms
+
+
+全量更新后, 表未膨胀, 索引膨胀.
+
+digoal=# update tbl set id=id+1000000;
+UPDATE 1000000
+Time: 7829.064 ms
+digoal=# select pg_relation_size('tbl');
+ pg_relation_size 
+------------------
+         88563712
+(1 row)
+Time: 0.310 ms
+digoal=# select pg_relation_size('idx_tbl_1');
+ pg_relation_size 
+------------------
+         88907776
+(1 row)
+Time: 0.397 ms
+
+
+例二 : 
+创建表, 索引, 插入500万测试数据 : 
+
+digoal=# create table tbl(id int primary key, info int);
+CREATE TABLE
+digoal=# insert into tbl select generate_series(1,5000000),1;
+INSERT 0 5000000
+digoal=# create index idx_tbl_1 on tbl(info);
+CREATE INDEX
+digoal=# vacuum analyze tbl;
+VACUUM
+记录当前的表, 索引的大小.
+digoal=# select pg_relation_size('tbl');
+ pg_relation_size 
+------------------
+        181239808
+(1 row)
+digoal=# select pg_relation_size('tbl_pkey');
+ pg_relation_size 
+------------------
+        112328704
+(1 row)
+digoal=# select pg_relation_size('idx_tbl_1');
+ pg_relation_size 
+------------------
+        112336896
+(1 row)
+
+
+使用pgbench对这个表做更新操作 : 
+
+pg93@db-172-16-3-33-> vi update.sql
+\setrandom id 1 5000000
+update tbl set info=trunc(5000000*random()) where id=:id;
+
+pg93@db-172-16-3-33-> pgbench -M prepared -r -n -c 8 -j 2 -f ./update.sql -T 60
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 2
+duration: 60 s
+number of transactions actually processed: 361126
+tps = 5994.525604 (including connections establishing)
+tps = 5995.828525 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001356        \setrandom id 1 5000000
+        1.331439        update tbl set info=trunc(5000000*random()) where id=:id;
+
+
+第一批更新后对表做vacuum, 回收dead tuple占用的空间 : 
+
+digoal=# vacuum verbose analyze tbl;
+INFO:  vacuuming "public.tbl"
+INFO:  scanned index "tbl_pkey" to remove 361126 row versions
+DETAIL:  CPU 0.08s/1.54u sec elapsed 1.74 sec.
+INFO:  scanned index "idx_tbl_1" to remove 361126 row versions
+DETAIL:  CPU 0.20s/1.88u sec elapsed 4.00 sec.
+INFO:  "tbl": removed 361126 row versions in 23350 pages
+DETAIL:  CPU 0.14s/0.34u sec elapsed 1.13 sec.
+INFO:  index "tbl_pkey" now contains 5000000 row versions in 13761 pages
+DETAIL:  361082 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  index "idx_tbl_1" now contains 5000000 row versions in 14972 pages
+DETAIL:  361126 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "tbl": found 300838 removable, 5000000 nonremovable row versions in 23459 out of 23459 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.62s/4.34u sec elapsed 7.77 sec.
+INFO:  analyzing "public.tbl"
+INFO:  "tbl": scanned 23459 of 23459 pages, containing 5000000 live rows and 0 dead rows; 30000 rows in sample, 5000000 estimated total rows
+VACUUM
+
+
+查看当前表的大小和索引的大小, 比创建表时大了一些. tbl_pkey没变大多少是因为HOT机制造成的. 
+HOT的详细介绍可以参考src/backend/access/heap/README.HOT
+
+digoal=# select pg_relation_size('tbl');
+ pg_relation_size 
+------------------
+        192176128
+(1 row)
+digoal=# select pg_relation_size('tbl_pkey');
+ pg_relation_size 
+------------------
+        112730112
+(1 row)
+digoal=# select pg_relation_size('idx_tbl_1');
+ pg_relation_size 
+------------------
+        122650624
+(1 row)
+
+
+再次使用pgbench对测试表其进行更新 : 
+
+pg93@db-172-16-3-33-> pgbench -M prepared -r -n -c 8 -j 2 -f ./update.sql -T 60
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 2
+duration: 60 s
+number of transactions actually processed: 417661
+tps = 6960.793225 (including connections establishing)
+tps = 6962.199893 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001263        \setrandom id 1 5000000
+        1.146337        update tbl set info=trunc(5000000*random()) where id=:id;
+
+
+再次执行vacuum,
+
+digoal=# vacuum verbose analyze tbl;
+INFO:  vacuuming "public.tbl"
+INFO:  scanned index "tbl_pkey" to remove 417660 row versions
+DETAIL:  CPU 0.09s/1.64u sec elapsed 1.88 sec.
+INFO:  scanned index "idx_tbl_1" to remove 417660 row versions
+DETAIL:  CPU 0.24s/1.96u sec elapsed 3.89 sec.
+INFO:  "tbl": removed 417660 row versions in 23635 pages
+DETAIL:  CPU 0.41s/1.28u sec elapsed 5.38 sec.
+INFO:  index "tbl_pkey" now contains 5000000 row versions in 14191 pages
+DETAIL:  417335 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  index "idx_tbl_1" now contains 5000000 row versions in 16433 pages
+DETAIL:  417660 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "tbl": found 361383 removable, 5000000 nonremovable row versions in 23727 out of 23727 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 23313 unused item pointers.
+0 pages are entirely empty.
+CPU 0.93s/5.76u sec elapsed 12.46 sec.
+INFO:  analyzing "public.tbl"
+INFO:  "tbl": scanned 23727 of 23727 pages, containing 5000000 live rows and 0 dead rows; 30000 rows in sample, 5000000 estimated total rows
+VACUUM
+
+
+当前表的膨胀几乎停止, 因为第一次vacuum后回收了dead tuple的空间.
+
+digoal=# select pg_relation_size('tbl');
+ pg_relation_size 
+------------------
+        194371584
+(1 row)
+
+digoal=# select pg_relation_size('tbl_pkey');
+ pg_relation_size 
+------------------
+        116252672
+(1 row)
+
+
+被更新列的索引继续膨胀, 因为索引页的复用需要这个页上的tuple itempoint完全失效后才可以.
+
+digoal=# select pg_relation_size('idx_tbl_1');
+ pg_relation_size 
+------------------
+        134619136
+(1 row)
+
+
+
+所以要经常给索引瘦身, 同时又不能影响数据库的DML操作.
+可以使用如下方法, 重建例一中的索引 : 
+
+digoal=# \d tbl
+      Table "public.tbl"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ id     | integer | 
+ info   | text    | 
+Indexes:
+    "idx_tbl_1" btree (id)
+
+
+创建索引的同时不影响表的 DML操作.
+
+digoal=# create index concurrently  idx_tbl_2 on tbl(id);
+CREATE INDEX
+Time: 2599.077 ms
+
+
+创建好后删除索引1.
+
+digoal=# drop index idx_tbl_1;
+DROP INDEX
+Time: 21.757 ms
+
+
+新建的索引又瘦下去了.
+
+digoal=# select pg_relation_size('idx_tbl_2');
+ pg_relation_size 
+------------------
+         22487040
+(1 row)
+Time: 0.450 ms
+
+
+对于primary key或者unique key也可以使用此方法.
+
+digoal=# create unique index concurrently user_info_username_key_1 on user_info(username);
+CREATE INDEX
+digoal=# begin;
+BEGIN
+digoal=# alter table user_info drop constraint user_info_username_key;
+ALTER TABLE
+digoal=# alter table user_info add constraint user_info_username_key unique using index user_info_username_key_1;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "user_info_username_key_1" to "user_info_username_key"
+ALTER TABLE
+digoal=# end;
+COMMIT
+digoal=# create unique index concurrently user_info_pkey_1 on user_info(id);
+CREATE INDEX
+digoal=# begin;
+BEGIN
+digoal=# alter table user_info drop constraint user_info_pkey;
+ALTER TABLE
+digoal=# alter table user_info add constraint user_info_pkey primary key using index user_info_pkey_1;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "user_info_pkey_1" to "user_info_pkey"
+ALTER TABLE
+digoal=# end;
+COMMIT
+
+

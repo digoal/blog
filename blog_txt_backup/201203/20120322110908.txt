@@ -1,0 +1,291 @@
+PostgreSQL research
+
+PostgreSQL tuple output order & column output order
+
+2012-03-22 11:09:08   查看原文>>
+
+一、tuple output order
+在大多数数据库中如果没有用order by指定数据返回的顺序, 返回的结果都是无序的, 甚至每次返回的结果顺序可能都不一样.
+那么就算不一样其实也是有一些规律可循的.
+1. 首先是, 我们想想一条SQL交给数据库执行的时候, 它是怎么scan的. 怎么SCAN直接影响输出的顺序. 怎么scan可以从执行计划中看出来.
+2. 当tuple被更新后, PostgreSQL的做法是把原来的记录修改它的xmax, 然后在free space map中找到一个空槽位,新增一条TUPLE.
+3. 可能还需要考虑其他因素.
+来举个例子 : 
+创建测算表与索引:
+
+digoal=> create table order_test ( id int ,username text );
+CREATE TABLE
+digoal=> create index idx_order_test_1 on order_test (id);
+CREATE INDEX
+
+
+插入测试数据 : 
+
+digoal=> insert into order_test select generate_series(1,100000),'digoal';
+INSERT 0 100000
+
+
+测试查询结果的顺序 : 
+以下两次顺序是一样的,
+
+digoal=> select ctid,* from order_test where id>1000 and id<1009;
+  ctid  |  id  | username 
+--------+------+----------
+ (5,76) | 1001 | digoal
+ (5,77) | 1002 | digoal
+ (5,78) | 1003 | digoal
+ (5,79) | 1004 | digoal
+ (5,80) | 1005 | digoal
+ (5,81) | 1006 | digoal
+ (5,82) | 1007 | digoal
+ (5,83) | 1008 | digoal
+(8 rows)
+
+digoal=> select ctid,* from order_test where id>1000 and id<1009;
+  ctid  |  id  | username 
+--------+------+----------
+ (5,76) | 1001 | digoal
+ (5,77) | 1002 | digoal
+ (5,78) | 1003 | digoal
+ (5,79) | 1004 | digoal
+ (5,80) | 1005 | digoal
+ (5,81) | 1006 | digoal
+ (5,82) | 1007 | digoal
+ (5,83) | 1008 | digoal
+(8 rows)
+
+
+查看上次查询的执行计划 : 
+使用的是bitmap heap scan.
+
+digoal=> explain select ctid,* from order_test where id>1000 and id<1009;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Bitmap Heap Scan on order_test  (cost=7.67..347.59 rows=333 width=42)
+   Recheck Cond: ((id > 1000) AND (id < 1009))
+   ->  Bitmap Index Scan on idx_order_test_1  (cost=0.00..7.59 rows=333 width=0)
+         Index Cond: ((id > 1000) AND (id < 1009))
+(4 rows)
+
+
+接下来换成index_scan和seq_scan的执行计划继续查询 :
+
+digoal=> set enable_bitmapscan=off;
+SET
+digoal=> explain select ctid,* from order_test where id>1000 and id<1009;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Index Scan using idx_order_test_1 on order_test  (cost=0.00..520.92 rows=333 width=42)
+   Index Cond: ((id > 1000) AND (id < 1009))
+(2 rows)
+
+digoal=> select ctid,* from order_test where id>1000 and id<1009;
+  ctid  |  id  | username 
+--------+------+----------
+ (5,76) | 1001 | digoal
+ (5,77) | 1002 | digoal
+ (5,78) | 1003 | digoal
+ (5,79) | 1004 | digoal
+ (5,80) | 1005 | digoal
+ (5,81) | 1006 | digoal
+ (5,82) | 1007 | digoal
+ (5,83) | 1008 | digoal
+(8 rows)
+
+digoal=> set enable_indexscan=off;
+SET
+digoal=> explain select ctid,* from order_test where id>1000 and id<1009;
+                           QUERY PLAN
+----------------------------------------------------------------
+ Seq Scan on order_test  (cost=0.00..1539.14 rows=333 width=42)
+   Filter: ((id > 1000) AND (id < 1009))
+(2 rows)
+
+digoal=> select ctid,* from order_test where id>1000 and id<1009;
+  ctid  |  id  | username
+--------+------+----------
+ (5,76) | 1001 | digoal
+ (5,77) | 1002 | digoal
+ (5,78) | 1003 | digoal
+ (5,79) | 1004 | digoal
+ (5,80) | 1005 | digoal
+ (5,81) | 1006 | digoal
+ (5,82) | 1007 | digoal
+ (5,83) | 1008 | digoal
+(8 rows)
+
+
+返回的顺序还是一样的, 不要急. 接下来我更新一条记录再次查询 : 
+注意到这次的返回顺序就和SCAN方法有关了.
+
+digoal=> update order_test set username='DIGOAL' where id=1001;
+UPDATE 1
+digoal=> explain select ctid,* from order_test where id>1000 and id<1009;
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Seq Scan on order_test  (cost=0.00..1539.14 rows=333 width=42)
+   Filter: ((id > 1000) AND (id < 1009))
+(2 rows)
+
+digoal=> select ctid,* from order_test where id>1000 and id<1009;
+   ctid    |  id  | username 
+-----------+------+----------
+ (5,77)    | 1002 | digoal
+ (5,78)    | 1003 | digoal
+ (5,79)    | 1004 | digoal
+ (5,80)    | 1005 | digoal
+ (5,81)    | 1006 | digoal
+ (5,82)    | 1007 | digoal
+ (5,83)    | 1008 | digoal
+ (540,101) | 1001 | DIGOAL
+(8 rows)
+
+
+seq_scan的扫描顺序以及返回结果的顺序显然和这条记录的物理存储的顺序有关系.
+
+digoal=> set enable_indexscan=on;
+SET
+digoal=> explain select ctid,* from order_test where id>1000 and id<1009;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Index Scan using idx_order_test_1 on order_test  (cost=0.00..520.92 rows=333 width=42)
+   Index Cond: ((id > 1000) AND (id < 1009))
+(2 rows)
+digoal=> select ctid,* from order_test where id>1000 and id<1009;
+   ctid    |  id  | username 
+-----------+------+----------
+ (540,101) | 1001 | DIGOAL
+ (5,77)    | 1002 | digoal
+ (5,78)    | 1003 | digoal
+ (5,79)    | 1004 | digoal
+ (5,80)    | 1005 | digoal
+ (5,81)    | 1006 | digoal
+ (5,82)    | 1007 | digoal
+ (5,83)    | 1008 | digoal
+(8 rows)
+
+
+index_scan的扫描顺序以及返回结果的顺序显然和index的存储结构和扫描顺序有关系, 它是按照index的值顺序扫描的.
+
+digoal=> set enable_bitmapscan=on;
+SET
+digoal=> explain select ctid,* from order_test where id>1000 and id<1009;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Bitmap Heap Scan on order_test  (cost=7.67..347.59 rows=333 width=42)
+   Recheck Cond: ((id > 1000) AND (id < 1009))
+   ->  Bitmap Index Scan on idx_order_test_1  (cost=0.00..7.59 rows=333 width=0)
+         Index Cond: ((id > 1000) AND (id < 1009))
+(4 rows)
+
+digoal=> select ctid,* from order_test where id>1000 and id<1009;
+   ctid    |  id  | username 
+-----------+------+----------
+ (5,77)    | 1002 | digoal
+ (5,78)    | 1003 | digoal
+ (5,79)    | 1004 | digoal
+ (5,80)    | 1005 | digoal
+ (5,81)    | 1006 | digoal
+ (5,82)    | 1007 | digoal
+ (5,83)    | 1008 | digoal
+ (540,101) | 1001 | DIGOAL
+(8 rows)
+
+
+而bitmap scan的话, 是先从索引扫到所有的item, 然后按照item排序后再从heap table扫tuple输出, 所以是按照ctid排序输出的.
+
+二、column output order
+列的顺序基本上是固定的, 
+它的顺序取决于pg_attribute的attnum的值.
+
+digoal=> select * from pg_attribute where attrelid=(select oid from pg_class where relname='order_test');
+ attrelid | attname  | atttypid | attstattarget | attlen | attnum | attndims | attcacheoff | atttypmod | attbyval | attstorage | att
+align | attnotnull | atthasdef | attisdropped | attislocal | attinhcount | attcollation | attacl | attoptions
+----------+----------+----------+---------------+--------+--------+----------+-------------+-----------+----------+------------+----
+------+------------+-----------+--------------+------------+-------------+--------------+--------+------------
+    25285 | tableoid |       26 |             0 |      4 |     -7 |        0 |          -1 |        -1 | t        | p          | i
+      | t          | f         | f            | t          |           0 |            0 |        |
+    25285 | cmax     |       29 |             0 |      4 |     -6 |        0 |          -1 |        -1 | t        | p          | i
+      | t          | f         | f            | t          |           0 |            0 |        |
+    25285 | xmax     |       28 |             0 |      4 |     -5 |        0 |          -1 |        -1 | t        | p          | i
+      | t          | f         | f            | t          |           0 |            0 |        |
+    25285 | cmin     |       29 |             0 |      4 |     -4 |        0 |          -1 |        -1 | t        | p          | i
+      | t          | f         | f            | t          |           0 |            0 |        |
+    25285 | xmin     |       28 |             0 |      4 |     -3 |        0 |          -1 |        -1 | t        | p          | i
+      | t          | f         | f            | t          |           0 |            0 |        |
+    25285 | ctid     |       27 |             0 |      6 |     -1 |        0 |          -1 |        -1 | f        | p          | s
+      | t          | f         | f            | t          |           0 |            0 |        |
+    25285 | id       |       23 |            -1 |      4 |      1 |        0 |          -1 |        -1 | t        | p          | i
+      | f          | f         | f            | t          |           0 |            0 |        |
+    25285 | username |       25 |            -1 |     -1 |      2 |        0 |          -1 |        -1 | f        | x          | i
+      | f          | f         | f            | t          |           0 |          100 |        |
+(8 rows)
+
+
+直接调整attnum带来的后果 : 
+
+postgres=# \d test
+                Table "public.test"
+  Column  |            Type             | Modifiers 
+----------+-----------------------------+-----------
+ id       | integer                     | not null
+ crt_time | timestamp without time zone | 
+ info     | text                        | 
+Indexes:
+    "test_pkey" PRIMARY KEY, btree (id)
+    "idx_test_crt_time" btree (crt_time)
+
+postgres=# insert into test values (1,now(),'digoal');
+INSERT 0 1
+postgres=# select * from pg_attribute where attrelid='test'::regclass;
+ attrelid | attname  | atttypid | attstattarget | attlen | attnum | attndims | attcacheoff | atttypmod | attbyval | attstorage | att
+align | attnotnull | atthasdef | attisdropped | attislocal | attinhcount | attcollation | attacl | attoptions | attfdwoptions 
+----------+----------+----------+---------------+--------+--------+----------+-------------+-----------+----------+------------+----
+------+------------+-----------+--------------+------------+-------------+--------------+--------+------------+---------------
+    24641 | tableoid |       26 |             0 |      4 |     -7 |        0 |          -1 |        -1 | t        | p          | i  
+      | t          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | cmax     |       29 |             0 |      4 |     -6 |        0 |          -1 |        -1 | t        | p          | i  
+      | t          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | xmax     |       28 |             0 |      4 |     -5 |        0 |          -1 |        -1 | t        | p          | i  
+      | t          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | cmin     |       29 |             0 |      4 |     -4 |        0 |          -1 |        -1 | t        | p          | i  
+      | t          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | xmin     |       28 |             0 |      4 |     -3 |        0 |          -1 |        -1 | t        | p          | i  
+      | t          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | ctid     |       27 |             0 |      6 |     -1 |        0 |          -1 |        -1 | f        | p          | s  
+      | t          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | id       |       23 |            -1 |      4 |      1 |        0 |          -1 |        -1 | t        | p          | i  
+      | t          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | crt_time |     1114 |            -1 |      8 |      2 |        0 |          -1 |        -1 | t        | p          | d  
+      | f          | f         | f            | t          |           0 |            0 |        |            | 
+    24641 | info     |       25 |            -1 |     -1 |      3 |        0 |          -1 |        -1 | f        | x          | i  
+      | f          | f         | f            | t          |           0 |          100 |        |            | 
+(9 rows)
+
+postgres=# update pg_attribute set attnum=4 where attrelid='test'::regclass and attname='crt_time';
+UPDATE 1
+postgres=# update pg_attribute set attnum=2 where attrelid='test'::regclass and attname='info';
+UPDATE 1
+postgres=# update pg_attribute set attnum=3 where attrelid='test'::regclass and attname='crt_time';
+UPDATE 1
+postgres=# \d test
+                Table "public.test"
+  Column  |            Type             | Modifiers 
+----------+-----------------------------+-----------
+ id       | integer                     | not null
+ info     | text                        | 
+ crt_time | timestamp without time zone | 
+Indexes:
+    "test_pkey" PRIMARY KEY, btree (id)
+    "idx_test_crt_time" btree (info timestamp_ops)
+
+postgres=# select * from test limit 1;
+ERROR:  invalid memory alloc request size 18446744073709551613
+
+因为只调整了元数据, page中的数据还是按照原来的顺序存储的, 取出的时候由于数据类型不一致等原因都会导致错误. 
+
+【参考】
+http://blog.163.com/digoal@126/blog/static/1638770402010411115555401/
+http://blog.163.com/digoal@126/blog/static/163877040201112251058216/
+src/backend/access
+Flag Counter

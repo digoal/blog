@@ -1,0 +1,153 @@
+PostgreSQL research
+
+test luapgsql driver performance (vs pgbench)
+
+2014-02-21 17:44:14   查看原文>>
+
+前面我们测试了luasql这个驱动的性能, 无法达到pgbench的性能. 损失17%左右, 原因是luasql不支持prepared sql.
+这篇将介绍一下luapgsql这个驱动的性能.
+首先要在环境中安装, 前面的安装是在CentOS 5.x中安装的, 需要依赖libbsd-devel包(bsd/bsd.h头文件)
+环境
+
+Lua 5.2.3
+CentOS 6.4 x64
+PostgreSQL 9.3.1
+CPU
+model name      : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+stepping        : 5
+cpu MHz         : 1596.010
+
+在CentOS 6.x 中没有这个包, 需要下载并安装
+
+wget http://elrepo.reloumirrors.net/testing/el6/x86_64/RPMS/libbsd-devel-0.2.0-4.el6.elrepo.x86_64.rpm
+wget http://elrepo.org/linux/testing/el6/i386/RPMS/libbsd-0.2.0-4.el6.elrepo.i686.rpm
+rpm -ivh libbsd-0.2.0-4.el6.elrepo.i686.rpm
+rpm -ivh libbsd-devel-0.2.0-4.el6.elrepo.x86_64.rpm
+
+
+安装完后, 就有依赖的bsd/bsd.h头文件了.
+
+另一个需要注意的是, 如果系统中安装了其他版本的postgresql-libs , 例如使用rpm包安装的, 那么要先卸载这些rpm, 否则安装luapgsql时会用那些pg 版本的so文件, 造成不可用.
+
+[root@db-172-16-3-150 luapgsql]# rpm -qa|grep postg
+postgresql-libs-8.4.13-1.el6_3.x86_64
+postgresql-8.4.13-1.el6_3.x86_64
+postgresql-devel-8.4.13-1.el6_3.x86_64
+
+
+这些全部卸载掉.
+然后修改GNUmakefile
+
+luapgsql]# vi GNUmakefile 
+SRCS=           luapgsql.c
+LIB=            pgsql
+
+LUAVER=         `lua -v 2>&1 | cut -c 5-7`
+
+CFLAGS+=        -O3 -Wall -fPIC -I/usr/include -I/usr/include/lua${LUAVER} \
+                -I/home/pg931/pgsql/include/server -I/home/pg931/pgsql/include -D_GNU_SOURCE
+LDADD+=         -L/usr/lib -L/home/pg931/pgsql/lib -lpq -lbsd
+
+LIBDIR=         /usr/local/lib
+LUADIR=         /usr/local/lib/lua/${LUAVER}
+
+${LIB}.so:      ${SRCS:.c=.o}
+                cc -shared -o ${LIB}.so ${CFLAGS} ${SRCS:.c=.o} ${LDADD}
+
+clean:
+                rm -f *.o *.so
+install:
+        install -d ${DESTDIR}${LIBDIR}
+        install -m 755 ${LIB}.so ${DESTDIR}${LUADIR}/${LIB}.so
+
+
+使用正确的LIBDIR, CFLAGS, LDADD编译安装.
+
+[root@db-172-16-3-150 luapgsql]# make
+cc -O3 -Wall -fPIC -I/usr/include -I/usr/include/lua`lua -v 2>&1 | cut -c 5-7` -I/home/pg931/pgsql/include/server -I/home/pg931/pgsql/include -D_GNU_SOURCE   -c -o luapgsql.o luapgsql.c
+cc -shared -o pgsql.so -O3 -Wall -fPIC -I/usr/include -I/usr/include/lua`lua -v 2>&1 | cut -c 5-7` -I/home/pg931/pgsql/include/server -I/home/pg931/pgsql/include -D_GNU_SOURCE luapgsql.o -L/usr/lib -L/home/pg931/pgsql/lib -lpq -lbsd
+/usr/bin/ld: skipping incompatible /usr/lib/libbsd.a when searching for -lbsd
+/usr/bin/ld: skipping incompatible /usr/lib/libc.so when searching for -lc
+[root@db-172-16-3-150 luapgsql]# make install
+install -d /usr/local/lib
+install -m 755 pgsql.so /usr/local/lib/lua/`lua -v 2>&1 | cut -c 5-7`/pgsql.so
+
+
+
+测试 : 
+
+[root@db-172-16-3-150 luapgsql]# lua
+Lua 5.2.3  Copyright (C) 1994-2013 Lua.org, PUC-Rio
+> require "pgsql"
+error loading module 'pgsql' from file '/usr/local/lib/lua/5.2/pgsql.so':
+        libpq.so.5: cannot open shared object file: No such file or directory
+stack traceback:
+        [C]: in ?
+        [C]: in function 'require'
+        stdin:1: in main chunk
+        [C]: in ?
+> os.exit()
+
+
+
+这是由于libpq没有在LD_LIBRARY_PATH路径中, 可以配置这个变量或者修改/etc/ld.so.conf
+
+[root@db-172-16-3-150 luapgsql]# export LD_LIBRARY_PATH=/home/pg931/pgsql/lib:$LD_LIBRARY_PATH
+[root@db-172-16-3-150 luapgsql]# lua
+Lua 5.2.3  Copyright (C) 1994-2013 Lua.org, PUC-Rio
+> pgsql = require "pgsql"
+> conn = pgsql.connectdb('host=/ssd1/pg931/pg_root port=1922 dbname=digoal user=digoal password=digoal')
+> print(conn:errorMessage())
+
+> print (conn:status())
+0
+> conn:prepare('pre5','select $1',23)
+> conn:execPrepared('pre5','10')
+> function foo(cnt) 
+>>  local var1 = os.time()
+>>  for i = 1,cnt do
+>>    conn:execPrepared('pre5','10')
+>>  end
+>>  return (os.time()-var1)
+>> end
+> print(foo(100000))
+5
+> print(foo(1000000))
+49
+# 20408.163265306122 TPS
+因为关闭了log_statement, 速度有一定提升.
+
+
+
+关闭了log_statement后的pgbench测试结果 : 
+
+pg931@db-172-16-3-150-> taskset -c 2 pgbench -M prepared -n -r -c 1 -j 1 -T 30 -f ./test.sql -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 1
+number of threads: 1
+duration: 30 s
+number of transactions actually processed: 643458
+tps = 21448.561393 (including connections establishing)
+tps = 21450.541989 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.045633        select 10;
+
+
+
+现在lua和pgbench的测试结果非常相近. 仅仅相差5%的性能.
+
+stap输出可以看出, luapgsql正常使用了prepared sql.
+
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")10754
+process("/home/pg931/pgsql9.3.1/bin/postgres").mark("query__execute__start")10754
+... 略
+
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201412125644452/
+2. http://blog.163.com/digoal@126/blog/static/1638770402014121113037760/
+3. https://github.com/mbalmer/luapgsql

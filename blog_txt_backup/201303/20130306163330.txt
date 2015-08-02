@@ -1,0 +1,190 @@
+PostgreSQL research
+
+Use PostgreSQL server program import binary data into database bytea type
+
+2013-03-06 16:33:30   查看原文>>
+
+群里问到的一个问题, 如何将数据库服务器上的文件导入PostgreSQL数据库. 例如图片.
+【方法1 : 】
+使用pg_read_binary_file函数. 
+如下 : 
+
+postgres=# select pg_read_binary_file('postgresql.conf');
+
+
+因为postgresql.conf在$PGDATA, 下面所以可以读取.
+如果是绝对路径或者不在$PGDATA或它的子目录下将报错 : 
+
+postgres=# select pg_read_binary_file('/home/ocz/t.sh');
+ERROR:  absolute path not allowed
+postgres=# select pg_read_binary_file('../postgresql.conf');
+ERROR:  path must be in or below the current directory
+
+
+除了读全文件以外, read_binary_file还支持offset和limit. 
+方法1除了对文件的位置做了限制外, 其实还是很好用的.
+
+【方法2 : 】
+使用大对象.
+
+postgres=# select lo_import('/home/ocz/t.sh');
+ lo_import 
+-----------
+   3475818
+(1 row)
+
+
+/home/ocz/t.sh被导入pg_largeobject中, 在data字段中.
+
+postgres=# \d pg_largeobject
+Table "pg_catalog.pg_largeobject"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ loid   | oid     | not null
+ pageno | integer | not null
+ data   | bytea   | 
+Indexes:
+    "pg_largeobject_loid_pn_index" UNIQUE, btree (loid, pageno)
+
+
+-- 查询
+
+postgres=# select data from pg_largeobject where loid=3475818;
+
+
+当然还有更细致的查询, 如data的offset, limit.
+大对象的使用例子可参考如下 : 
+http://blog.163.com/digoal@126/blog/static/16387704020130931040444/
+方法2是集中式的管理, 虽然可以读任意位置的文件, 但是如果想在自己的表中存储bytea, 那么方法2不适合.
+
+【方法3 : 】
+解决方法1 和方法2 的弊端.
+自建读文件的函数 : 
+vi readfile.c
+
+#include "postgres.h"
+
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <dirent.h>
+
+#include "catalog/pg_type.h"
+#include "funcapi.h"
+#include "mb/pg_wchar.h"
+#include "miscadmin.h"
+#include "postmaster/syslogger.h"
+#include "storage/fd.h"
+#include "utils/builtins.h"
+#include "utils/memutils.h"
+#include "utils/timestamp.h"
+#include "fmgr.h"
+
+PG_MODULE_MAGIC;
+PG_FUNCTION_INFO_V1(cu_pg_read_binary_file_all);
+
+/*                                                                            
+ * Convert a "text" filename argument to C string, and check it's allowable.  
+ *                                                                            
+ * Filename may be absolute or relative to the DataDir, but we only allow     
+ * absolute paths that match DataDir or Log_directory.                        
+ */                                                                           
+static char *                                                                 
+cu_convert_and_check_filename(text *arg)                                         
+{                                                                             
+    char       *filename;                                                     
+                                                                              
+    filename = text_to_cstring(arg);                                          
+    canonicalize_path(filename);    /* filename can change length here */     
+                                                               
+    return filename;                                                          
+}                                                                             
+
+Datum
+cu_pg_read_binary_file_all(PG_FUNCTION_ARGS)                      
+{                                                              
+    text       *filename_t = PG_GETARG_TEXT_P(0);              
+    char       *filename;                                      
+                                                               
+    if (!superuser())                                          
+        ereport(ERROR,                                         
+                (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),      
+                 (errmsg("must be superuser to read files"))));
+                                                               
+    filename = cu_convert_and_check_filename(filename_t);         
+                                                               
+    PG_RETURN_BYTEA_P(read_binary_file(filename, 0, -1));      
+}  
+
+
+编译 : 
+
+gcc -O3 -Wall -Wextra -Werror -I /home/ocz/postgresql-9.2.1/src/include -g -fPIC -c ./readfile.c -o readfile.o
+gcc -O3 -Wall -Wextra -Werror -I /home/ocz/postgresql-9.2.1/src/include -g -shared readfile.o -o libreadfile.so
+
+
+拷贝到库目录 : 
+
+cp libreadfile.so $PGHOME/lib/
+
+
+创建函数 : 
+
+psql digoal digoal
+digoal=# create or replace function cu_pg_read_binary_file(text) returns bytea as '$libdir/libreadfile.so', 'cu_pg_read_binary_file_all' language C STRICT;
+
+
+使用 : 
+
+digoal=# select cu_pg_read_binary_file('/home/ocz/t.sh');
+
+
+方法三的好处是, 不再受文件位置的限制.
+
+【参考】
+1. http://blog.163.com/digoal@126/blog/static/16387704020130931040444/
+2. src/backend/utils/adt/genfile.c
+-- 这个函数包含了文件位置检测, 所以pg_read_binary_file不能读绝对路径以及$PGDATA之外的路径原因就在此.
+
+00041 /*
+00042  * Convert a "text" filename argument to C string, and check it's allowable.
+00043  *
+00044  * Filename may be absolute or relative to the DataDir, but we only allow
+00045  * absolute paths that match DataDir or Log_directory.
+00046  */
+00047 static char *
+00048 convert_and_check_filename(text *arg)
+00049 {
+00050     char       *filename;
+00051 
+00052     filename = text_to_cstring(arg);
+00053     canonicalize_path(filename);    /* filename can change length here */
+00054 
+00055     if (is_absolute_path(filename))
+00056     {
+00057         /* Disallow '/a/b/data/..' */
+00058         if (path_contains_parent_reference(filename))
+00059             ereport(ERROR,
+00060                     (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+00061             (errmsg("reference to parent directory (\"..\") not allowed"))));
+00062 
+00063         /*
+00064          * Allow absolute paths if within DataDir or Log_directory, even
+00065          * though Log_directory might be outside DataDir.
+00066          */
+00067         if (!path_is_prefix_of_path(DataDir, filename) &&
+00068             (!is_absolute_path(Log_directory) ||
+00069              !path_is_prefix_of_path(Log_directory, filename)))
+00070             ereport(ERROR,
+00071                     (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+00072                      (errmsg("absolute path not allowed"))));
+00073     }
+00074     else if (!path_is_relative_and_below_cwd(filename))
+00075         ereport(ERROR,
+00076                 (errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+00077                  (errmsg("path must be in or below the current directory"))));
+00078 
+00079     return filename;
+00080 }
+
+

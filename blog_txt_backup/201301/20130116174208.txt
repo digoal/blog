@@ -1,0 +1,462 @@
+PostgreSQL research
+
+PostgreSQL JSON json_in and json_validate_cstring performance test
+
+2013-01-16 17:42:08   查看原文>>
+
+Andrew Dunstan在测试JSON的json_in性能, 其实主要测试的是json.c中的json_validate_cstring的性能.
+如下 : 
+取自PostgreSQL 9.2.1
+src/backend/utils/adt/json.c
+
+/*
+ * Input.
+ */
+Datum
+json_in(PG_FUNCTION_ARGS)
+{
+        char       *text = PG_GETARG_CSTRING(0);
+
+        json_validate_cstring(text);
+
+        /* Internal representation is the same as text, for now */
+        PG_RETURN_TEXT_P(cstring_to_text(text));
+}
+/*
+ * Check whether supplied input is valid JSON.
+ */
+static void
+json_validate_cstring(char *input)
+{
+        JsonLexContext lex;
+        JsonParseStack *stack,
+                           *stacktop;
+        int                     stacksize;
+
+        /* Set up lexing context. */
+        lex.input = input;
+        lex.token_terminator = lex.input;
+
+        /* Set up parse stack. */
+        stacksize = 32;
+        stacktop = (JsonParseStack *) palloc(sizeof(JsonParseStack) * stacksize);
+        stack = stacktop;
+        stack->state = JSON_PARSE_VALUE;
+
+        /* Main parsing loop. */
+        for (;;)
+        {
+                JsonStackOp op;
+
+                /* Fetch next token. */
+                json_lex(&lex);
+
+                /* Check for unexpected end of input. */
+                if (lex.token_start == NULL)
+                        report_parse_error(stack, &lex);
+
+redo:
+                /* Figure out what to do with this token. */
+                op = JSON_STACKOP_NONE;
+                switch (stack->state)
+                {
+                        case JSON_PARSE_VALUE:
+                                if (lex.token_type != JSON_VALUE_INVALID)
+                                        op = JSON_STACKOP_POP;
+                                else if (lex.token_start[0] == '[')
+                                        stack->state = JSON_PARSE_ARRAY_START;
+                                else if (lex.token_start[0] == '{')
+                                        stack->state = JSON_PARSE_OBJECT_START;
+                                else
+                                        report_parse_error(stack, &lex);
+                                break;
+                        case JSON_PARSE_ARRAY_START:
+                                if (lex.token_type != JSON_VALUE_INVALID)
+                                        stack->state = JSON_PARSE_ARRAY_NEXT;
+                                else if (lex.token_start[0] == ']')
+                                        op = JSON_STACKOP_POP;
+                                else if (lex.token_start[0] == '[' ||
+                                                 lex.token_start[0] == '{')
+                                {
+                                        stack->state = JSON_PARSE_ARRAY_NEXT;
+                                        op = JSON_STACKOP_PUSH_WITH_PUSHBACK;
+                                }
+                                else
+                                        report_parse_error(stack, &lex);
+                                break;
+                        case JSON_PARSE_ARRAY_NEXT:
+                                if (lex.token_type != JSON_VALUE_INVALID)
+                                        report_parse_error(stack, &lex);
+                                else if (lex.token_start[0] == ']')
+                                        op = JSON_STACKOP_POP;
+                                else if (lex.token_start[0] == ',')
+                                        op = JSON_STACKOP_PUSH;
+                                else
+                                        report_parse_error(stack, &lex);
+                                break;
+                        case JSON_PARSE_OBJECT_START:
+                                if (lex.token_type == JSON_VALUE_STRING)
+                                        stack->state = JSON_PARSE_OBJECT_LABEL;
+                                else if (lex.token_type == JSON_VALUE_INVALID &&
+                                                 lex.token_start[0] == '}')
+                                        op = JSON_STACKOP_POP;
+                                else
+                                        report_parse_error(stack, &lex);
+                                break;
+                        case JSON_PARSE_OBJECT_LABEL:
+                                if (lex.token_type == JSON_VALUE_INVALID &&
+                                        lex.token_start[0] == ':')
+                                {
+                                        stack->state = JSON_PARSE_OBJECT_NEXT;
+                                        op = JSON_STACKOP_PUSH;
+                                }
+                                else
+                                        report_parse_error(stack, &lex);
+                                break;
+                        case JSON_PARSE_OBJECT_NEXT:
+                                if (lex.token_type != JSON_VALUE_INVALID)
+                                        report_parse_error(stack, &lex);
+                                else if (lex.token_start[0] == '}')
+                                        op = JSON_STACKOP_POP;
+                                else if (lex.token_start[0] == ',')
+                                        stack->state = JSON_PARSE_OBJECT_COMMA;
+                                else
+                                        report_parse_error(stack, &lex);
+                                break;
+                        case JSON_PARSE_OBJECT_COMMA:
+                                if (lex.token_type == JSON_VALUE_STRING)
+                                        stack->state = JSON_PARSE_OBJECT_LABEL;
+                                else
+                                        report_parse_error(stack, &lex);
+                                break;
+                        default:
+                                elog(ERROR, "unexpected json parse state: %d",
+                                         (int) stack->state);
+                }
+
+                /* Push or pop the state stack, if needed. */
+                switch (op)
+                {
+                        case JSON_STACKOP_PUSH:
+                        case JSON_STACKOP_PUSH_WITH_PUSHBACK:
+                                stack++;
+                                if (stack >= &stacktop[stacksize])
+                                {
+                                        /* Need to enlarge the stack. */
+                                        int                     stackoffset = stack - stacktop;
+
+                                        stacksize += 32;
+                                        stacktop = (JsonParseStack *)
+                                                repalloc(stacktop,
+                                                                 sizeof(JsonParseStack) * stacksize);
+                                        stack = stacktop + stackoffset;
+                                }
+                                stack->state = JSON_PARSE_VALUE;
+                                if (op == JSON_STACKOP_PUSH_WITH_PUSHBACK)
+                                        goto redo;
+                                break;
+                        case JSON_STACKOP_POP:
+                                if (stack == stacktop)
+                                {
+                                        /* Expect end of input. */
+                                        json_lex(&lex);
+                                        if (lex.token_start != NULL)
+                                                report_parse_error(NULL, &lex);
+                                        return;
+                                }
+                                stack--;
+                                break;
+                        case JSON_STACKOP_NONE:
+                                /* nothing to do */
+                                break;
+                }
+        }
+}
+
+
+接下来我在DELL R610的服务器上进行测试, 配置如下 : 
+
+DELL R610
+2 * Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+PostgreSQL 9.2.1
+
+
+
+具体如何测试呢? 测试inline脚本 : 
+
+do language plpgsql $$ 
+declare 
+  it text;
+  oj json;
+begin 
+select array_to_json(array_agg(q)) into it
+  from (select * from pg_class) q;
+for i in 1 .. 10000 loop 
+  select it::json into oj;
+end loop; 
+end; 
+$$;
+
+
+用gdb跟踪一下循环中是否真的每次都调用了json_in和json_validate_cstring
+SESSION A : 
+
+ocz@db-172-16-3-150-> psql
+psql (9.2.1)
+Type "help" for help.
+
+postgres=# select pg_backend_pid();
+ pg_backend_pid 
+----------------
+            868
+(1 row)
+
+
+
+SESSION B : 
+
+gdb
+(gdb) attach 868
+Attaching to process 868
+(gdb) break json_in
+Breakpoint 1 at 0x681f80: file json.c, line 108.
+(gdb) break json_out
+Breakpoint 2 at 0x682000: file json.c, line 126.
+(gdb) break json_validate_cstring
+Breakpoint 3 at 0x681c70: file json.c, line 178.
+(gdb) c
+Continuing.
+
+
+
+SESSION A : 
+
+postgres=# do language plpgsql $$ 
+declare 
+  it text;
+  oj json;
+begin 
+select array_to_json(array_agg(q)) into it
+  from (select * from pg_class) q;
+for i in 1 .. 10 loop 
+  select it::json into oj;
+end loop; 
+end; 
+$$;
+
+
+
+SESSION B : 
+
+Breakpoint 2, json_out (fcinfo=0x7fff1f836090) at json.c:126
+126             PG_RETURN_CSTRING(TextDatumGetCString(txt));
+(gdb) c
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18e2f4f0 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18e53000 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18e53000 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18e53000 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18e53000 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18dba390 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18d96870 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18dba390 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18d96870 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+Breakpoint 1, json_in (fcinfo=0x7fff1f835e20) at json.c:108
+108     {
+(gdb) 
+Continuing.
+
+Breakpoint 3, json_validate_cstring (
+    input=0x18dba390 "[{\"relname\":\"pg_statistic\",\"relnamespace\":11,\"reltype\":10802,\"reloftype\":0,\"relowner\":10,\"relam\":0,\"relfilenode\":12525,\"reltablespace\":0,\"relpages\":17,\"reltuples\":389,\"relallvisible\":12,\"reltoastrelid"...)
+    at json.c:178
+178     {
+(gdb) 
+Continuing.
+
+
+共跟踪到1次json_out, 10次json_in和10次json_validate_cstring.
+第一次json_out是array_to_json(array_agg(q))这个函数用到的. 仅此一次.
+为什么要确定一下呢, 因为函数特稳定性的关系, 常量可能只调用一次. 如下 : 
+
+postgres=# do language plpgsql
+$$      
+declare   
+begin     
+for i in 1 .. 1000000 loop
+perform json_out(json '{"a": "b"}');      
+end loop;                         
+end;                     
+$$ ;
+DO
+Time: 5622.756 ms
+
+
+这个测试json_out就只调用1次.
+改成如下, 循环中将每次都调用json_out, 因为用了变量 : 
+
+postgres=# do language plpgsql         
+$$
+declare 
+  a json;
+begin 
+  a := json '{"a": "b"}';
+  for i in 1 .. 1000000 loop
+    perform json_out(a);
+  end loop;
+end;
+$$ ;
+
+
+
+函数稳定性参考 : 
+http://blog.163.com/digoal@126/blog/static/163877040201211241434248/
+
+确定每次都会调用后, 接下来就可以看看性能了 : 
+1. 先退出gdb
+2. 然后执行10W次以下循环 : 
+
+postgres=# \timing
+Timing is on.
+postgres=# do language plpgsql $$ 
+declare 
+  it text;
+  oj json;
+begin 
+select array_to_json(array_agg(q)) into it
+  from (select * from pg_class) q;
+for i in 1 .. 100000 loop 
+  select it::json into oj;
+end loop; 
+end; 
+$$;
+DO
+Time: 201343.110 ms
+
+
+耗时201秒.
+测试的JSON值的长度为146KB : 
+
+postgres=# select length(array_to_json(array_agg(q))::text)      
+  from (select * from pg_class) q;
+ length 
+--------
+ 146134
+(1 row)
+
+
+每个CPU核每秒约处理72.7MB数据.
+
+postgres=# select (146134*100000::int8)/201.0;
+       ?column?        
+-----------------------
+ 72703482.587064676617
+(1 row)
+
+
+
+【参考】
+1. http://adpgtech.blogspot.hk/2013/01/robert-haas-wanted-to-know-how-much.html
+2. http://www.postgresql.org/docs/9.2/static/sql-createtype.html
+3. http://blog.163.com/digoal@126/blog/static/16387704020130163491530/
+4. http://blog.163.com/digoal@126/blog/static/163877040201211241434248/
+

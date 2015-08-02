@@ -1,0 +1,82 @@
+PostgreSQL research
+
+multicast for distribyted storage object data delivering like ceph replication
+
+2014-12-24 17:46:19   查看原文>>
+
+在看ceph文档时看到如下一段
+
+PEERING
+
+When Ceph is Peering a placement group, Ceph is bringing the OSDs that store the replicas of the placement group into agreement about the state of the objects and metadata in the placement group. When Ceph completes peering, this means that the OSDs that store the placement group agree about the current state of the placement group. However, completion of the peering process does NOT mean that each replica has the latest contents.
+
+Authoratative History
+Ceph will NOT acknowledge a write operation to a client, until all OSDs of the acting set persist the write operation. This practice ensures that at least one member of the acting set will have a record of every acknowledged write operation since the last successful peering operation.
+
+With an accurate record of each acknowledged write operation, Ceph can construct and disseminate a new authoritative history of the placement group – a complete, and fully ordered set of operations that, if performed, would bring an OSD’s copy of a placement group up to date.
+
+
+这段话主要表明用户在往ceph cluster写一份数据时, ceph集群需要确保这份数据已经写入它所在的Placement Group所在的所有acting OSDs中, ceph才返回ACK告诉客户端写入完成.
+
+那么问题来了, CEPH是怎么处理多份写入的呢, 例如pg放在3份拷贝的POOL, 那么一份数据会放到3个OSD中.
+可能是这样(客户端写一个OSD, 再由ceph通过TCP复制到其他OSD)
+Client ->(write to) OSDa
+OSDa ->(replicate to through tcp) OSDb
+OSDa ->(replicate to through tcp) OSDc
+这种方法的弊端是, 数据需要从OSDa再下发一次到b,c. 并且OSD之间需要3次握手.
+
+也可能是这样(客户端写一个OSD, 再由ceph通过UDP(多播)复制到其他OSD)
+Client ->(write to) OSDa
+OSDa ->(replicate to through UDP mcast) OSDb, OSDc
+这种方法的弊端是, 数据需要从OSDa再下发一次到b,c. 
+相比第一种方法OSD之间不需要3次握手.
+但是需要CEPH自己处理UDP丢包问题.
+
+也可能是这样(客户端通过多播一次写多个OSD)
+Client ->(write to through UDP mcast) OSDa, OSDb, OSDc
+这种方法的好处是数据包只需要在网络上传输一次.
+弊端是需要CEPH自己处理UDP丢包问题, 并且多播组需要动态变化, 例如pg的数据分布发生变化, 不同的PG属于不同的OSD集合, 等等, 使这种方法不切合实际.
+
+也可能是这样(客户端通过单播一次写多个OSD)
+Client ->(write to through UDP unicast) OSDa, OSDb, OSDc
+这种方法比较切合实际, 同样需要CEPH自己处理UDP丢包问题.
+但是避免了多播老变化的问题.
+
+效率最高的应该是最后一种, 只是软件设计会更加复杂. (例如OSD退出, backfill, pg分布的OSD可能发生变化, 等)
+
+目前CEPH好像不支持UDP, 所以应该第一种的可能性较大, 暂时先了解到这里.
+当然还可以使用SDN来提升网络传输体验.
+
+使用tcpdump在一台OSD抓包, eth1是cluster network
+[root@osd2 ~]# tcpdump tcp -i eth1
+可以看到在往rbd写数据时, 有大量的包在cluster network传输.
+[root@osd2 ~]# cat /etc/ceph/ceph.conf 
+[global]
+fsid = f649b128-963c-4802-ae17-5a76f36c4c76
+mon initial members = mon1, mon2, mon3
+mon host = 172.17.0.2, 172.17.0.3, 172.17.0.4
+public network = 172.17.0.0/16
+cluster network = 172.18.0.0/16, 172.19.0.0/16
+auth cluster required = cephx
+auth service required = cephx
+auth client required = cephx
+osd journal size = 1024
+filestore xattr use omap = true
+osd pool default size = 2
+osd pool default min size = 1
+osd pool default pg num = 333
+osd pool default pgp num = 333
+osd crush chooseleaf type = 1
+ms_bind_ipv6 = false
+
+17:43:35.677205 IP 172.18.0.6.60150 > 172.18.0.7.6800: Flags [P.], seq 14750505:14750776, ack 10006930, win 24576, options [nop,nop,TS val 95339819 ecr 95339763], length 271
+
+[参考]
+1. http://www.google.com/patents/US20140204940
+2. https://github.com/OpenHFT/Chronicle-Map#tcp--udp-replication
+3. http://openhft.net/products/chronicle-map/
+4. http://www.arcserve.com/ap/for-it-professionals/~/media/files/industryanalystreports/arcserve/ca-arcserve-udp-vs-veeam-backup-and-replication-v7-0.pdf
+5. http://ganglia.sourceforge.net/
+6. http://ceph.com/docs/master/rados/operations/monitoring-osd-pg/
+
+Flag Counter

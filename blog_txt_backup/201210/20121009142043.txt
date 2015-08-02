@@ -1,0 +1,630 @@
+PostgreSQL research
+
+group by & distinct tuning case : use WITH RECURSIVE and min() function
+
+2012-10-09 14:20:43   查看原文>>
+
+今天要说的这个优化是从前面一篇讲解《performance tuning case :use cursor or trigger replace group by and order by》的延展.
+例如一个表中有一个字段是性别, 这个表不管有多少条记录, 性别这个字段一般来说也就2个值
+select count(distinct sex) from table; 得到的结果当然是2. 但是如果数据量很大的情况下, 这种运算就非常耗时, 下面来测试一下 : 
+PostgreSQL : 
+测试表
+
+digoal=> create table sex (sex char(1), otherinfo text);
+CREATE TABLE
+
+
+测试数据
+
+digoal=> insert into sex select 'm', generate_series(1,10000000)||'this is test';
+INSERT 0 10000000
+digoal=> insert into sex select 'w', generate_series(1,10000000)||'this is test';
+INSERT 0 10000000
+
+
+测试SQL1
+
+digoal=> \timing on
+digoal=> select count(distinct sex) from sex;
+ count 
+-------
+     2
+(1 row)
+Time: 47254.221 ms
+
+
+测试SQL2
+
+digoal=> select sex from sex t group by sex;
+ sex 
+-----
+ w
+ m
+(2 rows)
+Time: 6534.433 ms
+
+
+执行计划
+
+digoal=> explain select count(distinct sex) from sex;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Aggregate  (cost=377385.25..377385.26 rows=1 width=2)
+   ->  Seq Scan on sex  (cost=0.00..327386.00 rows=19999700 width=2)
+
+digoal=> explain select sex from sex t group by sex;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ HashAggregate  (cost=377385.25..377385.27 rows=2 width=2)
+   ->  Seq Scan on sex t  (cost=0.00..327386.00 rows=19999700 width=2)
+
+
+
+创建索引
+
+digoal=> create index idx_sex_1 on sex(sex);
+CREATE INDEX
+digoal=> set enable_seqscan=off;
+SET
+
+
+使用索引后的执行计划, PostgreSQL可以使用Index Only Scan.
+
+digoal=> explain select count(distinct sex) from sex;
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Aggregate  (cost=532235.01..532235.02 rows=1 width=2)
+   ->  Index Only Scan using idx_sex_1 on sex  (cost=0.00..482234.97 rows=20000016 width=2)
+
+digoal=> explain select sex from sex t group by sex;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Group  (cost=0.00..532235.01 rows=2 width=2)
+   ->  Index Only Scan using idx_sex_1 on sex t  (cost=0.00..482234.97 rows=20000016 width=2)
+
+
+创建索引后SQL耗时
+
+digoal=> select count(distinct sex) from sex;
+ count 
+-------
+     2
+(1 row)
+Time: 49589.947 ms
+
+digoal=> select sex from sex t group by sex;
+ sex 
+-----
+ m
+ w
+(2 rows)
+Time: 6608.053 ms
+
+
+
+Oracle测试 : 
+测试表
+
+SQL> create table sex(sex char(1), otherinfo varchar2(64));
+Table created.
+
+
+测试数据
+
+SQL> insert into sex select 'm', rownum||'this is test' from dual connect by level <=10000001;
+10000001 rows created.
+SQL> commit;
+Commit complete.
+SQL> insert into sex select 'w', rownum||'this is test' from dual connect by level <=10000001;
+10000001 rows created.
+SQL> commit;
+Commit complete.
+
+
+测试SQL1:
+
+SQL> set autotrace on
+SQL> set timing on
+SQL> select count(distinct sex) from sex;
+COUNT(DISTINCTSEX)
+------------------
+                 2
+Elapsed: 00:00:03.62
+
+Execution Plan
+----------------------------------------------------------
+Plan hash value: 2096505595
+---------------------------------------------------------------------------
+| Id  | Operation          | Name | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |      |     1 |     3 | 13106   (3)| 00:02:38 |
+|   1 |  SORT GROUP BY     |      |     1 |     3 |            |          |
+|   2 |   TABLE ACCESS FULL| SEX  |    24M|    69M| 13106   (3)| 00:02:38 |
+---------------------------------------------------------------------------
+Note
+-----
+   - dynamic sampling used for this statement
+Statistics
+----------------------------------------------------------
+          0  recursive calls
+          0  db block gets
+      74074  consistent gets
+          0  physical reads
+          0  redo size
+        525  bytes sent via SQL*Net to client
+        487  bytes received via SQL*Net from client
+          2  SQL*Net roundtrips to/from client
+          1  sorts (memory)
+          0  sorts (disk)
+          1  rows processed
+
+
+
+测试SQL2
+
+SQL> select sex from sex t group by sex;
+S
+-
+w
+m
+Elapsed: 00:00:03.23
+Execution Plan
+----------------------------------------------------------
+Plan hash value: 2807610159
+---------------------------------------------------------------------------
+| Id  | Operation          | Name | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |      |    24M|    69M| 14908  (14)| 00:02:59 |
+|   1 |  HASH GROUP BY     |      |    24M|    69M| 14908  (14)| 00:02:59 |
+|   2 |   TABLE ACCESS FULL| SEX  |    24M|    69M| 13106   (3)| 00:02:38 |
+---------------------------------------------------------------------------
+Note
+-----
+   - dynamic sampling used for this statement
+Statistics
+----------------------------------------------------------
+          0  recursive calls
+          0  db block gets
+      74074  consistent gets
+          0  physical reads
+          0  redo size
+        563  bytes sent via SQL*Net to client
+        487  bytes received via SQL*Net from client
+          2  SQL*Net roundtrips to/from client
+          0  sorts (memory)
+          0  sorts (disk)
+          2  rows processed
+
+
+
+创建索引
+
+SQL> create index idx_sex_1 on sex(sex);
+Index created.
+Elapsed: 00:00:33.40
+
+
+创建索引后的测试, 执行时间没有明显变化.
+
+SQL> select count(distinct sex) from sex;
+COUNT(DISTINCTSEX)
+------------------
+                 2
+Elapsed: 00:00:04.32
+Execution Plan
+----------------------------------------------------------
+Plan hash value: 1805173869
+-----------------------------------------------------------------------------------
+| Id  | Operation             | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT      |           |     1 |     3 |  6465   (3)| 00:01:18 |
+|   1 |  SORT GROUP BY        |           |     1 |     3 |            |          |
+|   2 |   INDEX FAST FULL SCAN| IDX_SEX_1 |    24M|    69M|  6465   (3)| 00:01:18 |
+-----------------------------------------------------------------------------------
+Note
+-----
+   - dynamic sampling used for this statement
+Statistics
+----------------------------------------------------------
+          5  recursive calls
+          0  db block gets
+      36421  consistent gets
+      36300  physical reads
+          0  redo size
+        525  bytes sent via SQL*Net to client
+        487  bytes received via SQL*Net from client
+          2  SQL*Net roundtrips to/from client
+          1  sorts (memory)
+          0  sorts (disk)
+          1  rows processed
+SQL> select sex from sex t group by sex;
+S
+-
+w
+m
+Elapsed: 00:00:03.21
+Execution Plan
+----------------------------------------------------------
+Plan hash value: 2807610159
+---------------------------------------------------------------------------
+| Id  | Operation          | Name | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |      |    24M|    69M| 14908  (14)| 00:02:59 |
+|   1 |  HASH GROUP BY     |      |    24M|    69M| 14908  (14)| 00:02:59 |
+|   2 |   TABLE ACCESS FULL| SEX  |    24M|    69M| 13106   (3)| 00:02:38 |
+---------------------------------------------------------------------------
+Note
+-----
+   - dynamic sampling used for this statement
+Statistics
+----------------------------------------------------------
+          5  recursive calls
+          0  db block gets
+      74170  consistent gets
+          0  physical reads
+          0  redo size
+        563  bytes sent via SQL*Net to client
+        487  bytes received via SQL*Net from client
+          2  SQL*Net roundtrips to/from client
+          0  sorts (memory)
+          0  sorts (disk)
+          2  rows processed
+
+
+
+对比以上测试, Oracle的性能要明显优于PostgreSQL.
+将count(distinct sex)修改如下后PostgreSQL的执行速度有明显改善, 但是性能还是低于Oracle一截, 约一半.
+
+digoal=> select count(*) from (select sex from sex t group by sex) t;
+ count 
+-------
+     2
+(1 row)
+Time: 6231.965 ms
+
+
+
+那么如何优化呢?
+在PostgreSQL中的递归SQL在这里就派上大用场了, 结合btree索引扫描. 性能可以提升几万倍.
+来看如下优化过程 : 
+创建测试表 : 
+
+create table user_download_log (user_id int not null, listid int not null, apkid int not null, get_time timestamp(0) not null, otherinfo text);
+
+
+插入测试数据
+
+insert into user_download_log select generate_series(0,10000000),generate_series(0,10000000),generate_series(0,10000000),generate_series(clock_timestamp(),clock_timestamp()+interval '10000000 min',interval '1 min'), 'this is test';
+
+
+创建索引 : 
+
+create index i1 on user_download_log (user_id);
+create index i2 on user_download_log (otherinfo);
+
+
+查看数据分布 : 
+用来说明递归SQL适合哪种场景的优化.
+
+select count(distinct user_id), count(distinct otherinfo) from user_download_log;
+  count   | count 
+----------+-------
+ 10000001 |     1
+
+
+查看未优化时以下SQL的执行计划以及耗时.
+
+digoal=> explain analyze select count(distinct otherinfo) from user_download_log;
+                                                               QUERY PLAN                                                           
+    
+------------------------------------------------------------------------------------------------------------------------------------
+----
+ Aggregate  (cost=208334.36..208334.37 rows=1 width=13) (actual time=6295.493..6295.494 rows=1 loops=1)
+   ->  Seq Scan on user_download_log  (cost=0.00..183334.29 rows=10000029 width=13) (actual time=0.014..1612.333 rows=10000001 loops
+=1)
+ Total runtime: 6295.550 ms
+
+
+优化后的SQL : 
+
+digoal=> with recursive skip as (
+digoal(>   (
+digoal(>     select min(t.otherinfo) as otherinfo from user_download_log t where t.otherinfo is not null
+digoal(>   )
+digoal(>   union all
+digoal(>   (
+digoal(>     select (select min(t.otherinfo) from user_download_log t where t.otherinfo > s.otherinfo and t.otherinfo is not null) 
+digoal(>       from skip s where s.otherinfo is not null
+digoal(>   )  -- 这里的where s.otherinfo is not null 一定要加,否则就死循环了.
+digoal(> ) 
+digoal-> select count(distinct otherinfo) from skip;
+ count 
+-------
+     1
+(1 row)
+
+
+优化后的SQL执行计划以及耗时, 性能提升了36390倍, 相比Oracle也提升了上万倍.
+
+digoal=> explain analyze with recursive skip as (
+  (
+    select min(t.otherinfo) as otherinfo from user_download_log t where t.otherinfo is not null
+  )
+  union all
+  (
+    select (select min(t.otherinfo) from user_download_log t where t.otherinfo > s.otherinfo and t.otherinfo is not null) 
+      from skip s where s.otherinfo is not null
+  )  -- 这里的where s.otherinfo is not null 一定要加,否则就死循环了.
+) 
+select count(distinct otherinfo) from skip;
+                                                                                 QUERY PLAN                                         
+                                         
+------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------
+ Aggregate  (cost=10.55..10.56 rows=1 width=32) (actual time=0.094..0.094 rows=1 loops=1)
+   CTE skip
+     ->  Recursive Union  (cost=0.03..8.28 rows=101 width=32) (actual time=0.044..0.073 rows=2 loops=1)
+           ->  Result  (cost=0.03..0.04 rows=1 width=0) (actual time=0.042..0.042 rows=1 loops=1)
+                 InitPlan 1 (returns $1)
+                   ->  Limit  (cost=0.00..0.03 rows=1 width=13) (actual time=0.038..0.039 rows=1 loops=1)
+                         ->  Index Only Scan using i2 on user_download_log t  (cost=0.00..296844.61 rows=10000029 width=13) (actual 
+time=0.037..0.037 rows=1 loops=1)
+                               Index Cond: (otherinfo IS NOT NULL)
+                               Heap Fetches: 1
+           ->  WorkTable Scan on skip s  (cost=0.00..0.62 rows=10 width=32) (actual time=0.013..0.013 rows=0 loops=2)
+                 Filter: (otherinfo IS NOT NULL)
+                 Rows Removed by Filter: 0
+                 SubPlan 3
+                   ->  Result  (cost=0.03..0.04 rows=1 width=0) (actual time=0.018..0.018 rows=1 loops=1)
+                         InitPlan 2 (returns $3)
+                           ->  Limit  (cost=0.00..0.03 rows=1 width=13) (actual time=0.017..0.017 rows=0 loops=1)
+                                 ->  Index Only Scan using i2 on user_download_log t  (cost=0.00..107284.96 rows=3333343 width=13) (
+actual time=0.015..0.015 rows=0 loops=1)
+                                       Index Cond: ((otherinfo > s.otherinfo) AND (otherinfo IS NOT NULL))
+                                       Heap Fetches: 0
+   ->  CTE Scan on skip  (cost=0.00..2.02 rows=101 width=32) (actual time=0.047..0.077 rows=2 loops=1)
+ Total runtime: 0.173 ms
+(21 rows)
+
+
+
+换一个字段, 数据分布广泛的字段上使用以上优化方法, 看是否妥当, 以下是原始SQL的执行计划以及耗时 : 
+
+digoal=> explain analyze select count(distinct user_id) from user_download_log;
+                                                              QUERY PLAN                                                            
+   
+------------------------------------------------------------------------------------------------------------------------------------
+---
+ Aggregate  (cost=208334.36..208334.37 rows=1 width=4) (actual time=4008.858..4008.858 rows=1 loops=1)
+   ->  Seq Scan on user_download_log  (cost=0.00..183334.29 rows=10000029 width=4) (actual time=0.014..1606.607 rows=10000001 loops=
+1)
+ Total runtime: 4008.916 ms
+
+
+
+换一个字段, 数据分布广泛的字段上使用以上优化方法, 看是否妥当, 以下是采用递归SQL后的执行计划以及耗时 : 
+显然性能是下降的, 所以使用递归SQL不适合数据分布广泛的字段的group by或者count(distinct)操作.
+
+digoal=> explain analyze with recursive skip as (
+  (
+    select min(t.user_id) as user_id from user_download_log t where t.user_id is not null
+  )
+  union all
+  (
+    select (select min(t.user_id) from user_download_log t where t.user_id > s.user_id and t.user_id is not null) 
+      from skip s where s.user_id is not null
+  )  -- 这里的where s.user_id is not null 一定要加,否则就死循环了.
+) 
+select count(distinct user_id) from skip;
+                                                                                    QUERY PLAN                                      
+                                               
+------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------
+ Aggregate  (cost=10.44..10.45 rows=1 width=4) (actual time=186741.338..186741.339 rows=1 loops=1)
+   CTE skip
+     ->  Recursive Union  (cost=0.03..8.17 rows=101 width=4) (actual time=0.047..178296.238 rows=10000002 loops=1)
+           ->  Result  (cost=0.03..0.04 rows=1 width=0) (actual time=0.046..0.046 rows=1 loops=1)
+                 InitPlan 1 (returns $1)
+                   ->  Limit  (cost=0.00..0.03 rows=1 width=4) (actual time=0.042..0.042 rows=1 loops=1)
+                         ->  Index Only Scan using i1 on user_download_log t  (cost=0.00..285759.50 rows=10000029 width=4) (actual t
+ime=0.040..0.040 rows=1 loops=1)
+                               Index Cond: (user_id IS NOT NULL)
+                               Heap Fetches: 1
+           ->  WorkTable Scan on skip s  (cost=0.00..0.61 rows=10 width=4) (actual time=0.017..0.017 rows=1 loops=10000002)
+                 Filter: (user_id IS NOT NULL)
+                 Rows Removed by Filter: 0
+                 SubPlan 3
+                   ->  Result  (cost=0.03..0.04 rows=1 width=0) (actual time=0.016..0.016 rows=1 loops=10000001)
+                         InitPlan 2 (returns $3)
+                           ->  Limit  (cost=0.00..0.03 rows=1 width=4) (actual time=0.015..0.015 rows=1 loops=10000001)
+                                 ->  Index Only Scan using i1 on user_download_log t  (cost=0.00..103588.85 rows=3333343 width=4) (a
+ctual time=0.014..0.014 rows=1 loops=10000001)
+                                       Index Cond: ((user_id > s.user_id) AND (user_id IS NOT NULL))
+                                       Heap Fetches: 10000000
+   ->  CTE Scan on skip  (cost=0.00..2.02 rows=101 width=4) (actual time=0.050..183449.391 rows=10000002 loops=1)
+ Total runtime: 186909.323 ms
+(21 rows)
+Time: 186910.482 ms
+
+
+
+以下是同样的数据结构以及测试数据在Oracle下的测试.
+
+oracle@db1-> sqlplus "/ as sysdba"
+SQL*Plus: Release 10.2.0.4.0 - Production on Mon Oct 8 17:28:58 2012
+Copyright (c) 1982, 2007, Oracle.  All Rights Reserved.
+Connected to:
+Oracle Database 10g Enterprise Edition Release 10.2.0.4.0 - 64bit Production
+With the Partitioning, OLAP, Data Mining and Real Application Testing options
+SQL> create table test (id int, otherinfo varchar2(32)) nologging;
+Table created.
+SQL> insert into test select rownum,'this is test' from dual connect by level <=10000001;
+10000001 rows created.
+SQL> commit;
+SQL> create index i1 on test(id);
+SQL> create index i2 on test(otherinfo);
+SQL> explain plan for select count(distinct id) from test;
+Explained.
+SQL> select * from table(dbms_xplan.display());
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------
+Plan hash value: 1403727100
+------------------------------------------------------------------------------
+| Id  | Operation             | Name | Rows  | Bytes | Cost (%CPU)| Time     |
+------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT      |      |     1 |    13 |  4178   (3)| 00:00:51 |
+|   1 |  SORT GROUP BY        |      |     1 |    13 |            |          |
+|   2 |   INDEX FAST FULL SCAN| I1   |  9834K|   121M|  4178   (3)| 00:00:51 |
+------------------------------------------------------------------------------
+Note
+-----
+   - dynamic sampling used for this statement
+13 rows selected.
+SQL> explain plan for select count(distinct otherinfo) from test;
+Explained.
+SQL> select * from table(dbms_xplan.display());
+PLAN_TABLE_OUTPUT
+--------------------------------------------------------------------------------------------------------------------------------------------
+Plan hash value: 2603667166
+---------------------------------------------------------------------------
+| Id  | Operation          | Name | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |      |     1 |    18 |  5837   (3)| 00:01:11 |
+|   1 |  SORT GROUP BY     |      |     1 |    18 |            |          |
+|   2 |   TABLE ACCESS FULL| TEST |  9834K|   168M|  5837   (3)| 00:01:11 |
+---------------------------------------------------------------------------
+Note
+-----
+   - dynamic sampling used for this statement
+13 rows selected.
+SQL> set timing on
+SQL> select count(distinct otherinfo) from test;
+COUNT(DISTINCTOTHERINFO)
+------------------------
+                       1
+Elapsed: 00:00:02.49
+SQL> select count(distinct id) from test;
+COUNT(DISTINCTID)
+-----------------
+         10000001
+Elapsed: 00:00:07.13
+
+
+从执行耗时可以看出PostgreSQL在数据分布稀疏的字段上使用递归SQL优化后的性能相比Oracle有41213倍的性能提升.
+
+【其他】
+-- 递归查询中不允许使用聚合函数 : 
+
+with recursive skip as (
+  (
+    select min(t.otherinfo) as otherinfo from user_download_log t where t.otherinfo is not null
+  )
+  union all
+  (
+    select min(t.otherinfo) from user_download_log t, skip s 
+      where t.otherinfo > s.otherinfo 
+      and t.otherinfo is not null
+      and s.otherinfo is not null
+  )  -- 这里的where s.otherinfo is not null 一定要加,否则就死循环了.
+) 
+select * from skip;
+ERROR:  aggregate functions not allowed in a recursive query's recursive term
+LINE 7:     select min(t.otherinfo) from user_download_log t, skip s...
+                   ^
+Time: 0.581 ms
+
+
+-- 修改如下 : 
+
+with recursive skip as (
+  (
+    select min(t.otherinfo) as otherinfo from user_download_log t where t.otherinfo is not null
+  )
+  union all
+  (
+    select (select min(t.otherinfo) from user_download_log t where t.otherinfo > s.otherinfo and t.otherinfo is not null) 
+      from skip s where s.otherinfo is not null
+  )  -- 这里的where s.otherinfo is not null 一定要加,否则就死循环了.
+) 
+select * from skip;
+
+
+【补充】
+细心的朋友发现Oracle测试中未对表进行分析, 以下是分析后的结果, 执行计划无变化 : 
+
+SQL> analyze table sex estimate statistics for all columns sample 10 percent;
+Table analyzed.
+SQL> analyze index idx_sex_1 estimate statistics sample 10 percent;
+Index analyzed.
+SQL> select sex from sex t group by sex;
+
+S
+-
+w
+m
+
+Elapsed: 00:00:03.17
+
+Execution Plan
+----------------------------------------------------------
+Plan hash value: 2807610159
+
+---------------------------------------------------------------------------
+| Id  | Operation          | Name | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |      |     2 |     2 | 14519  (12)| 00:02:55 |
+|   1 |  HASH GROUP BY     |      |     2 |     2 | 14519  (12)| 00:02:55 |
+|   2 |   TABLE ACCESS FULL| SEX  |    20M|    19M| 13062   (2)| 00:02:37 |
+---------------------------------------------------------------------------
+
+
+Statistics
+----------------------------------------------------------
+          1  recursive calls
+          0  db block gets
+      74074  consistent gets
+          0  physical reads
+          0  redo size
+        563  bytes sent via SQL*Net to client
+        487  bytes received via SQL*Net from client
+          2  SQL*Net roundtrips to/from client
+          0  sorts (memory)
+          0  sorts (disk)
+          2  rows processed
+
+SQL> select count(distinct sex) from sex;
+
+COUNT(DISTINCTSEX)
+------------------
+                 2
+
+Elapsed: 00:00:03.85
+
+Execution Plan
+----------------------------------------------------------
+Plan hash value: 1805173869
+
+-----------------------------------------------------------------------------------
+| Id  | Operation             | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT      |           |     1 |     1 |  6454   (3)| 00:01:18 |
+|   1 |  SORT GROUP BY        |           |     1 |     1 |            |          |
+|   2 |   INDEX FAST FULL SCAN| IDX_SEX_1 |    20M|    19M|  6454   (3)| 00:01:18 |
+-----------------------------------------------------------------------------------
+
+
+Statistics
+----------------------------------------------------------
+          1  recursive calls
+          0  db block gets
+      36325  consistent gets
+          0  physical reads
+          0  redo size
+        525  bytes sent via SQL*Net to client
+        487  bytes received via SQL*Net from client
+          2  SQL*Net roundtrips to/from client
+          1  sorts (memory)
+          0  sorts (disk)
+          1  rows processed
+
+

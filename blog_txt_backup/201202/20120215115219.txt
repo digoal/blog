@@ -1,0 +1,122 @@
+PostgreSQL research
+
+PostgreSQL add "Index Only Scan" present to explain command
+
+2012-02-15 11:52:19   查看原文>>
+
+PostgreSQL 9.1.2 还没有Index Only Scan的执行计划.
+原因可能是Index 文件中没有包含tuple的版本信息, 无法完成MVCC。
+未来也许会支持Index Only Scan
+
+2012-1-26日, 增加了一个committed的补丁.
+show Heap Fetches in EXPLAIN ANALYZE output for index-only scans
+
+下面在PostgreSQL 9.2devel版本中测试一下 : 
+创建测试表 : 
+
+pg9.2devel=> create table t1 (id int primary key,info text);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "t1_pkey" for table "t1"
+CREATE TABLE
+
+
+插入测试数据 : 
+
+pg9.2devel=> insert into t1 select generate_series(1,100000),'digoal';
+INSERT 0 100000
+
+
+测试SQL1 : 
+
+pg9.2devel=> explain (analyze,verbose,costs,buffers) select * from t1 where id between 90000 and 91000 order by id;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Index Scan using t1_pkey on digoal.t1  (cost=0.00..33.67 rows=1018 width=11) (actual time=0.025..1.063 rows=1001 loops=1)
+   Output: id, info
+   Index Cond: ((t1.id >= 90000) AND (t1.id <= 91000))
+   Buffers: shared hit=11
+ Total runtime: 1.880 ms
+(5 rows)
+
+
+测试SQL2 : 
+
+pg9.2devel=> explain (analyze,verbose,costs,buffers) select id from t1 where id between 90000 and 91000 order by id;
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using t1_pkey on digoal.t1  (cost=0.00..33.67 rows=1018 width=4) (actual time=0.018..1.088 rows=1001 loops=1)
+   Output: id
+   Index Cond: ((t1.id >= 90000) AND (t1.id <= 91000))
+   Heap Fetches: 1001
+   Buffers: shared hit=11
+ Total runtime: 1.884 ms
+(6 rows)
+
+
+
+再到PostgreSQL9.1.2中做同样的测试 : 
+创建测试表 : 
+
+pg9.1.2=> create table t1 (id int primary key,info text);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "t1_pkey" for table "t1"
+CREATE TABLE
+
+
+插入测试数据 : 
+
+pg9.1.2=> insert into t1 select generate_series(1,100000),'digoal';
+INSERT 0 100000
+
+
+测试SQL1 : 
+
+pg9.1.2=> explain (analyze,verbose,costs,buffers) select * from t1 where id between 90000 and 91000 order by id;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Index Scan using t1_pkey on sar.t1  (cost=0.00..33.00 rows=987 width=11) (actual time=0.012..0.388 rows=1001 loops=1)
+   Output: id, info
+   Index Cond: ((t1.id >= 90000) AND (t1.id <= 91000))
+   Buffers: shared hit=11
+ Total runtime: 0.527 ms
+(5 rows)
+
+
+测试SQL2 : 
+
+pg9.1.2=> explain (analyze,verbose,costs,buffers) select id from t1 where id between 90000 and 91000 order by id;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Index Scan using t1_pkey on sar.t1  (cost=0.00..33.00 rows=987 width=4) (actual time=0.026..0.473 rows=1001 loops=1)
+   Output: id
+   Index Cond: ((t1.id >= 90000) AND (t1.id <= 91000))
+   Buffers: shared hit=11
+ Total runtime: 0.633 ms
+(5 rows)
+
+
+
+【小结】
+1. PostgreSQL9.2devel的explain 多了Index Only Scan的输出和Heap Fetches的输出。
+目前9.2还处于开发阶段, 从性能上看反而有下降, 可能还有其他原因。
+2. Index Only Scan相比Index Scan可以降低IO请求, 原因是它不再需要扫描表的page. 在IO能力足够的环境或者表已经在数据库缓存或文件系统CACHE中的情况下, 这种优势并不明显. 只有当IO成为瓶颈的时候, 它的优势就显现出来了.
+3. count(*)其实也可以走Index Only Scan, 它的性能提升能有多少也取决于系统的IO能力, 表的大小, 索引的大小, 扫描的PAGE数等.
+
+【参考】
+src/backend/commands/explain.c
+
+
+
+评论
+
+理查德 - 2012-04-06 11:31:42
+
+这个测试存在以下几个问题：
+一、缓存没有清除。index only scan就是指只访问index，不访问表。之所以能提升性能，归根结底，是因为不访问表可以大量减少磁盘访问。然而，博主在测试的时候，没有清除缓存，这样，索引覆盖的优势便体现不出来了，因为在有缓存的情况下，有没有索引覆盖都不需要访问磁盘。建议每次测试清除换存，另外注意，清除缓存包括清除数据库的缓存和操
+作系统的缓存。
+二、字段太少。字段太少将使索引扫面的优势不明显，测试用的表，索引大约占去整个表的一边（只有两个字段），那么索引覆盖只访问索引，非索引覆盖访问全表，后者花费时间大约为前者两倍。建议增加字段数。
+
+
+德哥@Digoal 回复理查德 - 2012-04-06 11:31:42
+
+本身index only scan也不会带来突破性的性能提升. 现实场景中不可能没有缓存.
+能真正带来性能提升的应该是有个地方记录了TUPLE的条目数.
+

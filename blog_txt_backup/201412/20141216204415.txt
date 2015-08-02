@@ -1,0 +1,173 @@
+PostgreSQL research
+
+docker sshd image problem, session required pam_loginuid.so, cann't login
+
+2014-12-16 20:44:15   查看原文>>
+
+在使用sshd docker 镜像时, 发现一个比较诡异的问题, 有些启动的容器可以连接, 有些不能.
+例如 : 
+启动2个容器(这两个容器都有问题) : 
+
+[root@localhost ~]# docker run -d --name di digoal/sshd_ceph:giant
+[root@localhost ~]# docker run -d --name da digoal/sshd
+
+
+这两个容器的CMD如下 : 
+
+[root@localhost ~]# docker inspect -f '{{.Config.Cmd}}' da
+[/usr/sbin/sshd -D]
+[root@localhost ~]# docker inspect -f '{{.Config.Cmd}}' di
+[/usr/sbin/sshd -D]
+
+
+查看他们的IP
+
+[root@localhost ~]# docker inspect -f '{{.NetworkSettings.IPAddress}}' di
+172.17.0.7
+[root@localhost ~]# docker inspect -f '{{.NetworkSettings.IPAddress}}' da
+172.17.0.8
+
+
+
+使用ssh客户端连接, 被拒绝.
+
+[root@localhost ~]# ssh 172.17.0.8
+root@172.17.0.8's password: 
+Last login: Tue Dec 16 20:22:12 2014 from 172.17.42.1
+Connection to 172.17.0.8 closed.
+
+[root@localhost ~]# ssh 172.17.0.7
+root@172.17.0.7's password: 
+Last login: Tue Dec 16 20:21:58 2014 from 172.17.42.1
+Connection to 172.17.0.7 closed.
+
+
+
+排错, 先删除这两个容器 : 
+
+[root@localhost ~]# docker stop di
+di
+[root@localhost ~]# docker stop da
+da
+[root@localhost ~]# docker rm da
+da
+[root@localhost ~]# docker rm di
+di
+
+
+排错时, 使用交互模式打开容器, 使用/bin/bash覆盖/usr/sbin/sshd -D. 并将sshd日志输出到挂载在宿主机的/tmp目录.
+
+[root@localhost ~]# docker run --rm -t -i --name=da --volume=/tmp:/data01 digoal/sshd_ceph:giant /bin/bash
+[root@f563c0940d2b /]# /usr/sbin/sshd -D -E /data01/sshd.log
+
+
+查看容器IP
+
+[root@localhost tmp]# docker inspect -f '{{.NetworkSettings.IPAddress}}' da
+172.17.0.11
+
+
+使用SSH客户端连接这个容器, 同样被退出.
+
+[root@localhost tmp]# ssh 172.17.0.11
+The authenticity of host '172.17.0.11 (172.17.0.11)' can't be established.
+ECDSA key fingerprint is db:5c:6b:2a:bc:9e:3e:31:24:1b:c0:8d:5f:96:f2:e0.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '172.17.0.11' (ECDSA) to the list of known hosts.
+root@172.17.0.11's password: 
+Last login: Tue Dec  9 15:20:36 2014 from 172.17.42.1
+Connection to 172.17.0.11 closed.
+
+
+
+查看容器的sshd日志如下, 原因找到了. : 
+
+[root@localhost tmp]# cat /tmp/sshd.log 
+Server listening on 0.0.0.0 port 22.
+Server listening on :: port 22.
+Accepted password for root from 172.17.42.1 port 41153 ssh2
+PAM: pam_open_session(): Cannot make/remove an entry for the specified session
+Received disconnect from 172.17.42.1: 11: disconnected by user
+
+
+
+解决办法1, 修改/etc/pam.d/sshd  : 
+
+[root@f563c0940d2b /]# /usr/sbin/sshd -D -E /data01/sshd.log
+^C
+    注释如下
+[root@f563c0940d2b /]# vi /etc/pam.d/sshd 
+#session    required     pam_loginuid.so
+    现在可以连接了
+[root@localhost tmp]# ssh 172.17.0.11
+root@172.17.0.11's password: 
+Last login: Tue Dec 16 20:28:15 2014 from 172.17.42.1
+[root@f563c0940d2b ~]# 
+
+
+
+解决办法2, 使用超级权限启动容器 : 
+
+[root@f563c0940d2b /]# exit
+exit
+[root@localhost ~]# docker run --rm -t -i --name=da --privileged=true --volume=/tmp:/data01 digoal/sshd_ceph:giant /bin/bash
+[root@44e686983f3a /]# /usr/sbin/sshd -D -E /data01/sshd.log
+
+[root@localhost tmp]# docker inspect -f '{{.NetworkSettings.IPAddress}}' da
+172.17.0.13
+    正常连接 : 
+[root@localhost tmp]# ssh 172.17.0.13
+The authenticity of host '172.17.0.13 (172.17.0.13)' can't be established.
+ECDSA key fingerprint is db:5c:6b:2a:bc:9e:3e:31:24:1b:c0:8d:5f:96:f2:e0.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '172.17.0.13' (ECDSA) to the list of known hosts.
+root@172.17.0.13's password: 
+Last login: Tue Dec  9 15:20:36 2014 from 172.17.42.1
+[root@44e686983f3a ~]# 
+[root@44e686983f3a ~]# cat /etc/pam.d/sshd |grep pam_loginuid
+session    required     pam_loginuid.so
+
+
+
+最后, 建议在创建sshd镜像时, 就将session    required     pam_loginuid.so注释掉. 
+那么以后使用这个镜像启动容器, 就不会出现文章开头的问题了.
+
+[参考]
+1. man docker-run
+
+       --privileged=true|false Give extended privileges to this container.  By default,  Docker  containers  are  “unprivileged”
+       (=false)  and  cannot,  for  example, run a Docker daemon inside the Docker container.  This is because by default a con‐
+       tainer is not allowed to access any devices.  A “privileged” container is given access to all devices.
+
+       When the operator executes docker run --privileged, Docker will enable access to all devices on the host as well  as  set
+       some configuration in AppArmor to allow the container nearly all the same access to the host as processes running outside
+       of a container on the host.
+
+
+2. man sshd_config
+
+# Set this to 'yes' to enable PAM authentication, account processing,
+# and session processing. If this is enabled, PAM authentication will
+# be allowed through the ChallengeResponseAuthentication and
+# PasswordAuthentication.  Depending on your PAM configuration,
+# PAM authentication via ChallengeResponseAuthentication may bypass
+# the setting of "PermitRootLogin without-password".
+# If you just want the PAM account and session checks to run without
+# PAM authentication, then enable this but set PasswordAuthentication
+# and ChallengeResponseAuthentication to 'no'.
+# WARNING: 'UsePAM no' is not supported in Red Hat Enterprise Linux and may cause several
+# problems.
+#UsePAM no
+UsePAM yes
+
+     UsePAM  Enables the Pluggable Authentication Module interface.  If set to “yes” this will enable PAM authentication using
+             ChallengeResponseAuthentication and PasswordAuthentication in addition to PAM account and session module processing
+             for all authentication types.
+
+             Because PAM challenge-response authentication usually serves an equivalent role to password authentication, you
+             should disable either PasswordAuthentication or ChallengeResponseAuthentication.
+
+             If UsePAM is enabled, you will not be able to run sshd(8) as a non-root user.  The default is “no”.
+
+
+Flag Counter

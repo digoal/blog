@@ -1,0 +1,300 @@
+PostgreSQL research
+
+Postgres-XC 1.1 devel add data online redistribute among nodes and distribute strategys
+
+2013-04-09 11:24:57   查看原文>>
+
+上一篇blog介绍了postgres-xc开发版本的安装方法.
+http://blog.163.com/digoal@126/blog/static/1638770402013388461690/
+这一篇开始将要介绍一下postgres-xc 1.1 devel 版本的新特性.
+测试如下 : 
+# 现有环境如下
+
+postgres=# select oid,* from pgxc_node;
+  oid  |  node_name   | node_type | node_port |     node_host      | nodeis_primary | nodeis_preferred |   node_id
+-------+--------------+-----------+-----------+--------------------+----------------+------------------+-------------
+ 16384 | datanode_1   | D         |      1923 | db-192-168-122-173 | t              | f                |  -675012441
+ 16385 | datanode_2   | D         |      1923 | db-192-168-122-174 | f              | t                | -1047623914
+ 16386 | datanode_3   | D         |      1923 | db-192-168-122-175 | f              | f                |  1787525382
+ 16387 | datanode_4   | D         |      1923 | db-192-168-122-176 | f              | f                |   -83063638
+ 16388 | datanode_5   | D         |      1923 | db-192-168-122-177 | f              | f                |   137889650
+ 16389 | datanode_6   | D         |      1923 | db-192-168-122-178 | f              | f                |  -678318491
+ 11198 | coordinate_1 | C         |      1921 | 127.0.0.1          | f              | f                |  -922782310
+(7 rows)
+
+
+# 节点分组
+
+postgres=# select * from pgxc_group;
+ group_name |            group_members            
+------------+-------------------------------------
+ gp0        | 16384 16385 16386 16387 16388 16389
+(1 row)
+
+
+# 创建测试表, 使用hash(id) 分布策略, 分布到gp0
+
+postgres=#  create table test(id int primary key, info text, crt_time timestamp) distribute by hash(id) to group gp0;
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "test_pkey" for table "test"
+CREATE TABLE
+
+
+# 插入测试数据
+
+postgres=# insert into test select generate_series(1,1000), md5(random()::text), clock_timestamp();
+INSERT 0 1000
+
+
+# 查看id=1和id=2的节点数据分布.
+
+postgres=# explain verbose select * from test where id=1;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_3
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 1)
+(4 rows)
+
+postgres=# explain verbose select * from test where id=2;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_5
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 2)
+(4 rows)
+
+
+# 修改分布策略为modulo(id)
+
+postgres=# alter table test distribute by modulo(id) ,to group gp0;
+ALTER TABLE
+
+
+# 再次查看id=1和id=2的节点数据分布. 可以观察重分布已经生效.
+
+postgres=# explain verbose select * from test where id=1;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_2
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 1)
+(4 rows)
+
+postgres=# explain verbose select * from test where id=2;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_3
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 2)
+(4 rows)
+
+
+# 修改分布范围为节点3.
+
+postgres=# alter table test distribute by modulo(id) ,to node (datanode_3);
+ALTER TABLE
+
+
+# 再次查看数据, 所有数据都分布到节点3了.
+
+postgres=# explain verbose select * from test where id=1;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_3
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 1)
+(4 rows)
+
+postgres=# explain verbose select * from test where id=2;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_3
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 2)
+(4 rows)
+
+
+
+# 在现有的分布范围内添加1个节点.
+
+postgres=# alter table test add node (datanode_1);
+ALTER TABLE
+
+
+# 数据将在原有的节点和新增的节点范围内分布.
+
+postgres=# explain verbose select * from test where id=190;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_1
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 190)
+(4 rows)
+
+postgres=# explain verbose select * from test where id=191;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_3
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 191)
+(4 rows)
+
+postgres=# explain verbose select * from test where id=192;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_1
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 192)
+(4 rows)
+
+postgres=# explain verbose select * from test where id=193;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Data Node Scan on "__REMOTE_FQS_QUERY__"  (cost=0.00..0.00 rows=0 width=0)
+   Output: test.id, test.info, test.crt_time
+   Node/s: datanode_3
+   Remote query: SELECT id, info, crt_time FROM test WHERE (id = 193)
+(4 rows)
+
+
+# 修改分布策略为replication
+
+postgres=# alter table test distribute by replication;
+ALTER TABLE
+
+
+# 修改分布策略为roundrobin, 因为roundrobin算法无法保证全局唯一约束, 所以会提示错误.
+
+postgres=# alter table test distribute by roundrobin;
+ERROR:  Cannot alter table to distribution incompatible with existing constraints
+# 将主键去除后就可以修改为roundrobin了.
+postgres=# alter table test drop constraint test_pkey;
+ALTER TABLE
+postgres=# alter table test distribute by roundrobin;
+ALTER TABLE
+
+
+# 修改分布策略列.
+
+postgres=# alter table test distribute by hash(info), to group gp0;
+ALTER TABLE
+
+
+# 删除节点
+
+postgres=# alter table test delete node(datanode_1);
+ALTER TABLE
+
+
+
+[其他]
+1. alter table为DDL语句, 需要加AccessExclusiveLock锁, 如下 : 
+
+SESSION A : 
+postgres=# begin;
+BEGIN
+postgres=# alter table test distribute by hash(id), to group gp0;
+ALTER TABLE
+
+
+
+SESSION B : 
+
+-[ RECORD 1 ]------+--------------------
+locktype           | virtualxid
+database           | 
+relation           | 
+page               | 
+tuple              | 
+virtualxid         | 2/358
+transactionid      | 
+classid            | 
+objid              | 
+objsubid           | 
+virtualtransaction | 2/358
+pid                | 5356
+mode               | ExclusiveLock
+granted            | t
+fastpath           | t
+-[ RECORD 2 ]------+--------------------
+locktype           | relation
+database           | 12811
+relation           | 24585
+page               | 
+tuple              | 
+virtualxid         | 
+transactionid      | 
+classid            | 
+objid              | 
+objsubid           | 
+virtualtransaction | 2/358
+pid                | 5356
+mode               | AccessExclusiveLock
+granted            | t
+fastpath           | f
+-[ RECORD 3 ]------+--------------------
+locktype           | transactionid
+database           | 
+relation           | 
+page               | 
+tuple              | 
+virtualxid         | 
+transactionid      | 1001430
+classid            | 
+objid              | 
+objsubid           | 
+virtualtransaction | 2/358
+pid                | 5356
+mode               | ExclusiveLock
+granted            | t
+fastpath           | f
+
+
+
+SESSION C : 
+
+select * from test;
+waiting ..........
+
+
+
+
+2. alter table 对数据进行重分布时, 需要等待分布结束才返回给客户端, 是一个同步到过程, 而非异步的过程.
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/1638770402013388461690/
+
+评论
+
+Cutis_Dow - 2015-01-27 16:24:39
+
+能否认为删除节点前都必需要修改分布策略为roundrobin？那么如果我有三台机器作为datanode，在去除其中一台前需要逐一对表进行roundrobin？
+
+德哥@Digoal 回复 Cutis_Dow - 2015-01-27 16:24:39
+
+不是的, 重分布和更新分布算法没关系啊.
+
+Cutis_Dow 回复德哥@Digoal - 2015-01-27 16:24:39
+
+对于postgres-xl集群，新增数据节点，然后做数据重分布，您可有什么好的推荐？我正在做这个但是还没有好的方案
+
+德哥@Digoal 回复 Cutis_Dow - 2015-01-27 16:24:39
+
+没有, 目前PG-XL的做法是将数据全部汇聚到coordinator再分发到datanode.效率比较低, 不能直接在datanode之间重分布.
+
+Cutis_Dow 回复德哥@Digoal - 2015-01-27 16:24:39
+
+那如果我要移除某个datanode，为了保持数据完整性，也是讲所有数据汇聚到coordinator，删除节点后在重新分布？
+
+德哥@Digoal 回复 Cutis_Dow - 2015-01-27 16:24:39
+
+理论上是的.

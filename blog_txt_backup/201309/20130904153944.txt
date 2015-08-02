@@ -1,0 +1,376 @@
+PostgreSQL research
+
+PostgreSQL 9.4 pending patch : Hstore: (@> kv contains)Query speedups with Gin index
+
+2013-09-04 15:39:44   查看原文>>
+
+Hey everyone,
+I'm looking for feedback on a contrib/hstore patch.
+
+We've been experiencing slow "@>" queries involving an hstore column that's
+covered by a Gin index. At the current postgresql git HEAD, the hstore <->
+gin interface produces the following text items to be indexed:
+
+hstore: "'a'=>'1234', 'b'=>'test'"
+Produces indexed text items: "Ka", "V1234", "Kb", "Vtest"
+
+For the size of our production table (10s of millions of rows), I observed
+significant query speedups by changing the index strategy to the following:
+
+hstore: "'a'=>'1234', 'b'=>'test'"
+Produces indexed text items: "Ka", "KaV1234", "Kb", "KbVtest"
+
+The combined entry is used to support "contains (@>)" queries, and the key
+only item is used to support "key contains (?)" queries. This change seems
+to help especially with hstore keys that have high cardinalities. Downsides
+of this change is that it requires an index rebuild, and the index will be
+larger in size.
+
+Patch attached. Any thoughts on this change?
+
+Thanks,
+Blake
+
+
+该补丁尝试通过修改索引条目的内容来达到加速gin索引@>, ?等操作符的目的.
+补丁前gin索引中存储k值,v值. 补丁后索引中存储k值, k值+v值混合值. 
+所以对于@>的查询效率是可以提高的. key的查询效率应该是不变的.
+同时打了这个补丁对于key值比较散的情况, 索引容量会大增.
+HSTORE操作符如下 : 
+
+Table F-6. hstore Operators
+
+┌────────────────┬──────────────────────────────────────────────────────────┬──────────────────────────────────────────────────┬────────────────────────────┐
+│    Operator    │                       Description                        │                     Example                      │           Result           │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore -> text  │get value for key (NULL if not present)                   │'a=>x, b=>y'::hstore -> 'a'                       │x                           │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore -> text[]│get values for keys (NULL if not present)                 │'a=>x, b=>y, c=>z'::hstore -> ARRAY['c','a']      │{"z","x"}                   │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore || hstore│concatenate hstores                                       │'a=>b, c=>d'::hstore || 'c=>x, d=>q'::hstore      │"a"=>"b", "c"=>"x", "d"=>"q"│
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore ? text   │does hstore contain key?                                  │'a=>1'::hstore ? 'a'                              │t                           │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore ?& text[]│does hstore contain all specified keys?                   │'a=>1,b=>2'::hstore ?& ARRAY['a','b']             │t                           │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore ?| text[]│does hstore contain any of the specified keys?            │'a=>1,b=>2'::hstore ?| ARRAY['b','c']             │t                           │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore @> hstore│does left operand contain right?                          │'a=>b, b=>1, c=>NULL'::hstore @> 'b=>1'           │t                           │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore <@ hstore│is left operand contained in right?                       │'a=>c'::hstore <@ 'a=>b, b=>1, c=>NULL'           │f                           │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore - text   │delete key from left operand                              │'a=>1, b=>2, c=>3'::hstore - 'b'::text            │"a"=>"1", "c"=>"3"          │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore - text[] │delete keys from left operand                             │'a=>1, b=>2, c=>3'::hstore - ARRAY['a','b']       │"c"=>"3"                    │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│hstore - hstore │delete matching pairs from left operand                   │'a=>1, b=>2, c=>3'::hstore - 'a=>4, b=>2'::hstore │"a"=>"1", "c"=>"3"          │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│record #= hstore│replace fields in record with matching values from hstore │see Examples section                              │                            │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│%% hstore       │convert hstore to array of alternating keys and values    │%% 'a=>foo, b=>bar'::hstore                       │{a,foo,b,bar}               │
+├────────────────┼──────────────────────────────────────────────────────────┼──────────────────────────────────────────────────┼────────────────────────────┤
+│%# hstore       │convert hstore to two-dimensional key/value array         │%# 'a=>foo, b=>bar'::hstore                       │{{a,foo},{b,bar}}           │
+└────────────────┴──────────────────────────────────────────────────────────┴──────────────────────────────────────────────────┴────────────────────────────┘
+
+测试 : 
+打补丁 : 
+
+[root@db-172-16-3-39 ~]# cd /opt/soft_bak/postgresql-1b1d3d9
+[root@db-172-16-3-39 postgresql-1b1d3d9]# wget http://www.postgresql.org/message-id/attachment/30006/hstore_gin_speedup.patch
+
+[root@db-172-16-3-39 postgresql-1b1d3d9]# patch -p1 < hstore_gin_speedup.patch 
+patching file contrib/hstore/hstore_gin.c
+
+[root@db-172-16-3-39 postgresql-1b1d3d9]# cd contrib/
+[root@db-172-16-3-39 contrib]# cd hstore/
+
+[root@db-172-16-3-39 hstore]# gmake
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -I. -I. -I../../src/include -D_GNU_SOURCE -I/usr/include/libxml2   -c -o hstore_gin.o hstore_gin.c
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -shared -o hstore.so hstore_io.o hstore_op.o hstore_gist.o hstore_gin.o hstore_compat.o crc32.o -L../../src/port -L../../src/common  -Wl,-rpath,'/home/pg94/pgsql9.4devel/lib',--enable-new-dtags  
+
+[root@db-172-16-3-39 hstore]# gmake install
+/bin/mkdir -p '/home/pg94/pgsql9.4devel/lib'
+/bin/mkdir -p '/home/pg94/pgsql9.4devel/share/extension'
+/bin/mkdir -p '/home/pg94/pgsql9.4devel/share/extension'
+/usr/bin/install -c -m 755  hstore.so '/home/pg94/pgsql9.4devel/lib/hstore.so'
+/usr/bin/install -c -m 644 hstore.control '/home/pg94/pgsql9.4devel/share/extension/'
+/usr/bin/install -c -m 644 hstore--1.1.sql hstore--1.0--1.1.sql hstore--unpackaged--1.0.sql '/home/pg94/pgsql9.4devel/share/extension/'
+
+
+
+创建测试表和生成随机hstore的函数 : 
+
+[root@db-172-16-3-39 hstore]# su - pg94
+pg94@db-172-16-3-39-> psql
+psql (9.4devel)
+Type "help" for help.
+
+digoal=# create extension hstore;
+CREATE EXTENSION
+
+digoal=# CREATE OR REPLACE FUNCTION public.gen_hstore(i integer)
+ RETURNS hstore
+ LANGUAGE plpgsql
+ STRICT
+AS $function$
+declare
+  v_res hstore;
+begin
+  v_res := hstore('0', md5(random()::text));
+  for x in 1..i loop
+    v_res := hs_concat(v_res, hstore(x::text, md5(random()::text)));
+  end loop;
+  return v_res;
+end;
+$function$;
+CREATE FUNCTION
+
+digoal=# select * from gen_hstore(0);
+               gen_hstore
+-----------------------------------------
+ "0"=>"f016e0d9c1973abb9e06ddf40f262e44"
+(1 row)
+
+digoal=# select * from gen_hstore(1);
+                                    gen_hstore
+----------------------------------------------------------------------------------
+ "0"=>"bbbbd53b879e2c2e112f8f3bed0c6872", "1"=>"243d995d7f8df165b7d8165f63406f8b"
+(1 row)
+
+digoal=# select * from gen_hstore(2);
+                                                        gen_hstore
+---------------------------------------------------------------------------------------------------------------------------
+ "0"=>"19065cc2fe0d19a7f22ba749d13c53fc", "1"=>"4a0ecc985fd9bbf17954917472fb5291", "2"=>"cf7a2de20496f88f0a8d2895c4c2c654"
+(1 row)
+
+
+创建测试表 : 
+
+digoal=# create table t_hstore(id serial primary key, info hstore, crt_time timestamp default clock_timestamp());
+CREATE TABLE
+
+
+使用pgbench生成40万条测试数据
+
+pg94@db-172-16-3-39-> cat test.sql
+\setrandom i 0 20
+insert into t_hstore(info) values (gen_hstore(:i));
+
+
+生成速度还可以 : 
+
+pg94@db-172-16-3-39-> pgbench -M prepared -n -r -f ./test.sql -P 1 -c 8 -j 4 -t 50000
+progress: 1.0 s, 36165.0 tps, 0.221 ms lat
+progress: 2.0 s, 37799.6 tps, 0.212 ms lat
+progress: 3.0 s, 38091.6 tps, 0.210 ms lat
+progress: 4.0 s, 37625.7 tps, 0.213 ms lat
+progress: 5.0 s, 34643.5 tps, 0.231 ms lat
+progress: 6.0 s, 34891.4 tps, 0.229 ms lat
+progress: 7.0 s, 38052.7 tps, 0.210 ms lat
+progress: 8.0 s, 37459.1 tps, 0.214 ms lat
+progress: 9.0 s, 37486.9 tps, 0.213 ms lat
+progress: 10.0 s, 36291.7 tps, 0.220 ms lat
+progress: 11.0 s, 29639.3 tps, 0.270 ms lat
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 4
+number of transactions per client: 50000
+number of transactions actually processed: 400000/400000
+tps = 35572.152732 (including connections establishing)
+tps = 35597.906781 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002022        \setrandom i 0 20
+        0.210059        insert into t_hstore(info) values (gen_hstore(:i));
+
+
+40万条记录, 耗费196MB空间.
+
+digoal=# \dt+ t_hstore
+                      List of relations
+ Schema |   Name   | Type  |  Owner   |  Size  | Description
+--------+----------+-------+----------+--------+-------------
+ public | t_hstore | table | postgres | 196 MB |
+(1 row)
+
+
+在hstore列创建gin索引.
+
+digoal=# create index idx_t_hstore_info on t_hstore using gin(info);
+CREATE INDEX
+Time: 48123.826 ms
+
+
+创建索引耗时48秒.
+
+digoal=# \di+ idx_t_hstore_info 
+                                List of relations
+ Schema |       Name        | Type  |  Owner   |  Table   |  Size  | Description 
+--------+-------------------+-------+----------+----------+--------+-------------
+ public | idx_t_hstore_info | index | postgres | t_hstore | 335 MB | 
+(1 row)
+
+
+索引大小335MB.
+
+kv contains 场景gin索引查询效率测试
+
+digoal=# explain analyze select * from t_hstore where info @> (select info from t_hstore where id=5200001);
+                                                                 QUERY PLAN                                                         
+         
+------------------------------------------------------------------------------------------------------------------------------------
+---------
+ Bitmap Heap Scan on t_hstore  (cost=11.54..413.54 rows=400 width=473) (actual time=0.164..0.165 rows=1 loops=1)
+   Recheck Cond: (info @> $0)
+   InitPlan 1 (returns $0)
+     ->  Index Scan using t_hstore_pkey on t_hstore t_hstore_1  (cost=0.42..2.44 rows=1 width=461) (actual time=0.011..0.012 rows=1 
+loops=1)
+           Index Cond: (id = 5200001)
+   ->  Bitmap Index Scan on idx_t_hstore_info  (cost=0.00..9.00 rows=400 width=0) (actual time=0.153..0.153 rows=1 loops=1)
+         Index Cond: (info @> $0)
+ Total runtime: 0.206 ms
+(8 rows)
+Time: 0.643 ms
+
+
+
+k contains 场景gin索引查询效率测试
+
+digoal=# select array_agg(key) from (select (each(info)).key from t_hstore where id=5200001) t;
+                   array_agg                   
+-----------------------------------------------
+ {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17}
+(1 row)
+Time: 0.778 ms
+digoal=# explain analyze select * from t_hstore where info ? '1';
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on t_hstore  (cost=9.10..411.10 rows=400 width=473) (actual time=89.038..250.400 rows=380822 loops=1)
+   Recheck Cond: (info ? '1'::text)
+   Rows Removed by Index Recheck: 10100
+   ->  Bitmap Index Scan on idx_t_hstore_info  (cost=0.00..9.00 rows=400 width=0) (actual time=86.100..86.100 rows=380822 loops=1)
+         Index Cond: (info ? '1'::text)
+ Total runtime: 283.150 ms
+(6 rows)
+Time: 283.861 ms
+digoal=# explain analyze select * from t_hstore where info ?| _text '{0,1,2,3,4,5,6,7,8,9,10,11}';
+                                                              QUERY PLAN                                                            
+  
+------------------------------------------------------------------------------------------------------------------------------------
+--
+ Bitmap Heap Scan on t_hstore  (cost=64.10..466.10 rows=400 width=473) (actual time=262.783..613.775 rows=400000 loops=1)
+   Recheck Cond: (info ?| '{0,1,2,3,4,5,6,7,8,9,10,11}'::text[])
+   ->  Bitmap Index Scan on idx_t_hstore_info  (cost=0.00..64.00 rows=400 width=0) (actual time=259.514..259.514 rows=400000 loops=1
+)
+         Index Cond: (info ?| '{0,1,2,3,4,5,6,7,8,9,10,11}'::text[])
+ Total runtime: 648.329 ms
+(5 rows)
+Time: 648.992 ms
+
+
+
+下面是hstore补丁前的测试, 用于对比这个补丁是否有性能提升.
+生成数据部分同上, 略.
+
+digoal=# \dt+ t_hstore
+                      List of relations
+ Schema |   Name   | Type  |  Owner   |  Size  | Description
+--------+----------+-------+----------+--------+-------------
+ public | t_hstore | table | postgres | 196 MB |
+(1 row)
+
+
+在hstore列创建gin索引.
+
+digoal=# create index idx_t_hstore_info on t_hstore using gin(info);
+CREATE INDEX
+Time: 51732.079 ms
+
+
+创建索引耗时51秒.
+索引大小335MB.
+
+digoal=# \di+ idx_t_hstore_info
+                                List of relations
+ Schema |       Name        | Type  |  Owner   |  Table   |  Size  | Description
+--------+-------------------+-------+----------+----------+--------+-------------
+ public | idx_t_hstore_info | index | postgres | t_hstore | 335 MB |
+(1 row)
+
+
+kv contains 场景gin索引查询效率测试
+
+digoal=# explain (buffers,analyze) select * from t_hstore where info @> (select info from t_hstore where id=4000001);
+                                                                 QUERY PLAN
+
+------------------------------------------------------------------------------------------------------------------------------------
+---------
+ Bitmap Heap Scan on t_hstore  (cost=11.54..413.54 rows=400 width=473) (actual time=168.336..168.337 rows=1 loops=1)
+   Recheck Cond: (info @> $0)
+   Buffers: shared hit=2730
+   InitPlan 1 (returns $0)
+     ->  Index Scan using t_hstore_pkey on t_hstore t_hstore_1  (cost=0.42..2.44 rows=1 width=461) (actual time=0.015..0.016 rows=1
+loops=1)
+           Index Cond: (id = 4000001)
+           Buffers: shared hit=4
+   ->  Bitmap Index Scan on idx_t_hstore_info  (cost=0.00..9.00 rows=400 width=0) (actual time=168.311..168.311 rows=1 loops=1)
+         Index Cond: (info @> $0)
+         Buffers: shared hit=2729
+ Total runtime: 168.381 ms
+(11 rows)
+
+
+k contains 场景gin索引查询效率测试
+
+digoal=# select array_agg(key) from (select (each(info)).key from t_hstore where id=4000001) t;
+          array_agg
+-----------------------------
+ {0,1,2,3,4,5,6,7,8,9,10,11}
+(1 row)
+Time: 0.278 ms
+digoal=# explain analyze select * from t_hstore where info ? '1';
+                                                            QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on t_hstore  (cost=9.10..411.10 rows=400 width=473) (actual time=60.182..246.450 rows=380810 loops=1)
+   Recheck Cond: (info ? '1'::text)
+   Rows Removed by Index Recheck: 10066
+   ->  Bitmap Index Scan on idx_t_hstore_info  (cost=0.00..9.00 rows=400 width=0) (actual time=58.273..58.273 rows=380810 loops=1)
+         Index Cond: (info ? '1'::text)
+ Total runtime: 274.195 ms
+(6 rows)
+Time: 274.683 ms
+
+digoal=# explain analyze select * from t_hstore where info ?| _text '{0,1,2,3,4,5,6,7,8,9,10,11}';
+                                                              QUERY PLAN
+
+------------------------------------------------------------------------------------------------------------------------------------
+--
+ Bitmap Heap Scan on t_hstore  (cost=64.10..466.10 rows=400 width=473) (actual time=178.108..548.362 rows=400000 loops=1)
+   Recheck Cond: (info ?| '{0,1,2,3,4,5,6,7,8,9,10,11}'::text[])
+   ->  Bitmap Index Scan on idx_t_hstore_info  (cost=0.00..64.00 rows=400 width=0) (actual time=176.103..176.103 rows=400000 loops=1
+)
+         Index Cond: (info ?| '{0,1,2,3,4,5,6,7,8,9,10,11}'::text[])
+ Total runtime: 578.002 ms
+(5 rows)
+
+Time: 578.539 ms
+
+
+
+[小结]
+1. 索引大小比较
+这个和key的离散程度以及key的长度有关, 本例key取值0-20的整型范围, 所以key相对来说比较小, 离散度也不高.
+因此补丁前后索引的大小是差不多的.
+2. 索引创建时间比较
+创建时间没有明显差别.
+3. 查询效率比较
+k-v contains 查询效率提升非常明显, 精确匹配1行, 在内存命中的情况下. 从168毫秒提升到0.2毫秒. 
+k contains 查询效率可以认为差别不明显, 因为本例打补丁前使用的机器CPU频率略高2.83GHZ. 打补丁后的机器为2.0GHZ.
+
+[参考]
+1. http://www.postgresql.org/docs/devel/static/hstore.html
+2. http://www.postgresql.org/message-id/flat/CAPxT4eEe-MNs4FbVN1Le_nWsTgyw3N38tENbN5W7GPBrWB7cJA@mail.gmail.com#CAPxT4eEe-MNs4FbVN1Le_nWsTgyw3N38tENbN5W7GPBrWB7cJA@mail.gmail.com
+3. https://www.pgcon.org/2013/schedule/events/518.en.html
+4. http://obartunov.livejournal.com/171959.html
+

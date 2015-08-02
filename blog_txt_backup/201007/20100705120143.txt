@@ -1,0 +1,225 @@
+PostgreSQL research
+
+[PostgreSQL] Using speedup max,min search
+
+2010-07-05 12:01:43   查看原文>>
+
+今天在给数据仓库ETL做优化的时候，发现PostgreSQL一个比较奇怪的问题。
+
+首先介绍一下环境：
+
+有一个表需要被数据仓库的ETL程序抽取，表名暂且叫tbl_test，数据量大概在1亿左右。
+
+修改标记字段为modifytime,允许空,BTREE索引。
+
+创建标记字段为createtime,允许空,无索引。
+
+抽取的时候按照modifytime范围取值进行抽取。
+
+问题来了：
+
+select max(modifytime) from tbl_ups_user_info;
+
+
+
+
+Time: 10563.757 ms
+
+
+
+
+select min(modifytime) from tbl_ups_user_info;
+
+
+
+
+Time: 0.901 ms
+
+
+差别实在太大了。
+
+执行计划如下：
+
+skyups=> explain analyze select max(modifytime) from tbl_ups_user_info;
+                                                                                           QUERY PLAN                              
+                                                           
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------
+ Result  (cost=0.05..0.06 rows=1 width=0) (actual time=11801.932..11801.932 rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit  (cost=0.00..0.05 rows=1 width=8) (actual time=11801.925..11801.926 rows=1 loops=1)
+           ->  Index Scan Backward using idx_tbl_ups_user_info_modifytime on tbl_ups_user_info  (cost=0.00..1644338.43 rows=32003931
+ width=8) (actual time=11801.922..11801.922 rows=1 loops=1)
+                 Filter: (modifytime IS NOT NULL)
+ Total runtime: 11801.985 ms
+(6 rows)
+
+
+
+
+Time: 11803.978 ms
+skyups=> explain analyze select min(modifytime) from tbl_ups_user_info;
+                                                                                  QUERY PLAN                                       
+                                          
+------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------
+ Result  (cost=0.05..0.06 rows=1 width=0) (actual time=0.067..0.067 rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit  (cost=0.00..0.05 rows=1 width=8) (actual time=0.064..0.064 rows=1 loops=1)
+           ->  Index Scan using idx_tbl_ups_user_info_modifytime on tbl_ups_user_info  (cost=0.00..1644338.43 rows=32003931 width=8)
+ (actual time=0.063..0.063 rows=1 loops=1)
+                 Filter: (modifytime IS NOT NULL)
+ Total runtime: 0.109 ms
+(6 rows)
+
+
+
+
+Time: 0.942 ms
+
+
+从执行计划上看，预计COST是一致的，但是真实时间差了1万倍以上，分析差别在 Index Scan Backward using idx_tbl_ups_user_info_modifytime ，但是索引是平衡二叉树索引，理论上来说得出结果的时间一致才对。
+
+为了验证，把索引修改为desc排序的索引。
+
+结果还是一样，MAX得到的时间还是要10多秒。
+
+于是想到会不会是空在作怪，默认情况下，空是被认为是最大的。是不是在做max取值时去搜索了空呢？
+
+赶紧来验证一把：
+
+select count(*) from tbl_test where modifytime is null;
+
+
+9千万条记录.
+
+select count(*) from tbl_test where createtime is null;
+
+
+0条记录
+
+create index idx_test_2 on tbl_test (createtime) ;
+
+
+
+
+select min(createtime) from tbl_test;
+
+
+0.9毫秒
+
+select min(createtime) from tbl_test;
+
+
+0.9毫秒
+
+果然，问题就处在空。
+
+ 
+
+解决这个问题只需要建立partial索引。
+
+如下:
+
+create index idx_test_1 on tbl_test(modifytime) where modifytime is not null;
+
+
+再次搜索
+
+max(modifytime)和min(modifytime)时间都在1毫秒以内了。
+
+后记：
+
+PostgreSQL 二叉树索引不记录空值，那么应该没有必要再搜索索引之外的其他PAGE才对，这点有点费解。
+
+两次索引的大小如下
+
+第一种情况:
+
+create index idx_test_1 on tbl_test(modifytime);
+
+
+
+
+1023MB;
+
+
+
+
+skyups=> explain select count(*) from tbl_ups_user_info where modifytime is not null;
+                                   QUERY PLAN                                   
+---------------------------------------------------------------------------------
+ Aggregate  (cost=963192.07..963192.08 rows=1 width=0)
+   ->  Seq Scan on tbl_ups_user_info  (cost=0.00..962603.70 rows=235346 width=0)
+         Filter: (modifytime IS NOT NULL)
+(3 rows)
+
+
+
+
+Time: 1.669 ms
+skyups=> explain select count(*) from tbl_ups_user_info where modifytime is  null;
+                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+ Aggregate  (cost=1042064.76..1042064.77 rows=1 width=0)
+   ->  Seq Scan on tbl_ups_user_info  (cost=0.00..962603.70 rows=31784424 width=0)
+         Filter: (modifytime IS NULL)
+(3 rows)
+
+
+
+
+Time: 0.547 ms
+
+
+第二种情况:
+
+create index idx_test_1 on tbl_test(modifytime) where modifytime is not null;
+
+
+
+
+4MB;
+
+
+
+
+skyups=> explain select count(*) from tbl_ups_user_info where modifytime is  null;
+                                    QUERY PLAN                                    
+-----------------------------------------------------------------------------------
+ Aggregate  (cost=1042082.04..1042082.05 rows=1 width=0)
+   ->  Seq Scan on tbl_ups_user_info  (cost=0.00..962607.48 rows=31789824 width=0)
+         Filter: (modifytime IS NULL)
+(3 rows)
+
+
+
+
+Time: 1.771 ms
+skyups=> explain select count(*) from tbl_ups_user_info where modifytime is not null;
+                                                        QUERY PLAN                                                       
+--------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=231425.54..231425.55 rows=1 width=0)
+   ->  Index Scan using idx_tbl_ups_user_info_modifytime on tbl_ups_user_info  (cost=0.00..230849.98 rows=230224 width=0)
+(2 rows)
+
+
+
+
+Time: 0.588 ms
+
+
+ 
+
+总结：
+
+1. 二叉树索引中记录了modifytime is null的row page 和item号.（注意，在ORACLE中二叉树索引是不包含空的）
+
+这个从建立索引的语法中就可以理解：
+
+CREATE INDEX test2_info_nulls_low ON test2 (info NULLS FIRST);
+CREATE INDEX test3_desc_index ON test3 (id DESC NULLS LAST);
+
+
+2. 当需要使用max和min这类函数时，如果被运算的字段包含较多的空或者没有使用NOT NULL约束，建议在建立索引时使用partial索引。避免而外的PAGE扫描。
+

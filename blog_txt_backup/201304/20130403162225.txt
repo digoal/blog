@@ -1,0 +1,173 @@
+PostgreSQL research
+
+Postgres-XC can add normal PostgreSQL node to XC's datanode?
+
+2013-04-03 16:22:25   查看原文>>
+
+从Postgres-XC的架构来看, datanode只是充当了存储数据的角色. 理论上是可以使用普通的PostgreSQL节点来充当普通节点的.
+但是实际上做了限制, 至少从以下的测试来看, 连接参数就做过改动.
+不仅如此, XID也做了改动, 需要从GTM申请. 还有snapshot的机制.
+本文主要折腾一下, 如果把普通的PostgreSQL 加到datanode角色去会出什么样的问题.
+
+当然就算不做任何限制, 还是会有其他的问题存在的, 因为还涉及到其他的修改, 例如聚合函数. Postgres-XC中聚合函数类似mapreduce, 需要多节点的汇聚, 甚至可以做多次的mapreduce. 未来Postgres-XC是否能在数据仓库领域大有可为至少聚合函数这块要有比较便利的开发框架才行.
+
+下面尝试将普通的数据库节点添加到某个Postgres-XC的coordinator节点 : 
+测试环境请参考 : 
+http://blog.163.com/digoal@126/blog/static/16387704020133292915600/
+1. 配置普通数据库节点
+vi pg_hba.conf
+
+host all all 192.168.122.0/24 trust
+pg_ctl reload
+
+
+
+2. 操作Postgres-XC中的任意一个coordinator
+
+postgres=# create node test with (type=datanode, host='192.168.122.1', port=1921);
+CREATE NODE
+postgres=# select * from pgxc_node;
+  node_name   | node_type | node_port |     node_host      | nodeis_primary | nodeis_preferred |   node_id   
+--------------+-----------+-----------+--------------------+----------------+------------------+-------------
+ coordinate_6 | C         |      1921 | db-192-168-122-178 | f              | f                |    15814306
+ datanode_2   | D         |      1923 | db-192-168-122-174 | f              | f                | -1047623914
+ datanode_3   | D         |      1923 | db-192-168-122-175 | f              | t                |  1787525382
+ datanode_4   | D         |      1923 | db-192-168-122-176 | f              | f                |   -83063638
+ datanode_5   | D         |      1923 | db-192-168-122-177 | f              | f                |   137889650
+ coordinate_1 | C         |      1921 | db-192-168-122-173 | f              | f                |  -922782310
+ coordinate_2 | C         |      1921 | db-192-168-122-174 | f              | f                |  1027955327
+ coordinate_3 | C         |      1921 | db-192-168-122-175 | f              | f                |   183504851
+ coordinate_4 | C         |      1921 | db-192-168-122-176 | f              | f                | -1338651536
+ coordinate_5 | C         |      1921 | db-192-168-122-177 | f              | f                |  2058409530
+ datanode_6   | D         |      1923 | db-192-168-122-178 | f              | f                |  -678318491
+ datanode_1   | D         |      1923 | db-192-168-122-173 | t              | f                |  -675012441
+ test         | D         |      1921 | 192.168.122.1      | f              | f                |  1771415073
+(13 rows)
+postgres=# \set VERBOSITY verbose
+
+
+# 在新建的普通postgresql数据库节点新建表.
+
+postgres=# create table test(id int primary key, info text) distribute by (id) to node test;
+NOTICE:  00000: CREATE TABLE / PRIMARY KEY will create implicit index "test_pkey" for table "test"
+LOCATION:  DefineIndex, indexcmds.c:428
+ERROR:  42710: PGXC Node test: object not defined
+LOCATION:  pgxc_node_report_error, execRemote.c:4697
+
+
+# 这里报错是因为其他coordinator节点没有定义test节点.
+# 因此我们删掉这些coordinator, 保留本地节点即可.
+
+postgres=# drop NODE coordinate_1;
+DROP NODE
+postgres=# drop NODE coordinate_2;
+DROP NODE
+postgres=# drop NODE coordinate_4;
+DROP NODE
+postgres=# drop NODE coordinate_5;
+DROP NODE
+postgres=# drop NODE coordinate_6;
+DROP NODE
+postgres=# create table test(id int primary key, info text) distribute by (id) to node test;
+NOTICE:  00000: CREATE TABLE / PRIMARY KEY will create implicit index "test_pkey" for table "test"
+LOCATION:  DefineIndex, indexcmds.c:428
+ERROR:  42710: PGXC Node test: object not defined
+LOCATION:  pgxc_node_report_error, execRemote.c:4697
+
+
+# 现在还报错, 是因为coordinator pool未重载.
+
+3. 重载pool
+
+postgres=# select pgxc_pool_reload();
+ pgxc_pool_reload 
+------------------
+ t
+(1 row)
+postgres=# \q
+[pgxc@db-192-168-122-175 ~]$ psql -h 127.0.0.1
+psql (PGXC 1.0.2, based on PG 9.1.7)
+Type "help" for help.
+postgres=# \set VERBOSITY verbose
+postgres=# create table test(id int primary key, info text) distribute by (id) to node test;
+NOTICE:  00000: CREATE TABLE / PRIMARY KEY will create implicit index "test_pkey" for table "test"
+LOCATION:  DefineIndex, indexcmds.c:428
+ERROR:  53000: Failed to get pooled connections
+LOCATION:  get_handles, pgxcnode.c:1912
+
+
+# 注意现在报的错不一样了.
+
+4. 观察普通数据库节点的日志
+
+2013-04-03 15:43:28.979 CST,,,17595,"",515bdda0.44bb,1,"",2013-04-03 15:43:28 CST,,0,LOG,00000,"connection received: host=192.168.122.175 port=12185",,,,,,,,"BackendInitialize, postmaster.c:3476",""
+2013-04-03 15:43:28.980 CST,"postgres","postgres",17595,"192.168.122.175:12185",515bdda0.44bb,2,"authentication",2013-04-03 15:43:28 CST,2/124055,0,LOG,00000,"connection authorized: user=postgres database=postgres",,,,,,,,"PerformAuthentication, postinit.c:230",""
+2013-04-03 15:43:28.981 CST,"postgres","postgres",17595,"192.168.122.175:12185",515bdda0.44bb,3,"startup",2013-04-03 15:43:28 CST,2/124055,0,FATAL,42704,"unrecognized configuration parameter ""remotetype""",,,,,,,,"set_config_option, guc.c:5158",""
+
+
+
+原因是Postgres-XC修改了连接参数 :
+src/backend/utils/misc/guc.c
+
+#ifdef PGXC
+        {
+                {"remotetype", PGC_BACKEND, CONN_AUTH,
+                        gettext_noop("Sets the type of Postgres-XC remote connection"),
+                        NULL
+                },
+                &remoteConnType,
+                REMOTE_CONN_APP, pgxc_conn_types,
+                NULL, NULL, NULL
+        },
+#endif
+
+
+src/backend/pgxc/pool/pgxcnode.c
+
+/*
+ * Builds up a connection string
+ */
+char *
+PGXCNodeConnStr(char *host, int port, char *dbname,
+                                char *user, char *pgoptions, char *remote_type)
+{
+        char       *out,
+                                connstr[256];
+        int                     num;
+
+        /*
+         * Build up connection string
+         * remote type can be Coordinator, Datanode or application.
+         */
+        num = snprintf(connstr, sizeof(connstr),
+                                   "host=%s port=%d dbname=%s user=%s application_name=pgxc options='-c remotetype=%s %s'",
+                                   host, port, dbname, user, remote_type, pgoptions);
+
+        /* Check for overflow */
+        if (num > 0 && num < sizeof(connstr))
+        {
+                /* Output result */
+                out = (char *) palloc(num + 1);
+                strcpy(out, connstr);
+                return out;
+        }
+
+        /* return NULL if we have problem */
+        return NULL;
+}
+
+
+Flag Counter
+
+评论
+
+zhangqhd511 - 2014-01-15 10:55:30
+
+德哥，请教个问题：
+我想在现有的PGXC群集里添加DATANODE 在coordinator 重载后创建库没有问题，但是在现有的库里新建表都报错就是：Failed to get pooled connections
+在新datanode 的日志里能看到的错误是不存在xx库，我想如果手动创建库和相应的表就没问题了，可以找个时候的datanode 是只读模式的，找了一天的资料没有什么收获。。。。
+德哥给点建议谢谢
+
+德哥@Digoal 回复 zhangqhd511 - 2014-01-15 10:55:30
+
+重载后结构变更应该要刷一下配置. 再去创建, 否则会沿用老的配置, 新的PGXC版本不知道还有没有这个问题.

@@ -1,0 +1,149 @@
+PostgreSQL research
+
+PostgreSQL 9.3 change pg_resetxlog and XLogFileName funtion
+
+2012-10-15 10:04:48   查看原文>>
+
+前面一篇BLOG的例子中有用到pg_resetxlog来修改控制文件中对于XLOG的信息, 决定下minimum WAL starting location. 例子用到的是PostgreSQL 9.1的版本.
+修改的值包含TLI, LOG, SEG三部分信息. 如下 : 
+
+postgres@db-192-168-xxx-xxx-> pg_resetxlog --help
+pg_resetxlog resets the PostgreSQL transaction log.
+
+Usage:
+  pg_resetxlog [OPTION]... DATADIR
+
+Options:
+  -e XIDEPOCH     set next transaction ID epoch
+  -f              force update to be done
+  -l TLI,FILE,SEG force minimum WAL starting location for new transaction log
+  -m XID          set next multitransaction ID
+  -n              no update, just show extracted control values (for testing)
+  -o OID          set next OID
+  -O OFFSET       set next multitransaction offset
+  -x XID          set next transaction ID
+  --help          show this help, then exit
+  --version       output version information, then exit
+Report bugs to <pgsql-bugs@postgresql.org>.
+
+
+
+这个在PostgreSQL 9.3中已经有了修改, 如下 : 
+
+pgdev@db-172-16-3-150-> pg_resetxlog --help
+pg_resetxlog resets the PostgreSQL transaction log.
+
+Usage:
+  pg_resetxlog [OPTION]... DATADIR
+
+Options:
+  -e XIDEPOCH      set next transaction ID epoch
+  -f               force update to be done
+  -l xlogfile      force minimum WAL starting location for new transaction log
+  -m XID           set next multitransaction ID
+  -n               no update, just show extracted control values (for testing)
+  -o OID           set next OID
+  -O OFFSET        set next multitransaction offset
+  -V, --version    output version information, then exit
+  -x XID           set next transaction ID
+  -?, --help       show this help, then exit
+Report bugs to <pgsql-bugs@postgresql.org>.
+
+
+
+同时XLogFileName函数, PostgreSQL 9.3的版本也有了改进, 以前的版本SEG的最大值比较别扭, 居然是((2 ^ n) -2). 
+新版本已经改成了((2 ^ n) - 1) .
+如下 : 
+老版本的信息 : 64MB的wal_segment_size, SEG最大是0x3E = 64 - 2 .
+
+-rw------- 1 postgres postgres  64M Oct 14 13:20 000000020000180E0000003E
+-rw------- 1 postgres postgres  64M Oct 14 13:13 000000020000180F00000000
+
+
+src/include/access/xlog_internal.h
+/*
+ * These macros encapsulate knowledge about the exact layout of XLog file
+ * names, timeline history file names, and archive-status file names.
+ */
+#define MAXFNAMELEN             64
+
+#define XLogFileName(fname, tli, log, seg)      \
+        snprintf(fname, MAXFNAMELEN, "%08X%08X%08X", tli, log, seg)
+
+
+新版本改进后 : 16MB的wal_segment_size, SEG最大是0xFF = 256 - 1 .
+
+-rw------- 1 pgdev pgdev  16M Oct 15 09:42 0000000100000001000000FF
+-rw------- 1 pgdev pgdev  16M Oct 15 09:42 000000010000000200000000
+
+
+src/include/access/xlog_internal.h
+00165 /*
+00166  * These macros encapsulate knowledge about the exact layout of XLog file
+00167  * names, timeline history file names, and archive-status file names.
+00168  */
+00169 #define MAXFNAMELEN     64
+00170 
+00171 #define XLogFileName(fname, tli, logSegNo)  \
+00172     snprintf(fname, MAXFNAMELEN, "%08X%08X%08X", tli,       \
+00173              (uint32) ((logSegNo) / XLogSegmentsPerXLogId), \
+00174              (uint32) ((logSegNo) % XLogSegmentsPerXLogId))
+
+
+
+使用PostgreSQL 9.3修改控制文件TLI,LOG,SEG的命令如下 : 
+将XLOG修改到上限后, pg_switch_xlog()同样报错.
+
+pgdev@db-172-16-3-150-> pg_resetxlog -l 00000001FFFFFFFF000000FE $PGDATA
+Transaction log reset
+pgdev@db-172-16-3-150-> pg_ctl start
+server starting
+pgdev@db-172-16-3-150-> LOG:  database system was shut down at 2012-10-15 09:52:01 CST
+LOG:  autovacuum launcher started
+LOG:  database system is ready to accept connections
+
+pgdev@db-172-16-3-150-> psql
+psql (9.3devel)
+Type "help" for help.
+
+digoal=# \set VERBOSITY verbose
+digoal=# checkpoint;select pg_switch_xlog();
+CHECKPOINT
+  pg_switch_xlog   
+-------------------
+ FFFFFFFF/FE000108
+(1 row)
+
+digoal=# checkpoint;select pg_switch_xlog();
+CHECKPOINT
+ERROR:  xlog flush request FFFFFFFF/FF0000A8 is not satisfied --- flushed only to 0/28
+STATEMENT:  select pg_switch_xlog();
+WARNING:  AbortTransaction while in COMMIT state
+WARNING:  01000: AbortTransaction while in COMMIT state
+LOCATION:  AbortTransaction, xact.c:2276
+ERROR:  XX000: xlog flush request FFFFFFFF/FF0000A8 is not satisfied --- flushed only to 0/28
+LOCATION:  XLogFlush, xlog.c:2004
+digoal=# 
+digoal=# PANIC:  xlog write request 0/4000 is past end of log 0/0
+LOG:  WAL writer process (PID 15433) was terminated by signal 6: Aborted
+LOG:  terminating any other active server processes
+WARNING:  terminating connection because of crash of another server process
+DETAIL:  The postmaster has commanded this server process to roll back the current transaction and exit, because another server process exited abnormally and possibly corrupted shared memory.
+HINT:  In a moment you should be able to reconnect to the database and repeat your command.
+WARNING:  terminating connection because of crash of another server process
+DETAIL:  The postmaster has commanded this server process to roll back the current transaction and exit, because another server process exited abnormally and possibly corrupted shared memory.
+HINT:  In a moment you should be able to reconnect to the database and repeat your command.
+LOG:  all server processes terminated; reinitializing
+LOG:  database system was interrupted; last known up at 2012-10-15 09:52:28 CST
+LOG:  database system was not properly shut down; automatic recovery in progress
+LOG:  redo starts at FFFFFFFF/FF000088
+LOG:  record with zero length at 0/28
+LOG:  redo done at FFFFFFFF/FF000088
+LOG:  autovacuum launcher started
+LOG:  database system is ready to accept connections
+
+
+
+【参考】
+1. How many xlogs | WAL can be generated by PostgreSQL?
+http://blog.163.com/digoal@126/blog/static/1638770402012914112949546/

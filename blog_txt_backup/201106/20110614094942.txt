@@ -1,0 +1,176 @@
+PostgreSQL research
+
+use pg_buffercache to see what's happening in the shared buffer cache in real time
+
+2011-06-14 9:49:42   查看原文>>
+
+pg_buffercache extension 创建的时候，同时创建一个C函数，一个视图.
+
+-- Register the function.
+CREATE FUNCTION pg_buffercache_pages()
+RETURNS SETOF RECORD
+AS 'MODULE_PATHNAME', 'pg_buffercache_pages'
+LANGUAGE C;
+
+-- Create a view for convenient access.
+CREATE VIEW pg_buffercache AS
+        SELECT P.* FROM pg_buffercache_pages() AS P
+        (bufferid integer, relfilenode oid, reltablespace oid, reldatabase oid,
+         relforknumber int2, relblocknumber int8, isdirty bool, usagecount int2);
+
+-- Don't want these to be available to public.
+REVOKE ALL ON FUNCTION pg_buffercache_pages() FROM PUBLIC;
+REVOKE ALL ON pg_buffercache FROM PUBLIC;
+由于buffercache包含了整个集群的BUFFER内容,为了安全考虑，创建时收回了PUBLIC的权限.
+
+视图结构如下:
+
+ pg_buffercache Columns
+
+┌──────────────┬────────┬─────────────────────┬───────────────────────────────────┐
+│     Name     │  Type  │     References      │            Description            │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│bufferid      │integer │                     │ID, in the range 1..shared_buffers │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│relfilenode   │oid     │pg_class.relfilenode │Filenode number of the relation    │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│reltablespace │oid     │pg_tablespace.oid    │Tablespace OID of the relation     │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│reldatabase   │oid     │pg_database.oid      │Database OID of the relation       │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│relblocknumber│bigint  │                     │Page number within the relation    │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│relforknumber │smallint│                     │Fork number within the relation    │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│isdirty       │boolean │                     │Is the page dirty?                 │
+├──────────────┼────────┼─────────────────────┼───────────────────────────────────┤
+│usagecount    │smallint│                     │Page LRU count                     │
+└──────────────┴────────┴─────────────────────┴───────────────────────────────────┘
+
+在pg_buffercache里面的计数单位为block.
+block的大小是创建数据库集群的时候决定的，如果忘记了可以使用pg_controldata来查看，如下
+postgres@db5-> pg_controldata
+Database block size:                  8192
+以上block=8K Bytes
+
+注意，pg_buffercache获得的是一致性结果，因此需要对内存加锁，虽然很快，但是频繁的调用也会给数据库带来一定的负载，特别是并发调用。
+加锁
+for (i = 0; i < NUM_BUFFER_PARTITIONS; i++)
+                        LWLockAcquire(FirstBufMappingLock + i, LW_SHARED);
+释放锁是反向的,原因在代码里面有说明:
+
+                /*
+                 * And release locks.  We do this in reverse order for two reasons:
+                 * (1) Anyone else who needs more than one of the locks will be trying
+                 * to lock them in increasing order; we don't want to release the
+                 * other process until it can get all the locks it needs. (2) This
+                 * avoids O(N^2) behavior inside LWLockRelease.
+                 */
+for (i = NUM_BUFFER_PARTITIONS; --i >= 0;)
+                        LWLockRelease(FirstBufMappingLock + i);
+
+下面举例说明pg_buffercache 的使用情况.
+示例1 : 
+1. 创建extension,在需要查看的数据库中创建extension.使用超级用户
+digoal=# \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# create extension pg_buffercache;
+CREATE EXTENSION
+
+2. 查看shared_buffers由多少个block组成.
+digoal=# select count(*) from pg_buffercache ;
+ count  
+--------
+ 262144
+(1 row)
+digoal=# select 262144*8/1024||'MB';
+ ?column? 
+----------
+ 2048MB
+(1 row)
+# 刚好等于shared_buffers设置的大小
+digoal=# show shared_buffers;
+ shared_buffers 
+----------------
+ 2GB
+(1 row)
+
+示例2 : 
+# 查看shared_buffers已经使用了多少.
+# 因为未使用的buffers除了bufferid以为，其他的字段都为空，所以我们可以通过下面的SQL来查看未使用的BUFFERS。
+digoal=# select count(*)*8/1024||'MB' from pg_buffercache where relfilenode is null and reltablespace is null and reldatabase is null and relforknumber is null and relblocknumber is null and isdirty is null and usagecount is null;
+ ?column? 
+----------
+ 2006MB
+(1 row)
+
+示例3 : 
+# 查看当前数据库使用的buffers.
+digoal=# select count(*)*8/1024||'MB' from pg_buffercache where reldatabase=(select oid from pg_database where datname=current_database());
+ ?column? 
+----------
+ 38MB
+(1 row)
+
+示例4 : 
+# 查看当前数据库以及共享的系统表所使用掉的BUFFERS。（系统表属于database.oid=0的库）
+digoal=# select count(*)*8/1024||'MB' from pg_buffercache where reldatabase=(select oid from pg_database where datname=current_database()) or reldatabase=0;
+ ?column? 
+----------
+ 38MB
+(1 row)
+
+示例5 : 
+# 查看当前数据库的脏页面
+digoal=# select count(*) from pg_buffercache where isdirty is true and reldatabase=(select oid from pg_database where datname=current_database()) ;
+ count 
+-------
+     0
+(1 row)
+# 在一个事务中删除部分数据，同时查看脏页面
+digoal=# begin;
+BEGIN
+digoal=# delete from tbl_test ;
+DELETE 1000100
+digoal=# select count(*) from pg_buffercache where isdirty is true and reldatabase=(select oid from pg_database where datname=current_database()) ;
+ count 
+-------
+  4426
+(1 row)
+
+digoal=# select pg_relation_size('tbl_test') /1024/8;
+ ?column? 
+----------
+     4426
+(1 row)
+
+# 脏页面数刚好等于这个表的SIZE。
+
+示例6 : 
+# 查看当前数据库以及0库的buffercache对象使用排名.
+digoal=# SELECT c.relname, count(*) AS buffers
+digoal-#              FROM pg_buffercache b INNER JOIN pg_class c
+digoal-#              ON b.relfilenode = pg_relation_filenode(c.oid) AND
+digoal-#                 b.reldatabase IN (0, (SELECT oid FROM pg_database
+digoal(#                                       WHERE datname = current_database()))
+digoal-#              GROUP BY c.relname
+digoal-#              ORDER BY 2 DESC
+digoal-#              LIMIT 10;
+            relname             | buffers 
+--------------------------------+---------
+ tbl_test                       |    4426
+ pg_proc                        |      67
+ tbl_time                       |      66
+ pg_attribute                   |      52
+ idx_row_time                   |      30
+ pg_statistic                   |      27
+ pg_proc_proname_args_nsp_index |      26
+ pg_depend_reference_index      |      15
+ pg_operator                    |      14
+ pg_depend                      |      12
+(10 rows)
+
+
+
+
+

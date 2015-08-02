@@ -1,0 +1,479 @@
+PostgreSQL research
+
+Fast move table between databases by move datafiles ? Be careful TOAST pointer
+
+2015-04-28 10:34:14   查看原文>>
+
+最近有一个数据库合并的需求，因为涉及的数据量较大，正在寻找比较快速的合并方法。
+从rewrite table受到启发，rewrite table最后一步是交换元表的filenode完成重写的，那么合并数据库的话是否有可能只移动数据文件来完成数据的迁移呢？
+下面先做一个测试，
+创建两个数据库
+
+postgres@db-172-16-3-150-> psql
+psql (9.4.1)
+Type "help" for help.
+postgres=# create database digoal;
+CREATE DATABASE
+postgres=# create database test;
+CREATE DATABASE
+
+
+创建测试表，并启用TOAST存储，因为问题就出在TOAST。
+
+postgres=# \c digoal
+You are now connected to database "digoal" as user "postgres".
+digoal=# create table tbl(id int, info text, crt_time timestamp);
+CREATE TABLE
+digoal=# insert into tbl select generate_series(1,1000),repeat(md5(random()::text), 100000),clock_timestamp();
+INSERT 0 1000
+digoal=# alter table tbl add constraint pk primary key(id);
+ALTER TABLE
+digoal=# analyze tbl;
+
+
+记录下表的filepath.
+
+digoal=# select relname,oid,reltoastrelid,pg_relation_filepath(oid),pg_relation_filepath(reltoastrelid) from pg_class where relname='tbl' or oid in (select indexrelid from pg_index where indrelid='tbl'::regclass) or oid in (select indexrelid from pg_index where indrelid=(select reltoastrelid from pg_class where relname='tbl'));
+       relname        |  oid  | reltoastrelid | pg_relation_filepath | pg_relation_filepath
+----------------------+-------+---------------+----------------------+----------------------
+ tbl                  | 50156 |         50159 | base/50154/51175     | base/50154/51176
+ pk                   | 51165 |             0 | base/50154/51177     |
+ pg_toast_50156_index | 50161 |             0 | base/50154/51178     |
+
+
+假设我们需要将表迁移到test库，先在test库创建好对应的表。
+
+digoal=# \c test
+test=# create table tbl(id int primary key,info text,crt_time timestamp);
+CREATE TABLE
+
+
+记录下filepath
+
+test=# select relname,oid,reltoastrelid,pg_relation_filepath(oid),pg_relation_filepath(reltoastrelid) from pg_class where relname='tbl' or oid in (select indexrelid from pg_index where indrelid='tbl'::regclass) or oid in (select indexrelid from pg_index where indrelid=(select reltoastrelid from pg_class where relname='tbl'));
+       relname        |  oid  | reltoastrelid | pg_relation_filepath | pg_relation_filepath
+----------------------+-------+---------------+----------------------+----------------------
+ pg_toast_51167_index | 51172 |             0 | base/50155/51172     |
+ tbl_pkey             | 51173 |             0 | base/50155/51173     |
+ tbl                  | 51167 |         51170 | base/50155/51167     | base/50155/51170
+(3 rows)
+test=# checkpoint;
+CHECKPOINT
+postgres@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down.... done
+server stopped
+
+
+将digoal库的tbl表对应的数据文件拷贝到test库，并更名为test库对应的filepath.
+注意文件需要一一对应。
+
+postgres@db-172-16-3-150-> cd $PGDATA
+postgres@db-172-16-3-150-> ll base/50154/51175*
+-rw------- 1 postgres postgres 64K Apr 28 07:49 base/50154/51175
+-rw------- 1 postgres postgres 96K Apr 28 07:49 base/50154/51175_fsm
+postgres@db-172-16-3-150-> ll base/50154/51176*
+-rw------- 1 postgres postgres 40M Apr 28 07:49 base/50154/51176
+-rw------- 1 postgres postgres 96K Apr 28 07:49 base/50154/51176_fsm
+postgres@db-172-16-3-150-> ll base/50154/51177*
+-rw------- 1 postgres postgres 64K Apr 28 07:49 base/50154/51177
+postgres@db-172-16-3-150-> ll base/50154/51178*
+-rw------- 1 postgres postgres 192K Apr 28 07:49 base/50154/51178
+
+postgres@db-172-16-3-150-> ll base/50155/51167*
+-rw------- 1 postgres postgres 0 Apr 28 07:40 base/50155/51167
+postgres@db-172-16-3-150-> ll base/50155/51170*
+-rw------- 1 postgres postgres 0 Apr 28 07:40 base/50155/51170
+postgres@db-172-16-3-150-> ll base/50155/51173*
+-rw------- 1 postgres postgres 32K Apr 28 07:40 base/50155/51173
+postgres@db-172-16-3-150-> ll base/50155/51172*
+-rw------- 1 postgres postgres 32K Apr 28 09:46 base/50155/51172
+
+postgres@db-172-16-3-150-> rm -f base/50155/51167
+postgres@db-172-16-3-150-> rm -f base/50155/51170
+postgres@db-172-16-3-150-> rm -f base/50155/51173
+postgres@db-172-16-3-150-> rm -f base/50155/51172
+
+postgres@db-172-16-3-150-> cp base/50154/51175* base/50155/
+postgres@db-172-16-3-150-> cp base/50154/51176* base/50155/
+postgres@db-172-16-3-150-> cp base/50154/51177* base/50155/
+postgres@db-172-16-3-150-> cp base/50154/51178* base/50155/
+
+postgres@db-172-16-3-150-> mv base/50155/51175 base/50155/51167
+postgres@db-172-16-3-150-> mv base/50155/51175_fsm base/50155/51167_fsm
+postgres@db-172-16-3-150-> mv base/50155/51176 base/50155/51170
+postgres@db-172-16-3-150-> mv base/50155/51176_fsm base/50155/51170_fsm
+postgres@db-172-16-3-150-> mv base/50155/51177 base/50155/51173
+postgres@db-172-16-3-150-> mv base/50155/51178 base/50155/51172
+
+
+启动数据库，发现查看数据正常。
+
+pg_ctl start
+test=# select count(*) from tbl;
+ count 
+-------
+  1000
+(1 row)
+test=# select id,crt_time from tbl limit 1;
+ id |          crt_time          
+----+----------------------------
+  1 | 2015-04-28 07:49:00.319558
+(1 row)
+
+
+但是不要高兴太早，存储到TOAST的字段无法查出。
+
+test=# select info from tbl limit 1;
+ERROR:  could not open relation with OID 50159
+test=# \set VERBOSITY verbose
+test=# select sum(hashtext(t.*::text)) from tbl t;
+ERROR:  XX000: could not open relation with OID 50159
+LOCATION:  relation_open, heapam.c:1038
+
+
+报错的这个OID怎么来的呢？实际上这个OID是存储在表里的TOAST pointer里面的数据，对应的是TOAST表的OID。
+后面我会给出TOAST pointer的数据结构。
+
+test=# select oid,relname from pg_class where oid=(select reltoastrelid from pg_class where relname='tbl');
+  oid  |    relname     
+-------+----------------
+ 51170 | pg_toast_51167
+(1 row)
+
+
+这个OID在digoal库是能查到信息的：
+
+# \c digoal
+digoal=# select * from pg_class where reltoastrelid =50159;
+ relname | relnamespace | reltype | reloftype | relowner | relam | relfilenode | reltablespace | relpages | reltuples | relallvisibl
+e | reltoastrelid | relhasindex | relisshared | relpersistence | relkind | relnatts | relchecks | relhasoids | relhaspkey | relhasru
+les | relhastriggers | relhassubclass | relispopulated | relreplident | relfrozenxid | relminmxid | relacl | reloptions 
+---------+--------------+---------+-----------+----------+-------+-------------+---------------+----------+-----------+-------------
+--+---------------+-------------+-------------+----------------+---------+----------+-----------+------------+------------+---------
+----+----------------+----------------+----------------+--------------+--------------+------------+--------+------------
+ tbl     |         2200 |   50158 |         0 |       10 |     0 |       51175 |             0 |        2 |      1000 |             
+0 |         50159 | t           | f           | p              | r       |        3 |         0 | f          | t          | f       
+    | f              | f              | t              | d            |      6095721 |          1 |        | 
+(1 row)
+
+
+那么我将test库的pg_class元表里的tbl表对应的TOAST表的OID改成50159 ，不就好了吗？
+修改是遇到几个麻烦。通过修改代码可以不报这几个错误，但是最后是无法修改成功的原因见后面。
+
+test=# \set VERBOSITY verbose
+test=# update pg_class set oid=50159 where oid=(select reltoastrelid from pg_class where relname='tbl');
+ERROR:  0A000: cannot assign to system column "oid"
+LINE 1: update pg_class set oid=50159 where oid=(select reltoastreli...
+                            ^
+LOCATION:  transformAssignedExpr, parse_target.c:404
+
+# vi src/backend/parser/parse_target.c
+/*
+        if (attrno <= 0)
+                ereport(ERROR,
+                                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                                 errmsg("cannot assign to system column \"%s\"",
+                                                colname),
+                                 parser_errposition(pstate, location)));
+*/
+
+# make && make install
+
+pg_ctl restart -m fast
+
+test=# \set VERBOSITY verbose
+test=# update pg_class set oid=50159 where oid=(select reltoastrelid from pg_class where relname='tbl');
+ERROR:  XX000: bogus resno -2 in targetlist
+LOCATION:  rewriteTargetListIU, rewriteHandler.c:719
+
+# vi src/backend/rewrite/rewriteHandler.c
+/*
+                        if (attrno < 1 || attrno > numattrs)
+                                elog(ERROR, "bogus resno %d in targetlist", attrno);
+*/
+
+# make && make install
+
+pg_ctl restart -m fast
+
+postgres=# \c test
+You are now connected to database "test" as user "postgres".
+test=# \set VERBOSITY verbose
+test=# update pg_class set oid=50159 where oid=(select reltoastrelid from pg_class where relname='tbl');
+UPDATE 1
+test=# select * from pg_class where oid=50159;
+ relname | relnamespace | reltype | reloftype | relowner | relam | relfilenode | reltablespace | relpages | reltuples | relallvisibl
+e | reltoastrelid | relhasindex | relisshared | relpersistence | relkind | relnatts | relchecks | relhasoids | relhaspkey | relhasru
+les | relhastriggers | relhassubclass | relispopulated | relreplident | relfrozenxid | relminmxid | relacl | reloptions 
+---------+--------------+---------+-----------+----------+-------+-------------+---------------+----------+-----------+-------------
+--+---------------+-------------+-------------+----------------+---------+----------+-----------+------------+------------+---------
+----+----------------+----------------+----------------+--------------+--------------+------------+--------+------------
+(0 rows)
+test=# select sum(hashtext(t.*::text)) from tbl t;
+ERROR:  XX000: could not open relation with OID 50159
+LOCATION:  relation_open, heapam.c:1038
+
+
+为什么无法修改成功呢？原因还是出在rewriteHandler.c，它并没有对attrno<1的字段进行处理。如下：
+src/backend/rewrite/rewriteHandler.c
+
+rewriteTargetListIU(Query *parsetree, Relation target_relation,
+                                        List **attrno_list)
+{
+......
+        for (attrno = 1; attrno <= numattrs; attrno++)
+        {
+                TargetEntry *new_tle = new_tles[attrno - 1];
+
+                att_tup = target_relation->rd_att->attrs[attrno - 1];
+
+                /* We can (and must) ignore deleted attributes */
+                if (att_tup->attisdropped)
+                        continue;
+......
+
+
+oid在pg_class表的attrnum=-2
+
+test=# select attnum,attname from pg_attribute where attrelid ='pg_class'::regclass;
+ attnum |    attname     
+--------+----------------
+      1 | relname
+      2 | relnamespace
+      3 | reltype
+      4 | reloftype
+      5 | relowner
+      6 | relam
+      7 | relfilenode
+      8 | reltablespace
+      9 | relpages
+     10 | reltuples
+     11 | relallvisible
+     12 | reltoastrelid
+     13 | relhasindex
+     14 | relisshared
+     15 | relpersistence
+     16 | relkind
+     17 | relnatts
+     18 | relchecks
+     19 | relhasoids
+     20 | relhaspkey
+     21 | relhasrules
+     22 | relhastriggers
+     23 | relhassubclass
+     24 | relispopulated
+     25 | relreplident
+     26 | relfrozenxid
+     27 | relminmxid
+     28 | relacl
+     29 | reloptions
+     -1 | ctid
+     -3 | xmin
+     -4 | cmin
+     -5 | xmax
+     -6 | cmax
+     -7 | tableoid
+     -2 | oid
+
+
+
+TOAST pointer数据结构，包含        Oid                     va_toastrelid;  /* RelID of TOAST table containing it */
+所以当数据表中的某些字段存储到TOAST后，实际上在HEAP Tuple中存储的是TOAST pointer，所以要完成迁移，我们必须把目标库中的TOAST表的OID修改为TOAST pointer对应的OID。
+src/include/postgres.h
+
+/*
+ * struct varatt_external is a "TOAST pointer", that is, the information needed
+ * to fetch a Datum stored in an out-of-line on-disk Datum. The data is
+ * compressed if and only if va_extsize < va_rawsize - VARHDRSZ.  This struct
+ * must not contain any padding, because we sometimes compare pointers using
+ * memcmp.
+ *
+ * Note that this information is stored unaligned within actual tuples, so
+ * you need to memcpy from the tuple into a local struct variable before
+ * you can look at these fields!  (The reason we use memcmp is to avoid
+ * having to do that just to detect equality of two TOAST pointers...)
+ */
+typedef struct varatt_external
+{
+        int32           va_rawsize;             /* Original data size (includes header) */
+        int32           va_extsize;             /* External saved size (doesn't) */
+        Oid                     va_valueid;             /* Unique ID of value within TOAST table */
+        Oid                     va_toastrelid;  /* RelID of TOAST table containing it */
+}       varatt_external;
+
+
+最后要说的是，关键在于TOAST表的OID，如果能修改，一切就搞定了。
+虽然不容易修改pg_class.oid，但是我们可以删除pg_class的记录并重新导入，只是这里还牵涉到其他CATALOG，所以都需要修改。
+涉及的元表有3张，
+
+test=# \d pg_index
+        Table "pg_catalog.pg_index"
+     Column     |     Type     | Modifiers 
+----------------+--------------+-----------
+ indexrelid     | oid          | not null
+ indrelid       | oid          | not null
+ indnatts       | smallint     | not null
+ indisunique    | boolean      | not null
+ indisprimary   | boolean      | not null
+ indisexclusion | boolean      | not null
+ indimmediate   | boolean      | not null
+ indisclustered | boolean      | not null
+ indisvalid     | boolean      | not null
+ indcheckxmin   | boolean      | not null
+ indisready     | boolean      | not null
+ indislive      | boolean      | not null
+ indisreplident | boolean      | not null
+ indkey         | int2vector   | not null
+ indcollation   | oidvector    | not null
+ indclass       | oidvector    | not null
+ indoption      | int2vector   | not null
+ indexprs       | pg_node_tree | 
+ indpred        | pg_node_tree | 
+Indexes:
+    "pg_index_indexrelid_index" UNIQUE, btree (indexrelid)
+    "pg_index_indrelid_index" btree (indrelid)
+
+test=# \d pg_attribute
+    Table "pg_catalog.pg_attribute"
+    Column     |   Type    | Modifiers 
+---------------+-----------+-----------
+ attrelid      | oid       | not null
+ attname       | name      | not null
+ atttypid      | oid       | not null
+ attstattarget | integer   | not null
+ attlen        | smallint  | not null
+ attnum        | smallint  | not null
+ attndims      | integer   | not null
+ attcacheoff   | integer   | not null
+ atttypmod     | integer   | not null
+ attbyval      | boolean   | not null
+ attstorage    | "char"    | not null
+ attalign      | "char"    | not null
+ attnotnull    | boolean   | not null
+ atthasdef     | boolean   | not null
+ attisdropped  | boolean   | not null
+ attislocal    | boolean   | not null
+ attinhcount   | integer   | not null
+ attcollation  | oid       | not null
+ attacl        | aclitem[] | 
+ attoptions    | text[]    | 
+ attfdwoptions | text[]    | 
+Indexes:
+    "pg_attribute_relid_attnam_index" UNIQUE, btree (attrelid, attname)
+    "pg_attribute_relid_attnum_index" UNIQUE, btree (attrelid, attnum)
+
+test=# \d pg_class
+      Table "pg_catalog.pg_class"
+     Column     |   Type    | Modifiers 
+----------------+-----------+-----------
+ relname        | name      | not null
+ relnamespace   | oid       | not null
+ reltype        | oid       | not null
+ reloftype      | oid       | not null
+ relowner       | oid       | not null
+ relam          | oid       | not null
+ relfilenode    | oid       | not null
+ reltablespace  | oid       | not null
+ relpages       | integer   | not null
+ reltuples      | real      | not null
+ relallvisible  | integer   | not null
+ reltoastrelid  | oid       | not null
+ relhasindex    | boolean   | not null
+ relisshared    | boolean   | not null
+ relpersistence | "char"    | not null
+ relkind        | "char"    | not null
+ relnatts       | smallint  | not null
+ relchecks      | smallint  | not null
+ relhasoids     | boolean   | not null
+ relhaspkey     | boolean   | not null
+ relhasrules    | boolean   | not null
+ relhastriggers | boolean   | not null
+ relhassubclass | boolean   | not null
+ relispopulated | boolean   | not null
+ relreplident   | "char"    | not null
+ relfrozenxid   | xid       | not null
+ relminmxid     | xid       | not null
+ relacl         | aclitem[] | 
+ reloptions     | text[]    | 
+Indexes:
+    "pg_class_oid_index" UNIQUE, btree (oid)
+    "pg_class_relname_nsp_index" UNIQUE, btree (relname, relnamespace)
+    "pg_class_tblspc_relfilenode_index" btree (reltablespace, relfilenode)
+
+
+下面开始操作：
+记录新库TOAST表对应的OID，也就是需要被替换掉的OID。
+
+digoal=# select reltoastrelid from pg_class where relname='tbl';
+ reltoastrelid
+---------------
+         50159
+test=# select reltoastrelid from pg_class where relname='tbl';
+51170
+
+
+这个OID需要变更为50159，即HEAP tuple的TOAST pointer中记录的OID。
+将需要修改的记录（即toast对应的那条记录）COPY到STDOUT
+
+test=# copy (select 50159,* from pg_class where oid=(select reltoastrelid from pg_class where relname='tbl')) to stdout csv;
+50159,pg_toast_51167,99,51171,0,10,0,51170,0,0,0,0,0,t,f,p,t,3,0,f,t,f,f,f,t,n,6095720,1,,
+
+
+删除toast对应的记录
+
+test=# delete from pg_class where oid=51170;
+DELETE 1
+
+
+使用COPY重新插入，并使用新的OID
+
+test=# copy pg_class from stdin with(oids, format csv);
+Enter data to be copied followed by a newline.
+End with a backslash and a period on a line by itself.
+>> 50159,pg_toast_51167,99,51171,0,10,0,51170,0,0,0,0,0,t,f,p,t,3,0,f,t,f,f,f,t,n,6095720,1,,
+>> \.
+COPY 1
+test=# select oid from pg_class where oid=50159;
+  oid  
+-------
+ 50159
+(1 row)
+
+
+将tbl表对应的reltoastrelid修改为新的OID。
+
+test=# update pg_class set reltoastrelid=50159 where  oid='tbl'::regclass;
+UPDATE 1
+
+
+将字段信息，索引对应TOAST的也修改掉。
+
+test=# update pg_attribute set attrelid=50159 where attrelid=51170;
+UPDATE 9
+test=# update pg_index set indrelid = 50159 where indrelid = 51170;
+UPDATE 1
+
+
+现在重启数据库，重新加载relcache。查询tbl的TOAST数据正常。
+
+test=# select sum(hashtext(tbl.*::text)) from tbl;
+     sum      
+--------------
+ -21870423441
+(1 row)
+
+
+注意事项，
+1. 如果你的环境中有流复制的环境，那么所有节点都必须做同样的处理，所以也是非常繁琐的。
+2. 建议数据文件在同一个表空间内移动，这样的话不需要拷贝，mv即可。但是操作完后源库就不能操作对应的表了，所以这种方法是迁移而不是复制表。
+3. 这种方法同样适用跨集群的数据迁移，前提是PostgreSQL集群的软件编译参数一致，例如数据块的大小必须一致。(见pg_config的输出)。其次迁移的目标库上TOAST对象的OID不能有冲突否则也无法完成，最后是目标库的XID和CLOG必须在源库产生被迁移数据的XID之后（即未来），否则数据不可读，除非使用脏读获取数据。那就有点像pg_upgrade干的事情了
+。
+
+[参考]
+1. src/include/postgres.h
+2. src/backend/rewrite/rewriteHandler.c
+3. src/backend/parser/parse_target.c
+4. http://blog.163.com/digoal@126/blog/static/1638770402015345228317/
+5. http://blog.163.com/digoal@126/blog/static/163877040201183043153622/
+
+ Flag Counter

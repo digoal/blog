@@ -1,0 +1,324 @@
+PostgreSQL research
+
+PostgreSQL 9.3 Add SP-GiST support for range data types
+
+2013-05-07 8:40:34   查看原文>>
+
+Add SP-GiST support for range data types (Alexander Korotkov)
+The implementation is a quad-tree, largely copied from the quad-tree
+implementation for points. The lower and upper bound of ranges are the 2d
+coordinates, with some extra code to handle empty ranges.
+
+I left out the support for adjacent operator, -|-, from the original patch.
+Not because there was necessarily anything wrong with it, but it was more
+complicated than the other operators, and I only have limited time for
+reviewing. That will follow as a separate patch.
+Alexander Korotkov, reviewed by Jeff Davis and me.
+PostgreSQL 9.3 新增了range spgist的支持, 大部分代码是从point 四叉树spgist索引访问方法拷贝过来的.
+四叉树的介绍可参照wiki.
+PostgreSQL 9.3 Add SP-GiST support for range data types - 德哥@Digoal - PostgreSQL
+主要的思想是将每个数据区域划分为四个象限. 
+
+新增支持range 的 spgist index access method operator family : range_ops如下 : 
+
+digoal=# select * from (SELECT am.amname AS index_method,
+       opf.opfname AS opfamily_name,
+       amop.amopopr::regoperator AS opfamily_operator
+    FROM pg_am am, pg_opfamily opf, pg_amop amop
+    WHERE opf.opfmethod = am.oid AND
+          amop.amopfamily = opf.oid
+    ORDER BY index_method, opfamily_name, opfamily_operator) t where opfamily_name ~ 'range';
+ index_method | opfamily_name |    opfamily_operator    
+--------------+---------------+-------------------------
+ btree        | range_ops     | =(anyrange,anyrange)
+ btree        | range_ops     | <(anyrange,anyrange)
+ btree        | range_ops     | <=(anyrange,anyrange)
+ btree        | range_ops     | >=(anyrange,anyrange)
+ btree        | range_ops     | >(anyrange,anyrange)
+ gist         | range_ops     | =(anyrange,anyrange)
+ gist         | range_ops     | &&(anyrange,anyrange)
+ gist         | range_ops     | @>(anyrange,anyelement)
+ gist         | range_ops     | @>(anyrange,anyrange)
+ gist         | range_ops     | <@(anyrange,anyrange)
+ gist         | range_ops     | <<(anyrange,anyrange)
+ gist         | range_ops     | >>(anyrange,anyrange)
+ gist         | range_ops     | &<(anyrange,anyrange)
+ gist         | range_ops     | &>(anyrange,anyrange)
+ gist         | range_ops     | -|-(anyrange,anyrange)
+ hash         | range_ops     | =(anyrange,anyrange)
+ spgist       | range_ops     | =(anyrange,anyrange)
+ spgist       | range_ops     | &&(anyrange,anyrange)
+ spgist       | range_ops     | @>(anyrange,anyelement)
+ spgist       | range_ops     | @>(anyrange,anyrange)
+ spgist       | range_ops     | <@(anyrange,anyrange)
+ spgist       | range_ops     | <<(anyrange,anyrange)
+ spgist       | range_ops     | >>(anyrange,anyrange)
+ spgist       | range_ops     | &<(anyrange,anyrange)
+ spgist       | range_ops     | &>(anyrange,anyrange)
+ spgist       | range_ops     | -|-(anyrange,anyrange)
+
+PostgreSQL 9.2 : 
+
+digoal=# select * from (SELECT am.amname AS index_method,
+       opf.opfname AS opfamily_name,
+       amop.amopopr::regoperator AS opfamily_operator
+    FROM pg_am am, pg_opfamily opf, pg_amop amop
+    WHERE opf.opfmethod = am.oid AND
+          amop.amopfamily = opf.oid
+    ORDER BY index_method, opfamily_name, opfamily_operator) t where opfamily_name ~ 'range';
+ index_method | opfamily_name |    opfamily_operator    
+--------------+---------------+-------------------------
+ btree        | range_ops     | =(anyrange,anyrange)
+ btree        | range_ops     | <(anyrange,anyrange)
+ btree        | range_ops     | <=(anyrange,anyrange)
+ btree        | range_ops     | >=(anyrange,anyrange)
+ btree        | range_ops     | >(anyrange,anyrange)
+ gist         | range_ops     | =(anyrange,anyrange)
+ gist         | range_ops     | &&(anyrange,anyrange)
+ gist         | range_ops     | @>(anyrange,anyelement)
+ gist         | range_ops     | @>(anyrange,anyrange)
+ gist         | range_ops     | <@(anyrange,anyrange)
+ gist         | range_ops     | <<(anyrange,anyrange)
+ gist         | range_ops     | >>(anyrange,anyrange)
+ gist         | range_ops     | &<(anyrange,anyrange)
+ gist         | range_ops     | &>(anyrange,anyrange)
+ gist         | range_ops     | -|-(anyrange,anyrange)
+ hash         | range_ops     | =(anyrange,anyrange)
+
+[测试]
+
+-- test SP-GiST index that's been built incrementally
+create table test_range_spgist(ir int4range);
+create index test_range_spgist_idx on test_range_spgist using spgist (ir);
+
+insert into test_range_spgist select int4range(g, g+10) from generate_series(1,2000) g;
+insert into test_range_spgist select 'empty'::int4range from generate_series(1,500) g;
+insert into test_range_spgist select int4range(g, g+10000) from generate_series(1,1000) g;
+insert into test_range_spgist select 'empty'::int4range from generate_series(1,500) g;
+insert into test_range_spgist select int4range(NULL,g*10,'(]') from generate_series(1,100) g;
+insert into test_range_spgist select int4range(g*10,NULL,'(]') from generate_series(1,100) g;
+insert into test_range_spgist select int4range(g, g+10) from generate_series(1,2000) g;
+
+-- first, verify non-indexed results
+SET enable_seqscan    = t;
+SET enable_indexscan  = f;
+SET enable_bitmapscan = f;
+
+select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+select count(*) from test_range_spgist where ir = int4range(10,20);
+select count(*) from test_range_spgist where ir @> 10;
+select count(*) from test_range_spgist where ir @> int4range(10,20);
+select count(*) from test_range_spgist where ir && int4range(10,20);
+select count(*) from test_range_spgist where ir <@ int4range(10,50);
+select count(*) from test_range_spgist where ir << int4range(100,500);
+select count(*) from test_range_spgist where ir >> int4range(100,500);
+select count(*) from test_range_spgist where ir &< int4range(100,500);
+select count(*) from test_range_spgist where ir &> int4range(100,500);
+select count(*) from test_range_spgist where ir -|- int4range(100,500);
+
+-- now check same queries using index
+SET enable_seqscan    = f;
+SET enable_indexscan  = t;
+SET enable_bitmapscan = f;
+
+select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+select count(*) from test_range_spgist where ir = int4range(10,20);
+select count(*) from test_range_spgist where ir @> 10;
+select count(*) from test_range_spgist where ir @> int4range(10,20);
+select count(*) from test_range_spgist where ir && int4range(10,20);
+select count(*) from test_range_spgist where ir <@ int4range(10,50);
+select count(*) from test_range_spgist where ir << int4range(100,500);
+select count(*) from test_range_spgist where ir >> int4range(100,500);
+select count(*) from test_range_spgist where ir &< int4range(100,500);
+select count(*) from test_range_spgist where ir &> int4range(100,500);
+select count(*) from test_range_spgist where ir -|- int4range(100,500);
+
+-- now check same queries using a bulk-loaded index
+drop index test_range_spgist_idx;
+create index test_range_spgist_idx on test_range_spgist using spgist (ir);
+
+select count(*) from test_range_spgist where ir @> 'empty'::int4range;
+select count(*) from test_range_spgist where ir = int4range(10,20);
+select count(*) from test_range_spgist where ir @> 10;
+select count(*) from test_range_spgist where ir @> int4range(10,20);
+select count(*) from test_range_spgist where ir && int4range(10,20);
+select count(*) from test_range_spgist where ir <@ int4range(10,50);
+select count(*) from test_range_spgist where ir << int4range(100,500);
+select count(*) from test_range_spgist where ir >> int4range(100,500);
+select count(*) from test_range_spgist where ir &< int4range(100,500);
+select count(*) from test_range_spgist where ir &> int4range(100,500);
+select count(*) from test_range_spgist where ir -|- int4range(100,500);
+
+
+与gist索引的比较 : 
+size : 
+spgist索引比gist索引占用空间大.
+
+digoal=# \di+ test_range_gist_idx 
+                                     List of relations
+ Schema |        Name         | Type  |  Owner   |       Table       |  Size  | Description 
+--------+---------------------+-------+----------+-------------------+--------+-------------
+ public | test_range_gist_idx | index | postgres | test_range_spgist | 264 kB | 
+(1 row)
+digoal=# \di+ test_range_spgist_idx 
+                                      List of relations
+ Schema |         Name          | Type  |  Owner   |       Table       |  Size  | Description 
+--------+-----------------------+-------+----------+-------------------+--------+-------------
+ public | test_range_spgist_idx | index | postgres | test_range_spgist | 376 kB | 
+(1 row)
+
+select speed : 
+spgist查询速度比gist索引查询速度快.
+
+digoal=# explain (analyze,verbose,buffers) select * from test_range_spgist where ir @>1;
+                                                                    QUERY PLAN                                                      
+               
+------------------------------------------------------------------------------------------------------------------------------------
+---------------
+ Index Scan using test_range_gist_idx on public.test_range_spgist  (cost=0.15..18.53 rows=22 width=32) (actual time=0.032..0.100 row
+s=103 loops=1)
+   Output: ir
+   Index Cond: (test_range_spgist.ir @> 1)
+   Buffers: shared hit=9
+ Total runtime: 0.125 ms
+(5 rows)
+digoal=# explain (analyze,verbose,buffers) select * from test_range_spgist where ir @>1;
+                                                                        QUERY PLAN                                                  
+                      
+------------------------------------------------------------------------------------------------------------------------------------
+----------------------
+ Index Only Scan using test_range_spgist_idx on public.test_range_spgist  (cost=0.15..18.53 rows=22 width=32) (actual time=0.020..0.
+050 rows=103 loops=1)
+   Output: ir
+   Index Cond: (test_range_spgist.ir @> 1)
+   Heap Fetches: 103
+   Buffers: shared hit=14
+ Total runtime: 0.073 ms
+(6 rows)
+
+insert speed : 
+并行度一般时, 插入速度差不多.
+-- pgbench 脚本
+
+vi ins.sql
+\setrandom i 1 100000
+insert into test_range_spgist values (int4range(:i, :i+100, '[)'));
+
+
+-- spgist
+
+digoal=# \d+ test_range_spgist
+                    Table "public.test_range_spgist"
+ Column |   Type    | Modifiers | Storage  | Stats target | Description 
+--------+-----------+-----------+----------+--------------+-------------
+ ir     | int4range |           | extended |              | 
+Indexes:
+    "test_range_spgist_idx" spgist (ir)
+Has OIDs: no
+
+
+-- spgist 压力测试结果
+
+pg93@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 32 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 994780
+tps = 16571.329631 (including connections establishing)
+tps = 16583.348446 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001512        \setrandom i 1 100000
+        1.925790        insert into test_range_spgist values (int4range(:i, :i+100, '[)'));
+
+
+-- gist
+
+digoal=# \d+ test_range_spgist 
+                    Table "public.test_range_spgist"
+ Column |   Type    | Modifiers | Storage  | Stats target | Description 
+--------+-----------+-----------+----------+--------------+-------------
+ ir     | int4range |           | extended |              | 
+Indexes:
+    "test_range_gist_idx" gist (ir)
+Has OIDs: no
+
+
+-- gist 压力测试结果
+
+pg93@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 32 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 977163
+tps = 16280.498079 (including connections establishing)
+tps = 16292.777356 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001532        \setrandom i 1 100000
+        1.960390        insert into test_range_spgist values (int4range(:i, :i+100, '[)'));
+
+
+并行度测试 : 
+并行度高, gist索引的插入速度快.
+-- spgist 压力测试结果
+
+pg93@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 128 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 128
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 1754843
+tps = 29184.829543 (including connections establishing)
+tps = 29273.142723 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001689        \setrandom i 1 100000
+        4.363028        insert into test_range_spgist values (int4range(:i, :i+100, '[)'));
+
+
+-- gist 压力测试结果
+
+pg93@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 128 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 128
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 1964692
+tps = 32683.703473 (including connections establishing)
+tps = 32785.598264 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001629        \setrandom i 1 100000
+        3.895888        insert into test_range_spgist values (int4range(:i, :i+100, '[)'));
+
+
+create index speed : 
+
+digoal=# create index test_range_gist_idx on test_range_spgist using gist (ir);
+CREATE INDEX
+Time: 24504.650 ms
+digoal=# create index test_range_spgist_idx on test_range_spgist using spgist (ir);
+CREATE INDEX
+Time: 11414.184 ms
+
+
+
+[参考]
+1. http://www.postgresql.org/docs/devel/static/rangetypes.html#RANGETYPES-INDEXING
+2. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=ae7363999ff36a6857b968ffee8487519273709b
+3. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=317dd55a9cae160c8d121eaec323a6aea3259fd8
+4. http://blog.163.com/digoal@126/blog/static/16387704020125701029222/
+5. http://blog.163.com/digoal@126/blog/static/163877040201241752537254/
+6. http://blog.163.com/digoal@126/blog/static/16387704020124174238681/
+7. http://en.wikipedia.org/wiki/Quadtree
+8. http://en.wikipedia.org/wiki/Spatial_database#Spatial_index
+9. http://www.postgresql.org/docs/devel/static/spgist.html
+10. src/test/regress/sql/rangetypes.sql
+11. http://www.postgresql.org/docs/devel/static/indexes-opclass.html

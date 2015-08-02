@@ -1,0 +1,292 @@
+PostgreSQL research
+
+Postgres-XC count() agg in function BUG
+
+2013-04-06 22:00:11   查看原文>>
+
+在使用Postgres-XC函数是遇到一个BUG, 使用count(*)查询一个表并记录到变量时结果异常.
+如下 : 
+创建4个测试表, 分别使用4种分布方法(hasn, modulo, round robin, replication) : 
+
+digoal=> create table count_test1(id int primary key, info text) distribute by hash(id) to group gp0;
+digoal=> create table count_test2(id int primary key, info text) distribute by modulo(id) to group gp0;
+digoal=> create table count_test3(id int, info text) distribute by round robin to group gp0;
+digoal=> create table count_test4(id int primary key, info text) distribute by replication to group gp0;
+
+
+# 插入测试数据
+
+digoal=> insert into count_test1 select generate_series(1,10000),md5(random()::text);
+INSERT 0 10000
+Time: 3025.973 ms
+digoal=> insert into count_test2 select generate_series(1,10000),md5(random()::text);
+INSERT 0 10000
+Time: 3428.379 ms
+digoal=> insert into count_test3 select generate_series(1,10000),md5(random()::text);
+INSERT 0 10000
+Time: 3563.013 ms
+digoal=> insert into count_test4 select generate_series(1,10000),md5(random()::text);
+INSERT 0 10000
+Time: 3569.041 ms
+
+
+# 验证count(*)
+
+digoal=> select count(*) from count_test1;
+ count 
+-------
+ 10000
+(1 row)
+Time: 2.847 ms
+digoal=> select count(*) from count_test2;
+ count 
+-------
+ 10000
+(1 row)
+Time: 2.873 ms
+digoal=> select count(*) from count_test3;
+ count 
+-------
+ 10000
+(1 row)
+Time: 2.533 ms
+digoal=> select count(*) from count_test4;
+ count 
+-------
+ 10000
+(1 row)
+Time: 4.075 ms
+
+
+# 验证各个点的数据 : 
+
+digoal=# execute direct on datanode_1 'select count(*) from digoal.count_test1';
+ count 
+-------
+  1982
+(1 row)
+digoal=# execute direct on datanode_2 'select count(*) from digoal.count_test1';
+ count 
+-------
+  2040
+(1 row)
+digoal=# execute direct on datanode_3 'select count(*) from digoal.count_test1';
+ count 
+-------
+  1959
+(1 row)
+digoal=# execute direct on datanode_4 'select count(*) from digoal.count_test1';
+ count 
+-------
+  2017
+(1 row)
+digoal=# execute direct on datanode_5 'select count(*) from digoal.count_test1';
+ count 
+-------
+  2002
+(1 row)
+
+
+# replication表每个节点数据一致.
+
+digoal=# execute direct on datanode_1 'select count(*) from digoal.count_test4';
+ count 
+-------
+ 10000
+(1 row)
+digoal=# execute direct on datanode_2 'select count(*) from digoal.count_test4';
+ count 
+-------
+ 10000
+(1 row)
+digoal=# execute direct on datanode_3 'select count(*) from digoal.count_test4';
+ count 
+-------
+ 10000
+(1 row)
+digoal=# execute direct on datanode_4 'select count(*) from digoal.count_test4';
+ count 
+-------
+ 10000
+(1 row)
+digoal=# execute direct on datanode_5 'select count(*) from digoal.count_test4';
+ count 
+-------
+ 10000
+(1 row)
+
+
+# 以下函数, 正常结果应该为10000. 实际返回5
+
+digoal=> create or replace function f_count() returns int as $$
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test1;
+  raise notice 'count: %.', ret;
+  return ret;
+end;
+$$ language plpgsql;
+digoal=> select * from f_count();
+NOTICE:  count: 5.
+ f_count 
+---------
+       5
+(1 row)
+
+
+# 返回1
+
+digoal=> create or replace function f_count() returns int as $$
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test1 where id=1;
+  raise notice 'count: %.', ret;
+  return ret;
+end;
+$$ language plpgsql;
+CREATE FUNCTION
+digoal=> select * from f_count();
+NOTICE:  count: 1.
+ f_count 
+---------
+       1
+(1 row)
+
+
+# 以下函数, 正常结果应该为99. 实际返回5. 
+
+digoal=> create or replace function f_count() returns int as $$
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test1 where id<100;
+  raise notice 'count: %.', ret;
+  return ret;
+end;
+$$ language plpgsql;
+CREATE FUNCTION
+digoal=> select * from f_count();
+NOTICE:  count: 5.
+ f_count 
+---------
+       5
+(1 row)
+
+
+# 当表为replication时, 返回正常结果
+
+digoal=> create or replace function f_count() returns int as $$
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test4 where id<100;
+  raise notice 'count: %.', ret;
+  return ret;
+end;
+$$ language plpgsql;
+CREATE FUNCTION
+digoal=> select * from f_count();
+NOTICE:  count: 99.
+ f_count 
+---------
+      99
+(1 row)
+
+
+# online code
+将以上函数在online code中执行, 结果一样有问题. replication table没有问题.
+
+digoal=> do language plpgsql $$                                
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test4 where id<100;
+  raise notice 'count: %.', ret;
+end;         
+$$;
+NOTICE:  count: 99.
+DO
+
+
+
+digoal=> do language plpgsql $$
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test1 where id<100;
+  raise notice 'count: %.', ret;
+end;
+$$;
+NOTICE:  count: 5.
+DO
+
+
+
+digoal=> do language plpgsql $$
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test2 where id<100;
+  raise notice 'count: %.', ret;
+end;
+$$;
+NOTICE:  count: 5.
+DO
+
+
+
+digoal=> do language plpgsql $$
+declare
+  ret int8;
+begin
+  select count(*) into ret from count_test3 where id<100;
+  raise notice 'count: %.', ret;
+end;
+$$;
+NOTICE:  count: 5.
+DO
+
+
+
+[需要返回正常的结果, 可以使用动态SQL]
+# 使用动态SQL的话, 以上异常的结果返回都正常了.
+
+digoal=> do language plpgsql $$
+declare
+  ret int8;
+begin
+  execute 'select count(*) from count_test3 where id<100' into ret;
+  raise notice 'count: %.', ret;
+end;
+$$;
+NOTICE:  count: 99.
+DO
+
+
+# 使用execute direct语句返回结果也是正常的.
+
+digoal=# do language plpgsql $$
+declare
+  ret int8;
+begin
+  execute 'execute direct on datanode_1 $_$select count(*) from digoal.count_test1$_$' into ret;
+  raise notice 'count: %.', ret;
+end;
+$$;
+NOTICE:  count: 1982.
+DO
+
+digoal=# do language plpgsql $$
+declare
+  ret int8;
+begin
+  execute 'execute direct on datanode_2 $_$select count(*) from digoal.count_test1$_$' into ret;
+  raise notice 'count: %.', ret;
+end;
+$$;
+NOTICE:  count: 2040.
+DO
+
+

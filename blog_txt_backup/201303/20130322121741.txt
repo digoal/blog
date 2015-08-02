@@ -1,0 +1,841 @@
+PostgreSQL research
+
+CitusDB, PostgreSQLs Use Hadoop Distribute Query - 4 : Query Data IN HDFS
+
+2013-03-22 12:17:41   查看原文>>
+
+前面几篇文章分别介绍了CitusDB在单台服务器上的安装和配置, file_fdw的安装和使用, 以及hadoop_sync的安装.
+接下来的这篇文章将要搭建CitusDB+HDFS的环境, 利用file_fdw, hadoop_sync以及CitusDB的SQL引擎并行查询HDFS中的结构化数据.
+本文的测试环境 : 
+
+OS : CentOS 5.x x64
+Hadoop : 1.1.2
+CitusDB : 2.0
+
+
+4台主机 : 
+
+Hadoop namenode, CitusDB master
+172.16.3.150
+Hadoop datanode, CitusDB worker
+172.16.3.33
+172.16.3.39
+172.16.3.40
+
+
+
+首先在所有节点新建hadoop的运行以及管理用户.
+
+[root@db-172-16-3-150 data06]# useradd digoal
+
+
+其他节点操作同上
+
+所有节点, 下载hadoop软件包 : 
+
+[root@db-172-16-3-150 opt]# cd /opt
+[root@db-172-16-3-150 opt]# wget http://ftp.cuhk.edu.hk/pub/packages/apache.org/hadoop/common/hadoop-1.1.2/hadoop-1.1.2.tar.gz
+[root@db-172-16-3-150 opt]# tar -zxvf hadoop-1.1.2.tar.gz
+[root@db-172-16-3-150 ~]# chown -R digoal:digoal /opt/hadoop-1.1.2
+
+
+其他节点操作同上.
+
+hadoop 安装前提要素 : 
+所有节点, 安装rsync, ssh, sshd包: 
+
+yum install openssh-server
+yum install openssh-clients
+yum install rsync
+
+
+
+所有节点, 配置允许使用公钥连接, 这是hadoop namenode节点远程调用datanode节点脚本的方法, 与Greenplum的管理方式类似 : 
+
+/etc/ssh/sshd_config
+PubkeyAuthentication yes
+
+
+
+namenode节点, 在hadoop的管理用户下生成公钥 : 
+
+su - digoal
+digoal@db-172-16-3-150-> ssh-keygen -t dsa -P '' -f ~/.ssh/id_dsa
+digoal@db-172-16-3-150-> cat ~/.ssh/id_dsa.pub >> ~/.ssh/authorized_keys
+digoal@db-172-16-3-150-> chmod 700 ~
+digoal@db-172-16-3-150-> chmod 700 ~/.ssh
+digoal@db-172-16-3-150-> chmod 600 ~/.ssh/authorized_keys
+digoal@db-172-16-3-150-> cd .ssh
+digoal@db-172-16-3-150-> cat id_dsa.pub 
+ssh-dss AAAAB3NzaC1kc3MAAACBANBTKT4G4PZ5PC8SWrScHaB1PpVQ38BRQU2TiqeAZLU2Du2c8gP1h4XhO703R1v7K1r5isSyaVt14MIMBX5FKRUfwC7FNFMzr9VpjeprJRbDByYhsyXiMj5ziDamXq8VwUiaexfqPXbnE1n43od3M03bI1vOvXr7u8uG2BXKZXddAAAAFQCsSXXqmnwr9zlSp5Bc56WH98B67wAAAIEAoXahSqPMCpedHO5gEQcrZ00JGrnXVRx1HL7XHqNg+00ZvgqCmWr8WzYQJS5SzZ1E7PgPDLLJ/ym1AIrirYUfCttry8/YJBUO1B1jTWIvsHDblnKQPNeS4opuTcaJdklyfdeFS/sQrUU+EQfcmwpCVIY6gOduKm5PCE7xlaSZMm8AAACAEvWgs402kRZhWgvXCqOoOZhdFHLJ7h+53gmEpHa+Rhu4i7ag1RsK15q/aTt3eGFt3xbZS4GYT6LnBYM0TOB0yO3cmKoohNx1A7SZIYxnA1x48G3HFddwJdATP4xnK0VURI5JbMjkgoY2F91r5xwKdwf+Ypk7CBDVm3kjcJ+UCrU= digoal@db-172-16-3-150.sky-mobi.com
+
+
+
+datanode节点, 拷贝namenode节点的公钥id_dsa.pub的内容到本地的~/.ssh/authorized_keys
+
+digoal@db-172-16-3-33-> vi ~/.ssh/authorized_keys
+ssh-dss AAAAB3NzaC1kc3MAAACBAItGIu3Uf+vg9DatqoJt35J3cOSTJnlt8uqoRF9InRH7tWN5g4j9WE+Ol5pLjCSlpIysTxolmbZBj9muhcH4qmpLnI5Y4COVv975woHdgCUeXPeWUJ8J56cNEHLQS0KdEtd6eqQrIRpNnHEiLyv/75ID6HjOIld+JueSEQQCDxl/AAAAFQDyBVg8sB+e5zhRixuiSSEJzkiTqwAAAIBN+tkwON6kH26bNZWLK287GiZi6ymr1AdGTNVLW3cdrliFN8ENI3XQ5T7APz8bS+sgteg+Hwyz1gIfuaCw4srCInh1a3MTb2Mk4KvHK7DdplgaMWmQUjvSeoQoV6qeDJPeUoaIR5JnX4HZQLEqYO+NjPeLc4/uUKGSNycXZIqQqwAAAIBqAMd3YP6Pvu1BFyRZGslRu0us+xhEE375mpxLX1Csj4/WHWZvPHVYm3jiJVKS9s5So9a/7uKYKwTJCPZ6bBONtKEUEgu0oPMDwBlFbqj0VIf3zVaiWo34h+w2UQE6bb/pYstScqmWSn5A+mQ7uJY3HCgdKxGhm6B8k3kgc7faKw== root@db-172-16-3-150.sky-mobi.com
+digoal@db-172-16-3-33-> chmod 700 ~
+digoal@db-172-16-3-33-> chmod 700 ~/.ssh
+digoal@db-172-16-3-33-> chmod 600 ~/.ssh/authorized_keys
+另外两个datanode的操作同上.
+
+
+
+所有节点, 在没有DNS的环境中, 需要配置namenode和datanode的主机名信息(与GreenPlum类似) : 
+不要使用1个IP对应多个主机名, 否则会带来不必要的麻烦, 见本文末尾部分.
+
+[root@db-172-16-3-150 ~]# vi /etc/hosts
+172.16.3.150 db-172-16-3-150.sky-mobi.com
+172.16.3.33 db-172-16-3-33.sky-mobi.com
+172.16.3.39 db-172-16-3-39.sky-mobi.com
+172.16.3.40 db-172-16-3-40.sky-mobi.com
+
+
+
+在namenode节点的hadoop管理用户下, 连接datanode主机的管理用户无密码认证验证 : 
+
+digoal@db-172-16-3-150-> ssh db-172-16-3-150.sky-mobi.com date
+Thu Mar 21 16:21:58 CST 2013
+digoal@db-172-16-3-150-> ssh db-172-16-3-33.sky-mobi.com date
+Thu Mar 21 16:21:59 CST 2013
+digoal@db-172-16-3-150-> ssh db-172-16-3-39.sky-mobi.com date
+Thu Mar 21 16:22:00 CST 2013
+digoal@db-172-16-3-150-> ssh db-172-16-3-40.sky-mobi.com date
+Thu Mar 21 15:49:33 CST 2013
+
+
+所有节点, 安装java环境. 注意这里JAVA_HOME=/usr : 
+
+[root@db-172-16-3-33 opt]# yum install java
+[root@db-172-16-3-150 conf]# java -version
+java version "1.6.0_24"
+OpenJDK Runtime Environment (IcedTea6 1.11.9) (rhel-1.36.1.11.9.el5_9-x86_64)
+OpenJDK 64-Bit Server VM (build 20.0-b12, mixed mode)
+[root@db-172-16-3-150 conf]# which java
+/usr/bin/java
+
+
+
+所有节点, 配置hadoop目录信息 : 
+
+hadoop 运行日志目录 : 
+mkdir /var/log/hadoop
+chown -R digoal:digoal /var/log/hadoop
+namenode 事物日志目录 : 
+mkdir /hadoop/tdata
+chown -R digoal:digoal /hadoop
+datanode 数据块目录 : 
+mkdir /hadoop/data
+chown -R digoal:digoal /hadoop
+
+
+
+namenode节点, 配置hadoop core-site.xml, 0.0.0.0指监听所有接口
+
+[root@db-172-16-3-150 opt]# vi /opt/hadoop-1.1.2/conf/core-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+  <property>
+    <name>fs.default.name</name>
+    <value>hdfs://0.0.0.0:9000</value>
+  </property>
+</configuration>
+
+
+# namenode节点确保9000端口未被使用.
+
+[root@db-172-16-3-150 conf]# netstat -anp|grep 9000
+[root@db-172-16-3-150 conf]# 
+
+
+
+datanode 节点配置hadoop core-site.xml, 注意这里配置的不是0.0.0.0, 而是namenode节点的主机名(或DNS中的名称)
+
+[root@db-172-16-3-150 opt]# vi /opt/hadoop-1.1.2/conf/core-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+  <property>
+    <name>fs.default.name</name>
+    <value>hdfs://db-172-16-3-150.sky-mobi.com:9000</value>
+  </property>
+</configuration>
+# 其他节点配置同上
+
+
+
+# 所有节点配置hadoop hdfs-site.xml
+
+[root@db-172-16-3-150 conf]# vi /opt/hadoop-1.1.2/conf/hdfs-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+  <property>
+    <name>dfs.name.dir</name>
+    <value>/hadoop/tdata</value>
+  </property>
+  <property>
+    <name>dfs.data.dir</name>
+    <value>/hadoop/data</value>
+  </property>
+  <property>
+    <name>dfs.block.local-path-access.user</name>
+    <value>digoal</value>
+  </property>
+</configuration>
+
+
+
+# 在name node节点配置datanode的主机信息.
+
+[root@db-172-16-3-150 ~]# su - digoal 
+digoal@db-172-16-3-150-> vi /opt/hadoop-1.1.2/conf/slaves
+db-172-16-3-33.sky-mobi.com
+db-172-16-3-39.sky-mobi.com
+db-172-16-3-40.sky-mobi.com
+
+
+
+# 在所有节点配置hadoop运行环境配置文件.
+
+digoal@db-172-16-3-150-> which java
+/usr/bin/java
+digoal@db-172-16-3-150-> vi /opt/hadoop-1.1.2/conf/hadoop-env.sh
+export JAVA_HOME=/usr
+export HADOOP_LOG_DIR=/var/log/hadoop
+
+
+# 确认调用hadoop-env.sh后环境变量生效.
+
+digoal@db-172-16-3-150-> . /opt/hadoop-1.1.2/conf/hadoop-env.sh
+digoal@db-172-16-3-150-> echo $JAVA_HOME
+/usr
+
+
+
+# 在namenode节点初始化namespace信息.
+
+digoal@db-172-16-3-150-> /opt/hadoop-1.1.2/bin/hadoop namenode -format
+13/03/21 17:27:49 INFO namenode.NameNode: STARTUP_MSG: 
+/************************************************************
+STARTUP_MSG: Starting NameNode
+STARTUP_MSG:   host = db-172-16-3-150.sky-mobi.com/172.16.3.150
+STARTUP_MSG:   args = [-format]
+STARTUP_MSG:   version = 1.1.2
+STARTUP_MSG:   build = https://svn.apache.org/repos/asf/hadoop/common/branches/branch-1.1 -r 1440782; compiled by 'hortonfo' on Thu Jan 31 02:03:24 UTC 2013
+************************************************************/
+Re-format filesystem in /hadoop/tdata ? (Y or N) y
+Format aborted in /hadoop/tdata
+13/03/21 17:28:07 INFO namenode.NameNode: SHUTDOWN_MSG: 
+/************************************************************
+SHUTDOWN_MSG: Shutting down NameNode at db-172-16-3-150.sky-mobi.com/172.16.3.150
+************************************************************/
+
+
+
+# 在namenode节点启动HDFS, 这里调用了start-all.sh, 实际上调用start-dfs.sh就可以了, 因为CitusDB不需要用Hadoop提供的mapreduce.
+
+digoal@db-172-16-3-150-> /opt/hadoop-1.1.2/bin/start-all.sh
+starting namenode, logging to /var/log/hadoop/hadoop-digoal-namenode-db-172-16-3-150.sky-mobi.com.out
+db-172-16-3-40: starting datanode, logging to /var/log/hadoop/hadoop-digoal-datanode-db-172-16-3-40.sky-mobi.com.out
+db-172-16-3-39: starting datanode, logging to /var/log/hadoop/hadoop-digoal-datanode-db-172-16-3-39.sky-mobi.com.out
+db-172-16-3-33: starting datanode, logging to /var/log/hadoop/hadoop-digoal-datanode-db-172-16-3-33.sky-mobi.com.out
+localhost: starting secondarynamenode, logging to /var/log/hadoop/hadoop-digoal-secondarynamenode-db-172-16-3-150.sky-mobi.com.out
+starting jobtracker, logging to /var/log/hadoop/hadoop-digoal-jobtracker-db-172-16-3-150.sky-mobi.com.out
+db-172-16-3-39: starting tasktracker, logging to /var/log/hadoop/hadoop-digoal-tasktracker-db-172-16-3-39.sky-mobi.com.out
+db-172-16-3-40: starting tasktracker, logging to /var/log/hadoop/hadoop-digoal-tasktracker-db-172-16-3-40.sky-mobi.com.out
+db-172-16-3-33: starting tasktracker, logging to /var/log/hadoop/hadoop-digoal-tasktracker-db-172-16-3-33.sky-mobi.com.out
+
+
+# 启动后查看9000端口是否监听.
+
+digoal@db-172-16-3-150-> netstat -anp|grep 9000
+(Not all processes could be identified, non-owned process info
+ will not be shown, you would have to be root to see it all.)
+tcp        0      0 0.0.0.0:9000           0.0.0.0:*                   LISTEN      18985/java          
+tcp        0      0 172.16.3.150:13243          172.16.3.150:9000           ESTABLISHED 18985/java          
+tcp        0      0 172.16.3.150:13246          172.16.3.150:9000           ESTABLISHED 19195/java          
+tcp        0      0 172.16.3.150:9000           172.16.3.40:22747           ESTABLISHED 18985/java          
+tcp        0      0 172.16.3.150:9000           172.16.3.150:13243          ESTABLISHED 18985/java          
+tcp        0      0 172.16.3.150:9000           172.16.3.150:13246          ESTABLISHED 18985/java          
+tcp        0      0 172.16.3.150:9000           172.16.3.33:60047           ESTABLISHED 18985/java          
+tcp        0      0 172.16.3.150:9000           172.16.3.39:17978           ESTABLISHED 18985/java  
+
+
+
+# 在namenode节点下载后面要用到的测试文本文件.
+
+[root@db-172-16-3-150 data06]# wget http://examples.citusdata.com/customer_reviews_1998.csv.gz
+[root@db-172-16-3-150 data06]# wget http://examples.citusdata.com/customer_reviews_1999.csv.gz
+[root@db-172-16-3-150 data06]# gzip -d customer_reviews_1998.csv.gz
+[root@db-172-16-3-150 data06]# gzip -d customer_reviews_1999.csv.gz
+
+
+
+# 在namenode节点, 新建一个HDFS文件夹
+
+[root@db-172-16-3-150 citusdb]# su - digoal
+digoal@db-172-16-3-150-> ./hadoop fs -mkdir /user/data/reviews
+
+
+
+# 在namenode节点将下载好的数据导入到hdfs中.
+
+[root@db-172-16-3-150 citusdb]# su - digoal
+digoal@db-172-16-3-150-> /opt/hadoop-1.1.2/bin/hadoop fs -put /data06/customer_reviews_1998.csv /user/data/reviews
+digoal@db-172-16-3-150-> /opt/hadoop-1.1.2/bin/hadoop fs -put /data06/customer_reviews_1999.csv /user/data/reviews
+digoal@db-172-16-3-150-> /opt/hadoop-1.1.2/bin/hadoop fs -ls /user/data/reviews
+Found 2 items
+-rw-r--r--   3 digoal supergroup  101299118 2013-03-21 17:57 /user/data/reviews/customer_reviews_1998.csv
+-rw-r--r--   3 digoal supergroup  198247156 2013-03-21 17:57 /user/data/reviews/customer_reviews_1999.csv
+
+
+
+# 在各个datanode节点上查看datanode 监听端口
+
+[root@db-172-16-3-33 hadoop]# netstat -anp|grep 50020
+tcp        0      0 0.0.0.0:50020               0.0.0.0:*                   LISTEN      10948/java          
+[root@db-172-16-3-33 hadoop]# ps -ewf|grep 10948
+digoal   10948     1  2 17:53 ?        00:00:05 /usr/bin/java -Dproc_datanode -Xmx1000m -server -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote -Dhadoop.log.dir=/var/log/hadoop -Dhadoop.log.file=hadoop-digoal-datanode-db-172-16-3-33.sky-mobi.com.log -Dhadoop.home.dir=/opt/hadoop-1.1.2/libexec/.. -Dhadoop.id.str=digoal -Dhadoop.root.logger=INFO,DRFA -Dhadoop.security.logger=INFO,NullAppender -Djava.library.path=/opt/hadoop-1.1.2/libexec/../lib/native/Linux-amd64-64 -Dhadoop.policy.file=hadoop-policy.xml -classpath /opt/hadoop-1.1.2/libexec/../conf:/usr/lib/tools.jar:/opt/hadoop-1.1.2/libexec/..:/opt/hadoop-1.1.2/libexec/../hadoop-core-1.1.2.jar:/opt/hadoop-1.1.2/libexec/../lib/asm-3.2.jar:/opt/hadoop-1.1.2/libexec/../lib/aspectjrt-1.6.11.jar:/opt/hadoop-1.1.2/libexec/../lib/aspectjtools-1.6.11.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-beanutils-1.7.0.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-beanutils-core-1.8.0.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-cli-1.2.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-codec-1.4.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-collections-3.2.1.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-configuration-1.6.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-daemon-1.0.1.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-digester-1.8.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-el-1.0.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-httpclient-3.0.1.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-io-2.1.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-lang-2.4.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-logging-1.1.1.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-logging-api-1.0.4.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-math-2.1.jar:/opt/hadoop-1.1.2/libexec/../lib/commons-net-3.1.jar:/opt/hadoop-1.1.2/libexec/../lib/core-3.1.1.jar:/opt/hadoop-1.1.2/libexec/../lib/hadoop-capacity-scheduler-1.1.2.jar:/opt/hadoop-1.1.2/libexec/../lib/hadoop-fairscheduler-1.1.2.jar:/opt/hadoop-1.1.2/libexec/../lib/hadoop-thriftfs-1.1.2.jar:/opt/hadoop-1.1.2/libexec/../lib/hsqldb-1.8.0.10.jar:/opt/hadoop-1.1.2/libexec/../lib/jackson-core-asl-1.8.8.jar:/opt/hadoop-1.1.2/libexec/../lib/jackson-mapper-asl-1.8.8.jar:/opt/hadoop-1.1.2/libexec/../lib/jasper-compiler-5.5.12.jar:/opt/hadoop-1.1.2/libexec/../lib/jasper-runtime-5.5.12.jar:/opt/hadoop-1.1.2/libexec/../lib/jdeb-0.8.jar:/opt/hadoop-1.1.2/libexec/../lib/jersey-core-1.8.jar:/opt/hadoop-1.1.2/libexec/../lib/jersey-json-1.8.jar:/opt/hadoop-1.1.2/libexec/../lib/jersey-server-1.8.jar:/opt/hadoop-1.1.2/libexec/../lib/jets3t-0.6.1.jar:/opt/hadoop-1.1.2/libexec/../lib/jetty-6.1.26.jar:/opt/hadoop-1.1.2/libexec/../lib/jetty-util-6.1.26.jar:/opt/hadoop-1.1.2/libexec/../lib/jsch-0.1.42.jar:/opt/hadoop-1.1.2/libexec/../lib/junit-4.5.jar:/opt/hadoop-1.1.2/libexec/../lib/kfs-0.2.2.jar:/opt/hadoop-1.1.2/libexec/../lib/log4j-1.2.15.jar:/opt/hadoop-1.1.2/libexec/../lib/mockito-all-1.8.5.jar:/opt/hadoop-1.1.2/libexec/../lib/oro-2.0.8.jar:/opt/hadoop-1.1.2/libexec/../lib/servlet-api-2.5-20081211.jar:/opt/hadoop-1.1.2/libexec/../lib/slf4j-api-1.4.3.jar:/opt/hadoop-1.1.2/libexec/../lib/slf4j-log4j12-1.4.3.jar:/opt/hadoop-1.1.2/libexec/../lib/xmlenc-0.52.jar:/opt/hadoop-1.1.2/libexec/../lib/jsp-2.1/jsp-2.1.jar:/opt/hadoop-1.1.2/libexec/../lib/jsp-2.1/jsp-api-2.1.jar org.apache.hadoop.hdfs.server.datanode.DataNode
+
+
+
+# 在namenode节点上可以看到HDFS的报告
+
+digoal@db-172-16-3-150-> /opt/hadoop-1.1.2/bin/hadoop dfsadmin -report
+Configured Capacity: 229023145984 (213.29 GB)
+Present Capacity: 126058467328 (117.4 GB)
+DFS Remaining: 125152571392 (116.56 GB)
+DFS Used: 905895936 (863.93 MB)
+DFS Used%: 0.72%
+Under replicated blocks: 0
+Blocks with corrupt replicas: 0
+Missing blocks: 0
+
+-------------------------------------------------
+Datanodes available: 3 (3 total, 0 dead)
+
+Name: 172.16.3.33:50010
+Decommission Status : Normal
+Configured Capacity: 144471613440 (134.55 GB)
+DFS Used: 301965312 (287.98 MB)
+Non DFS Used: 96595206144 (89.96 GB)
+DFS Remaining: 47574441984(44.31 GB)
+DFS Used%: 0.21%
+DFS Remaining%: 32.93%
+Last contact: Thu Mar 21 20:41:48 CST 2013
+
+
+Name: 172.16.3.39:50010
+Decommission Status : Normal
+Configured Capacity: 42275766272 (39.37 GB)
+DFS Used: 301965312 (287.98 MB)
+Non DFS Used: 2332004352 (2.17 GB)
+DFS Remaining: 39641796608(36.92 GB)
+DFS Used%: 0.71%
+DFS Remaining%: 93.77%
+Last contact: Thu Mar 21 20:41:48 CST 2013
+
+
+Name: 172.16.3.40:50010
+Decommission Status : Normal
+Configured Capacity: 42275766272 (39.37 GB)
+DFS Used: 301965312 (287.98 MB)
+Non DFS Used: 4037468160 (3.76 GB)
+DFS Remaining: 37936332800(35.33 GB)
+DFS Used%: 0.71%
+DFS Remaining%: 89.74%
+Last contact: Thu Mar 21 20:41:48 CST 2013
+
+
+
+# 接下来需要配置CitusDB
+CitusDB master节点与Hadoop namenode放在一台主机上.
+CitusDB worker节点与Hadoop datanode放在一起.
+
+# 所有节点, 创建citusdb运行用户
+
+[root@db-172-16-3-150 ~]# useradd citusdb
+#其他节点操作同上
+
+# 所有节点, 下载citusdb
+
+[root@db-172-16-3-150 ~]# su - citusdb
+[citusdb@db-172-16-3-150 ~]$ wget http://packages.citusdata.com/readline-5.0/citusdb-2.0.0-1.x86_64.rpm
+# 将安装包拷贝到其他节点
+[root@db-172-16-3-150 citusdb]# scp citusdb-2.0.0-1.x86_64.rpm 172.16.3.33:/home/citusdb/
+[root@db-172-16-3-150 citusdb]# scp citusdb-2.0.0-1.x86_64.rpm 172.16.3.39:/home/citusdb/
+[root@db-172-16-3-150 citusdb]# scp citusdb-2.0.0-1.x86_64.rpm 172.16.3.40:/home/citusdb/
+
+# 所有节点, 安装citusdb
+
+[root@db-172-16-3-150 ~]# rpm -ivh /home/citusdb/citusdb-2.0.0-1.x86_64.rpm 
+[root@db-172-16-3-33 ~]# rpm -ivh /home/citusdb/citusdb-2.0.0-1.x86_64.rpm 
+[root@db-172-16-3-39 ~]# rpm -ivh /home/citusdb/citusdb-2.0.0-1.x86_64.rpm 
+[root@db-172-16-3-40 ~]# rpm -ivh /home/citusdb/citusdb-2.0.0-1.x86_64.rpm 
+
+
+PostgreSQL9.2.1将安装在/opt/citusdb/2,0目录, 数据目录在/opt/citusdb/2.0/data
+
+# 所有节点, 修改citusdb权限
+
+[root@db-172-16-3-150 opt]# chown -R citusdb:citusdb /opt/citusdb
+其他节点操作同上
+
+# 以下两步略, 因为citusdb-2.0.0-1.x86_64.rpm安装过程中自动初始化了数据库, 如果没有初始化则需要手工初始化一下.
+所有节点, 创建数据目录, 建议目录一致
+所有节点, 初始化数据库
+
+# 主节点配置work list
+
+[root@db-172-16-3-150 opt]# vi /opt/citusdb/2.0/data/pg_worker_list.conf
+db-172-16-3-33.sky-mobi.com 9900
+db-172-16-3-39.sky-mobi.com 9900
+db-172-16-3-40.sky-mobi.com 9900
+# 后面配置postgresql.conf中, worker节点数据库监听9900端口.
+
+# 主节点配置postgresql.conf, pg_hba.conf
+
+[root@db-172-16-3-150 opt]# vi /opt/citusdb/2.0/data/postgresql.conf
+listen_addresses = '0.0.0.0'
+port = 9900
+unix_socket_directory = '.'
+unix_socket_permissions = 0700
+tcp_keepalives_idle = 60
+tcp_keepalives_interval = 10
+tcp_keepalives_count = 10
+shared_buffers = 2048MB
+maintenance_work_mem = 1024MB
+max_stack_depth = 8MB
+synchronous_commit = off
+wal_buffers = 16384kB
+wal_writer_delay = 10ms
+checkpoint_segments = 32
+random_page_cost = 1.0
+effective_cache_size = 81920MB
+log_destination = 'csvlog'
+logging_collector = on
+log_directory = 'pg_log'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_file_mode = 0600
+log_truncate_on_rotation = on
+log_rotation_age = 1d
+log_rotation_size = 10MB
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose
+autovacuum = on
+log_autovacuum_min_duration = 0
+
+[root@db-172-16-3-150 data]# vi /opt/citusdb/2.0/data/pg_hba.conf
+host all all 127.0.0.1/32 trust
+host all all 172.16.3.150/32 trust
+host all all 172.16.3.33/32 trust
+host all all 172.16.3.39/32 trust
+host all all 172.16.3.40/32 trust
+host all all 0.0.0.0/0 md5
+# 允许127.0.0.1 trust认证, 主要用于hadoop-sync进程使用
+
+# worker节点配置postgresql.conf, pg_hba.conf
+
+[root@db-172-16-3-33 opt]# vi /opt/citusdb/2.0/data/postgresql.conf
+listen_addresses = '0.0.0.0'
+port = 9900
+unix_socket_directory = '.'
+unix_socket_permissions = 0700
+tcp_keepalives_idle = 60
+tcp_keepalives_interval = 10
+tcp_keepalives_count = 10
+shared_buffers = 2048MB
+maintenance_work_mem = 1024MB
+max_stack_depth = 8MB
+synchronous_commit = off
+wal_buffers = 16384kB
+wal_writer_delay = 10ms
+checkpoint_segments = 32
+random_page_cost = 1.0
+effective_cache_size = 81920MB
+log_destination = 'csvlog'
+logging_collector = on
+log_directory = 'pg_log'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_file_mode = 0600
+log_truncate_on_rotation = on
+log_rotation_age = 1d
+log_rotation_size = 10MB
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose
+autovacuum = on
+log_autovacuum_min_duration = 0
+
+[root@db-172-16-3-33 data]# vi /opt/citusdb/2.0/data/pg_hba.conf
+host all all 172.16.3.150/32 trust
+host all all 172.16.3.33/32 trust
+host all all 172.16.3.39/32 trust
+host all all 172.16.3.40/32 trust
+host all all 0.0.0.0/0 md5
+# 其他节点操作同上
+
+# 所有节点配置citusdb用户环境变量
+
+[root@db-172-16-3-150 data]# vi /home/citusdb/.bash_profile
+export PS1="$USER@`/bin/hostname -s`-> "
+export PGPORT=9900
+export PGUSER=postgres
+export PGDATA=/opt/citusdb/2.0/data
+export PGHOST=$PGDATA
+export PGDATABASE=digoal
+export LANG=en_US.utf8
+export PGHOME=/opt/citusdb/2.0
+export LD_LIBRARY_PATH=$PGHOME/lib:$PGHOME/lib/postgresql:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$PGHOME/bin:$PATH:.
+#export MANPATH=$PGHOME/share/man:$MANPATH
+export LD_PRELOAD=/usr/lib64/libncurses.so
+alias rm='rm -i'
+alias ll='ls -lh'
+
+# 启动citusdb集群
+
+[root@db-172-16-3-150 data]# su - citusdb
+citusdb@db-172-16-3-150-> pg_ctl start -D $PGDATA
+server starting
+[root@db-172-16-3-33 data]# su - citusdb
+citusdb@db-172-16-3-33-> pg_ctl start -D $PGDATA
+server starting
+[root@db-172-16-3-39 data]# su - citusdb
+citusdb@db-172-16-3-39-> pg_ctl start -D $PGDATA
+server starting
+[root@db-172-16-3-40 data]# su - citusdb
+citusdb@db-172-16-3-40-> pg_ctl start -D $PGDATA
+server starting
+
+# 所有节点在postgres数据库下面安装file_fdw (目前hadoop_sync不支持配置数据库名以及schema)
+细节参考 : http://blog.163.com/digoal@126/blog/static/16387704020132192011747/
+
+# 下载
+[root@db-172-16-3-150 soft_bak]# su - citusdb
+citusdb@db-172-16-3-150-> wget --no-check-certificate https://github.com/citusdata/file_fdw/archive/master.zip
+citusdb@db-172-16-3-150-> unzip master
+Archive:  master
+# 编译安装
+su - root
+[root@db-172-16-3-150 data05]# . /home/citusdb/.bash_profile 
+root@db-172-16-3-150-> which pg_config
+/opt/citusdb/2.0/bin/pg_config
+root@db-172-16-3-150-> cd /home/citusdb/file_fdw-master/
+root@db-172-16-3-150-> gmake USE_PGXS=1 clean
+root@db-172-16-3-150-> gmake USE_PGXS=1
+root@db-172-16-3-150-> gmake USE_PGXS=1 install
+其他节点操作同上
+
+# 主节点在postgres数据库下面创建外部表
+
+root@db-172-16-3-150-> psql postgres postgres
+psql (9.2.1)
+Type "help" for help.
+postgres=# create extension file_fdw;
+CREATE EXTENSION
+postgres=# CREATE SERVER file_server FOREIGN DATA WRAPPER file_fdw;
+CREATE SERVER
+postgres=# CREATE FOREIGN TABLE customer_reviews
+(
+    customer_id TEXT not null,
+    review_date DATE not null,
+    review_rating INTEGER not null,
+    review_votes INTEGER,
+    review_helpful_votes INTEGER,
+    product_id CHAR(10) not null,
+    product_title TEXT not null,
+    product_sales_rank BIGINT,
+    product_group TEXT,
+    product_category TEXT,
+    product_subcategory TEXT,
+    similar_product_ids CHAR(10)[]
+)
+DISTRIBUTE BY APPEND (review_date)
+SERVER file_server
+OPTIONS (filename '', hdfs_directory_path '/user/data/reviews', format 'csv');
+CREATE FOREIGN TABLE
+# 注意这个目录/user/data/reviews是HDFS中的目录.
+
+# 主节点安装hadoop_sync
+细节参考 : http://blog.163.com/digoal@126/blog/static/16387704020132189835346/
+
+wget http://mirror.bjtu.edu.cn/apache/maven/maven-3/3.0.5/binaries/apache-maven-3.0.5-bin.tar.gz
+tar -zxvf apache-maven-3.0.5-bin.tar.gz
+mv apache-maven-3.0.5 /opt/
+yum install java
+java -version
+which java
+yum install java-devel
+javac -version
+which javac
+vi ~/.bash_profile
+export M2_HOME=/opt/apache-maven-3.0.5
+export M2=$M2_HOME/bin
+export MAVEN_OPTS="-Xms256m -Xmx512m"
+export JAVA_HOME=/usr
+export PATH=$M2:$JAVA_HOME/bin:$PATH:.
+
+. ~/.bash_profile
+mvn --version
+cd /home/citusdb/
+wget --no-check-certificate https://github.com/citusdata/hadoop-sync/archive/master.zip -O hadoop-sync.zip
+unzip hadoop-sync.zip
+cd hadoop-sync-master
+mvn install
+[root@db-172-16-3-150 hadoop-sync-master]# ll
+total 16
+-rw-r--r-- 1 root root 2533 Feb 16 04:56 pom.xml
+-rw-r--r-- 1 root root 3047 Feb 16 04:56 README.md
+drwxr-xr-x 3 root root 4096 Feb 16 04:56 src
+drwxr-xr-x 7 root root 4096 Mar 22 09:15 target
+
+# 主节点配置hadoop-sync, 一定要配置为hadoop的启动用户, 否则会有hadoop block get权限问题.
+
+[root@db-172-16-3-150 hadoop-sync-master]# mkdir /opt/hadoop-sync
+[root@db-172-16-3-150 hadoop-sync-master]# mv /home/citusdb/hadoop-sync-master/target /opt/hadoop-sync/
+[root@db-172-16-3-150 hadoop-sync-master]# chown -R digoal:digoal /opt/hadoop-sync
+[root@db-172-16-3-150 hadoop-sync-master]# su - digoal
+digoal@db-172-16-3-150-> cd /opt/hadoop-sync/
+digoal@db-172-16-3-150-> cp target/classes/sync.properties .
+digoal@db-172-16-3-150-> vi /opt/hadoop-sync/sync.properties
+# HDFS related cluster configuration settings
+HdfsMasterNodeName = 127.0.0.1
+HdfsMasterNodePort = 9000
+HdfsWorkerNodePort = 50020
+# CitusDB related cluster configuration settings
+CitusMasterNodeName = 127.0.0.1
+CitusMasterNodePort = 9900
+CitusWorkerNodePort = 9900
+
+# 主节点运行hadoop_sync同步namenode中的元数据.
+
+[root@db-172-16-3-150 hadoop-sync-master]# su - digoal
+digoal@db-172-16-3-150-> java -jar /opt/hadoop-sync/target/hadoop-sync-0.1.jar customer_reviews --fetch-min-max
+
+# SQL查询
+
+[root@db-172-16-3-150 hdfs]# su - citusdb
+citusdb@db-172-16-3-150-> psql -h 127.0.0.1 -p 9900 -U digoal postgres
+psql (9.2.1)
+Type "help" for help.
+postgres=# select count(*) from customer_reviews ;
+  count  
+---------
+ 1762499
+(1 row)
+Time: 3101.759 ms
+postgres=# select * from customer_reviews limit 1;
+  customer_id  | review_date | review_rating | review_votes | review_helpful_votes | product_id |      product_title      | product_
+sales_rank | product_group | product_category | product_subcategory |                   similar_product_ids                    
+---------------+-------------+---------------+--------------+----------------------+------------+-------------------------+---------
+-----------+---------------+------------------+---------------------+----------------------------------------------------------
+ AQV87I9Y4CIQF | 1998-09-06  |             5 |           56 |                   55 | 1561580368 | Building for a Lifetime |         
+    215662 | Book          | Home & Garden    | Home Design         | {1589230612,1881955656,0140258094,1931498113,0070171513}
+(1 row)
+Time: 604.151 ms
+postgres=# select * from pg_dist_partition ;
+ logicalrelid | partmethod |                                                          partkey                                       
+                   
+--------------+------------+--------------------------------------------------------------------------------------------------------
+-------------------
+        16403 | a          | {VAR :varno 1 :varattno 2 :vartype 1082 :vartypmod -1 :varcollid 0 :varlevelsup 0 :varnoold 1 :varoattn
+o 2 :location 436}
+(1 row)
+Time: 0.386 ms
+postgres=# select * from pg_dist_shard;
+ logicalrelid |       shardid        | shardstorage | shardalias | shardminvalue | shardmaxvalue 
+--------------+----------------------+--------------+------------+---------------+---------------
+        16403 | -1221512698612183530 | f            |            | 1999-01-01    | 1999-05-13
+        16403 |  2698407172708592541 | f            |            | 1999-05-13    | 1999-09-11
+        16403 |   631600631725577683 | f            |            | 1998-09-06    | 1998-12-31
+        16403 | -2048097437225231483 | f            |            | 1999-09-11    | 1999-12-31
+        16403 |  3598423008504059948 | f            |            | 1970-12-30    | 1998-09-06
+(5 rows)
+Time: 0.502 ms
+postgres=# select * from pg_dist_shard_placement ;
+       shardid        | shardstate | shardlength |          nodename           | nodeport 
+----------------------+------------+-------------+-----------------------------+----------
+ -2048097437225231483 |          1 |    64029428 | db-172-16-3-33.sky-mobi.com |     9900
+ -2048097437225231483 |          1 |    64029428 | db-172-16-3-39.sky-mobi.com |     9900
+ -2048097437225231483 |          1 |    64029428 | db-172-16-3-40.sky-mobi.com |     9900
+ -1221512698612183530 |          1 |    67108864 | db-172-16-3-33.sky-mobi.com |     9900
+ -1221512698612183530 |          1 |    67108864 | db-172-16-3-39.sky-mobi.com |     9900
+ -1221512698612183530 |          1 |    67108864 | db-172-16-3-40.sky-mobi.com |     9900
+   631600631725577683 |          1 |    34190254 | db-172-16-3-33.sky-mobi.com |     9900
+   631600631725577683 |          1 |    34190254 | db-172-16-3-39.sky-mobi.com |     9900
+   631600631725577683 |          1 |    34190254 | db-172-16-3-40.sky-mobi.com |     9900
+  2698407172708592541 |          1 |    67108864 | db-172-16-3-33.sky-mobi.com |     9900
+  2698407172708592541 |          1 |    67108864 | db-172-16-3-39.sky-mobi.com |     9900
+  2698407172708592541 |          1 |    67108864 | db-172-16-3-40.sky-mobi.com |     9900
+  3598423008504059948 |          1 |    67108864 | db-172-16-3-33.sky-mobi.com |     9900
+  3598423008504059948 |          1 |    67108864 | db-172-16-3-39.sky-mobi.com |     9900
+  3598423008504059948 |          1 |    67108864 | db-172-16-3-40.sky-mobi.com |     9900
+(15 rows)
+Time: 0.541 ms
+
+
+postgres=# SELECT
+    customer_id, review_date, review_rating, product_id, product_title
+FROM
+    customer_reviews
+WHERE
+    customer_id ='A27T7HVDXA3K2A' AND
+    product_title LIKE '%Dune%' AND
+    review_date >= '1998-01-01' AND
+    review_date <= '1998-12-31';
+  customer_id   | review_date | review_rating | product_id |                 product_title                 
+----------------+-------------+---------------+------------+-----------------------------------------------
+ A27T7HVDXA3K2A | 1998-04-10  |             5 | 0399128964 | Dune (Dune Chronicles (Econo-Clad Hardcover))
+ A27T7HVDXA3K2A | 1998-04-10  |             5 | 044100590X | Dune
+ A27T7HVDXA3K2A | 1998-04-10  |             5 | 0441172717 | Dune (Dune Chronicles, Book 1)
+ A27T7HVDXA3K2A | 1998-04-10  |             5 | 0881036366 | Dune (Dune Chronicles (Econo-Clad Hardcover))
+ A27T7HVDXA3K2A | 1998-04-10  |             5 | 1559949570 | Dune Audio Collection
+(5 rows)
+Time: 3102.624 ms
+postgres=# SELECT
+    width_bucket(length(product_title), 1, 50, 5) title_length_bucket,
+    round(avg(review_rating), 2) AS review_average,
+    count(*)
+FROM
+   customer_reviews
+WHERE
+    product_group = 'Book'
+GROUP BY
+    title_length_bucket
+ORDER BY
+    title_length_bucket;
+ title_length_bucket | review_average | count  
+---------------------+----------------+--------
+                   1 |           4.26 | 139034
+                   2 |           4.24 | 411317
+                   3 |           4.34 | 245670
+                   4 |           4.32 | 167361
+                   5 |           4.30 | 118421
+                   6 |           4.40 | 116411
+(6 rows)
+Time: 3403.387 ms
+
+
+
+
+[注意]
+1. namenode的事物日志目录建议不要使用软链接. 否则namenode format 的时候可能会有问题.
+2. 目前hadoop_sync不支持配置数据库角色,数据库名以及schema
+因为CitusWorkerNode.java中链接worker节点的URL被固定了.
+
+        /* connection string format used in connecting to worker node */
+        private static final String CONNECTION_STRING_FORMAT =
+                "jdbc:postgresql://%s:%d/postgres";
+
+
+连接数据库的角色无法指定 : 
+
+citusdb@db-172-16-3-150-> java -jar /opt/hadoop-sync/target/hadoop-sync-0.1.jar customer_reviews --fetch-min-max
+2013-03-22 09:35:29,626 [main] ERROR hdfs.HdfsSynchronizer - could not synchronize table metadata
+org.postgresql.util.PSQLException: FATAL: role "citusdb" does not exist
+        at org.postgresql.core.v3.ConnectionFactoryImpl.readStartupMessages(ConnectionFactoryImpl.java:469)
+        at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:112)
+        at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:66)
+        at org.postgresql.jdbc2.AbstractJdbc2Connection.<init>(AbstractJdbc2Connection.java:125)
+        at org.postgresql.jdbc3.AbstractJdbc3Connection.<init>(AbstractJdbc3Connection.java:30)
+        at org.postgresql.jdbc3g.AbstractJdbc3gConnection.<init>(AbstractJdbc3gConnection.java:22)
+        at org.postgresql.jdbc4.AbstractJdbc4Connection.<init>(AbstractJdbc4Connection.java:30)
+        at org.postgresql.jdbc4.Jdbc4Connection.<init>(Jdbc4Connection.java:24)
+        at org.postgresql.Driver.makeConnection(Driver.java:393)
+        at org.postgresql.Driver.connect(Driver.java:267)
+        at java.sql.DriverManager.getConnection(DriverManager.java:620)
+        at java.sql.DriverManager.getConnection(DriverManager.java:222)
+        at com.citusdata.sync.hdfs.CitusMasterNode.<init>(CitusMasterNode.java:81)
+        at com.citusdata.sync.hdfs.HdfsSynchronizer.calculateMetadataDifference(HdfsSynchronizer.java:152)
+        at com.citusdata.sync.hdfs.HdfsSynchronizer.main(HdfsSynchronizer.java:69)
+解决办法, master和worker节点新建调用hadoop-sync脚本的操作系统角色.(本例为digoal用户)
+[root@db-172-16-3-150 hadoop]# su - citusdb
+citusdb@db-172-16-3-150-> psql postgres postgres
+psql (9.2.1)
+Type "help" for help.
+postgres=# create role digoal superuser login encrypted password 'DigoAL';
+CREATE ROLE
+# 其他worker节点操作同上
+
+3. hadoop 的getBlockLocalPathInfo只能使用启用Hadoop的用户调用. 如果使用其他用户, 如citusdb则会报错如下 : 
+
+2013-03-22 10:45:00,859 ERROR org.apache.hadoop.security.UserGroupInformation: PriviledgedActionException as:citusdb cause:org.apache.hadoop.security.AccessControlException: Can't continue with getBlockLocalPathInfo() authorization. The user citusdb is not allowed to call getBlockLocalPathInfo
+解决办法, 使用hadoop用户执行hadoop-sync脚本.
+[root@db-172-16-3-150 opt]# chown -R digoal:digoal hadoop-sync
+[root@db-172-16-3-150 opt]# su - digoal
+digoal@db-172-16-3-150-> java -jar /opt/hadoop-sync/target/hadoop-sync-0.1.jar customer_reviews --fetch-min-max
+2013-03-22 10:54:18,453 [main] INFO  hdfs.HdfsSynchronizer - synchronized metadata for table: customer_reviews
+
+4. 如果/etc/hosts中一个IP对应了多个主机名, 可能会造成问题, 例如 : 
+如果主机名配置
+
+cat /etc/hosts
+172.16.3.150 db-172-16-3-150.sky-mobi.com db-172-16-3-150
+172.16.3.33 db-172-16-3-33.sky-mobi.com db-172-16-3-33
+172.16.3.39 db-172-16-3-39.sky-mobi.com db-172-16-3-39
+172.16.3.40 db-172-16-3-40.sky-mobi.com db-172-16-3-40
+
+
+而 worker_list 配置了短名称
+
+[root@db-172-16-3-150 opt]# vi /opt/citusdb/2.0/data/pg_worker_list.conf
+db-172-16-3-33 9900
+db-172-16-3-39 9900
+db-172-16-3-40 9900
+
+
+查询时可能报如下错误
+
+postgres=# select * from customer_reviews limit 1;
+ERROR:  failed to assign 5 task(s) to worker nodes
+
+
+原因是nodename和pg_worker_list.conf中的配置不一致.
+
+postgres=# select * from pg_dist_shard_placement ;
+       shardid        | shardstate | shardlength |          nodename           | nodeport 
+----------------------+------------+-------------+-----------------------------+----------
+ -2048097437225231483 |          1 |    64029428 | db-172-16-3-33.sky-mobi.com |     9900
+ -2048097437225231483 |          1 |    64029428 | db-172-16-3-39.sky-mobi.com |     9900
+ -2048097437225231483 |          1 |    64029428 | db-172-16-3-40.sky-mobi.com |     9900
+ -1221512698612183530 |          1 |    67108864 | db-172-16-3-33.sky-mobi.com |     9900
+ -1221512698612183530 |          1 |    67108864 | db-172-16-3-39.sky-mobi.com |     9900
+ -1221512698612183530 |          1 |    67108864 | db-172-16-3-40.sky-mobi.com |     9900
+   631600631725577683 |          1 |    34190254 | db-172-16-3-33.sky-mobi.com |     9900
+   631600631725577683 |          1 |    34190254 | db-172-16-3-39.sky-mobi.com |     9900
+   631600631725577683 |          1 |    34190254 | db-172-16-3-40.sky-mobi.com |     9900
+  2698407172708592541 |          1 |    67108864 | db-172-16-3-33.sky-mobi.com |     9900
+  2698407172708592541 |          1 |    67108864 | db-172-16-3-39.sky-mobi.com |     9900
+  2698407172708592541 |          1 |    67108864 | db-172-16-3-40.sky-mobi.com |     9900
+  3598423008504059948 |          1 |    67108864 | db-172-16-3-33.sky-mobi.com |     9900
+  3598423008504059948 |          1 |    67108864 | db-172-16-3-39.sky-mobi.com |     9900
+  3598423008504059948 |          1 |    67108864 | db-172-16-3-40.sky-mobi.com |     9900
+(15 rows)
+
+
+解决办法是修改修改/etc/hosts, 同时修改pg_worker_list.conf, 以及hadoop的配置中设计主机名的部分. 
+
+[参考]
+1. http://www.citusdata.com/docs/sql-on-hadoop
+2. http://hadoop.apache.org/docs/r1.1.2/cluster_setup.html
+3. http://blog.163.com/digoal@126/blog/static/1638770402013219840831/
+4. http://blog.163.com/digoal@126/blog/static/16387704020132192011747/
+5. http://blog.163.com/digoal@126/blog/static/16387704020132189835346/
+Flag Counter

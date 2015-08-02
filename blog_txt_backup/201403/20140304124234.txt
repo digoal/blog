@@ -1,0 +1,140 @@
+PostgreSQL research
+
+Attention: pg_statsinfo 2.5.0 agent startup ERRO||BUG?
+
+2014-03-04 12:42:34   查看原文>>
+
+启动agent的时候, pg_statsinfo自动执行pg_statsinfo.sql脚本, 创建一些信息收集的函数.
+这个脚本会在本地的postgres数据库创建一个schema: statsinfo .
+而默认的连接数据库的用户和环境变量有关, 如果你配置了PGUSER不等于超级用户的话, 那么启动statsinfod这个服务将会失败.
+原因是没有权限在postgres库执行脚本pg_statsinfo.sql.
+如下, 如果PGUSER 环境变量配置为数据库的普通用户, 将报错 : 
+
+postgres@db-172-16-3-33-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1296
+LOG:  00000: loaded library "pg_statsinfo"
+LOCATION:  load_libraries, miscinit.c:1296
+LOG:  00000: redirecting log output to logging collector process
+HINT:  Future log output will appear in directory "pg_log".
+LOCATION:  SysLogger_Start, syslogger.c:649
+
+postgres@db-172-16-3-33-> 
+postgres@db-172-16-3-33-> 
+postgres@db-172-16-3-33-> 
+postgres@db-172-16-3-33-> LOG:  00000: pg_statsinfo launcher started
+LOCATION:  StatsinfoLauncherMain, libstatsinfo.c:2096
+ERROR: could not connect to database with "dbname=postgres port=5432 options='-c log_statement=none'": FATAL:  permission denied to set parameter "log_statement"
+WARNING:  01000: pg_statsinfod is aborted with fatal error
+LOCATION:  StatsinfoLauncherMain, libstatsinfo.c:2170
+
+
+原因是在相关代码中未设置启动用户, 只设置了dbname=postgres.
+
+postgres@db-172-16-3-33-> cd /opt/soft_bak/pg_statsinfo-2.5.0
+postgres@db-172-16-3-33-> grep -r log_statement *
+agent/bin/collector.c:          "dbname=%s port=%s options='-c log_statement=none'", db, postmaster_port);
+agent/bin/pg_statsinfod.c:              "dbname=%s port=%s options='-c log_statement=none'",
+Binary file agent/bin/pg_statsinfod matches
+Binary file agent/bin/writer.o matches
+Binary file agent/bin/pg_statsinfod.o matches
+agent/bin/writer.c:                     "%s options='-c log_statement=none'", my_repository_server);
+Binary file agent/bin/collector.o matches
+test/script/function-logger.sh:update_pgconfig ${PGDATA} "log_statement" "'all'"
+test/script/function-logger.sh:delete_pgconfig ${PGDATA} "log_statement"
+test/script/function-logger.sh:update_pgconfig ${PGDATA} "log_statement" "'all'"
+相关代码摘自
+PGconn *
+collector_connect(const char *db)
+{
+        char       *pgdb;
+        char            info[1024];
+        const char *schema;
+
+        if (db == NULL)
+        {
+                /* default connect */
+                db = "postgres";
+                schema = "statsinfo";
+        }
+        else
+        {
+                /* no schema required */
+                schema = NULL;
+        }
+...
+#ifdef DEBUG
+        snprintf(info, lengthof(info),
+                "dbname=%s port=%s", db, postmaster_port);
+#else
+        snprintf(info, lengthof(info),
+                "dbname=%s port=%s options='-c log_statement=none'", db, postmaster_port);
+#endif
+        return do_connect(&collector_conn, info, schema);
+}
+
+
+
+修改对应的环境变量后, 可以正常启动statsinfod.
+
+postgres@db-172-16-3-33-> export PGUSER=postgres
+postgres@db-172-16-3-33-> pg_ctl restart -m fast
+waiting for server to shut down....LOG:  00000: pg_statsinfo launcher shutting down
+LOCATION:  StatsinfoLauncherMain, libstatsinfo.c:2207
+ done
+server stopped
+server starting
+postgres@db-172-16-3-33-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1296
+LOG:  00000: loaded library "pg_statsinfo"
+LOCATION:  load_libraries, miscinit.c:1296
+LOG:  00000: redirecting log output to logging collector process
+HINT:  Future log output will appear in directory "pg_log".
+LOCATION:  SysLogger_Start, syslogger.c:649
+
+postgres@db-172-16-3-33-> LOG:  00000: pg_statsinfo launcher started
+LOCATION:  StatsinfoLauncherMain, libstatsinfo.c:2096
+LOG: start
+LOG: installing schema: statsinfo
+
+postgres@db-172-16-3-33-> 
+postgres@db-172-16-3-33-> 
+postgres@db-172-16-3-33-> psql
+psql (9.3.2)
+Type "help" for help.
+
+digoal=# \c postgres postgres
+You are now connected to database "postgres" as user "postgres".
+postgres=# \dn
+   List of schemas
+   Name    |  Owner   
+-----------+----------
+ public    | postgres
+ statsinfo | postgres
+(2 rows)
+
+
+因此需要注意, 如果你的系统使用了自动启动数据库的脚本, 在脚本中务必配置好对应的环境变量, 超级用户.
+例如
+PGDATABASE
+PGUSER
+PGPORT
+PGHOST
+等.
+
+还好对于standby节点可以大胆的使用, 因为有判断.
+
+                /* avoid connection fails during recovery and warm-standby */
+                switch (ctrl.state)
+                {
+                        case DB_IN_PRODUCTION:
+#if PG_VERSION_NUM >= 90000
+                        case DB_IN_ARCHIVE_RECOVERY:    /* hot-standby accepts connections */
+#endif
+                                break;                  /* ok, do connect */
+                        default:
+                                delay();
+                                return NULL;    /* server is not ready for accepting connections */
+                }
+        }
+
+

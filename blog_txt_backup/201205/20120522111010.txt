@@ -1,0 +1,242 @@
+PostgreSQL research
+
+PostgreSQL 9.2 Allow sorting to be performed by inlined and faster, non-SQL-callable comparison functions
+
+2012-05-22 11:10:10   查看原文>>
+
+PostgreSQL 9.2 beta1 release notes中提到
+Allow sorting to be performed by inlined and faster, non-SQL-callable comparison functions (Peter Geoghegan, Robert Haas, Tom Lane)
+没有细说, 但是通过查看源码看出了一点端倪, 以前的版本在对两个值进行比较时, 重复调用相应的SQL函数进行的比较, 如cmp(x,y) 返回int类型.
+<0 表示x<y. =0 表示x=y, >0表示x>y. 进行排序. (调用的比较函数必须是btree 支持的操作符支持的函数, 可以在pg_amproc中查询得到)
+由于调用的SQL函数, 所以带来了一些overheard.
+PostgreSQL 9.2 加入了SortSupport接口, 允许inlined的执行排序和值的比较操作. 
+通过下面的测试, PostgreSQL 9.2这种类型的操作性能提升36%.
+
+/*-------------------------------------------------------------------------
+ *
+ * sortsupport.h
+ *        Framework for accelerated sorting.
+ *
+ * Traditionally, PostgreSQL has implemented sorting by repeatedly invoking
+ * an SQL-callable comparison function "cmp(x, y) returns int" on pairs of
+ * values to be compared, where the comparison function is the BTORDER_PROC
+ * pg_amproc support function of the appropriate btree index opclass.
+ *
+ * This file defines alternative APIs that allow sorting to be performed with
+ * reduced overhead.  To support lower-overhead sorting, a btree opclass may
+ * provide a BTSORTSUPPORT_PROC pg_amproc entry, which must take a single
+ * argument of type internal and return void.  The argument is actually a
+ * pointer to a SortSupportData struct, which is defined below.
+ *
+ * If provided, the BTSORTSUPPORT function will be called during sort setup,
+ * and it must initialize the provided struct with pointers to function(s)
+ * that can be called to perform sorting.  This API is defined to allow
+ * multiple acceleration mechanisms to be supported, but no opclass is
+ * required to provide all of them.  The BTSORTSUPPORT function should
+ * simply not set any function pointers for mechanisms it doesn't support.
+ * (However, all opclasses that provide BTSORTSUPPORT are required to provide
+ * the comparator function.)
+ *
+ * All sort support functions will be passed the address of the
+ * SortSupportData struct when called, so they can use it to store
+ * additional private data as needed.  In particular, for collation-aware
+ * datatypes, the ssup_collation field is set before calling BTSORTSUPPORT
+ * and is available to all support functions.  Additional opclass-dependent
+ * data can be stored using the ssup_extra field.  Any such data
+ * should be allocated in the ssup_cxt memory context.
+ *
+ * Note: since pg_amproc functions are indexed by (lefttype, righttype)
+ * it is possible to associate a BTSORTSUPPORT function with a cross-type
+ * comparison.  This could sensibly be used to provide a fast comparator
+ * function for such cases, but probably not any other acceleration method.
+
+
+SortSupportData数据结构 : 
+
+typedef struct SortSupportData
+{
+        /*
+         * These fields are initialized before calling the BTSORTSUPPORT function
+         * and should not be changed later.
+         */
+        MemoryContext ssup_cxt;                         /* Context containing sort info */
+        Oid                     ssup_collation;                 /* Collation to use, or InvalidOid */
+
+        /*
+         * Additional sorting parameters; but unlike ssup_collation, these can
+         * be changed after BTSORTSUPPORT is called, so don't use them in
+         * selecting sort support functions.
+         */
+        bool            ssup_reverse;                   /* descending-order sort? */
+        bool            ssup_nulls_first;               /* sort nulls first? */
+
+        /*
+         * These fields are workspace for callers, and should not be touched by
+         * opclass-specific functions.
+         */
+        AttrNumber      ssup_attno;                             /* column number to sort */
+
+        /*
+         * ssup_extra is zeroed before calling the BTSORTSUPPORT function, and
+         * is not touched subsequently by callers.
+         */
+        void       *ssup_extra;                         /* Workspace for opclass functions */
+
+        /*
+         * Function pointers are zeroed before calling the BTSORTSUPPORT function,
+         * and must be set by it for any acceleration methods it wants to supply.
+         * The comparator pointer must be set, others are optional.
+         */
+
+        /*
+         * Comparator function has the same API as the traditional btree
+         * comparison function, ie, return <0, 0, or >0 according as x is less
+         * than, equal to, or greater than y.  Note that x and y are guaranteed
+         * not null, and there is no way to return null either.  Do not return
+         * INT_MIN, as callers are allowed to negate the result before using it.
+         */
+        int                     (*comparator) (Datum x, Datum y, SortSupport ssup);
+
+        /*
+         * Additional sort-acceleration functions might be added here later.
+         */
+} SortSupportData;
+
+
+以下截取PostgreSQL 9.2的src/backend/access/nbtree/nbtcompare.c中的部分, 添加了
+btint2fastcmp(Datum x, Datum y, SortSupport ssup)
+和
+btint2sortsupport(PG_FUNCTION_ARGS)
+
+-- PostgreSQL 9.2以前版本中没有fastcmp和sortsupport相关的代码, 只有btint2cmp这个.
+Datum
+btint2cmp(PG_FUNCTION_ARGS)
+{
+        int16           a = PG_GETARG_INT16(0);
+        int16           b = PG_GETARG_INT16(1);
+
+        PG_RETURN_INT32((int32) a - (int32) b);
+}
+
+static int
+btint2fastcmp(Datum x, Datum y, SortSupport ssup)
+{
+        int16           a = DatumGetInt16(x);
+        int16           b = DatumGetInt16(y);
+
+        return (int) a - (int) b;
+}
+
+Datum
+btint2sortsupport(PG_FUNCTION_ARGS)
+{
+        SortSupport     ssup = (SortSupport) PG_GETARG_POINTER(0);
+
+        ssup->comparator = btint2fastcmp;
+        PG_RETURN_VOID();
+}
+
+
+接下来分别针对PostgreSQL 9.1和PostgreSQL 9.2 测试以下int类型的排序和compare的性能，以体现9.2的性能提升.
+-- 新建测试表, 测试数据
+
+create table t1 (id int,info text);
+insert into t1 select generate_series(1,1000000),'digoal'||generate_series(1,1000000);
+create index idx_t1_id on t1(id);
+analyze t1;
+
+
+--  pgbench文件
+vi ssup.sql
+
+\setrandom id 1 1000000
+select * from t1 where id>:id order by id limit 1;
+
+
+
+一、PostgreSQL 9.1
+
+test=> select * from pgfadvise_willneed('t1');
+                   relpath                    | os_page_size | rel_os_pages | os_pages_free 
+----------------------------------------------+--------------+--------------+---------------
+ pg_tblspc/16386/PG_9.1_201105231/16387/24644 |         4096 |        12548 |        616865
+(1 row)
+test=> select * from pgfadvise_willneed('idx_t1_id');
+                   relpath                    | os_page_size | rel_os_pages | os_pages_free 
+----------------------------------------------+--------------+--------------+---------------
+ pg_tblspc/16386/PG_9.1_201105231/16387/24650 |         4096 |         5490 |        616803
+(1 row)
+
+
+-- pgbench测试结果 : 
+
+pgdba2000@db-172-16-3-33-> pgbench -M prepared -c 8 -j 8 -f ./ssup.sql -n -r -T 60 -h 127.0.0.1 -U test test
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 5034661
+tps = 83900.899617 (including connections establishing)
+tps = 83909.443190 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001803        \setrandom id 1 1000000
+        0.091438        select * from t1 where id>:id order by id limit 1;
+
+
+
+二、PostgreSQL 9.2
+
+digoal=# select * from pgfadvise_willneed('t1');
+     relpath      | os_page_size | rel_os_pages | os_pages_free 
+------------------+--------------+--------------+---------------
+ base/16384/16999 |         4096 |        12548 |        612161
+(1 row)
+digoal=# select * from pgfadvise_willneed('idx_t1_id');
+     relpath      | os_page_size | rel_os_pages | os_pages_free 
+------------------+--------------+--------------+---------------
+ base/16384/17005 |         4096 |         5490 |        612161
+(1 row)
+
+
+-- pgbench测试结果 : 
+
+pg92@db-172-16-3-33-> pgbench -M prepared -c 8 -j 8 -f ./ssup.sql -n -r -T 60 -h 127.0.0.1 -U postgres digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 6857931
+tps = 114287.381261 (including connections establishing)
+tps = 114302.459815 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001504        \setrandom id 1 1000000
+        0.066795        select * from t1 where id>:id order by id limit 1;
+
+
+PostgreSQL 9.2 性能提升 : 
+
+digoal=# select (114287.0-83900.0)/83900.0;
+        ?column?        
+------------------------
+ 0.36218116805721096544
+
+
+
+【参考】
+src/include/utils/sortsupport.h
+src/backend/utils/sort/sortsupport.c
+src/backend/access/nbtree/nbtcompare.c
+src/backend/commands/analyze.c
+src/backend/utils/sort/qsort_tuple.c
+src/backend/utils/sort/tuplesort.c
+src/backend/utils/adt/date.c
+src/backend/utils/adt/array_typanalyze.c
+src/backend/utils/adt/array_selfuncs.c
+src/backend/utils/adt/timestamp.c
+src/backend/utils/adt/float.c
+src/backend/executor/nodeMergeAppend.c
+src/backend/executor/nodeMergejoin.c

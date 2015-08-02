@@ -1,0 +1,181 @@
+PostgreSQL research
+
+PostgreSQL 9.4 New Feature - freeze by set HEAP_XMIN_COMMITTED | HEAP_XMIN_INVALID in t_infomask
+
+2014-05-06 14:30:33   查看原文>>
+
+PostgreSQL 9.4 修改了freeze的代码, 以往的版本是通过修改行头部的xmin并置为FrozenXID(2)来实现vacuum freeze的.
+也就是说, freeze后的行丢失了原来的版本信息.
+例如 : 
+
+digoal=# create table test(id int);
+CREATE TABLE
+digoal=# insert into test values (1);
+INSERT 0 1
+digoal=# insert into test values (2);
+INSERT 0 1
+digoal=# insert into test values (3);
+INSERT 0 1
+digoal=# insert into test values (4);
+INSERT 0 1
+digoal=# select ctid,cmin,cmax,xmin,xmax,* from test;
+ ctid  | cmin | cmax | xmin | xmax | id 
+-------+------+------+------+------+----
+ (0,1) |    0 |    0 | 1817 |    0 |  1
+ (0,2) |    0 |    0 | 1818 |    0 |  2
+ (0,3) |    0 |    0 | 1819 |    0 |  3
+ (0,4) |    0 |    0 | 1820 |    0 |  4
+(4 rows)
+digoal=# vacuum FREEZE test;
+VACUUM
+digoal=# select ctid,cmin,cmax,xmin,xmax,* from test;
+ ctid  | cmin | cmax | xmin | xmax | id 
+-------+------+------+------+------+----
+ (0,1) |    0 |    0 |    2 |    0 |  1
+ (0,2) |    0 |    0 |    2 |    0 |  2
+ (0,3) |    0 |    0 |    2 |    0 |  3
+ (0,4) |    0 |    0 |    2 |    0 |  4
+(4 rows)
+
+
+freeze后, 版本xmin变成2了.
+9.4通过两个比特位来表示freeze, 即t_infomask的HEAP_XMIN_COMMITTED | HEAP_XMIN_INVALID.
+详细的提交信息如下 : 
+
+Change the way we mark tuples as frozen.
+author  Robert Haas <rhaas@postgresql.org>
+Sun, 22 Dec 2013 20:49:09 +0000 (15:49 -0500)
+committer       Robert Haas <rhaas@postgresql.org>
+Sun, 22 Dec 2013 20:49:09 +0000 (15:49 -0500)
+commit  37484ad2aacef5ec794f4dd3d5cf814475180a78
+tree    ad9ca294fdb229d6b24309d90b9ee4e0b9a31b0a        tree | snapshot
+parent  961bf59fb7a7e4fab751e20e9372de7ab37c5649        commit | diff
+Change the way we mark tuples as frozen.
+
+Instead of changing the tuple xmin to FrozenTransactionId, the combination
+of HEAP_XMIN_COMMITTED and HEAP_XMIN_INVALID, which were previously never
+set together, is now defined as HEAP_XMIN_FROZEN.  A variety of previous
+proposals to freeze tuples opportunistically before vacuum_freeze_min_age
+is reached have foundered on the objection that replacing xmin by
+FrozenTransactionId might hinder debugging efforts when things in this
+area go awry; this patch is intended to solve that problem by keeping
+the XID around (but largely ignoring the value to which it is set).
+
+Third-party code that checks for HEAP_XMIN_INVALID on tuples where
+HEAP_XMIN_COMMITTED might be set will be broken by this change.  To fix,
+use the new accessor macros in htup_details.h rather than consulting the
+bits directly.  HeapTupleHeaderGetXmin has been modified to return
+FrozenTransactionId when the infomask bits indicate that the tuple is
+frozen; use HeapTupleHeaderGetRawXmin when you already know that the
+tuple isn't marked commited or frozen, or want the raw value anyway.
+We currently do this in routines that display the xmin for user consumption,
+in tqual.c where it's known to be safe and important for the avoidance of
+extra cycles, and in the function-caching code for various procedural
+languages, which shouldn't invalidate the cache just because the tuple
+gets frozen.
+
+Robert Haas and Andres Freund
+
+
+测试 : 
+
+digoal=# create table test(id int);
+CREATE TABLE
+digoal=# insert into test values (1);
+INSERT 0 1
+digoal=# insert into test values (2);
+INSERT 0 1
+digoal=# insert into test values (3);
+INSERT 0 1
+digoal=# insert into test values (4);
+INSERT 0 1
+digoal=# select ctid,cmin,cmax,xmin,xmax,* from test;
+ ctid  | cmin | cmax |  xmin   | xmax | id 
+-------+------+------+---------+------+----
+ (0,1) |    0 |    0 | 8609332 |    0 |  1
+ (0,2) |    0 |    0 | 8609333 |    0 |  2
+ (0,3) |    0 |    0 | 8609334 |    0 |  3
+ (0,4) |    0 |    0 | 8609335 |    0 |  4
+(4 rows)
+
+digoal=# vacuum FREEZE test;
+VACUUM
+digoal=# select ctid,cmin,cmax,xmin,xmax,* from test;
+ ctid  | cmin | cmax |  xmin   | xmax | id 
+-------+------+------+---------+------+----
+ (0,1) |    0 |    0 | 8609332 |    0 |  1
+ (0,2) |    0 |    0 | 8609333 |    0 |  2
+ (0,3) |    0 |    0 | 8609334 |    0 |  3
+ (0,4) |    0 |    0 | 8609335 |    0 |  4
+(4 rows)
+
+
+显然9.4没有直接修改xmin, 依旧保留了行版本信息.
+从t_infomask可以得到9.4定义了以下3个比特位, 其中HEAP_XMIN_COMMITTED|HEAP_XMIN_INVALID同时被定义说明是frozen的行.
+
+#define HEAP_XMIN_COMMITTED             0x0100  /* t_xmin committed */
+#define HEAP_XMIN_INVALID               0x0200  /* t_xmin invalid/aborted */
+#define HEAP_XMIN_FROZEN                (HEAP_XMIN_COMMITTED|HEAP_XMIN_INVALID)
+#define HEAP_XMAX_INVALID               0x0800  /* t_xmax invalid/aborted */
+
+digoal=# select * from heap_page_items(get_raw_page('test',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin  | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+---------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8160 |        1 |     28 | 8609332 |      0 |        0 | (0,1)  |           1 |       2816 |     24 |        |      
+  2 |   8128 |        1 |     28 | 8609333 |      0 |        0 | (0,2)  |           1 |       2816 |     24 |        |      
+  3 |   8096 |        1 |     28 | 8609334 |      0 |        0 | (0,3)  |           1 |       2816 |     24 |        |      
+  4 |   8064 |        1 |     28 | 8609335 |      0 |        0 | (0,4)  |           1 |       2816 |     24 |        |      
+(4 rows)
+
+
+
+同时9.4还对vacuum full和cluster做出了改进, 在使用vacuum full和cluste重组表时, 直接填充行的FROZEN比特位, 这样的话这个表不需要后续的freeze, 同时对pg_class中对应表的年龄也做出了同步的修改.
+这是个不小的改进, 节约了大量的freeze带来的读写IO.
+
+digoal=# truncate test;
+TRUNCATE TABLE
+digoal=# insert into test values (1);
+INSERT 0 1
+digoal=# insert into test values (2);
+INSERT 0 1
+digoal=# insert into test values (3);
+INSERT 0 1
+digoal=# insert into test values (4);
+INSERT 0 1
+digoal=# select * from heap_page_items(get_raw_page('test',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin  | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+---------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8160 |        1 |     28 | 8609338 |      0 |        0 | (0,1)  |           1 |       2048 |     24 |        |      
+  2 |   8128 |        1 |     28 | 8609339 |      0 |        0 | (0,2)  |           1 |       2048 |     24 |        |      
+  3 |   8096 |        1 |     28 | 8609340 |      0 |        0 | (0,3)  |           1 |       2048 |     24 |        |      
+  4 |   8064 |        1 |     28 | 8609341 |      0 |        0 | (0,4)  |           1 |       2048 |     24 |        |      
+(4 rows)
+digoal=# select age(relfrozenxid) from pg_class where relname='test';
+ age 
+-----
+   5
+(1 row)
+digoal=# vacuum full test;
+VACUUM
+digoal=# select * from heap_page_items(get_raw_page('test',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin  | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+---------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8160 |        1 |     28 | 8609338 |      0 |        0 | (0,1)  |           1 |       2816 |     24 |        |      
+  2 |   8128 |        1 |     28 | 8609339 |      0 |        0 | (0,2)  |           1 |       2816 |     24 |        |      
+  3 |   8096 |        1 |     28 | 8609340 |      0 |        0 | (0,3)  |           1 |       2816 |     24 |        |      
+  4 |   8064 |        1 |     28 | 8609341 |      0 |        0 | (0,4)  |           1 |       2816 |     24 |        |      
+(4 rows)
+digoal=# select age(relfrozenxid) from pg_class where relname='test';
+ age 
+-----
+   1
+(1 row)
+
+
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=37484ad2aacef5ec794f4dd3d5cf814475180a78
+2. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=3cff1879f8d03cb729368722ca823a4bf74c0cac
+3. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=af2543e884db06c0beb75010218cd88680203b86
+4. src/include/access/htup_details.h
+Flag Counter

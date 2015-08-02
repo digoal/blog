@@ -1,0 +1,439 @@
+PostgreSQL research
+
+OCZ pci-e revodrive3 240GB & DELL SSD 2.5 SATA 200GB & SAS 2.5 146GB 10K
+
+2012-11-27 12:29:31   查看原文>>
+
+本文主要目的是测试三种硬盘的PostgreSQL的select, update, insert性能, 反映这三种硬盘的IOPS能力.
+这三种硬盘分别是 : 
+
+1. OCZ RevoDrive3 PCI-E 240GB
+2. DELL SSD 2.5寸 SATA 200GB
+3. DELL 10K转 2.5寸 SAS 146GB
+
+
+同插在一台DELL R610的服务器上.
+OCZ硬盘使用请参见 : 
+http://blog.163.com/digoal@126/blog/static/1638770402012102613815282/
+
+测试环境 : 
+
+CentOS 5.7 x64
+PostgreSQL 9.2.1
+
+
+编译参数 : 
+
+./configure --prefix=/home/ocz/pgsql9.2.1 --with-pgport=9201 --with-perl --with-python --with-tcl --with-openssl --with-pam --without-ldap --with-libxml --with-libxslt --enable-thread-safety --with-wal-blocksize=16 --enable-debug --with-ossp-uuid --with-libs=/opt/uuid-1.6.2/lib
+
+
+配置文件 : 
+
+ocz@db-172-16-3-150-> cat postgresql.conf|grep -i "^\ *[a-z]"
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 9201                             # (change requires restart)
+max_connections = 1000                  # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directory = '.'             # (change requires restart)
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+tcp_keepalives_idle = 60                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 10            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 10               # TCP_KEEPCNT;
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+max_stack_depth = 8MB                   # min 100kB
+shared_preload_libraries = 'pg_stat_statements'         # (change requires restart)
+bgwriter_delay = 10ms                   # 10-10000ms between rounds
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+fsync = on                              # turns forced synchronization on or off
+synchronous_commit = on         # synchronization level;
+wal_sync_method = open_sync             # the default is the first option
+full_page_writes = on                   # recover from partial page writes
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+checkpoint_segments = 128               # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+max_wal_senders = 32            # max number of walsender processes
+wal_keep_segments = 256         # in logfile segments, 16MB each; 0 disables
+hot_standby = on                        # "on" allows queries during recovery
+wal_receiver_status_interval = 1s       # send replies at least this often
+hot_standby_feedback = on               # send info from standby to prevent
+random_page_cost = 1.0                  # same scale as above
+effective_cache_size = 90000MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = 'pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_checkpoints = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+pg_stat_statements.max = 1000
+pg_stat_statements.track = all
+
+
+
+测试表 : 
+
+digoal=> create table ocz_test(id int, info text, crt_time timestamp without time zone);
+
+
+
+测试数据 : 
+
+digoal=> insert into ocz_test select generate_series(1,10000000),repeat(clock_timestamp()::text, 10),clock_timestamp();
+digoal=> alter table ocz_test add constraint ocz_test_pkey primary key (id);
+
+
+
+测试函数 : 
+测试读取,写入,更新.
+
+digoal=> create or replace function f_ocz_test (i_id int) returns void as $BODY$
+declare
+begin
+perform 1 from ocz_test where id=i_id;
+if not found then
+  insert into ocz_test (id, info, crt_time) values (i_id, repeat(clock_timestamp()::text, 10), clock_timestamp());
+else
+  update ocz_test set info=repeat(clock_timestamp()::text, 10), crt_time=clock_timestamp() where id=i_id;
+end if;
+return;
+exception
+  when others then
+    return;
+end;
+$BODY$ language plpgsql;
+
+
+
+测试脚本 : 
+随即取数1到1亿, 超过基础数据, 所以有1/10的机会update, 9/10的机会insert, 100%的机会select.
+
+ocz@db-172-16-3-150-> cat ocz_test.sql 
+\setrandom id 1 100000000
+select f_ocz_test(:id);
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+
+
+
+测试方法 : 
+关闭RAID write cache, 关闭OCZ write cache. 开启同步提交. 确保测试得出的数据真实的反映硬盘的IO能力.
+关闭DELL 服务器上带的raid卡的写cache, 使用 write through : 
+OCZ pci-e revodrive3 240GB DELL SSD 2.5 sata-2 200GB SAS 2.5 146GB 10K - 德哥@Digoal - The Heart,The World.
+ 
+关闭OCZ 硬盘的写cache.
+
+[root@db-172-16-3-150 ~]# hdparm -W 0 /dev/mapper/mpath1
+/dev/mapper/mpath1:
+ setting drive write-caching to 0 (off)
+
+
+OCZ SSD测试结果 : 
+1. fdatasync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = fdatasync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 867098
+tps = 14450.950285 (including connections establishing)
+tps = 14452.524843 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002270        \setrandom id 1 100000000
+        0.548933        select f_ocz_test(:id);
+
+
+2. fsync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = fsync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 63334
+tps = 1055.390434 (including connections establishing)
+tps = 1055.525152 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003106        \setrandom id 1 100000000
+        7.572679        select f_ocz_test(:id);
+
+
+3. open_sync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = open_sync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 864942
+tps = 14410.387611 (including connections establishing)
+tps = 14412.032858 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002245        \setrandom id 1 100000000
+        0.550355        select f_ocz_test(:id);
+
+
+DELL SSD 2.5寸 SATA接口 200GB硬盘 : 
+数据目录和表空间目录移到DELL SSD硬盘后测试 : 
+1. fdatasync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = fdatasync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 41067
+tps = 684.307504 (including connections establishing)
+tps = 684.386309 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003403        \setrandom id 1 100000000
+        11.681978       select f_ocz_test(:id);
+
+
+2. fsync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = fsync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 40289
+tps = 671.344007 (including connections establishing)
+tps = 671.420270 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003300        \setrandom id 1 100000000
+        11.907794       select f_ocz_test(:id);
+
+
+3. open_sync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = open_sync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 41235
+tps = 687.096892 (including connections establishing)
+tps = 687.180406 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003390        \setrandom id 1 100000000
+        11.634480       select f_ocz_test(:id);
+
+
+DELL SAS 2.5寸 SAS接口 146GB 10K转速机械硬盘 : 
+数据目录和表空间目录移到DELL 机械硬盘后测试 : 
+1.fdatasync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = fdatasync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 37679
+tps = 627.889642 (including connections establishing)
+tps = 627.951509 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003394        \setrandom id 1 100000000
+        12.732292       select f_ocz_test(:id);
+
+
+2. fsync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = fsync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 9831
+tps = 163.736413 (including connections establishing)
+tps = 163.759836 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003614        \setrandom id 1 100000000
+        48.832661       select f_ocz_test(:id);
+
+
+3. open_sync
+
+wal_sync_method : 
+wal_level = hot_standby
+fsync = on
+synchronous_commit = on
+wal_sync_method = open_sync
+
+ocz@db-172-16-3-150-> pg_ctl stop -m fast
+waiting for server to shut down..... done
+server stopped
+ocz@db-172-16-3-150-> pg_ctl start
+server starting
+ocz@db-172-16-3-150-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1249
+
+ocz@db-172-16-3-150-> pgbench -M prepared -n -f ./ocz_test.sql -r -c 8 -j 8 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 8
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 37707
+tps = 628.375098 (including connections establishing)
+tps = 628.435232 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003443        \setrandom id 1 100000000
+        12.722869       select f_ocz_test(:id);
+
+
+
+【测试结果对比】
+OCZ pci-e revodrive3 240GB DELL SSD 2.5 sata-2 200GB SAS 2.5 146GB 10K - 德哥@Digoal - The Heart,The World.
+
+【参考】
+1. http://www.amazon.com/Seagate-Pulsar-2-2-5-Inch-Internal-ST100FM0002/dp/tech-data/B0089V4XQO/ref=de_a_smtd
+2. http://www.amazon.com/OCZ-RevoDrive-Express-Solid-State/dp/B005F30JBM/ref=sr_1_2?ie=UTF8&qid=1353997791&sr=8-2&keywords=revodrive
+3. http://www.seagate.com/internal-hard-drives/solid-state-hybrid/pulsar-solid-state-drives/specs/#
+
+评论
+
+francs - 2012-11-30 14:09:08
+
+ OCZ SSD 快了不止一个数量级啊。

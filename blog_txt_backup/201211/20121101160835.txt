@@ -1,0 +1,434 @@
+PostgreSQL research
+
+PostgreSQL tuning case: multi materialized table to single source table
+
+2012-11-01 16:08:35   查看原文>>
+
+最近在搞某项目从Oracle迁移到PostgreSQL的事情, 其中有个数据监控系统, 原来的做法是把生产Oracle里的单个表同步出来到监控数据库的2个表里面, 然后在监控数据库里面这两个表和其他的表进行关联统计. 其实就是用户的订单信息和订单确认信息进行关联, 统计实际确认的订单信息.
+切换到PostgreSQL后, 不打算再专门设立监控数据库, 而是让监控系统直接连生产数据库进行统计, 并且不打算把原来的单个表拆成2个表, 也就是说用户的订单记录和确认记录还是往同一个表插入. 
+所以切换后的监控SQL需要变一变, 其实也挺简单的, 只是用到了WITH, 窗口函数, 函数索引来进行优化. 
+总体来说和前面一篇《SQL tuning example(max speedup 2400 times) : use function index and use window function prevent subquery》比较类似.
+下面简单的讲解一下 : 
+1. 原来Oracle的数据同步过程如下 : 
+1.1 
+
+PROCEDURE     p_sync_digoal_new as
+  v_sql  varchar2(2000);
+  v_max_id number;
+begin
+    --ump
+    select max(id) into v_max_id from tbl_app_digoal_ump;
+    insert into tbl_app_digoal_ump nologging select id,mobile,'32','500',price/100 as price,createtime,status,orderid
+    from chss.TBL_digoal_ORDER_INFO@ump
+      where id>v_max_id;
+    commit;
+    insert into tbl_app_digoal nologging
+    select seq_app_digoal.nextval,phonenum,type,spcode,cost,motime,reserve,transactionid from tbl_app_digoal_ump
+    where id>v_max_id and motime is not null;
+    commit;
+END p_sync_digoal_new;
+
+
+1.2 
+
+PROCEDURE     p_sync_digoal_mr_new as
+  v_sql  varchar2(2000);
+  v_max_id number;
+begin
+    --ump
+    select max(id) into v_max_id from tbl_app_digoal_mr_ump;
+    insert into tbl_app_digoal_mr_ump nologging select id,'500',mobile,'DELIVRD',LASTNOTIFYTIME,orderid
+    from chss.TBL_digoal_ORDER_INFO@ump
+    where id>v_max_id;
+    commit;
+    insert into tbl_app_digoal_mr nologging
+    select seq_app_digoal_mr.nextval,spcode,phonenum,status,mrtime,transactionid from tbl_app_digoal_mr_ump
+    where id>v_max_id and mrtime is not null;
+    commit;
+END p_sync_digoal_mr_new;
+
+
+其中涉及的表如下 : 
+
+CREATE TABLE TBL_APP_digoal
+(
+  ID             NUMBER(20)                     NOT NULL,
+  PHONENUM       VARCHAR2(45 BYTE)              NOT NULL,
+  TYPE           VARCHAR2(9 BYTE),
+  SPCODE         VARCHAR2(9 BYTE)               NOT NULL,
+  COST           VARCHAR2(15 BYTE),
+  MOTIME         DATE,
+  RESERVE        VARCHAR2(6 BYTE),
+  TRANSACTIONID  VARCHAR2(96 BYTE)
+);
+CREATE TABLE TBL_APP_digoal_MR
+(
+  ID             NUMBER                         NOT NULL,
+  SPCODE         VARCHAR2(9 BYTE),
+  PHONENUM       VARCHAR2(45 BYTE),
+  STATUS         VARCHAR2(75 BYTE),
+  MRTIME         DATE,
+  TRANSACTIONID  VARCHAR2(96 BYTE)
+);
+CREATE TABLE TBL_APP_digoal_UMP
+(
+  ID             NUMBER(20)                     NOT NULL,
+  PHONENUM       VARCHAR2(45 BYTE)              NOT NULL,
+  TYPE           VARCHAR2(9 BYTE),
+  SPCODE         VARCHAR2(9 BYTE)               NOT NULL,
+  COST           VARCHAR2(15 BYTE),
+  MOTIME         DATE,
+  RESERVE        VARCHAR2(6 BYTE),
+  TRANSACTIONID  VARCHAR2(96 BYTE)
+);
+CREATE TABLE TBL_APP_digoal_MR_UMP
+(
+  ID             NUMBER                         NOT NULL,
+  SPCODE         VARCHAR2(9 BYTE),
+  PHONENUM       VARCHAR2(45 BYTE),
+  STATUS         VARCHAR2(75 BYTE),
+  MRTIME         DATE,
+  TRANSACTIONID  VARCHAR2(96 BYTE)
+);
+
+
+监控系统的数据均来自chss.TBL_digoal_ORDER_INFO@ump这个表. 
+其中 LASTNOTIFYTIME is not null 的数据插入到了tbl_app_digoal_mr .
+其中 createtime is not null 的数据插入到了tbl_app_digoal .
+
+2. 监控程序用到了tbl_app_digoal和tbl_app_digoal_mr这两个表, 4个SQL如下 : 
+2.1 //SpMrStatisticsService
+
+static final String SQL_SELECT_DATA_FROM_ORACLE = " select a1.spcode,sum(a1.cost) as income,count(0) as itemcount,a2.provincecode,a2.city,a2.provider "+
+                                                      " from "+
+                                                      " (select t1.spcode,t1.phonenum,t2.cost from tbl_app_digoal_mr t1,"+
+                                                      " (select distinct phonenum,cost,transactionid,spcode from tbl_app_digoal)  t2 "+
+                                                      " where t1.status='DELIVRD' and "+
+                                                      " substr(to_char(t1.mrtime,'yyyymmddhh24mi'),1,11)=? "+
+                                                      " and t1.transactionid=t2.transactionid and t1.spcode=t2.spcode "+
+                                                      " and t1.phonenum=t2.phonenum) a1,tbl_mobile a2 "+
+                                                      " where substr(a1.phonenum,1,7)=a2.phonenum(+) "+
+                                                      " group by a1.spcode,a2.provincecode,a2.city,a2.provider";
+
+
+
+2.2 //SpMoStatisticsService
+
+static final String SQL_SELECT_DATA_FROM_ORACLE = "select t1.spcode,sum(to_number(t1.cost)) as mosum,t2.provider,t2.provincecode,t2.city,max(substr(to_char(t1.motime,'yyyymmddhh24mi'),1,11)) as stattime "
+   + " from tbl_app_digoal t1,tbl_mobile t2 "
+   + " where substr(t1.phonenum,1,7)=t2.phonenum(+) "
+   + " and substr(to_char(t1.motime,'yyyymmddhh24mi'),1,11)=? "
+   + " group by t2.provider,t1.spcode,t2.provincecode,t2.city";
+
+
+
+2.3 //MrStatisticService
+
+static final String SQL_SELECT_DATA_FROM_ORACLE2
+    ="select t1.newstatus as status,"
+    +" t1.spcode,count(t1.id) as mrsum,t2.provider,t2.provincecode,t2.city, "
+    +" max(substr(to_char(t1.mrtime,'yyyymmddhh24mi'),1,11)) as stattime "
+    +" from "
+    +" (select (case when status='DELIVRD' then 'DELIVRD' else '-1'  end)  newstatus,"
+    +" spcode,phonenum,id,mrtime from tbl_app_digoal_mr "
+    +" where  substr(to_char(mrtime,'yyyymmddhh24mi'),1,11)=?) t1,tbl_mobile t2 "
+    +" where substr(t1.phonenum,1,7)=t2.phonenum(+) "
+    +" group by t2.provider,t2.provincecode,t1.spcode,newstatus,t2.city";
+
+
+
+2.4 //MoStatisticService
+
+static final String SQL_SELECT_DATA_FROM_ORACLE2="select t1.newreserve as reserve,"
+    +" t1.newtype as type,"
+    +" t1.spcode,count(t1.id) as mosum,t2.provider,t2.provincecode,t2.city, "
+    +" max(substr(to_char(t1.motime,'yyyymmddhh24mi'),1,11)) as stattime "
+    +" from "
+    +" (select (case when reserve='0' then '0' else '-1'  end)  newreserve,"
+    +" (case when type in('30','31') then 'wap' else 'sms' end) newtype,"
+    +" spcode,phonenum,id,motime from tbl_app_digoal "
+    +" where  substr(to_char(motime,'yyyymmddhh24mi'),1,11)=?) t1,tbl_mobile t2 "
+    +" where substr(t1.phonenum,1,7)=t2.phonenum(+) "
+    +" group by t2.provider,t2.provincecode,t1.spcode,newreserve,t2.city,newtype";
+
+
+
+3. 切换到PostgreSQL后, tbl_digoal_order_info的表结构如下 : 
+
+CREATE TABLE tbl_digoal_order_info
+(
+  id bigserial NOT NULL,
+  orderid character varying(20),
+  payid character varying(30) NOT NULL,
+  userid character varying(32) NOT NULL,
+  goodsid character varying(30) NOT NULL,
+  price numeric NOT NULL,
+  mobile character varying(30) NOT NULL,
+  status character(1) NOT NULL,
+  failurecause character varying(30),
+  createtime timestamp without time zone DEFAULT now(),
+  lastnotifytime timestamp with time zone,
+  paytime timestamp with time zone,
+  settletime timestamp with time zone
+)
+WITH (
+  OIDS=FALSE
+);
+
+
+
+4. 所以现在要做的是把监控系统涉及的4个SQL转换成PostgreSQL里面的SQL, 并且不再使用中间表tbl_app_digoal和tbl_app_digoal_mr.
+4.1 首先要理顺中间表和原始表的对应关系 : 
+
+4.1.1 materialized表 tbl_app_digoal : 
+(id,phonenum,type,spcode,cost,motime,reserve,transactionid)
+对应 TBL_digoal_ORDER_INFO : 
+id,mobile,'32','500',price/100 as price,createtime,status,orderid
+where createtime is not null;
+
+
+4.1.2 materialized表 tbl_app_digoal_mr : 
+(id,spcode,phonenum,status,mrtime,transactionid)
+对应 TBL_digoal_ORDER_INFO : 
+id,'500',mobile,'DELIVRD',LASTNOTIFYTIME,orderid
+where LASTNOTIFYTIME is not null
+
+
+
+4.2 
+使用最简单的方法WITH, 物化出2个中间表, 所以第一个SQL语句转换成 : 
+
+with 
+tbl_app_digoal_mr as
+(
+select id,
+  '500'::text as spcode,
+  mobile as phonenum,
+  'DELIVRD' as status,
+  LASTNOTIFYTIME as mrtime,
+  orderid as transactionid
+  from TBL_digoal_ORDER_INFO_201210
+  where LASTNOTIFYTIME is not null
+  and substr(to_char(LASTNOTIFYTIME,'yyyymmddhh24mi'),1,11)='20121031121'
+),
+tbl_app_digoal as 
+(
+select id,
+  mobile as phonenum,
+  '32'::text as type,
+  '500'::text as spcode,
+  price/100 as cost,
+  createtime as motime,
+  status as reserve,
+  orderid as transactionid 
+  from TBL_digoal_ORDER_INFO_201210
+  where createtime is not null
+)
+select a1.spcode, sum(a1.cost) as income, count(0) as itemcount, a2.provincecode, a2.city, a2.provider 
+  from 
+    (select t1.spcode,t1.phonenum,t2.cost from 
+     tbl_app_digoal_mr t1,
+     (select phonenum,cost,transactionid,spcode from tbl_app_digoal group by phonenum,cost,transactionid,spcode) 
+     AS t2
+       where (t1.transactionid, t1.phonenum) = (t2.transactionid, t2.phonenum)
+    ) AS a1
+    left outer join
+    tbl_mobile a2
+    on ( substr(a1.phonenum,1,7) = a2.phonenum )
+    group by a1.spcode,a2.provincecode,a2.city,a2.provider;
+
+
+但是这样效率就比较低了, 执行计划如下 : 
+
+ GroupAggregate  (cost=673837.64..674321.18 rows=17583 width=75)
+   CTE tbl_app_digoal_mr
+     ->  Seq Scan on tbl_digoal_order_info_201210  (cost=0.00..61475.64 rows=4396 width=49)
+           Filter: ((lastnotifytime IS NOT NULL) AND (substr(to_char(lastnotifytime, 'yyyymmddhh24mi'::text), 1, 11) = '20121031121'
+::text))
+   CTE tbl_app_digoal
+     ->  Seq Scan on tbl_digoal_order_info_201210  (cost=0.00..53476.03 rows=1599922 width=56)
+           Filter: (createtime IS NOT NULL)
+   ->  Sort  (cost=558885.98..558929.94 rows=17583 width=75)
+         Sort Key: t1.spcode, a2.provincecode, a2.city, a2.provider
+         ->  Merge Right Join  (cost=548383.02..557142.21 rows=17583 width=75)
+               Merge Cond: ((a2.phonenum)::text = (substr((t1.phonenum)::text, 1, 7)))
+               ->  Index Scan using tbl_mobile_pkey on tbl_mobile a2  (cost=0.00..7214.90 rows=238526 width=19)
+               ->  Materialize  (cost=548383.02..548470.94 rows=17583 width=142)
+                     ->  Sort  (cost=548383.02..548426.98 rows=17583 width=142)
+                           Sort Key: (substr((t1.phonenum)::text, 1, 7))
+                           ->  Merge Join  (cost=544823.35..546331.00 rows=17583 width=142)
+                                 Merge Cond: (((t2.transactionid)::text = (t1.transactionid)::text) AND ((t2.phonenum)::text = (t1.p
+honenum)::text))
+                                 ->  Sort  (cost=544469.43..544869.42 rows=159993 width=168)
+                                       Sort Key: t2.transactionid, t2.phonenum
+                                       ->  Subquery Scan on t2  (cost=492165.96..513764.92 rows=159993 width=168)
+                                             ->  Group  (cost=492165.96..512164.99 rows=159993 width=200)
+                                                   ->  Sort  (cost=492165.96..496165.77 rows=1599922 width=200)
+                                                         Sort Key: tbl_app_digoal.phonenum, tbl_app_digoal.cost, tbl_app_digoal.tran
+sactionid, tbl_app_digoal.spcode
+                                                         ->  CTE Scan on tbl_app_digoal  (cost=0.00..31998.44 rows=1599922 width=200
+)
+                                 ->  Sort  (cost=353.92..364.91 rows=4396 width=168)
+                                       Sort Key: t1.transactionid, t1.phonenum
+                                       ->  CTE Scan on tbl_app_digoal_mr t1  (cost=0.00..87.92 rows=4396 width=168)
+
+
+执行耗时 : 25469.754 ms
+原因如下 : 
+4.2.1 to_char函数不是immutable的, 所以没法建立函数索引进行加速.
+4.2.2 tbl_app_digoal这个中间表的数据量太大, 关联时将消耗大量的CPU.
+优化如下 : 
+4.2.3 创建immutable的to_char函数, 并建立函数索引.
+
+CREATE OR REPLACE FUNCTION ts_to_char_immutable(i_time timestamp without time zone, i_format text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+AS $function$
+    select to_char($1, $2);
+$function$;
+
+
+索引如下 : 
+
+索引虽然很多, 但是都是有序增长的插入, 所以影响偏小.
+ump=> \d  TBL_digoal_ORDER_INFO_201210
+                                     Table "ump.tbl_digoal_order_info_201210"
+     Column     |            Type             |                              Modifiers                               
+----------------+-----------------------------+----------------------------------------------------------------------
+ id             | bigint                      | not null default nextval('tbl_digoal_order_info_id_seq'::regclass)
+ orderid        | character varying(20)       | 
+ payid          | character varying(30)       | not null
+ userid         | character varying(32)       | not null
+ goodsid        | character varying(30)       | not null
+ price          | numeric(10,0)               | not null
+ mobile         | character varying(30)       | not null
+ status         | character(1)                | not null
+ failurecause   | character varying(30)       | 
+ createtime     | timestamp without time zone | not null default now()
+ lastnotifytime | timestamp without time zone | 
+ paytime        | timestamp without time zone | 
+ settletime     | timestamp without time zone | 
+Indexes:
+    "tbl_digoal_order_info_201210_pkey" PRIMARY KEY, btree (id)
+    "tbl_digoal_order_info_201210_orderid_idx" UNIQUE, btree (orderid)
+    "tbl_digoal_order_info_201210_createtime_idx" btree (createtime)
+    "tbl_digoal_order_info_201210_mobile_idx" btree (mobile)
+    "tbl_digoal_order_info_201210_substr_idx" btree (substr(ts_to_char_immutable(createtime, 'yyyymmddhh24mi'::text), 1, 11))
+    "tbl_digoal_order_info_201210_substr_idx1" btree (substr(ts_to_char_immutable(lastnotifytime, 'yyyymmddhh24mi'::text), 1, 11))
+Inherits: tbl_digoal_order_info
+
+
+4.2.4 将tbl_app_digoal从中间表中拿出, 直接使用原表. 优化后的SQL如下 : 
+
+with 
+tbl_app_digoal_mr as
+(
+select id,
+  '500'::text as spcode,
+  mobile as phonenum,
+  'DELIVRD' as status,
+  LASTNOTIFYTIME as mrtime,
+  orderid as transactionid
+  from TBL_digoal_ORDER_INFO_201210
+  where LASTNOTIFYTIME is not null
+  and substr(ts_to_char_immutable(LASTNOTIFYTIME,'yyyymmddhh24mi'),1,11)='20121031121'
+)
+select a1.spcode, sum(a1.cost) as income, count(0) as itemcount, a2.provincecode, a2.city, a2.provider 
+  from 
+    (select row_number() over (partition by t2.mobile,t2.price/100,t2.orderid) as rn, t1.spcode,t1.phonenum,t2.price/100 as cost from 
+     tbl_app_digoal_mr t1 join 
+     TBL_digoal_ORDER_INFO_201210 t2
+     on ((t1.transactionid, t1.phonenum) = (t2.orderid, t2.mobile) and t2.createtime is not null)
+     where t2.createtime is not null ) AS a1
+  left outer join
+    tbl_mobile a2
+    on ( substr(a1.phonenum,1,7) = a2.phonenum )
+    where a1.rn=1
+    group by a1.spcode,a2.provincecode,a2.city,a2.provider
+    order by a1.spcode,a2.provincecode,a2.city,a2.provider;
+
+
+执行计划如下 : 
+
+ GroupAggregate  (cost=32506.22..32506.25 rows=1 width=75)
+   CTE tbl_app_digoal_mr
+     ->  Index Scan using idx_order_info_ts_ntime_201210 on tbl_digoal_order_info_201210  (cost=0.25..10902.31 rows=4396 width=49)
+           Index Cond: (substr(ts_to_char_immutable(lastnotifytime, 'yyyymmddhh24mi'::text), 1, 11) = '20121031121'::text)
+           Filter: (lastnotifytime IS NOT NULL)
+   ->  Sort  (cost=21603.92..21603.92 rows=1 width=75)
+         Sort Key: a1.spcode, a2.provincecode, a2.city, a2.provider
+         ->  Nested Loop Left Join  (cost=21600.49..21603.91 rows=1 width=75)
+               ->  Subquery Scan on a1  (cost=21600.49..21600.53 rows=1 width=142)
+                     Filter: (a1.rn = 1)
+                     ->  WindowAgg  (cost=21600.49..21600.52 rows=1 width=148)
+                           ->  Sort  (cost=21600.49..21600.49 rows=1 width=148)
+                                 Sort Key: t2.mobile, ((t2.price / 100::numeric)), t2.orderid
+                                 ->  Nested Loop  (cost=0.00..21600.48 rows=1 width=148)
+                                       ->  CTE Scan on tbl_app_digoal_mr t1  (cost=0.00..87.92 rows=4396 width=168)
+                                       ->  Index Scan using tbl_digoal_order_info_201210_orderid_idx on tbl_digoal_order_info_20
+1210 t2  (cost=0.00..4.88 rows=1 width=38)
+                                             Index Cond: ((orderid)::text = (t1.transactionid)::text)
+                                             Filter: ((createtime IS NOT NULL) AND (createtime IS NOT NULL) AND ((t1.phonenum)::text
+ = (mobile)::text))
+               ->  Index Scan using tbl_mobile_pkey on tbl_mobile a2  (cost=0.00..3.37 rows=1 width=19)
+                     Index Cond: (substr((a1.phonenum)::text, 1, 7) = (phonenum)::text)
+
+
+执行耗时 : 6.407 ms
+优化后性能提升3975倍.
+
+5. 转换其他SQL如下 : 
+5.1 //SpMoStatisticsService
+
+select '500'::text as spcode,sum(t1.price/100) as mosum,t2.provider,t2.provincecode,t2.city,max(substr(ts_to_char_immutable(t1.createtime,'yyyymmddhh24mi'),1,11)) as stattime
+  from TBL_digoal_ORDER_INFO_201210 t1 left outer join tbl_mobile t2
+  on (substr(t1.mobile,1,7) = t2.phonenum)
+  where t1.createtime is not null
+  and substr(ts_to_char_immutable(t1.createtime,'yyyymmddhh24mi'),1,11)='20121031121'
+  group by t2.provider,spcode,t2.provincecode,t2.city
+  order by t2.provider,spcode,t2.provincecode,t2.city;
+
+
+5.2 //MrStatisticService
+
+select 'DELIVRD'::text AS status,
+  '500'::text AS spcode, 
+  count(t1.id) as mrsum,
+  t2.provider,
+  t2.provincecode,
+  t2.city,
+  max(substr(ts_to_char_immutable(t1.LASTNOTIFYTIME,'yyyymmddhh24mi'),1,11)) as stattime 
+    from 
+    tbl_digoal_order_info_201210 AS t1
+    left outer join tbl_mobile t2
+    on ( substr(t1.mobile,1,7)=t2.phonenum  
+         and t1.LASTNOTIFYTIME is not null )
+    where substr(ts_to_char_immutable(t1.LASTNOTIFYTIME,'yyyymmddhh24mi'),1,11)='20121031121'
+    group by t2.provider,t2.provincecode,spcode,status,t2.city
+    order by t2.provider,t2.provincecode,spcode,status,t2.city;
+
+
+5.3 //MoStatisticService
+
+select (case when t1.status='0' then '0' else '-1' end) as newreserve,
+  'sms' as newtype,
+  '500'::text AS spcode, 
+  count(t1.id) as mosum,
+  t2.provider, t2.provincecode, t2.city, 
+  max(substr(ts_to_char_immutable(t1.createtime,'yyyymmddhh24mi'),1,11)) as stattime
+  from
+  tbl_digoal_order_info_201210 AS t1
+  left outer join tbl_mobile t2
+  on (substr(t1.mobile,1,7)=t2.phonenum 
+  and t1.createtime is not null )
+  where substr(ts_to_char_immutable(t1.createtime,'yyyymmddhh24mi'),1,11)='20121031121'
+  group by t2.provider,t2.provincecode,spcode,newreserve,t2.city,newtype
+  order by t2.provider,t2.provincecode,spcode,newreserve,t2.city,newtype;
+
+
+
+【参考】
+1. SQL tuning example(max speedup 2400 times) : use function index and use window function prevent subquery
+http://blog.163.com/digoal@126/blog/static/1638770402012651054869/
+

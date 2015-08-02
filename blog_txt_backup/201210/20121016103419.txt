@@ -1,0 +1,734 @@
+PostgreSQL research
+
+PostgreSQL XLOG fsync simple introduce
+
+2012-10-16 10:34:19   查看原文>>
+
+一、where is the tuples? datafile, blocks.
+从上到下的顺序查找.
+
+1. PostgreSQL shared buffer
+2. OS FileSystem cache
+3. storage cache(raid card or controller's cache)
+4. disk cache (almost disabled)
+5. disk
+
+
+二、How point to tuples?
+
+Index(optional)  ->  Heap page -> itemid -> item(tuple).
+
+
+三、which tuples can be saw by client? must satisfied two factors below at the same time.
+
+1. xmin , xmax in tuple. -- client can see the tuples xid before the client's xid or database's current xid.
+
+
+2. transaction (xmin or xmax) status (t_infomask). -- client can see tuples has been commited success.
+
+
+后面将举例使用pageinspect来举例说明这两点.
+
+四、transaction Durable(ACID - Durable) : 
+async commit & sync commit
+
+1. the transaction's redo info (xlog buffer) fsynced to disk . 
+
+
+后面将举例使用strace 跟踪系统接口write和fsync的调用.
+
+五、which process does "wal fsync"?
+
+1. wal writer process
+2. backend process
+
+
+后面将举例使用strace 跟踪系统接口write和fsync的调用.
+
+六、WAL fsync parameters
+http://www.postgresql.org/docs/9.2/static/runtime-config-wal.html#RUNTIME-CONFIG-WAL-SETTINGS
+
+举例 : 
+1. pageinspect的例子, 观察xmin, xmax, t_infomask的值. t_infomask的值见参考部分.
+安装postgresql, 这里使用PostgreSQL 9.3, 从github上下载.
+
+useradd pgdev
+vi /home/pgdev/.bash_profile
+export PS1="$USER@`/bin/hostname -s`-> "
+export PGPORT=9300
+export PGUSER=postgres
+export PGDATA=/data04/pgdev/pg_root
+export LANG=en_US.utf8
+export PGHOME=/home/pgdev/pgsql9.3
+export PGHOST=$PGDATA
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+alias rm='rm -i'
+alias ll='ls -lh'
+
+wget https://nodeload.github.com/postgres/postgres/zipball/master
+unzip postgresql-snapshot.zip
+cd postgresql
+./configure --prefix=/home/pgdev/pgsql9.3 --with-pgport=9300 --with-perl --with-python --with-tcl --with-openssl --with-pam--without-ldap --with-libxml --with-libxslt --enable-thread-safety --with-wal-blocksize=16 --enable-debug && gmake
+gmake install
+cd postgresql/contrib/pageinspect
+. /home/pgdev/.bash_profile
+gmake
+gmake install
+su - pgdev
+initdb
+
+
+创建测试库, 表.
+
+postgres=# create role digoal nosuperuser nocreatedb nocreaterole noinherit login encrypted password 'DIGOAL';
+CREATE ROLE
+postgres=# create database digoal with owner digoal;
+CREATE DATABASE
+postgres=# \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# create extension pageinspect;
+CREATE EXTENSION
+digoal=# \c digoal digoal
+You are now connected to database "digoal" as user "digoal".
+digoal=> create schema digoal ;
+CREATE SCHEMA
+digoal=> create table t (id serial primary key, info text);
+CREATE TABLE
+
+
+使用pageinspect对heap信息讲解 : 
+
+digoal=> insert into t(info) values ('digoal');
+INSERT 0 1
+digoal=> select ctid,* from t;
+ ctid  | id |  info  
+-------+----+--------
+ (0,1) |  1 | digoal
+(1 row)
+digoal=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# select * from heap_page_items(get_raw_page('digoal.t',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+--------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 |   1746 |      0 |        0 | (0,1)  |           2 |       2306 |     24 |        |      
+(1 row)
+
+
+信息 : 
+
+lp = 1 ( 对应 ctid(0,1) 里面的 1 )
+t_infomask = 2306 ( = 0x0902 = 0x0002 + 0x0100 + 0x0800 )
+HEAP_HASVARWIDTH 0x0002
+HEAP_XMIN_COMMITTED 0x0100
+HEAP_XMAX_INVALID 0x0800
+t_xmin = 1746
+t_xmax = 0
+
+
+解释 : 
+这条记录的t_infomax由3个值相加得到, 分别是HEAP_HASVARWIDTH,HEAP_XMIN_COMMITTED,HEAP_XMAX_INVALID. 表示这条记录的xmin已经提交, 同时xmax无效, 表示是新插入的记录. HEAP_HASVARWIDTH表示这条记录有变长字段.
+所以这条记录能被后起的会话(分配了更新的xid的会话)看见. 如下(xid = 1747, 较t_xmin=1746 更新) : 
+
+digoal=# select txid_current();
+ txid_current 
+--------------
+         1747
+(1 row)
+digoal=# select * from digoal.t;
+ id |  info  
+----+--------
+  1 | digoal
+(1 row)
+
+
+
+接下来举一个插入并回滚的例子 : 
+session 1:
+
+digoal=# begin;
+BEGIN
+digoal=# insert into digoal.t(info) values('rollback');
+INSERT 0 1
+
+
+
+session 2:
+
+digoal=# select txid_current();
+ txid_current 
+--------------
+         1749
+(1 row)
+digoal=# select * from heap_page_items(get_raw_page('digoal.t',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+--------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 |   1746 |      0 |        0 | (0,1)  |           2 |       2306 |     24 |        |      
+  2 |   8112 |        1 |     37 |   1748 |      0 |        0 | (0,2)  |           2 |       2050 |     24 |        |      
+(2 rows)
+
+
+注意, 使用pageinspect分析的是块信息, 所以能见度较高, 无视xmin,xmax. 这里看到了会话1新插入的行. 信息如下 : 
+
+lp = 2 ( 对应 ctid(0,2) 里面的 2 )
+t_infomask = 2050 ( = 0x0802 = 0x0002 + 0x0800 )
+HEAP_HASVARWIDTH 0x0002
+HEAP_XMAX_INVALID 0x0800
+t_xmin = 1748
+t_xmax = 0
+
+
+从以上信息可以分析, 这条记录的事务号是1748. 当前这个tuple的事务还未提交, 因为少了HEAP_XMIN_COMMITTED标记.
+所以即使会话2的txid比会话1更新, 也看不到这条记录 (这个和事务隔离级别有关, PostgreSQL最低事务隔离级别=read committed)
+所以在会话2中现在看不到这条记录.
+
+digoal=# select * from digoal.t;
+ id |  info  
+----+--------
+  1 | digoal
+(1 row)
+
+
+
+session 1:
+回滚 : 
+
+digoal=# rollback;
+ROLLBACK
+
+
+
+session 2:
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.t',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+--------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 |   1746 |      0 |        0 | (0,1)  |           2 |       2306 |     24 |        |      
+  2 |   8112 |        1 |     37 |   1748 |      0 |        0 | (0,2)  |           2 |       2050 |     24 |        |      
+(2 rows)
+
+
+PostgreSQL的回滚操作非常迅速, 从heap_page_items得到的信息中也可以验证, 显然, 回滚时, 数据块没有变化. 这条记录的t_infomask维持0x0802. 
+
+接下来举一个更新的例子 : 
+session 1:
+
+digoal=# begin;
+BEGIN
+digoal=# update digoal.t set info='new' where id=1;
+UPDATE 1
+
+
+
+session 2:
+
+digoal=# select * from heap_page_items(get_raw_page('digoal.t',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+--------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 |   1746 |   1750 |        0 | (0,3)  |       16386 |        258 |     24 |        |      
+  2 |   8112 |        1 |     37 |   1748 |      0 |        0 | (0,2)  |           2 |       2050 |     24 |        |      
+  3 |   8080 |        1 |     32 |   1750 |      0 |        0 | (0,3)  |       32770 |      10242 |     24 |        |      
+(3 rows)
+
+
+解释:
+ctid=(0,1)的记录t_xmax变成了1750, t_infomask变成258 = 0x0102 (HEAP_HASVARWIDTH, HEAP_XMIN_COMMITTED) 说明此时xmin和xmax都是有效的, 但是xmax还未提交. 因此其他会话能看到ctid=(0,1)这条. t_ctid=(0,3), 表示这条记录同时指向ctid=(0,3)的记录.
+
+同时新增了ctid=(0,3)的记录, t_xmin=1750, t_infomask = 10242 = 0x2802 (HEAP_UPDATED, HEAP_XMAX_INVALID, HEAP_HASVARWIDTH) 说明这条记录的xmin是有效的, 但是还未提交.
+
+session 1:
+
+COMMIT;
+
+
+
+session 2:
+
+digoal=# select * from digoal.t;
+ id | info 
+----+------
+  1 | new
+(1 row)
+digoal=# select * from heap_page_items(get_raw_page('digoal.t',0));
+ lp | lp_off | lp_flags | lp_len | t_xmin | t_xmax | t_field3 | t_ctid | t_infomask2 | t_infomask | t_hoff | t_bits | t_oid 
+----+--------+----------+--------+--------+--------+----------+--------+-------------+------------+--------+--------+-------
+  1 |   8152 |        1 |     35 |   1746 |   1750 |        0 | (0,3)  |       16386 |       1282 |     24 |        |      
+  2 |   8112 |        1 |     37 |   1748 |      0 |        0 | (0,2)  |           2 |       2562 |     24 |        |      
+  3 |   8080 |        1 |     32 |   1750 |      0 |        0 | (0,3)  |       32770 |      10498 |     24 |        |      
+(3 rows)
+
+
+session1提交后, 
+ctid=(0,1)的记录t_infomask变成1282 = 0x0502 (HEAP_HASVARWIDTH, HEAP_XMIN_COMMITTED, HEAP_XMAX_COMMITTED) 说明此时xmin和xmax都是有效并提交的状态. t_ctid=(0,3), 表示这条记录同时指向ctid=(0,3)的记录. (对于repeatable read和serializeable read的隔离级别, 读取哪条tuple, 就要分辨t_xmin和t_xmax了. 还有vacuum进程也需要看这两个
+值)
+ctid=(0,3)的记录, t_infomask = 10498 = 0x2902 (HEAP_UPDATED, HEAP_XMIN_COMMITTED, HEAP_XMAX_INVALID, HEAP_HASVARWIDTH) 说明这条记录的xmin是有效的, 并已提交.
+
+2. 使用strace跟踪fdatasync调用举例
+下面使用的是PostgreSQL 9.3 devel版本进行的测试.
+session 1 : 
+
+digoal=# select pg_backend_pid();
+ pg_backend_pid 
+----------------
+           9499
+(1 row)
+digoal=# show synchronous_commit;
+ synchronous_commit 
+--------------------
+ on
+(1 row)
+digoal=# show wal_sync_method;
+ wal_sync_method 
+-----------------
+ fdatasync
+(1 row)
+
+
+
+session 2 :
+
+pgdev@db-172-16-3-150-> ps -ewf|grep pgdev
+pgdev     8393     1  0 08:26 pts/5    00:00:00 /home/pgdev/pgsql9.3/bin/postgres
+pgdev     8395  8393  0 08:26 ?        00:00:00 postgres: checkpointer process   
+pgdev     8396  8393  0 08:26 ?        00:00:00 postgres: writer process         
+pgdev     8397  8393  0 08:26 ?        00:00:00 postgres: wal writer process     
+pgdev     8398  8393  0 08:26 ?        00:00:00 postgres: autovacuum launcher process   
+pgdev     8399  8393  0 08:26 ?        00:00:00 postgres: stats collector process   
+pgdev     9499  8393  0 09:08 ?        00:00:00 postgres: postgres digoal [local] idle
+
+
+跟踪wal writer 进程
+
+strace -p 8397
+
+
+整个过程中没有跟踪到wal writer进程有系统调用操作.
+
+session 3 : 
+跟踪backend 进程
+
+strace -p 9499
+
+
+回滚测试 : 
+
+# session 1 (begin;)
+recvfrom(8, "Q\0\0\0\vbegin;\0", 8192, 0, NULL, NULL) = 12
+sendto(8, "C\0\0\0\nBEGIN\0Z\0\0\0\5T", 17, 0, NULL, 0) = 17
+# session 1 (insert into digoal.t (info) values ('test');)
+recvfrom(8, "Q\0\0\0001insert into digoal.t (info)"..., 8192, 0, NULL, NULL) = 50
+sendto(8, "C\0\0\0\17INSERT 0 1\0Z\0\0\0\5T", 22, 0, NULL, 0) = 22
+# session 1 (rollback;)
+recvfrom(8, "Q\0\0\0\16rollback;\0", 8192, 0, NULL, NULL) = 15
+kill(8397, SIGUSR1)                     = 0
+sendto(7, "\2\0\0\0`\1\0\0006@\0\0\3\0\0\0\0\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 352, 0, NULL, 0) = 352
+sendto(8, "C\0\0\0\rROLLBACK\0Z\0\0\0\5I", 20, 0, NULL, 0) = 20
+
+
+注意到, rollback时backend process和wal writer process都没有写xlog文件的操作(write或者fdatasync都没看到). (但是, 并不代表rollback掉的事务就不产生XLOG信息了, 产生xlog信息是在每个SQL执行过程中产生的, commit只是触发了fsync操作. 这些XLOG信息其实已经在wal buffer里面了, 后面会有例子来讲这个.)
+更加详细的调用需要使用gdb来跟踪. strace很多信息都跟踪不到.
+
+提交测试 : 
+
+# session 1 (begin;)
+recvfrom(8, "Q\0\0\0\vbegin;\0", 8192, 0, NULL, NULL) = 12
+sendto(8, "C\0\0\0\nBEGIN\0Z\0\0\0\5T", 17, 0, NULL, 0) = 17
+# session 1 (insert into digoal.t (info) values ('test');)
+recvfrom(8, "Q\0\0\0001insert into digoal.t (info)"..., 8192, 0, NULL, NULL) = 50
+sendto(8, "C\0\0\0\17INSERT 0 1\0Z\0\0\0\5T", 22, 0, NULL, 0) = 22
+# session 1 (commit;)
+recvfrom(8, "Q\0\0\0\fcommit;\0", 8192, 0, NULL, NULL) = 13
+lseek(16, 327680, SEEK_SET)             = 327680
+write(16, "u\320\5\0\1\0\0\0\0\0\5\2\0\0\0\0O\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 16384) = 16384
+fdatasync(16)                           = 0
+sendto(7, "\2\0\0\0`\1\0\0006@\0\0\3\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 352, 0, NULL, 0) = 352
+sendto(8, "C\0\0\0\vCOMMIT\0Z\0\0\0\5I", 18, 0, NULL, 0) = 18
+
+
+注意到, commit时, backend process写xlog文件(查看该进程的fd)并调用fdatasync写入磁盘.
+查看fd=16打开的是什么文件?
+
+cd /proc/9499/fd
+ll
+lrwx------ 1 pgdev pgdev 64 Oct 16 09:21 16 -> /data04/pgdev/pg_root/pg_xlog/000000010000000000000002
+
+
+
+3. 使用strace跟踪fdatasync调用举例
+以下使用的是PostgreSQL 9.1.3的版本进行的测试 : 
+session 1 : 
+
+postgres@db-172-16-3-40-> psql -h 127.0.0.1
+psql (9.1.3)
+Type "help" for help.
+postgres=# show synchronous_commit;
+ synchronous_commit 
+--------------------
+ on
+(1 row)
+postgres=# show wal_sync_method;
+ wal_sync_method 
+-----------------
+ fdatasync
+(1 row)
+postgres=# select pg_backend_pid();
+ pg_backend_pid 
+----------------
+          26479
+(1 row)
+
+
+
+session 2 :
+
+postgres@db-172-16-3-40-> ps -ewf|grep postgres
+postgres 21941     1  0 Oct15 pts/5    00:00:29 /opt/pgsql/bin/postgres
+postgres 21948 21941  0 Oct15 ?        00:00:11 postgres: logger process   
+postgres 21950 21941  0 Oct15 ?        00:00:00 postgres: writer process   
+postgres 21951 21941  0 Oct15 ?        00:00:00 postgres: wal writer process   
+postgres 21952 21941  0 Oct15 ?        00:00:00 postgres: autovacuum launcher process   
+postgres 21953 21941  0 Oct15 ?        00:00:00 postgres: stats collector process   
+postgres 26479 21941  0 09:02 ?        00:00:00 postgres: postgres postgres 127.0.0.1(17658) idle
+
+
+跟踪wal writer 进程
+
+strace -p 21951
+
+
+回滚测试 : 
+
+# session 1 (insert into digoal.t (info) values ('test');)
+lseek(5, 7520256, SEEK_SET)             = 7520256
+write(5, "f\320\1\0\1\0\0\0\0\0\0\0\0\300rH\22\0\0\0pi\1\0\0\0\0\0\0\0\0\0"..., 8192) = 8192
+fdatasync(5)                            = 0
+# session 1 (rollback;)
+write(5, "f\320\1\0\1\0\0\0\0\0\0\0\0\340rH\210\1\0\0\377\377\1\0\345/\0\0enab"..., 8192) = 8192
+fdatasync(5)                            = 0
+
+
+fd信息如下 : 
+
+[root@db-172-16-3-40 fd]# cd /proc/26479/fd
+[root@db-172-16-3-40 fd]# ll 5
+lrwx------ 1 postgres postgres 64 Oct 16 09:09 5 -> /pgdata/digoal/1921/data02/pg_root/base/12699/12505
+postgres=# select pg_relation_filepath('t'::regclass);
+ pg_relation_filepath 
+----------------------
+ base/12699/16923
+(1 row)
+
+
+wal writer进程写的居然是pg_am这个系统表, 暂时还不知道啥原因.
+
+postgres=# select relname,relkind,pg_relation_filepath(oid) from pg_class where pg_relation_filepath(oid) ~ '12505';
+ relname | relkind | pg_relation_filepath 
+---------+---------+----------------------
+ pg_am   | r       | base/12699/12505
+(1 row)
+
+
+
+session 3 : 
+跟踪backend 进程
+
+strace -p 26479
+
+
+回滚测试 : 
+
+# session 1 (begin;)
+recvfrom(7, "Q\0\0\0\vbegin;\0", 8192, 0, NULL, NULL) = 12
+close(40)                               = 0
+sendto(7, "C\0\0\0\nBEGIN\0Z\0\0\0\5T", 17, 0, NULL, 0) = 17
+# session 1 (insert into digoal.t (info) values ('test');)
+recvfrom(7, "Q\0\0\0,insert into t (info) values"..., 8192, 0, NULL, NULL) = 45
+open("base/12699/16923_fsm", O_RDWR)    = -1 ENOENT (No such file or directory)
+open("base/12699/16923", O_RDWR)        = 18
+lseek(18, 0, SEEK_END)                  = 0
+lseek(18, 0, SEEK_END)                  = 0
+write(18, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 8192) = 8192
+open("base/12699/16930", O_RDWR)        = 40
+read(40, "\0\0\0\0\0\0\0\0\1\0\0\0000\0\360\37\360\37\4 \0\0\0\0b1\5\0\2\0\0\0"..., 8192) = 8192
+open("base/12699/16930_fsm", O_RDWR)    = -1 ENOENT (No such file or directory)
+lseek(40, 0, SEEK_END)                  = 8192
+write(40, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 8192) = 8192
+close(40)                               = 0
+sendto(7, "C\0\0\0\17INSERT 0 1\0Z\0\0\0\5T", 22, 0, NULL, 0) = 22
+# session 1 (rollback;)
+recvfrom(7, "Q\0\0\0\16rollback;\0", 8192, 0, NULL, NULL) = 15
+sendto(6, "\2\0\0\0\300\3\0\0\2331\0\0\t\0\0\0\0\0\0\0\1\0\0\0\353\4\0\0\0\0\0\0"..., 960, 0, NULL, 0) = 960
+sendto(6, "\2\0\0\0\270\1\0\0\2331\0\0\4\0\0\0\0\0\0\0\0\0\0\0v\n\0\0\0\0\0\0"..., 440, 0, NULL, 0) = 440
+sendto(7, "C\0\0\0\rROLLBACK\0Z\0\0\0\5I", 20, 0, NULL, 0) = 20
+
+
+注意到, rollback时backend process和wal writer process都没有写xlog文件的操作(write或者fdatasync都没看到). 但是有write fsm文件的操作.
+更加详细的调用需要使用gdb来跟踪. strace很多信息都跟踪不到.
+
+提交测试 : 
+
+# session 1 (begin;)
+recvfrom(7, "Q\0\0\0\vbegin;\0", 8192, 0, NULL, NULL) = 12
+sendto(7, "C\0\0\0\nBEGIN\0Z\0\0\0\5T", 17, 0, NULL, 0) = 17
+# session 1 (insert into digoal.t (info) values ('test');)
+recvfrom(7, "Q\0\0\0,insert into t (info) values"..., 8192, 0, NULL, NULL) = 45
+sendto(7, "C\0\0\0\17INSERT 0 1\0Z\0\0\0\5T", 22, 0, NULL, 0) = 22
+# session 1 (commit;)
+recvfrom(7, "Q\0\0\0\fcommit;\0", 8192, 0, NULL, NULL) = 13
+write(38, "f\320\1\0\1\0\0\0\0\0\0\0\0\340rH\210\1\0\0\377\377\1\0\345/\0\0enab"..., 8192) = 8192
+fdatasync(38)                           = 0
+sendto(6, "\2\0\0\0P\1\0\0\2331\0\0\3\0\0\0\1\0\0\0\0\0\0\0\33B\0\0\0\0\0\0"..., 336, 0, NULL, 0) = 336
+sendto(7, "C\0\0\0\vCOMMIT\0Z\0\0\0\5I", 18, 0, NULL, 0) = 18
+
+
+注意到, commit时, backend process写xlog文件(查看该进程的fd)并调用fdatasync写入磁盘.
+查看fd=38打开的是什么文件?
+
+postgres@db-172-16-3-40-> cd /proc/26479/fd
+postgres@db-172-16-3-40-> ll 38
+lrwx------ 1 postgres postgres 64 Oct 16 09:09 38 -> /pgdata/digoal/1921/data01/pg_xlog/000000010000000000000012
+
+
+4. gdb
+以下使用PostgreSQL 9.3 devel版本进行测试.
+session 1 : 
+
+pgdev@db-172-16-3-150-> psql
+psql (9.3devel)
+Type "help" for help.
+
+postgres=# \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# select pg_backend_pid();
+ pg_backend_pid 
+----------------
+          12872
+(1 row)
+
+
+
+session 2 : 
+
+pgdev@db-172-16-3-150-> gdb
+GNU gdb (GDB) Red Hat Enterprise Linux (7.0.1-37.el5)
+Copyright (C) 2009 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "x86_64-redhat-linux-gnu".
+For bug reporting instructions, please see:
+<http://www.gnu.org/software/gdb/bugs/>.
+(gdb) attach 12872
+Attaching to process 12872
+Reading symbols from /home/pgdev/pgsql9.3/bin/postgres...done.
+Reading symbols from /usr/lib64/libxslt.so.1...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libxslt.so.1
+Reading symbols from /usr/lib64/libxml2.so.2...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libxml2.so.2
+Reading symbols from /lib64/libssl.so.6...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libssl.so.6
+Reading symbols from /lib64/libcrypto.so.6...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libcrypto.so.6
+Reading symbols from /lib64/libcrypt.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libcrypt.so.1
+Reading symbols from /lib64/libdl.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libdl.so.2
+Reading symbols from /lib64/libm.so.6...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libm.so.6
+Reading symbols from /lib64/libc.so.6...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libc.so.6
+Reading symbols from /lib64/libz.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libz.so.1
+Reading symbols from /usr/lib64/libgssapi_krb5.so.2...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libgssapi_krb5.so.2
+Reading symbols from /usr/lib64/libkrb5.so.3...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libkrb5.so.3
+Reading symbols from /lib64/libcom_err.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libcom_err.so.2
+Reading symbols from /usr/lib64/libk5crypto.so.3...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libk5crypto.so.3
+Reading symbols from /lib64/ld-linux-x86-64.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/ld-linux-x86-64.so.2
+Reading symbols from /usr/lib64/libkrb5support.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libkrb5support.so.0
+Reading symbols from /lib64/libkeyutils.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libkeyutils.so.1
+Reading symbols from /lib64/libresolv.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libresolv.so.2
+Reading symbols from /lib64/libselinux.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libselinux.so.1
+Reading symbols from /lib64/libsepol.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libsepol.so.1
+Reading symbols from /lib64/libnss_files.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libnss_files.so.2
+warning: no loadable sections found in added symbol-file system-supplied DSO at 0x7fff05bc9000
+0x000000345fad4ef5 in recv () from /lib64/libc.so.6
+(gdb) b fdatasync
+Breakpoint 1 at 0x345facda60
+(gdb) c
+Continuing.
+
+
+
+session 1 : 
+
+digoal=# begin;
+BEGIN
+digoal=# insert into digoal.t (info) values ('test');
+INSERT 0 1
+digoal=# end;
+
+
+
+session 2 : 
+
+Breakpoint 1, 0x000000345facda60 in fdatasync () from /lib64/libc.so.6
+(gdb) bt
+#0  0x000000345facda60 in fdatasync () from /lib64/libc.so.6
+#1  0x0000000000491a19 in issue_xlog_fsync (fd=35, segno=3) at xlog.c:8215
+#2  0x0000000000497507 in XLogWrite (WriteRqst=..., flexible=0 '\000', xlog_switch=0 '\000') at xlog.c:1697
+#3  0x0000000000497a38 in XLogFlush (record=50343800) at xlog.c:1976
+#4  0x0000000000488dfb in RecordTransactionCommit () at xact.c:1125
+#5  CommitTransaction () at xact.c:1876
+#6  0x000000000048a9b9 in CommitTransactionCommand () at xact.c:2622
+#7  0x000000000062fbb3 in finish_xact_command () at postgres.c:2421
+#8  0x0000000000631e65 in exec_simple_query (query_string=0x34651f0 "end;") at postgres.c:1085
+#9  0x0000000000632c2d in PostgresMain (argc=<value optimized out>, argv=<value optimized out>, username=<value optimized out>)
+    at postgres.c:3976
+#10 0x00000000005f5267 in ServerLoop () at postmaster.c:3671
+#11 0x00000000005f7e91 in PostmasterMain (argc=1, argv=0x33b2d10) at postmaster.c:1185
+#12 0x00000000005967b3 in main (argc=1, argv=<value optimized out>) at main.c:197
+
+
+
+5. 那么fsync xlog 的操作是不是只在commit 的时候发生呢?
+当然不是, 上面没有观察到rollback时写XLOG是因为wal buffer设得较大, 没有被写满, 同时数据库中没有其他会话有commit操作.
+真正发生fsync xlog有几种可能, 1.  commit的时候.  2. wal buffer被写满的时候.
+下面使用大批量插入进行测试就能看出, 此时wal writer进程将会发生写xlog的操作.
+
+postgres=# begin;insert into t (info) select generate_series(1,10000000);
+BEGIN
+INSERT 0 10000000
+
+
+跟踪wal writer进程, 未提交时也发生了xlog write : 
+postgres@db-172-16-3-40-> strace -p 21951 
+
+Process 21951 attached - interrupt to quit
+open("pg_xlog/000000010000000000000021", O_RDWR) = 5
+write(5, "f\320\2\0\1\0\0\0\0\0\0\0\0\0\0\204\355\377_O\305\277^O\0\0\0\4\0 \0\0"..., 303104) = 303104
+fdatasync(5)                            = 0
+....write..
+close(5)                                = 0
+open("pg_xlog/000000010000000000000022", O_RDWR) = 5
+write(5, "f\320\2\0\1\0\0\0\0\0\0\0\0\0\0\210\355\377_O\305\277^O\0\0\0\4\0 \0\0"..., 245760) = 245760
+fdatasync(5)                            = 0
+....write..
+close(5)                                = 0
+open("pg_xlog/000000010000000000000023", O_RDWR) = 5
+write(5, "f\320\3\0\1\0\0\0\0\0\0\0\0\0\0\214\355\377_O\305\277^O\0\0\0\4\0 \0\0"..., 344064) = 344064
+fdatasync(5)                            = 0
+....write..
+close(5)                                = 0
+open("pg_xlog/000000010000000000000024", O_RDWR) = -1 ENOENT (No such file or directory)
+unlink("pg_xlog/xlogtemp.21951")        = -1 ENOENT (No such file or directory)
+open("pg_xlog/xlogtemp.21951", O_RDWR|O_CREAT|O_EXCL, 0600) = 5
+write(5, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 8192) = 8192
+... 省略多行同样的初始化xlog文件的操作.
+fsync(5)                                = 0
+close(5)                                = 0
+stat("pg_xlog/000000010000000000000024", 0x7fff4b204c30) = -1 ENOENT (No such file or directory)
+link("pg_xlog/xlogtemp.21951", "pg_xlog/000000010000000000000024") = 0
+unlink("pg_xlog/xlogtemp.21951")        = 0
+open("pg_xlog/000000010000000000000024", O_RDWR) = 5
+write(5, "f\320\2\0\1\0\0\0\0\0\0\0\0\0\0\220\355\377_O\305\277^O\0\0\0\4\0 \0\0"..., 303104) = 303104
+fdatasync(5)                            = 0
+....write.....
+......
+close(5)                                = 0
+open("pg_xlog/000000010000000000000028", O_RDWR) = -1 ENOENT (No such file or directory)
+unlink("pg_xlog/xlogtemp.21951")        = -1 ENOENT (No such file or directory)
+open("pg_xlog/xlogtemp.21951", O_RDWR|O_CREAT|O_EXCL, 0600) = 5
+write(5, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"..., 8192) = 8192
+............
+stat("pg_xlog/000000010000000000000028", 0x7fff4b204c30) = -1 ENOENT (No such file or directory)
+link("pg_xlog/xlogtemp.21951", "pg_xlog/000000010000000000000028") = 0
+unlink("pg_xlog/xlogtemp.21951")        = 0
+open("pg_xlog/000000010000000000000028", O_RDWR) = 5
+write(5, "f\320\2\0\1\0\0\0\0\0\0\0\0\0\0\240\355\377_O\305\277^O\0\0\0\4\0 \0\0"..., 311296) = 311296
+fdatasync(5)                            = 0
+
+
+跟踪backend process :
+
+postgres@db-172-16-3-40-> strace -p 26479 
+# 仅当commit时backend process进程会对xlog进行写操作
+Process 26479 attached - interrupt to quit
+recvfrom(7, "Q\0\0\0\fcommit;\0", 8192, 0, NULL, NULL) = 13
+fadvise64(38, 0, 0, POSIX_FADV_DONTNEED) = 0
+close(38)                               = 0
+open("pg_xlog/000000010000000000000028", O_RDWR) = 38
+lseek(38, 56131584, SEEK_SET)           = 56131584
+write(38, "f\320\1\0\1\0\0\0\0\0\0\0\0\200X\243\"\0\0\0\177\6\0\0\2331\0\0\"B\0\0"..., 8192) = 8192
+fdatasync(38)                           = 0
+sendto(6, "\2\0\0\0\210\2\0\0\2331\0\0\6\0\0\0\1\0\0\0\0\0\0\0\33B\0\0\0\0\0\0"..., 648, 0, NULL, 0) = 648
+sendto(7, "C\0\0\0\vCOMMIT\0Z\0\0\0\5I", 18, 0, NULL, 0) = 18
+
+[root@db-172-16-3-40 fd]# cd /proc/26479/fd
+[root@db-172-16-3-40 fd]# ll 38
+lrwx------ 1 postgres postgres 64 Oct 16 09:09 38 -> /pgdata/digoal/1921/data01/pg_xlog/000000010000000000000028
+
+
+因此在使用流复制的primary-standby环境中, standby可以迅速的接收到主节点已经fsync到disk的xlog信息. 取决于wal buffer是否满, 或者系统中有commit. 那么主节点上fsync到磁盘的xlog信息将被sender process(每10ms或者每次commit后被唤醒)发送给standby 的receiver process.
+
+【参考】
+1. Use pageinspect EXTENSION view PostgreSQL Page's raw infomation
+http://blog.163.com/digoal@126/blog/static/16387704020114273265960/
+2. http://www.postgresql.org/docs/9.2/static/pageinspect.html
+3. http://www.postgresql.org/docs/9.2/static/runtime-config-wal.html#RUNTIME-CONFIG-WAL-SETTINGS
+4. USE GDB debug postgres
+http://blog.163.com/digoal@126/blog/static/163877040201252605924116/
+5. t_infomask标示 : 
+
+htup.h
+00158 /*
+00159  * information stored in t_infomask:
+00160  */
+00161 #define HEAP_HASNULL            0x0001  /* has null attribute(s) */
+00162 #define HEAP_HASVARWIDTH        0x0002  /* has variable-width attribute(s) */
+00163 #define HEAP_HASEXTERNAL        0x0004  /* has external stored attribute(s) */
+00164 #define HEAP_HASOID             0x0008  /* has an object-id field */
+00165 /* bit 0x0010 is available */
+00166 #define HEAP_COMBOCID           0x0020  /* t_cid is a combo cid */
+00167 #define HEAP_XMAX_EXCL_LOCK     0x0040  /* xmax is exclusive locker */
+00168 #define HEAP_XMAX_SHARED_LOCK   0x0080  /* xmax is shared locker */
+00169 /* if either LOCK bit is set, xmax hasn't deleted the tuple, only locked it */
+00170 #define HEAP_IS_LOCKED  (HEAP_XMAX_EXCL_LOCK | HEAP_XMAX_SHARED_LOCK)
+00171 #define HEAP_XMIN_COMMITTED     0x0100  /* t_xmin committed */
+00172 #define HEAP_XMIN_INVALID       0x0200  /* t_xmin invalid/aborted */
+00173 #define HEAP_XMAX_COMMITTED     0x0400  /* t_xmax committed */
+00174 #define HEAP_XMAX_INVALID       0x0800  /* t_xmax invalid/aborted */
+00175 #define HEAP_XMAX_IS_MULTI      0x1000  /* t_xmax is a MultiXactId */
+00176 #define HEAP_UPDATED            0x2000  /* this is UPDATEd version of row */
+00177 #define HEAP_MOVED_OFF          0x4000  /* moved to another place by pre-9.0
+00178                                          * VACUUM FULL; kept for binary
+00179                                          * upgrade support */
+00180 #define HEAP_MOVED_IN           0x8000  /* moved from another place by pre-9.0
+00181                                          * VACUUM FULL; kept for binary
+00182                                          * upgrade support */
+00183 #define HEAP_MOVED (HEAP_MOVED_OFF | HEAP_MOVED_IN)
+00184 
+00185 #define HEAP_XACT_MASK          0xFFE0  /* visibility-related bits */
+
+
+6. wal buffer : 
+
+wal_buffers (integer)
+The amount of shared memory used for WAL data that has not yet been written to disk. The default setting of -1 selects a size equal to 1/32nd (about 3%) of shared_buffers, but not less than 64kB nor more than the size of one WAL segment, typically 16MB. This value can be set manually if the automatic choice is too large or too small, but any positive value less than 32kB will be treated as 32kB. This parameter can only be set at server start.
+The contents of the WAL buffers are written out to disk at every transaction commit, so extremely large values are unlikely to provide a significant benefit. However, setting this value to at least a few megabytes can improve write performance on a busy server where many clients are committing at once. The auto-tuning selected by the default setting of -1 should give reasonable results in most cases.
+Increasing this parameter might cause PostgreSQL to request more System V shared memory than your operating system's default configuration allows. See Section 17.4.1 for information on how to adjust those parameters, if necessary.
+
+

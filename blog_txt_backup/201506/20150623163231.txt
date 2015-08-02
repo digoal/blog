@@ -1,0 +1,278 @@
+PostgreSQL research
+
+Why "INSERT ... ON CONFLICT DO NOTHING/UPDATE" Good for performance
+
+2015-06-23 16:32:31   查看原文>>
+
+PostgreSQL 9.5 新增了存在则更新或啥也不干的原子操作。
+这个特性有什么好处呢？
+如果你的应用程序不做保护，直接插入，可能会导致大量的违反唯一约束的错误，这种错误除了会写数据库日志，还会带来一定的问题。
+例子：
+
+postgres=# create table uk_test(id int primary key,info text,crt_time timestamp);
+CREATE TABLE
+postgres=# insert into uk_test values (1,'test',now());
+INSERT 0 1
+
+
+下面插入几个违反唯一约束的报错。
+
+postgres=# insert into uk_test values (1,'test',now());
+ERROR:  duplicate key value violates unique constraint "uk_test_pkey"
+DETAIL:  Key (id)=(1) already exists.
+postgres=# insert into uk_test values (1,'test',now());
+ERROR:  duplicate key value violates unique constraint "uk_test_pkey"
+DETAIL:  Key (id)=(1) already exists.
+postgres=# insert into uk_test values (1,'test',now());
+ERROR:  duplicate key value violates unique constraint "uk_test_pkey"
+DETAIL:  Key (id)=(1) already exists.
+
+
+以上操作实际上已经形成了HEAP tuple，但是没有形成index linepoint，同时在clog中标记为事务失败。
+这些其实是有负面影响的，
+1. 消耗了事务号，我们知道事务号是一个UINT32的整型，每20亿必须做一次frozen。所以这种回滚事务实际上是浪费事务号的。
+2. 浪费XLOG空间，虽然事务回滚了，但是同样形成了块的变更，在XLOG中也是有记录的。
+3. 浪费了空间，同时还需要垃圾回收进程来回收它。
+看看ctid就明白了。
+
+postgres=# insert into uk_test values (2,'test',now());
+INSERT 0 1
+postgres=# select ctid,* from uk_test ;
+ ctid  | id | info |          crt_time          
+-------+----+------+----------------------------
+ (0,1) |  1 | test | 2015-06-23 15:00:33.452243
+ (0,5) |  2 | test | 2015-06-23 15:00:37.431145
+(2 rows)
+
+
+
+使用on conflict ... do nothing;可以有效的避免垃圾的产生：
+
+postgres=# truncate uk_test ;
+TRUNCATE TABLE
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do nothing;
+INSERT 0 1
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do nothing;
+INSERT 0 0
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do nothing;
+INSERT 0 0
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do nothing;
+INSERT 0 0
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do nothing;
+INSERT 0 0
+postgres=# insert into uk_test values (2,'test',now());
+INSERT 0 1
+postgres=# select ctid,* from uk_test ;
+ ctid  | id |  info  |          crt_time          
+-------+----+--------+----------------------------
+ (0,1) |  1 | digoal | 2015-06-23 15:00:59.137141
+ (0,2) |  2 | test   | 2015-06-23 15:01:05.143134
+(2 rows)
+
+
+从上面的ctid可以看到，没有产生任何垃圾。
+
+使用on constraint uk_test_pkey do update set info=excluded.info,crt_time=excluded.crt_time;，提供了原子操作，减少了应用和数据库的交互，对性能提升也是非常明显的。
+更新操作和普通的更新没有区别，产生新的版本。
+
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do update set info=excluded.info,crt_time=excluded.crt_time;
+INSERT 0 1
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do update set info=excluded.info,crt_time=excluded.crt_time;
+INSERT 0 1
+postgres=# select ctid,* from uk_test ;
+ ctid  | id |  info  |          crt_time          
+-------+----+--------+----------------------------
+ (0,2) |  2 | test   | 2015-06-23 15:01:05.143134
+ (0,4) |  1 | digoal | 2015-06-23 15:01:27.715183
+(2 rows)
+
+postgres=# insert into uk_test values (1,'digoal',now()) on conflict on constraint uk_test_pkey do update set info=excluded.info,crt_time=excluded.crt_time;
+INSERT 0 1
+postgres=# select ctid,* from uk_test ;
+ ctid  | id |  info  |          crt_time          
+-------+----+--------+----------------------------
+ (0,2) |  2 | test   | 2015-06-23 15:01:05.143134
+ (0,5) |  1 | digoal | 2015-06-23 15:01:34.485177
+(2 rows)
+
+postgres=# update uk_test set info='new',crt_time=now() where id=1;
+UPDATE 1
+postgres=# select ctid,* from uk_test ;
+ ctid  | id | info |          crt_time          
+-------+----+------+----------------------------
+ (0,2) |  2 | test | 2015-06-23 15:01:05.143134
+ (0,6) |  1 | new  | 2015-06-23 15:02:12.968176
+(2 rows)
+
+
+
+性能测试对比：
+传统的最靠谱的存在则更新，不存在则插入的方法：
+
+postgres=# create or replace function ins_update (v_id int) returns void as $$
+declare
+begin
+  perform 1 from uk_test where id=v_id limit 1;
+  if found then
+    update uk_test set info='test',crt_time=now() where id=v_id;
+  else
+    insert into uk_test values(v_id,'test',now());
+  end if;
+  exception when others then
+    return;
+end;
+$$ language plpgsql;
+CREATE FUNCTION
+
+
+性能：
+postgres=# select pg_stat_reset_single_table_counters('uk_test'::regclass);
+postgres=# truncate uk_test ;
+postgres=# checkpoint;
+
+pg95@db-172-16-3-150-> vi test.sql
+\setrandom id 1 5000000
+select ins_update(:id);
+
+pg95@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -P 1 -c 32 -j 32 -T 60
+progress: 1.0 s, 44468.6 tps, lat 0.638 ms stddev 1.028
+progress: 2.0 s, 46454.6 tps, lat 0.687 ms stddev 1.078
+progress: 3.0 s, 46644.0 tps, lat 0.685 ms stddev 1.112
+progress: 4.0 s, 46005.8 tps, lat 0.693 ms stddev 1.116
+progress: 5.0 s, 45636.1 tps, lat 0.700 ms stddev 1.107
+progress: 6.0 s, 45518.6 tps, lat 0.701 ms stddev 1.117
+progress: 7.0 s, 45674.2 tps, lat 0.699 ms stddev 1.090
+progress: 8.0 s, 45288.2 tps, lat 0.705 ms stddev 1.150
+progress: 9.0 s, 45074.2 tps, lat 0.708 ms stddev 1.125
+......
+progress: 56.0 s, 36654.9 tps, lat 0.871 ms stddev 1.590
+progress: 57.0 s, 36694.7 tps, lat 0.870 ms stddev 1.530
+progress: 58.0 s, 36511.4 tps, lat 0.875 ms stddev 1.577
+progress: 59.0 s, 37118.4 tps, lat 0.860 ms stddev 1.502
+progress: 60.0 s, 36207.2 tps, lat 0.880 ms stddev 1.556
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 32
+duration: 60 s
+number of transactions actually processed: 2456377
+latency average: 0.778 ms
+latency stddev: 1.327 ms
+tps = 40934.377749 (including connections establishing)
+tps = 41005.456116 (excluding connections establishing)
+statement latencies in milliseconds:
+        -0.001878       \setrandom id 1 5000000
+        0.775430        select ins_update(:id);
+
+postgres=# select * from pg_stat_all_tables where relname='uk_test';
+-[ RECORD 1 ]-------+------------------------------
+relid               | 16930
+schemaname          | public
+relname             | uk_test
+seq_scan            | 0
+seq_tup_read        | 0
+idx_scan            | 13841219
+idx_tup_fetch       | 3655255
+n_tup_ins           | 1941192
+n_tup_upd           | 515185
+n_tup_del           | 0
+n_tup_hot_upd       | 482125
+n_live_tup          | 1941184
+n_dead_tup          | 36686
+n_mod_since_analyze | 0
+last_vacuum         | 
+last_autovacuum     | 2015-06-23 16:03:39.271969+08
+last_analyze        | 
+last_autoanalyze    | 2015-06-23 16:04:38.928135+08
+vacuum_count        | 0
+autovacuum_count    | 1
+analyze_count       | 0
+autoanalyze_count   | 2
+
+
+
+使用insert into ... on conflict ... update set ...
+性能：
+
+postgres=# select pg_stat_reset_single_table_counters('uk_test'::regclass);
+postgres=# truncate uk_test ;
+postgres=# checkpoint;
+
+pg95@db-172-16-3-150-> vi test.sql
+\setrandom id 1 5000000
+insert into uk_test values (:id,'test',now()) on conflict on constraint uk_test_pkey do update set info=excluded.info,crt_time=excluded.crt_time;
+
+pg95@db-172-16-3-150-> pgbench -M prepared -n -r -f ./test.sql -P 1 -c 32 -j 32 -T 60
+progress: 1.0 s, 62283.4 tps, lat 0.430 ms stddev 0.823
+progress: 2.0 s, 64971.9 tps, lat 0.490 ms stddev 0.969
+progress: 3.0 s, 65560.7 tps, lat 0.486 ms stddev 0.937
+progress: 4.0 s, 64161.9 tps, lat 0.496 ms stddev 0.956
+progress: 5.0 s, 64003.1 tps, lat 0.498 ms stddev 0.994
+progress: 6.0 s, 63739.1 tps, lat 0.499 ms stddev 1.007
+progress: 7.0 s, 62974.2 tps, lat 0.505 ms stddev 1.005
+progress: 8.0 s, 62266.2 tps, lat 0.512 ms stddev 1.006
+......
+progress: 33.0 s, 53306.1 tps, lat 0.598 ms stddev 1.239
+progress: 34.0 s, 52924.6 tps, lat 0.602 ms stddev 1.275
+progress: 35.0 s, 52799.8 tps, lat 0.603 ms stddev 1.268
+progress: 36.0 s, 52527.6 tps, lat 0.607 ms stddev 1.264
+progress: 37.0 s, 51948.2 tps, lat 0.613 ms stddev 1.303
+progress: 38.0 s, 51547.3 tps, lat 0.618 ms stddev 1.330
+progress: 39.0 s, 50852.2 tps, lat 0.626 ms stddev 1.348
+......
+progress: 57.0 s, 45127.5 tps, lat 0.707 ms stddev 1.614
+progress: 58.0 s, 44983.0 tps, lat 0.708 ms stddev 1.573
+progress: 59.0 s, 45179.3 tps, lat 0.706 ms stddev 1.585
+progress: 60.0 s, 45045.4 tps, lat 0.708 ms stddev 1.579
+随着数据重复率越来越高，更新越来越多，TPS呈现下降趋势。
+
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 32
+duration: 60 s
+number of transactions actually processed: 3237650
+latency average: 0.589 ms
+latency stddev: 1.264 ms
+tps = 53954.428043 (including connections establishing)
+tps = 54087.133269 (excluding connections establishing)
+statement latencies in milliseconds:
+        -0.002449       \setrandom id 1 5000000
+        0.586167        insert into uk_test values (:id,'test',now()) on conflict on constraint uk_test_pkey do update set info=excluded.info,crt_time=excluded.crt_time;
+
+
+postgres=# select * from pg_stat_all_tables where relname='uk_test';
+-[ RECORD 1 ]-------+------------------------------
+relid               | 16930
+schemaname          | public
+relname             | uk_test
+seq_scan            | 0
+seq_tup_read        | 0
+idx_scan            | 10869657
+idx_tup_fetch       | 2624947
+n_tup_ins           | 2383669
+n_tup_upd           | 853982
+n_tup_del           | 1
+n_tup_hot_upd       | 800533
+n_live_tup          | 2360714
+n_dead_tup          | 27022
+n_mod_since_analyze | 811433
+last_vacuum         | 
+last_autovacuum     | 2015-06-23 16:01:41.707076+08
+last_analyze        | 
+last_autoanalyze    | 2015-06-23 16:01:42.553299+08
+vacuum_count        | 0
+autovacuum_count    | 1
+analyze_count       | 0
+autoanalyze_count   | 1
+
+
+
+可以看到性能提升是非常明显的。
+
+[参考]
+1. http://www.postgresql.org/docs/devel/static/sql-insert.html#SQL-ON-CONFLICT
+2. http://blog.163.com/digoal@126/blog/static/163877040201541094137923/
+Flag Counter

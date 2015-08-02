@@ -1,0 +1,109 @@
+PostgreSQL research
+
+PostgreSQL 9.2 add a dedicated worker process to perform checkpoints
+
+2012-05-18 14:14:12   查看原文>>
+
+以下是一个PostgreSQL9.2的运行进程 : 
+
+19204 pg92      15   0 2231m  14m  13m S  0.0  0.1   0:00.01 postgres: writer process                                               
+19206 pg92      15   0 2231m  17m  16m S  0.0  0.1   0:00.22 postgres: wal writer process                                           
+19208 pg92      15   0  110m 1544  864 S  0.0  0.0   0:00.09 postgres: stats collector process                                      
+19202 pg92      15   0  108m 1364  796 S  0.0  0.0   0:00.00 postgres: logger process                                               
+19205 pg92      15   0 2231m  60m  59m S  0.0  0.3   0:00.08 postgres: checkpointer process                                         
+19207 pg92      15   0 2232m 2548 1268 S  0.0  0.0   0:00.03 postgres: autovacuum launcher process                                  
+19197 pg92      15   0 2230m  66m  65m S  0.0  0.3   0:00.09 /opt/pgsql92/bin/postgres
+
+
+显然比以前的版本多了一个进程名字叫做checkpointer process.
+同时在代码中也可以看出来，
+新增的代码文件src/backend/postmaster/checkpointer.c 截取.
+
+
+/*-------------------------------------------------------------------------
+ *
+ * checkpointer.c
+ *
+ * The checkpointer is new as of Postgres 9.2.  It handles all checkpoints.
+ * Checkpoints are automatically dispatched after a certain amount of time has
+ * elapsed since the last one, and it can be signaled to perform requested
+ * checkpoints as well.  (The GUC parameter that mandates a checkpoint every
+ * so many WAL segments is implemented by having backends signal when they
+ * fill WAL segments; the checkpointer itself doesn't watch for the
+ * condition.)
+ *
+ * The checkpointer is started by the postmaster as soon as the startup
+ * subprocess finishes, or as soon as recovery begins if we are doing archive
+ * recovery.  It remains alive until the postmaster commands it to terminate.
+ * Normal termination is by SIGUSR2, which instructs the checkpointer to
+ * execute a shutdown checkpoint and then exit(0).  (All backends must be
+ * stopped before SIGUSR2 is issued!)  Emergency termination is by SIGQUIT;
+ * like any backend, the checkpointer will simply abort and exit on SIGQUIT.
+ *
+ * If the checkpointer exits unexpectedly, the postmaster treats that the same
+ * as a backend crash: shared memory may be corrupted, so remaining backends
+ * should be killed by SIGQUIT and then a recovery cycle started.  (Even if
+ * shared memory isn't corrupted, we have lost information about which
+ * files need to be fsync'd for the next checkpoint, and so a system
+ * restart needs to be forced.)
+ *
+ *
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ *
+ *
+ * IDENTIFICATION
+ *        src/backend/postmaster/checkpointer.c
+ *
+ *-------------------------------------------------------------------------
+ */
+
+
+
+/*----------
+ * Shared memory area for communication between checkpointer and backends
+ *
+ * The ckpt counters allow backends to watch for completion of a checkpoint
+ * request they send.  Here's how it works:
+ *      * At start of a checkpoint, checkpointer reads (and clears) the request
+ *        flags and increments ckpt_started, while holding ckpt_lck.
+ *      * On completion of a checkpoint, checkpointer sets ckpt_done to
+ *        equal ckpt_started.
+ *      * On failure of a checkpoint, checkpointer increments ckpt_failed
+ *        and sets ckpt_done to equal ckpt_started.
+ *
+ * The algorithm for backends is:
+ *      1. Record current values of ckpt_failed and ckpt_started, and
+ *         set request flags, while holding ckpt_lck.
+ *      2. Send signal to request checkpoint.
+ *      3. Sleep until ckpt_started changes.  Now you know a checkpoint has
+ *         begun since you started this algorithm (although *not* that it was
+ *         specifically initiated by your signal), and that it is using your flags.
+ *      4. Record new value of ckpt_started.
+ *      5. Sleep until ckpt_done >= saved value of ckpt_started.  (Use modulo
+ *         arithmetic here in case counters wrap around.)  Now you know a
+ *         checkpoint has started and completed, but not whether it was
+ *         successful.
+ *      6. If ckpt_failed is different from the originally saved value,
+ *         assume request failed; otherwise it was definitely successful.
+ *
+ * ckpt_flags holds the OR of the checkpoint request flags sent by all
+ * requesting backends since the last checkpoint start.  The flags are
+ * chosen so that OR'ing is the correct way to combine multiple requests.
+ *
+ * num_backend_writes is used to count the number of buffer writes performed
+ * by user backend processes.  This counter should be wide enough that it
+ * can't overflow during a single processing cycle.  num_backend_fsync
+ * counts the subset of those writes that also had to do their own fsync,
+ * because the checkpointer failed to absorb their request.
+ *
+ * The requests array holds fsync requests sent by backends and not yet
+ * absorbed by the checkpointer.
+ *
+ * Unlike the checkpoint fields, num_backend_writes, num_backend_fsync, and
+ * the requests fields are protected by CheckpointerCommLock.
+ *----------
+ */
+
+
+当然，并不是说checkpointer进程独立出来了，就不会发生backend process 处理checkpoint的动作了. 当checkpointer处理不过来的时候backend process还是会发生checkpoint的。
+

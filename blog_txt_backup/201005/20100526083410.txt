@@ -1,0 +1,138 @@
+PostgreSQL research
+
+PostgreSQL and MySQL lock compare ext.
+
+2010-05-26 8:34:10   查看原文>>
+
+事情的起因是这样的，今天同事碰到MYSQL奇怪的慢查询问题，大概如下：
+
+select * from table where id=?
+
+id是主键，按常理，这条SQL应该很快才对，但是每天都有不定期的出现慢的情况。
+
+这个表只有三种操作，insert delete ,select。
+
+经过下面的实验发现了一个很严重的问题，MYSQL的锁似乎有点暴力，在对表进行DML操作的时候，SELECT需要等待。
+
+测试如下（分别对MyISAM和innodb引擎的表进行了测试)：
+
+create table tbl_test1 (id int primary key) engine=myisam;
+
+insert into tbl_test1 (3千万记录）
+
+create table tbl_test2 (id int primary key) engine=innodb;
+
+insert into tbl_test2 (3千万记录）
+
+看看执行计划：
+
+select * from tbl_test1 wher id=?
+
+
++—-+————-+———–+——-+—————+—————+———+——-+——+————-+
+| id | select_type | table     | type  | possible_keys | key           | key_len | ref   | rows | Extra       |
++—-+————-+———–+——-+—————+—————+———+——-+——+————-+
+|  1 | SIMPLE      | tbl_test1 | const | tbl_test2_idx | tbl_test2_idx | 4       | const |    1 | Using index |
++—-+————-+———–+——-+—————+—————+———+——-+——+————-+
+1 row in set (0.00 sec)
++—-+————-+———–+——-+—————+—————+———+——-+——+————-+
+| id | select_type | table     | type  | possible_keys | key           | key_len | ref   | rows | Extra       |
++—-+————-+———–+——-+—————+—————+———+——-+——+————-+
+|  1 | SIMPLE      | tbl_test2 | const | tbl_test2_idx | tbl_test2_idx | 4       | const |    1 | Using index |
++—-+————-+———–+——-+—————+—————+———+——-+——+————-+
+1 row in set (0.00 sec)
+
+
++—-+————-+———–+——-+—————+—————+———+——-+——+————-+| id | select_type | table     | type  | possible_keys | key           | key_len | ref   | rows | Extra       |+—-+————-+———–+——-+—————+—————+———+——-+——+————-+|  1 | SIMPLE      | tbl_test2 | const | tbl_test2_idx | tbl_test2_idx | 4       | const |    1 | Using index |+—-+————-+———–+——-+—————+—————+———+——-+——+————-+1 row in set (0.00 sec)
+
+
+好了，接下来开始执行一条删除的SQL
+
+session1:
+
+
+delete from tbl_test1 where id <?
+
+
+session 2:
+
+
+select * from tbl_test1 where id=?
+
+
+session 3:
+
+
+show processlist;
+
+
+mysql> show processlist;
+
+
++—-+——+———–+——+———+——+———-+—————————————–+
+
+
+| Id | User | Host      | db   | Command | Time | State    | Info                                    |
+
+
++—-+——+———–+——+———+——+———-+—————————————–+
+
+
+|  3 | root | localhost | test | Query   |   23 | Locked   | select * from tbl_test2 where id=122767 |
+
+
+|  4 | root | localhost | test | Query   |   24 | updating | delete from tbl_test2 where id<6276758  |
+
+
+|  5 | root | localhost | test | Query   |    0 | NULL     | show processlist                        |
+
+
++—-+——+———–+——+———+——+———-+—————————————–+
+
+
+3 rows in set (0.00 sec)
+
+
+mysql> show processlist;
+
+
++—-+——+———–+——+———+——+———-+—————————————–+
+
+
+| Id | User | Host      | db   | Command | Time | State    | Info                                    |
+
+
++—-+——+———–+——+———+——+———-+—————————————–+
+
+
+|  3 | root | localhost | test | Query   |   23 | Locked   | select * from tbl_test1 where id=10122767 |
+
+
+|  4 | root | localhost | test | Query   |   24 | updating | delete from tbl_test1 where id<6276758  |
+
+
+|  5 | root | localhost | test | Query   |    0 | NULL     | show processlist                        |
+
+
++—-+——+———–+——+———+——+———-+—————————————–+
+
+
+3 rows in set (0.00 sec)
+
+
+在SESSION1删除TBL_TEST2的某些记录时，SESSION2查询处于等待状态。
+
+所以，DELETE如果慢的话，SELECT也跟着变慢了。这太不能接受了，而且myisam和innode都一样。
+
+最不能理解的是删除的记录里面并没有包含我要查询的记录，为啥要等待呢？
+
+接下来看看PostgreSQL:
+
+同样的表，SESSION1在删除时，SESSION2的查询不会受到影响，SESSION2在SESSION1没有真正删除到被删除的行是，SESSION2是可以查询到该记录的。很明显在Postgresql做批量删除时，是行锁或块锁。所以并发度很好。
+
+而MYSQL在删除时看样子不应该是行锁或块锁，所以并发性能不好。
+
+在设计MYSQL的应用的时候，切记这种类型的SQL操作，防止并发下降.
+
+（我对MYSQL还不太熟悉，哈哈，写的不对的话请多批评）
+

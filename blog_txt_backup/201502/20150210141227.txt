@@ -1,0 +1,266 @@
+PostgreSQL research
+
+avoid local TIME_WAIT when use port_probe in sky_pg_cluster by set setsockopt ：SO_LINGER
+
+2015-02-10 14:12:27   查看原文>>
+
+一个PostgreSQL master-slave HA集群, 主节点被莫名的failover了.
+在standby上看到的一些日志(/tmp/sky_pg_cluster.log)
+在出现异常前, 经常有port_probe报出来的 connect failed的错误.
+
+2015-02-0917:35:38 detecting eth0 192.168.173.143 exists, ps: return 0 exist, other not exist.
+connect failed!: Operation now in progress
+socket created!
+checkmaster check times: 1
+2015-02-0917:36:03 detecting eth0 192.168.173.143 exists, ps: return 0 exist, other not exist.
+connect failed!: Operation now in progress
+socket created!
+checkmaster check times: 2
+2015-02-0917:36:06 detecting eth0 192.168.173.143 exists, ps: return 0 exist, other not exist.
+connect failed!: Operation now in progress
+socket created!
+checkmaster check times: 3
+2015-02-0917:36:09 detecting eth0 192.168.173.143 exists, ps: return 0 exist, other not exist.
+socket created!
+connect ok!
+check master normal.
+
+
+对应的时间点, 在数据库日志中发现有53300的报错, 这种报错说明连接数用光了.
+剩余连接时给超级用户预留的.
+
+postgresql-2015-02-09_173502.csv:2015-02-09 17:35:38.950 CST,"digoal","digoal",9604,"xxx.xxx.xxx.xxx:59292",54d87f6a.2584,2,"authentication",2015-02-09 17:35:38 CST,,0,FATAL,53300,"sorry, too many clients already",,,,,,,,"InitProcess, proc.c:336",""
+postgresql-2015-02-09_173502.csv:2015-02-09 17:35:39.177 CST,"digoal","digoal",9612,"xxx.xxx.xxx.xxx:34046",54d87f6b.258c,2,"authentication",2015-02-09 17:35:39 CST,,0,FATAL,53300,"sorry, too many clients already",,,,,,,,"InitProcess, proc.c:336",""
+postgresql-2015-02-09_173502.csv:2015-02-09 17:35:39.190 CST,"digoal","digoal",9488,"xxx.xxx.xxx.xxx:59367",54d87f64.2510,3,"startup",2015-02-09 17:35:32 CST,1826/25,0,FATAL,53300,"remaining connection slots are reserved for non-replication superuser connections",,,,,,,,"InitPostgres, postinit.c:660",""
+postgresql-2015-02-09_173502.csv:2015-02-09 17:35:39.191 CST,"digoal","digoal",9588,"xxx.xxx.xxx.xxx:59245",54d87f68.2574,3,"startup",2015-02-09 17:35:36 CST,1988/34,0,FATAL,53300,"remaining connection slots are reserved for non-replication superuser connections",,,,,,,,"InitPostgres, postinit.c:660",""
+
+
+错误对应 : 
+
+man connect
+       EINPROGRESS
+              The socket is non-blocking and the connection cannot  be  completed  immediately.   It  is  possible  to
+              select(2)  or  poll(2)  for  completion  by selecting the socket for writing.  After select(2) indicates
+              writability, use getsockopt(2) to read the SO_ERROR option at level SOL_SOCKET to determine whether con-
+              nect()  completed  successfully (SO_ERROR is zero) or unsuccessfully (SO_ERROR is one of the usual error
+              codes listed here, explaining the reason for the failure).
+
+
+探测端口的port_probe.c代码如下 : 
+
+# cat /opt/soft_bak/port_probe.c 
+/*                                                                                                                                  
+# 用于探测仲裁服务器上的vip端口代理.                                                                                                
+# install:                                                                                                                          
+# gcc -O3 -Wall -Wextra -Werror -g -o port_probe ./port_probe.c                                                                     
+                                                                                                                                    
+# Author : Digoal zhou                                                                                                              
+# Email : digoal@126.com                                                                                                            
+# Blog : http://blog.163.com/digoal@126/                                                                                            
+*/
+
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <strings.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <sys/time.h>
+
+// 错误函数, 当exit_val=0只输出错误信息, 不退出程序. 其他值输出错误信息并退出程序
+void error(char * msg, int exit_val);
+
+void error(char * msg, int exit_val) {
+  fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+  // if exit_val == 0, not exit the program.
+  if (exit_val)
+    exit(exit_val);
+}
+
+int main(int argc,char *argv[])
+{
+  if(argc == 1)
+    error("USAGE [program ip port]", 1);
+  int cfd;
+  struct sockaddr_in s_add;
+     
+  cfd = socket(AF_INET, SOCK_STREAM, 0);
+  if(-1 == cfd)
+    error("socket create failed!", -1);
+  fprintf(stdout, "socket created!\n");
+
+  bzero(&s_add, sizeof(struct sockaddr_in));
+  s_add.sin_family=AF_INET;
+  s_add.sin_addr.s_addr= inet_addr(argv[1]);
+  s_add.sin_port=htons(atoi(argv[2]));
+
+  // 设置连接超时, 否则如果端口不通, connect可能会很久.
+  struct timeval tv_timeout;
+  tv_timeout.tv_sec = 2;
+  tv_timeout.tv_usec = 0;
+  if (setsockopt(cfd, SOL_SOCKET, SO_SNDTIMEO, (void *) &tv_timeout, sizeof(struct timeval)) < 0) {
+    error("setsockopt error!", -1);
+  }
+  if (setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, (void *) &tv_timeout, sizeof(struct timeval)) < 0) {
+    error("setsockopt error!", -1);
+  }
+
+  if(-1 == connect(cfd, (struct sockaddr *)(&s_add), sizeof(struct sockaddr))) {
+    error("connect failed!", -1);
+  }
+  fprintf(stdout, "connect ok!\n");
+
+  close(cfd);
+  return 0;
+}
+
+
+但是这个问题没有办法重现, 当我在一个测试环境中, 把连接占满后, 使用port_probe探测端口还是能正常返回的.
+环境 : 
+
+PostgreSQL版本
+9.2.9
+OS版本CentOS 6.6 x64
+kernel 2.6.32-504.el6.x86_64
+
+
+不过, 排查这个问题倒发现了一个新的问题, 我们这个port_probe在close连接后, 客户端对应的tcp会话会处于TIME_WAIT状态.
+默认超时应该是60秒.
+例如 : 
+
+[root@db-192-168-173-37 soft_bak]# ./port_probe 127.0.0.1 1921
+socket created!
+connect ok!
+[root@db-192-168-173-37 soft_bak]# netstat -anpo|grep 1921
+tcp        0      0 0.0.0.0:1921                0.0.0.0:*                   LISTEN      2298/postgres       off (0.00/0/0)
+tcp        0      0 192.168.173.37:44398        192.168.173.130:1921        ESTABLISHED 4096/postgres       keepalive (1.07/0/0)
+tcp        0      0 127.0.0.1:17389             127.0.0.1:1921              TIME_WAIT   -                   timewait (59.36/0/0)
+unix  2      [ ACC ]     STREAM     LISTENING     14082  2298/postgres       ./.s.PGSQL.1921
+
+
+所以问题来了, 如果我们探测非常频繁的话, 可能导致TCP端口被全部占用, 从而导致探测失败.
+
+# vi test.sh
+#!/bin/bash
+
+for ((i=0;i<100000;i++))
+do
+/opt/soft_bak/port_probe 远端IP 1921
+done
+
+#  . ./test.sh
+....
+socket created!
+connect ok!
+socket created!
+......
+socket created!
+connect failed!: Cannot assign requested address
+
+
+
+port_probe的本地大量的TIME_WAIT连接
+远端(数据库端)没有出现TIME_WAIT
+要解决这个问题, 可以修改一下port_probe程序.
+参考
+http://blog.csdn.net/factor2000/article/details/3929816
+使用强制关闭.
+修改后的程序如下 : 
+
+/*                                                                                                                                  
+# 用于探测仲裁服务器上的vip端口代理.                                                                                                
+# install:                                                                                                                          
+# gcc -O3 -Wall -Wextra -Werror -g -o port_probe ./port_probe.c                                                                     
+                                                                                                                                    
+# Author : Digoal zhou                                                                                                              
+# Email : digoal@126.com                                                                                                            
+# Blog : http://blog.163.com/digoal@126/                                                                                            
+*/
+
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <strings.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <sys/time.h>
+
+
+// 错误函数, 当exit_val=0只输出错误信息, 不退出程序. 其他值输出错误信息并退出程序
+void error(char * msg, int exit_val);
+
+void error(char * msg, int exit_val) {
+  fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+  // if exit_val == 0, not exit the program.
+  if (exit_val)
+    exit(exit_val);
+}
+
+int main(int argc,char *argv[])
+{
+  if(argc == 1)
+    error("USAGE [program ip port]", 1);
+  int cfd;
+  struct sockaddr_in s_add;
+     
+  cfd = socket(AF_INET, SOCK_STREAM, 0);
+  if(-1 == cfd)
+    error("socket create failed!", -1);
+  fprintf(stdout, "socket created!\n");
+
+  bzero(&s_add, sizeof(struct sockaddr_in));
+  s_add.sin_family=AF_INET;
+  s_add.sin_addr.s_addr= inet_addr(argv[1]);
+  s_add.sin_port=htons(atoi(argv[2]));
+
+  // 设置连接超时, 否则如果端口不通, connect可能会很久.
+  struct timeval tv_timeout;
+  tv_timeout.tv_sec = 2;
+  tv_timeout.tv_usec = 0;
+
+  // 避免本地出现TIME_WAIT
+  struct linger {
+     int l_onoff; /* 0 = off, nozero = on */
+     int l_linger; /* linger time */
+  };
+  struct linger so_linger;
+  so_linger.l_onoff = 1;
+  so_linger.l_linger = 0;
+
+  if (setsockopt(cfd, SOL_SOCKET, SO_SNDTIMEO, (void *) &tv_timeout, sizeof(struct timeval)) < 0) {
+    error("setsockopt SO_SNDTIMEO error!", -1);
+  }
+  if (setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, (void *) &tv_timeout, sizeof(struct timeval)) < 0) {
+    error("setsockopt SO_RCVTIMEO error!", -1);
+  }
+  if (setsockopt(cfd, SOL_SOCKET, SO_LINGER, (void *) &so_linger, sizeof(so_linger)) < 0) {
+    error("setsockopt error!", -1);
+  }
+
+  if(-1 == connect(cfd, (struct sockaddr *)(&s_add), sizeof(struct sockaddr))) {
+    error("connect failed!", -1);
+  }
+  fprintf(stdout, "connect ok!\n");
+
+  close(cfd);
+  return 0;
+}
+
+
+使用这个版本就不会再出现TIME_WAIT的问题了.
+另外, 通过修改内核参数, 也可以缓解这个问题, 但是没上面直接改客户端代码的效果好.
+http://blog.163.com/digoal@126/blog/static/163877040201362355123969/
+sysctl -w net.ipv4.tcp_tw_recycle=1
+sysctl -w net.ipv4.tcp_timestamps=1
+
+Flag Counter

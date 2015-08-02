@@ -1,0 +1,168 @@
+PostgreSQL research
+
+why PostgreSQL - jdbc getTables error
+
+2011-12-23 8:05:39   查看原文>>
+
+一个生产系统的报错 : 
+2011-12-23 00:00:22.046 CST,"mmochat","mmochat3",2393,"127.0.0.1:35406",4ef34f4d.959,4,"PARSE",2011-12-22 23:39:57 CST,123/0,53282411,ERROR,25P02,"current transaction is aborted, commands ignored until end of transaction block",,,,,,"SELECT NULL AS TABLE_CAT, n.nspname AS TABLE_SCHEM, c.relname AS TABLE_NAME,  CASE
+n.nspname ~ '^pg_' OR n.nspname = 'information_schema'  WHEN true THEN CASE  WHEN n.nspname = 'pg_catalog' OR n.nspname = 'information_schema' THEN CASE c.relkind   WHEN 'r' THEN 'SYSTEM TABLE'   WHEN 'v' THEN 'SYSTEM VIEW'   WHEN 'i' THEN 'SYSTEM INDEX'   ELSE NULL   END  WHEN n.nspname = 'pg_toast' THEN CASE
+c.relkind   WHEN 'r' THEN 'SYSTEM TOAST TABLE'   WHEN 'i' THEN 'SYSTEM TOAST INDEX'   ELSE NULL   END  ELSE CASE c.relkind   WHEN 'r' THEN 'TEMPORARY TABLE'   WHEN 'i' THEN 'TEMPORARY INDEX'   ELSE NULL   END  END  WHEN false THEN CASE c.relkind  WHEN 'r' THEN 'TABLE'  WHEN 'i' THEN 'INDEX'  WHEN 'S' THEN 'SEQUENCE'
+ WHEN 'v' THEN 'VIEW'  ELSE NULL  END  ELSE NULL  END  AS TABLE_TYPE, d.description AS REMARKS  FROM pg_catalog.pg_namespace n, pg_catalog.pg_class c  LEFT JOIN pg_catalog.pg_description d ON (c.oid = d.objoid AND d.objsubid = 0)  LEFT JOIN pg_catalog.pg_class dc ON (d.classoid=dc.oid AND dc.relname='pg_class')  LEFT
+JOIN pg_catalog.pg_namespace dn ON (dn.oid=dc.relnamespace AND dn.nspname='pg_catalog')  WHERE c.relnamespace = n.oid  AND c.relname LIKE 'PROBABLYNOT'  AND (false  OR ( c.relkind = 'r' AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema' ) )  ORDER BY TABLE_TYPE,TABLE_SCHEM,TABLE_NAME ",,,""
+
+首先要知道这句SQL来自什么地方, 是谁发起的请求?
+这句SQL来自postgresql-jdbc驱动, 
+源码文件在 : 
+org/postgresql/jdbc2/AbstractJdbc2DatabaseMetaData.java
+
+然后分析这个问题, 问题并不在SQL, 因为执行是没有问题的, 而是current transaction is aborted, commands ignored until end of transaction block
+解决这个问题需要知道在调用getTables之前还有哪些动作, 那些才是引发这个报错的原因.为什么这么说呢? 来看一个例子 : 
+digoal=> create table test (id int check (id<10));
+CREATE TABLE
+digoal=> begin;
+BEGIN
+digoal=> insert into test values(10);
+ERROR:  new row for relation "test" violates check constraint "test_id_check"
+digoal=> insert into test values(9);
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+digoal=> end;
+ROLLBACK
+数据库日志如下 : 
+2011-12-23 07:48:24.516 CST,"digoal","digoal",18551,"127.0.0.1:26509",4ef3c1a1.4877,5,"INSERT",2011-12-23 07:47:45 CST,2/98,0,ERROR,23514,"new row for relation ""test"" violates check constraint ""test_id_check""",,,,,,"insert into test values(10);",,,"psql"
+2011-12-23 07:48:28.309 CST,"digoal","digoal",18551,"127.0.0.1:26509",4ef3c1a1.4877,6,"INSERT",2011-12-23 07:47:45 CST,2/0,0,ERROR,25P02,"current transaction is aborted, commands ignored until end of transaction block",,,,,,"insert into test values(9);",,,"psql"
+在这两条错误中
+SESSION_ID=4ef3c1a1.4877
+SESSION_LINE_NUM=5, 6
+transaction_id=0
+
+好的，接下来分析生产系统的问题, 看看生产系统中报错的
+SESSION_ID = 4ef34f4d.959,4
+transaction_id= 53282411
+再次到生产系统中根据这两个号去查，查到在这条报错的上一条报错满足我们的需求,如下 : 
+2011-12-23 00:00:22.045 CST,"mmochat","mmochat3",2393,"127.0.0.1:35406",4ef34f4d.959,3,"INSERT",2011-12-22 23:39:57 CST,123/248970,5
+3282411,ERROR,23505,"duplicate key value violates unique constraint ""role_name_key""","Key (name)=(雪落无痕) already exists.",,,,,"
+insert into role(skyid, name, sexual, family, type, friendlist_bmp, latest_login_time, latest_offline_time, suggest_name, create_tim
+e, imei) values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",,,""
+根源就是这了。就是说getTables和这条应用发出的SQL请求封装在一个事务中，并且这条应用的SQL刚好也失败了，导致事务失败, 也就是后面的getTables失败。
+那么，为什么getTables要和应用的SQL搅和在一起呢？这个要问postgreSQL-jdbc的开发者了。
+也许是为了减少与数据库的交互次数.
+
+小结 : 
+1. getTables是不是一个问题？该不该有？
+        从postgresql-jdbc得到的描述是这样的,Get a description of tables available in a catalog.
+        异常的捕获是exception SQLException if a database-access error occurs.
+        看起来没有多大必要, 有开关的话尽量关掉无谓的请求. 如果只是为了捕获这个异常, 业务系统应该也可以解决的. 
+2. 为什么getTables会报错?
+        前面已经分析过了, 因为getTables与业务系统发起的SQL请求封装在一个事务中, 如果业务系统发出的SQL请求失败了, 再提交getTables的           请求将失败.
+
+参考 : 
+
+CREATE TABLE postgres_log (   log_time timestamp(3) with time zone,   user_name text,   database_name text,   process_id integer,   connection_from text,   session_id text,   session_line_num bigint,   command_tag text,   session_start_time timestamp with time zone,   virtual_transaction_id text,   transaction_id bigint,   error_severity text,   sql_state_code text,   message text,   detail text,   hint text,   internal_query text,   internal_query_pos integer,   context text,   query text,   query_pos integer,   location text,   application_name text,   PRIMARY KEY (session_id, session_line_num) );
+
+
+http://jdbc.postgresql.org/
+org/postgresql/jdbc2/AbstractJdbc2DatabaseMetaData.java
+/*
+     * Get a description of tables available in a catalog.
+     *
+     * <p>Only table descriptions matching the catalog, schema, table
+     * name and type criteria are returned. They are ordered by
+     * TABLE_TYPE, TABLE_SCHEM and TABLE_NAME.
+     *
+     * <p>Each table description has the following columns:
+     *
+     * <ol>
+     * <li><b>TABLE_CAT</b> String => table catalog (may be null)
+     * <li><b>TABLE_SCHEM</b> String => table schema (may be null)
+     * <li><b>TABLE_NAME</b> String => table name
+     * <li><b>TABLE_TYPE</b> String => table type. Typical types are "TABLE",
+     * "VIEW", "SYSTEM TABLE", "GLOBAL TEMPORARY", "LOCAL
+     * TEMPORARY", "ALIAS", "SYNONYM".
+     * <li><b>REMARKS</b> String => explanatory comment on the table
+     * </ol>
+     *
+     * <p>The valid values for the types parameter are:
+     * "TABLE", "INDEX", "SEQUENCE", "VIEW", "TYPE"
+     * "SYSTEM TABLE", "SYSTEM INDEX", "SYSTEM VIEW",
+     * "SYSTEM TOAST TABLE", "SYSTEM TOAST INDEX",
+     * "TEMPORARY TABLE", "TEMPORARY VIEW", "TEMPORARY INDEX",
+     * "TEMPORARY SEQUENCE", "FOREIGN TABLE".
+     *
+     * @param catalog a catalog name; For org.postgresql, this is ignored, and
+     * should be set to null
+     * @param schemaPattern a schema name pattern
+     * @param tableNamePattern a table name pattern. For all tables this should be "%"
+     * @param types a list of table types to include; null returns
+     * all types
+     * @return each row is a table description
+     * @exception SQLException if a database-access error occurs.
+     */
+    public java.sql.ResultSet getTables(String catalog, String schemaPattern, String tableNamePattern, String types[]) throws SQLException
+   
+【备注】
+今天发这个问题发到qq群之后得到了孙博士的支持，
+http://www.java2s.com/Open-Source/Java-Document/Database-JDBC-Connection-Pool/c3p0/com/mchange/v2/c3p0/impl/DefaultConnectionTester.java.htm 
+
+1. 可能是调用了某个连接池，连接池封装了这个语句，然后又加入了activeCheckConnectionNoQuery{ ...getTables(null, null, "PROBABLYNOT", ....}    函数，以测试后续的连接是否还active，连接池的问题也可以看看.
+
+以下摘自
+http://www.java2s.com/Open-Source/Java-Document/Database-JDBC-Connection-Pool/c3p0/com/mchange/v2/c3p0/impl/DefaultConnectionTester.java.htm 
+ private int activeCheckConnectionNoQuery(Connection c,
+                    Throwable[] rootCauseOutParamHolder) {
+                //      if (Debug.DEBUG && Debug.TRACE == Debug.TRACE_MAX && logger.isLoggable( MLevel.FINER ) )
+                //      logger.finer("Entering DefaultConnectionTester.activeCheckConnection(Connection c). [using default system-table query]");
+
+                ResultSet rs = null;
+                try {
+                    rs = c.getMetaData().getTables(null, null, "PROBABLYNOT",
+                            new String[] { "TABLE" });
+                    return CONNECTION_IS_OKAY;
+                } catch (SQLException e) {
+                    if (Debug.DEBUG && logger.isLoggable(MLevel.FINE))
+                        logger
+                                .log(
+                                        MLevel.FINE,
+                                        "Connection "
+                                                + c
+                                                + " failed default system-table Connection test with an Exception!",
+                                        e);
+
+                    if (rootCauseOutParamHolder != null)
+                        rootCauseOutParamHolder[0] = e;
+
+                    String state = e.getSQLState();
+                    if (INVALID_DB_STATES.contains(state)) {
+                        if (logger.isLoggable(MLevel.WARNING))
+                            logger
+                                    .log(
+                                            MLevel.WARNING,
+                                            "SQL State '"
+                                                    + state
+                                                    + "' of Exception which occurred during a Connection test (fallback DatabaseMetaData test) implies that the database is invalid, "
+                                                    + "and the pool should refill itself with fresh Connections.",
+                                            e);
+                        return DATABASE_IS_INVALID;
+                    } else
+                        return CONNECTION_IS_INVALID;
+                } catch (Exception e) {
+                    if (Debug.DEBUG && logger.isLoggable(MLevel.FINE))
+                        logger
+                                .log(
+                                        MLevel.FINE,
+                                        "Connection "
+                                                + c
+                                                + " failed default system-table Connection test with an Exception!",
+                                        e);
+
+                    if (rootCauseOutParamHolder != null)
+                        rootCauseOutParamHolder[0] = e;
+
+                    return CONNECTION_IS_INVALID;
+                } finally {
+                    ResultSetUtils.attemptClose(rs);
+                    //          if (Debug.DEBUG && Debug.TRACE == Debug.TRACE_MAX && logger.isLoggable( MLevel.FINER ) )
+                    //          logger.finer("Exiting DefaultConnectionTester.activeCheckConnection(Connection c). [using default system-table query]");
+                }
+            }
+

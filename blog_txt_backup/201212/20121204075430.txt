@@ -1,0 +1,166 @@
+PostgreSQL research
+
+smartctl command's RETURN VALUES
+
+2012-12-04 7:54:30   查看原文>>
+
+smartctl 的返回值是由8个比特位组成的 , 具体的解释参考本为末尾部分。
+使用smartctl -H可以根据磁盘已经收集的信息检测磁盘的监控状态。返回的是一个数值类型。
+返回值具体代表什么意思需要翻译成8个比特位，并查询smartctl的RETURN VALUES。
+如果smartctl的输出了failing的健康状态的话, 表示磁盘已经failed或者将要在24小时内failed了. 
+1. 首先确保开启硬盘的几个选项 : 
+
+smartctl -S on -s on -o on /dev/sdd
+[root@db-172-16-3-150 ~]# /opt/smartmontools-6.0/sbin/smartctl -S on -s on -o on /dev/sdd
+smartctl 6.0 2012-10-10 r3643 [x86_64-linux-2.6.18-274.el5] (local build)
+Copyright (C) 2002-12, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF ENABLE/DISABLE COMMANDS SECTION ===
+SMART Enabled.
+SMART Attribute Autosave Enabled.
+SMART Automatic Offline Testing Enabled every four hours.
+
+
+2. smartctl健康检查选项 : 
+
+       -H, --health
+              Check: Ask the device to report its SMART health status or pending TapeAlert messages.  SMART status  is
+              based  on  information  that  it  has  gathered from online and offline tests, which were used to deter-
+              mine/update its SMART vendor-specific Attribute values. TapeAlert status  is  obtained  by  reading  the
+              TapeAlert log page.
+
+              If  the  device  reports failing health status, this means either that the device has already failed, or
+              that it is predicting its own failure within the next 24 hours.  If this happens, use the ′-a′ option to
+              get more information, and get your data off the disk and to someplace safe as soon as you can.
+
+
+健康检查示例 : 
+
+[root@db-172-16-3-150 ~]# /opt/smartmontools-6.0/sbin/smartctl -H /dev/sdd
+smartctl 6.0 2012-10-10 r3643 [x86_64-linux-2.6.18-274.el5] (local build)
+Copyright (C) 2002-12, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+返回值 :
+[root@db-172-16-3-150 ~]# echo $?
+0
+
+
+或者仅输出错误 : 
+
+[root@db-172-16-3-150 ~]# /opt/smartmontools-6.0/sbin/smartctl -H -q errorsonly /dev/sdd
+[root@db-172-16-3-150 ~]# 
+
+
+3. 返回值解析脚本 : 
+
+[root@db-172-16-3-150 ~]# cat smart.sh
+/opt/smartmontools-6.0/sbin/smartctl -H -d sat+megaraid,2 /dev/sdb
+status=$?
+for ((i=0; i<8; i++)); do
+  echo "Bit $i: $((status & 2**i && 1))"
+done
+
+
+执行这个shell script : 
+
+[root@db-172-16-3-150 ~]# . ./smart.sh
+smartctl 6.0 2012-10-10 r3643 [x86_64-linux-2.6.18-274.el5] (local build)
+Copyright (C) 2002-12, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+Warning: This result is based on an Attribute check.
+
+Bit 0: 0
+Bit 1: 0
+Bit 2: 1
+Bit 3: 0
+Bit 4: 0
+Bit 5: 0
+Bit 6: 0
+Bit 7: 0
+
+
+以上这些比特位的含义见参考部分. 
+这个结果是PASSWD的但是返回值不是0, 而是4. (bit2 :1).
+从源码ataprint.cpp部分来看 : 
+ataSmartStatus2(device) 这里的 ataSmartStatus2(device) 返回值并非0或-1.
+所以到了如下代码段 : 
+
+    default:
+      // Something went wrong with the SMART STATUS command.
+      // The ATA SMART RETURN STATUS command provides the result in the ATA output
+      // registers. Buggy ATA/SATA drivers and SAT Layers often do not properly
+      // return the registers values.
+      failuretest(OPTIONAL_CMD, returnval|=FAILSMART);
+      if (!(smart_val_ok && smart_thres_ok)) {
+        print_on();
+        pout("SMART overall-health self-assessment test result: UNKNOWN!\n"
+             "SMART Status, Attributes and Thresholds cannot be read.\n\n");
+      }
+      else if (find_failed_attr(&smartval, &smartthres, attribute_defs, 1)) {
+        print_on();
+        pout("SMART overall-health self-assessment test result: FAILED!\n"
+             "Drive failure expected in less than 24 hours. SAVE ALL DATA.\n");
+        print_off();
+        returnval|=FAILATTR;
+        returnval|=FAILSTATUS;
+        if (options.smart_vendor_attrib)
+          pout("See vendor-specific Attribute list for failed Attributes.\n\n");
+        else {
+          print_on();
+          pout("Failed Attributes:\n");
+          PrintSmartAttribWithThres(&smartval, &smartthres, attribute_defs, rpm, 1, options.output_format);
+        }
+      }
+      else {
+        pout("SMART overall-health self-assessment test result: PASSED\n");
+        pout("Warning: This result is based on an Attribute check.\n");
+
+
+
+【参考】
+1. http://www.linuxjournal.com/article/6983
+2. RETURN VALUES
+
+       The  return  values of smartctl are defined by a bitmask.  If all is well with the disk, the return value (exit
+       status) of smartctl is 0 (all bits turned off).  If a problem occurs, or an error, potential error, or fault is
+       detected,  then a non-zero status is returned.  In this case, the eight different bits in the return value have
+       the following meanings for ATA disks; some of these values may also be returned for SCSI disks.
+
+       Bit 0: Command line did not parse.
+
+       Bit 1: Device open failed, device did not return an IDENTIFY DEVICE structure, or device is in a low-power mode
+              (see ′-n′ option above).
+
+       Bit 2: Some SMART or other ATA command to the disk failed, or there was a checksum error in a SMART data struc-
+              ture (see ′-b′ option above).
+
+       Bit 3: SMART status check returned "DISK FAILING".
+
+       Bit 4: We found prefail Attributes <= threshold.
+
+       Bit 5: SMART status check returned "DISK OK" but we found that some (usage or prefail) Attributes have been  <=
+              threshold at some time in the past.
+
+       Bit 6: The device error log contains records of errors.
+
+       Bit 7: The  device  self-test log contains records of errors.  [ATA only] Failed self-tests outdated by a newer
+              successful extended self-test are ignored.
+
+       To test within the shell for whether or not the different bits are turned on or off, you can use the  following
+       type of construction (this is bash syntax):
+       smartstat=$(($? & 8))
+       This  looks  at  only  at  bit  3  of the exit status $?  (since 8=2^3).  The shell variable $smartstat will be
+       nonzero if SMART status check returned "disk failing" and zero otherwise.
+
+       This bash script prints all status bits:
+       status=$?
+       for ((i=0; i<8; i++)); do
+         echo "Bit $i: $((status & 2**i && 1))"
+       done
+
+
+

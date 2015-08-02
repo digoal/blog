@@ -1,0 +1,188 @@
+PostgreSQL research
+
+Systemtap(2.4) fixed BUG(1.8) : delete from statistics(aggregates) type stored in array elements
+
+2013-10-13 10:12:56   查看原文>>
+
+上一篇BLOG中在测试使用delete删除数组元素中存储的统计信息时出现未删除的BUG.
+http://blog.163.com/digoal@126/blog/static/163877040201391234023230/
+本文从git上下载最新的2.4版本进行同样场景的测试, 发现这个bug已经不存在了. (建议使用CentOS 6.x以上版本测试, 否则可能因为elfutils版本太低无法安装stap 2.4)
+测试过程如下 : 
+环境准备 : 
+
+yum install -y systemtap-devel systemtap-client systemtap-runtime systemtap-sdt-devel systemtap
+
+
+其中systemtap-sdt-devel 是PostgreSQL --enable-dtrace需要的包.
+
+安装git, CentOS 6.x 可以直接从yum源中下载.
+或者从google code中下载.
+http://blog.163.com/digoal@126/blog/static/163877040201242512825860/
+
+从sourceware 站点下载和安装stap : 
+
+git clone git://sourceware.org/git/systemtap.git
+cd systemtap/
+./configure --prefix=/opt/systemtap && gmake all && gmake install
+[root@db-172-16-3-150 ~]# /opt/systemtap/bin/stap -V
+Systemtap translator/driver (version 2.4/0.152, commit release-2.3-133-g335e342 + changes)
+Copyright (C) 2005-2013 Red Hat, Inc. and others
+This is free software; see the source for copying conditions.
+enabled features: LIBSQLITE3 BOOST_SHARED_PTR TR1_UNORDERED_MAP NLS JAVA
+
+
+
+测试 : 
+脚本如下, 与1.8版本相同 : 
+
+[root@db-172-16-3-150 ~]# cat test.stp
+global var1[50000], var2[50000], var3[50000]
+
+probe process("/home/pg93/pgsql9.3.1/bin/postgres").mark("query__start") {
+  pid=pid()
+  delete var1[pid]
+  delete var2[pid]
+  delete var3[pid]
+  var3[pid] = user_string($arg1)
+  printf("pid:%u, query start: %s, read: %u,%u, write: %u,%u\n", pid, var3[pid], @sum(var1[pid]), @count(var1[pid]), @sum(var2[pid]), @count(var2[pid]))
+}
+
+probe process("/home/pg93/pgsql9.3.1/bin/postgres").mark("query__done") {
+  pid=pid()
+  printf("pid:%u, query done: %s, read: %u,%u, write: %u,%u\n", pid, var3[pid], @sum(var1[pid]), @count(var1[pid]), @sum(var2[pid]), @count(var2[pid]))
+  delete var1[pid]
+  delete var2[pid]
+  delete var3[pid]
+}
+
+probe syscall.read.return {
+  if (execname()=="postgres") {
+    pid=pid()
+    var1[pid] <<< $count
+  }
+}
+
+probe syscall.write.return {
+  if (execname()=="postgres") {
+    pid=pid()
+    var2[pid] <<< $count
+  }
+}
+
+probe end {
+  delete var1
+  delete var2
+  delete var3
+}
+
+
+执行stap脚本, 测试场景与1.8版本相同.
+
+[root@db-172-16-3-150 ~]# /opt/systemtap/bin/stap -D MAXSKIPPED=1 test.stp 
+
+
+[root@db-172-16-3-150 ~]# su - pg93
+pg93@db-172-16-3-150-> psql
+psql (9.3.1)
+Type "help" for help.
+digoal=# drop table t;
+DROP TABLE
+digoal=# create table t(id int, info text, crt_time timestamp);
+CREATE TABLE
+digoal=# insert into t select generate_series(1,1000000),md5(random()::text),now();
+INSERT 0 1000000
+digoal=# select count(*) from t;
+  count  
+---------
+ 1000000
+(1 row)
+digoal=# select count(*) from t;
+  count  
+---------
+ 1000000
+(1 row)
+digoal=# create index idx_t_1 on t(id);
+CREATE INDEX
+digoal=# select count(*) from t;
+  count  
+---------
+ 1000000
+(1 row)
+digoal=# select count(*) from t;
+  count  
+---------
+ 1000000
+(1 row)
+digoal=# select count(*) from t;
+  count  
+---------
+ 1000000
+(1 row)
+digoal=# checkpoint;
+CHECKPOINT
+digoal=# checkpoint;
+CHECKPOINT
+
+
+stap输出结果如下, delete var1[pid]和delete var2[pid]已经可以正常清楚statistic类型的数据了.
+
+pid:17397, query start: drop table t;, read: 0,0, write: 0,0
+pid:17397, query done: drop table t;, read: 0,0, write: 65536,1
+pid:17397, query start: create table t(id int, info text, crt_time timestamp);, read: 0,0, write: 0,0
+pid:17397, query done: create table t(id int, info text, crt_time timestamp);, read: 8192,1, write: 16384,2
+pid:17397, query start: insert into t select generate_series(1,1000000),md5(random()::text),now();, read: 0,0, write: 0,0
+pid:17397, query done: insert into t select generate_series(1,1000000),md5(random()::text),now();, read: 32768,4, write: 76603392,9351
+pid:17397, query start: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query done: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query start: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query done: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query start: create index idx_t_1 on t(id);, read: 0,0, write: 0,0
+pid:17397, query done: create index idx_t_1 on t(id);, read: 0,0, write: 24158208,2853
+pid:17397, query start: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query done: select count(*) from t;, read: 8192,1, write: 0,0
+pid:17397, query start: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query done: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query start: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query done: select count(*) from t;, read: 0,0, write: 0,0
+pid:17397, query start: checkpoint;, read: 0,0, write: 0,0
+pid:17397, query done: checkpoint;, read: 0,0, write: 0,0
+pid:17397, query start: checkpoint;, read: 0,0, write: 0,0
+pid:17397, query done: checkpoint;, read: 0,0, write: 0,0
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201391234023230/
+2. http://blog.163.com/digoal@126/blog/static/16387704020137140265557/
+3. http://blog.163.com/digoal@126/blog/static/163877040201242512825860/
+
+评论
+
+yanqing_1226 - 2013-11-20 13:21:54
+
+LZ您好。请教一个问题。
+我使用systemtap2.4-elfutils-0.157。
+在执行/systemtap-2.4/doc/tutorial下的例子inode-watch.stp时。一直报错，这个例子是输出vfs_read函数中参数struct file *file中结构体成员。报错说不能resolving file这个结构体。我在1.6的systemtap下运行是可以的。是2.4不能直接使用$file->f_path这样的吗？
+我的OS是ubuntu 13.10，自己编译的内核3.12.。先谢谢。急等您的回复。
+
+德哥@Digoal 回复 yanqing_1226 - 2013-11-20 13:21:54
+
+会不会是没有3.12的debuginfo.
+
+yanqing_1226 回复德哥@Digoal - 2013-11-20 13:21:54
+
+这个有的。我自己编译的内核。 这些配置选项CONFIG_DEBUG_INFO, CONFIG_KPROBES, CONFIG_RELAY, CONFIG_DEBUG_FS, CONFIG_MODULES, CONFIG_MODULE_UNLOAD都选了的。可以查看sys_open等系统调用函数。
+
+德哥@Digoal 回复 yanqing_1226 - 2013-11-20 13:21:54
+
+用& $file-f_path
+
+yanqing_1226 - 2013-11-20 13:23:15
+
+同时，类似
+stap -e 'probe kernel.function("icmp_echo") {printf("%s\n", $$parms$$); exit();}'
+这样的脚本，展开输出parms中结构体成员，会被skip过去。
+
+德哥@Digoal 回复 yanqing_1226 - 2013-11-20 13:23:15
+
+HI, 展开返回字符串过长会截断到MAXSTRINGLEN

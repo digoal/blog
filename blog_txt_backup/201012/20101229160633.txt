@@ -1,0 +1,273 @@
+PostgreSQL research
+
+【转】基于MongoDb的S3实现
+
+2010-12-29 16:06:33   查看原文>>
+
+【原文】
+http://www.fuchaoqun.com/2010/05/s3-on-mongodb-with-php/
+
+
+原理是利用MongoDb的GridFS，伸展性方面交由MongoDb的auto sharding去实现，这里用PHP给MongoDb绑了个S3出来，支持选择文件存储节点，支持文件分目录存储，这样的好处是对于一些受时间影响比较明显的文件，可以按照年月的形式存储，减轻历史包袱。
+
+首先，配置MongoDb GridFS节点信息:
+<?php
+$s3Config = array(
+    'foo' => array(
+        'server' => '127.0.0.1',
+        'database' => 'test',
+        'user' => 'test',
+        'password' => 'foobar',
+        'domain' => 'http://s3.foobar.com'
+    ),
+ 
+    'bar' => array(
+        'server' => '127.0.0.1',
+        'database' => 'test',
+        'user' => 'test',
+        'password' => 'foobar',
+        'domain' => 'http://s3.foobar.com'
+    ),
+);
+
+MongoDb的S3绑定:
+<?php
+/**
+ * 统一文件存储
+ *
+ */
+class Api_S3
+{
+    protected $_node;
+ 
+    protected $_dir;
+ 
+    protected $_config;
+ 
+    /**
+     * 构造函数
+     *
+     * @param string $node
+     * @param string $dir
+     * @param array $config
+     */
+    public function __construct($node, $dir = null, $config = null)
+    {
+        $this->_config = $config;
+ 
+        $this->path($node, $dir, false);
+    }
+ 
+    /**
+     * 设置文件路径
+     *
+     * @param string $node
+     * @param string $dir
+     * @return Api_S3
+     */
+    public function path($node, $dir, $connect = true)
+    {
+        $this->_node = $node;
+        $this->_dir = empty($dir) ? 'fs' : $dir;
+ 
+        if (empty($this->_config[$this->_node])) {
+            throw new Cola_Exception('Api_S3: invalidate node');
+        }
+ 
+        if ($connect) {
+            $this->_gridFS = $this->_gridFS();
+        }
+ 
+        return $this;
+    }
+ 
+    /**
+     * GridFS
+     *
+     * @return MongDbGridFS
+     */
+    protected function _gridFS()
+    {
+        $mongo = new Cola_Com_Mongo($this->_config[$this->_node]);
+ 
+        return $mongo->gridFS($this->_dir);
+    }
+ 
+    /**
+     * 获得文件句柄
+     *
+     * @param string $name
+     * @return MongoGridFSFile
+     */
+    public function file($name)
+    {
+        if (empty($this->_gridFS)) {
+            $this->_gridFS = $this->_gridFS();
+        }
+ 
+        return $this->_gridFS->findOne(array('filename' => $name));
+    }
+ 
+    /**
+     * 获得文件内容
+     *
+     * @param string $name
+     */
+    public function read($name)
+    {
+        $file = $this->file($name);
+ 
+        return $file->getBytes();
+    }
+ 
+    /**
+     * 写入文件
+     *
+     * @param string $name
+     * @param string $data
+     * @param array $extra
+     * @param boolean $overWrite
+     * @return boolean
+     */
+    public function write($name, $data, $extra = array(), $overWrite = false)
+    {
+        $extra = (array)$extra + array('filename' => basename($name));
+ 
+        if ($filetype = $this->_type($name)) {
+            $extra['filetype'] = $filetype;
+        }
+ 
+        if ($this->file($extra['filename'])) {
+            if ($overWrite) {
+                $this->delete($extra['filename']);
+            } else {
+                throw new Cola_Exception('Api_S3: file exists');
+            }
+        }
+ 
+        return $this->_gridFS->storeBytes($data, $extra);
+    }
+ 
+    /**
+     * 复制系统文件
+     *
+     * @param string $file
+     * @param array $extra
+     * @param boolean $overWrite
+     * @return boolean
+     */
+    public function copy($file, $extra = array(), $overWrite = false)
+    {
+        $extra = (array)$extra + array('filename' => basename($file));
+ 
+        if ($filetype = $this->_type($file)) {
+            $extra['filetype'] = $filetype;
+        }
+ 
+        if ($this->file($extra['filename'])) {
+            if ($overWrite) {
+                $this->delete($extra['filename']);
+            } else {
+                throw new Cola_Exception('Api_S3: file exists');
+            }
+        }
+ 
+        return $this->_gridFS->storeFile($file, $extra);
+    }
+ 
+    /**
+     * 删除文件
+     *
+     * @param string $name
+     * @return boolean
+     */
+    public function delete($name)
+    {
+        if (empty($this->_gridFS)) {
+            $this->_gridFS = $this->_gridFS();
+        }
+ 
+        return  $this->_gridFS->remove(array('filename' => $name));
+    }
+ 
+    /**
+     * 获得文件地址
+     *
+     * @param string $name
+     * @param string $default
+     * @return string
+     */
+    public function getUrl($name, $default = false)
+    {
+        $data = array(
+            'domain' => rtrim($this->_config[$this->_node]['domain'], '/'),
+            'path'   => $this->_node . (('fs' == $this->_dir) ? '' : $this->_dir),
+            'name'   => $name
+        );
+        return  implode('/', $data);
+    }
+ 
+    /**
+     * 设置文件属性
+     *
+     * @param string $name
+     * @param array $attr
+     * @return boolean
+     */
+    public function setAttr($name, $attr)
+    {
+        if (!$file = $this->file($name)) {
+            throw new Cola_Exception('Api_S3: file not exists');
+        }
+ 
+        $file->file = $attr + $file->file;
+ 
+        return $this->_gridFS->save($file->file);
+    }
+ 
+    /**
+     * 获得文件属性
+     *
+     * @param string $name
+     * @return array
+     */
+    public function getAttr($name)
+    {
+        $file = $this->file($name);
+        return $file->file;
+    }
+ 
+    /**
+     * 获得文件类型
+     *
+     * @param string $file
+     * @return string
+     */
+    protected function _type($file)
+    {
+        return mime_content_type($file);
+    }
+}
+
+文件存入，支持自选节点，自定义目录，自定义文件名，可以自动添加文件类型:
+<?php
+$s3 = new Api_S3($node, $dir, $s3Config);
+$s3->copy($file, array('filename' => $name, 'filetype' => $type));
+
+文件读取，以”http://s3.foobar.com/foo/201005/foobar.jpg”为例，foo映射到节点名，201005映射到目录名，foobar.jpg映射到文件名:
+<?php
+$s3 = new Api_S3($node, $dir, $s3Config);
+$file = $s3->file($name);
+ 
+Cola_Response::lastModified($file->file['uploadDate']->sec);
+Cola_Response::etag($file->file['md5']);
+ 
+if (isset($file->file['filetype'])) {
+    header("Content-Type: {$file->file['filetype']}");
+}
+ 
+echo $file->getBytes();
+
+注意到我们利用了文件的修改时间设置http头的last modified，以及用文件的md5信息设置etag值，这样的好处是可以大大减少带宽使用，当然，你也可以设置expire时间来减少重复请求。
+
+关于性能问题，可以在PHP读取的上一层，加一个Squid之类的反向代理服务，基本上就不会有问题.

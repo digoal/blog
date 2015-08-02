@@ -1,0 +1,122 @@
+PostgreSQL research
+
+Waiting PostgreSQL 9.5 support update data from table use window function or by ctid now
+
+2014-06-13 15:19:01   查看原文>>
+
+今天同事问的一个问题, 在MySQL中where 条件不允许在update里面写被更新的表.
+
+update xxx_com_table 
+set iflive=1  
+where name="www.xxx.com"  
+and rdata ="xxx.xxx.xxx.xxx" 
+and weight > (select min(weight) from xxx_com_table where name="www.xxx.com") ;
+
+
+以上SQL在MySQL中报错.
+更新为以下写法则可以通过.
+
+update xxx_com_table 
+set iflive=1  
+where name="www.xxx.com"  
+and rdata ="xxx.xxx.xxx.xxx" 
+and weight > (select weight from (select min(weight) as weight from xxx_com_table where name="www.xxx.com") as a) ;
+
+
+
+本文不讨论MySQL, 来说说PostgreSQL.
+这个SQL只是引子, 需求很简单, 更新指定分组内除最小weight以外的所有行.
+在PostgreSQL中, 早些时间有一个补丁, 可以用来更新排序后的若干行.
+参见http://blog.163.com/digoal@126/blog/static/1638770402014224113459340/.
+其实本文的用意也很明显, 是不是有这样的语法来支持这种更新呢?
+在PostgreSQL中, 这种查询倒是有, 但是还没有类似的语法,
+查询用到窗口函数, 如下 : 
+
+digoal=# create table a(id int, c1 text, c2 text, c3 int);
+CREATE TABLE
+digoal=# insert into a values (1,'a','a',1);
+INSERT 0 1
+digoal=# insert into a values (2,'a','a',2);
+INSERT 0 1
+digoal=# insert into a values (2,'a','a',3);
+INSERT 0 1
+digoal=# insert into a values (2,'a','b',1);
+INSERT 0 1
+digoal=# insert into a values (2,'a','b',2);
+INSERT 0 1
+digoal=# insert into a values (2,'a','b',3);
+INSERT 0 1
+digoal=# insert into a values (2,'a','c',1);
+INSERT 0 1
+
+digoal=# select ctid,* from (select *,ctid,row_number() over(partition by c1,c2 order by c3) as rn from a) as t where rn=1;
+ ctid  | id | c1 | c2 | c3 | ctid  | rn 
+-------+----+----+----+----+-------+----
+ (0,1) |  1 | a  | a  |  1 | (0,1) |  1
+ (0,4) |  2 | a  | b  |  1 | (0,4) |  1
+ (0,7) |  2 | a  | c  |  1 | (0,7) |  1
+(3 rows)
+
+
+
+最高效的方法应该是通过游标, 只需要扫一遍数据, 但是显然不能如愿, 因为更新游标不支持非简单查询.
+
+digoal=# do language plpgsql $$             
+declare
+  rec record;
+  cu cursor for select * from (select *,row_number() over(partition by c1,c2 order by c3) as rn from a) as t where rn<>1;
+begin
+  for rec in cu loop
+    update a set id=1 where current of cu;
+  end loop;
+end;
+$$;
+ERROR:  cursor "cu" is not a simply updatable scan of table "a"
+CONTEXT:  SQL statement "update a set id=1 where current of cu"
+PL/pgSQL function inline_code_block line 7 at SQL statement
+
+
+
+目前可以用的办法是找到表的唯一ID, 或行号, 进行排除更新, 或直接更新.
+唯一ID的话把下面的ctid替换成PK即可. 走索引扫描的话如果数据量比较大的情况, 扫描集小的话性能会高很多.
+
+digoal=# update a set id=101 where ctid not in (select ctid from (select *,ctid,row_number() over(partition by c1,c2 order by c3) as rn from a) as t where rn=1);
+UPDATE 4
+
+digoal=# select * from a;
+ id  | c1 | c2 | c3 
+-----+----+----+----
+   1 | a  | a  |  1
+   2 | a  | b  |  1
+   2 | a  | c  |  1
+ 101 | a  | a  |  2
+ 101 | a  | a  |  3
+ 101 | a  | b  |  2
+ 101 | a  | b  |  3
+(7 rows)
+
+
+但是这种方法, 显然会导致数据重复扫描.
+
+digoal=# explain update a set id=101 where ctid not in (select ctid from (select *,ctid,row_number() over(partition by c1,c2 order by c3) as rn from a) as t where rn=1);
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Update on a  (cost=229.06..180793.53 rows=1605 width=74)
+   ->  Seq Scan on a  (cost=229.06..180793.53 rows=1605 width=74)
+         Filter: (NOT (SubPlan 1))
+         SubPlan 1
+           ->  Materialize  (cost=229.06..341.49 rows=16 width=6)
+                 ->  Subquery Scan on t  (cost=229.06..341.41 rows=16 width=6)
+                       Filter: (t.rn = 1)
+                       ->  WindowAgg  (cost=229.06..301.28 rows=3210 width=78)
+                             ->  Sort  (cost=229.06..237.08 rows=3210 width=78)
+                                   Sort Key: a_1.c1, a_1.c2, a_1.c3
+                                   ->  Seq Scan on a a_1  (cost=0.00..42.10 rows=3210 width=78)
+(11 rows)
+
+
+期待PostgreSQL 9.5可以出简洁的语法, 减少扫描次数. 像本例游标那样, 扫一次.
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/1638770402014224113459340/
+Flag Counter

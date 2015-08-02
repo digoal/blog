@@ -1,0 +1,181 @@
+PostgreSQL research
+
+USE SysBench test Mysql and PostgreSQL - 2
+
+2013-05-14 17:08:15   查看原文>>
+
+ 上一篇BLOG介绍了使用sysbench测试mysql和postgresql的simple场景.
+也就是只有select的场景, 
+http://blog.163.com/digoal@126/blog/static/163877040201341441042613/
+本文将介绍包含复杂查询的场景, 包含如下SQL : 
+
+ INSERT INTO sbtest(k,c,pad) values(?,?,?)
+ SELECT c from sbtest where id=$1
+ UPDATE sbtest set k=k+? where id=$1
+ SELECT DISTINCT c from sbtest where id between $1 and $2 order by c
+ SELECT c from sbtest where id between $1 and $2 order by c
+ SELECT SUM(K) from sbtest where id between $1 and $2
+ SELECT c from sbtest where id between $1 and $2
+ UPDATE sbtest set c=$1 where id=$2
+ DELETE from sbtest where id=$1
+
+
+但是需要先解决一个问题, 因为sysbench对pg的支持不太好, 在插入数据时使用的是sysbench产生的值, 而不是sequence.
+会产生如下错误 : 
+
+[root@db-172-16-3-33 bin]# ./sysbench --max-requests=0 --max-time=60 --num-threads=16 --test=oltp --db-driver=pgsql --pgsql-host=127.0.0.1 --pgsql-port=1999 --pgsql-user=postgres --pgsql-password=postgres --pgsql-db=postgres --oltp-test-mode=complex --oltp-reconnect-mode=session run
+sysbench 0.4.12:  multi-threaded system evaluation benchmark
+
+Running the test with following options:
+Number of threads: 16
+
+Doing OLTP test.
+Running mixed OLTP test
+Using Special distribution (12 iterations,  1 pct of values are returned in 75 pct cases)
+Using "BEGIN" for starting transactions
+Using auto_inc on the id column
+Threads started!
+FATAL: query execution failed: 145040784
+FATAL: database error, exiting...
+Done.
+
+
+日志 : 
+
+2013-05-14 16:36:31.259 CST,"postgres","postgres",13938,"127.0.0.1:23937",5191f78f.3672,3,"INSERT",2013-05-14 16:36:31 CST,7/464628,
+32112157,ERROR,23505,"duplicate key value violates unique constraint ""sbtest_pkey""","Key (id)=(5014) already exists.",,,,,"INSERT 
+INTO sbtest values($1,0,' ','aaaaaaaaaaffffffffffrrrrrrrrrreeeeeeeeeeyyyyyyyyyy')",,"_bt_check_unique, nbtinsert.c:398",""
+
+
+产生这个错误后sysbench会直接退出. 这就无法测试了.
+所以需要修改一下sysbench的代码 : 
+
+vi sysbench-0.4.12/sysbench/tests/oltp/sb_oltp.c
+
+
+找到
+
+  /* Prepare the insert statement */
+  snprintf(query, MAX_QUERY_LEN, "INSERT INTO %s values(?,0,' ',"
+           "'aaaaaaaaaaffffffffffrrrrrrrrrreeeeeeeeeeyyyyyyyyyy')",
+           args.table_name);
+
+
+改成 : 
+
+  /* Prepare the insert statement */
+  if (args.auto_inc)
+    snprintf(query, MAX_QUERY_LEN, "INSERT INTO %s(k,c,pad) values(0,' ',"
+           "'aaaaaaaaaaffffffffffrrrrrrrrrreeeeeeeeeeyyyyyyyyyy')",
+           args.table_name);
+  else
+    snprintf(query, MAX_QUERY_LEN, "INSERT INTO %s values(?,0,' ',"
+           "'aaaaaaaaaaffffffffffrrrrrrrrrreeeeeeeeeeyyyyyyyyyy')",
+           args.table_name);
+
+
+然后重新编译即可.
+如何编译参考 : 
+http://blog.163.com/digoal@126/blog/static/16387704020134142151769/
+
+接下来可以使用参数--oltp-auto-inc来控制选择是否使用序列.
+[测试结果]
+1. PostgreSQL
+
+[root@db-172-16-3-33 bin]# ./sysbench --oltp-auto-inc=on --max-requests=0 --max-time=60 --num-threads=16 --test=oltp --db-driver=pgsql --pgsql-host=127.0.0.1 --pgsql-port=1999 --pgsql-user=postgres --pgsql-password=postgres --pgsql-db=postgres --oltp-test-mode=complex --oltp-reconnect-mode=session run
+sysbench 0.4.12:  multi-threaded system evaluation benchmark
+
+Running the test with following options:
+Number of threads: 16
+
+Doing OLTP test.
+Running mixed OLTP test
+Using Special distribution (12 iterations,  1 pct of values are returned in 75 pct cases)
+Using "BEGIN" for starting transactions
+Using auto_inc on the id column
+Threads started!
+Time limit exceeded, exiting...
+(last message repeated 15 times)
+Done.
+
+OLTP test statistics:
+    queries performed:
+        read:                            4328002
+        write:                           1545715
+        other:                           618286
+        total:                           6492003
+    transactions:                        309143 (5152.10 per sec.)
+    deadlocks:                           0      (0.00 per sec.)
+    read/write requests:                 5873717 (97889.81 per sec.)
+    other operations:                    618286 (10304.19 per sec.)
+
+Test execution summary:
+    total time:                          60.0034s
+    total number of events:              309143
+    total time taken by event execution: 956.5899
+    per-request statistics:
+         min:                                  1.34ms
+         avg:                                  3.09ms
+         max:                                179.74ms
+         approx.  95 percentile:               8.93ms
+
+Threads fairness:
+    events (avg/stddev):           19321.4375/325.75
+    execution time (avg/stddev):   59.7869/0.02
+
+
+2. MySQL
+
+[root@db-172-16-3-33 bin]# ./sysbench --oltp-auto-inc=off --max-requests=0 --max-time=60 --num-threads=16 --test=oltp --db-driver=mysql --mysql-host=127.0.0.1 --mysql-port=3306 --mysql-user=root --mysql-password=root --mysql-db=test --oltp-test-mode=complex --oltp-reconnect-mode=session run
+sysbench 0.4.12:  multi-threaded system evaluation benchmark
+
+Running the test with following options:
+Number of threads: 16
+
+Doing OLTP test.
+Running mixed OLTP test
+Using Special distribution (12 iterations,  1 pct of values are returned in 75 pct cases)
+Using "BEGIN" for starting transactions
+Not using auto_inc on the id column
+Threads started!
+Time limit exceeded, exiting...
+(last message repeated 15 times)
+Done.
+
+OLTP test statistics:
+    queries performed:
+        read:                            1380960
+        write:                           493088
+        other:                           197237
+        total:                           2071285
+    transactions:                        98597  (1643.12 per sec.)
+    deadlocks:                           43     (0.72 per sec.)
+    read/write requests:                 1874048 (31231.08 per sec.)
+    other operations:                    197237 (3286.96 per sec.)
+
+Test execution summary:
+    total time:                          60.0059s
+    total number of events:              98597
+    total time taken by event execution: 958.6545
+    per-request statistics:
+         min:                                  2.30ms
+         avg:                                  9.72ms
+         max:                                204.51ms
+         approx.  95 percentile:              26.08ms
+
+Threads fairness:
+    events (avg/stddev):           6162.3125/43.34
+    execution time (avg/stddev):   59.9159/0.00
+
+
+
+[参考]
+1. Install SysBench support MySQL and PostgreSQL
+http://blog.163.com/digoal@126/blog/static/16387704020134142151769/
+2. USE SysBench test Mysql and PostgreSQL - 1
+http://blog.163.com/digoal@126/blog/static/163877040201341441042613/
+3. http://wiki.bazaar.canonical.com/DistroDownloads#CentOS.2FRHEL
+4. http://www.percona.com/docs/wiki/benchmark:sysbench:olpt.lua
+5. http://wiki.gentoo.org/wiki/Sysbench
+6. https://launchpad.net/sysbench
+Flag Counter

@@ -1,0 +1,358 @@
+PostgreSQL research
+
+PostgreSQL nodes's estimate bug? when alter column set statistics 0
+
+2014-04-15 14:56:59   查看原文>>
+
+群里的一位兄弟提到的一个问题, 当列的统计信息开关关闭时, 为什么还会走索引?
+有些数据库产品在创建索引时, 会自动给对应的列加上统计信息. 为什么PostgreSQL不可以这样呢?
+首先我们来看一下第一个问题, 当列的统计信息开关关闭后, 会发生什么?
+创建一个普通表, 不关闭列统计信息.
+
+digoal=# create table t(id int, info text);
+CREATE TABLE
+digoal=# insert into t select 1,'test' from generate_series(1,1000000);
+INSERT 0 1000000
+digoal=# analyze t;
+ANALYZE
+digoal=# select * from pg_stats where tablename ='t';
+ schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogra
+m_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+---------
+---------+-------------+-------------------+------------------------+----------------------
+ public     | t         | id      | f         |         0 |         4 |          1 | {1}              | {1}               |         
+         |           1 |                   |                        | 
+ public     | t         | info    | f         |         0 |         5 |          1 | {test}           | {1}               |         
+         |           1 |                   |                        | 
+(2 rows)
+
+
+
+创建另一个表, 关闭列的统计信息.
+
+digoal=# create table t1(id int, info text);
+CREATE TABLE
+digoal=# alter table t1 alter column id set statistics 0;
+ALTER TABLE
+digoal=# alter table t1 alter column info set statistics 0;
+ALTER TABLE
+digoal=# insert into t1 select 1,'test' from generate_series(1,1000000);
+INSERT 0 1000000
+digoal=# analyze t1;
+ANALYZE
+digoal=# select * from pg_stats where tablename ='t1';
+ schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogra
+m_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+---------
+---------+-------------+-------------------+------------------------+----------------------
+(0 rows)
+
+
+关闭统计信息后, 在pg_stats中查不到列的统计信息.
+给这两个表创建ID列的索引.
+
+digoal=# create index idx_t_id on t(id);
+digoal=# create index idx_t1_id on t1(id);
+digoal=# select * from pg_stats where tablename ='t1';
+ schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogra
+m_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+---------
+---------+-------------+-------------------+------------------------+----------------------
+(0 rows)
+
+
+创建索引后, t1表仍然没有统计信息, 这个是当然的, 因为PostgreSQL创建索引时不会主动生成统计信息. 即使要生成统计信息, 因为关闭了列统计, 所以也不可能会有统计信息.
+那么在pg_class表查看对应的数据块和行, 两个表得到的结果也不一样. t表的数据比较精确, t1表不精确. 但是也比较接近.
+
+digoal=# select relname,reltuples,relpages from pg_class where relname in ('t','t1');
+ relname | reltuples | relpages 
+---------+-----------+----------
+ t       |     1e+06 |     1345
+ t1      |    999468 |     1345
+(2 rows)
+
+
+
+查询ID等于1的记录, 查看对应的执行计划, t1表走了索引, 但是评估出来的行是4997.
+
+digoal=# explain select * from t1 where id=1;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Index Scan using idx_t1_id on t1  (cost=0.30..1436.75 rows=4997 width=36)
+   Index Cond: (id = 1)
+(2 rows)
+
+
+t表未走索引, 评估出来的行是1000000. 两者怎么会差别这么大呢?
+
+digoal=# explain select * from t where id=1;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Seq Scan on t  (cost=0.00..13845.00 rows=1000000 width=9)
+   Filter: (id = 1)
+(2 rows)
+
+
+理论上t1表应该没有列统计信息, 应该评估不出任何行, 但是却被评估到了4997行.
+这个评估的算法在costsize.c里面可以找到, 在这种情况下显然不合理. 但是这可能是一种折中的做法, 因为在没有统计信息的前提下, 根本不知道该不该走索引, 所以这个选择性也是一个胡乱猜测做出的. 
+一般情况下, 作为查询条件的列, 都不建议关闭统计信息.
+
+下面我们看看其他查询, 如范围查询, 不等于的查询, 或者换一个ID进行查询.
+从t1表执行计划评估到的行数, 显然和实际相差甚远.
+
+digoal=# explain select * from t1 where id>1;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Index Scan using idx_t1_id on t1  (cost=0.30..7403.53 rows=333156 width=36)
+   Index Cond: (id > 1)
+(2 rows)
+
+digoal=# explain select * from t1 where id>0;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Index Scan using idx_t1_id on t1  (cost=0.30..7403.53 rows=333156 width=36)
+   Index Cond: (id > 0)
+(2 rows)
+
+digoal=# explain select * from t1 where id>100000;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Index Scan using idx_t1_id on t1  (cost=0.30..7403.53 rows=333156 width=36)
+   Index Cond: (id > 100000)
+(2 rows)
+
+digoal=# explain select * from t1 where id=100000;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Index Scan using idx_t1_id on t1  (cost=0.30..1436.75 rows=4997 width=36)
+   Index Cond: (id = 100000)
+(2 rows)
+
+digoal=# explain select * from t1 where id<>100000;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Seq Scan on t1  (cost=0.00..13838.35 rows=994471 width=36)
+   Filter: (id <> 100000)
+(2 rows)
+
+
+
+开启了列统计信息的T表, 统计到的行数和实际相符.
+
+digoal=# explain select * from t where id>1;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Index Scan using idx_t_id on t  (cost=0.30..1.32 rows=1 width=9)
+   Index Cond: (id > 1)
+(2 rows)
+
+digoal=# explain select * from t where id>0;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Seq Scan on t  (cost=0.00..13845.00 rows=1000000 width=9)
+   Filter: (id > 0)
+(2 rows)
+
+digoal=# explain select * from t where id>100000;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Index Scan using idx_t_id on t  (cost=0.30..1.32 rows=1 width=9)
+   Index Cond: (id > 100000)
+(2 rows)
+
+digoal=# explain select * from t where id=100000;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Index Scan using idx_t_id on t  (cost=0.30..1.32 rows=1 width=9)
+   Index Cond: (id = 100000)
+(2 rows)
+
+digoal=# explain select * from t where id<>100000;
+                        QUERY PLAN                         
+-----------------------------------------------------------
+ Seq Scan on t  (cost=0.00..13845.00 rows=1000000 width=9)
+   Filter: (id <> 100000)
+(2 rows)
+
+
+开启plan的跟踪可以看到更详细的情况 : 
+例如 : 
+
+digoal=# set debug_print_plan=on;
+SET
+digoal=# set client_min_messages=log;
+SET
+digoal=# \set VERBOSITY verbose
+digoal=# explain select * from t1 where id<>100000;
+LOG:  00000: plan:
+DETAIL:     {PLANNEDSTMT 
+   :commandType 1 
+   :queryId 0 
+   :hasReturning false 
+   :hasModifyingCTE false 
+   :canSetTag true 
+   :transientPlan false 
+   :planTree 
+      {SEQSCAN 
+      :startup_cost 0.00 
+      :total_cost 13838.35 
+      :plan_rows 994471 
+      :plan_width 36 
+      :targetlist (
+         {TARGETENTRY 
+         :expr 
+            {VAR 
+            :varno 1 
+            :varattno 1 
+            :vartype 23 
+            :vartypmod -1 
+            :varcollid 0 
+            :varlevelsup 0 
+            :varnoold 1 
+            :varoattno 1 
+            :location 15
+            }
+         :resno 1 
+         :resname id 
+         :ressortgroupref 0 
+         :resorigtbl 17194 
+         :resorigcol 1 
+         :resjunk false
+         }
+         {TARGETENTRY 
+         :expr 
+            {VAR 
+            :varno 1 
+            :varattno 2 
+            :vartype 25 
+            :vartypmod -1 
+            :varcollid 100 
+            :varlevelsup 0 
+            :varnoold 1 
+            :varoattno 2 
+            :location 15
+            }
+         :resno 2 
+         :resname info 
+         :ressortgroupref 0 
+         :resorigtbl 17194 
+         :resorigcol 2 
+         :resjunk false
+         }
+      )
+      :qual (
+         {OPEXPR 
+         :opno 518 
+         :opfuncid 144 
+         :opresulttype 16 
+         :opretset false 
+         :opcollid 0 
+         :inputcollid 0 
+         :args (
+            {VAR 
+            :varno 1 
+            :varattno 1 
+            :vartype 23 
+            :vartypmod -1 
+            :varcollid 0 
+            :varlevelsup 0 
+            :varnoold 1 
+            :varoattno 1 
+            :location 31
+            }
+            {CONST 
+            :consttype 23 
+            :consttypmod -1 
+            :constcollid 0 
+            :constlen 4 
+            :constbyval true 
+            :constisnull false 
+            :location 35 
+            :constvalue 4 [ -96 -122 1 0 0 0 0 0 ]
+            }
+         )
+         :location 33
+         }
+      )
+      :lefttree <> 
+      :righttree <> 
+      :initPlan <> 
+      :extParam (b)
+      :allParam (b)
+      :scanrelid 1
+      }
+   :rtable (
+      {RTE 
+      :alias <> 
+      :eref 
+         {ALIAS 
+         :aliasname t1 
+         :colnames ("id" "info")
+         }
+      :rtekind 0 
+      :relid 17194 
+      :relkind r 
+      :lateral false 
+      :inh false 
+      :inFromCl true 
+      :requiredPerms 2 
+      :checkAsUser 0 
+      :selectedCols (b 9 10)
+      :modifiedCols (b)
+      }
+   )
+   :resultRelations <> 
+   :utilityStmt <> 
+   :subplans <> 
+   :rewindPlanIDs (b)
+   :rowMarks <> 
+   :relationOids (o 17194)
+   :invalItems <> 
+   :nParamExec 0
+   }
+
+LOCATION:  elog_node_display, print.c:84
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Seq Scan on t1  (cost=0.00..13838.35 rows=994471 width=36)
+   Filter: (id <> 100000)
+(2 rows)
+
+
+
+[参考]
+1. http://www.postgresql.org/docs/9.3/static/sql-altertable.html
+2. cost_index@src/backend/optimizer/path/costsize.c
+
+        /*
+         * Call index-access-method-specific code to estimate the processing cost
+         * for scanning the index, as well as the selectivity of the index (ie,
+         * the fraction of main-table tuples we will have to retrieve) and its
+         * correlation to the main-table tuple order.
+         */
+        OidFunctionCall7(index->amcostestimate,
+                                         PointerGetDatum(root),
+                                         PointerGetDatum(path),
+                                         Float8GetDatum(loop_count),
+                                         PointerGetDatum(&indexStartupCost),
+                                         PointerGetDatum(&indexTotalCost),
+                                         PointerGetDatum(&indexSelectivity),
+                                         PointerGetDatum(&indexCorrelation));
+
+        /*
+         * Save amcostestimate's results for possible use in bitmap scan planning.
+         * We don't bother to save indexStartupCost or indexCorrelation, because a
+         * bitmap scan doesn't care about either.
+         */
+        path->indextotalcost = indexTotalCost;
+        path->indexselectivity = indexSelectivity;
+
+        /* all costs for touching index itself included here */
+        startup_cost += indexStartupCost;
+        run_cost += indexTotalCost - indexStartupCost;
+
+        /* estimate number of main-table tuples fetched */
+        tuples_fetched = clamp_row_est(indexSelectivity * baserel->tuples);
+
+
+Flag Counter

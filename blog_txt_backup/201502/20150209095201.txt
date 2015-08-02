@@ -1,0 +1,269 @@
+PostgreSQL research
+
+How to control who can see PostgreSQL function's source code
+
+2015-02-09 9:52:01   查看原文>>
+
+函数内容比较敏感时, 如何提高函数内容的隐射或安全性呢?
+1. 可以使用加密函数的方法来提高安全性. 需要安装额外的插件.
+2. 可以使用C函数, 用户无法看到函数内容.
+3. 如果以上方法无法在你的生产环境实施的话, 那么可以通过控制pg_proc的权限来控制谁可以看到函数内容.
+例如, 我们这里创建一个测试函数 : 
+
+postgres=# create or replace function f() returns int as $$
+postgres$# declare
+postgres$#  a int := 10;
+postgres$# begin
+postgres$#  return a;
+postgres$# end;
+postgres$# $$ language plpgsql;
+CREATE FUNCTION
+
+
+函数内容存在pg_proc.prosrc字段中.
+
+postgres=# select prosrc from pg_proc where proname='f';
+    prosrc     
+---------------
+              +
+ declare      +
+  a int := 10;+
+ begin        +
+  return a;   +
+ end;         +
+ 
+(1 row)
+
+
+创建一个普通用户, 因为pg_proc的权限给public角色了, 所以普通用户也可以查询到它的内容.
+
+postgres=# create role test login;
+CREATE ROLE
+postgres=# \c postgres test
+You are now connected to database "postgres" as user "test".
+postgres=> select prosrc from pg_proc where proname='f';
+    prosrc     
+---------------
+              +
+ declare      +
+  a int := 10;+
+ begin        +
+  return a;   +
+ end;         +
+ 
+(1 row)
+
+
+仅仅回收prosrc字段的权限是不够的, 为什么呢? 参考
+http://www.postgresql.org/docs/9.4/static/sql-revoke.html
+
+postgres=> \c postgres postgres
+You are now connected to database "postgres" as user "postgres".
+postgres=# revoke select(prosrc) on pg_proc from public;
+REVOKE
+postgres=# \c postgres test
+You are now connected to database "postgres" as user "test".
+postgres=> select prosrc from pg_proc where proname='f';
+    prosrc     
+---------------
+              +
+ declare      +
+  a int := 10;+
+ begin        +
+  return a;   +
+ end;         +
+ 
+(1 row)
+
+
+将pg_proc的权限从public回收即可.
+
+postgres=> \c postgres postgres
+You are now connected to database "postgres" as user "postgres".
+postgres=# revoke select on pg_proc from public;
+REVOKE
+postgres=# \c postgres test
+You are now connected to database "postgres" as user "test".
+postgres=> select prosrc from pg_proc where proname='f';
+ERROR:  permission denied for relation pg_proc
+postgres=> select proname from pg_proc where proname='f';
+ERROR:  permission denied for relation pg_proc
+
+
+但是这样做的话, 所有的普通用户都没有了查询权限, 包括不能列出函数名.
+
+postgres=> \c postgres postgres
+You are now connected to database "postgres" as user "postgres".
+postgres=# \du
+                             List of roles
+ Role name |                   Attributes                   | Member of 
+-----------+------------------------------------------------+-----------
+ d         |                                                | {}
+ postgres  | Superuser, Create role, Create DB, Replication | {}
+ test      |                                                | {}
+postgres=> \df
+ERROR:  permission denied for relation pg_proc
+
+
+其他普通用户, 需要查询函数名, 必须赋予pg_proc的查询权限.
+
+postgres=# grant select on pg_proc to d;
+GRANT
+postgres=# \c postgres d
+You are now connected to database "postgres" as user "d".
+postgres=> select prosrc from pg_proc where proname='f';
+    prosrc     
+---------------
+              +
+ declare      +
+  a int := 10;+
+ begin        +
+  return a;   +
+ end;         +
+ 
+(1 row)
+
+
+这样就控制了某个用户没有查询函数, 函数内容的权限.
+
+postgres=> \c postgres test
+You are now connected to database "postgres" as user "test".
+postgres=> select prosrc from pg_proc where proname='f';
+ERROR:  permission denied for relation pg_proc
+
+
+如果要做到可以列出函数名, 但是不能查询函数内容. 怎么做呢?
+首先我们要知道列函数用到什么QUERY
+
+postgres@localhost-> psql -E
+postgres=> \df
+********* QUERY **********
+SELECT n.nspname as "Schema",
+  p.proname as "Name",
+  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
+  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
+ CASE
+  WHEN p.proisagg THEN 'agg'
+  WHEN p.proiswindow THEN 'window'
+  WHEN p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype THEN 'trigger'
+  ELSE 'normal'
+ END as "Type"
+FROM pg_catalog.pg_proc p
+     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE pg_catalog.pg_function_is_visible(p.oid)
+      AND n.nspname <> 'pg_catalog'
+      AND n.nspname <> 'information_schema'
+ORDER BY 1, 2, 4;
+**************************
+ERROR:  permission denied for relation pg_proc
+
+
+那么需要将除prosrc以外的所有字段(包括oid)都赋予给test用户即可.
+
+postgres=# grant select(oid,proname,pronamespace,proowner,prolang,procost,prorows,provariadic,protransform,proisagg,proiswindow,prosecdef,proleakproof,proisstrict,proretset,provolatile,pronargs,pronargdefaults,prorettype,proargtypes,proallargtypes,proargmodes,proargnames,proargdefaults,probin,proconfig,proacl) on pg_proc to test;
+GRANT
+postgres=# \c postgres test
+You are now connected to database "postgres" as user "test".
+
+
+现在test用户可以列函数名, 但是不能看函数内容了.
+
+postgres=> select proname from pg_proc limit 1;
+ proname 
+---------
+ boolin
+(1 row)
+
+postgres=> select prosrc from pg_proc limit 1;
+ERROR:  permission denied for relation pg_proc
+postgres=> \df
+                        List of functions
+ Schema |          Name           |     Result data type      |                                                                     
+                                                  Argument data types                                                               
+                                                        |  Type  
+--------+-------------------------+---------------------------+---------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------+--------
+ public | dblink                  | SETOF record              | text                                                                
+                                                                                                                                    
+                                                        | normal
+ public | dblink                  | SETOF record              | text, boolean
+
+
+但是, 别高兴太早, 函数的内容不是这么查出来的, 而是通过pg_get_functiondef(oid)系统函数来获取的, 所以还需要回收这个系统函数的权限.
+在回收权限前.
+
+postgres=> select * from pg_get_functiondef(16649);
+          pg_get_functiondef           
+---------------------------------------
+ CREATE OR REPLACE FUNCTION public.f()+
+  RETURNS integer                     +
+  LANGUAGE plpgsql                    +
+ AS $function$                        +
+ declare                              +
+  a int := 10;                        +
+ begin                                +
+  return a;                           +
+ end;                                 +
+ $function$                           +
+ 
+(1 row)
+postgres=> \sf f
+CREATE OR REPLACE FUNCTION public.f()
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+declare
+ a int := 10;
+begin
+ return a;
+end;
+$function$
+
+
+回收权限后
+
+postgres=# revoke execute on function pg_get_functiondef(oid) from public;
+REVOKE
+postgres=> \c postgres postgres
+You are now connected to database "postgres" as user "postgres".
+postgres=# select oid from pg_proc where proname='f';
+  oid  
+-------
+ 16649
+(1 row)
+postgres=# \c postgres test
+You are now connected to database "postgres" as user "test".
+postgres=> \sf f
+ERROR:  permission denied for function pg_get_functiondef
+postgres=> select * from pg_get_functiondef(16649);
+ERROR:  permission denied for function pg_get_functiondef
+
+
+
+[小结]
+通过权限来控制普通用户是否有查看函数内容的权限方法. 
+第三步对于不同的PostgreSQL版本可能不一样, 请注意.
+
+1. revoke select on pg_proc from public;
+2. grant select on pg_proc to 需要查看函数内容权限的普通用户;
+3. grant select(oid,proname,pronamespace,proowner,prolang,procost,prorows,provariadic,protransform,proisagg,proiswindow,prosecdef,proleakproof,proisstrict,proretset,provolatile,pronargs,pronargdefaults,prorettype,proargtypes,proallargtypes,proargmodes,proargnames,proargdefaults,probin,proconfig,proacl) on pg_proc to 不需要查看函数内容权限的普通用户;
+4. revoke select(prosrc) on pg_proc from 不需要查看函数内容权限的普通用户;
+5.
+postgres=# revoke execute on function pg_get_functiondef(oid) from public;
+REVOKE
+6.
+postgres=# grant execute on function pg_get_functiondef(oid) to 需要查看函数内容权限的普通用户;
+
+
+目前PostgreSQL在对象权限这块控制还是过于粗燥, 不像Oracle做得很细, 用户间的权限控制是非常严格的.
+而Postgres-XL则做了一定的修改, 是在parser层面做的, 可参考 : 
+http://blog.163.com/digoal@126/blog/static/163877040201462552243293/
+这也是一个路子.
+
+[参考]
+1. http://www.postgresql.org/docs/9.4/static/sql-revoke.html
+    When revoking privileges on a table, the corresponding column privileges (if any) are automatically revoked on each column of the table, as well. On the other hand, if a role has been granted privileges on a table, then revoking the same privileges from individual columns will have no effect.
+
+2. http://www.cybertec.at/en/products/plpgsql_sec-encrypt-your-stored-procedure-codes/
+Flag Counter

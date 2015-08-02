@@ -1,0 +1,252 @@
+PostgreSQL research
+
+PostgreSQL Audit by Database or Role wide parameter
+
+2013-03-20 8:54:18   查看原文>>
+
+本文基于PostgreSQL 9.2讲解.
+审计的一个普遍用途就是记录用户在数据库中都干了些什么?
+如果系统级的参数设置日志全记录下来当然也可以达到审计的目的, 但是这样做的话很多不需要的日志也会输出, 造成硬盘资源浪费甚至影响数据库性能. 所以精细化的审计非常有必要.
+之前写过一篇关于PostgreSQL借助pg_log_userqueries插件实现用户或数据库级审计的文章.
+http://blog.163.com/digoal@126/blog/static/1638770402012019112218804/
+但是实际上, 使用数据库本身的配置就可以达到此目的. 主要用到PostgreSQL的以下两项配置.
+1. PostgreSQL 的配置文件中对于日志的配置项What to Log中包含了默认的记录哪些日志的配置.
+   这些配置默认情况下是全局生效的, 不管是哪个用户连过来, 或者连到哪个数据库. 都是取的这些配置项.
+2. PostgreSQL 提供了用户级以及数据库级的参数配置. 
+
+【审计举例】
+假设当前的postgresql.conf LOG配置项如下 : 
+
+log_destination = 'csvlog'
+logging_collector = on
+log_directory = 'pg_log'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_file_mode = 0600
+log_truncate_on_rotation = on
+log_rotation_age = 1d
+log_rotation_size = 10MB
+log_connections = on
+log_error_verbosity = verbose
+log_timezone = 'PRC'
+log_statement = 'none'
+log_min_duration_statement = -1
+
+
+
+1. 审计用户digoal连到数据库digoal 的所有SQL.
+
+digoal=# alter role digoal in database digoal set log_statement='all';
+
+
+# 查看当前的数据库+role级别的配置 : 
+
+digoal=> select a.*,b.datname,c.rolname from pg_db_role_setting a,pg_database b,pg_roles c where a.setdatabase=b.oid and a.setrole=c.oid;
+ setdatabase | setrole |      setconfig      | datname | rolname 
+-------------+---------+---------------------+---------+---------
+     3425937 | 3425936 | {log_statement=all} | digoal  | digoal
+(1 row)
+
+
+# 测试 : 
+# 打开一个终端观察日志的输出
+
+tail -f -n 1 postgresql-2013-03-20_000000.csv
+
+
+# 使用digoal用户连接到digoal数据库, 并执行SQL
+
+digoal=> \c digoal digoal
+digoal=> select current_user;
+ current_user 
+--------------
+ digoal
+(1 row)
+
+
+# select current_user被记录在日志中了
+
+2013-03-20 08:43:25.109 CST,"digoal","digoal",2743,"[local]",5149061c.ab7,7,"idle",2013-03-20 08:43:08 CST,1/169,0,LOG,00000,"statement: select current_user;",,,,,,,,"exec_simple_query, postgres.c:888","psql"
+
+
+# digoal用户连接到其他数据库, 或者其他用户连接到digoal数据库的SQL不会被记录.
+
+digoal=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# select current_user;
+ current_user 
+--------------
+ postgres
+(1 row)
+digoal=# \c postgres digoal
+You are now connected to database "postgres" as user "digoal".
+postgres=> select current_user;
+ current_user 
+--------------
+ digoal
+(1 row)
+
+
+# 以上SQL在日志中无记录.
+
+2. 审计用户digoal 的所有SQL.
+
+postgres=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# alter role digoal set log_statement='all';
+ALTER ROLE
+digoal=# select * from pg_roles where rolname='digoal';
+ rolname | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcatupdate | rolcanlogin | rolreplication | rolconnlimit | rolpas
+sword | rolvaliduntil |      rolconfig      |   oid   
+---------+----------+------------+---------------+-------------+--------------+-------------+----------------+--------------+-------
+------+---------------+---------------------+---------
+ digoal  | f        | t          | f             | f           | f            | t           | f              |           -1 | ******
+**    |               | {log_statement=all} | 3425936
+(1 row)
+
+
+# 测试, digoal用户连接到postgres数据库执行SQL
+
+digoal=# \c postgres digoal
+You are now connected to database "postgres" as user "digoal".
+postgres=> select 'abc';
+ ?column? 
+----------
+ abc
+(1 row)
+
+
+# 日志输出 : 
+
+2013-03-20 08:46:11.986 CST,"digoal","postgres",2807,"[local]",514906d1.af7,3,"idle",2013-03-20 08:46:09 CST,3/40,0,LOG,00000,"statement: select 'abc';",,,,,,,,"exec_simple_query, postgres.c:888","psql"
+
+
+
+3. 审计任何用户连接到数据库digoal 的所有SQL.
+
+postgres=# alter database digoal set log_statement='all';
+ALTER DATABASE
+postgres=# select a.*,b.datname from pg_db_role_setting a,pg_database b where a.setdatabase=b.oid;
+ setdatabase | setrole |      setconfig      | datname 
+-------------+---------+---------------------+---------
+     3425937 |       0 | {log_statement=all} | digoal
+     3425937 | 3425936 | {log_statement=all} | digoal
+(2 rows)
+setrole=0 表示所有用户.
+
+
+# 测试, postgres用户连接到digoal数据库执行SQL
+
+postgres=# \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+digoal=# select now();
+              now              
+-------------------------------
+ 2013-03-20 08:49:27.761984+08
+(1 row)
+
+
+# 日志输出 : 
+
+2013-03-20 08:49:27.762 CST,"postgres","digoal",2879,"[local]",51490792.b3f,3,"idle",2013-03-20 08:49:22 CST,3/42,0,LOG,00000,"statement: select now();",,,,,,,,"exec_simple_query, postgres.c:888","psql"
+
+
+
+【清除以上审计配置】
+
+digoal=# alter role digoal set log_statement to default;
+ALTER ROLE
+digoal=# alter role digoal in database digoal reset log_statement;
+ALTER ROLE
+digoal=# alter database digoal reset log_statement;
+ALTER DATABASE
+digoal=# select * from pg_db_role_setting;
+ setdatabase | setrole | setconfig 
+-------------+---------+-----------
+(0 rows)
+
+
+
+【推荐的日志配置】
+
+log_destination = 'csvlog'
+logging_collector = on
+log_directory = '/var/log/pg_log'  # 这个目录最好不要和数据文件的目录放在一起, 目录需要给启动postgres的操作系统用户写权限.
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_file_mode = 0600
+log_truncate_on_rotation = on
+log_rotation_age = 1d
+log_rotation_size = 10MB
+log_error_verbosity = verbose
+
+
+
+【其他】
+1. 以上审计的粒度可能还是太大, 只到了用户和数据库的层面. 
+并且, 仅仅审计到用户调用的SQL, 而不能审计到变化前后的数据, 例如用户执行一条UPDATE语句, 可能变更了整张表的数据, 但是使用log_statement只能记录下这条SQL, 而不是记录被变更前后的数据.
+
+如果要对表或者表上面的数据进行审计的话, 需要用上触发器.
+例如 : 
+http://blog.163.com/digoal@126/blog/static/163877040201252575529358/
+如果不想将这些记录写在数据库中, 而是输出到日志的话 : 
+1.  触发器中使用RAISE WARNING '....' 打印消息.
+2.  postgresql.conf 配置 log_min_messages = warning 
+这样的话'....'的消息就会打印到日志中.
+具体的例子在另一篇文章中再详细介绍一下.
+3. PostgreSQL 9.3还引入了事件触发器的功能, 也可以作为审计的外围工具之一.
+感兴趣的朋友可以参考
+http://blog.163.com/digoal@126/blog/static/16387704020132131361949/
+
+【注意】
+1. 超级用户可以修改这些配置项, 所以被审计的用户最好是普通用户. 否则用户连上来可以修改这些审计项.
+2. 程序用的数据库账号和个人用的数据库账号分开, 对于程序用的数据库账号可以只审计DDL操作, 而对于个人使用的数据库账号, 建议审计所有的SQL.
+
+【参考】
+1. PostgreSQL.conf
+
+# - What to Log -
+
+#debug_print_parse = off
+#debug_print_rewritten = off
+#debug_print_plan = off
+#debug_pretty_print = on
+#log_checkpoints = off
+log_connections = on
+#log_disconnections = off
+#log_duration = off
+log_error_verbosity = verbose           # terse, default, or verbose messages
+#log_hostname = off
+#log_line_prefix = ''                   # special values:
+                                        #   %a = application name
+                                        #   %u = user name
+                                        #   %d = database name
+                                        #   %r = remote host and port
+                                        #   %h = remote host
+                                        #   %p = process ID
+                                        #   %t = timestamp without milliseconds
+                                        #   %m = timestamp with milliseconds
+                                        #   %i = command tag
+                                        #   %e = SQL state
+                                        #   %c = session ID
+                                        #   %l = session line number
+                                        #   %s = session start timestamp
+                                        #   %v = virtual transaction ID
+                                        #   %x = transaction ID (0 if none)
+                                        #   %q = stop here in non-session
+                                        #        processes
+                                        #   %% = '%'
+                                        # e.g. '<%u%%%d> '
+#log_lock_waits = off                   # log lock waits >= deadlock_timeout
+#log_statement = 'none'                 # none, ddl, mod, all
+#log_temp_files = -1                    # log temporary files equal or larger
+                                        # than the specified size in kilobytes;
+                                        # -1 disables, 0 logs all temp files
+log_timezone = 'PRC'
+
+
+2. http://www.postgresql.org/docs/9.2/static/sql-alterrole.html
+3. http://www.postgresql.org/docs/9.2/static/sql-alterdatabase.html
+4. http://www.postgresql.org/docs/9.2/static/sql-set.html
+5. http://www.postgresql.org/docs/9.2/static/runtime-config.html
+6. http://blog.163.com/digoal@126/blog/static/163877040201252575529358/
+7. http://blog.163.com/digoal@126/blog/static/1638770402012019112218804/
+8. http://blog.163.com/digoal@126/blog/static/16387704020132131361949/

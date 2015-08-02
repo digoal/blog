@@ -1,0 +1,366 @@
+PostgreSQL research
+
+使用PostgreSQL和nagios设计统一的应用监控接口
+
+2012-04-22 0:31:22   查看原文>>
+
+SKYPE的skytools中有使用PostgreSQL 作为message queue来记录数据库表的DML操作, 并且方便大家开发消息consumer和provider.
+我想了想, 其实也可以利用PostgreSQL作为开放的应用监控接口. 接口可以用任何PostgreSQL支持的函数语言写, 本文用到的是plpgsql.
+架构如下 : 
+1. 为什么要多IDC部署?
+为避免广域网络异常时无法接收到应用发来的消息, 在每个IDC部署一个PostgreSQL数据库用于接收应用程序发送过来的告警/恢复/心跳消息.
+2. 为什么要使用关系数据库?
+可以存储应用的详细信息, 依赖关系, 部署的地点 , 项目所属部门, 开发, 项目经理, 运维人员等信息, 保留历史告警数据等等.
+由运维分配被监控的应用的应用ID和模块ID. 并且使用PostgreSQL可以对应用做鉴权, 后面的例子会提到.
+PostgreSQL有先进的函数语言方便运维控制内部逻辑, 适合提供API, 简化程序端的逻辑.
+PostgreSQL的函数还可以方便的用来输出监控结果, 输出异常模块会关联到的其他模块. 提高运维深度判断故障的效率.
+使用PostgreSQL和nagios设计统一的应用监控接口 - 德哥@Digoal - The Heart,The World.
+ 接口描述 : 
+我这里暂时只写了4个相关的接口函数,
+应用程序API描述
+1. 心跳API
+由应用程序间隔一段时间向PostgreSQL数据库执行一条函数调用.
+keepalive(i_modid integer)
+2. 信息发布API
+应用程序调用PostgreSQL数据库函数,告知当前应用程序的运行状况(健康,警告,异常).
+app_api(i_modid integer, i_code integer, i_appcode text, i_info text)
+Nagios API描述
+3. 获取心跳API
+由NagiosServer发起,nagios plugin完成的心跳检测, 运维可以主动关闭任意模块的心跳检测, 如临时维护时.
+nagios_keepalive(i_interval interval)
+4. 检测告警信息API
+检测当前异常的模块信息, 同时输出依赖这些模块的其他模块, 以提升关联异常的发现效率.
+nagios_get_mq()
+
+具体的代码和测试信息如下 : 
+
+-- 服务信息表
+create table srv_info (
+id serial primary key, -- 主键
+appid int not null, -- 应用ID, 由运维分配
+appname text not null, -- 应用名称描述
+modid int not null, -- 应用ID中的模块ID, 由运维分配
+modname text not null, -- 模块名称描述
+department text not null, -- 模块所属部门, 从直接所属部门一直追溯到一级部门
+dev text not null, -- 开发者
+dev_phone numeric not null, -- 开发者联系电话
+pm text not null, -- 项目经理
+pm_phone numeric not null, -- 项目经理联系电话
+op text not null, -- 运维
+op_phone numeric not null, -- 运维联系电话
+deployaddr text not null, -- 该模块部署在什么地方, 多机房部署的应该都写上
+keepalive boolean not null, -- 表示是否需要主动探测该模块的keepalive状态
+status text not null, -- 模块维护状态, 在维, 下线, 未知等
+comment text not null, -- 备注
+online_time timestamp(0) without time zone, -- 模块上线时间
+offline_time timestamp(0) without time zone, -- 模块下线时间
+crt_time timestamp(0) without time zone not null, -- 记录创建时间
+mod_time timestamp(0) without time zone , -- 记录修改时间
+unique(modid)
+);
+
+
+
+-- 服务的模块依赖关系表
+create table srv_depend (
+modid int primary key, -- 应用ID中的模块ID, 由运维分配
+depend_modid int not null, -- 该模块直接依赖哪些模块才可以正常运行
+crt_time timestamp(0) without time zone not null, -- 记录创建时间
+mod_time timestamp(0) without time zone , -- 记录修改时间
+foreign key (modid) references srv_info(modid),
+unique (modid,depend_modid)
+);
+
+
+
+-- 鉴权表
+create table srv_monitor_grant (
+id serial primary key, -- 主键
+modid int not null, -- 应用ID中的模块ID, 由运维分配
+addr inet not null, -- 运行这些IP接入这些对应的appid和modid, 防止程序中配置错误导致监控信息有误.
+crt_time timestamp(0) without time zone not null, -- 记录创建时间
+mod_time timestamp(0) without time zone, -- 记录修改时间
+foreign key (modid) references srv_info(modid),
+unique (modid,addr)
+);
+
+
+
+-- keepalive表
+create table srv_keepalive (
+id serial8 primary key, -- 主键
+modid int not null, -- 应用ID中的模块ID, 由运维分配
+last_time timestamp(0) without time zone not null, -- 记录创建时间, 也就是最后一次keepalive消息发送过来的时间.
+foreign key (modid) references srv_info(modid),
+unique (modid)
+);
+
+
+
+-- 异常队列表
+create table srv_mq (
+id serial8 primary key, -- 主键
+modid int not null, -- 应用ID中的模块ID, 由运维分配
+code int not null, -- 返回值, 1, 2, 由运维约定, 0 正常, 1警告, 2异常.
+appcode text not null, -- 程序返回的错误代码, 由程序定义, 但是同样的错误必须使用相同的错误代码, 避免多次记录同一个错误.
+info text not null, -- 返回信息, 程序输出的错误信息等.
+nagios_reads int default 0 not null, -- 该消息被nagios读取的次数, 每次nagios读取到消息后自增1
+crt_time timestamp(0) without time zone not null, -- 记录创建时间, 也就是故障发生的时间
+mod_time timestamp(0) without time zone, -- 记录修改时间, 每次nagios读取后更新这个时间.
+recover_time timestamp(0) without time zone, -- 故障恢复时间, 恢复后记录移至srv_mq_history表.
+foreign key (modid) references srv_info(modid)
+);
+
+
+
+-- 异常队列历史表
+create table srv_mq_history (
+id int8 primary key, -- 主键
+modid int not null, -- 应用ID中的模块ID, 由运维分配
+code int not null, -- 返回值, 1, 2, 由运维约定, 0 正常, 1警告, 2异常.
+appcode text not null, -- 程序返回的错误代码, 由程序定义, 但是同样的错误必须使用相同的错误代码, 避免多次记录同一个错误.
+info text not null, -- 返回信息, 程序输出的错误信息等.
+nagios_reads int default 0 not null, -- 该消息被nagios读取的次数, 每次nagios读取到消息后自增1
+crt_time timestamp(0) without time zone not null, -- 记录创建时间, 也就是故障发生的时间
+mod_time timestamp(0) without time zone, -- 记录修改时间, 每次nagios读取后更新这个时间.
+recover_time timestamp(0) without time zone, -- 故障恢复时间, 恢复后记录移至srv_mq_history表.
+foreign key (modid) references srv_info(modid)
+);
+
+
+
+-- 程序接口函数keepalive,间隔一定的时间由程序调用,表示与数据库通讯正常,并且表示程序的监控模块正常.
+create or replace function keepalive(i_modid int) returns int as $$
+declare
+v_addr inet;
+begin
+-- 判断鉴权
+select inet_client_addr() into v_addr;
+perform 1 from srv_monitor_grant where modid = i_modid and addr = v_addr;
+if not found then
+raise notice 'modid:% no granted with ip:%, please check or grant it with above ip.',i_modid,v_addr;
+raise exception 'err';
+end if;
+-- 插入keepalive信息
+perform 1 from srv_keepalive where modid = i_modid;
+if not found then
+insert into srv_keepalive (modid,last_time) values (i_modid, now());
+return 0;
+end if;
+update srv_keepalive set last_time = now() where modid = i_modid;
+return 0;
+-- 异常处理
+exception 
+when others then
+return 1;
+end;
+$$ language plpgsql;
+
+
+
+-- 程序接口函数,异常以及恢复时由程序调用.
+create or replace function app_api(i_modid int,i_code int,i_appcode text,i_info text) returns int as $$
+declare
+v_addr inet;
+begin
+-- 判断鉴权
+select inet_client_addr() into v_addr;
+perform 1 from srv_monitor_grant where modid = i_modid and addr = v_addr;
+if not found then
+raise notice 'modid:% no granted with ip:%, please check or grant it with above ip.',i_modid,v_addr;
+raise exception 'err';
+end if;
+case i_code
+when 0 then -- 表示恢复,移动该记录到历史表
+insert into srv_mq_history (id,modid,code,appcode,info,nagios_reads,crt_time,mod_time,recover_time) 
+  select id,modid,code,appcode,info,nagios_reads,crt_time,now(),now() from srv_mq where modid=i_modid;
+delete from srv_mq where modid=i_modid;
+when 1, 2 then -- 表示警告或异常
+-- 判断是否已经存在相同的告警, 存在则不做任何动作, 不存在则插入
+perform 1 from srv_mq where modid=i_modid and appcode=i_appcode;
+if not found then
+insert into srv_mq (modid,code,appcode,info,crt_time)
+  values (i_modid,i_code,i_appcode,i_info,now());
+end if;
+else -- 非法代码
+raise notice 'the code:% is not assigned, please use 0,1,2.', i_code;
+raise exception 'err';
+end case;
+return 0;
+-- 异常处理
+exception 
+when others then
+return 1;
+end;
+$$ language plpgsql;
+
+
+
+
+-- nagios调用的函数, 根据输入的时间间隔参数查询是否有keepalive异常的记录.
+create or replace function nagios_keepalive (i_interval interval) returns setof text as $$
+declare
+begin
+-- 列出在srv_info表中开启了keepalive, 但是应用未调用keepalive函数的记录.
+return next '-- 列出在srv_info表中开启了keepalive, 但是应用未调用keepalive函数的记录.';
+return query select department||','||appname||','||modname from srv_info where keepalive is true and modid not in (select modid from srv_keepalive);
+-- 列出超时的记录, 有则返回部门,app名,模块名的信息
+return next '-- 列出超时的记录, 有则返回部门,app名,模块名的信息';
+perform 1 from srv_keepalive where now() > (last_time+i_interval) and modid in (select modid from srv_info where keepalive is true);
+if found then 
+return query select department||','||appname||','||modname from srv_info where modid in (select modid from srv_keepalive where now() > (last_time+i_interval) and modid in (select modid from srv_info where keepalive is true));
+return ;
+end if;
+-- 正常则返回NORMAL
+return next 'NORMAL';
+return ;
+exception
+when others then
+-- 异常返回ERROR
+return next 'ERROR';
+return ;
+end;
+$$ language plpgsql;
+
+
+
+
+-- nagios读取mq信息,返回异常的模块信息, 并返回依赖这些异常模块的模块信息.
+create or replace function nagios_get_mq () returns setof text as $$
+declare
+begin
+perform 1 from srv_mq limit 1;
+if found then
+-- 返回异常的模块信息,格式:返回值,异常开始时间,部门,app名,模块名,应用错误代码,应用输出信息.
+return next '-- 异常模块信息:';
+return query select t1.code::text||','||t1.crt_time||','||t2.department||','||t2.appname||','||t2.modname||','||t1.appcode||','||t1.info from srv_mq t1,srv_info t2 where t1.modid=t2.modid;
+-- 更新nagios已读取次数字段.
+update srv_mq set nagios_reads=nagios_reads+1;
+-- 返回直接(不做递归)依赖这些异常模块的模块信息.格式:部门,app名,模块名
+return next '-- 依赖这些异常模块的模块信息:';
+return query select department||','||appname||','||modname from srv_info where modid in (select modid from srv_depend where depend_modid in (select modid from srv_mq));
+return;
+end if;
+-- 正常则返回NORMAL
+return next 'NORMAL';
+return;
+exception 
+when others then
+-- 异常返回ERROR
+return next 'ERROR';
+return;
+end;
+$$ language plpgsql;
+
+
+
+
+-- 插入测试的服务和模块信息
+insert into srv_info (appid,appname,modid,modname,department,dev,dev_phone,pm,pm_phone,op,op_phone,deployaddr,keepalive,status,comment,crt_time) values (1,'测试app1',1,'测试模块1','运维','digoal.zhou',123,'digoal.zhou',123,'digoal.zhou',123,'三墩',true,'在线','测试',now());
+insert into srv_info (appid,appname,modid,modname,department,dev,dev_phone,pm,pm_phone,op,op_phone,deployaddr,keepalive,status,comment,crt_time) values (2,'测试app2',2,'测试模块2','运维','digoal.zhou',123,'digoal.zhou',123,'digoal.zhou',123,'三墩',true,'在线','测试',now());
+insert into srv_info (appid,appname,modid,modname,department,dev,dev_phone,pm,pm_phone,op,op_phone,deployaddr,keepalive,status,comment,crt_time) values (3,'测试app3',3,'测试模块3','运维','digoal.zhou',123,'digoal.zhou',123,'digoal.zhou',123,'三墩',true,'在线','测试',now());
+insert into srv_info (appid,appname,modid,modname,department,dev,dev_phone,pm,pm_phone,op,op_phone,deployaddr,keepalive,status,comment,crt_time) values (3,'测试app3',4,'测试模块4','运维','digoal.zhou',123,'digoal.zhou',123,'digoal.zhou',123,'三墩',true,'在线','测试',now());
+insert into srv_info (appid,appname,modid,modname,department,dev,dev_phone,pm,pm_phone,op,op_phone,deployaddr,keepalive,status,comment,crt_time) values (3,'测试app3',5,'测试模块5','运维','digoal.zhou',123,'digoal.zhou',123,'digoal.zhou',123,'三墩',true,'在线','测试',now());
+insert into srv_info (appid,appname,modid,modname,department,dev,dev_phone,pm,pm_phone,op,op_phone,deployaddr,keepalive,status,comment,crt_time) values (4,'测试app4',6,'测试模块6','运维','digoal.zhou',123,'digoal.zhou',123,'digoal.zhou',123,'三墩',true,'在线','测试',now());
+
+
+
+-- 插入测试的模块间依赖关系信息
+insert into srv_depend(modid,depend_modid,crt_time) values (4,3,now());
+insert into srv_depend(modid,depend_modid,crt_time) values (5,3,now());
+insert into srv_depend(modid,depend_modid,crt_time) values (2,3,now());
+
+
+
+-- 插入鉴权信息
+insert into srv_monitor_grant (modid,addr,crt_time) values (3,'172.16.3.39',now());
+
+
+
+-- 在172.16.3.39上执行如下,
+-- 因为modid = 1未给172.16.3.39服务器鉴权, 所以keepalive报错.
+test=# select * from keepalive(1);
+NOTICE:  modid:1 no granted with ip:172.16.3.39, please check or grant it with above ip.
+ keepalive 
+-----------
+         1
+(1 row)
+-- modid = 3给172.16.3.39服务器做了鉴权, 因此可以插入.
+test=# select * from keepalive(3);
+ keepalive 
+-----------
+         0
+(1 row)
+test=# select * from srv_keepalive;
+ id | modid |      last_time      
+----+-------+---------------------
+  1 |     3 | 2012-04-21 23:11:55
+(1 row)
+
+
+
+-- 告警测试
+test=# select * from app_api(3,1,'ERR','请致电运维人员') ;
+ app_api 
+---------
+       0
+(1 row)
+
+test=# select * from srv_mq;
+ id | modid | code | appcode |      info      | nagios_reads |      crt_time       | mod_time | recover_time 
+----+-------+------+---------+----------------+--------------+---------------------+----------+--------------
+  1 |     3 |    1 | ERR     | 请致电运维人员 |            0 | 2012-04-21 23:18:31 |          | 
+(1 row)
+
+
+
+-- 使用nagios获取告警测试, 由于2,4,5号模块依赖3号模块, 所以会在依赖信息中报出.
+test=# select * from nagios_get_mq();
+                          nagios_get_mq                           
+------------------------------------------------------------------
+ -- 异常模块信息:
+ 1,2012-04-21 23:18:31,运维,测试app3,测试模块3,ERR,请致电运维人员
+ -- 依赖这些异常模块的模块信息:
+ 运维,测试app2,测试模块2
+ 运维,测试app3,测试模块4
+ 运维,测试app3,测试模块5
+(6 rows)
+
+
+
+-- 使用nagios获取keepalive超时或未开启的信息.
+test=# select * from nagios_keepalive('1 sec');
+                             nagios_keepalive                             
+--------------------------------------------------------------------------
+ -- 列出在srv_info表中开启了keepalive, 但是应用未调用keepalive函数的记录.
+ 运维,测试app1,测试模块1
+ 运维,测试app2,测试模块2
+ 运维,测试app3,测试模块4
+ 运维,测试app3,测试模块5
+ 运维,测试app4,测试模块6
+ -- 列出超时的记录, 有则返回部门,app名,模块名的信息
+ 运维,测试app3,测试模块3
+(8 rows)
+
+
+
+-- 恢复正常测试.
+test=# select * from app_api(3,0,'NORMAL','') ;
+ app_api 
+---------
+       0
+(1 row)
+-- srv_mq中模块3的记录将移动到srv_mq_history表中.因此在此检查mq将不会报出异常
+test=# select * from nagios_get_mq();
+ nagios_get_mq 
+---------------
+ NORMAL
+(1 row)
+-- 检查srv_mq_history表, 信息已经记录, 包括恢复时间信息.
+test=# select * from srv_mq_history ;
+ id | modid | code | appcode |      info      | nagios_reads |      crt_time       |      mod_time       |    recover_time     
+----+-------+------+---------+----------------+--------------+---------------------+---------------------+---------------------
+  1 |     3 |    1 | ERR     | 请致电运维人员 |            3 | 2012-04-21 23:18:31 | 2012-04-21 23:31:16 | 2012-04-21 23:31:16
+(1 row)
+
+

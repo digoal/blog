@@ -1,0 +1,303 @@
+PostgreSQL research
+
+PostgreSQL reduce big table's whole scan caused by vacuum , performance tuning
+
+2013-09-24 11:27:42   查看原文>>
+
+熟悉PostgreSQL的童鞋对xid定不陌生, 为了避免出现tuples disappear的现象, 数据库需要有计划的自动vacuum将normal xid变更成frozenxid.
+(模拟disappear场景可参考如下:)
+http://blog.163.com/digoal@126/blog/static/163877040201183043153622/
+由于这个变更xid的操作, 会给数据库带来写IO和读IO操作, 所以对数据库有一定的影响.
+如果发生的是全表性质的扫描vacuum, 并且刚好发生在数据库繁忙期间, 那简直就是雪上加霜的事情.
+控制是否将normal xid替换成frozenxid的几个参数如下 : 
+全局参数 : 
+autovacuum_freeze_max_age, 会降低对象的relfrozenxid, 所以需要whole table scan, 替换所有符合条件的normal xid为frozen xid.
+注意即使未开启autovacuum, 这个参数也会生效.
+
+Specifies the maximum age (in transactions) that a table's pg_class.relfrozenxid field can attain before a VACUUM operation is forced to prevent transaction ID wraparound within the table. Note that the system will launch autovacuum processes to prevent wraparound even when autovacuum is otherwise disabled.
+
+Vacuum also allows removal of old files from the pg_clog subdirectory, which is why the default is a relatively low 200 million transactions. This parameter can only be set at server start, but the setting can be reduced for individual tables by changing storage parameters. For more information see Section 23.1.5.
+
+
+vacuum_freeze_min_age, 仅仅替换被扫描块的符合条件的normal xid 为 frozen xid. 不一定是whole table scan. 
+
+Specifies the cutoff age (in transactions) that VACUUM should use to decide whether to replace transaction IDs with FrozenXID while scanning a table. The default is 50 million transactions. Although users can set this value anywhere from zero to one billion, VACUUM will silently limit the effective value to half the value of autovacuum_freeze_max_age, so that there is not an unreasonably short time between forced autovacuums. For more information see Section 23.1.5.
+
+
+vacuum_freeze_table_age, 当对象的age达到vacuum_freeze_table_age时, 执行vacuum的时候会触发whole table scan. 
+
+VACUUM performs a whole-table scan if the table's pg_class.relfrozenxid field has reached the age specified by this setting. The default is 150 million transactions. Although users can set this value anywhere from zero to one billion, VACUUM will silently limit the effective value to 95% of autovacuum_freeze_max_age, so that a periodical manual VACUUM has a chance to run before an anti-wraparound autovacuum is launched for the table. For more information see Section 23.1.5.
+
+
+表级参数 : 
+
+autovacuum_freeze_min_age, toast.autovacuum_freeze_min_age (integer)
+autovacuum_freeze_max_age, toast.autovacuum_freeze_max_age (integer)
+autovacuum_freeze_table_age, toast.autovacuum_freeze_table_age (integer)
+
+
+如果创建表时没有指定, 默认将继承全局参数的设置. 
+
+什么情况下会发生whole table scan? 
+1. 当对象的age达到vacuum_freeze_table_age时, vacuum的时候会触发whole table scan. 
+2. 当使用vacuum freeze命令时, 也是whole table scan. 
+3. 当对象的所有数据块里面都存在dead tuple, 需要回收垃圾空间时.
+
+测试1 : 
+
+digoal=# create table test(id int, info text, crt_time timestamp);
+CREATE TABLE
+
+pg94@db-172-16-3-39-> vi test.sql
+\setrandom id 1 5000000
+insert into test values (:id, 'test', now());
+
+pg94@db-172-16-3-39-> pgbench -M prepared -n -r -f ./test.sql -P 3 -c 16 -j 4 -T 20
+progress: 3.0 s, 90145.5 tps, 0.177 ms lat
+progress: 6.0 s, 98736.2 tps, 0.162 ms lat
+progress: 9.0 s, 99266.5 tps, 0.161 ms lat
+progress: 12.0 s, 98073.9 tps, 0.163 ms lat
+progress: 15.0 s, 99807.6 tps, 0.160 ms lat
+progress: 18.0 s, 97463.6 tps, 0.164 ms lat
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+duration: 20 s
+number of transactions actually processed: 1949618
+tps = 97461.032569 (including connections establishing)
+tps = 97531.461529 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001346        \setrandom id 1 5000000
+        0.161348        insert into test values (:id, 'test', now());
+
+pg94@db-172-16-3-39-> psql
+psql (9.4devel)
+Type "help" for help.
+当前test表的relfrozenxid 和age.
+digoal=# select relname,relfrozenxid,age(relfrozenxid) from pg_class where relname='test';
+ relname | relfrozenxid |   age   
+---------+--------------+---------
+ test    |      9613651 | 1949619
+(1 row)
+使用vacuum freeze会发生whole table scan, 变更normal xid为frozen xid(实际上是把行的xmin变更为2), 同时降低age
+digoal=# vacuum (verbose,freeze) test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 1949618 nonremovable row versions in 12426 out of 12426 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.03s/0.25u sec elapsed 0.28 sec.
+INFO:  vacuuming "pg_toast.pg_toast_24619"
+INFO:  index "pg_toast_24619_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_24619": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+digoal=# select relname,relfrozenxid,age(relfrozenxid) from pg_class where relname='test';
+ relname | relfrozenxid | age 
+---------+--------------+-----
+ test    |     11563271 |   0
+(1 row)
+
+
+
+测试2 : 
+
+digoal=# truncate table test;
+TRUNCATE TABLE
+
+pg94@db-172-16-3-39-> pgbench -M prepared -n -r -f ./test.sql -P 3 -c 16 -j 4 -T 20
+progress: 3.0 s, 91312.6 tps, 0.175 ms lat
+progress: 6.0 s, 98566.6 tps, 0.162 ms lat
+progress: 9.0 s, 98924.4 tps, 0.162 ms lat
+progress: 12.0 s, 98866.5 tps, 0.162 ms lat
+progress: 15.0 s, 97615.4 tps, 0.164 ms lat
+progress: 18.0 s, 95816.6 tps, 0.167 ms lat
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+duration: 20 s
+number of transactions actually processed: 1936647
+tps = 96806.188128 (including connections establishing)
+tps = 96869.910097 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001440        \setrandom id 1 5000000
+        0.162382        insert into test values (:id, 'test', now());
+
+digoal=# select relname,relfrozenxid,age(relfrozenxid) from pg_class where relname='test';
+ relname | relfrozenxid |   age   
+---------+--------------+---------
+ test    |     13508670 | 1936649
+(1 row)
+此时只需vacuum, 我们看到没有扫描全表.
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 0 nonremovable row versions in 0 out of 12343 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  vacuuming "pg_toast.pg_toast_24619"
+INFO:  index "pg_toast_24619_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_24619": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+如果把vacuum_freeze_table_age改为小于当前这个表的年龄
+digoal=# set vacuum_freeze_table_age=1936648;
+SET
+此时再次执行vacuum , 会发生全表扫描.
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 1936647 nonremovable row versions in 12343 out of 12343 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.19u sec elapsed 0.19 sec.
+INFO:  vacuuming "pg_toast.pg_toast_24619"
+INFO:  index "pg_toast_24619_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_24619": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+虽然发生了全表扫描, 但是normal xid未被替换为frozen xid, 原因是vacuum_freeze_min_age大于这些被扫描的xmin的年龄.
+digoal=# select relname,relfrozenxid,age(relfrozenxid) from pg_class where relname='test';
+ relname | relfrozenxid |   age   
+---------+--------------+---------
+ test    |     13508670 | 1936659
+(1 row)
+如果把vacuum_freeze_min_age改为0, 那么就会被替换为frozen xid了.
+digoal=# set vacuum_freeze_min_age=0;
+SET
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  "test": found 0 removable, 1936647 nonremovable row versions in 12343 out of 12343 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.01s/0.70u sec elapsed 0.75 sec.
+INFO:  vacuuming "pg_toast.pg_toast_24619"
+INFO:  index "pg_toast_24619_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_24619": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+digoal=# select relname,relfrozenxid,age(relfrozenxid) from pg_class where relname='test';
+ relname | relfrozenxid | age 
+---------+--------------+-----
+ test    |     15445329 |   0
+(1 row)
+
+
+
+对以上概念有所了解后, 我们来假象一个场景.
+假设数据库中有以下表,
+t1_201307
+t2_201307
+t3_201307
+t4_201307
+t5_201307
+t1_201308
+t2_201308
+t3_201308
+t4_201308
+t5_201308
+....
+每个月1个表.
+每个月的表只在当月有dml操作, 过后不会有dml, 最多可能会有select的操作, 所以这些表的relfrozenxid在下个月就不会变了, 而且也不会自动触发vacuum. 因为表没有了dml操作, 那么这些表只有当年龄到达autovacuum_freeze_max_age时, 强制触发autovacuum whole table scan, 将normal xid变更成frozen xid. 而且这些表如果数据量很大的话, 同时又在
+系统繁忙时触发, 后果可想而知.
+
+如何来避免这种情况的发生呢?
+1. 可以在数据库比较空闲时手工或使用定时执行任务来降低对象的pg_class.relfrozenxid. 
+如何手工来降低pg_class.relfrozenxid. 可以参照前面的两个例子, 
+vacuum freeze;
+或者
+set vacuum_freeze_min_age=0;
+set vacuum_freeze_table_age=0;
+vacuum;
+或者使用命令
+vacuumdb -Fav
+这样的话就可以减少非计划性的whole table scan.
+脚本举例, 请根据自己的情况适当调整 : 
+处理年龄大于2000万的, 同时大小大于800MB的, 按最老的开始排序的前10个对象.
+
+#!/bin/bash
+# 环境变量
+PATH=$PATH:$HOME/bin
+export PATH
+export LANG=en_US.utf8
+export PGHOME=/opt/pgsql
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+export PATH=$PGHOME/bin:$PATH:.
+
+# 配置项
+TODAY=`date +%Y%m%d`
+AGE="20000000"
+PAGES="102400"
+
+HOST="127.0.0.1"
+PORT="2999"
+ROLE="postgres"
+QUERY1="select t2.nspname||'.'||t1.relname from pg_class t1 join pg_namespace t2 on (t1.relnamespace=t2.oid and t1.relkind='r' and age(t1.relfrozenxid)>$AGE and t1.relpages>$PAGES) order by age(relfrozenxid) desc limit 10;"
+
+for DB in `psql -A -q -t -h $HOST -p $PORT -U $ROLE postgres -c "select datname from pg_database where datname not in ('postgres','template0','template1')"`
+do
+  for RELNAME in `psql -A -q -t -h $HOST -p $PORT -U $ROLE $DB -c "$QUERY1"`
+  do
+    psql -h $HOST -p $PORT -U $ROLE $DB -c "vacuum (verbose,freeze) $RELNAME;"
+  done
+done
+
+
+既然是自定义脚本, 所以还要考虑自动触发的情况, 如果使用了自定义脚本, 那么尽量把自动触发的点往后调, 也就是调大以下的默认值:
+autovacuum_freeze_max_age = 200000000
+vacuum_freeze_min_age = 50000000
+vacuum_freeze_table_age = 150000000
+
+[参考]
+1. http://www.postgresql.org/docs/9.3/static/runtime-config-autovacuum.html#GUC-AUTOVACUUM-FREEZE-MAX-AGE
+2. http://www.postgresql.org/docs/9.3/static/sql-createtable.html
+
+autovacuum_freeze_min_age, toast.autovacuum_freeze_min_age (integer)
+Custom vacuum_freeze_min_age parameter. Note that autovacuum will ignore attempts to set a per-table autovacuum_freeze_min_age larger than the half system-wide autovacuum_freeze_max_age setting.
+
+autovacuum_freeze_max_age, toast.autovacuum_freeze_max_age (integer)
+Custom autovacuum_freeze_max_age parameter. Note that autovacuum will ignore attempts to set a per-table autovacuum_freeze_max_age larger than the system-wide setting (it can only be set smaller). Note that while you can set autovacuum_freeze_max_age very small, or even zero, this is usually unwise since it will force frequent vacuuming.
+
+autovacuum_freeze_table_age, toast.autovacuum_freeze_table_age (integer)
+Custom vacuum_freeze_table_age parameter.
+
+
+3. http://www.postgresql.org/docs/9.3/static/runtime-config-client.html#GUC-VACUUM-FREEZE-MIN-AGE
+4. http://www.postgresql.org/docs/9.3/static/sql-vacuum.html
+5. http://www.postgresql.org/docs/9.3/static/routine-vacuuming.html#VACUUM-FOR-WRAPAROUND
+
+The whole table is scanned when relfrozenxid is more than vacuum_freeze_table_age transactions old, when VACUUM's FREEZE option is used, or when all pages happen to require vacuuming to remove dead row versions. 
+
+
+6. http://blog.163.com/digoal@126/blog/static/163877040201183043153622/
+7. http://blog.163.com/digoal@126/blog/static/163877040201251911813661/

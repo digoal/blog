@@ -1,0 +1,822 @@
+PostgreSQL research
+
+PostgreSQL 9.3 add postgres_fdw extension for accessing remote tables
+
+2013-02-26 15:07:40   查看原文>>
+
+https://wiki.postgresql.org/wiki/Foreign_data_wrappers
+
+PostgreSQL 9.3新增了一个postgres_fdw模块, 已经整合在源码包中. 用于创建postgres外部表.
+此前名为pgsql_fdw, pgsql_fdw未整合到contrib中, 使用方法如下.
+http://blog.163.com/digoal@126/blog/static/163877040201231514057303/
+
+【测试环境】
+
+远程数据库 : 
+IP : 172.16.3.150
+PORT : 9201
+version : 9.2.1
+DBNAME : digoal
+ROLE : digoal
+PASSWORD : digoal
+ENCODE : UTF8
+LOCALE = C
+-- 如下 : 
+ocz@db-172-16-3-150-> psql
+psql (9.2.1)
+digoal=> \l
+                             List of databases
+   Name    |  Owner   | Encoding | Collate | Ctype |   Access privileges   
+-----------+----------+----------+---------+-------+-----------------------
+ digoal    | digoal   | UTF8     | C       | C     | 
+
+本地数据库 : 
+IP : 172.16.3.150
+PORT : 9300
+version : 9.3devel
+DBNAME : digoal
+ROLE : digoal
+ENCODE : UTF8
+LOCALE = C
+-- 如下 : 
+pgdev@db-172-16-3-150-> psql digoal digoal
+psql (9.3devel)
+digoal=> \l
+                             List of databases
+   Name    |  Owner   | Encoding | Collate | Ctype |   Access privileges   
+-----------+----------+----------+---------+-------+-----------------------
+ digoal    | digoal   | UTF8     | C       | C     | 
+
+
+
+【使用举例】
+1. 在本地数据库中创建postgres_fdw extension.
+
+digoal=> \c digoal postgres
+You are now connected to database "digoal" as user "postgres".
+
+
+digoal=# CREATE EXTENSION postgres_fdw;
+
+
+2. 在远程数据库上生成测试数据 : 
+
+-- 自建枚举类型 : 
+CREATE TYPE user_enum AS ENUM ('foo', 'bar', 'buz');
+-- 注意是创建在public下面的.
+digoal=> \dT
+        List of data types
+ Schema |   Name    | Description
+--------+-----------+-------------
+ public | user_enum |
+(1 row)
+-- 注意oid
+digoal=> select oid from pg_type where typname='user_enum';
+   oid
+---------
+ 3425980
+(1 row)
+-- schema : 
+CREATE SCHEMA digoal;
+-- 表 : 
+CREATE TABLE digoal.test1 (
+        c1 int NOT NULL,
+        c2 int NOT NULL,
+        c3 text,
+        c4 timestamptz,
+        c5 timestamp,
+        c6 varchar(10),
+        c7 char(10),
+        c8 user_enum,
+        CONSTRAINT t1_pkey PRIMARY KEY (c1)
+);
+CREATE TABLE digoal.test2 (
+        c1 int NOT NULL,
+        c2 text,
+        CONSTRAINT t2_pkey PRIMARY KEY (c1)
+);
+-- 测试数据 : 
+INSERT INTO digoal.test1
+        SELECT id,
+               id % 10,
+               to_char(id, 'FM00000'),
+               '1970-01-01'::timestamptz + ((id % 100) || ' days')::interval,
+               '1970-01-01'::timestamp + ((id % 100) || ' days')::interval,
+               id % 10,
+               id % 10,
+               'foo'::user_enum
+        FROM generate_series(1, 1000) id;
+INSERT INTO digoal.test2
+        SELECT id,
+               'AAA' || to_char(id, 'FM000')
+        FROM generate_series(1, 100) id;
+-- 分析 : 
+ANALYZE digoal.test1;
+ANALYZE digoal.test2;
+
+
+3. 在本地数据库中创建server
+
+-- 语法 : 
+CREATE SERVER server_name [ TYPE 'server_type' ] [ VERSION 'server_version' ]
+    FOREIGN DATA WRAPPER fdw_name
+    [ OPTIONS ( option 'value' [, ... ] ) ]
+-- 创建 : 
+digoal=# CREATE SERVER s1 FOREIGN DATA WRAPPER postgres_fdw;
+CREATE SERVER
+digoal=# select * from pg_foreign_server ;
+ srvname | srvowner | srvfdw | srvtype | srvversion | srvacl | srvoptions 
+---------+----------+--------+---------+------------+--------+------------
+ s1      |       10 |  16425 |         |            |        | 
+(1 row)
+-- 设置SERVER 参数语法 : 
+Command:     ALTER SERVER
+Description: change the definition of a foreign server
+Syntax:
+ALTER SERVER name [ VERSION 'new_version' ]
+    [ OPTIONS ( [ ADD | SET | DROP ] option ['value'] [, ... ] ) ]
+ALTER SERVER name OWNER TO new_owner
+ALTER SERVER name RENAME TO new_name
+-- 可用的server参数, 请参考 : 
+http://www.postgresql.org/docs/devel/static/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+-- 但是以下参数不能使用在server options中 : 
+user and password (specify these for a user mapping, instead)
+client_encoding (this is automatically set from the local server encoding)
+fallback_application_name (always set to postgres_fdw)
+-- 设置SERVER 参数(常用的是地址,端口,库名) : 
+digoal=# alter server s1 options ( add hostaddr '172.16.3.150', add port '9201', add dbname 'digoal');
+ALTER SERVER
+
+
+4. SERVER赋权 : 
+
+digoal=# grant usage on foreign server s1 to digoal;
+GRANT
+digoal=# select * from pg_foreign_server ;
+ srvname | srvowner | srvfdw | srvtype | srvversion |                 srvacl                  |            srvoptions             
+---------+----------+--------+---------+------------+-----------------------------------------+-----------------------------------
+ s1      |       10 |  16425 |         |            | {postgres=U/postgres,digoal=U/postgres} | {hostaddr=172.16.3.150,port=9201,dbn
+ame=digoal}
+(1 row)
+
+
+5. 在本地数据库中创建user mapping : 
+
+-- 可用options: user, password
+digoal=# CREATE USER MAPPING FOR digoal server s1 options (user 'digoal', password 'digoal');
+CREATE USER MAPPING
+
+
+6. 在本地数据库中创建foreign table
+
+-- 首先要创建一致的枚举类型.
+digoal=> CREATE TYPE user_enum AS ENUM ('foo', 'bar', 'buz');
+CREATE TYPE
+digoal=> \dT
+        List of data types
+ Schema |   Name    | Description 
+--------+-----------+-------------
+ digoal | user_enum | 
+(1 row)
+digoal=> select oid from pg_type where typname='user_enum';
+  oid  
+-------
+ 16439
+(1 row)
+-- 创建外部表ft1
+-- 可用的options: schema_name, table_name
+digoal=> CREATE FOREIGN TABLE ft1 (
+digoal(> c0 int,
+digoal(> c1 int NOT NULL,
+digoal(> c2 int NOT NULL,
+digoal(> c3 text,
+digoal(> c4 timestamptz,
+digoal(> c5 timestamp,
+digoal(> c6 varchar(10),
+digoal(> c7 char(10),
+digoal(> c8 user_enum
+digoal(> ) SERVER s1 options(schema_name 'digoal', table_name 'test1');
+CREATE FOREIGN TABLE
+-- 注意远程表没有c0列, 所以报错
+digoal=> select * from ft1 limit 1;
+ERROR:  column "c0" does not exist
+CONTEXT:  Remote SQL command: SELECT c0, c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1
+-- 删除ft1表的c0列.
+digoal=> ALTER FOREIGN TABLE ft1 DROP COLUMN c0;
+ALTER FOREIGN TABLE
+-- 查询正常.
+digoal=> select * from ft1 limit 1;
+ c1 | c2 |  c3   |           c4           |         c5          | c6 |     c7     | c8  
+----+----+-------+------------------------+---------------------+----+------------+-----
+  1 |  1 | 00001 | 1970-01-02 00:00:00+08 | 1970-01-02 00:00:00 | 1  | 1          | foo
+(1 row)
+-- 创建外部表ft2, 注意外部表的列顺序无所谓, 但是列名必须在远程表中已经存在.
+digoal=> CREATE FOREIGN TABLE ft2 (c2 text, c1 int not null) SERVER s1 options(schema_name 'digoal', table_name 'test2');
+CREATE FOREIGN TABLE
+digoal=> select * from ft2 limit 1;
+   c2   | c1 
+--------+----
+ AAA001 |  1
+(1 row)
+
+
+-- 注意上面创建外部表时, 可用的options为schema_name, table_name, use_remote_estimate(后面会测试到). 那万一列名不一致怎么处理呢?
+-- 可用使用alter来修改. 如下 : 
+
+digoal=> CREATE FOREIGN TABLE ft3 (c2 text, c3 int not null) SERVER s1 options(schema_name 'digoal', table_name 'test2');
+CREATE FOREIGN TABLE
+digoal=> select * from ft3 limit 1;
+ERROR:  column "c3" does not exist
+CONTEXT:  Remote SQL command: SELECT c2, c3 FROM digoal.test2
+由于c3列在远程表中不存在, 所以报错. 修改后正常 : 
+digoal=> alter foreign table ft3 alter column c3 options (column_name 'c1');
+ALTER FOREIGN TABLE
+digoal=> select * from ft3 limit 1;
+   c2   | c3 
+--------+----
+ AAA001 |  1
+(1 row)
+
+
+-- 也可以在创建外部表时指定远程表的列名和本地列名映射关系, 本地表的列类型等 : 
+
+digoal=> CREATE FOREIGN TABLE ft3 (c2 text, c3 int OPTIONS (column_name 'c1') not null) SERVER s1 options(schema_name 'digoal', table_name 'test2');
+CREATE FOREIGN TABLE
+digoal=> select * from ft3 limit 1;
+   c2   | c3 
+--------+----
+ AAA001 |  1
+(1 row)
+
+
+
+【其他测试】
+1. 远程表中存在bytea类型
+
+-- 远程表 : 
+digoal=> create table test3(id int,info bytea);
+CREATE TABLE
+digoal=> insert into test3 values (1, decode(repeat(md5(clock_timestamp()::text), 3), 'base64'));
+INSERT 0 1
+digoal=> set bytea_output='escape';
+SET
+digoal=> select * from test3 limit 1;
+ id |                                                                                                      info                     
+                                                                                  
+----+-------------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+  1 | \327\2767\353n<\337\226\236\347w\337\333\1774sn_\325\355\272s\327\035\327\2767\353n<\337\226\236\347w\337\333\1774sn_\325\355\
+272s\327\035\327\2767\353n<\337\226\236\347w\337\333\1774sn_\325\355\272s\327\035
+(1 row)
+digoal=> set bytea_output='hex';
+SET
+digoal=> select * from test3 limit 1;
+ id |                                                                        info                                                   
+                     
+----+-------------------------------------------------------------------------------------------------------------------------------
+---------------------
+  1 | \xd7be37eb6e3cdf969ee777dfdb7f34736e5fd5edba73d71dd7be37eb6e3cdf969ee777dfdb7f34736e5fd5edba73d71dd7be37eb6e3cdf969ee777dfdb7f
+34736e5fd5edba73d71d
+(1 row)
+-- 外部表测试 : 
+digoal=> CREATE FOREIGN TABLE ft3 (id int, info bytea not null) SERVER s1 options(schema_name 'digoal', table_name 'test3');
+CREATE FOREIGN TABLE
+digoal=> select * from ft3;
+ id |                                                                        info                                                   
+                     
+----+-------------------------------------------------------------------------------------------------------------------------------
+---------------------
+  1 | \xd7be37eb6e3cdf969ee777dfdb7f34736e5fd5edba73d71dd7be37eb6e3cdf969ee777dfdb7f34736e5fd5edba73d71dd7be37eb6e3cdf969ee777dfdb7f
+34736e5fd5edba73d71d
+(1 row)
+digoal=> set bytea_output='escape';
+SET
+digoal=> select * from ft3;
+ id |                                                                                                      info                     
+                                                                                  
+----+-------------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+  1 | \327\2767\353n<\337\226\236\347w\337\333\1774sn_\325\355\272s\327\035\327\2767\353n<\337\226\236\347w\337\333\1774sn_\325\355\
+272s\327\035\327\2767\353n<\337\226\236\347w\337\333\1774sn_\325\355\272s\327\035
+(1 row)
+
+
+2. 远程表中存在大对象large object类型.
+
+-- 大对象的使用可参见 : 
+http://blog.163.com/digoal@126/blog/static/16387704020130931040444/
+-- 远程表 : 
+digoal=> drop table test3;
+DROP TABLE
+digoal=> create table test3(id int,info oid);
+CREATE TABLE
+-- 创建插入大对象的函数.
+create or replace function write_lo (i_bytea bytea) returns oid as $$
+declare
+  oid_new_lo oid;
+  fd_new_lo int;
+begin
+  select lo_creat(-1) into oid_new_lo;
+  select lo_open(oid_new_lo, 131072) into fd_new_lo;
+  perform lowrite(fd_new_lo, i_bytea);
+  perform lo_close(fd_new_lo);
+  return oid_new_lo;
+end;
+$$ language plpgsql;
+-- 创建读大对象的函数
+create or replace function read_lo (i_lo_oid oid, i_size int4) returns bytea as $$
+declare
+  result bytea;
+  fd_lo int;
+begin
+  select lo_open(i_lo_oid, 262144) into fd_lo;
+  select loread(fd_lo, i_size) into result;
+  perform lo_close(fd_lo);
+  return result;
+end;
+$$ language plpgsql;
+-- 插入测试数据 : 
+digoal=> insert into test3 values (1, write_lo(decode(repeat(md5(clock_timestamp()::text), 3), 'base64')));
+INSERT 0 1
+-- 读取 : 
+digoal=> select id,info,read_lo(info,100) from test3;
+ id |  info   |                                                                      read_lo                                        
+                               
+----+---------+---------------------------------------------------------------------------------------------------------------------
+-------------------------------
+  1 | 3426035 | \xf5ef767bd79d71cdb67df6b96bae5bd1eeb8dfa73de3be3af5ef767bd79d71cdb67df6b96bae5bd1eeb8dfa73de3be3af5ef767bd79d71cdb6
+7df6b96bae5bd1eeb8dfa73de3be3a
+(1 row)
+-- 大对象数据实际存储在pg_largeobject中
+digoal=> \d pg_largeobject
+Table "pg_catalog.pg_largeobject"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ loid   | oid     | not null
+ pageno | integer | not null
+ data   | bytea   | 
+Indexes:
+    "pg_largeobject_loid_pn_index" UNIQUE, btree (loid, pageno)
+-- 但是直接读取pg_largeobject是不允许的 : 
+digoal=> select * from pg_largeobject limit 1;
+ERROR:  permission denied for relation pg_largeobject
+
+-- 外部表测试 : 
+digoal=> drop foreign table ft3;
+DROP FOREIGN TABLE
+digoal=> CREATE FOREIGN TABLE ft3 (id int, info oid) SERVER s1 options(schema_name 'digoal', table_name 'test3');
+CREATE FOREIGN TABLE
+digoal=> select * from ft3 limit 1;
+ id |  info   
+----+---------
+  1 | 3426035
+(1 row)
+-- 如何能读到大数据呢?
+-- 在本地数据库中创建read_lo函数, 看看能不能传递给远程数据库
+digoal=> create or replace function read_lo (i_lo_oid oid, i_size int4) returns bytea as $$
+digoal$> declare
+digoal$>   result bytea;
+digoal$>   fd_lo int;
+digoal$> begin
+digoal$>   select lo_open(i_lo_oid, 262144) into fd_lo;
+digoal$>   select loread(fd_lo, i_size) into result;
+digoal$>   perform lo_close(fd_lo);
+digoal$>   return result;
+digoal$> end;
+digoal$> $$ language plpgsql strict immutable;
+CREATE FUNCTION
+-- 当然不可以, 原因是能传递给远程的只能是内建函数, 并且是immutable的. 后面会有测试.
+digoal=> select id,info,read_lo(info,100) from ft3;
+ERROR:  large object 3426035 does not exist
+CONTEXT:  SQL statement "select lo_open(i_lo_oid, 262144)"
+-- 查看远程SQL, 函数read_lo没有传递给远程数据库.
+digoal=> explain verbose select id,info,read_lo(info,100) from ft3;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Foreign Scan on digoal.ft3  (cost=100.00..826.80 rows=2560 width=8)
+   Output: id, info, read_lo(info, 100)
+   Remote SQL: SELECT id, info FROM digoal.test3
+(3 rows)
+
+-- 有没有其他办法呢?
+-- 一种方法是基于视图的外部表
+-- 远程视图
+digoal=> create view v_test3 as select id,read_lo(info,100) as info from test3;
+CREATE VIEW
+digoal=> \d v_test3
+    View "digoal.v_test3"
+ Column |  Type   | Modifiers 
+--------+---------+-----------
+ id     | integer | 
+ info   | bytea   | 
+-- 外部表 : 
+digoal=> CREATE FOREIGN TABLE ft3 (id int, info bytea) SERVER s1 options(schema_name 'digoal', table_name 'v_test3');
+CREATE FOREIGN TABLE
+digoal=> select * from ft3 limit 1;
+ id |                                                                                                           info                
+                                                                                           
+----+-------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+  1 | \365\357v{\327\235q\315\266}\366\271k\256[\321\356\270\337\247=\343\276:\365\357v{\327\235q\315\266}\366\271k\256[\321\356\270
+\337\247=\343\276:\365\357v{\327\235q\315\266}\366\271k\256[\321\356\270\337\247=\343\276:
+(1 row)
+
+
+3. 成本评估 : 
+
+-- 外部表的统计信息需手工执行analyze进行收集. 因为autovacuum无法被触发.
+digoal=# select count(*) from pg_statistic where starelid='digoal.ft1'::regclass;
+ count 
+-------
+     0
+(1 row)
+-- 收集后再查看统计信息表, 已经有了统计信息.
+digoal=# analyze verbose digoal.ft1;
+INFO:  analyzing "digoal.ft1"
+INFO:  "ft1": table contains 1000 rows, 1000 rows in sample
+ANALYZE
+digoal=# select count(*) from pg_statistic where starelid='digoal.ft1'::regclass;
+ count 
+-------
+     8
+(1 row)
+-- postgres_fdw的外部表成本估算分成本地和远程两种.
+digoal=> alter foreign table digoal.ft1 options (set use_remote_estimate 'true');
+ALTER FOREIGN TABLE
+digoal=> explain analyze verbose select * from digoal.ft1 where c1=1;
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Foreign Scan on digoal.ft1  (cost=100.00..108.29 rows=1 width=47) (actual time=0.418..0.419 rows=1 loops=1)
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+ Total runtime: 0.550 ms
+(4 rows)
+-- 把上面看到的Remote SQL: 放到远程数据库中执行看看成本是多少 : 
+-- 远程数据库上的analyze结果 : 
+digoal=> explain analyze verbose select * from digoal.test1 where c1=1;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Index Scan using t1_pkey on digoal.test1  (cost=0.00..8.27 rows=1 width=47) (actual time=0.009..0.010 rows=1 loops=1)
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Index Cond: (test1.c1 = 1)
+ Total runtime: 0.033 ms
+(4 rows)
+-- 当外部表的选项use_remote_estimate 为 'true'时, COST用到了远程的COST, 具体的算法如下 : 
+-- 外部表的成本
+cost=100.00..108.29
+-- 远程成本
+cost=0.00..8.27
+100为外部表对应的SERVER的基本成本, 不同的基数可以用来体现不同SERVER的网络好坏.
+远程成本是8.27
+还有0.02是什么呢?
+其中1个是fdw_tuple_cost*rows, 另一个是cpu_tuple_cost*rows
+计算公式 : total_cost = fdw_startup_cost + remote_total_cost + fdw_tuple_cost*rows + cpu_tuple_cost*rows
+digoal=> show cpu_tuple_cost;
+ cpu_tuple_cost 
+----------------
+ 0.01
+(1 row)
+计算结果 = 100 + 8.27 + 0.01*1 + 0.01*1 = 108.29
+fdw_tuple_cost指的是外部表对应的SERVER的获取单条TUPLE的成本. 不同的数字可以用来体现不同SERVER的网络好坏.
+参考 : 
+
+fdw_startup_cost
+This option, which can be specified for a foreign server, is a numeric value that is added to the estimated startup cost of any foreign-table scan on that server. This represents the additional overhead of establishing a connection, parsing and planning the query on the remote side, etc. The default value is 100.
+
+fdw_tuple_cost
+This option, which can be specified for a foreign server, is a numeric value that is used as extra cost per-tuple for foreign-table scans on that server. This represents the additional overhead of data transfer between servers. You might increase or decrease this number to reflect higher or lower network delay to the remote server. The default value is 0.01.
+
+
+-- 修改fdw_tuple_cost后
+digoal=> \c digoal postgres
+digoal=# alter server s1 options (add fdw_tuple_cost '0.2');
+ALTER SERVER
+digoal=> explain analyze verbose select * from digoal.ft1 where c1=1;
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Foreign Scan on digoal.ft1  (cost=100.00..108.48 rows=1 width=47) (actual time=0.760..0.761 rows=1 loops=1)
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+ Total runtime: 1.051 ms
+(4 rows)
+-- 计算108.48 = 100 + 8.27 + 0.2*1 + 0.01*1
+
+-- 将use_remote_estimate 改成 'false'
+digoal=> alter foreign table digoal.ft1 options (set use_remote_estimate 'false');
+ALTER FOREIGN TABLE
+digoal=> explain analyze verbose select * from digoal.ft1 where c1=1;
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Foreign Scan on digoal.ft1  (cost=100.00..123.52 rows=1 width=47) (actual time=0.556..0.557 rows=1 loops=1)
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+ Total runtime: 0.855 ms
+(4 rows)
+-- 这里的成本估算用的是本地的pg_statistics中的数据.
+
+4. 什么操作符, 函数, 表达式可以传递给远程. 看REMOTE SQL : 
+
+4.1 order by不传, OFFSET 不传, LIMIT 不传.
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 ORDER BY t1.c3, t1.c1 OFFSET 100 LIMIT 10;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Limit
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   ->  Sort
+         Output: c1, c2, c3, c4, c5, c6, c7, c8
+         Sort Key: t1.c3, t1.c1
+         ->  Foreign Scan on public.ft1 t1
+               Output: c1, c2, c3, c4, c5, c6, c7, c8
+               Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1
+(8 rows)
+4.2 操作符(对应的函数)为immutable并且为内建操作符时可以传递给远程.
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE t1.c1 = 101 AND t1.c6 = '1' AND t1.c7 >= '1';
+                                                                   QUERY PLAN                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c7 >= '1'::bpchar)) AND ((c1 = 101)) AND ((c6 = '1'::text))
+(3 rows)
+-- 详见
+WHERE clauses are not sent to the remote server unless they use only built-in data types, operators, and functions. Operators and functions in the clauses must be IMMUTABLE as well.
+-- pg_proc.provolatile
+
+4.3 聚合函数, 不传递.
+-- count(*) 远程实际上查询的是select null,null,... from table;
+digoal=> explain verbose SELECT COUNT(*) FROM ft1 t1;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Aggregate  (cost=333.50..333.51 rows=1 width=0)
+   Output: count(*)
+   ->  Foreign Scan on digoal.ft1 t1  (cost=100.00..331.00 rows=1000 width=0)
+         Remote SQL: SELECT NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL FROM digoal.test1
+(4 rows)
+
+4.4 支持自建函数, 但是函数也需要是内建并且immutable的才可以传递给远程执行.
+-- user-defined operator/function
+CREATE FUNCTION postgres_fdw_abs(int) RETURNS int AS $$
+BEGIN
+RETURN abs($1);
+END
+$$ LANGUAGE plpgsql IMMUTABLE;
+CREATE OPERATOR === (
+    LEFTARG = int,
+    RIGHTARG = int,
+    PROCEDURE = int4eq,
+    COMMUTATOR = ===,
+    NEGATOR = !==
+);
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE t1.c1 = postgres_fdw_abs(t1.c2);
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Filter: (t1.c1 = postgres_fdw_abs(t1.c2))
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1
+(4 rows)
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE t1.c1 === t1.c2;
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Filter: (t1.c1 === t1.c2)
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1
+(4 rows)
+
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE t1.c1 = abs(t1.c2);
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = abs(c2)))
+(3 rows)
+
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE t1.c1 = t1.c2;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = c2))
+(3 rows)
+
+4.5 is null和is not null可以传递给远程
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE c1 IS NULL;        -- NullTest
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 IS NULL))
+(3 rows)
+
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE c1 IS NOT NULL;    -- NullTest
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 IS NOT NULL))
+(3 rows)
+
+4.6 distinct from 可以传递给远程
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE (c1 IS NOT NULL) IS DISTINCT FROM (c1 IS NOT NULL); -- DistinctExpr
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE (((c1 IS NOT NULL) IS DISTINCT FROM (c1 IS NOT NULL)))
+(3 rows)
+
+4.7 array any表达式可以传递给远程, 但是需要远程数据库支持.
+digoal=> EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE c1 = ANY(ARRAY[c2, 1, c1 + 0]);
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on digoal.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = ANY (ARRAY[c2, 1, (c1 + 0)])))
+(3 rows)
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE c1 = (ARRAY[c1,c2,3])[1]; -- ArrayRef
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = ((ARRAY[c1, c2, 3])[1])))
+(3 rows)
+
+4.8 自建的数据类型不可传递给远程.
+EXPLAIN (VERBOSE, COSTS false) SELECT * FROM ft1 t1 WHERE c8 = 'foo';  -- can't be sent to remote
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Filter: (t1.c8 = 'foo'::user_enum)
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1
+(4 rows)
+
+
+5. 绑定变量, 
+
+generic和custom plan请参考 : 
+http://blog.163.com/digoal@126/blog/static/1638770402012112452432251/
+-- custom plan should be chosen initially
+PREPARE st4(int) AS SELECT * FROM ft1 t1 WHERE t1.c1 = $1;
+EXPLAIN (VERBOSE, COSTS false) EXECUTE st4(1);
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+(3 rows)
+EXPLAIN (VERBOSE, COSTS false) EXECUTE st4(1);
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+(3 rows)
+EXPLAIN (VERBOSE, COSTS false) EXECUTE st4(1);
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+(3 rows)
+EXPLAIN (VERBOSE, COSTS false) EXECUTE st4(1);
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+(3 rows)
+EXPLAIN (VERBOSE, COSTS false) EXECUTE st4(1);
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = 1))
+(3 rows)
+-- once we try it enough times, should switch to generic plan
+EXPLAIN (VERBOSE, COSTS false) EXECUTE st4(1);
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Foreign Scan on public.ft1 t1
+   Output: c1, c2, c3, c4, c5, c6, c7, c8
+   Remote SQL: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE ((c1 = $1::integer))
+(3 rows)
+
+
+6. 外部表游标的使用, 本地和远程错误不会中断外部表游标.
+
+-- ===================================================================
+-- subtransaction
+--  + local/remote error doesn't break cursor
+-- ===================================================================
+BEGIN;
+DECLARE c CURSOR FOR SELECT * FROM ft1 ORDER BY c1;
+FETCH c;
+ c1 | c2 |  c3   |              c4              |            c5            | c6 |     c7     | c8  
+----+----+-------+------------------------------+--------------------------+----+------------+-----
+  1 |  1 | 00001 | Fri Jan 02 00:00:00 1970 PST | Fri Jan 02 00:00:00 1970 | 1  | 1          | foo
+(1 row)
+
+SAVEPOINT s;
+ERROR OUT;          -- ERROR
+ERROR:  syntax error at or near "ERROR"
+LINE 1: ERROR OUT;
+        ^
+ROLLBACK TO s;
+FETCH c;
+ c1 | c2 |  c3   |              c4              |            c5            | c6 |     c7     | c8  
+----+----+-------+------------------------------+--------------------------+----+------------+-----
+  2 |  2 | 00002 | Sat Jan 03 00:00:00 1970 PST | Sat Jan 03 00:00:00 1970 | 2  | 2          | foo
+(1 row)
+
+SAVEPOINT s;
+SELECT * FROM ft1 WHERE 1 / (c1 - 1) > 0;  -- ERROR
+ERROR:  division by zero
+CONTEXT:  Remote SQL command: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM digoal.test1 WHERE (((1 / (c1 - 1)) > 0))
+ROLLBACK TO s;
+FETCH c;
+ c1 | c2 |  c3   |              c4              |            c5            | c6 |     c7     | c8  
+----+----+-------+------------------------------+--------------------------+----+------------+-----
+  3 |  3 | 00003 | Sun Jan 04 00:00:00 1970 PST | Sun Jan 04 00:00:00 1970 | 3  | 3          | foo
+(1 row)
+
+SELECT * FROM ft1 ORDER BY c1 LIMIT 1;
+ c1 | c2 |  c3   |              c4              |            c5            | c6 |     c7     | c8  
+----+----+-------+------------------------------+--------------------------+----+------------+-----
+  1 |  1 | 00001 | Fri Jan 02 00:00:00 1970 PST | Fri Jan 02 00:00:00 1970 | 1  | 1          | foo
+(1 row)
+
+COMMIT;
+
+
+
+【其他】
+1. 本地库和远程库尽量使用一致的encoding.
+2. 远程查询默认使用repeatable read隔离级别, 当本地是SERIALIZABLE事务时, 则远程也是SERIALIZABLE隔离级别. 目前不支持远程为read committed隔离级别.
+
+During a query that references any remote tables on a foreign server, postgres_fdw opens a transaction on the remote server if one is not already open corresponding to the current local transaction. The remote transaction is committed or aborted when the local transaction commits or aborts. Savepoints are similarly managed by creating corresponding remote savepoints.
+
+The remote transaction uses SERIALIZABLE isolation level when the local transaction has SERIALIZABLE isolation level; otherwise it uses REPEATABLE READ isolation level. This choice ensures that if a query performs multiple table scans on the remote server, it will get snapshot-consistent results for all the scans. A consequence is that successive queries within a single transaction will see the same data from the remote server, even if concurrent updates are occurring on the remote server due to other activities. That behavior would be expected anyway if the local transaction uses SERIALIZABLE or REPEATABLE READ isolation level, but it might be surprising for a READ COMMITTED local transaction. A future PostgreSQL release might modify these rules.
+
+
+
+9. 连接重用, 同一个会话中, 如果再次有使用同样的user mapping和server的需求, 则不需要重建远程连接.
+
+postgres_fdw establishes a connection to a foreign server during the first query that uses a foreign table associated with the foreign server. This connection is kept and re-used for subsequent queries in the same session. However, if multiple user identities (user mappings) are used to access the foreign server, a connection is established for each user mapping.
+
+
+参见 : 
+contrib/postgres_fdw/connection.c
+
+【参考】
+1. http://www.postgresql.org/docs/devel/static/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+2. http://www.postgresql.org/docs/devel/static/postgres-fdw.html
+3. contrib/postgres_fdw/postgres_fdw.c
+
+        /*----------
+         * Adjust costs with factors of the corresponding foreign server:
+         *       - add cost to establish connection to both startup and total
+         *       - add cost to manipulate on remote, and transfer result to total
+         *       - add cost to manipulate tuples on local side to total
+         *----------
+         */
+        startup_cost += fdw_startup_cost;
+        total_cost += fdw_startup_cost;
+        total_cost += fdw_tuple_cost * baserel->rows;
+        total_cost += cpu_tuple_cost * baserel->rows;
+
+
+4. http://blog.163.com/digoal@126/blog/static/163877040201231514057303/
+5. contrib/postgres_fdw/expected/postgres_fdw.out
+6. http://blog.163.com/digoal@126/blog/static/1638770402012112452432251/
+7. http://www.postgresql.org/docs/devel/static/sql-createforeigntable.html
+8. http://www.postgresql.org/docs/devel/static/sql-createserver.html
+9. http://www.postgresql.org/docs/devel/static/sql-createusermapping.html
+
+评论
+
+jxfwinter - 2014-03-11 3:07:36
+
+太NB了，方方面面都考虑到了，
+用C++写与数据库打交道的逻辑实在是写烦了，不知道那些与数据库打交道的逻辑全部用plpgsql写是否可行，
+像什么负载均衡算法，根据逻辑进行的数据同步都扔到数据库里去。
+
+德哥@Digoal 回复 jxfwinter - 2014-03-11 3:07:36
+
+数据库可用实现负载均衡例如plproxy, 数据同步例如londiste3 或者直接使用触发器.
+
+jxfwinter 回复德哥@Digoal - 2014-03-11 3:07:36
+
+我用的postgres_fdw实现了，
+补充一个postgres_fdw要注意的地方，如果对外部表进程表操作，远程数据库对应的表，如果有触发器，触发器函数里的表必须带有schema，在网上搜到的。
+http://www.postgresql.org/message-id/7589.1384549380@sss.pgh.pa.us
+
+另外，您说的plproxy，londiste3 这些灵活吗？
+比如我有一个表记录了一堆不同类型的server的信息，有图片存储服务器等等，里面有当前消耗带宽，总带宽，当前cpu占用率，当前内存占用率，要分配各项值占用比都比较低的服务器上去，这些逻辑怎么说我也要自己写吧，
+plproxy难道提供了写这些逻辑的接口？
+
+目前有postgres_fdw已经感到pgsql简化了很多任务，不用我使用c++把数据倒来倒去了。
+
+德哥@Digoal 回复 jxfwinter - 2014-03-11 3:07:36
+
+plproxy提供了RUN接口, run到什么地方, 这个逻辑可以写在函数里面.

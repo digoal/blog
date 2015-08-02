@@ -1,0 +1,654 @@
+PostgreSQL research
+
+PostgreSQL memory barrier defined but not used yet
+
+2013-02-20 17:03:56   查看原文>>
+
+PostgreSQL 9.2 添加了memory barrier的支持, 但是目前尚未被任何函数使用. 如下 : 
+
+     * Add memory barrier support (Robert Haas)
+       This is currently unused.
+
+
+包括memory barrier, read barrier, write barrier.
+barrier在各种CPU架构下的指令名称不一样, 以下截取i386和x86的部分定义.
+
+  53 /*
+  54  * icc defines __GNUC__, but doesn't support gcc's inline asm syntax
+  55  */
+  56 #define pg_memory_barrier()     _mm_mfence()
+  57 #define pg_compiler_barrier()   __memory_barrier()
+  58 #elif defined(__GNUC__)
+
+  60 /* This works on any architecture, since it's only talking to GCC itself. */
+  61 #define pg_compiler_barrier()   __asm__ __volatile__("" : : : "memory")
+  62 
+  63 #if defined(__i386__)
+  64 
+  65 /*
+  66  * i386 does not allow loads to be reordered with other loads, or stores to be
+  67  * reordered with other stores, but a load can be performed before a subsequent
+  68  * store.
+  69  *
+  70  * "lock; addl" has worked for longer than "mfence".
+  71  */
+  72 #define pg_memory_barrier()     \
+  73     __asm__ __volatile__ ("lock; addl $0,0(%%esp)" : : : "memory")
+  74 #define pg_read_barrier()       pg_compiler_barrier()
+  75 #define pg_write_barrier()      pg_compiler_barrier()
+  76 #elif defined(__x86_64__)       /* 64 bit x86 */
+  77 
+  78 /*
+  79  * x86_64 has similar ordering characteristics to i386.
+  80  *
+  81  * Technically, some x86-ish chips support uncached memory access and/or
+  82  * special instructions that are weakly ordered.  In those cases we'd need
+  83  * the read and write barriers to be lfence and sfence.  But since we don't
+  84  * do those things, a compiler barrier should be enough.
+  85  */
+  86 #define pg_memory_barrier()     \
+  87     __asm__ __volatile__ ("lock; addl $0,0(%%rsp)" : : : "memory")
+  88 #define pg_read_barrier()       pg_compiler_barrier()
+  89 #define pg_write_barrier()      pg_compiler_barrier()
+  90 #elif defined(__ia64__) || defined(__ia64)
+
+
+memory barrier的引入主要是要解决CPU的store buffer和invalidate queue引入以及多CPU协作可能带来的程序BUG(CPU全局共享内存状态不一致)问题, 后面会引用一些例子.
+在PostgreSQL 多核编程中可能就要用到.
+《Memory Barriers: a Hardware View for Software Hackers》这篇文章对CPU的store buffer以及invalidate queue的起源以及带来的问题做了比较详细的阐述, 有兴趣的朋友可以阅读一下. 下面截取一部分书中的内容 : 
+2006年的CPU每纳秒可以处理10个指令, 但是从主内存中获取一个数据项需要耗费十几个纳秒. 由于速度差异太大, 因此CPU CACHE产生了, 用来解决这个速度的差异问题. 每个CPU可能有几MB的CACHE. 如下图 : 
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+CPU往往有多级CACHE, 假设最接近CPU的CACHE访问速度为1个时钟周期. 
+
+It is standard practice to use multiple levels of cache, 
+with a small level-one cache close to the CPU with single-cycle access time, 
+and a larger level-two cache with a longer access time, perhaps roughly ten clock cycles. 
+Higher-performance CPUs often have three or even four levels of cache.
+
+
+在CPU CACHE或者主内存中, 数据流被分成了2的N次方的粒度, 范围是16到256字节. 这个粒度也称为cache lines.
+当CPU初次访问一个数据项的时候, CPU CACHE中没有这个数据, 需要到主内存中获取, 这个场景称为cache miss(或者startup, warmup cache miss). 这个时候CPU不得不等待数据从主内存读入CPU CACHE(约100多个时钟周期).
+当经过一段时间后, CPU CACHE可能被填满, 所以新的数据将不能写入cache. 这个场景称为capacity miss. 
+
+large caches are implemented as hardware hash tables with fixed-size hash buckets (or “sets”, as CPU designers callthem) and no chaining.
+
+
+大的CPU CACHE将被拆分成多个固定大小的HASH BUCKETS. 如下图.
+下图中CPU CACHE被分成了2路, 每路16个bucket, 每个bucket存储256个字节. 
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+由于每个BUCKET存储256字节的数据, HASH算法非常简单, 只要取倒数第三个十六进制位即可.
+例如0x43210E00到0x43210EFF的数据在哪个BUCKET呢? 取倒数第三个十六进制位是0xE. 所以在way1 或者way 0的0xE这个BUCKET找.
+上图中空白部分表示这个BUCKET没有数据填充, 所以当有数据从主内存读取时可以写入到对应的空白BUCKET. 当读取的内容来自主内存地址0x1233E00时, 由于两路的bucket都被占用了, 必须清理出1个BUCKET, 来存放. 例如清理掉way1的0xE这个BUCKET, 当下次访问0X43210E00的数据时, 因为已经填充了0x1233E00的数据, 所以此时称为associativity miss.
+以上谈到的都是从主内存加载数据到CPU CACHE的情况, 下面来说说写或者修改CPU CACHE的情况.
+在多CPU的环境中, 每个CPU有自己的CPU CAHCE, 所以当A CPU需要写某个地址的数据时, 需求先确保其他CPU的CACHE中没有这个地址的数据. 如果其他CPU CACHE中有这个地址的数据, 那么需要将这些CPU CACHE对应的数据清除(invalidate), 然后A CPU才可以修改A CPU CACHE中这个地址的数据. 其他CPU访问由于A CPU的写需求导致被清理掉的CACHE数据时, 这些
+数据已经不存在, 所以被称为communication miss.
+由于多个CPU可能存储相同的数据在各自的CACHE中, 所以需要一个可靠的协议来保证不会出现数据紊乱(数据不一致或数据丢失). 这个就是cache-coherency protocols.
+这个协议非常复制, 可能存在几十种交互状态, 这里只提4种状态. MESI(modified, exclusive, shared, invalid)
+Caches using this proto-col therefore maintain a two-bit state “tag” on each cache line in addition to that lines physical address and data.
+1. modified状态表示这个cache line存储了最新的数据(比主内存中的数据更新,换句话说这个数据在cache中被修改了), 同时其他CPU的cache中没有这部分数据. 同时这个数据如果要被修改, 不需要通知其他CPU, 因为其他CPU的CACHE中没有这部分数据. 最后当这个cache line需要被重用时, 必须先将数据flush到主内存.
+2. exclusive与modified类似, 不同的是这个数据还没有被CPU修改. 所以当这个cache line需要被重用时, 不需要将数据flush到主内存.
+3. shared 状态表示该cache line可能在至少1个其他CPU的CACHE中, 所以不能在不通知其他CPU的情况下直接修改该cache line.
+另外就是, 如果需要用到这个cache line, 那么可以直接丢弃这个cache line中的内容, 不需要flush到内存.
+4. invalid 表示该cache line没有存储任何数据, 如果有新的数据需要写入cache, 那么写入invalid状态的cache line是最快捷的, 因为写入其他状态的cache line都需要排挤出它的内容, 导致cache miss.
+CPU通过消息传递来变更这些状态. 如果多个CPU在单一的共享总线上, 那么需要用到以下消息就可以了 : 
+
+Read: 
+  The “read” message contains the physical address of the cache line to be read.
+
+Read Response: 
+  The “read response” message contains the data requested by an earlier “read”message. 
+  This “read response” message might be supplied either by memory or by one of the other caches. 
+  For example, if one of the caches has the desired data in “modified” state, that cache must supply the “read response” message.
+
+Invalidate: 
+  The “invalidate” message contains the physical address of the cache line to be invalidated. 
+  All other caches must remove the corresponding data from their caches and respond.
+
+Invalidate Acknowledge: 
+  A CPU receiving an “invalidate” message must respond with an “invalidate acknowledge” message after removing the specified data from its cache.
+
+Read Invalidate: 
+  The “read invalidate” message contains the physical address of the cache line to be read, 
+  while at the same time directing other caches to remove the data. 
+  Hence, it is a combination of a “read” and an “invalidate”, as indicated by its name. 
+  A “read invalidate” message requires both a “read response” and a set of “invalidate acknowledge” messages in reply.
+
+Writeback:
+  The “writeback” message contains both the address and the data to be written back to memory 
+  (and perhaps “snooped” into other CPUs ’ caches along the way). 
+  This message permits caches to eject lines in the “modified” state as needed to make room for other data.
+
+
+下图标示了4种状态的转变对应的消息 : 
+MESI State Diagram
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+ 
+
+M -> E Transition (a): A cache line is written back to memory, but the CPU retains it in its cache and
+further retains the right to modify it. This transition requires a “writeback” message.
+
+E -> M Transition (b): The CPU writes to the cache line that it already had exclusive access to. 
+This transition does not require any messages to be sent or received.
+
+M -> I Transition (c): The CPU receives a “read invalidate” message for a cache line that it has modified. 
+The CPU must invalidate its local copy, then respond with both a “read response” and an
+“invalidate acknowledge” message, both sending the data to the requesting CPU and indicating
+that it no longer has a local copy.
+
+I -> M Transition (d): The CPU does an atomic read-modify-write operation on a data item that was not present in its cache. 
+It transmits a “read invalidate”, receiving the data via a “read response”. 
+The CPU can complete the transition once it has also received a full set of “invalidate acknowledge” responses .
+
+S -> M Transition (e): The CPU does an atomic read-modify-write operation on a data item that was
+previously read-only in its cache. It must transmit “invalidate” messages ,
+and must wait for a full set of “invalidate acknowledge” responses before completing the transition.
+
+M -> S Transition (f): Some other CPU reads the cache line, and it is supplied from this CPU’s cache,
+which retains a read-only copy, possibly also writing it back to memory. 
+This transition is initiated by the reception of a “read” message,
+and this CPU responds with a “read response” message containing the requested data.
+
+E -> S Transition (g): Some other CPU reads a data item in this cache line, and it is supplied either from
+this CPU’s cache or from memory. In either case, this CPU retains a read-only copy. 
+This transition is initiated by the reception of a “read” message, 
+and this CPU responds with a “read response” message containing the requested data.
+
+S -> E Transition (h): This CPU realizes that it will soon need to write to some data item in this cache
+line, and thus transmits an “invalidate” message.
+The CPU cannot complete the transition until
+it receives a full set of “invalidate acknowledge” responses . 
+Alter natively, all other CPUs eject this cache line from their caches via “writeback”
+messages (presumably to make room for other cache lines ), 
+so that this CPU is the last CPU caching it.
+
+E -> I Transition (i): Some other CPU does an atomic read-modify-write operation on a data item in a
+cache line held only in this CPU’s cache, so this
+CPU invalidates it from its cache. This transition is initiated by the reception of a “read invalidate” message, 
+and this CPU responds with both a “read response” and an “invalidate acknowledge” message.
+
+I -> E Transition (j): This CPU does a store to a data item in a cache line that was not in its cache,
+and thus transmits a “read invalidate” message.
+The CPU cannot complete the transition until it
+receives the “read response” and a full set of “invalidate acknowledge” messages . 
+The cache line will presumably transition to “modified” state via transition (b) as soon as the actual store completes .
+
+I -> S Transition (k): This CPU loads a data item in a cache line that was not in its cache. 
+The CPU transmits a “read” message, and completes
+the transition up on receiving the corresponding
+“read response”.
+
+S -> I Transition (l): Some other CPU does a store to a
+data item in this cache line, but holds this cache
+line in read-only state due to its being held in
+other CPUs ’ caches (such as the current CPU’s cache). 
+This transition is initiated by the reception of an “invalidate” message, and this CPU
+responds with an “invalidate acknowledge” message.
+
+
+下图是一个4个CPU的系统, 假设对地址为0和8的内存进行操作, 同时假设CPU CACHE只能存下1份数据(不能同时存下地址0和8的数据). 
+第一列是操作顺序, 第二列是操作的CPU, 第三列是操作内容, 第四列是CPU CACHE LINE的四个状态, 第五列是内存的状态(有效或者无效, 当CPU CACHE LINE是M状态时, 对应的内存数据无效).
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+ 
+RMW是read-modify-write的缩写.
+对应的操作流程如下 : 
+
+0- Initially, the CPU cache lines in which the data would reside are in the “invalid” state, 
+and the data is valid in memory. 
+
+1- When CPU 0 loads the data at address 0, it enters the “shared” state in CPU 0’s cache, 
+and is still valid in memory. 
+
+2- CPU 3 also loads the data at address 0, so that it is in the “shared” state in both CPUs ’ caches , 
+and is still valid in memory. 
+
+3- Next CPU 0 loads some other cache line (at address 8), 
+which forces the data at address 0 out of its cache via an invalidation, 
+replacing it with the data at address 8. 
+
+4- CPU 2 now does a load from address 0, 
+but this CPU realizes that it will so on need to store to it, 
+and so it uses a “read invalidate” message in order to gain an exclusive copy, 
+invalidating it from CPU 3’s cache (though the copy in memory remains up to date). 
+
+5- Next CPU 2 does its anticipated store, changing the state to “modified”. 
+The copy of the data in memory is now out of date. 
+
+6- CPU 1 does an atomic increment, 
+using a “read invalidate” to snoop the data from CPU 2’s cache and invalidate it, 
+so that the copy in CPU 1’s cache is in the “modified” state
+(and the copy in memory remains out of date). 
+
+7- Finally, CPU 1 reads the cache line at address 8, 
+which uses a “writeback” message to push address 0’s data back out to memory.
+
+
+下面要讲讲首次CPU cache的存储或改写(store)带来的等待问题 : 
+需要等待的写CACHE line指的是cache line从I或者s的状态变成M.不管是从 I -> M 还是 S -> M.
+都需要通知其他CPU, 发出invalidate信息. 等到所有的CPU都响应了invalidate Acknowledge后才可以修改该cache line.
+如图 : 
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+从发出invalidate指令到写数据到cache line这个过程, CPU 0 需要等待.
+为了解决这个等待的问题, 在CACHE和CPU之间加入了Store buffers区域. 以上操作CPU 0 不需要等待invalidate acknowledge, 可以直接先将数据写入store buffer区域.
+如图 : 
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+从图中来看, 写先经过Store Buffers, 最终写入cache.
+读的话是直接从cache中读取的, 所以这里就存在一个问题了, 因为Store Buffers中的数据可能还没有写入cache, 因此可能读到的是老的cache, 而非修改后的数据. 例如一下代码 : 
+
+1 a = 1;
+2 b = a + 1;
+3 assert(b == 2);
+
+
+执行过程以及本地内存顺序(或本地一致性)问题如下 : 
+
+1. CPU 0 starts executing the a=1.
+2. CPU 0 looks “a” up in the cache, and finds that it is missing.
+3. CPU 0 therefore sends a “read invalidate” message in order to get exclusive ownership of the cache line containing “a”.
+4. CPU 0 records the store to “a” in its store buffer .
+5. CPU 1 receives the “read invalidate” message, 
+   and responds by transmitting the cache line and removing that cache line from its cache.
+6. CPU 0 starts executing the b=a+1.
+7. CPU 0 receives the cache line from CPU 1, which still has a value of zero for “a”.
+-- 此时CPU 0 CACHE中 a=0, store buffer中 a=1;
+8. CPU 0 loads “a” from its cache, finding the value zero.
+-- 注意CPU 0执行 b=a+1时, 从CPU 0 CACHE中LOAD a的值, 所以取了0.
+9. CPU 0 applies the entry from its store queue to the newly arrived cache line,
+   setting the value of “a” in its cache to one.
+-- CPU 0 将store buffer中的数据写入cache line. 但是已经晚了, b=a+1已经等于1了.
+10. CPU 0 adds one to the value zero loaded for “a” above,
+    and stores it into the cache line containing “b” 
+    (which we will assume is already owned by CPU 0).
+11. CPU 0 executes assert(b==2), which fails .
+
+
+这个问题是通过Store Forwarding来解决的, 如下图 : 
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+当CPU执行LOAD指令时, 使用Store forwarding, CPU读取数据会从store buffer和cache line中读取.
+所以不会发生前面遇到的从CACHE中LOAD了老数据的问题.
+但是又带来了其他的问题 : 
+例如 : 
+
+1 void foo(void)
+2 {
+3 a = 1;
+4 b = 1;
+5 }
+6
+7 void bar(void)
+8 {
+9 while (b == 0) continue;
+10 assert(a == 1);
+11 }
+
+
+假设 : 
+1. a, b初始值为0, 
+2. CPU 0执行foo(), CPU 1执行bar(),
+3. a在CPU 1的CACHE LINE中. b在CPU 0的CACHE LINE中
+执行过程以及全局内存顺序(或全局一致性)问题如下 : 
+
+1. CPU 0 executes a=1. The cache line is not in CPU 0’s cache, 
+   so CPU 0 places the new value of “a” in its store buffer and transmits a “read invalidate” message.
+
+2. CPU 1 executes while (b==0) continue, but the cache line containing “b” is not in its cache. 
+   It therefore transmits a “read” message.
+
+3. CPU 0 executes b=1. It already owns this cache line 
+   (in other words , the cache line is already in either the “modified” or the “exclusive” state),
+   so it stores the new value of “b” in its cache line.
+
+4. CPU 0 receives the “read” message, and transmits the cache line containing the now-updated value of “b” to CPU 1, 
+   also marking the line as “shared” in its own cache.
+
+5. CPU 1 receives the cache line containing “b” and installs it in its cache.
+
+6. CPU 1 can now finish executing while (b==0) continue, 
+   and since it finds that the value of “b” is 1, it proceeds to the next statement.
+
+7. CPU 1 executes the assert(a==1), and, 
+   since CPU 1 is working with the old value of “a”, 
+   this assertion fails .
+-- 此时CPU 0 已经将a的值改为1了, 但是CPU 1显然还不知道, 因为还没有收到read invalidate消息. 所以出现了问题.
+
+8. CPU 1 receives the “read invalidate” message,
+   and transmits the cache line containing “a” to CPU 0 and invalidates this cache line from its own cache. 
+   But it is too late.
+
+9. CPU 0 receives the cache line containing “a” and applies the buffered store just in time to 
+   fall victim to CPU 1’s failed assertion.
+
+
+硬件无法直接解决这个问题, 需要用到CPU的memory barrier指令, 如下 : 
+
+1 void foo(void)
+2 {
+3 a = 1;
+4 smp_mb();
+5 b = 1;
+6 }
+7
+8 void bar(void)
+9 {
+10 while (b == 0) continue;
+11 assert(a == 1);
+12 }
+
+
+smp_mb()的作用是, 当CPU需要写数据到cache line时, 必须先确保在这个写操作以前的store buffers中的数据已经全部flush.
+有两种方法达到这个目的 : 
+1.  CPU等store buffer清空.
+2.  CPU 不等待store buffer清空, 而是使用store buffer来保持后续的cache line写操作, 直到store buffers中前面的部分全部flush. 所以前面的store buffer必须有个标示.
+下面以方法2为例描述以下上面代码的操作流程 : 
+
+1. CPU 0 executes a=1. The cache line is not in CPU 0’s cache, so CPU 0 places the new value
+   of “a” in its store buffer and transmits a “read invalidate” message.
+
+2. CPU 1 executes while (b==0) continue, but the cache line containing “b” is not in its cache. 
+   It therefore transmits a “read” message.
+
+3. CPU 0 executes smp_mb(), and marks all current store buffer entries (namely, the a=1 ).
+
+4. CPU 0 executes b=1. It already owns this cache line 
+   (in other words , the cache line is already in either the “modified” or the “exclusive” state),
+   but there is a marked entry in the store buffer .
+   Therefore, rather than store the new value of “b” in the cache line, 
+   it instead places it in the store buffer (but in an unmarked entry).
+-- 注意由于b=1在smp_mb()后面, 所以CPU 0 必须先清理掉store buffer的内容, 才能写cache line. 
+-- 或则使用方法2, 对store buffer中的内容作标记, 然后继续使用store buffer存储b的内容(不做标记), 而不是写cache line.
+-- 所以此时b 在CPU 0 cache中=0, 在store buffer中=1.
+
+5. CPU 0 receives the “read” message, and transmits the cache line containing the original value of “b” to CPU 1. 
+   It also marks its own copy of this cache line as “shared”.
+-- 注意读的是cache line中的b=0. 而不是store buffer中的b=1. 为什么没有使用Store forward呢?
+-- 和smp_mb()有关, b=1在store buffer中未被标记, 所以被略过.
+-- 同时由于CPU 1请求了b的数据, 所以CPU 0 需要将cache line中b的数据标记为shared状态.
+
+6. CPU 1 receives the cache line containing “b” and installs it in its cache.
+
+7. CPU 1 can now finish executing while (b==0) continue, 
+   but since it finds that the value of “b” is still 0, it repeats the while statement.
+   The new value of “b” is safely hidden in CPU 0’s store buffer .
+-- CPU 0 的store buffer中b=1被隐藏了.
+
+8. CPU 1 receives the “read invalidate” message,
+   and transmits the cache line containing “a” to
+   CPU 0 and invalidates this cache line from its own cache.
+
+9. CPU 0 receives the cache line containing “a” and applies the buffered store, 
+   placing this line into the “modified” state.
+-- 由于store buffer中a被标记, 接收到read response后需要将标记了的a写入cache line.
+
+10. Since the store to “a” was the only entry in the
+    store buffer that was marked by the smp_mb(),
+    CPU 0 can also store the new value of “b” —
+    except for the fact that the cache line containing
+    “b” is now in “shared” state.
+-- 因为store buffer中被标记的数据已经全部flush了, 所以未被标记的b也可以写入cache line, 
+-- 除非cache line中已经存在b的数据并且被标记为shared了. (shared的数据须先通知其他CPU, invalidate ack后才能写入)
+
+11. CPU 0 therefore sends an “invalidate” message to CPU 1.
+-- 这里就是为了将store buffer中的b写入cache line(已经含有状态为shared 的b 数据项), 所以需要发出invalidate消息.
+
+12. CPU 1 receives the “invalidate” message, invalidates the cache line containing “b” from its
+    cache, and sends an “acknowledgement” message to CPU 0.
+
+13. CPU 1 executes while (b==0) continue, but the
+    cache line containing “b” is not in its cache. It
+    therefore transmits a “read” message to CPU 0.
+
+14. CPU 0 receives the “acknowledgement” message,
+    and puts the cache line containing “b” into the
+    “exclusive” state. CPU 0 now stores the new
+    value of “b” into the cache line.
+
+15. CPU 0 receives the “read” message, and transmits the cache line containing the new value of
+    “b” to CPU 1. It also marks its own copy of this
+    cache line as “shared”.
+
+16. CPU 1 receives the cache line containing “b” and
+    installs it in its cache.
+
+17. CPU 1 can now finish executing while (b==0) continue, and since it finds that the value of
+    “b” is 1, it proceeds to the next statement.
+
+18. CPU 1 executes the assert (a==1), but the
+    cache line containing “a” is no longer in its cache.
+    Once it gets this cache from CPU 0, it will be working with the up-to-date value of “a”, and
+    the assertion therefore passes .
+
+
+使用smp_mb()确保这个指令的前面的store指令生效后面的指令才会生效. 不会出现紊乱现象.
+就如上例, 不会出现b=1已经生效了但是a=1还没有生效.
+
+接下来要引入invalidate queue. 原因是 : 
+1. 因为store buffer的容量是有限的, 所以如果每次store的操作都是cache miss或者cache line的状态是shared的话, 那么当store buffer满了后还是需要等待其他CPU的invalidate ack的. 这样很快CPU又会陷入等待中.
+2. 当使用了memory barrier后, barrier后面的store指令必须等待前面的store指令完成(也就是前面提到的方法1, 需要等待invalidate ack, 然后flush).
+要解决这个性能问题, 主要是让invalidate message更快的响应, 因此引入了invalidate queue.
+其中一种方法是每个CPU对应各自的invalidate message queue. 解决两个问题.
+1. invalidate操作要将cache line真正清空后才能返回invalidate ack message. 所以对于一个CACHE繁忙的CPU这个操作延时是比较大的.
+2. 另外, 短时间内收到大量的invalidate操作对执行invalidate操作的CPU来说也是比较大的挑战, 可能使得该CPU无法跟上其他CPU的节奏.
+使用了invalidate message queue后,
+1. 在CPU收到invalide message后, 将这个消息以及cache line的HASH值记录到QUEUE中.
+2. 返回invalidate ack message. 所以这里就非常快捷了, 因为不需要等待invalidate cache line操作完成.
+3. 由于invalidate queue中对应的cache line以及标记为invalidate了, 所以后续相关的操作就需要等待invalidate操作完成了.
+如图 : 
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+ 
+但是Invalidate queue的引入打破了memory barrier的功能, 带来如下问题 : 
+
+1 void foo(void)
+2 {
+3 a = 1;
+4 smp_mb();
+5 b = 1;
+6 }
+7
+8 void bar(void)
+9 {
+10 while (b == 0) continue;
+11 assert(a == 1);
+12 }
+
+
+假设 : 
+1. a, b初始值为0
+2. a 在CPU 0和CPU 1的cache line中, 标记为shared状态.
+3. b 在CPU 0的cache line中, 标记为exclusive或modified状态.
+4. CPU 0执行foo(), CPU 1执行bar().
+执行过程以及暴露出的内存全局一致性问题如下 : 
+
+1. CPU 0 executes a=1. The corresponding cache line is read-only in CPU 0’s cache, 
+   so CPU 0 places the new value of “a” in its store buffer and transmits an “invalidate” message 
+   in order to flush the corresponding cache line from CPU 1’s cache.
+
+2. CPU 1 executes while (b==0) continue, but the
+   cache line containing “b” is not in its cache. 
+   It therefore transmits a “read” message.
+
+3. CPU 1 receives CPU 0’s “invalidate” message,
+   queues it, and immediately responds to it.
+
+4. CPU 0 receives the response from CPU 1, and is
+   therefore free to proceed past the smp_mb() on
+   line 4 above, moving the value of “a” from its
+   store buffer to its cache line.
+
+5. CPU 0 executes b=1. It already owns this cache
+   line (in other words , the cache line is already in
+   either the “modified” or the “exclusive” state),
+   so it stores the new value of “b” in its cache line.
+
+6. CPU 0 receives the “read” message, and transmits the cache line containing the now-updated
+   value of “b” to CPU 1, also marking the line as
+   “shared” in its own cache.
+
+7. CPU 1 receives the cache line containing “b” and
+   installs it in its cache.
+
+8. CPU 1 can now finish executing while (b==0) continue, 
+   and since it finds that the value of
+   “b” is 1, it proceeds to the next statement.
+
+9. CPU 1 executes the assert(a==1), and, since
+   the old value of “a” is still in CPU 1’s cache,
+   this assertion fails .
+-- 由于使用了invalidate queue, 实际上a=0的数据还在CPU 1的cache line中.
+-- 所以LOAD时, 出现了问题.
+
+10. Despite the assertion failure, CPU 1 processes
+    the queued “invalidate” message, and (tardily)
+    invalidates the cache line containing “a” from its own cache.
+
+
+要解决这个问题还是要用到barrier. 如下 : 
+
+1 void foo(void)
+2 {
+3 a = 1;
+4 smp_mb();
+5 b = 1;
+6 }
+7
+8 void bar(void)
+9 {
+10 while (b == 0) continue;
+11 smp_mb();
+12 assert(a == 1);
+13 }
+
+
+假设的场景与上例一致, 执行过程如下 : 
+
+1. CPU 0 executes a=1. The corresponding cache
+line is read-only in CPU 0’s cache, so CPU 0
+places the new value of “a” in its store buffer and
+transmits an “invalidate” message in order to
+flush the corresponding cache line from CPU 1’s
+cache.
+
+2. CPU 1 executes while (b==0) continue, but the
+cache line containing “b” is not in its cache. It
+therefore transmits a “read” message.
+
+3. CPU 1 receives CPU 0’s “invalidate” message,
+queues it, and immediately responds to it.
+
+4. CPU 0 receives the response from CPU 1, and is
+therefore free to proceed past the smp_mb() on
+line 4 above, moving the value of “a” from its
+store buffer to its cache line.
+
+5. CPU 0 executes b=1. It already owns this cache
+line (in other words , the cache line is already in
+either the “modified” or the “exclusive” state),
+so it stores the new value of “b” in its cache line.
+
+6. CPU 0 receives the “read” message, and transmits 
+the cache line containing the now-updated
+value of “b” to CPU 1, also marking the line as
+“shared” in its own cache.
+
+7. CPU 1 receives the cache line containing “b” and
+installs it in its cache.
+
+8. CPU 1 can now finish executing while (b==0) continue, 
+and since it finds that the value of “b”
+is 1, it proceeds to the next statement, which is
+now a memory barrier .
+
+9. CPU 1 must now stall until it processes all pre-existing messages in its invalidation queue.
+-- memory barrier在CPU 1这里起到的作用是等待处理完所有的invalidate queue messages. 因为CPU 1 没有用到store buffer.
+
+10. CPU 1 now processes the queued “invalidate”
+message, and invalidates the cache line containing “a” from its own cache.
+
+11. CPU 1 executes the assert(a==1), and, since
+the cache line containing “a” is no longer in
+CPU 1’s cache, it transmits a “read” message.
+
+12. CPU 0 responds to this “read” message with the
+cache line containing the new value of “a”.
+
+13. CPU 1 receives this cache line, which contains a
+value of 1 for “a”, so that the assertion does not trigger .
+
+
+从上面的例子可以知道, memory barrier不仅仅解决了store buffer带来的全局内存顺序问题, 同时也可以解决invalidate queue带来的全局内存顺序问题.
+但是在上面提到的例子中, foo()函数不会使用到invalidate queue, 而bar()函数不会使用到store buffer.
+从而某些CPU提供了更弱的(影响更小的)barrier指令, read barrier和write barrier指令. 分别用来解决invalidate queue和 store buffer带来的全局内存(一致性)顺序问题.
+
+  The effect of this is that a read memory barrier orders only loads on the CPU that executes it, 
+so that all loads preceding the read memory barrier will appear to have completed before 
+any load following the read memory barrier . 
+  Similarly, a write memory barrier orders only stores , again on the CPU that executes it, 
+and again so that all stores preceding the write memory barrier will appear to 
+have completed before any store following the write memory barrier . 
+  A full-fledged memory barrier orders both
+loads and stores , but again only on the CPU execut-ing the memory barrier .
+
+
+因此以上代码可以修改如下 : 
+
+1 void foo(void)
+2 {
+3 a = 1;
+4 smp_wmb();
+5 b = 1;
+6 }
+7
+8 void bar(void)
+9 {
+10 while (b == 0) continue;
+11 smp_rmb();
+12 assert(a == 1);
+13 }
+
+
+
+【词汇】
+
+1. CPU CACHE
+2. cache line
+3. MESI
+4. store buffer
+5. store buffer forward
+6. invalidate queue
+7. memory barrier
+8. read barrier
+9. write barrier
+10. compiler barrier
+
+
+ 
+【参考】
+1. Linux Kernel
+    Documentation/memory-barriers.txt
+2. src/include/storage/barrier.h
+3. src/backend/storage/lmgr/README.barrier
+4. PostgreSQL backend work process
+5. http://en.wikipedia.org/wiki/Memory_barrier
+6. http://en.wikipedia.org/wiki/Memory_ordering
+7. http://en.wikipedia.org/wiki/Out-of-order_execution
+8. http://en.wikipedia.org/wiki/Memory_model_(programming)
+9. http://en.wikipedia.org/wiki/Shared_memory
+10. http://en.wikipedia.org/wiki/Consistency_model
+11. http://en.wikipedia.org/wiki/Java_Memory_Model
+12. http://en.wikipedia.org/wiki/C11_(C_standard_revision)
+13. http://en.wikipedia.org/wiki/CPU_cache
+14. http://blogs.sourceallies.com/2012/03/parallel-programming-with-barrier-synchronization/
+15. http://www.rdrop.com/users/paulmck/scalability/paper/whymb.2010.06.07c.pdf
+16. http://en.wikipedia.org/wiki/Lock_(computer_science)
+17. http://en.wikipedia.org/wiki/Spinlock
+18. http://www.postgresql.org/docs/9.2/static/xfunc-c.html
+19. http://www.postgresql.org/docs/9.2/static/dynamic-trace.html
+20. src/include/storage/lwlock.h
+21. src/include/storage/spin.h
+22. http://sstompkins.wordpress.com/2011/04/12/why-memory-barrier%EF%BC%9F/
+23. Intel? 64 and IA-32 Architectures Software Developer’s Manual
+      http://download.intel.com/products/processor/manual/325462.pdf
+PostgreSQL memory barrier defined but not used yet - 德哥@Digoal - The Heart,The World.
+24. 
+《Handling Memory Ordering in Multithreaded Applications with Oracle Solaris Studio 12 Update 2》
+Part 1, Compiler Barriers
+Part 2, Memory Barriers and Memory Fences 
+

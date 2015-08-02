@@ -1,0 +1,84 @@
+PostgreSQL research
+
+A Case about cursor_sharing=FORCE can introduce a execute plan stale
+
+2011-05-21 16:57:50   查看原文>>
+
+今天一位同事带着非常忐忑的心情来找我，棋牌项目的ORACLE数据库负载过高。
+我连上服务器一看，果然，LOAD 100多。IOWAIT非常低。
+再TOP一下，发现ACTIVE进程非常多，单个消耗CPU在20%左右。
+然后这位同事跟我描述了一下，今天上了一个推广的活动，可能导致业务量猛增，我开始怀疑是正常的业务请求。
+--- 此处省略1000字。
+于是开始抓STATSPACK报告，不过LOAD 100多抓起来非常呛。
+最终发现以下SQL消耗CPU过多。
+因为开启了cursor_sharing=FORCE，这条SQL执行计划被锁定了（后面会有处理办法）。
+
+  Elapsed                Elap per            CPU                        Old
+  Time (s)   Executions  Exec (s)  %Total   Time (s)  Physical Reads Hash Value
+---------- ------------ ---------- ------ ---------- --------------- ----------
+ 353348.79       29,044      12.17   87.6   29731.62               0 1523025606
+select *     from CAC_xxxxxx     where      :"SY
+S_B_0" = :"SYS_B_1"             and        GAME_ID = :1
+    and        SKY_ID = :2            and START_TIME >(sysDate -
+ :"SYS_B_2")      and (TASK_STATUS = :"SYS_B_3" or TASK_STATUS =
+ -:"SYS_B_4")        order by START_TIME desc
+
+
+
+于是去看一看执行计划 : 
+
+Plan hash value: 4233498801 
+
+----------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                           | Name                       | Rows  | Bytes | Cost (%CPU)| Time     | Pstart| Pstop |
+----------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                    |                            |     1 |    95 |    62   (2)| 00:00:01 |       |       |
+|   1 |  PARTITION RANGE ITERATOR           |                            |     1 |    95 |    62   (2)| 00:00:01 |    27 |   KEY |
+|   2 |   SORT ORDER BY                     |                            |     1 |    95 |    62   (2)| 00:00:01 |       |       |
+|*  3 |    TABLE ACCESS BY LOCAL INDEX ROWID| CAC_xxxxxx |     1 |    95 |    61   (0)| 00:00:01 |    27 |   KEY |
+|*  4 |     INDEX RANGE SCAN                | IDX_ACH_SKY_ID             |     6 |       |    55   (0)| 00:00:01 |    27 |   KEY |
+----------------------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   3 - filter(("TASK_STATUS"=(-1) OR "TASK_STATUS"=1) AND "START_TIME">SYSDATE@!-1 AND "GAME_ID"=1)
+   4 - access("SKY_ID"=1)
+
+17 rows selected.
+
+
+
+从现象上来看，执行计划是对的。
+因为cursor_sharing=FORCE，执行计划固化。
+为了保险起见，还是对这个表收集了一把统计信息
+
+EXEC DBMS_STATS.GATHER_table_STATS (OWNNAME => 'username',TABNAME =>'CAC_XXXXXX',METHOD_OPT => 'FOR ALL',estimate_percent=>5,cascade => true);
+
+
+
+收集完后，数据库负载当然还是那么高滴。
+现在要做得是把执行计划解固。
+SQL> alter system flush shared_pool;
+缓存的执行计划随着shared_pool清空而清空。
+
+清空后立刻见效：
+
+oracle@db-digoal-> vmstat -n 1
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+112  1      0 3957260 286444 18216008    0    0    51    58 1593 8418 100  0  0  0  0
+93  3      0 3955432 286444 18217096    0    0  1175   993 1660 9244 99  0  0  0  0
+74  2      0 3951096 286444 18220176    0    0  3311  2090 1980 10706 99  0  0  0  0
+62  5      0 3904224 286444 18264240    0    0 44602   193 2713 20304 97  1  1  1  0
+ 4  3      0 3830140 286444 18329288    0    0 66340 73856 11196 67220 54  5 34  6  0
+ 2  3      0 3660048 286448 18493348    0    0 164539  1067 11295 67007 19  6 69  7  0
+10  5      0 3494580 286448 18653152    0    0 159327  2159 9271 35820 10  4 77  9  0
+ 7  3      0 3375788 286448 18765216    0    0 112467  8500 12912 36616 14  5 70 12  0
+ 0  2      0 3223936 286448 18911064    0    0 146187  2815 12425 40537 10  4 76 10  0
+ 0  5      0 3057604 286448 19024216    0    0 112646 304645 9411 19671  5  4 81 10  0
+
+
+
+CPU过高在数据库里面其实是一个比较经典的案例，有硬解析造成的，有执行计划不优造成的等等。
+这次也不例外,归根结底就是执行计划的问题。

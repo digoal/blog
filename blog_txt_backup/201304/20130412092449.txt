@@ -1,0 +1,765 @@
+PostgreSQL research
+
+PostgreSQL load data performance test
+
+2013-04-12 9:24:49   查看原文>>
+
+最近一位网友在对数据库做选型, 业务大概是收集终端的日志导入数据库, 每秒约1万条记录. 每天8.6亿. 假设按天分表.
+现在跑在MySQL下面, 在load数据库的时候会产生锁, 导致并发的读请求需要等待. 原因 : 
+
+[广州]sheen(403239566)  10:07:57
+[杭州]-德哥(276732431)  9:47:41
+PostgreSQL load data performance test  
+http://blog.163.com/digoal@126/blog/static/16387704020133103581541/
+看了下mysql 的表引擎 是myisam ，
+
+对MyISAM表的写操作，则会阻塞其他用户对同一表的读和写操作；MyISAM表的读操作与写操作之间，以及写操作之间是串行的.
+这个是他导入数据会锁的原因
+
+
+
+我以前针对PostgreSQL的batch insert做过较为详细的测试, 有兴趣的朋友可以参考如下.
+1. http://blog.163.com/digoal@126/blog/static/163877040201092805732741/
+2. http://blog.163.com/digoal@126/blog/static/16387704020109276295217/
+3. http://blog.163.com/digoal@126/blog/static/16387704020125421816584/
+4. http://blog.163.com/digoal@126/blog/static/163877040201242331551545/
+
+接下来本文主要针对这位网友的场景进行针对性的测试.
+(本文不对MySQL进行验证测试, 仅仅针对PostgreSQL以及这个场景进行测试)
+最终得出的测试结果是否满足这位网友的需求呢? 
+
+1. 首先介绍一下MYSQL中的数据结构 : 
+
+CREATE TABLE `t_log_nat`(
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `device_id` int(11) NOT NULL COMMENT '设备ID',
+  `src_ip` bigint(20) DEFAULT NULL COMMENT '源IP地址',
+  `src_transfer_ip` bigint(20) DEFAULT NULL COMMENT '目的IP地址',
+  `dst_ip` bigint(20) DEFAULT NULL COMMENT '目的IP地址',
+  `src_port` int(11) DEFAULT NULL COMMENT '源端口',
+  `dst_port` int(11) DEFAULT NULL COMMENT '目的端口',
+  `transfer_port` int(11) DEFAULT NULL COMMENT '转换后端口',
+  `type` varchar(32) DEFAULT NULL COMMENT 'nat类型，snat，dnat，bnat', -- 改成int2了.
+  `ip_version` tinyint DEFAULT 0 COMMENT 'ip版本,0:ipv4,1:ipv6',
+  `protocol_id` int(11) DEFAULT NULL COMMENT '协议ID',
+  `rule_id` int(11) DEFAULT NULL COMMENT '规则ID',
+  `create_time`  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`,`create_time`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_bin
+PARTITION BY RANGE ( UNIX_TIMESTAMP(create_time) ) (
+    PARTITION pmaxvalue VALUES LESS THAN (MAXVALUE)
+);
+
+除了主键外还有其他4个btree索引 : 
+
+src_ip,
+dst_ip,
+device_id,
+create_time
+
+
+转换成PostgreSQL后的数据结构 : 
+
+CREATE TABLE t_log_nat(
+  id serial8 NOT NULL ,-- COMMENT '主键'
+  device_id int NOT NULL ,-- COMMENT '设备ID'
+  src_ip bigint DEFAULT NULL ,-- COMMENT '源IP地址'
+  src_transfer_ip bigint DEFAULT NULL ,-- COMMENT '目的IP地址'
+  dst_ip bigint DEFAULT NULL ,-- COMMENT '目的IP地址'
+  src_port int2 DEFAULT NULL ,-- COMMENT '源端口'
+  dst_port int2 DEFAULT NULL ,-- COMMENT '目的端口'
+  transfer_port int DEFAULT NULL ,-- COMMENT '转换后端口'
+  type int2 DEFAULT NULL ,-- COMMENT 'nat类型,snat,dnat,bnat'
+  ip_version int2 DEFAULT 0 ,-- COMMENT 'ip版本,0:ipv4,1:ipv6'
+  protocol_id int DEFAULT NULL ,-- COMMENT '协议ID'
+  rule_id int DEFAULT NULL ,-- COMMENT '规则ID'
+  create_time timestamp NOT NULL DEFAULT clock_timestamp(),
+  primary key(id)
+);
+
+
+索引 : 
+
+create index idx_t_log_nat_1 on t_log_nat(src_ip);
+create index idx_t_log_nat_2 on t_log_nat(dst_ip);
+create index idx_t_log_nat_3 on t_log_nat(device_id);
+create index idx_t_log_nat_4 on t_log_nat(create_time);
+
+
+
+# 测试环境 : 
+
+DELL R610
+CPU : Intel(R) Xeon(R) CPU           E5504  @ 2.00GHz
+OS : Ubuntu 12.04 x64
+KERNEL :
+Linux digoal-PowerEdge-R610 3.5.0-26-generic #42~precise1-Ubuntu SMP Mon Mar 11 22:17:58 UTC 2013 x86_64 x86_64 x86_64 GNU/Linux
+MEM : 98GB
+DISK : (Table)OCZ-VERTEX4 512GB, (Index)OCZ-RevoDrive3 240G, (pg_xlog)10k转146G
+RAID card : 03:00.0 RAID bus controller: LSI Logic / Symbios Logic MegaRAID SAS 1078 (rev 04)
+Database : PostgreSQL 9.2.4
+
+
+数据库参数 : 
+
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 1919                             # (change requires restart)
+max_connections = 2000                  # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directory = '.'             # (change requires restart)
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+tcp_keepalives_idle = 60                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 10            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 10               # TCP_KEEPCNT;
+shared_buffers = 8096MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+max_stack_depth = 6MB                   # min 100kB
+vacuum_cost_delay = 10ms                # 0-100 milliseconds
+vacuum_cost_limit = 10000               # 1-10000 credits
+synchronous_commit = off                # synchronization level;
+wal_sync_method = open_datasync         # the default is the first option
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+wal_writer_delay = 10ms         # 1-10000 milliseconds
+checkpoint_segments = 512               # in logfile segments, min 1, 16MB each
+random_page_cost = 1.0                  # same scale as above
+effective_cache_size = 81920MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = 'pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+
+
+# 生成测试数据的函数1, 固定输入数据类型, 本文末尾提供一个不固定输入类型的函数, 方便使用.
+# 不固定输入类型时, 如果不指定类型, 类型将在第一次使用时被固化, 所以不需要传入时指定. 方便使用.
+
+drop function insert_t_log_nat(int,int8,int8,int8,int2,int2,int,int2,int2,int,int);
+
+create or replace function insert_t_log_nat
+(i_device_id int, 
+i_src_ip int8, 
+i_src_transfer_ip int8, 
+i_dst_ip int8, 
+i_src_port int2, 
+i_dst_port int2, 
+i_transfer_port int, 
+i_type int2,
+i_ip_version int2,
+i_protocol_id int,
+i_rule_id int
+) 
+returns void as $$
+declare
+begin
+  insert into t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id)
+  values
+  (i_device_id , 
+    i_src_ip , 
+    i_src_transfer_ip , 
+    i_dst_ip , 
+    i_src_port , 
+    i_dst_port , 
+    i_transfer_port , 
+    i_type ,
+    i_ip_version ,
+    i_protocol_id ,
+    i_rule_id 
+    ) ;
+end;
+$$ language plpgsql;
+
+
+# 生成测试数据的pgbench脚本, 使用这种方法生成随机数据, 确保索引列的数据随机. 具备真实性.
+# 模拟实际数据要考虑的因素主要是索引列上的值要真实, 例如本例的索引共5个(主键, device_id, src_ip, dst_ip, create_time)
+# 其中主键和create_time是数据库自动生成的, 连续性与实际场景相符
+# 那么脚本中要设计的就是device_id, src_ip, dst_ip的值了, 这里使用的是随机生成的值, 离散度会远远高于实际生产的数据.
+# 所以测出的导入性能和实际的生产导入性能会有一定的偏差, 理论上会小于实际导入速度.
+# 例如本文测试出来是4w/s, 实际生产可能就可以达到10W/s.的导入速度.
+
+\setrandom i_device_id 1 20000000
+\setrandom i_src_ip 1 2000000000
+\setrandom i_dst_ip 1 2000000000
+select insert_t_log_nat(:i_device_id::int,:i_src_ip::int8,:i_src_ip::int8,:i_dst_ip::int8,1::int2,1::int2,1::int,0::int2,0::int2,1::int,1::int);
+
+
+# 调用pgbench插入数据
+
+pg92@db-172-16-3-33-> nohup pgbench -M prepared -r -c 16 -f ./insert.sql -j 8 -n -T 300000 -h 172.16.3.150 -p 1919 -U postgres postgres >>./bench.log 2>&1 &
+
+
+# 测试数据生成完后, 开始模拟数据导入. 从已经生成的测试数据中取出80万条随机数据, 放到8个文件中.
+
+copy (select device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id from t_log_nat
+ where id in
+        (select floor(random() * (max_id - min_id))::int
+                + min_id
+           from generate_series(1,100000),
+                (select max(id) as max_id,
+                        min(id) as min_id
+                   from t_log_nat) s1
+        )) to '/data01/pg92/t_log_nat1.dmp';
+
+
+执行8次, 取出80W条随机记录.
+
+# 编辑pgbench数据导入测试语句:
+
+pg92@digoal-PowerEdge-R610-> cat copy.sql 
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat1.dmp';
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat2.dmp';
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat3.dmp';
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat4.dmp';
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat5.dmp';
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat6.dmp';
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat7.dmp';
+copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat8.dmp';
+
+
+# 查询当前t_log_nat记录数
+
+postgres=# select count(*) from t_log_nat;
+   count   
+-----------
+ 105070012
+(1 row)
+
+# 导入结果 : 
+
+pg92@digoal-PowerEdge-R610-> date;pgbench -M prepared -r -n -f ./copy.sql -c 16 -j 8 -T 60 -h $PGDATA -p 1919 -U postgres postgres;date;
+Thu Apr 11 23:22:27 CST 2013
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 16
+tps = 0.052661 (including connections establishing)
+tps = 0.052663 (excluding connections establishing)
+statement latencies in milliseconds:
+        39115.213812    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat1.dmp';
+        38753.329625    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat2.dmp';
+        38626.822375    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat3.dmp';
+        38034.551125    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat4.dmp';
+        37485.141625    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat5.dmp';
+        37306.804812    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat6.dmp';
+        37125.665250    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat7.dmp';
+        37328.476000    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat8.dmp';
+Thu Apr 11 23:27:31 CST 2013
+
+
+# 耗时304秒
+
+# 查询导入测试结束后t_log_nat记录数
+
+postgres=# select count(*) from t_log_nat;
+   count   
+-----------
+ 117861708
+(1 row)
+
+
+# 计算每秒导入的速度 : 
+
+postgres=# select (117861708-105070012)/304.0;
+      ?column?      
+--------------------
+ 42077.947368421053
+(1 row)
+
+
+每秒导入42077.9条数据.
+
+# 多次导入后, 数据量达到130653404 t_log_nat数据表的大小 12GB : 
+
+postgres=# select pg_relation_size('t_log_nat')/1024/1024/1024;
+ ?column? 
+----------
+       12
+
+
+# 算上索引后的大小 28GB  : 
+
+postgres=# select pg_total_relation_size('t_log_nat')/1024/1024/1024;
+ ?column? 
+----------
+       28
+
+
+# 数据导入的同时对数据库进行查询, 如下, 返回587条记录, 走索引, 查询速度约10毫秒.
+
+postgres=# select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10000100 order by create_time desc;
+    id     | device_id |        create_time         
+-----------+-----------+----------------------------
+ 120758136 |  10000086 | 2013-04-11 23:32:14.657665
+ 120758074 |  10000086 | 2013-04-11 23:32:14.656145
+ 120758062 |  10000086 | 2013-04-11 23:32:14.655861
+ 120758059 |  10000086 | 2013-04-11 23:32:14.65583
+ 120758006 |  10000086 | 2013-04-11 23:32:14.654482
+ 120757895 |  10000086 | 2013-04-11 23:32:14.651929
+ 120757890 |  10000086 | 2013-04-11 23:32:14.651841
+ 此处省略......
+   1350515 |  10000010 | 2013-04-11 16:49:11.348698
+   1323334 |  10000043 | 2013-04-11 16:49:10.053747
+    628804 |  10000087 | 2013-04-11 16:48:36.021167
+    407184 |  10000026 | 2013-04-11 16:47:32.296035
+    299771 |  10000065 | 2013-04-11 16:44:27.968158
+    224439 |  10000086 | 2013-04-11 16:44:23.94885
+     65973 |  10000068 | 2013-04-11 16:42:01.920676
+(587 rows)
+Time: 10.788 ms
+
+
+
+# 继续生成测试数据, 使用最开始的方法生成随机数据, 确保索引列的数据随机. 具备真实性.
+
+pg92@db-172-16-3-33-> jobs
+[1]-  Running                 nohup pgbench -M prepared -r -c 8 -f ./insert.sql -j 8 -n -t 1500000000 -h 172.16.3.150 -p 1919 -U postgres postgres >> ./bench.log 2>&1 &
+[2]+  Running                 nohup pgbench -M prepared -r -c 8 -f ./insert.sql -j 8 -n -t 1500000000 -h 172.16.3.150 -p 1919 -U postgres postgres >> ./bench.log 2>&1 &
+
+
+# 执行以上数据插入程序, 当单表数据量增加到3.75亿左右再测试导入性能. 以及查询性能. 
+# 目前表的大小以及包含索引后的大小. (单表35GB, 包含索引后81GB)
+
+postgres=# select pg_relation_size('t_log_nat')/1024/1024/1024;
+ ?column? 
+----------
+       35
+(1 row)
+postgres=# select pg_total_relation_size('t_log_nat')/1024/1024/1024;
+ ?column? 
+----------
+       81
+(1 row)
+
+# 数据量到达3.75亿后, 再次测试导入
+# 当前数据
+
+postgres=# select count(*) from t_log_nat;
+   count   
+-----------
+ 362575684
+(1 row)
+
+
+# 导入测试
+
+pg92@digoal-PowerEdge-R610-> date;pgbench -M prepared -r -n -f ./copy.sql -c 16 -j 8 -T 60 -h $PGDATA -p 1919 -U postgres postgres;date;
+Fri Apr 12 08:09:13 CST 2013
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 16
+tps = 0.051573 (including connections establishing)
+tps = 0.051574 (excluding connections establishing)
+statement latencies in milliseconds:
+        39345.002125    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat1.dmp';
+        38809.249500    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat2.dmp';
+        37935.941000    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat3.dmp';
+        39468.084250    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat4.dmp';
+        39687.854188    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat5.dmp';
+        36542.220000    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat6.dmp';
+        38437.234875    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat7.dmp';
+        39990.318500    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat8.dmp';
+Fri Apr 12 08:14:23 CST 2013
+
+
+# 导入完后数据量
+
+postgres=# select count(*) from t_log_nat;
+   count   
+-----------
+ 375367380
+(1 row)
+postgres=# select 362575684-375367380;
+ ?column?  
+-----------
+ -12791696
+(1 row)
+
+
+# 导入速度和之前差别不大 : 
+
+postgres=# select 12791696/310.0;
+      ?column?      
+--------------------
+ 41263.535483870968
+(1 row)
+
+
+# 调整sequence cache, 理论上可以减少cpu耗费.
+
+postgres=# select * from t_log_nat_id_seq ;
+  sequence_name   | last_value | start_value | increment_by |      max_value      | min_value | cache_value | log_cnt | is_cycled | 
+is_called 
+------------------+------------+-------------+--------------+---------------------+-----------+-------------+---------+-----------+-
+----------
+ t_log_nat_id_seq |  375567272 |           1 |            1 | 9223372036854775807 |         1 |           1 |      19 | f         | 
+t
+(1 row)
+postgres=# alter sequence t_log_nat_id_seq cache 100000;
+ALTER SEQUENCE
+
+
+# 继续测试导入
+
+pg92@digoal-PowerEdge-R610-> date;pgbench -M prepared -r -n -f ./copy.sql -c 16 -j 8 -T 60 -h $PGDATA -p 1919 -U postgres postgres;date;
+Fri Apr 12 08:25:09 CST 2013
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 16
+tps = 0.050657 (including connections establishing)
+tps = 0.050658 (excluding connections establishing)
+statement latencies in milliseconds:
+        39354.917500    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat1.dmp';
+        39780.023062    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat2.dmp';
+        39446.035125    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat3.dmp';
+        38788.305625    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat4.dmp';
+        40780.025938    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat5.dmp';
+        37838.100688    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat6.dmp';
+        37923.570437    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat7.dmp';
+        41910.572875    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat8.dmp';
+Fri Apr 12 08:30:24 CST 2013
+
+
+# 导入结束后数据量
+
+postgres=# select count(*) from t_log_nat;
+   count   
+-----------
+ 388358954
+(1 row)
+
+
+# 导入速度41243每秒.
+
+(388358954-375367380)/315 = 41243 ;
+
+
+# 导入过程中测试查询速度是否受到影响, 同样使用1亿数据时的SQL, 查询耗费5毫秒. 
+
+postgres=# explain select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10000100 order by create_time desc) t;
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Aggregate  (cost=2114.99..2115.00 rows=1 width=0)
+   ->  Sort  (cost=2086.16..2090.97 rows=1922 width=20)
+         Sort Key: t_log_nat.create_time
+         ->  Index Scan using idx_t_log_nat_3 on t_log_nat  (cost=0.00..1981.33 rows=1922 width=20)
+               Index Cond: ((device_id >= 10000000) AND (device_id < 10000100))
+(5 rows)
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10000100 order by create_time desc) t;
+ count 
+-------
+  1906
+(1 row)
+Time: 5.327 ms
+
+
+# 查询20W记录耗时225毫秒
+
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 ) t;
+ count  
+--------
+ 199677
+(1 row)
+Time: 225.151 ms
+postgres=# explain select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 ) t;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=197129.56..197129.57 rows=1 width=0)
+   ->  Index Only Scan using idx_t_log_nat_3 on t_log_nat  (cost=0.00..196639.92 rows=195855 width=0)
+         Index Cond: ((device_id >= 10000000) AND (device_id < 10010000))
+(3 rows)
+Time: 0.622 ms
+
+
+# 20W数据中, 进行数据翻页, 最短耗时1毫秒(首页), 最长耗时338毫秒(末尾页).
+
+postgres=# explain select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 order by device_id limit 100 offset 100000) t;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=100502.93..100502.94 rows=1 width=0)
+   ->  Limit  (cost=100401.28..100501.68 rows=100 width=20)
+         ->  Index Scan using idx_t_log_nat_3 on t_log_nat  (cost=0.00..198393.92 rows=197601 width=20)
+               Index Cond: ((device_id >= 10000000) AND (device_id < 10010000))
+(4 rows)
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 order by device_id limit 100 offset 0) t;
+ count 
+-------
+   100
+(1 row)
+Time: 1.052 ms
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 order by device_id limit 100 offset 199577) t;
+ count 
+-------
+   100
+(1 row)
+Time: 338.059 ms
+
+
+# 提高导入并行度, 以上两次并行度都是CPU核的2倍, 也就是16个并发.
+# 提高到32个并发, 继续测试性能, 注意并行导入时, 可能遇到数据块扩展瓶颈, 建议使用32K的postgresql block size.
+# 参考
+http://blog.163.com/digoal@126/blog/static/163877040201392641033482
+
+
+pg92@digoal-PowerEdge-R610-> date;pgbench -M prepared -r -n -f ./copy.sql -c 32 -j 8 -T 60 -h $PGDATA -p 1919 -U postgres postgres;date;
+Fri Apr 12 09:03:52 CST 2013
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 8
+duration: 60 s
+number of transactions actually processed: 32
+tps = 0.051920 (including connections establishing)
+tps = 0.051921 (excluding connections establishing)
+statement latencies in milliseconds:
+        79397.675656    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat1.dmp';
+        76724.902563    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat2.dmp';
+        79072.056687    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat3.dmp';
+        75542.704563    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat4.dmp';
+        75984.743844    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat5.dmp';
+        78727.274625    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat6.dmp';
+        75262.292875    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat7.dmp';
+        75554.252875    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat8.dmp';
+Fri Apr 12 09:14:09 CST 2013
+
+
+速度 : 
+
+postgres=# select max(id) from t_log_nat;
+    max    
+-----------
+ 401166753
+(1 row)
+Time: 0.860 ms
+postgres=# select max(id) from t_log_nat;
+    max    
+-----------
+ 426766753
+(1 row)
+postgres=# select (426766753-401166753)/617.0;
+      ?column?      
+--------------------
+ 41491.085899513776
+(1 row)
+
+
+# 单表数据量到达7亿后, 单表大小70GB, 加上索引共计170GB.
+
+ Schema |      Name       | Type  |  Owner   |    Size    | Description 
+--------+-----------------+-------+----------+------------+-------------
+ public | t_log_nat       | table | postgres | 70 GB      | 
+
+
+# 索引的分别大小
+
+ Schema |      Name       | Type  |  Owner   |    Table     |  Size  | Description 
+--------+-----------------+-------+----------+--------------+--------+-------------
+ public | idx_t_log_nat_1 | index | postgres | t_log_nat    | 21 GB  | 
+ public | idx_t_log_nat_2 | index | postgres | t_log_nat    | 21 GB  | 
+ public | idx_t_log_nat_3 | index | postgres | t_log_nat    | 21 GB  | 
+ public | idx_t_log_nat_4 | index | postgres | t_log_nat    | 16 GB  | 
+ public | t_log_nat_pkey  | index | postgres | t_log_nat    | 22 GB  | 
+
+
+# 再次测试导入, 同时测试导入数据的同时进行查询.
+
+pg92@digoal-PowerEdge-R610-> date;pgbench -M prepared -r -n -f ./copy.sql -c 16 -j 4 -t 20 -h $PGDATA -p 1919 -U postgres postgres;date;
+Fri Apr 12 10:47:36 CST 2013
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+number of transactions per client: 20
+number of transactions actually processed: 320/320
+tps = 0.048879 (including connections establishing)
+tps = 0.048879 (excluding connections establishing)
+statement latencies in milliseconds:
+        41356.507434    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat1.dmp';
+        41133.114569    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat2.dmp';
+        40853.623953    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat3.dmp';
+        40862.861253    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat4.dmp';
+        40688.835200    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat5.dmp';
+        40615.129241    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat6.dmp';
+        40779.250894    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat7.dmp';
+        41009.791787    copy t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id) from '/data01/pg92/t_log_nat8.dmp';
+Fri Apr 12 12:36:43 CST 2013
+
+
+# 每个文件80W记录, 计算出导入速率 39101每秒.
+
+# 查询效率
+
+postgres=# explain select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 ) t;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=367419.89..367419.90 rows=1 width=0)
+   ->  Index Only Scan using idx_t_log_nat_3 on t_log_nat  (cost=0.00..366507.41 rows=364994 width=0)
+         Index Cond: ((device_id >= 10000000) AND (device_id < 10010000))
+(3 rows)
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 ) t;
+ count  
+--------
+ 383507
+(1 row)
+Time: 501.402 ms
+
+postgres=# explain select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10000100 order by create_time desc) t;
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Aggregate  (cost=4040.51..4040.52 rows=1 width=0)
+   ->  Sort  (cost=3985.69..3994.82 rows=3655 width=20)
+         Sort Key: t_log_nat.create_time
+         ->  Index Scan using idx_t_log_nat_3 on t_log_nat  (cost=0.00..3769.39 rows=3655 width=20)
+               Index Cond: ((device_id >= 10000000) AND (device_id < 10000100))
+(5 rows)
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10000100 order by create_time desc) t;
+ count 
+-------
+  3644
+(1 row)
+Time: 9.860 ms
+
+postgres=# explain select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 order by device_id limit 100 offset 100000) t;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=100516.44..100516.45 rows=1 width=0)
+   ->  Limit  (cost=100414.77..100515.19 rows=100 width=20)
+         ->  Index Scan using idx_t_log_nat_3 on t_log_nat  (cost=0.00..367360.42 rows=365843 width=20)
+               Index Cond: ((device_id >= 10000000) AND (device_id < 10010000))
+(4 rows)
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 order by device_id limit 100 offset 0) t;
+ count 
+-------
+   100
+(1 row)
+Time: 0.888 ms
+postgres=# select count(*) from (select id,device_id,create_time from t_log_nat where device_id>=10000000 and device_id<10010000 order by device_id limit 100 offset 199577) t;
+ count 
+-------
+   100
+(1 row)
+Time: 393.783 ms
+
+
+
+[小结]
+1. 从iostat来看, pg_xlog磁盘的util维持在15%, table磁盘的util维持在1%, 偶尔到达60% index磁盘的util维持在5%, 偶尔到达100%. (io异步,所以不影响导入)整个测试过程, 瓶颈在cpu. 
+(如果增加CPU能力, 同上可以达到导入速度的目的. ) 如果瓶颈在数据块的扩展上, 增加并行度没有提升效果, 唯有提高单个数据块的大小, PostgreSQL支持的最大block size 32KB.
+参考 : 
+http://blog.163.com/digoal@126/blog/static/163877040201392641033482
+
+2. 数据load过程不影响查询, 这是肯定的, 因为COPY是RowExclusiveLock锁, 查询是AccessShareLock, 两种锁不冲突.
+3. 对于本例的场景, t_log_nat表的autovacuum可以选择关闭或者不关闭的情况下调大autovacuum_vacuum_scale_factor, autovacuum_analyze_scale_factor 减少扫描次数. 
+   调大autovacuum_freeze_max_age, autovacuum_freeze_table_age, 例如调整到最大10亿, (默认是2亿, 1.5亿). (减少freeze操作扫全表的几率)
+
+postgres=# alter table t_log_nat set (autovacuum_vacuum_scale_factor=0.8, autovacuum_analyze_scale_factor=0.8, autovacuum_freeze_max_age=1000000000, autovacuum_freeze_table_age=1000000000);
+ALTER TABLE
+postgres=# \d+ t_log_nat
+                                                           Table "public.t_log_nat"
+     Column      |            Type             |                       Modifiers                        | Storage | Stats target | D
+escription 
+-----------------+-----------------------------+--------------------------------------------------------+---------+--------------+--
+-----------
+ id              | bigint                      | not null default nextval('t_log_nat_id_seq'::regclass) | plain   |              | 
+ device_id       | integer                     | not null                                               | plain   |              | 
+ src_ip          | bigint                      |                                                        | plain   |              | 
+ src_transfer_ip | bigint                      |                                                        | plain   |              | 
+ dst_ip          | bigint                      |                                                        | plain   |              | 
+ src_port        | smallint                    |                                                        | plain   |              | 
+ dst_port        | smallint                    |                                                        | plain   |              | 
+ transfer_port   | integer                     |                                                        | plain   |              | 
+ type            | smallint                    |                                                        | plain   |              | 
+ ip_version      | smallint                    | default 0                                              | plain   |              | 
+ protocol_id     | integer                     |                                                        | plain   |              | 
+ rule_id         | integer                     |                                                        | plain   |              | 
+ create_time     | timestamp without time zone | not null default clock_timestamp()                     | plain   |              | 
+Indexes:
+    "t_log_nat_pkey" PRIMARY KEY, btree (id), tablespace "tbs_pg92"
+    "idx_t_log_nat_1" btree (src_ip), tablespace "tbs_pg92"
+    "idx_t_log_nat_2" btree (dst_ip), tablespace "tbs_pg92"
+    "idx_t_log_nat_3" btree (device_id), tablespace "tbs_pg92"
+    "idx_t_log_nat_4" btree (create_time), tablespace "tbs_pg92"
+Has OIDs: no
+Options: autovacuum_vacuum_scale_factor=0.8, autovacuum_analyze_scale_factor=0.8, autovacuum_freeze_max_age=1000000000, autovacuum_f
+reeze_table_age=1000000000
+
+
+4. 表分区的建议, 如果按照时间以及device_id为查询条件的查询较多, 那么可以第一层按照device_id hash分区, 第二层按照时间分区.
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201092805732741/
+2. http://blog.163.com/digoal@126/blog/static/16387704020109276295217/
+3. http://blog.163.com/digoal@126/blog/static/16387704020125421816584/
+4. http://blog.163.com/digoal@126/blog/static/163877040201242331551545/
+5. 
+# 插入数据的函数2, 任意类型参数. 方便插入脚本使用.
+
+drop function insert_t_log_nat(anyelement,anyelement,anyelement,anyelement,anyelement,anyelement,anyelement,anyelement,anyelement,anyelement,anyelement);
+
+create or replace function insert_t_log_nat
+(i_device_id anyelement, 
+i_src_ip anyelement, 
+i_src_transfer_ip anyelement, 
+i_dst_ip anyelement, 
+i_src_port anyelement, 
+i_dst_port anyelement, 
+i_transfer_port anyelement, 
+i_type anyelement,
+i_ip_version anyelement,
+i_protocol_id anyelement,
+i_rule_id anyelement
+) 
+returns void as $$
+declare
+begin
+  insert into t_log_nat (device_id,src_ip,src_transfer_ip,dst_ip,src_port,dst_port,transfer_port,type,ip_version,protocol_id,rule_id)
+  values
+  (i_device_id , 
+i_src_ip , 
+i_src_transfer_ip , 
+i_dst_ip , 
+i_src_port , 
+i_dst_port , 
+i_transfer_port , 
+i_type ,
+i_ip_version ,
+i_protocol_id ,
+i_rule_id 
+) ;
+end;
+$$ language plpgsql;
+# 这里插入可以不需要指定类型了, 在insert时会固化类型
+\setrandom i_device_id 1 20000000
+\setrandom i_src_ip 1 2000000000
+\setrandom i_dst_ip 1 2000000000
+select insert_t_log_nat(:i_device_id,:i_src_ip,:i_src_ip,:i_dst_ip,1,1,1,0,0,1,1);
+
+
+6. http://www.postgresql.org/docs/9.2/static/sql-createtable.html#SQL-CREATETABLE-STORAGE-PARAMETERS

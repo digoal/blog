@@ -1,0 +1,384 @@
+PostgreSQL research
+
+keepalived vrrp script|interface weight when positive,nagtive,zero & vrrp's status transition
+
+2014-08-20 16:57:14   查看原文>>
+
+本文以实例的形式来展示一下脚本的weight对vrrp的影响(状态或优先级).
+注意优先级的变化可能导致vrrp master重新选举, 从而导致状态的变化.
+而直接导致状态的变化则是当script weight=0时, 可以直接导致状态的变化.(当然最后还是选举产生的, 除非backup配置了不降级, 那么就不会主动让位.)
+首先来看一张图 : 
+keepalived vrrp script weight when positive,nagtive,zero vrrps status transition - 德哥@Digoal - PostgreSQL research
+这张图表明了track interface或track script的weight在大于0, 小于0, 等于0这三种状态下, 对VRRP的影响.
+(track interface的原理和本文将要讲的track script是一样的, 只是检测的是接口)
+weight>0 : 检查成功, 优先级加, 检查失败, 回归基本优先级.
+weight=0 : 检查成功, 状态不变, 检查失败, 状态变为FAULT, 再次检查成功, 状态回到初始状态, 可能会需要重新选举master. (能不能选为master就看是否符合vrrp的协定了, 当然还与backup是否配置允许降级有关) 
+weight<0 : 检查成功, 优先级不变, 检查失败, 需要降低优先级, 再次检查成功, 回归正常优先级.
+
+[注意]
+初始优先级是255的话, 不受weight的动态优先级调整影响. 原因见 : 
+http://blog.163.com/digoal@126/blog/static/16387704020147212529175/
+
+测试环境 : 
+192.168.173.203
+192.168.173.204
+虚拟IP, 因为只是测试, 我用了一个其他网段的IP.
+172.16.173.100
+
+keepalived的安装参考
+http://blog.163.com/digoal@126/blog/static/16387704020147199133921/
+
+vrrp script, 创建3个脚本, 分别用于weight配置为正, 负, 零 : 
+脚本返回值0表示成功, 非零表示失败, 我们通过改变文件内容来改变脚本的返回值.
+例如pos.sh返回的是/root/pos.var的值. 默认我们都配置为0. 
+在测试keepalived的过程中只要修改pos.var, 就可以改变pos.sh脚本的返回值.
+
+vi /root/pos.sh
+#!/bin/bash
+res=$(cat /root/pos.var)
+exit $res
+
+vi /root/pos.var
+0
+
+chmod 500 /root/pos.sh
+
+vi /root/nag.sh
+#!/bin/bash
+res=$(cat /root/nag.var)
+exit $res
+
+vi /root/nag.var
+0
+
+chmod 500 /root/nag.sh
+
+vi /root/zero.sh
+#!/bin/bash
+res=$(cat /root/zero.var)
+exit $res
+
+vi /root/zero.var
+0
+
+chmod 500 /root/zero.sh
+
+
+
+配置文件内容 : 
+2个节点唯一不同的配置是优先级priority . 一高一低即可.
+192.168.173.203: 100
+192.168.173.204: 99
+
+[root@192_168_173_204 ~]# cd /opt/keepalived/etc/keepalived/
+[root@192_168_173_204 keepalived]# cat keepalived.conf
+! Configuration File for keepalived  !号或#号开头为注释
+
+global_defs {      # 全局配置除了router_id, 其他都无所谓, 因为我这里的测试只是观察script weight对vrrp的影响.
+   notification_email {
+     acassen@firewall.loc
+     failover@firewall.loc
+     sysadmin@firewall.loc
+   }
+   notification_email_from Alexandre.Cassen@firewall.loc
+   smtp_server 192.168.200.1
+   smtp_connect_timeout 30
+   router_id DIGOAL_TEST   # 两个节点一致
+}
+
+vrrp_script pos {   # 脚本配置 
+    script "/root/pos.sh"
+    interval 1
+    weight 0   # 配置默认weight 0, 后面可以在instance中覆盖
+    fall 1    # 从OK到KO需要1次检测失败.
+    rise 1    # 从KO到OK需要1次检测成功.
+}
+
+vrrp_script nag {   # 脚本配置 
+    script "/root/nag.sh"
+    interval 1
+    weight 0   # 配置默认weight 0, 后面可以在instance中覆盖
+    fall 1    # 从OK到KO需要1次检测失败.
+    rise 1    # 从KO到OK需要1次检测成功.
+}
+
+vrrp_script zero {   # 脚本配置 
+    script "/root/zero.sh"
+    interval 1
+    weight 0   # 配置默认weight 0, 后面可以在instance中覆盖
+    fall 1    # 从OK到KO需要1次检测失败.
+    rise 1    # 从KO到OK需要1次检测成功.
+}
+
+vrrp_instance vi_1 {
+    state MASTER    # 初始状态
+    interface eth0
+    virtual_router_id 51
+    priority 99   # 初始优先级, 注意两个节点配置要不一样. 一高一低, 高的选举为master.
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    track_script {
+        pos weight 3
+        zero weight 0
+        nag weight -5
+    }
+    unicast_peer {   # 使用多播代替组播发送vrrp心跳.
+        192.168.173.203
+        192.168.173.204
+    }
+    virtual_ipaddress {   # 虚拟地址配置, 和ifconfig兼容
+        172.16.173.100/24 brd 172.16.173.255 dev eth0 scope link label eth0:1
+    }
+    debug   # 打开debug, 方便调试, 本例没有用到
+}
+
+
+启动keepalived, -D打开详细日志.
+我们先启动优先级低的节点, 这样可以观察到选举master的过程.
+
+[root@192_168_173_204 ~]# keepalived -f /opt/keepalived/etc/keepalived/keepalived.conf -D
+
+
+查看日志
+
+/var/log/messages
+Aug 20 16:32:43 192_168_173_204 Keepalived[5920]: Starting Keepalived v1.2.13 (08/19,2014)
+Aug 20 16:32:43 192_168_173_204 Keepalived[5921]: Starting Healthcheck child process, pid=5922
+Aug 20 16:32:43 192_168_173_204 Keepalived[5921]: Starting VRRP child process, pid=5923
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Netlink reflector reports IP 192.168.173.204 added
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Netlink reflector reports IP fe80::f6ce:46ff:fe85:15fc added
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Registering Kernel netlink reflector
+Aug 20 16:32:43 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 192.168.173.204 added
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Registering Kernel netlink command channel
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Registering gratuitous ARP shared channel
+Aug 20 16:32:43 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP fe80::f6ce:46ff:fe85:15fc added
+Aug 20 16:32:43 192_168_173_204 Keepalived_healthcheckers[5922]: Registering Kernel netlink reflector
+Aug 20 16:32:43 192_168_173_204 Keepalived_healthcheckers[5922]: Registering Kernel netlink command channel
+Aug 20 16:32:43 192_168_173_204 Keepalived_healthcheckers[5922]: Opening file '/opt/keepalived/etc/keepalived/keepalived.conf'.
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Opening file '/opt/keepalived/etc/keepalived/keepalived.conf'.
+Aug 20 16:32:43 192_168_173_204 Keepalived_healthcheckers[5922]: Configuration is using : 7935 Bytes
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Configuration is using : 69309 Bytes
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: Using LinkWatch kernel netlink reflector...
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: VRRP sockpool: [ifindex(2), proto(112), unicast(1), fd(10,11)]
+Aug 20 16:32:43 192_168_173_204 Keepalived_healthcheckers[5922]: Using LinkWatch kernel netlink reflector...
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Script(pos) succeeded
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Script(zero) succeeded
+Aug 20 16:32:43 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Script(nag) succeeded
+Aug 20 16:32:44 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:32:45 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 16:32:45 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 16:32:45 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:32:45 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 172.16.173.100 added
+Aug 20 16:32:50 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+
+
+通过ifconfig可以看到虚拟IP已经起来了
+
+eth0:1    Link encap:Ethernet  HWaddr F4:CE:46:85:15:FC  
+          inet addr:172.16.173.100  Bcast:172.16.173.255  Mask:255.255.255.0
+          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+
+
+
+简单的说一下日志, 可以看出keepalived进程结构分成3个部分, 主进程以及两个fork出来的子进程.
+vrrp复制路由主节点的选举, vrrp心跳.
+healthcheckers负责检测, 例如vrrp script和vrrp interface(本例没有配置vrrp interface check).
+虚拟ip起来后, 发送了免费的ARP请求, 宣告IP和MAC地址.
+现在, 192.168.173.204的优先级是99+3=102
+好了, 现在启动192.168.173.203的keepalived.
+
+[root@192_168_173_203 ~]# keepalived -f /opt/keepalived/etc/keepalived/keepalived.conf -D
+
+
+查看日志
+
+Aug 20 16:38:28 192_168_173_203 Keepalived[23107]: Starting Keepalived v1.2.13 (08/19,2014)
+Aug 20 16:38:28 192_168_173_203 Keepalived[23108]: Starting Healthcheck child process, pid=23109
+Aug 20 16:38:28 192_168_173_203 Keepalived[23108]: Starting VRRP child process, pid=23110
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Netlink reflector reports IP 192.168.173.203 added
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Netlink reflector reports IP 192.168.173.203 added
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Netlink reflector reports IP 192.168.173.156 added
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Netlink reflector reports IP 192.168.173.156 added
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Netlink reflector reports IP fe80::f6ce:46ff:fe86:4234 added
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Netlink reflector reports IP fe80::f6ce:46ff:fe86:4234 added
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Registering Kernel netlink reflector
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Registering Kernel netlink reflector
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Registering Kernel netlink command channel
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Registering Kernel netlink command channel
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Registering gratuitous ARP shared channel
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Opening file '/opt/keepalived/etc/keepalived/keepalived.conf'.
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Opening file '/opt/keepalived/etc/keepalived/keepalived.conf'.
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Configuration is using : 7937 Bytes
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Configuration is using : 69311 Bytes
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: Using LinkWatch kernel netlink reflector...
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: VRRP sockpool: [ifindex(2), proto(112), unicast(1), fd(10,11)]
+Aug 20 16:38:28 192_168_173_203 Keepalived_healthcheckers[23109]: Using LinkWatch kernel netlink reflector...
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Script(nag) succeeded
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Script(zero) succeeded
+Aug 20 16:38:28 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Script(pos) succeeded
+
+
+初始设置为MASTER, 所以有选举的过程, 但是刚起来的时候脚本还没开始检查, 优先级是100, 所以选举中变成了backup角色.
+
+Aug 20 16:38:29 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:38:29 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Received higher prio advert
+Aug 20 16:38:29 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Entering BACKUP STATE
+
+
+当开始检查脚本后, 优先级提高到了100+3=103, 大于192.168.173.204的102, 所以选举中变成了MASTER.
+同时虚拟IP切换到了本节点
+
+Aug 20 16:38:30 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:38:30 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:38:31 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:38:32 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 16:38:32 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 16:38:32 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:38:32 192_168_173_203 Keepalived_healthcheckers[23109]: Netlink reflector reports IP 172.16.173.100 added
+Aug 20 16:38:37 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+
+
+
+查看192.168.173.204节点的日志, 选举为BACKUP后, 移除了虚拟IP.
+
+Aug 20 16:38:08 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:38:09 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 16:38:09 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 16:38:09 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 172.16.173.100 added
+Aug 20 16:38:09 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:38:14 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:38:29 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Received lower prio advert, forcing new election
+Aug 20 16:38:29 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:38:29 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Received lower prio advert, forcing new election
+Aug 20 16:38:29 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:38:30 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Received higher prio advert
+Aug 20 16:38:30 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Entering BACKUP STATE
+Aug 20 16:38:30 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) removing protocol VIPs.
+Aug 20 16:38:30 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 172.16.173.100 removed
+
+
+
+现在我们把192.168.173.203的pos.var改成1, 那么将降回初始优先级100. 比192.168.173.204的优先级102要低.
+
+[root@192_168_173_203 ~]# echo 1 > /root/pos.var
+
+
+我们在192.168.173.204节点可以看到它重新选举变成了MASTER
+
+Aug 20 16:44:43 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:44:43 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:44:44 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:44:45 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 16:44:45 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 16:44:45 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:44:45 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 172.16.173.100 added
+Aug 20 16:44:50 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+
+
+
+接下来在192.168.173.204测试一下nag.sh脚本, 把nag.var改成1. 那么nag.sh将返回1, 也就是失败. 优先级需要减5. 变成102-5=97, vrrp重新选举的话, 变成BACKUP.
+
+[root@192_168_173_204 ~]# echo 1 > /root/nag.var 
+
+
+我们在192.168.173.203上可以看到它选举变成了master.
+
+Aug 20 16:48:04 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:48:04 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:48:05 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:48:06 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 16:48:06 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 16:48:06 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:48:06 192_168_173_203 Keepalived_healthcheckers[23109]: Netlink reflector reports IP 172.16.173.100 added
+Aug 20 16:48:11 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+
+
+
+现在的优先级构成如下 : 
+
+192.168.173.203  MASTER
+base=100
+pos.sh failed  +0
+zero.sh success
+nag.sh success  -0
+最终优先级: 100
+
+192.168.173.204  BACKUP
+base=99
+pos.sh success  + 3
+zero.sh success
+nag.sh failed  -5
+最终优先级: 97
+
+
+接下来把192.168.173.203的nag.sh弄成failed, 那么将再次减5, 变成95. 选举将变成BACKUP.
+
+[root@192_168_173_203 ~]# echo 1 > /root/nag.var
+
+
+可以看到192.168.173.204变成MASTER了.
+
+Aug 20 16:52:29 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:52:29 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) forcing a new MASTER election
+Aug 20 16:52:30 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:52:31 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 16:52:31 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 16:52:31 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:52:31 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 172.16.173.100 added
+
+
+
+最后测试一下zero脚本对状态的影响, 前面我们看到的nag.sh和pos.sh都只改变优先级, 不会直接对状态造成影响, 而是在选举的过程中简介的对状态造成的影响.
+zero脚本的weight=0, 所以脚本调用的成功与否直接影响vrrp instance的状态
+测试 : 
+把192.168.173.204的zero.var改成1, 
+
+[root@192_168_173_204 ~]# echo 1 >/root/zero.var 
+
+
+查看日志 : 
+
+Aug 20 16:54:49 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Script(zero) failed
+Aug 20 16:54:50 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Entering FAULT STATE
+Aug 20 16:54:50 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) removing protocol VIPs.
+Aug 20 16:54:50 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 172.16.173.100 removed
+Aug 20 16:54:50 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Now in FAULT state
+
+
+192.168.173.203变成了唯一的状态正常的主机, 所以理所当然就是MASTER了.
+
+Aug 20 16:54:50 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 16:54:51 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 16:54:51 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 16:54:51 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 16:54:51 192_168_173_203 Keepalived_healthcheckers[23109]: Netlink reflector reports IP 172.16.173.100 added
+Aug 20 16:54:56 192_168_173_203 Keepalived_vrrp[23110]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+
+
+最后, 把zero.var改回0, 观察状态回到配置的初始状态. 并重新选举.
+[root@192_168_173_204 ~]# echo 0 >/root/zero.var
+重新选举的过程中依然是先使用初始优先级进行选举, 状态定了以后, 再检查脚本, 动态的改变优先级.
+本例192.168.173.204的初始优先级是99, 大于当前192.168.173.203的优先级95, 所以初始优先级就可以当选MASTER.
+等检测开始后, 优先级变成99+3-5=97, 依然大于当前192.168.173.203的优先级95, 所以继续MASTER.
+
+Aug 20 17:02:05 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Script(zero) succeeded
+Aug 20 17:02:06 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) prio is higher than received advert
+Aug 20 17:02:06 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Transition to MASTER STATE
+Aug 20 17:02:06 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Received lower prio advert, forcing new election
+Aug 20 17:02:07 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Entering MASTER STATE
+Aug 20 17:02:07 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) setting protocol VIPs.
+Aug 20 17:02:07 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+Aug 20 17:02:07 192_168_173_204 Keepalived_healthcheckers[5922]: Netlink reflector reports IP 172.16.173.100 added
+Aug 20 17:02:12 192_168_173_204 Keepalived_vrrp[5923]: VRRP_Instance(vi_1) Sending gratuitous ARPs on eth0 for 172.16.173.100
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/16387704020147199133921/
+2. http://blog.163.com/digoal@126/blog/static/163877040201472010332545/
+3. http://blog.163.com/digoal@126/blog/static/163877040201471992259474/
+
+Flag Counter

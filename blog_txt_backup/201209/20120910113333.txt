@@ -1,0 +1,348 @@
+PostgreSQL research
+
+use dml instead of trigger on views implement increment migration
+
+2012-09-10 11:33:33   查看原文>>
+
+数据迁移是DBA经常干的事情之一, 譬如从Oracle迁移到PG, PG迁移到PG . 
+PG到PG的同版本的迁移可以使用自带的流复制或在log shipping技术, 停机时间可以做到非常的短暂 . 
+如果是跨版本的迁移, 或者是仅仅需要迁移部分表. 使用流复制就不太合适了 . 
+pg到pg跨版本数据迁移可选的方案比较多, 例如londiste, slony, snapshot(http://pgfoundry.org/projects/snapshot/)等. 也可以做到比较短的停机时间.
+pg_dump来迁移的话停机时间就比较长, 要保证一致性. 或者结合业务特性, pg_dump也可以做到比较短的停机时间. 但是适用性就比较差.
+接下来我们使用PostgreSQL 的视图以及视图上应用instead of DML触发器, 来设计增量的数据迁移.
+需要用到四个对象 : 视图, 原表, 更新表, 删除表.
+以下操作建立触发器函数, 在视图上创建相应触发器.
+1. 更新操作, 从原表删除, 从更新表删除, 调用插入函数步骤(判断插入原表约束, 插入更新表.).
+2. 删除操作, 从原表删除, 从更新表删除, 插入删除记录表.
+3. 插入操作, 判断插入原表约束, 插入更新表, 删除删除表中对应记录.
+具体操作如下 : 
+创建测试表 : 
+
+digoal=> create table user_info(userid int primary key, username name unique, info text, crt_time timestamp(0), mod_time timestamp(0));
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "user_info_pkey" for table "user_info"
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "user_info_username_key" for table "user_info"
+CREATE TABLE
+
+
+插入测试数据100W条
+
+digoal=> insert into user_info select generate_series(1,1000000), 'test'||generate_series(1,1000000), '增量测试'||random(), clock_timestamp(), null;
+INSERT 0 1000000
+
+
+把表名改为user_info_old.
+
+digoal=> alter table user_info rename to user_info_old;
+ALTER TABLE
+
+
+创建一个增量数据表.
+
+digoal=> create table user_info_change (like user_info_old including all);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "user_info_change_pkey" for table "user_info_change"
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "user_info_change_username_key" for table "user_info_change"
+CREATE TABLE
+
+
+创建一个记录删除记录的表.
+
+digoal=> create table user_info_del (like user_info_old including all);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "user_info_del_pkey" for table "user_info_del"
+NOTICE:  CREATE TABLE / UNIQUE will create implicit index "user_info_del_username_key" for table "user_info_del"
+CREATE TABLE
+
+
+创建一个与生产表同名的视图.
+
+digoal=> create or replace view user_info as select * from user_info_old where userid not in (select userid from user_info_del union select userid from user_info_change) union select * from user_info_change where userid not in (select userid from user_info_del);
+CREATE VIEW
+
+
+创建插入触发器函数 v1
+
+create or replace function f_user_info_insert () returns trigger as $$
+declare
+begin
+  raise notice 'userid: %', NEW.userid;
+  -- f_user_info_insert() v1.
+  -- 虽然新的记录都插入user_info_change, 但是需要确保约束, 所以需要在user_info_old表再判断一遍.
+  -- 更好的办法是插入user_info_old表, 然后在末端再从user_info_old表删除, 这样就不用写判断语句了.(因为pg最低的事务隔离级别是read committed)
+  perform 1 from user_info_old where userid = NEW.userid;
+  if not found then
+    perform 1 from user_info_old where username = NEW.username;
+    if not found then
+      insert into user_info_change values (NEW.*);
+      delete from user_info_del where userid = NEW.userid;
+    else
+      raise exception 'unique key conflict';
+    end if;
+  else
+    raise exception 'primary key conflict';
+  end if;
+  return null;
+end;
+$$ language plpgsql;
+
+
+插入触发器函数 v2
+
+create or replace function f_user_info_insert () returns trigger as $$
+declare
+begin
+  raise notice 'userid: %', NEW.userid;
+  -- f_user_info_insert() v2.
+  insert into user_info_old values (NEW.*);
+  insert into user_info_change values (NEW.*);
+  delete from user_info_del where userid = NEW.userid;
+  delete from user_info_old where userid = NEW.userid;
+  return null;
+end;
+$$ language plpgsql;
+
+
+
+创建更新触发器函数v1
+
+create or replace function f_user_info_update () returns trigger as $$
+declare
+begin
+  raise notice 'userid: %', OLD.userid;
+  delete from user_info_old where userid = OLD.userid;
+  delete from user_info_change where userid = OLD.userid;
+  -- f_user_info_update() v1.
+  -- 虽然新的记录都插入user_info_change, 但是需要确保约束, 所以需要在user_info_old表再判断一遍.
+  -- 更好的办法是插入user_info_old表, 然后在末端再从user_info_old表删除, 这样就不用写判断语句了.(因为pg最低的事务隔离级别是read committed)
+  perform 1 from user_info_old where userid = NEW.userid;
+  if not found then
+    perform 1 from user_info_old where username = NEW.username;
+    if not found then
+      insert into user_info_change values (NEW.*);
+      delete from user_info_del where userid = NEW.userid;
+    else
+      raise exception 'unique key conflict';
+    end if;
+  else
+    raise exception 'primary key conflict';
+  end if;
+  return null;
+end;
+$$ language plpgsql;
+
+
+更新触发器函数v2
+
+create or replace function f_user_info_update () returns trigger as $$
+declare
+begin
+  raise notice 'userid: %', OLD.userid;
+  delete from user_info_old where userid = OLD.userid;
+  delete from user_info_change where userid = OLD.userid;
+  insert into user_info_old values (NEW.*);
+  insert into user_info_change values (NEW.*);
+  delete from user_info_del where userid = NEW.userid;
+  delete from user_info_old where userid = NEW.userid;
+  return null;
+end;
+$$ language plpgsql;
+
+
+创建删除触发器函数
+
+create or replace function f_user_info_delete () returns trigger as $$
+declare
+begin
+  raise notice 'userid: %', OLD.userid;
+  delete from user_info_old where userid = OLD.userid;
+  delete from user_info_change where userid = OLD.userid;
+  perform 1 from user_info_del where userid = OLD.userid;
+  if not found then
+    insert into user_info_del values (OLD.*);
+  end if;
+  return null;
+end;
+$$ language plpgsql;
+
+
+
+在视图上创建DML 触发器
+
+digoal=> create trigger tg_user_info_insert instead of insert on user_info for each row execute procedure f_user_info_insert();
+CREATE TRIGGER
+Time: 0.806 ms
+digoal=> create trigger tg_user_info_delete instead of delete on user_info for each row execute procedure f_user_info_delete();
+CREATE TRIGGER
+Time: 0.958 ms
+digoal=> create trigger tg_user_info_update instead of update on user_info for each row execute procedure f_user_info_update();
+CREATE TRIGGER
+Time: 0.706 ms
+
+
+测试:
+
+digoal=> select * from user_info where userid=1;
+ userid | username |           info            |      crt_time       | mod_time 
+--------+----------+---------------------------+---------------------+----------
+      1 | test1    | 增量测试0.613957106601447 | 2012-09-10 11:14:46 | 
+(1 row)
+
+Time: 1.444 ms
+digoal=> update user_info set username='testtest' where userid=1;
+NOTICE:  userid: 1
+UPDATE 0
+Time: 2.310 ms
+digoal=> select * from user_info where userid=1;
+ userid | username |           info            |      crt_time       | mod_time 
+--------+----------+---------------------------+---------------------+----------
+      1 | testtest | 增量测试0.613957106601447 | 2012-09-10 11:14:46 | 
+(1 row)
+
+Time: 1.251 ms
+digoal=> delete from user_info where userid=1;
+NOTICE:  userid: 1
+DELETE 0
+Time: 2.470 ms
+digoal=> select * from user_info where userid=1;
+ userid | username | info | crt_time | mod_time 
+--------+----------+------+----------+----------
+(0 rows)
+
+Time: 1.087 ms
+digoal=> insert into user_info values (1,'test1',now(),now());
+NOTICE:  userid: 1
+INSERT 0 0
+Time: 1.274 ms
+digoal=> select * from user_info where userid=1;
+ userid | username |             info              |      crt_time       | mod_time 
+--------+----------+-------------------------------+---------------------+----------
+      1 | test1    | 2012-09-10 11:16:06.000839+08 | 2012-09-10 11:16:06 | 
+(1 row)
+
+Time: 1.139 ms
+digoal=> update user_info set info='测试数据' where userid=1;
+NOTICE:  userid: 1
+UPDATE 0
+Time: 1.653 ms
+digoal=> select * from user_info where userid=1;
+ userid | username |   info   |      crt_time       | mod_time 
+--------+----------+----------+---------------------+----------
+      1 | test1    | 测试数据 | 2012-09-10 11:16:06 | 
+(1 row)
+
+Time: 0.686 ms
+digoal=> insert into user_info values (0,'test0','测试',now(),now());
+NOTICE:  userid: 0
+INSERT 0 0
+Time: 0.811 ms
+digoal=> select * from user_info where userid=0;
+ userid | username | info |      crt_time       |      mod_time       
+--------+----------+------+---------------------+---------------------
+      0 | test0    | 测试 | 2012-09-10 11:17:02 | 2012-09-10 11:17:02
+(1 row)
+
+Time: 1.015 ms
+digoal=> update user_info set info='测试数据' where userid=0;
+NOTICE:  userid: 0
+UPDATE 0
+Time: 1.377 ms
+digoal=> select * from user_info where userid=0;
+ userid | username |   info   |      crt_time       |      mod_time       
+--------+----------+----------+---------------------+---------------------
+      0 | test0    | 测试数据 | 2012-09-10 11:17:02 | 2012-09-10 11:17:02
+(1 row)
+
+Time: 0.995 ms
+digoal=> delete from user_info where userid=0;
+NOTICE:  userid: 0
+DELETE 0
+Time: 1.597 ms
+digoal=> select * from user_info where userid=0;
+ userid | username | info | crt_time | mod_time 
+--------+----------+------+----------+----------
+(0 rows)
+
+Time: 0.961 ms
+digoal=> insert into user_info values (0,'test0','测试',now(),now());
+NOTICE:  userid: 0
+INSERT 0 0
+Time: 0.759 ms
+digoal=> select * from user_info where userid=0;
+ userid | username | info |      crt_time       |      mod_time       
+--------+----------+------+---------------------+---------------------
+      0 | test0    | 测试 | 2012-09-10 11:17:24 | 2012-09-10 11:17:24
+(1 row)
+
+Time: 1.016 ms
+digoal=> update user_info set info='测试数据' where userid=0;
+NOTICE:  userid: 0
+UPDATE 0
+Time: 1.390 ms
+digoal=> select * from user_info where userid=0;
+ userid | username |   info   |      crt_time       |      mod_time       
+--------+----------+----------+---------------------+---------------------
+      0 | test0    | 测试数据 | 2012-09-10 11:17:24 | 2012-09-10 11:17:24
+(1 row)
+
+Time: 0.985 ms
+digoal=> delete from user_info where userid=0;
+NOTICE:  userid: 0
+DELETE 0
+Time: 2.661 ms
+digoal=> select * from user_info where userid=0;
+ userid | username | info | crt_time | mod_time 
+--------+----------+------+----------+----------
+(0 rows)
+
+Time: 0.953 ms
+
+
+迁移过程简单描述 : 
+1. 导出user_info_old
+2. 导入user_info_old到新库
+3. 停止业务(停止对user_info的DML操作)
+4. 导出user_info_change
+5. 导入user_info_change到新库
+6. 新库 : 以下操作放在一个事务中进行.
+
+begin;
+delete from user_info_old where userid in (select userid from user_info_change) or userid in (select userid from user_info_del);
+delete from user_info_change where userid in (select userid from user_info_del);
+insert into user_info_old select * from user_info_change;
+alter table user_info_old rename to user_info;
+end;
+
+
+【注意】
+1. 由于是on each row的触发器, 在表中但是不在view里面的记录是无法被触发的.
+例如, update user_info set info='test' where userid=1;
+当select * from user_info where userid=1 无记录时, 不会触发.
+即使user_info_old或者user_info_change中有userid=1并且user_info_del里面也有userid=1的记录.
+测试如下 :
+
+digoal=> insert into user_info_old values (-2,'test','test',now(),now());
+INSERT 0 1
+digoal=> insert into user_info_del values (-2,'test','test',now(),now());
+INSERT 0 1
+digoal=> select * from user_info where userid=-2;
+ userid | username | info | crt_time | mod_time 
+--------+----------+------+----------+----------
+(0 rows)
+
+digoal=> delete from user_info where userid=-2;
+DELETE 0
+
+
+因为记录都还在user_info_old里面, 显然没有触发f_user_info_delete(). 因为触发器是on each row的.
+
+digoal=> select * from user_info_old where userid=-2;
+ userid | username | info |      crt_time       |      mod_time       
+--------+----------+------+---------------------+---------------------
+     -2 | test     | test | 2012-09-11 16:42:33 | 2012-09-11 16:42:33
+(1 row)
+
+digoal=> select * from user_info_del where userid=-2;
+ userid | username | info |      crt_time       |      mod_time       
+--------+----------+------+---------------------+---------------------
+     -2 | test     | test | 2012-09-11 16:42:37 | 2012-09-11 16:42:37
+(1 row) 
+
+

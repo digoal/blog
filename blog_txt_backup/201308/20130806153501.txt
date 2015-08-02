@@ -1,0 +1,381 @@
+PostgreSQL research
+
+PostgreSQL 9.3+ A custom background worker process to log changes to postgresql.conf to a table
+
+2013-08-06 15:35:01   查看原文>>
+
+PostgreSQL 9.3 的一项新特性, 支持background worker process.
+http://www.postgresql.org/docs/9.3/static/bgworker.html
+本文将介绍一个利用PostgreSQL 9.3 background worker process记录postgresql.conf变化到数据库表的一个插件config_log.
+使用这个插件, 可以记录下postgresql.conf的变更操作.
+
+[安装]
+
+wget http://api.pgxn.org/dist/config_log/0.1.6/config_log-0.1.6.zip
+unzip config_log-0.1.6.zip
+cd config_log-0.1.6
+[root@db-172-16-3-39 config_log-0.1.6]# export PATH=/opt/pgsql9.3beta2/bin:$PATH
+[root@db-172-16-3-39 config_log-0.1.6]# which pg_config
+/opt/pgsql9.3beta2/bin/pg_config
+
+
+注意PostgreSQL源码请使用2013-07-16之后的版本, 因为config_log-0.1.6用到了bgworker.h中的BGW_MAXLEN.
+这个定义是在以下版本才加入的.
+http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=7f7485a0cde92aa4ba235a1ffe4dda0ca0b6cc9a
+如果用到以前的版本, 可能在编译config_log时会报错如下 : 
+
+[root@db-172-16-3-33 config_log-0.1.6]# gmake clean
+rm -f config_log.so config_log.o
+rm -f config_log.o
+[root@db-172-16-3-33 config_log-0.1.6]# gmake
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -I. -I. -I/opt/pgsql9.3beta2/include/server -I/opt/pgsql9.3beta2/include/internal -D_GNU_SOURCE -I/usr/include/libxml2   -c -o config_log.o config_log.c
+config_log.c: In function ‘_PG_init’:
+config_log.c:373: warning: assignment from incompatible pointer type
+config_log.c:379: error: ‘BGW_MAXLEN’ undeclared (first use in this function)
+config_log.c:379: error: (Each undeclared identifier is reported only once
+config_log.c:379: error: for each function it appears in.)
+gmake: *** [config_log.o] Error 1
+
+
+解决办法自己添加这个定义. 或者使用已更新的PostgreSQL源码.
+
+
+[root@db-172-16-3-33 config_log-0.1.6]# vi config_log.c
+#include "tcop/utility.h"
+// add by digoal
+#define BGW_MAXLEN                     64
+
+
+重新编译即可.
+
+[root@db-172-16-3-33 config_log-0.1.6]# gmake
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -I. -I. -I/opt/pgsql9.3beta2/include/server -I/opt/pgsql9.3beta2/include/internal -D_GNU_SOURCE -I/usr/include/libxml2   -c -o config_log.o config_log.c
+config_log.c: In function ‘_PG_init’:
+config_log.c:375: warning: assignment from incompatible pointer type
+gcc -O2 -Wall -Wmissing-prototypes -Wpointer-arith -Wdeclaration-after-statement -Wendif-labels -Wmissing-format-attribute -Wformat-security -fno-strict-aliasing -fwrapv -fpic -L/opt/pgsql9.3beta2/lib  -Wl,-rpath,'/opt/pgsql9.3beta2/lib',--enable-new-dtags  -shared -o config_log.so config_log.o
+[root@db-172-16-3-33 config_log-0.1.6]# gmake install
+/bin/mkdir -p '/opt/pgsql9.3beta2/share/extension'
+/bin/mkdir -p '/opt/pgsql9.3beta2/share/extension'
+/bin/mkdir -p '/opt/pgsql9.3beta2/lib'
+/usr/bin/install -c -m 644 ./config_log.control '/opt/pgsql9.3beta2/share/extension/'
+/usr/bin/install -c -m 644 ./config_log--0.1.6.sql  '/opt/pgsql9.3beta2/share/extension/'
+/usr/bin/install -c -m 755  config_log.so '/opt/pgsql9.3beta2/lib/'
+
+
+
+查看扩展包含的SQL : 
+
+[root@db-172-16-3-33 extension]# cat config_log--0.1.6.sql 
+
+-- complain if script is sourced in psql, rather than via CREATE EXTENSION
+\echo Use "CREATE EXTENSION config_log" to load this file. \quit
+
+CREATE TABLE pg_settings_log AS 
+ SELECT name,
+        setting,
+        unit,
+        sourcefile,
+        sourceline,
+        CAST('INSERT' AS VARCHAR(6)) AS op,
+        CURRENT_TIMESTAMP AS recorded_ts
+   FROM pg_settings WHERE source='configuration file';
+
+CREATE OR REPLACE VIEW pg_settings_log_current
+  AS  SELECT psl.*
+        FROM pg_settings_log psl
+   LEFT JOIN pg_settings_log psl_ref
+          ON (psl.name = psl_ref.name
+         AND psl.recorded_ts < psl_ref.recorded_ts)
+       WHERE psl_ref.name IS NULL;
+
+CREATE OR REPLACE FUNCTION pg_settings_logger()
+  RETURNS BOOLEAN
+  LANGUAGE plpgsql
+AS $$
+DECLARE
+  changed BOOLEAN := FALSE;
+  settings_rec RECORD;
+BEGIN
+  FOR settings_rec IN
+    WITH pg_settings_log_current AS (
+      SELECT *
+        FROM pg_settings_log_current
+    ORDER BY name
+    )
+    SELECT 'UPDATE' AS op,
+           ps.name,
+           ps.setting,
+           ps.unit,
+           ps.sourcefile,
+           ps.sourceline
+      FROM pg_settings ps
+INNER JOIN pg_settings_log_current psl ON (psl.name=ps.name AND psl.setting != ps.setting)
+     WHERE ps.source ='configuration file'
+        UNION 
+    SELECT 'INSERT' AS op,
+           ps.name,
+           ps.setting,
+           ps.unit,
+           ps.sourcefile,
+           ps.sourceline
+      FROM pg_settings ps 
+     WHERE ps.source ='configuration file'
+       AND NOT EXISTS (SELECT NULL
+                         FROM pg_settings_log_current psl 
+                        WHERE psl.name = ps.name
+                      )
+        UNION
+    SELECT 'DELETE' AS op,
+           psl.name,
+           psl.setting,
+           psl.unit,
+           psl.sourcefile,
+           psl.sourceline
+      FROM pg_settings_log_current psl
+     WHERE EXISTS (SELECT NULL 
+                         FROM pg_settings ps
+                        WHERE ps.name = psl.name
+                          AND ps.source ='default'
+                      )
+       AND psl.op != 'DELETE'
+
+    LOOP 
+      INSERT INTO pg_settings_log
+                 (name,
+                  setting,
+                  unit,
+                  sourcefile,
+                  sourceline,
+                  op,
+                  recorded_ts
+                 )
+           VALUES(settings_rec.name,
+                  settings_rec.setting,
+                  settings_rec.unit,
+                  settings_rec.sourcefile,
+                  settings_rec.sourceline,
+                  settings_rec.op,
+                  CURRENT_TIMESTAMP
+                 );
+      changed = TRUE;
+    END LOOP;
+    RETURN changed;
+  END;
+$$;
+
+REVOKE ALL ON pg_settings_log FROM public;
+REVOKE ALL ON pg_settings_log_current FROM public;
+REVOKE ALL ON FUNCTION pg_settings_logger() FROM public;
+
+
+
+创建config_log extension
+
+pg93@db-172-16-3-33-> psql
+psql (9.3beta2)
+Type "help" for help.
+digoal=# create extension config_log;
+digoal=# select * from pg_settings_log;
+              name              |                                                 setting                                           
+       | unit |                       sourcefile                        | sourceline |   op   |          recorded_ts          
+--------------------------------+---------------------------------------------------------------------------------------------------
+-------+------+---------------------------------------------------------+------------+--------+-------------------------------
+ archive_command                | test ! -f /pgdata/digoal/1921/data03/pg93/pg_arch/%f && cp %p /pgdata/digoal/1921/data03/pg93/pg_a
+rch/%f |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        194 | INSERT | 2013-08-06 15:02:46.371767+08
+ archive_mode                   | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        192 | INSERT | 2013-08-06 15:02:46.371767+08
+ autovacuum                     | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        451 | INSERT | 2013-08-06 15:02:46.371767+08
+ bgwriter_delay                 | 10                                                                                                
+       | ms   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        148 | INSERT | 2013-08-06 15:02:46.371767+08
+ checkpoint_segments            | 32                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        185 | INSERT | 2013-08-06 15:02:46.371767+08
+ DateStyle                      | ISO, MDY                                                                                          
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        501 | INSERT | 2013-08-06 15:02:46.371767+08
+ default_text_search_config     | pg_catalog.english                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        523 | INSERT | 2013-08-06 15:02:46.371767+08
+ effective_cache_size           | 16384000                                                                                          
+       | 8kB  | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        270 | INSERT | 2013-08-06 15:02:46.371767+08
+ hot_standby                    | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        228 | INSERT | 2013-08-06 15:02:46.371767+08
+ hot_standby_feedback           | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        238 | INSERT | 2013-08-06 15:02:46.371767+08
+ lc_messages                    | C                                                                                                 
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        516 | INSERT | 2013-08-06 15:02:46.371767+08
+ lc_monetary                    | C                                                                                                 
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        518 | INSERT | 2013-08-06 15:02:46.371767+08
+ lc_numeric                     | C                                                                                                 
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        519 | INSERT | 2013-08-06 15:02:46.371767+08
+ lc_time                        | C                                                                                                 
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        520 | INSERT | 2013-08-06 15:02:46.371767+08
+ listen_addresses               | 0.0.0.0                                                                                           
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |         59 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_autovacuum_min_duration    | 0                                                                                                 
+       | ms   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        453 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_checkpoints                | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        390 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_connections                | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        391 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_destination                | csvlog                                                                                            
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        298 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_directory                  | pg_log                                                                                            
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        310 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_disconnections             | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        392 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_error_verbosity            | verbose                                                                                           
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        394 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_file_mode                  | 0600                                                                                              
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        314 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_filename                   | postgresql-%Y-%m-%d_%H%M%S.log                                                                    
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        312 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_lock_waits                 | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        416 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_rotation_age               | 1440                                                                                              
+       | min  | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        324 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_rotation_size              | 10240                                                                                             
+       | kB   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        326 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_statement                  | ddl                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        417 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_timezone                   | PRC                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        421 | INSERT | 2013-08-06 15:02:46.371767+08
+ log_truncate_on_rotation       | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        316 | INSERT | 2013-08-06 15:02:46.371767+08
+ logging_collector              | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        304 | INSERT | 2013-08-06 15:02:46.371767+08
+ maintenance_work_mem           | 524288                                                                                            
+       | kB   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        124 | INSERT | 2013-08-06 15:02:46.371767+08
+ max_connections                | 100                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |         64 | INSERT | 2013-08-06 15:02:46.371767+08
+ max_standby_archive_delay      | 300000                                                                                            
+       | ms   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        230 | INSERT | 2013-08-06 15:02:46.371767+08
+ max_standby_streaming_delay    | 300000                                                                                            
+       | ms   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        233 | INSERT | 2013-08-06 15:02:46.371767+08
+ max_wal_senders                | 32                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        210 | INSERT | 2013-08-06 15:02:46.371767+08
+ pg_stat_statements.max         | 1000                                                                                              
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        592 | INSERT | 2013-08-06 15:02:46.371767+08
+ pg_stat_statements.track       | all                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        593 | INSERT | 2013-08-06 15:02:46.371767+08
+ port                           | 1999                                                                                              
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |         63 | INSERT | 2013-08-06 15:02:46.371767+08
+ random_page_cost               | 1.5                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        266 | INSERT | 2013-08-06 15:02:46.371767+08
+ shared_buffers                 | 131072                                                                                            
+       | 8kB  | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        114 | INSERT | 2013-08-06 15:02:46.371767+08
+ shared_preload_libraries       | pg_stat_statements                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        136 | INSERT | 2013-08-06 15:02:46.371767+08
+ superuser_reserved_connections | 3                                                                                                 
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |         67 | INSERT | 2013-08-06 15:02:46.371767+08
+ synchronous_commit             | off                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | INSERT | 2013-08-06 15:02:46.371767+08
+ TimeZone                       | PRC                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        503 | INSERT | 2013-08-06 15:02:46.371767+08
+ unix_socket_directories        | .                                                                                                 
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |         68 | INSERT | 2013-08-06 15:02:46.371767+08
+ unix_socket_permissions        | 0700                                                                                              
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |         71 | INSERT | 2013-08-06 15:02:46.371767+08
+ vacuum_cost_delay              | 10                                                                                                
+       | ms   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        140 | INSERT | 2013-08-06 15:02:46.371767+08
+ vacuum_cost_limit              | 10000                                                                                             
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        144 | INSERT | 2013-08-06 15:02:46.371767+08
+ wal_buffers                    | 1024                                                                                              
+       | 16kB | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        176 | INSERT | 2013-08-06 15:02:46.371767+08
+ wal_keep_segments              | 128                                                                                               
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        212 | INSERT | 2013-08-06 15:02:46.371767+08
+ wal_level                      | hot_standby                                                                                       
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        163 | INSERT | 2013-08-06 15:02:46.371767+08
+ wal_receiver_status_interval   | 1                                                                                                 
+       | s    | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        236 | INSERT | 2013-08-06 15:02:46.371767+08
+ wal_sync_method                | fdatasync                                                                                         
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        168 | INSERT | 2013-08-06 15:02:46.371767+08
+ wal_writer_delay               | 10                                                                                                
+       | ms   | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        178 | INSERT | 2013-08-06 15:02:46.371767+08
+(55 rows)
+
+
+修改参数 : 
+
+vi postgresql.conf
+synchronous_commit = on
+pg_ctl reload
+
+
+
+再次查询无变化, 记录变化需手工执行pg_settings_logger
+
+digoal=# select pg_settings_logger();
+ pg_settings_logger 
+--------------------
+ t
+(1 row)
+
+
+返回true, 表示参数有变化, 并且将变化记录到pg_settings_log
+
+ synchronous_commit             | on                                                                                                
+       |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | UPDATE | 2013-08-06 15:07:12.703068+08
+(56 rows)
+
+
+
+如果要启动background process, 必须配置shared_preload_libraries, 重启数据库.
+
+vi postgresql.conf
+shared_preload_libraries = 'pg_stat_statements,config_log'  
+#如果config_log不是使用的默认数据库, 那么需要配置如下参数. 就如上面在digoal库中创建的extension. 需要配置如下 : 
+config_log.database = 'digoal'
+config_log.schema   = 'public'
+
+
+重启数据库 : 
+pg_ctl restart
+
+pg93@db-172-16-3-33-> LOG:  00000: loaded library "pg_stat_statements"
+LOCATION:  load_libraries, miscinit.c:1296
+LOG:  00000: registering background worker: config_log
+LOCATION:  RegisterBackgroundWorker, postmaster.c:5168
+LOG:  00000: loaded library "config_log"
+LOCATION:  load_libraries, miscinit.c:1296
+
+
+
+修改postgresql.conf, reload. 即可看到config_log记录这些变化.
+
+2013-08-06 15:28:49.632 CST,,,26364,,5200a532.66fc,11,,2013-08-06 15:26:42 CST,,0,LOG,00000,"received SIGHUP, reloading configuration files",,,,,,,,"SIGHUP_handler, postmaster.c:2282",""
+2013-08-06 15:28:49.633 CST,,,26364,,5200a532.66fc,12,,2013-08-06 15:26:42 CST,,0,LOG,00000,"parameter ""synchronous_commit"" changed to ""on""",,,,,,,,"ProcessConfigFile, guc-file.l:318",""
+2013-08-06 15:28:49.634 CST,,,26364,,5200a532.66fc,13,,2013-08-06 15:26:42 CST,,0,LOG,00000,"worker process: config_log (PID 26432) exited with exit code 0",,,,,,,,"LogChildExit, postmaster.c:3211",""
+2013-08-06 15:28:49.634 CST,,,26364,,5200a532.66fc,14,,2013-08-06 15:26:42 CST,,0,LOG,00000,"starting background worker process ""config_log""",,,,,,,,"start_bgworker, postmaster.c:5572",""
+2013-08-06 15:28:49.640 CST,,,26447,,5200a5b1.674f,1,,2013-08-06 15:28:49 CST,2/0,0,LOG,00000,"config_log: initialized, database objects validated",,,,,,,,"log_info, config_log.c:95",""
+2013-08-06 15:28:49.646 CST,,,26447,,5200a5b1.674f,2,,2013-08-06 15:28:49 CST,2/12,5866970,LOG,00000,"config_log: pg_settings_logger() executed",,,,,,,,"log_info, config_log.c:95",""
+2013-08-06 15:28:49.646 CST,,,26447,,5200a5b1.674f,3,,2013-08-06 15:28:49 CST,2/12,5866970,LOG,00000,"config_log: Configuration changes recorded",,,,,,,,"log_info, config_log.c:95",""
+
+
+
+digoal=# select * from pg_settings_log where name='synchronous_commit' order by recorded_ts;
+        name        | setting | unit |                       sourcefile                        | sourceline |   op   |          reco
+rded_ts          
+--------------------+---------+------+---------------------------------------------------------+------------+--------+--------------
+-----------------
+ synchronous_commit | off     |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | INSERT | 2013-08-06 15
+:02:46.371767+08
+ synchronous_commit | on      |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | UPDATE | 2013-08-06 15
+:07:12.703068+08
+ synchronous_commit | off     |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | UPDATE | 2013-08-06 15
+:09:16.467896+08
+ synchronous_commit | on      |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | UPDATE | 2013-08-06 15
+:11:17.994152+08
+ synchronous_commit | on      |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | DELETE | 2013-08-06 15
+:28:06.707209+08
+ synchronous_commit | off     |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | UPDATE | 2013-08-06 15
+:28:26.758408+08
+ synchronous_commit | on      |      | /pgdata/digoal/1921/data03/pg93/pg_root/postgresql.conf |        166 | UPDATE | 2013-08-06 15
+:28:49.640548+08
+(7 rows)
+
+
+
+[参考]
+1. http://pgxn.org/dist/config_log/0.1.6/
+2. http://sql-info.de/postgresql/notes/logging-changes-to-postgresql-conf.html
+3. http://sql-info.de/postgresql/notes/custom-background-worker-bgw-practical-example.html
+4. https://github.com/ibarwick/config_log

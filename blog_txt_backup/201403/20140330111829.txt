@@ -1,0 +1,327 @@
+PostgreSQL research
+
+PostgreSQL 58P01 error after use "alter table alter column" extened varchar(n) to varchar
+
+2014-03-30 11:18:29   查看原文>>
+
+前几天francs维护数据库的时候碰到的一个问题, 在对单表执行完一批将varchar(n)类型扩展为varchar类型后出现查询表报filenode不存在的错误.
+PostgreSQL 9.2.4版本, 表大概有几十个类型, 头尾为定长INT类型, 中间大量的varchar(n), 没有not null约束.
+已有几十万数据, 某些被修改数据类型的字段上有索引.
+执行的操作, 将所有的varchar(n)字段改为varchar, alter table .. alter column .. type varchar;
+执行完操作后, 和这个表相关的所有查询都会报58P01错误, 来自以下代码 : 
+src/backend/storage/smgr/md.c
+
+/*
+ *      mdopen() -- Open the specified relation.
+ *
+ * Note we only open the first segment, when there are multiple segments.
+ *
+ * If first segment is not present, either ereport or return NULL according
+ * to "behavior".  We treat EXTENSION_CREATE the same as EXTENSION_FAIL;
+ * EXTENSION_CREATE means it's OK to extend an existing relation, not to
+ * invent one out of whole cloth.
+ */
+static MdfdVec *
+mdopen(SMgrRelation reln, ForkNumber forknum, ExtensionBehavior behavior)
+{
+        MdfdVec    *mdfd;
+        char       *path;
+        File            fd;
+
+        /* No work if already open */
+        if (reln->md_fd[forknum])
+                return reln->md_fd[forknum];
+
+        path = relpath(reln->smgr_rnode, forknum);
+
+        fd = PathNameOpenFile(path, O_RDWR | PG_BINARY, 0600);
+
+        if (fd < 0)
+        {
+                /*
+                 * During bootstrap, there are cases where a system relation will be
+                 * accessed (by internal backend processes) before the bootstrap
+                 * script nominally creates it.  Therefore, accept mdopen() as a
+                 * substitute for mdcreate() in bootstrap mode only. (See mdcreate)
+                 */
+                if (IsBootstrapProcessingMode())
+                        fd = PathNameOpenFile(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, 0600);
+                if (fd < 0)
+                {
+                        if (behavior == EXTENSION_RETURN_NULL &&
+                                FILE_POSSIBLY_DELETED(errno))
+                        {
+                                pfree(path);
+                                return NULL;
+                        }
+                        ereport(ERROR,
+                                        (errcode_for_file_access(),
+                                         errmsg("could not open file \"%s\": %m", path)));
+                }
+        }
+
+        pfree(path);
+
+        reln->md_fd[forknum] = mdfd = _fdvec_alloc();
+
+        mdfd->mdfd_vfd = fd;
+        mdfd->mdfd_segno = 0;
+        mdfd->mdfd_chain = NULL;
+        Assert(_mdnblocks(reln, forknum, mdfd) <= ((BlockNumber) RELSEG_SIZE));
+
+        return mdfd;
+}
+
+
+错误内容中包含了path也就是filenode. 使用以下SQL查询报错输出的filenode是对应的哪个对象.
+
+select relname from pg_class where pg_relation_filepath(oid)='$filenode';
+
+
+经过查询, 全部来自索引. 即使查询走的全表扫描, 也会报错误, 原因是执行计划需要检索对应的索引.
+也就是说, 执行完扩展字段的SQL后, 索引对应的filenode丢失了. 
+模拟无法重现这个问题 : 
+
+digoal=# create table tbl(id int, c1 varchar(100), c2 varchar(125), c3 int);
+CREATE TABLE
+digoal=# insert into tbl select id,md5(random()::text),md5(random()::text),id from generate_series(1,100000) g(id);
+INSERT 0 100000
+digoal=# create index idx_tbl_c1 on tbl(c1);
+CREATE INDEX
+digoal=# create index idx_tbl_c2 on tbl(c2);
+CREATE INDEX
+digoal=# select ctid,oid,relname,pg_relation_filepath(oid) from pg_class where relname ~ 'tbl';
+  ctid  |  oid  |  relname   | pg_relation_filepath 
+--------+-------+------------+----------------------
+ (7,19) | 16580 | tbl        | base/16384/16580
+ (7,21) | 16583 | idx_tbl_c1 | base/16384/16583
+ (7,22) | 16584 | idx_tbl_c2 | base/16384/16584
+(3 rows)
+
+
+目前的文件状态和MD5值 : 
+
+pg92@db-172-16-3-150-> stat base/16384/16580*
+  File: `base/16384/16580'
+  Size: 10928128        Blocks: 21344      IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7602950     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:06.933356375 +0800
+Modify: 2014-03-30 10:38:10.689356211 +0800
+Change: 2014-03-30 10:38:10.689356211 +0800
+  File: `base/16384/16580_fsm'
+  Size: 24576           Blocks: 48         IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7603424     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:09.879356210 +0800
+Modify: 2014-03-30 10:38:09.879356210 +0800
+Change: 2014-03-30 10:38:09.879356210 +0800
+
+pg92@db-172-16-3-150-> stat base/16384/16583*
+  File: `base/16384/16583'
+  Size: 5931008         Blocks: 11584      IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7603422     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:12.801355874 +0800
+Modify: 2014-03-30 10:38:13.391356209 +0800
+Change: 2014-03-30 10:38:13.391356209 +0800
+
+pg92@db-172-16-3-150-> stat base/16384/16584*
+  File: `base/16384/16584'
+  Size: 5931008         Blocks: 11584      IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7603425     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:15.074356263 +0800
+Modify: 2014-03-30 10:38:15.660356207 +0800
+Change: 2014-03-30 10:38:15.660356207 +0800
+
+pg92@db-172-16-3-150-> md5sum base/16384/16580*
+99aeb973031392efeff705cd28548b26  base/16384/16580
+86a4cae1a14f8636c77119f9f2a0c14d  base/16384/16580_fsm
+pg92@db-172-16-3-150-> md5sum base/16384/16583*
+bdf3bf9070a1cac51ac103148e024877  base/16384/16583
+pg92@db-172-16-3-150-> md5sum base/16384/16584*
+65de4b56e07f5b7f8df190d88be6ed57  base/16384/16584
+
+
+扩展数据类型 : 
+
+digoal=# alter table tbl alter COLUMN c1 type varchar;
+ALTER TABLE
+digoal=# alter table tbl alter COLUMN c2 type varchar;
+ALTER TABLE
+digoal=# select ctid,oid,relname,pg_relation_filepath(oid) from pg_class where relname ~ 'tbl';
+  ctid  |  oid  |  relname   | pg_relation_filepath 
+--------+-------+------------+----------------------
+ (7,23) | 16587 | idx_tbl_c1 | base/16384/16583
+ (7,26) | 16580 | tbl        | base/16384/16580
+ (7,28) | 16591 | idx_tbl_c2 | base/16384/16584
+(3 rows)
+
+
+扩展后对应的文件状态和MD5值, 包括inode都没有发生变化.
+
+pg92@db-172-16-3-150-> stat base/16384/16580*
+  File: `base/16384/16580'
+  Size: 10928128        Blocks: 21344      IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7602950     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:06.933356375 +0800
+Modify: 2014-03-30 10:38:10.689356211 +0800
+Change: 2014-03-30 10:38:10.689356211 +0800
+  File: `base/16384/16580_fsm'
+  Size: 24576           Blocks: 48         IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7603424     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:09.879356210 +0800
+Modify: 2014-03-30 10:38:09.879356210 +0800
+Change: 2014-03-30 10:38:09.879356210 +0800
+
+pg92@db-172-16-3-150-> stat base/16384/16583*
+  File: `base/16384/16583'
+  Size: 5931008         Blocks: 11584      IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7603422     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:12.801355874 +0800
+Modify: 2014-03-30 10:38:13.391356209 +0800
+Change: 2014-03-30 10:38:13.391356209 +0800
+
+pg92@db-172-16-3-150-> stat base/16384/16584*
+  File: `base/16384/16584'
+  Size: 5931008         Blocks: 11584      IO Block: 4096   regular file
+Device: 801h/2049d      Inode: 7603425     Links: 1
+Access: (0600/-rw-------)  Uid: (  504/    pg92)   Gid: (  506/    pg92)
+Access: 2014-03-30 10:38:15.074356263 +0800
+Modify: 2014-03-30 10:38:15.660356207 +0800
+Change: 2014-03-30 10:38:15.660356207 +0800
+
+pg92@db-172-16-3-150-> md5sum base/16384/16580*
+99aeb973031392efeff705cd28548b26  base/16384/16580
+86a4cae1a14f8636c77119f9f2a0c14d  base/16384/16580_fsm
+pg92@db-172-16-3-150-> md5sum base/16384/16583*
+bdf3bf9070a1cac51ac103148e024877  base/16384/16583
+pg92@db-172-16-3-150-> md5sum base/16384/16584*
+65de4b56e07f5b7f8df190d88be6ed57  base/16384/16584
+
+
+因为9.2, 变长字符串扩展为不限长度字符串不需要rewrite table, 所以不会涉及到表和索引的重组.
+模拟删除对应的索引文件 : 
+
+pg92@db-172-16-3-150-> cd $PGDATA
+pg92@db-172-16-3-150-> rm -f base/16384/16583*
+pg92@db-172-16-3-150-> rm -f base/16384/16584*
+digoal=# \set VERBOSITY verbose
+digoal=# select * from tbl where c1='8b8d7a70bd8922c9ba91621b8f0835e4';
+ERROR:  58P01: could not open file "base/16384/16583": No such file or directory
+LOCATION:  mdopen, md.c:579
+digoal=# select * from tbl limit 1;
+ERROR:  58P01: could not open file "base/16384/16583": No such file or directory
+LOCATION:  mdopen, md.c:579
+digoal=# explain select * from tbl limit 1;
+ERROR:  58P01: could not open file "base/16384/16583": No such file or directory
+LOCATION:  mdopen, md.c:579
+
+
+这个问题重建索引解决 : 
+
+digoal=# reindex table tbl;
+REINDEX
+digoal=# explain select * from tbl limit 1;
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Limit  (cost=0.00..0.02 rows=1 width=444)
+   ->  Seq Scan on tbl  (cost=0.00..2334.00 rows=100000 width=444)
+(2 rows)
+
+
+注意, 如果此时shared buffer中仍旧有缓存, 并且当前会话已经打开了对应的文件描述符的话, 可能不会报错.
+
+digoal=# explain select * from tbl where c1='8b8d7a70bd8922c9ba91621b8f0835e4';
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Bitmap Heap Scan on tbl  (cost=20.15..1002.35 rows=500 width=444)
+   Recheck Cond: ((c1)::text = '8b8d7a70bd8922c9ba91621b8f0835e4'::text)
+   ->  Bitmap Index Scan on idx_tbl_c1  (cost=0.00..20.03 rows=500 width=0)
+         Index Cond: ((c1)::text = '8b8d7a70bd8922c9ba91621b8f0835e4'::text)
+(4 rows)
+digoal=# select * from tbl where c1='8b8d7a70bd8922c9ba91621b8f0835e4';
+ id  |                c1                |                c2                | c3  
+-----+----------------------------------+----------------------------------+-----
+ 116 | 8b8d7a70bd8922c9ba91621b8f0835e4 | bb65b13ece4cc14f599e987eec29f1b7 | 116
+(1 row)
+digoal=# select ctid,oid,relname,pg_relation_filepath(oid) from pg_class where relname ~ 'tbl';
+  ctid  |  oid  |  relname   | pg_relation_filepath 
+--------+-------+------------+----------------------
+ (7,35) | 16597 | idx_tbl_id | base/16384/16665
+ (7,58) | 16648 | idx_tbl_c2 | base/16384/16666
+ (7,59) | 16658 | idx_tbl_c1 | base/16384/16667
+ (7,76) | 16580 | tbl        | base/16384/16659
+(4 rows)
+
+
+删除c1列对应的索引文件 : 
+
+pg92@db-172-16-3-150-> rm -f base/16384/16667*
+
+
+在当前会话继续使用这个索引查询没有问题, 
+
+digoal=# select * from tbl where c1='8b8d7a70bd8922c9ba91621b8f0835e4';
+ id  |                c1                |                c2                | c3  
+-----+----------------------------------+----------------------------------+-----
+ 116 | 8b8d7a70bd8922c9ba91621b8f0835e4 | bb65b13ece4cc14f599e987eec29f1b7 | 116
+(1 row)
+digoal=# select * from tbl limit 2;
+ id  |                c1                |                c2                | c3  
+-----+----------------------------------+----------------------------------+-----
+ 116 | 8b8d7a70bd8922c9ba91621b8f0835e4 | bb65b13ece4cc14f599e987eec29f1b7 | 116
+  14 | 026ff05e958bb893bfc022ce02d33541 | 7bf7b06ddbe8adfc0bf44fa249439a9a |  14
+(2 rows)
+digoal=# explain analyze select * from tbl where c1='026ff05e958bb893bfc022ce02d33541';
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on tbl  (cost=20.15..1002.35 rows=500 width=444) (actual time=0.085..0.086 rows=1 loops=1)
+   Recheck Cond: ((c1)::text = '026ff05e958bb893bfc022ce02d33541'::text)
+   ->  Bitmap Index Scan on idx_tbl_c1  (cost=0.00..20.03 rows=500 width=0) (actual time=0.078..0.078 rows=1 loops=1)
+         Index Cond: ((c1)::text = '026ff05e958bb893bfc022ce02d33541'::text)
+ Total runtime: 0.125 ms
+(5 rows)
+digoal=# select * from tbl where c1='026ff05e958bb893bfc022ce02d33541';
+ id |                c1                |                c2                | c3 
+----+----------------------------------+----------------------------------+----
+ 14 | 026ff05e958bb893bfc022ce02d33541 | 7bf7b06ddbe8adfc0bf44fa249439a9a | 14
+(1 row)
+digoal=# select * from tbl where id=10000;
+  id   |                c1                |                c2                |  c3   
+-------+----------------------------------+----------------------------------+-------
+ 10000 | c351b1744a2894eec33b37f349957bd8 | 912bd453ba95cc75e472433ae7666792 | 10000
+(1 row)
+digoal=# select * from tbl where c1='c351b1744a2894eec33b37f349957bd8';
+  id   |                c1                |                c2                |  c3   
+-------+----------------------------------+----------------------------------+-------
+ 10000 | c351b1744a2894eec33b37f349957bd8 | 912bd453ba95cc75e472433ae7666792 | 10000
+(1 row)
+digoal=# explain analyze select * from tbl where c1='c351b1744a2894eec33b37f349957bd8';
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on tbl  (cost=20.15..1002.35 rows=500 width=444) (actual time=0.032..0.032 rows=1 loops=1)
+   Recheck Cond: ((c1)::text = 'c351b1744a2894eec33b37f349957bd8'::text)
+   ->  Bitmap Index Scan on idx_tbl_c1  (cost=0.00..20.03 rows=500 width=0) (actual time=0.028..0.028 rows=1 loops=1)
+         Index Cond: ((c1)::text = 'c351b1744a2894eec33b37f349957bd8'::text)
+ Total runtime: 0.062 ms
+(5 rows)
+
+
+但是, 退出会话, 重进就报错了, 因为退出会话时, 这个索引对应的文件描述符关闭了 : 
+
+digoal=# \q
+pg92@db-172-16-3-150-> 
+pg92@db-172-16-3-150-> psql
+psql (9.2.4)
+Type "help" for help.
+digoal=# explain analyze select * from tbl where c1='c351b1744a2894eec33b37f349957bd8';
+ERROR:  could not open file "base/16384/16667": No such file or directory
+
+
+
+为什么索引文件会丢失, 原因还不明.

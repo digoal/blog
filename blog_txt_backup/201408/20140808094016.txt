@@ -1,0 +1,123 @@
+PostgreSQL research
+
+GlusterFS cann't active in oVirt because gluster's brick directory & subd's permission problem not vdsm.kvm 755
+
+2014-08-08 9:40:16   查看原文>>
+
+今天在ovirt中使用glusterfs时, 发现一点问题, gfs deactive后就无法激活了, 查看日志.
+
+/var/log/ovirt-engine/engine.log
+2014-08-08 08:26:09,087 ERROR [org.ovirt.engine.core.bll.storage.GLUSTERFSStorageHelper] (org.ovirt.thread.pool-6-thread-50) [d59bd20] The connection with details 172.16.3.150:/gfs1 failed because of error code 469 and error message is: permission settings on the specified path do not allow access to the storage.
+verify permission settings on the specified storage path.
+2014-08-08 08:26:09,091 ERROR [org.ovirt.engine.core.bll.storage.ConnectStorageToVdsCommand] (org.ovirt.thread.pool-6-thread-50) [d59bd20] Transaction rolled-back for command: org.ovirt.engine.core.bll.storage.ConnectStorageToVdsCommand.
+2014-08-08 08:26:09,092 INFO  [org.ovirt.engine.core.vdsbroker.irsbroker.ActivateStorageDomainVDSCommand] (org.ovirt.thread.pool-6-thread-46) [2edf4d01] START, ActivateStorageDomainVDSCommand( storagePoolId = 00000002-0002-0002-0002-0000000000ec, ignoreFailoverLimit = false, storageDomainId = 8f6f0ec3-2183-48cd-9ec4-aface2540629), log id: 3a874700
+2014-08-08 08:26:09,179 ERROR [org.ovirt.engine.core.vdsbroker.irsbroker.ActivateStorageDomainVDSCommand] (org.ovirt.thread.pool-6-thread-46) [2edf4d01] Failed in ActivateStorageDomainVDS method
+2014-08-08 08:26:09,180 ERROR [org.ovirt.engine.core.vdsbroker.irsbroker.IrsBrokerCommand] (org.ovirt.thread.pool-6-thread-46) [2edf4d01] IrsBroker::Failed::ActivateStorageDomainVDS due to: IRSErrorException: IRSGenericException: IRSErrorException: Failed to ActivateStorageDomainVDS, error = Storage domain does not exist: ('8f6f0ec3-2183-48cd-9ec4-aface2540629',), code = 358
+
+
+问题出在权限上面.
+查看brick的目录权限, 两个brick节点的权限都变成了root:root. 600.
+drw-------  4 root root       4096 Aug  6 17:03 gfs_b1
+而oVirt要求的目录是vdsm:kvm的, 不管是NFS还是GlusterFS. 都需要这样的owner和group.
+查看 http://wiki.ovirt.org/Features/GlusterFS_Storage_Domain
+指出, 使用GlusterFS, 必须修改volume的权限.
+
+Important Pre-requisites
+
+If the GlusterFS volume is created using oVirt's GlusterFS GUI, then don't forget to click on "Optimize for virt. store" which helps set the right permissions and enables the optimum GlusterFS translators for virtualization usecase
+If the GlusterFS volume was created manually, then ensure the below options are set on the volume, so that its accessible from oVirt
+volume set <volname> storage.owner-uid=36
+volume set <volname> storage.owner-gid=36
+The below settings/options of GlusterFS volume must also be enabled for it to be able to work as a oVirt storage domain. Currently its not possible to set these from oVirt GlusterFS GUI
+option rpc-auth-allow-insecure on ==> in glusterd.vol (ensure u restart glusterd service... for this to take effect)
+volume set <volname> server.allow-insecure on ==> (ensure u stop and start the volume.. for this to take effect)
+Other packages that are needed on the hypervisor host (aka VDSM host) are...
+Needs minm libvirt version 1.0.1 (which has the gluster protocol/network disk support)
+Needs qemu version 1.3 (which has the gluster block backend support)
+Needs vdsm-gluster plugin, which pulls in all the related requirements (glusterfs, etc)
+
+
+修改gid, uid和server.allow-insecure.
+
+[root@40 data01]# id vdsm
+uid=36(vdsm) gid=36(kvm) groups=36(kvm),179(sanlock),107(qemu)
+
+[root@150 data01]# gluster
+gluster> volume set gfs1 server.allow-insecure on
+gluster> volume set gfs1 storage.owner-uid 36
+volume set: success
+gluster> volume set gfs1 storage.owner-gid 36
+volume set: success
+
+gluster> volume info
+ 未修改的卷:
+Volume Name: sv1
+Type: Stripe
+Volume ID: eb236299-8344-4dde-bc51-36ad34594511
+Status: Started
+Number of Bricks: 1 x 2 = 2
+Transport-type: tcp
+Bricks:
+Brick1: 172.16.3.150:/data01/gfs2
+Brick2: 172.16.3.40:/data01/gfs2
+ 修改过的卷:
+Volume Name: gfs1
+Type: Replicate
+Volume ID: 1318eb16-6984-4ee3-baa0-c13cd26424ae
+Status: Started
+Number of Bricks: 1 x 2 = 2
+Transport-type: tcp
+Bricks:
+Brick1: 172.16.3.150:/data01/gfs_b1
+Brick2: 172.16.3.40:/data01/gfs_b1
+Options Reconfigured:
+server.allow-insecure: on
+storage.owner-gid: 36
+storage.owner-uid: 36
+
+gluster> volume status gfs1 detail
+Status of volume: gfs1
+------------------------------------------------------------------------------
+Brick                : Brick 172.16.3.150:/data01/gfs_b1
+Port                 : 49152               
+Online               : Y                   
+Pid                  : 2116                
+File System          : ext4                
+Device               : /dev/sdb1           
+Mount Options        : rw,noatime,nodiratime,nobarrier
+Inode Size           : 256                 
+Disk Space Free      : 173.9GB             
+Total Disk Space     : 182.8GB             
+Inode Count          : 12173312            
+Free Inodes          : 12173067            
+------------------------------------------------------------------------------
+Brick                : Brick 172.16.3.40:/data01/gfs_b1
+Port                 : 49152               
+Online               : Y                   
+Pid                  : 6246                
+File System          : ext4                
+Device               : /dev/mapper/360026b902fd4120014d4569d05d0d581
+Mount Options        : rw,noatime,nodiratime,nobarrier
+Inode Size           : 256                 
+Disk Space Free      : 131.8GB             
+Total Disk Space     : 134.0GB             
+Inode Count          : 8921088             
+Free Inodes          : 8920953
+
+
+
+修改所有 brick 目录的mod
+
+on 40 exec # chmod -R 755 /data01/gfs_b1
+on 150 exec # chmod -R 755 /data01/gfs_b1
+
+
+
+现在可以正常的激活GlusterFS domain了.
+
+[参考]
+1. http://blog.gluster.org/category/glusterfs-openstack-cinder/
+2. http://wiki.ovirt.org/Features/GlusterFS_Storage_Domain
+3. http://www.middleswarth.net/2012/07/04/installing-ovirt-3-1-and-glusterfs-using-either-nfs-or-posix-native-file-system/
+
+Flag Counter

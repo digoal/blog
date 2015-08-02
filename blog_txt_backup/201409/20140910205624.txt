@@ -1,0 +1,1141 @@
+PostgreSQL research
+
+PostgreSQL HA manual with shared disk use RHCS - 2
+
+2014-09-10 20:56:24   查看原文>>
+
+(续)
+http://blog.163.com/digoal@126/blog/static/163877040201481085344535/
+应朋友要求, 写一篇RHCS利用共享存储的PostgreSQL HA部署手册 : 
+PostgreSQL windows域认证以及在vmware vSphere中的HA部署请参考 : 
+http://blog.163.com/digoal@126/blog/static/1638770402014824551899/
+http://blog.163.com/digoal@126/blog/static/163877040201481805519157/
+
+接下来需要配置逻辑卷:
+如果集群文件系统基于逻辑卷的话, 那么需要配置lvm.conf, 配置锁的类型
+https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Cluster_Administration/ap-ha-halvm-CA.html
+
+修改lvm锁类型, 2台主机都需要修改.
+
+# vi /etc/lvm/lvm.conf
+locking_type = 3
+
+
+
+2台主机都启动clvmd服务. (必须在cman启动后才能启动clvmd, 大多数依赖集群的服务都需要先启动cman后启动, 如果要关闭cman服务, 也需要先关闭依赖cman的服务, 例如clvmd, rgmanager)
+
+# chkconfig clvmd on
+# service clvmd start
+
+
+
+在任意节点, 创建pv
+
+[root@172_16_13_204 ~]# pvcreate /dev/mapper/e06_eva_vd3
+  Physical volume "/dev/mapper/e06_eva_vd3" successfully created
+[root@172_16_13_204 ~]# pvcreate /dev/mapper/e06_eva_vd4
+  Physical volume "/dev/mapper/e06_eva_vd4" successfully created
+
+
+
+在任意节点创建集群卷组.
+
+# vgcreate
+        [-c|--clustered {y|n}] 
+# vgcreate -cy shared_vg /dev/mapper/e06_eva_vd3 /dev/mapper/e06_eva_vd4
+
+
+
+在其他节点扫描pv和vg
+
+[root@172_16_13_204 ~]# pvs
+  PV                      VG        Fmt  Attr PSize   PFree  
+  /dev/mapper/e06_eva_vd3 shared_vg lvm2 a--  350.00g 350.00g
+  /dev/mapper/e06_eva_vd4 shared_vg lvm2 a--  350.00g 350.00g
+[root@172_16_13_204 ~]# vgs
+  VG        #PV #LV #SN Attr   VSize   VFree  
+  shared_vg   2   0   0 wz--nc 699.99g 699.99g
+
+
+
+在任意节点创建逻辑卷
+
+[root@172_16_13_203 ~]# lvcreate -L 100G -n lv01 shared_vg
+  Logical volume "lv01" created
+[root@172_16_13_203 ~]# lvs
+  LV   VG        Attr       LSize   Pool Origin Data%  Move Log Cpy%Sync Convert
+  lv01 shared_vg -wi-a----- 100.00g   
+
+
+
+在任意节点创建集群文件系统, 如果要多个节点同时mount一个文件系统的话, 需要多个journal区域.
+本例集群中只有2台主机, 所以只需要使用2个journal区域.
+在格式化文件系统的时候需要设置好.
+
+[root@172_16_13_203 ~]# mkfs.gfs2 -p lock_dlm -t yumpg001:lv01 -j 2 /dev/mapper/shared_vg-lv01 
+This will destroy any data on /dev/mapper/shared_vg-lv01.
+It appears to contain: symbolic link to `../dm-2'
+
+Are you sure you want to proceed? [y/n] y
+
+Device:                    /dev/mapper/shared_vg-lv01
+Blocksize:                 4096
+Device Size                100.00 GB (26214400 blocks)
+Filesystem Size:           100.00 GB (26214398 blocks)
+Journals:                  2
+Resource Groups:           400
+Locking Protocol:          "lock_dlm"
+Lock Table:                "yumpg001:lv01"
+UUID:                      7c1531b1-e1e5-b746-a2ec-c1244bbb51eb
+
+
+
+加载文件系统
+
+[root@172_16_13_204 ~]# mkdir /data01
+[root@172_16_13_204 ~]# mount.gfs2 -o lockproto=lock_dlm /dev/mapper/shared_vg-lv01 /data01
+/dev/mapper/shared_vg-lv01 on /data01 type gfs2 (rw,relatime,lockproto=lock_dlm,hostdata=jid=0)
+
+[root@172_16_13_203 ~]# mkdir /data01
+[root@172_16_13_203 ~]# mount.gfs2 -o lockproto=lock_dlm /dev/mapper/shared_vg-lv01 /data01
+/dev/mapper/shared_vg-lv01 on /data01 type gfs2 (rw,relatime,lockproto=lock_dlm,hostdata=jid=1)
+
+
+
+接下来要把文件系统卸载掉
+
+[root@172_16_13_204 ~]# umount /data01
+
+
+因为多个节点都要使用这个共享存储, 所以可以把它作为全局资源, 添加到独立的service, 并且设置为启动cman时自动启动.
+
+当然不自动启动也没有问题. 可以和VIP的资源放一起, 跟随指定的service一起启动.
+查看系统支持的资源和对应的配置选项.
+
+[root@172_16_13_203 ~]# ccs -f /etc/cluster/cluster.conf --lsresourceopts
+service - Defines a service (resource group).
+ASEHAagent - Sybase ASE Failover Instance
+SAPDatabase - Manages any SAP database (based on Oracle, MaxDB, or DB2)
+SAPInstance - SAP instance resource agent
+apache - Defines an Apache web server
+clusterfs - Defines a cluster file system mount.
+fs - Defines a file system mount.
+ip - This is an IP address.
+lvm - LVM Failover script
+mysql - Defines a MySQL database server
+named - Defines an instance of named server
+netfs - Defines an NFS/CIFS file system mount.
+nfsclient - Defines an NFS client.
+nfsexport - This defines an NFS export.
+nfsserver - This defines an NFS server resource.
+openldap - Defines an Open LDAP server
+oracledb - Oracle 10g/11g Failover Instance
+orainstance - Oracle 10g Failover Instance
+oralistener - Oracle 10g Listener Instance
+postgres-8 - Defines a PostgreSQL server
+samba - Dynamic smbd/nmbd resource agent
+script - LSB-compliant init script as a clustered resource.
+tomcat-6 - Defines a Tomcat server
+vm - Defines a Virtual Machine
+
+[root@172_16_13_203 ~]# ccs -f /etc/cluster/cluster.conf --lsresourceopts lvm
+lvm - LVM Failover script
+  Required Options:
+    name: Name
+    vg_name: Volume group name
+  Optional Options:
+    lv_name: Logical Volume name (optional).
+    self_fence: Fence the node if it is not able to clean up LVM tags
+    nfslock: Enable NFS lock workarounds
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+[root@172_16_13_204 ~]# ccs -f /etc/cluster/cluster.conf --lsresourceopts fs
+fs - Defines a file system mount.
+  Required Options:
+    name: File System Name
+    mountpoint: Mount Point
+    device: Device or Label
+  Optional Options:
+    fstype: File system type
+    force_unmount: Force Unmount
+    quick_status: Quick/brief status checks.
+    self_fence: Seppuku Unmount
+    nfslock: Enable NFS lock workarounds
+    nfsrestart: Enable NFS daemon and lockd workaround
+    fsid: NFS File system ID
+    force_fsck: Force fsck support
+    options: Mount Options
+    use_findmnt: Utilize findmnt to detect if and where filesystems are mounted
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+
+
+把2个节点的服务停了再开始配置/etc/cluster/cluster.conf
+
+# clusvcadmin -d yumpg001_pg
+# service rgmanager stop
+# service clvmd stop
+# service cman stop
+
+
+
+把LVM添加进资源, GFS2文件系统添加进资源.
+
+[root@172_16_13_203 cluster]# ccs -f /etc/cluster/cluster.conf --addresource lvm name=lvm vg_name=shared_vg lv_name=lv01
+[root@172_16_13_203 cluster]# ccs -f /etc/cluster/cluster.conf --addresource fs name="fs" mountpoint="/data01" device="/dev/mapper/shared_vg-lv01" options="lockproto=lock_dlm"
+
+
+
+把这两个资源添加到yumpg001_pg服务中.
+
+[root@172_16_13_203 cluster]# ccs -f /etc/cluster/cluster.conf --addsubservice yumpg001_pg lvm ref="LVM"
+[root@172_16_13_203 cluster]# ccs -f /etc/cluster/cluster.conf --addsubservice yumpg001_pg fs ref="FS"
+[root@172_16_13_203 cluster]# vi /etc/cluster/cluster.conf 
+<cluster config_version="26" name="yumpg001">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="172.16.13.203" nodeid="1">
+      <fence>
+        <method name="ILO">
+          <device action="reboot" name="fence_203"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="172.16.13.204" nodeid="2">
+      <fence>
+        <method name="ILO">
+          <device action="reboot" name="fence_204"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman expected_votes="1" two_node="1"/>
+  <fencedevices>
+    <fencedevice agent="fence_ilo" ipaddr="172.16.12.12" login="2010" name="fence_203" passwd="2010"/>
+    <fencedevice agent="fence_ilo" ipaddr="172.16.12.13" login="2010" name="fence_204" passwd="2010"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains>
+      <failoverdomain name="yumpg001_fd" nofailback="1" ordered="1" restricted="1">
+        <failoverdomainnode name="172.16.13.203" priority="1"/>
+        <failoverdomainnode name="172.16.13.204" priority="1"/>
+      </failoverdomain>
+    </failoverdomains>
+    <resources>
+      <ip address="172.16.13.156" monitor_link="1"/>
+      <lvm lv_name="lv01" name="LVM" vg_name="shared_vg"/>
+      <fs device="/dev/mapper/shared_vg-lv01" mountpoint="/data01" name="FS" options="lockproto=lock_dlm"/>
+    </resources>
+    <service autostart="0" domain="yumpg001_fd" name="yumpg001_pg">
+      <ip ref="172.16.13.156"/>
+      <lvm ref="LVM"/>
+      <fs ref="FS"/>
+    </service>
+  </rm>
+  <logging/>
+</cluster>
+
+
+把生成的/etc/cluster/cluster.conf内容拷贝到另一台服务器.
+
+同时启动两台主机的cman服务.
+
+[root@172_16_13_203 cluster]# service cman start
+Starting cluster: 
+   Checking if cluster has been disabled at boot... [  OK  ]
+   Checking Network Manager... [  OK  ]
+   Global setup... [  OK  ]
+   Loading kernel modules... [  OK  ]
+   Mounting configfs... [  OK  ]
+   Starting cman... [  OK  ]
+   Waiting for quorum... [  OK  ]
+   Starting fenced... [  OK  ]
+   Starting dlm_controld... [  OK  ]
+   Tuning DLM kernel config... [  OK  ]
+   Starting gfs_controld... [  OK  ]
+   Unfencing self... [  OK  ]
+   Joining fence domain... [  OK  ]
+[root@172_16_13_204 ~]# service cman start
+Starting cluster: 
+   Checking if cluster has been disabled at boot... [  OK  ]
+   Checking Network Manager... [  OK  ]
+   Global setup... [  OK  ]
+   Loading kernel modules... [  OK  ]
+   Mounting configfs... [  OK  ]
+   Starting cman... [  OK  ]
+   Waiting for quorum... [  OK  ]
+   Starting fenced... [  OK  ]
+   Starting dlm_controld... [  OK  ]
+   Tuning DLM kernel config... [  OK  ]
+   Starting gfs_controld... [  OK  ]
+   Unfencing self... [  OK  ]
+   Joining fence domain... [  OK  ]
+
+[root@172_16_13_204 ~]# clustat
+Cluster Status for yumpg001 @ Wed May 28 19:49:04 2014
+Member Status: Quorate
+
+ Member Name                                                     ID   Status
+ ------ ----                                                     ---- ------
+ 172.16.13.203                                                     1 Online
+ 172.16.13.204                                                     2 Online, Local
+
+
+启动clvmd, rgmanager服务.
+
+
+[root@172_16_13_203 cluster]# service clvmd start
+Starting clvmd: 
+Activating VG(s):   1 logical volume(s) in volume group "shared_vg" now active
+[  OK  ]
+
+[root@172_16_13_203 cluster]# service rgmanager start
+Starting Cluster Service Manager: [  OK  ]
+
+[root@172_16_13_204 ~]# service clvmd start
+Starting clvmd: 
+Activating VG(s):   1 logical volume(s) in volume group "shared_vg" now active
+  clvmd not running on node 172.16.13.203
+[  OK  ]
+
+[root@172_16_13_204 ~]# service rgmanager start
+Starting Cluster Service Manager: [  OK  ]
+
+
+
+启动yumpg001_pg服务, 会自动加载文件系统.
+
+
+[root@172_16_13_203 cluster]# clusvcadm -e yumpg001_pg
+Local machine trying to enable service:yumpg001_pg...Success
+service:yumpg001_pg is now running on 172.16.13.203
+[root@172_16_13_203 cluster]# df -h
+Filesystem                  Size  Used Avail Use% Mounted on
+/dev/sda1                    32G  1.7G   29G   6% /
+tmpfs                        12G   32M   12G   1% /dev/shm
+/dev/sda3                    96G  206M   91G   1% /opt
+/dev/mapper/shared_vg-lv01  100G  259M  100G   1% /data01
+
+
+
+关闭服务, 会自动卸载配置在服务中的文件系统.
+
+[root@172_16_13_203 cluster]# clusvcadm -d yumpg001_pg
+Local machine disabling service:yumpg001_pg...Success
+[root@172_16_13_203 cluster]# df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        32G  1.7G   29G   6% /
+tmpfs            12G   26M   12G   1% /dev/shm
+/dev/sda3        96G  206M   91G   1% /opt
+
+
+
+接下来需要安装数据库软件, 在2台主机各自安装PostgreSQL 9.3.5软件.
+软件请安装在本地目录中, 不要安装在集群文件系统中.
+
+[root@172_16_13_204 ~]# useradd postgres
+[root@172_16_13_203 cluster]# useradd postgres
+[root@172_16_13_203 cluster]# cd /opt
+[root@172_16_13_203 opt]# mkdir soft_bak
+cd soft_bak
+wget http://ftp.postgresql.org/pub/source/v9.3.5/postgresql-9.3.5.tar.bz2
+tar -jxvf postgresql-9.3.5.tar.bz2
+cd postgresql-9.3.5
+yum -y install lrzsz sysstat e4fsprogs ntp readline-devel zlib zlib-devel openssl openssl-devel pam-devel libxml2-devel libxslt-devel python-devel tcl-devel gcc make smartmontools flex bison perl perl-devel perl-ExtUtils* OpenIPMI-tools openldap*
+
+./configure --prefix=/opt/pgsql9.3.5 --with-pgport=1921 --with-perl --with-tcl --with-python --with-openssl --with-pam --with-ldap --with-libxml --with-libxslt --enable-thread-safety && gmake world && gmake install-world
+ln -s /opt/pgsql9.3.5 /opt/pgsql
+
+
+
+安装完后, 启动集群服务, 挂载共享存储, 在任意节点初始化数据库到共享存储.
+
+node A,B:
+service cman start
+
+node A,B:
+service clvmd start
+service rgmanager start
+
+node A:
+clusvcadmin -e yumpg001_pg
+
+
+
+在启动了yumpg001_pg服务的节点初始化数据库: 
+
+[root@172_16_13_204 postgresql-9.3.5]# df -h
+Filesystem                  Size  Used Avail Use% Mounted on
+/dev/sda1                    32G  1.7G   29G   6% /
+tmpfs                        12G   32M   12G   1% /dev/shm
+/dev/sda3                    96G  413M   90G   1% /opt
+/dev/mapper/shared_vg-lv01  100G  259M  100G   1% /data01
+
+[root@172_16_13_204 postgresql-9.3.5]# mkdir /data01/pgdata
+
+[root@172_16_13_204 postgresql-9.3.5]# chown postgres:postgres /data01/pgdata
+
+
+
+配置2个节点的postgres用户的.bash_profile
+
+# vi /home/postgres/.bash_profile
+# add by digoal
+export PS1="$USER@`/bin/hostname -s`-> "
+export PGPORT=1921
+export PGDATA=/data01/pgdata/pg_root
+export LANG=en_US.utf8
+export PGHOME=/opt/pgsql
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+export PGUSER=postgres
+export PGHOST=$PGDATA
+export PGDATABASE=postgres
+alias rm='rm -i'
+alias ll='ls -lh'
+
+
+
+在启动了yumpg001_pg服务的节点初始化数据库, 数据目录使用共享存储.
+
+su - postgres
+postgres@172_16_13_204-> initdb -D $PGDATA -E UTF8 --locale=C -U postgres -W
+
+
+
+配置pg_hba.conf, postgresql.conf
+
+postgres@172_16_13_204-> cd $PGDATA
+vi postgresql.conf
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+max_connections = 1000                  # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directories = '.'   # comma-separated list of directories
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+password_encryption = on
+tcp_keepalives_idle = 60                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 10            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 10               # TCP_KEEPCNT;
+shared_buffers = 2048MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+shared_preload_libraries = 'pg_stat_statements,auto_explain'            # (change requires restart)
+vacuum_cost_delay = 10                  # 0-100 milliseconds
+vacuum_cost_limit = 10000               # 1-10000 credits
+bgwriter_delay = 10ms                   # 10-10000ms between rounds
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # synchronization level;
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+wal_writer_delay = 10ms         # 1-10000 milliseconds
+checkpoint_segments = 128               # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = 'DIR=/data05/pgdata/pg_tbs/pg_arch/`date +%F`; test ! -d $DIR && mkdir $DIR; test ! -f $DIR/%f && cp %p $DIR/%f'           # command to use to archive a logfile segment
+max_wal_senders = 32            # max number of walsender processes
+wal_keep_segments = 512         # in logfile segments, 16MB each; 0 disables
+hot_standby = on                # "on" allows queries during recovery
+max_standby_archive_delay = 300s        # max delay before canceling queries
+max_standby_streaming_delay = 300s      # max delay before canceling queries
+wal_receiver_status_interval = 1s       # send replies at least this often
+hot_standby_feedback = on               # send info from standby to prevent
+effective_cache_size = 24000MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = '/data05/pgdata/pg_tbs/pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_min_duration_statement = 1s # -1 is disabled, 0 logs all statements
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_lock_waits = on                     # log lock waits >= deadlock_timeout
+log_statement = 'ddl'                   # none, ddl, mod, all
+log_timezone = 'PRC'
+track_activity_query_size = 2048        # (change requires restart)
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+pg_stat_statements.max = 1000
+pg_stat_statements.track = all
+pg_stat_statements.save = on
+auto_explain.log_min_duration = 1s
+auto_explain.log_analyze = on
+auto_explain.log_verbose = on
+auto_explain.log_buffers = on
+auto_explain.log_timing = on
+auto_explain.log_nested_statements = on
+
+vi pg_hba.conf
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+host all all 0.0.0.0/0 md5
+host replication postgres 0.0.0.0/0 md5
+
+
+
+在当前节点启动数据库, 并创建extension, 以及表空间.
+
+pg_ctl start
+psql postgres postgres
+create extension pg_stat_statements;
+create tablespace tbs_def location '/data03/pgdata/pg_tbs/tbs_def';
+create tablespace tbs_tmp1 location '/data03/pgdata/pg_tbs/tbs_tmp1';
+create tablespace tbs1 location '/data03/pgdata/pg_tbs/tbs1';
+create tablespace tbs2 location '/data04/pgdata/pg_tbs/tbs2';
+grant all on tablespace tbs_def to public;
+grant all on tablespace tbs_tmp1 to public;
+
+
+
+关闭数据库
+
+pg_ctl stop -m fast
+
+
+配置自动切换数据库脚本
+如果要把脚本作为资源的话, 需要的配置如下 : 
+注意脚本的调用规格必须和LSB兼容, 例如test.sh start|stop|restart|status|reload
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts script
+script - LSB-compliant init script as a clustered resource.
+  Required Options:
+    name: Name
+    file: Path to script
+  Optional Options:
+    service_name: Inherit the service name.
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+
+
+编写启动数据库的脚本, 遵循LSB.
+
+vi /usr/local/bin/pgctl.sh
+
+#!/bin/bash
+
+# environment.
+# Get the aliases and functions
+if [ -f ~/.bashrc ]; then
+        . ~/.bashrc
+fi
+
+# User specific environment and startup programs
+
+export PGHOME=/opt/pgsql
+export PATH=$PGHOME/bin:$PATH
+export PGDATA=/data01/pgdata/pg_root
+export PGPORT=1921
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+
+
+start() {
+su - postgres -c "$PGHOME/bin/pg_ctl start"
+return 0
+}
+
+stop() {
+su - postgres -c "$PGHOME/bin/pg_ctl stop -m fast"
+return 0 
+}
+
+reload() {
+su - postgres -c "$PGHOME/bin/pg_ctl reload"
+return 0
+}
+
+status() {
+su - postgres -c "$PGHOME/bin/pg_ctl status"  # 如果需要更加详细的检测, 可以修改此处代码, 例如加入SQL的检测
+return $?
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        exit $?
+        ;;
+  stop)
+        stop
+        exit $?
+        ;;
+  restart)
+        stop
+        start
+        exit $?
+        ;;
+  reload)
+        reload
+        exit $?
+        ;;
+  status)
+        status
+        exit $?
+        ;;
+  *)
+        echo $"Usage: $prog {start|stop|restart|reload|status}"
+        exit 0
+esac
+
+chmod 500 /usr/local/bin/pgctl.sh
+
+
+
+将脚本添加到/etc/cluster/cluster.conf
+
+[root@172_16_13_203 ~]# ccs -f /etc/cluster/cluster.conf --addresource script name=pgctl file=/usr/local/bin/pgctl.sh
+[root@172_16_13_203 ~]# ccs -f /etc/cluster/cluster.conf --addsubservice yumpg001_pg script ref=pgctl
+
+[root@172_16_13_203 ~]# ccs -f /etc/cluster/cluster.conf --lsservices
+service: name=yumpg001_pg, domain=yumpg001_fd, autostart=0
+  ip: ref=172.16.13.156
+  lvm: ref=LVM
+  fs: ref=FS
+  script: ref=pgctl
+resources: 
+  ip: monitor_link=1, address=172.16.13.156
+  lvm: name=LVM, vg_name=shared_vg, lv_name=lv01
+  fs: name=FS, device=/dev/mapper/shared_vg-lv01, mountpoint=/data01, options=lockproto=lock_dlm
+  script: name=pgctl, file=/usr/local/bin/pgctl.sh
+
+
+注意这里的subservice的顺序, 启动数据库前必须先启动FS, 如果顺序不对, 必须调整一下, 直接编辑/etc/cluster/cluster.conf即可. 
+编辑后记得加版本号和同步, 重启集群.
+
+同步/etc/cluster/cluster.conf, 即两台主机的配置文件内容保持一致.
+
+[root@172_16_13_203 ~]# cat /etc/cluster/cluster.conf 
+<cluster config_version="32" name="yumpg001">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="172.16.13.203" nodeid="1">
+      <fence>
+        <method name="ILO">
+          <device action="reboot" name="fence_203"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="172.16.13.204" nodeid="2">
+      <fence>
+        <method name="ILO">
+          <device action="reboot" name="fence_204"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman expected_votes="1" two_node="1"/>
+  <fencedevices>
+    <fencedevice agent="fence_ilo" ipaddr="172.16.12.12" login="2010" name="fence_203" passwd="2010"/>
+    <fencedevice agent="fence_ilo" ipaddr="172.16.12.13" login="2010" name="fence_204" passwd="2010"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains>
+      <failoverdomain name="yumpg001_fd" nofailback="1" ordered="1" restricted="1">
+        <failoverdomainnode name="172.16.13.203" priority="1"/>
+        <failoverdomainnode name="172.16.13.204" priority="1"/>
+      </failoverdomain>
+    </failoverdomains>
+    <resources>
+      <ip address="172.16.13.156" monitor_link="1"/>
+      <lvm lv_name="lv01" name="LVM" vg_name="shared_vg"/>
+      <fs device="/dev/mapper/shared_vg-lv01" mountpoint="/data01" name="FS" options="lockproto=lock_dlm"/>
+      <script file="/usr/local/bin/pgctl.sh" name="pgctl"/>
+    </resources>
+    <service autostart="0" domain="yumpg001_fd" name="yumpg001_pg">
+      <ip ref="172.16.13.156"/>
+      <lvm ref="LVM"/>
+      <fs ref="FS"/>
+      <script ref="pgctl"/>
+    </service>
+  </rm>
+  <logging/>
+</cluster>
+
+
+
+重启集群的2个节点服务
+
+node A,B : 
+# clusvcadm -d yumpg001_pg
+# service clvmd stop
+# service rgmanager stop
+# service cman stop
+
+node A,B : 
+# service cman start
+node A,B : 
+# service clvmd start
+# service rgmanager start
+
+
+在任意节点启动集群服务.
+
+node A :
+# clusvcadm -e yumpg001_pg
+
+[root@172_16_13_203 ~]# clustat
+Cluster Status for yumpg001 @ Wed May 28 21:51:19 2014
+Member Status: Quorate
+
+ Member Name                                                     ID   Status
+ ------ ----                                                     ---- ------
+ 172.16.13.203                                                     1 Online, Local, rgmanager
+ 172.16.13.204                                                     2 Online, rgmanager
+
+ Service Name                                             Owner (Last)                                             State         
+ ------- ----                                             ----- ------                                             -----         
+ service:yumpg001_pg                                       172.16.13.203                                          started       
+
+
+
+查看服务所在节点的日志, 我们看到LSB模式的脚本status是用来检测服务状态的, 30秒检查一次.
+
+[root@172_16_13_203 ~]# tail -f -n 1 /var/log/messages 
+May 28 21:51:11 172_16_13_203 rgmanager[13987]: Service service:yumpg001_pg started
+May 28 21:51:45 172_16_13_203 rgmanager[15614]: [script] Executing /usr/local/bin/pgctl.sh status
+May 28 21:52:15 172_16_13_203 rgmanager[15985]: [script] Executing /usr/local/bin/pgctl.sh status
+May 28 21:52:45 172_16_13_203 rgmanager[16408]: [script] Executing /usr/local/bin/pgctl.sh status
+
+
+
+关闭数据库, 因为脚本定义的status返回异常, 自动恢复.
+
+$ pg_ctl stop -m fast
+
+May 28 21:59:45 172_16_13_203 rgmanager[20418]: [script] script:pgctl: status of /usr/local/bin/pgctl.sh failed (returned 3)
+May 28 21:59:45 172_16_13_203 rgmanager[13987]: status on script "pgctl" returned 1 (generic error)
+May 28 21:59:45 172_16_13_203 rgmanager[13987]: Stopping service service:yumpg001_pg
+May 28 21:59:46 172_16_13_203 rgmanager[20459]: [script] Executing /usr/local/bin/pgctl.sh stop
+May 28 21:59:46 172_16_13_203 rgmanager[20541]: [ip] Removing IPv4 address 172.16.13.156/24 from eth0
+May 28 21:59:56 172_16_13_203 rgmanager[20600]: [fs] unmounting /data01
+May 28 21:59:56 172_16_13_203 multipathd: dm-2: remove map (uevent)
+May 28 21:59:56 172_16_13_203 multipathd: dm-2: devmap not registered, can't remove
+May 28 21:59:56 172_16_13_203 multipathd: dm-2: remove map (uevent)
+May 28 21:59:56 172_16_13_203 multipathd: dm-2: devmap not registered, can't remove
+May 28 21:59:56 172_16_13_203 rgmanager[13987]: Service service:yumpg001_pg is recovering
+May 28 21:59:56 172_16_13_203 rgmanager[13987]: Recovering failed service service:yumpg001_pg
+May 28 21:59:57 172_16_13_203 rgmanager[20744]: [fs] mounting /dev/dm-2 on /data01
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=: Trying to join cluster "lock_dlm", "yumpg001:lv01"
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=yumpg001:lv01.0: Joined cluster. Now mounting FS...
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=yumpg001:lv01.0: jid=0, already locked for use
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=yumpg001:lv01.0: jid=0: Looking at journal...
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=yumpg001:lv01.0: jid=0: Done
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=yumpg001:lv01.0: jid=1: Trying to acquire journal lock...
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=yumpg001:lv01.0: jid=1: Looking at journal...
+May 28 21:59:57 172_16_13_203 kernel: GFS2: fsid=yumpg001:lv01.0: jid=1: Done
+May 28 21:59:57 172_16_13_203 rgmanager[20853]: [ip] Adding IPv4 address 172.16.13.156/24 to eth0
+May 28 22:00:01 172_16_13_203 rgmanager[20936]: [script] Executing /usr/local/bin/pgctl.sh start
+May 28 22:00:01 172_16_13_203 rgmanager[13987]: Service service:yumpg001_pg started
+
+
+
+断开IP, 自动切换到另一台主机
+
+[root@172_16_13_203 ~]# ifdown eth0
+
+May 28 22:03:32 172_16_13_204 corosync[31497]:   [TOTEM ] A processor failed, forming new configuration.
+May 28 22:03:34 172_16_13_204 corosync[31497]:   [QUORUM] Members[1]: 2
+May 28 22:03:34 172_16_13_204 corosync[31497]:   [TOTEM ] A processor joined or left the membership and a new membership was formed.
+May 28 22:03:34 172_16_13_204 corosync[31497]:   [CPG   ] chosen downlist: sender r(0) ip(172.16.13.204) ; members(old:2 left:1)
+May 28 22:03:34 172_16_13_204 corosync[31497]:   [MAIN  ] Completed service synchronization, ready to provide service.
+May 28 22:03:34 172_16_13_204 rgmanager[31785]: State change: 172.16.13.203 DOWN
+May 28 22:03:35 172_16_13_204 kernel: dlm: closing connection to node 1
+May 28 22:03:40 172_16_13_204 fenced[31552]: fencing node 172.16.13.203
+May 28 22:03:53 172_16_13_204 fenced[31552]: fence 172.16.13.203 success
+May 28 22:03:54 172_16_13_204 rgmanager[31785]: Taking over service service:yumpg001_pg from down member 172.16.13.203
+May 28 22:03:57 172_16_13_204 rgmanager[973]: [fs] mounting /dev/dm-2 on /data01
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=: Trying to join cluster "lock_dlm", "yumpg001:lv01"
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=yumpg001:lv01.0: Joined cluster. Now mounting FS...
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=yumpg001:lv01.0: jid=0, already locked for use
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=yumpg001:lv01.0: jid=0: Looking at journal...
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=yumpg001:lv01.0: jid=0: Done
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=yumpg001:lv01.0: jid=1: Trying to acquire journal lock...
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=yumpg001:lv01.0: jid=1: Looking at journal...
+May 28 22:03:58 172_16_13_204 kernel: GFS2: fsid=yumpg001:lv01.0: jid=1: Done
+May 28 22:03:58 172_16_13_204 rgmanager[1082]: [ip] Adding IPv4 address 172.16.13.156/24 to eth0
+May 28 22:04:01 172_16_13_204 rgmanager[1176]: [script] Executing /usr/local/bin/pgctl.sh start
+May 28 22:04:01 172_16_13_204 rgmanager[31785]: Service service:yumpg001_pg started
+
+
+
+[建议]
+1. 不建议将lvm , gfs的加载放到HA服务中来启动.
+   建议lvm和gfs放在启动cman和clvmd后, 手工挂载. 
+   所以rhcs管理的服务中只需要包含VIP和pg启动脚本即可.
+
+2. 修改资源的检测间隔.
+参考
+https://fedorahosted.org/cluster/wiki/ResourceActions
+或/etc/cluster/cluster.conf
+例如把pgctl.sh的资源检测时间改成10秒一次.
+
+# vi /etc/cluster/cluster.conf 
+<cluster config_version="36" name="yumpg001">
+...
+    <resources>
+      <ip address="192.168.173.156" monitor_link="1"/>
+      <lvm lv_name="lv01" name="LVM" vg_name="shared_vg"/>
+      <fs device="/dev/mapper/shared_vg-lv01" mountpoint="/data01" name="FS" options="lockproto=lock_dlm"/>
+      <script file="/usr/local/bin/pgctl.sh" name="pgctl">
+        <action name="status" interval="10"/>
+      </script>
+    </resources>
+...
+
+
+同步cluster.conf, 重启集群后, 生效.
+
+[root@192_168_173_204 ~]# tail -f -n 1 /var/log/messages 
+May 29 09:00:39 192_168_173_204 rgmanager[32323]: Service service:yumpg001_pg started
+May 29 09:00:55 192_168_173_204 rgmanager[1317]: [script] Executing /usr/local/bin/pgctl.sh status
+May 29 09:01:06 192_168_173_204 rgmanager[1550]: [script] Executing /usr/local/bin/pgctl.sh status
+May 29 09:01:25 192_168_173_204 rgmanager[1755]: [script] Executing /usr/local/bin/pgctl.sh status
+May 29 09:01:35 192_168_173_204 rgmanager[1875]: [script] Executing /usr/local/bin/pgctl.sh status
+May 29 09:01:46 192_168_173_204 rgmanager[2136]: [script] Executing /usr/local/bin/pgctl.sh status
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/1638770402014428985260/
+2. https://access.redhat.com/site/articles/40051
+3. https://fedorahosted.org/cluster/wiki/ResourceActions
+4. https://access.redhat.com/site/documentation/en-US/
+5. https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Cluster_Administration/index.html
+6. https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Cluster_Administration/ap-ha-halvm-CA.html
+7. man ccs
+8. man ipmitool
+9. man cluster.conf
+10. man mkfs.gfs2
+11. man mount.gfs2
+12. 查看操作系统支持的fence设备和对应的配置项.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsfenceopts
+fence_apc - Fence agent for APC over telnet/ssh
+fence_apc_snmp - Fence agent for APC over SNMP
+fence_bladecenter - Fence agent for IBM BladeCenter
+fence_bladecenter_snmp - Fence agent for IBM BladeCenter over SNMP
+fence_brocade - Fence agent for Brocade over telnet
+fence_cisco_mds - Fence agent for Cisco MDS
+fence_cisco_ucs - Fence agent for Cisco UCS
+fence_drac - fencing agent for Dell Remote Access Card
+fence_drac5 - Fence agent for Dell DRAC CMC/5
+fence_eaton_snmp - Fence agent for Eaton over SNMP
+fence_egenera - I/O Fencing agent for the Egenera BladeFrame
+fence_eps - Fence agent for ePowerSwitch
+fence_hpblade - Fence agent for HP BladeSystem
+fence_ibmblade - Fence agent for IBM BladeCenter over SNMP
+fence_idrac - Fence agent for IPMI over LAN
+fence_ifmib - Fence agent for IF MIB
+fence_ilo - Fence agent for HP iLO
+fence_ilo2 - Fence agent for HP iLO
+fence_ilo3 - Fence agent for IPMI over LAN
+fence_ilo4 - Fence agent for IPMI over LAN
+fence_ilo_mp - Fence agent for HP iLO MP
+fence_imm - Fence agent for IPMI over LAN
+fence_intelmodular - Fence agent for Intel Modular
+fence_ipdu - Fence agent for iPDU over SNMP
+fence_ipmilan - Fence agent for IPMI over LAN
+fence_kdump - Fence agent for use with kdump
+fence_pcmk - Helper that presents a RHCS-style interface to stonith-ng for CMAN based clusters
+fence_rhevm - Fence agent for RHEV-M REST API
+fence_rsa - Fence agent for IBM RSA
+fence_rsb - I/O Fencing agent for Fujitsu-Siemens RSB
+fence_sanbox2 - Fence agent for QLogic SANBox2 FC switches
+fence_sanlock - Fence agent for watchdog and shared storage
+fence_scsi - fence agent for SCSI-3 persistent reservations
+fence_virsh - Fence agent for virsh
+fence_virt - Fence agent for virtual machines
+fence_vmware - Fence agent for VMWare
+fence_vmware_soap - Fence agent for VMWare over SOAP API
+fence_wti - Fence agent for WTI
+fence_xvm - Fence agent for virtual machines
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsfenceopts fence_ipmilan
+fence_ipmilan - Fence agent for IPMI over LAN
+  Required Options:
+  Optional Options:
+    option: No description available
+    auth: IPMI Lan Auth type (md5, password, or none)
+    ipaddr: IPMI Lan IP to talk to
+    passwd: Password (if required) to control power on IPMI device
+    passwd_script: Script to retrieve password (if required)
+    lanplus: Use Lanplus to improve security of connection
+    login: Username/Login (if required) to control power on IPMI device
+    action: Operation to perform. Valid operations: on, off, reboot, status, list, diag, monitor or metadata
+    timeout: Timeout (sec) for IPMI operation
+    cipher: Ciphersuite to use (same as ipmitool -C parameter)
+    method: Method to fence (onoff or cycle)
+    power_wait: Wait X seconds after on/off operation
+    delay: Wait X seconds before fencing is started
+    privlvl: Privilege level on IPMI device
+    verbose: Verbose mode
+
+
+
+13. failover域属性
+
+A failover domain is  a named subset of cluster nodes  that are eligible to run a cluster service in the
+event of a node failure.  A failover domain can have the following characteristics :
+Unrestricted — Allows  you to specify that a subset of members  are preferred,  but that a cluster
+service as signed to this  domain can run on any available member.
+Restricted — Allows  you to restrict the members  that can run a particular cluster service.  If none of
+the members  in a restricted failover domain are available,  the cluster service cannot be started
+(either manually or by the cluster software).
+Unordered — When a clus ter s ervice is  as signed to an unordered failover domain,  the member on
+which the cluster service runs  is  chosen from the available failover domain members  with no priority
+ordering.
+Ordered — Allows  you to specify a preference order among the members  of a failover domain.  The
+member at the top of the list is  the most preferred,  followed by the second member in the list,  and so
+on.
+Failback — Allows  you to specify whether a s ervice in the failover domain should fail back to the node
+that it was  originally running on before that node failed.  Configuring this  characteristic is  useful in
+circumstances  where a node repeatedly fails  and is  part of an ordered failover domain.  In that
+circumstance,  if a node is  the preferred node in a failover domain,  it is  possible for a service to fail
+over and fail back repeatedly between the preferred node and another node,  causing severe impact
+on performance.
+
+
+
+14. 操作系统支持的资源, 以及资源对应的配置选项.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts
+service - Defines a service (resource group).
+ASEHAagent - Sybase ASE Failover Instance
+SAPDatabase - Manages any SAP database (based on Oracle, MaxDB, or DB2)
+SAPInstance - SAP instance resource agent
+apache - Defines an Apache web server
+clusterfs - Defines a cluster file system mount.
+fs - Defines a file system mount.
+ip - This is an IP address.
+lvm - LVM Failover script
+mysql - Defines a MySQL database server
+named - Defines an instance of named server
+netfs - Defines an NFS/CIFS file system mount.
+nfsclient - Defines an NFS client.
+nfsexport - This defines an NFS export.
+nfsserver - This defines an NFS server resource.
+openldap - Defines an Open LDAP server
+oracledb - Oracle 10g/11g Failover Instance
+orainstance - Oracle 10g Failover Instance
+oralistener - Oracle 10g Listener Instance
+postgres-8 - Defines a PostgreSQL server
+samba - Dynamic smbd/nmbd resource agent
+script - LSB-compliant init script as a clustered resource.
+tomcat-6 - Defines a Tomcat server
+vm - Defines a Virtual Machine
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts ip
+ip - This is an IP address.
+  Required Options:
+    address: IP Address
+  Optional Options:
+    family: Family
+    monitor_link: Monitor NIC Link
+    nfslock: Enable NFS lock workarounds
+    sleeptime: Amount of time (seconds) to sleep.
+    disable_rdisc: Disable updating of routing using RDISC protocol
+    prefer_interface: Network interface
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts fs
+fs - Defines a file system mount.
+  Required Options:
+    name: File System Name
+    mountpoint: Mount Point
+    device: Device or Label
+  Optional Options:
+    fstype: File system type
+    force_unmount: Force Unmount
+    quick_status: Quick/brief status checks.
+    self_fence: Seppuku Unmount
+    nfslock: Enable NFS lock workarounds
+    nfsrestart: Enable NFS daemon and lockd workaround
+    fsid: NFS File system ID
+    force_fsck: Force fsck support
+    options: Mount Options
+    use_findmnt: Utilize findmnt to detect if and where filesystems are mounted
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts lvm
+lvm - LVM Failover script
+  Required Options:
+    name: Name
+    vg_name: Volume group name
+  Optional Options:
+    lv_name: Logical Volume name (optional).
+    self_fence: Fence the node if it is not able to clean up LVM tags
+    nfslock: Enable NFS lock workarounds
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+
+
+15. 服务的属性
+
+When you add a service to the clus ter configuration,  you configure the following attributes :
+autostart — Specifies  whether to autos tart the s ervice when the clus ter starts .  Use " 1"  to
+enable and " 0 "  to disable;  the default is  enabled.
+domain — Specifies  a failover domain (if required).
+exclusive — Specifies  a policy wherein the s ervice only runs  on nodes  that have no other
+services  running on them.
+recovery — Specifies  a recovery policy for the s ervice.  T he options  are to relocate,  res tart,
+disable,  or restart-disable the s ervice.  T he res tart recovery policy indicates  that the s ys tem
+should attempt to res tart the failed s ervice before trying to relocate the s ervice to another
+node.  T he relocate policy indicates  that the s ys tem s hould try to res tart the s ervice in a
+different node.  T he dis able policy indicates  that the s ys tem s hould dis able the res ource group
+if any component fails .  T he restart-disable policy indicates  that the system should attempt to
+res tart the s ervice in place if it fails ,  but if res tarting the s ervice fails  the s ervice will be
+dis abled ins tead of being moved to another hos t in the cluster.
+If you s elect Restart  or Restart - Disable  as  the recovery policy for the s ervice,  you can
+specify the maximum number of res tart failures  before relocating or dis abling the s ervice,  and
+you can s pecify the length of time in s econds  after which to forget a restart.
+
+
+
+16. 配置多播地址, 可选. 如果不配置, 多播地址从集群ID中运算出来.
+所以我们需要在同一个多播域中使用不同的集群名来区分多播地址.
+多播是用于集群中的心跳检测的.
+
+If you do not specify a multicast address  in the cluster configuration file,  the Red Hat High Availability
+Add-On software creates  one based on the cluster ID.  It generates  the lower 16 bits  of the address  and
+appends  them to the upper portion of the address  according to whether the IP protocol is  IPv4  or IPv6:
+For IPv4  — The address  formed is  239.192.  plus  the lower 16 bits  generated by Red Hat High
+Availability Add-On software.
+For IPv6 — The addres s  formed is  FF15: :  plus  the lower 16 bits  generated by Red Hat High
+Availability Add-On software.
+
+The cluster ID is  a unique identifier that cman generates  for each cluster.  To view the cluster ID,
+run the cman_tool status command on a cluster node.
+
+[root@db-192-168-10-146 ~]# cman_tool status
+Version: 6.2.0
+Config Version: 6
+Cluster Name: yumpg001
+Cluster Id: 57130
+Cluster Member: Yes
+Cluster Generation: 20
+Membership state: Cluster-Member
+Nodes: 1
+Expected votes: 1
+Total votes: 1
+Node votes: 1
+Quorum: 1  
+Active subsystems: 8
+Flags: 2node 
+Ports Bound: 0 177  
+Node name: 192.168.10.146
+Node ID: 1
+Multicast addresses: 239.192.223.10 
+Node addresses: 192.168.10.146 
+
+
+
+17. cluster配置文件有一个版本号, 每次修改配置文件后, 如果要使配置文件在重启cman后生效必须把版本号加1. 
+同时必须确保集群中的所有服务器的cluster.conf文件内容一致, 版本号一致.
+
+18. /usr/share/cluster/cluster.rng 包含了详细的cluster.conf文件的说明.
+
+19. 默认是使用多播心跳, 如果要使用单播, 请参考
+http://blog.163.com/digoal@126/blog/static/1638770402014817365719/
+
+20. 虚拟化环境的FENCE设备参考
+http://blog.163.com/digoal@126/blog/static/1638770402014817111038741/
+http://blog.163.com/digoal@126/blog/static/16387704020148169845549/
+手工确认fence结果参考
+http://blog.163.com/digoal@126/blog/static/163877040201481693725958/
+
+21. 自动启动集群, 配置一个启动脚本, 
+流程 : 
+1. 判断对方节点是否启动, 如telnet 22端口.(你可能需要改端口)
+2. 如果600秒内, 对方启动了, 那么开始启动服务
+cman
+clvmd 
+rgmanager
+加载共享存储
+如果是主节点的话, 启动集群服务.(备节点不启动服务)
+具体操作如下 : 
+
+# vi /usr/local/bin/start_cluster.sh
+
+#!/bin/bash
+PEER="10.10.10.221 22"
+SRV="yumpg001_pg"
+
+for ((i=0;i<600;i++))
+do
+  echo -e "q"|telnet -e "q" $PEER
+  if [ $? -eq 0 ]; then
+    break
+  else
+    sleep 1
+    continue
+  fi
+done
+
+sleep 15
+
+service cman start
+sleep 3
+
+service clvmd start
+sleep 3
+
+service rgmanager start
+sleep 3
+
+# mount shared disk
+mount /dev/mappver/sharedvg_lv01 /data01
+sleep 3
+
+# primary node only exec: 指定全路径, sleep 10秒后启动, 否则可能会启动失败
+# 只需要在主节点执行, 备节点不自动启动服务.(当然写上也没关系, 反正会判断是否已启动的)
+sleep 10
+/usr/sbin/clusvcadm -e $SRV
+
+# chmod 500 /usr/local/bin/start_cluster.sh 
+
+# vi /etc/rc.local
+
+su - root -c "/usr/local/bin/start_cluster.sh"
+
+
+
+Flag Counter

@@ -1,0 +1,95 @@
+PostgreSQL research
+
+PostgreSQL 9.3 will allocate shared memory use mmap(), and reduce amount usage of System V shared memory
+
+2012-07-13 9:36:09   查看原文>>
+
+PostgreSQL master 分支6月28号提交的commit中，有一个是关于修改内存指派的，在其他分支中没有这个commit，也就是说这个特性要等到9.3了。
+在以往的版本中，数据库参数文件postgresql.conf里面有一个配置shared_buffers，是指分配的共享内存大小，配置它如果超出了内核现在，数据库将无法启动，也就是说这个参数的配置还需要同时配置内核限制(kernel.shmmax)，否则将会报错。
+例如 : 
+
+[root@db-172-16-3-150 zzz]# sysctl -w kernel.shmmax=128000000
+kernel.shmmax = 128000000
+
+
+-- 将kernel.shmmax 设置为128MB .
+-- 启动PostgreSQL 9.2, 如果shared_buffers大于128MB将报错. 启动失败.
+
+pg92@db-172-16-3-150-> FATAL:  could not create shared memory segment: Invalid argument
+DETAIL:  Failed system call was shmget(key=1920001, size=297934848, 03600).
+HINT:  This error usually means that PostgreSQL's request for a shared memory segment exceeded your kernel's SHMMAX parameter.  You can either reduce the request size or reconfigure the kernel with larger SHMMAX.  To reduce the request size (currently 297934848 bytes), reduce PostgreSQL's shared memory usage, perhaps by reducing shared_buffers or max_connections.
+        If the request size is already small, it's possible that it is less than your kernel's SHMMIN parameter, in which case raising the request size or reconfiguring SHMMIN is called for.
+        The PostgreSQL documentation contains more information about shared memory configuration.
+
+
+
+启动PostgreSQL 9.3 (注意需要6月28号以后的源码), 如果shared_buffers大于128MB不会报错. 启动成功.
+
+pg93@db-172-16-3-150-> pg_ctl start -o '-c shared_buffers=256MB'
+server starting
+pg93@db-172-16-3-150-> LOG:  database system was shut down at 2012-07-13 09:25:04 CST
+LOG:  autovacuum launcher started
+LOG:  database system is ready to accept connections
+
+
+甚至可以使用更大的shared_buffers
+
+pg93@db-172-16-3-150-> pg_ctl start -o '-c shared_buffers=10240MB'
+server starting
+pg93@db-172-16-3-150-> LOG:  database system was shut down at 2012-07-13 09:35:04 CST
+LOG:  autovacuum launcher started
+LOG:  database system is ready to accept connections
+pg93@db-172-16-3-150-> psql -h 127.0.0.1 postgres postgres
+Password for user postgres: 
+psql (9.3devel)
+Type "help" for help.
+
+postgres=# show shared_buffers;
+ shared_buffers 
+----------------
+ 10GB
+(1 row)
+
+
+
+代码部分的更新详见 : 
+https://github.com/postgres/postgres/commit/b0fc0df9364d2d2d17c0162cf3b8b59f6cb09f67
+
+
+/*
+ * PGSharedMemoryCreate
+ *
+ * Create a shared memory segment of the given size and initialize its
+ * standard header.  Also, register an on_shmem_exit callback to release
+ * the storage.
+ *
+ * Dead Postgres segments are recycled if found, but we do not fail upon
+ * collision with non-Postgres shmem segments.  The idea here is to detect and
+ * re-use keys that may have been assigned by a crashed postmaster or backend.
+ *
+ * makePrivate means to always create a new segment, rather than attach to
+ * or recycle any existing segment.
+ *
+ * The port number is passed for possible use as a key (for SysV, we use
+ * it to generate the starting shmem key).      In a standalone backend,
+ * zero will be passed.
+ */
+.....略
+/*
+ * As of PostgreSQL 9.3, we normally allocate only a very small amount of
+ * System V shared memory, and only for the purposes of providing an
+ * interlock to protect the data directory.  The real shared memory block
+ * is allocated using mmap().  This works around the problem that many
+ * systems have very low limits on the amount of System V shared memory
+ * that can be allocated.  Even a limit of a few megabytes will be enough
+ * to run many copies of PostgreSQL without needing to adjust system
+ * settings.
+ *
+ * However, we disable this logic in the EXEC_BACKEND case, and fall back
+ * to the old method of allocating the entire segment using System V shared
+ * memory, because there's no way to attach an mmap'd segment to a process
+ * after exec().  Since EXEC_BACKEND is intended only for developer use,
+ * this shouldn't be a big problem.
+ */
+
+

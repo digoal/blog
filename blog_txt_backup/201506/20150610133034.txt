@@ -1,0 +1,589 @@
+PostgreSQL research
+
+阿里云RDS for PostgreSQL试用报告 - 1
+
+2015-06-10 13:30:34   查看原文>>
+
+昨天申请了5台阿里云的RDS，再加上PG群里的兄弟贡献的几台，可以用plproxy开始测试分布式了。
+申请的RDS都是最低配置的，容量5GB，内存1GB，支持100个连接，IOPS 400。
+先看看配置吧，为了提高性能，有一些参数是可以调整的，如下：
+
+postgres=> select name,substring(setting,1,10),unit from pg_settings order by category, name;
+                name                 |         substring         | unit 
+-------------------------------------+---------------------------+------
+ autovacuum                          | on                        | 
+ autovacuum_analyze_scale_factor     | 0.1                       |   
+ autovacuum_analyze_threshold        | 50                        | 
+ autovacuum_freeze_max_age           | 200000000                 | 
+ autovacuum_max_workers              | 5                         | 
+ autovacuum_multixact_freeze_max_age | 400000000                 | 
+ autovacuum_naptime                  | 60                        | s    --  值略大，容易膨胀，建议改小
+ autovacuum_vacuum_cost_delay        | 0                     | ms  -- 如果IOPS比较差，可以考虑改为10毫秒，但是注意容易导致膨胀
+ autovacuum_vacuum_cost_limit        | -1                        | 
+ autovacuum_vacuum_scale_factor      | 0.1                       |   --  值略大，可能容易膨胀，不够考虑到IOPS，就算了。
+ autovacuum_vacuum_threshold         | 50                        | 
+ client_encoding                     | UTF8                      | 
+ DateStyle                           | ISO, YMD                  | 
+ default_text_search_config          | pg_catalog                | 
+ extra_float_digits                  | 0                         | 
+ IntervalStyle                       | postgres                  | 
+ lc_collate                          | zh_CN.UTF-             |   --  个人建议LC相关的全部改为C，并且数据库初始化时也建议选C
+ lc_ctype                            | zh_CN.UTF-                | 
+ lc_messages                         | C                         | 
+ lc_monetary                         | zh_CN.UTF-                | 
+ lc_numeric                          | zh_CN.UTF-                | 
+ lc_time                             | zh_CN.UTF-                | 
+ server_encoding                     | UTF8                      | 
+ TimeZone                            | PRC                       | 
+ timezone_abbreviations              | Default                   | 
+ gin_fuzzy_search_limit              | 0                         | 
+ tcp_keepalives_count                | 9                         | 
+ tcp_keepalives_idle                 | 7200                      | s    -- 建议改小，例如60，如果有跨广域网访问的话。
+ tcp_keepalives_interval             | 75                        | s   -- 建议改小
+ local_preload_libraries             |                           | 
+ bytea_output                        | hex                       | 
+ check_function_bodies               | on                        | 
+ default_tablespace                  |                           | 
+ default_transaction_deferrable      | off                       | 
+ default_transaction_isolation       | read commi                | 
+ default_transaction_read_only       | off                       | 
+ lock_timeout                        | 0                         | ms      --  建议用户针对自己的业务，修改锁等待超时
+ search_path                         | "$user",pu                | 
+ session_replication_role            | origin                    | 
+ statement_timeout                   | 0                         | ms    --  建议用户针对自己的业务，修改语句执行超时
+ temp_tablespaces                    |                           | 
+ transaction_deferrable              | off                       | 
+ transaction_isolation               | read commi                | 
+ transaction_read_only               | off                       | 
+ vacuum_freeze_min_age               | 50000000                  | 
+ vacuum_freeze_table_age             | 150000000                 | 
+ vacuum_multixact_freeze_min_age     | 5000000                   | 
+ vacuum_multixact_freeze_table_age   | 150000000                 | 
+ xmlbinary                           | base64                    | 
+ xmloption                           | content                   | 
+ bonjour                             | off                       | 
+ bonjour_name                        |                           | 
+ listen_addresses                    | *                         | 
+ max_connections                     | 100                       | 
+ port            | 3009             |   --  这是数据库的监听端口，和RDS提供的端口不一样，说明RDS用了中间件或端口代理
+ superuser_reserved_connections      | 10               |   -- 为超级用户保留的连接，阿里云管理RDS用的，超级用户对客户不开放
+ unix_socket_group                   |                           | 
+ unix_socket_permissions             | 0777                      |   -- 这个权限改为0700更靠谱
+ authentication_timeout              | 60                        | s
+ db_user_namespace                   | off                       | 
+ krb_caseins_users                   | off                       | 
+ password_encryption                 | on                        | 
+ ssl                                 | off                       |   --  对于跨广域网的访问，建议阿里云允许SSL连接
+ ssl_ca_file                         |                           | 
+ ssl_cert_file                       | server.crt                | 
+ ssl_crl_file                        |                           | 
+ ssl_key_file                        | server.key                | 
+ ssl_prefer_server_ciphers           | on                        | 
+ ssl_renegotiation_limit             | 524288                    | kB
+ pg_stat_statements.max              | 1000                      |   --  阿里云RDS默认开启了pg_stat_statements
+ pg_stat_statements.save             | on                        | 
+ pg_stat_statements.track            | all                       | 
+ pg_stat_statements.track_utility    | on                        | 
+ allow_system_table_mods             | off                       | 
+ debug_assertions                    | off                       | 
+ ignore_checksum_failure             | off                       | 
+ ignore_system_indexes               | off                       | 
+ post_auth_delay                     | 0                         | s
+ pre_auth_delay                      | 0                         | s
+ trace_notify                        | off                       |   
+ trace_recovery_messages             | log                       | 
+ trace_sort                          | off                       | 
+ zero_damaged_pages                  | off                       |   
+ exit_on_error                       | off                       | 
+ restart_after_crash                 | on                        | 
+ deadlock_timeout                    | 1000                      | ms  -- 锁时间超过1秒，记录锁等待SQL以及其他状态
+ max_locks_per_transaction           | 64                        | 
+ max_pred_locks_per_transaction      | 64                        | 
+ block_size                          | 8192                      |   --  数据块大小，对当下的硬件，建议用32KB的块
+ data_checksums              | on          |   -- checksums打开，对性能有一定影响，开启了FULL PAGE WRITE一般没有必要开这个
+ integer_datetimes                   | on                        | 
+ max_function_args                   | 100                       | 
+ max_identifier_length               | 63                        | 
+ max_index_keys                      | 32                        | 
+ segment_size                        | 131072                    | 8kB   -- 单个数据文件最大1GB
+ server_version                      | 9.4.1                     | 
+ server_version_num                  | 90401                     | 
+ wal_block_size                      | 8192                      | 
+ wal_segment_size                    | 2048                      | 8kB  -- 单个WAL文件16MB
+ geqo                                | on                        | 
+ geqo_effort                         | 5                         | 
+ geqo_generations                    | 0                         | 
+ geqo_pool_size                      | 0                         | 
+ geqo_seed                           | 0                         | 
+ geqo_selection_bias                 | 2                         | 
+ geqo_threshold                      | 12                       |   -- 超过12个对象的JOIN会使用遗传优化算法，不用穷举法
+ constraint_exclusion                | partition                 | 
+ cursor_tuple_fraction               | 0.1                       | 
+ default_statistics_target           | 100                       | 
+ from_collapse_limit                 | 8                         | 
+ join_collapse_limit                 | 8                         | 
+ cpu_index_tuple_cost                | 0.005           |   -- 成本因子，不知道阿里有没有针对硬件环境调整，看样子是没有调整
+ cpu_operator_cost                   | 0.0025                    | 
+ cpu_tuple_cost                      | 0.01                      | 
+ effective_cache_size                | 98304                     | 8kB  -- 只给了800MB，难道在宿主机连这个也限了？
+ random_page_cost                    | 4                         |   
+ seq_page_cost                       | 1                         | 
+ enable_bitmapscan                   | on                        | 
+ enable_hashagg                      | on                        | 
+ enable_hashjoin                     | on                        | 
+ enable_indexonlyscan                | on                        | 
+ enable_indexscan                    | on                        | 
+ enable_material                     | on                        | 
+ enable_mergejoin                    | on                        | 
+ enable_nestloop                     | on                        | 
+ enable_seqscan                      | on                        | 
+ enable_sort                         | on                        | 
+ enable_tidscan                      | on                        | 
+ synchronous_standby_names           |                           |   -- 未开启同步流复制
+ vacuum_defer_cleanup_age            | 0                         | 
+ max_replication_slots               | 10                        | 
+ max_wal_senders                     | 5                         | 
+ wal_keep_segments                   | 80                        | 
+ wal_sender_timeout                  | 60000                     | ms
+ hot_standby        | on              |   -- 开启了hot_standby，可能是用于HA的，如果开放超级用户或者复制用户的话，客户可以将整个集群通过流复制协议搞出来。不过阿里云只提供了普通用户给客户使用。
+ hot_standby_feedback                | on                        | 
+ max_standby_archive_delay           | 30000     | ms   -- 如果将来阿里云要开放读写分离，在SLAVE要跑LONG SQL的话，可能要加大这个值
+ max_standby_streaming_delay         | 30000        | ms  -- 如果将来阿里云要开放读写分离，在SLAVE要跑LONG SQL的话，可能要加大这个值
+ wal_receiver_status_interval        | 10                        | s  -- 建议缩短feedback时延
+ wal_receiver_timeout                | 60000                     | ms
+ application_name                    | psql                      | 
+ debug_pretty_print                  | on                        | 
+ debug_print_parse                   | off                       | 
+ debug_print_plan                    | off                       | 
+ debug_print_rewritten               | off                       | 
+ log_autovacuum_min_duration         | -1                        | ms  -- 这个值建议改为0，记录所有的垃圾回收操作
+ log_checkpoints                     | off                       |   -- 建议打开
+ log_connections                     | off                       |   -- 建议打开
+ log_disconnections                  | off                       |   -- 建议打开
+ log_duration                        | off                       | 
+ log_error_verbosity                 | default                   |   -- 建议改为 verbose, 记录代码位置
+ log_hostname                        | off                       | 
+ log_line_prefix                     | \x01                     +| 
+                                     |         %p      %r      % | 
+ log_lock_waits                      | on                        | 
+ log_statement                       | all                       |   --  又一个对性能有影响的参数，阿里RDS将记录所有的SQL
+ log_temp_files                      | 100000                    | kB
+ log_timezone                        | UTC                       | 
+ client_min_messages                 | notice                    | 
+ log_min_duration_statement          | 1000                      | ms  -- 开了log_statement=all, 这个就没有必要了。
+ log_min_error_statement             | error                     | 
+ log_min_messages                    | warning                   | 
+ event_source                        | PostgreSQL                | 
+ log_destination                     | stderr         |   --  建议使用csvlog，或者加一个remote log。日志统一发到监控平台。
+ log_file_mode                       | 0600                      | 
+ logging_collector                   | on                        | 
+ log_rotation_age                    | 0                         | min
+ log_rotation_size                   | 10240                     | kB
+ log_truncate_on_rotation            | on                        | 
+ syslog_facility                     | local0                    | 
+ syslog_ident                        | postgres                  | 
+ effective_io_concurrency            | 1                         | 
+ max_worker_processes                | 8                         | 
+ bgwriter_delay                      | 20                        | ms
+ bgwriter_lru_maxpages               | 100                       | 
+ bgwriter_lru_multiplier             | 2                         | 
+ vacuum_cost_delay            | 0              | ms  -- 如果想降低垃圾回收对IO的影响，可以改为10毫秒，但是垃圾回收的时间会拉长
+ vacuum_cost_limit                   | 200                       | 
+ vacuum_cost_page_dirty              | 20                        | 
+ vacuum_cost_page_hit                | 1                         | 
+ vacuum_cost_page_miss               | 10                        | 
+ temp_file_limit                     | -1                        | kB
+ max_files_per_process               | 1000                      | 
+ autovacuum_work_mem                 | -1                        | kB
+ dynamic_shared_memory_type          | posix                     | 
+ huge_pages                          | try                       | 
+ maintenance_work_mem                | 16384                     | kB
+ max_prepared_transactions        | 800       |   --  允许用户使用分布式事务，一般不建议打开，对于不熟悉的用户，可能导致膨胀，xid wrap等不良后果。除非有使用的必要。
+ max_stack_depth                     | 2048                      | kB
+ shared_buffers                      | 32768                     | 8kB  --  太小了吧，到底是只有1G内存的实例
+ temp_buffers                        | 1024                      | 8kB
+ track_activity_query_size           | 1024                      | 
+ work_mem                            | 4096                      | kB
+ log_executor_stats                  | off                       | 
+ log_parser_stats                    | off                       | 
+ log_planner_stats                   | off                       | 
+ log_statement_stats                 | off                       | 
+ track_activities                    | on                        | 
+ track_counts                        | on                        | 
+ track_functions                     | all                       |  -- 这个也是对性能有影响的，统计所有的函数调用
+ track_io_timing                     | on                        | -- 对IO耗时进行统计，相当影响性能
+ update_process_title                | on                        | 
+ transform_null_equals               | off                       | 
+ array_nulls                         | on                        | 
+ backslash_quote                     | safe_encod                | 
+ default_with_oids                   | off                       | 
+ escape_string_warning               | on                        | 
+ lo_compat_privileges                | off                       | 
+ quote_all_identifiers               | off                       | 
+ sql_inheritance                     | on                        | 
+ standard_conforming_strings         | on                        | 
+ synchronize_seqscans                | on                        | 
+ archive_command                     | cp %p /u02                | 
+ archive_mode                        | on                        |   -- 开启了归档，是为了更好的做在线备份
+ archive_timeout                     | 0                         | s
+ checkpoint_completion_target        | 0.9       |   --  检查点的时间拉这么长，是IOPS性能较差的妥协，恢复时间也会拉长。
+ checkpoint_segments           | 64            |   -- shared buffer只有256MB，但是这个有1GB的间隔，可以考虑加大shared buffer。前提是cgroup不会限制。
+ checkpoint_timeout                  | 300                       | s
+ checkpoint_warning                  | 30                        | s
+ commit_delay            | 0            |   --  未开启分组提交，对于高并发的场景，建议打开。当然也可以关闭synchronous_commit          达到同样的目的。
+ commit_siblings                     | 5                         | 
+ fsync                               | on                        | 
+ full_page_writes                    | on              |   -- 如果底层块设备的原子写大于等于block_size，和wal_block_size，可以关闭full_page_writes, 或者底层文件系统可以避免partial write，也可以关闭fpw.
+ synchronous_commit                  | on              |  -- 对于非重要事务，建议在事务级别关闭synchronous_commit   来提高性能。
+ wal_buffers                         | 983                       | 8kB
+ wal_level                           | hot_standb                | 
+ wal_log_hints                       | off                       | 
+ wal_sync_method                     | fdatasync          |   -- 建议根据wal所在的块设备测试一下，使用最快的fsync接口
+ wal_writer_delay                    | 200                       | ms  --  建议改为10ms
+(228 rows)
+
+
+以上有很多可以优化或调整的地方，希望阿里云RDS团队的人看到或者用户看到，大家一起来把RDS搞好，用好。
+
+接下来先做一个简单的单个实例的性能测试，因为RDS实例是最低配置的，而且鉴于以上配置有些对性能影响较大的，同时网络层面不是直连数据库，因为阿里云里面还有一层中间件，另外还有一个对性能有影响的是用了其他机房的ECS去测试RDS，所以结果可能和我们自己笔记本上测试的都相差甚远。
+请看：
+生成测试数据，为了减少IOPS，因为CGROUP现在了只有400的IOPS，所以我们的测试数据和索引加起来要小于256MB，用户数据200万条，会话数据200万条，一共400万条初始数据，以及日志表一个。
+
+\timing
+set synchronous_commit=off;
+create table userinfo (userid int,info jsonb);
+insert into userinfo select generate_series(1,2000000);
+create table session (userid int,last_login timestamp);
+insert into session select generate_series(1,2000000);
+create table login_log (userid int,db_user name,client_addr inet,
+                       client_port int,server_addr inet,server_port int,login_time timestamp);
+set maintenance_work_mem='1GB';
+alter table userinfo add constraint pk_userinfo primary key (userid);
+alter table session add constraint pk_session primary key (userid);
+
+postgres=> \dt+
+                        List of relations
+ Schema |      Name       | Type  | Owner  |  Size  | Description 
+--------+-----------------+-------+--------+--------+-------------
+ public | ha_health_check | table | aurora | 40 kB  | 
+ public | login_log       | table | digoal | 141 MB | 
+ public | session         | table | digoal | 75 MB  | 
+ public | userinfo        | table | digoal | 69 MB  | 
+(4 rows)
+
+postgres=> \di+
+                                   List of relations
+ Schema |         Name         | Type  | Owner  |      Table      | Size  | Description 
+--------+----------------------+-------+--------+-----------------+-------+-------------
+ public | ha_health_check_pkey | index | aurora | ha_health_check | 16 kB | 
+ public | login_log_pkey       | index | digoal | login_log       | 22 MB | 
+ public | pk_session           | index | digoal | session         | 43 MB | 
+ public | pk_userinfo          | index | digoal | userinfo        | 43 MB | 
+(4 rows)
+
+
+
+将数据加载到内存：
+
+create extension pg_prewarm;
+select pg_prewarm('userinfo');
+select pg_prewarm('pk_userinfo');
+select pg_prewarm('session');
+select pg_prewarm('pk_session');
+
+
+
+创建测试函数，包含3个操作：
+1. 基于PK执行查询用户表，
+2. 基于PK更新会话表，
+3. 插入日志
+共三个操作的事务，使用异步提交。
+
+create or replace function f_test(i_id int) returns void as $$
+declare
+  v_t timestamp := now();
+begin
+  set synchronous_commit = off;
+  perform 1 from userinfo where userid=i_id;
+  update session set last_login=v_t where userid=i_id;
+  insert into login_log (userid,db_user,client_addr,client_port,server_addr,server_port,login_time)
+                        values (i_id,current_user,inet_client_addr(),inet_client_port(),inet_server_addr(),inet_server_port(),v_t);
+  return;
+end;
+$$ language plpgsql strict;
+
+
+
+验证：
+
+postgres=> select f_test(1);
+ f_test 
+--------
+ 
+(1 row)
+postgres=> select now(),* from session where userid=1;
+              now              | userid |        last_login         
+-------------------------------+--------+---------------------------
+ 2015-06-10 11:44:01.820262+08 |      1 | 2015-06-10 11:44:01.22805
+(1 row)
+
+
+
+测试机是阿里云的ECS（1核的ECS，也是较烂的性能了），与数据库在北京的不同机房（因为没找到同机房的ECS），测试：
+
+vi test.sql
+\setrandom id 1 2000000
+select f_test(:id);
+
+
+测试5分钟，每5秒输出一次tps统计，测试结果：
+
+pgbench -M prepared -n -r -f ./test.sql -c 16 -j 16 -P 5 -h xxxx -p 3433 -U digoal -T 300 postgres
+progress: 5.0 s, 2903.1 tps, lat 5.482 ms stddev 7.189
+progress: 10.0 s, 3101.8 tps, lat 5.162 ms stddev 6.366
+progress: 15.0 s, 3131.1 tps, lat 5.098 ms stddev 6.286
+progress: 20.0 s, 3060.6 tps, lat 5.234 ms stddev 6.591
+progress: 25.0 s, 3198.8 tps, lat 4.998 ms stddev 6.069
+progress: 30.0 s, 3110.7 tps, lat 5.144 ms stddev 6.362
+progress: 35.0 s, 2972.9 tps, lat 5.376 ms stddev 6.899
+progress: 40.0 s, 3060.7 tps, lat 5.224 ms stddev 6.609
+progress: 45.0 s, 3057.8 tps, lat 5.232 ms stddev 6.642
+progress: 50.0 s, 3051.0 tps, lat 5.242 ms stddev 6.601
+progress: 55.0 s, 3083.9 tps, lat 5.192 ms stddev 6.454
+progress: 60.0 s, 3154.5 tps, lat 5.063 ms stddev 6.247
+progress: 65.0 s, 3103.8 tps, lat 5.166 ms stddev 6.421
+progress: 70.0 s, 3099.7 tps, lat 5.158 ms stddev 6.464
+progress: 75.0 s, 3141.9 tps, lat 5.092 ms stddev 6.292
+progress: 80.0 s, 3105.9 tps, lat 5.140 ms stddev 6.406
+progress: 85.0 s, 3097.7 tps, lat 5.161 ms stddev 6.412
+progress: 90.0 s, 3112.3 tps, lat 5.146 ms stddev 6.339
+progress: 95.0 s, 3023.9 tps, lat 5.271 ms stddev 6.627
+progress: 100.0 s, 3088.4 tps, lat 5.194 ms stddev 6.426
+progress: 105.0 s, 3095.3 tps, lat 5.178 ms stddev 6.358
+progress: 110.0 s, 3085.7 tps, lat 5.172 ms stddev 6.465
+progress: 115.0 s, 3143.2 tps, lat 5.099 ms stddev 6.185
+progress: 122.9 s, 1429.7 tps, lat 6.803 ms stddev 78.508
+progress: 127.8 s, 174.7 tps, lat 95.927 ms stddev 617.430
+progress: 130.5 s, 443.2 tps, lat 61.379 ms stddev 460.493
+progress: 135.5 s, 240.0 tps, lat 68.903 ms stddev 379.392
+progress: 143.0 s, 179.9 tps, lat 45.773 ms stddev 314.194
+progress: 148.1 s, 330.8 tps, lat 74.456 ms stddev 564.188
+progress: 150.2 s, 993.0 tps, lat 20.515 ms stddev 249.150
+progress: 158.5 s, 265.6 tps, lat 58.506 ms stddev 422.513
+progress: 160.3 s, 1535.6 tps, lat 15.287 ms stddev 188.301
+progress: 168.8 s, 377.9 tps, lat 34.676 ms stddev 309.978
+progress: 170.0 s, 2758.9 tps, lat 15.764 ms stddev 204.179
+progress: 175.0 s, 992.6 tps, lat 16.132 ms stddev 146.747
+progress: 180.0 s, 1061.1 tps, lat 15.093 ms stddev 136.797
+progress: 185.0 s, 487.3 tps, lat 32.812 ms stddev 302.795
+progress: 190.8 s, 1665.7 tps, lat 6.174 ms stddev 57.000
+progress: 195.7 s, 834.5 tps, lat 16.647 ms stddev 189.034
+progress: 204.2 s, 1839.9 tps, lat 10.975 ms stddev 147.814
+progress: 205.0 s, 3180.3 tps, lat 8.171 ms stddev 95.892
+progress: 210.0 s, 3216.4 tps, lat 4.972 ms stddev 10.054
+progress: 215.0 s, 1229.4 tps, lat 13.029 ms stddev 166.420
+progress: 220.0 s, 3178.3 tps, lat 5.039 ms stddev 7.517
+progress: 225.0 s, 3261.0 tps, lat 4.897 ms stddev 11.573
+progress: 230.0 s, 3149.3 tps, lat 5.073 ms stddev 7.657
+progress: 235.0 s, 3200.8 tps, lat 4.995 ms stddev 7.128
+progress: 240.0 s, 3128.6 tps, lat 5.121 ms stddev 9.665
+progress: 245.0 s, 3063.0 tps, lat 5.223 ms stddev 6.571
+progress: 250.0 s, 3047.3 tps, lat 5.250 ms stddev 6.514
+progress: 255.0 s, 3192.3 tps, lat 5.007 ms stddev 6.121
+progress: 260.0 s, 3113.3 tps, lat 5.148 ms stddev 6.379
+progress: 265.0 s, 3278.1 tps, lat 4.871 ms stddev 5.762
+progress: 270.0 s, 3091.6 tps, lat 5.181 ms stddev 6.378
+progress: 275.0 s, 3172.2 tps, lat 5.034 ms stddev 6.098
+progress: 280.0 s, 2879.8 tps, lat 5.556 ms stddev 7.319
+progress: 285.0 s, 3267.2 tps, lat 4.900 ms stddev 5.850
+progress: 290.0 s, 3174.6 tps, lat 5.035 ms stddev 6.097
+progress: 295.0 s, 3201.1 tps, lat 4.996 ms stddev 6.033
+progress: 300.0 s, 3071.6 tps, lat 5.216 ms stddev 6.439
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 16
+duration: 300 s
+number of transactions actually processed: 720287
+latency average: 6.663 ms
+latency stddev: 72.356 ms
+tps = 2400.926759 (including connections establishing)
+tps = 2401.013184 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002118        \setrandom id 1 2000000
+        6.659889        select f_test(:id);
+
+
+性能抖动分析，虽然拿不到数据库的日志，但是基本上和检查点有关，检查点时会产生刷脏数据的IO，因此更新会变慢，同时又开启了FPW，所以接下来的脏块写WAL BUFFER开销会变大，所以性能抖动严重，这个是需要优化的，但是IOPS是无法优化的硬伤。详见我以前写的一些分析文章：
+http://blog.163.com/digoal@126/blog/static/163877040201542103933969/
+http://blog.163.com/digoal@126/blog/static/1638770402015463252387/
+http://blog.163.com/digoal@126/blog/static/16387704020154651655783/
+http://blog.163.com/digoal@126/blog/static/16387704020154653422892/
+http://blog.163.com/digoal@126/blog/static/16387704020154811421484/
+http://blog.163.com/digoal@126/blog/static/16387704020154129958753/
+所以我们再看看不带更新, 只有查询和插入的测试吧：
+
+create or replace function f_test(i_id int) returns void as $$
+declare
+  v_t timestamp := now();
+begin
+  set synchronous_commit = off;
+  perform 1 from userinfo where userid=i_id;
+  -- update session set last_login=v_t where userid=i_id;
+  insert into login_log (userid,db_user,client_addr,client_port,server_addr,server_port,login_time)
+                        values (i_id,current_user,inet_client_addr(),inet_client_port(),inet_server_addr(),inet_server_port(),v_t);
+  return;
+end;
+$$ language plpgsql strict;
+
+
+测试结果，性能相当平稳：
+
+pgbench -M prepared -n -r -f ./test.sql -c 16 -j 16 -P 5 -h xxxx -p 3433 -U digoal -T 300 postgres
+progress: 5.0 s, 3571.7 tps, lat 4.466 ms stddev 4.847
+progress: 10.0 s, 3653.7 tps, lat 4.379 ms stddev 4.484
+progress: 15.0 s, 3675.6 tps, lat 4.352 ms stddev 4.416
+progress: 20.0 s, 3688.8 tps, lat 4.337 ms stddev 4.420
+progress: 25.0 s, 3766.2 tps, lat 4.247 ms stddev 4.116
+progress: 30.0 s, 3626.6 tps, lat 4.411 ms stddev 4.657
+progress: 35.0 s, 3683.6 tps, lat 4.342 ms stddev 4.424
+progress: 40.0 s, 3735.7 tps, lat 4.282 ms stddev 4.283
+progress: 45.0 s, 3818.3 tps, lat 4.189 ms stddev 4.027
+progress: 50.0 s, 3736.7 tps, lat 4.281 ms stddev 4.259
+progress: 55.0 s, 3763.7 tps, lat 4.250 ms stddev 4.158
+progress: 60.0 s, 3768.1 tps, lat 4.245 ms stddev 4.169
+progress: 65.0 s, 3699.0 tps, lat 4.324 ms stddev 4.355
+progress: 70.0 s, 3698.1 tps, lat 4.326 ms stddev 4.345
+progress: 75.0 s, 3653.2 tps, lat 4.378 ms stddev 4.496
+progress: 80.0 s, 3623.2 tps, lat 4.415 ms stddev 4.615
+progress: 85.0 s, 3653.9 tps, lat 4.378 ms stddev 4.464
+progress: 90.0 s, 3548.9 tps, lat 4.507 ms stddev 4.958
+progress: 95.0 s, 3656.9 tps, lat 4.374 ms stddev 4.520
+progress: 100.0 s, 3750.1 tps, lat 4.265 ms stddev 4.221
+progress: 105.0 s, 3742.4 tps, lat 4.274 ms stddev 4.190
+progress: 110.0 s, 3662.2 tps, lat 4.368 ms stddev 4.464
+progress: 115.0 s, 3652.6 tps, lat 4.379 ms stddev 4.431
+progress: 120.0 s, 3707.2 tps, lat 4.315 ms stddev 4.363
+progress: 125.0 s, 3765.1 tps, lat 4.248 ms stddev 4.216
+progress: 130.0 s, 3750.7 tps, lat 4.265 ms stddev 4.244
+progress: 135.0 s, 3693.3 tps, lat 4.331 ms stddev 4.371
+progress: 140.0 s, 3748.8 tps, lat 4.267 ms stddev 4.264
+progress: 145.0 s, 3702.3 tps, lat 4.320 ms stddev 4.297
+progress: 150.0 s, 3584.9 tps, lat 4.462 ms stddev 4.832
+progress: 155.0 s, 3537.5 tps, lat 4.522 ms stddev 4.942
+progress: 160.0 s, 3638.0 tps, lat 4.397 ms stddev 4.472
+progress: 165.0 s, 3645.4 tps, lat 4.388 ms stddev 4.489
+progress: 170.0 s, 3642.1 tps, lat 4.392 ms stddev 4.488
+progress: 175.0 s, 3650.1 tps, lat 4.382 ms stddev 4.473
+progress: 180.0 s, 3550.6 tps, lat 4.505 ms stddev 4.733
+progress: 185.0 s, 3550.3 tps, lat 4.505 ms stddev 4.613
+progress: 190.0 s, 3703.2 tps, lat 4.319 ms stddev 4.374
+progress: 195.0 s, 3666.0 tps, lat 4.363 ms stddev 4.440
+progress: 200.0 s, 3660.2 tps, lat 4.371 ms stddev 4.520
+progress: 205.0 s, 3686.4 tps, lat 4.339 ms stddev 4.374
+progress: 210.0 s, 3557.1 tps, lat 4.497 ms stddev 4.882
+progress: 215.0 s, 3546.0 tps, lat 4.505 ms stddev 4.914
+progress: 220.0 s, 3726.5 tps, lat 4.298 ms stddev 4.293
+progress: 225.0 s, 3740.5 tps, lat 4.276 ms stddev 4.247
+progress: 230.0 s, 3704.3 tps, lat 4.318 ms stddev 4.337
+progress: 235.0 s, 3635.7 tps, lat 4.400 ms stddev 4.510
+progress: 240.0 s, 3592.6 tps, lat 4.453 ms stddev 4.675
+progress: 245.0 s, 3581.2 tps, lat 4.466 ms stddev 4.732
+progress: 250.0 s, 3609.8 tps, lat 4.431 ms stddev 4.626
+progress: 255.0 s, 3628.8 tps, lat 4.408 ms stddev 4.549
+progress: 260.0 s, 3611.0 tps, lat 4.430 ms stddev 4.608
+progress: 265.0 s, 3666.0 tps, lat 4.363 ms stddev 4.395
+progress: 270.0 s, 3657.9 tps, lat 4.373 ms stddev 4.575
+progress: 275.0 s, 3603.4 tps, lat 4.439 ms stddev 4.791
+progress: 280.0 s, 3794.4 tps, lat 4.215 ms stddev 4.105
+progress: 285.0 s, 3759.1 tps, lat 4.255 ms stddev 4.123
+progress: 290.0 s, 3631.6 tps, lat 4.405 ms stddev 4.468
+progress: 295.0 s, 3741.2 tps, lat 4.275 ms stddev 4.196
+progress: 300.0 s, 3743.8 tps, lat 4.273 ms stddev 4.223
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 16
+duration: 300 s
+number of transactions actually processed: 1101227
+latency average: 4.357 ms
+latency stddev: 4.453 ms
+tps = 3670.717757 (including connections establishing)
+tps = 3670.852824 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002000        \setrandom id 1 2000000
+        4.354966        select f_test(:id);
+
+
+
+小结：
+1.RDS内部再优化一下，性能还会更加靠谱。可以参考前面的参数分析。
+2.另外需要注意别触碰到IOPS的瓶颈，因为是用cgroup限制的，影响很大。
+3.RDS用了异步流复制，所以用户需要注意，是否有绝对的不丢事务的需求，这点一定要和阿里云确定清楚。
+
+其他：
+在阿里云RDS中使用dblink：
+
+CREATE SERVER fdtest FOREIGN DATA WRAPPER dblink_fdw OPTIONS (host 'xxxxxx', dbname 'postgres', port '3433');
+CREATE USER MAPPING FOR digoal SERVER fdtest OPTIONS (user 'xxx', password 'xxx');
+GRANT USAGE ON FOREIGN SERVER fdtest TO digoal;
+SELECT dblink_connect('myconn', 'fdtest');
+
+
+查看数据库的真实IP
+
+postgres=> SELECT * from dblink('myconn', 'select inet_server_addr()') as t(ip inet);
+    ip
+---------------
+ 10.151.133.18
+(1 row)
+
+
+查看客户端的真实IP，从现象上看，至少中间件这层在IP层好像是透明的，或者做了协议适配。
+
+postgres=> SELECT * from dblink('myconn', 'select inet_client_addr()') as t(ip inet);
+    ip
+---------------
+ 10.151.133.19
+(1 row)
+
+
+查看standby状态，普通用户现在了一些信息的查看。
+
+postgres=>  select * from pg_stat_replication ;
+  pid   | usesysid |  usename   | application_name | client_addr | client_hostname | client_port | backend_start | backend_xmin | st
+ate | sent_location | write_location | flush_location | replay_location | sync_priority | sync_state 
+--------+----------+------------+------------------+-------------+-----------------+-------------+---------------+--------------+---
+----+---------------+----------------+----------------+-----------------+---------------+------------
+ 204877 |    16384 | replicator | standby1         |             |                 |             |               |         3310 |   
+    |               |                |                |                 |               | 
+(1 row)
+
+
+除了普通用户digoal, 还有几个用户是RDS后台用的，复制用的。
+
+postgres=> \du
+                                    List of roles
+        Role name        |                   Attributes                   | Member of 
+-------------------------+------------------------------------------------+-----------
+ aurora                  | Superuser                                      | {}
+ aurora_proxy            | Superuser                                      | {}
+ digoal                  | Create role, Create DB                         | {}
+ pgrdskp501t1znuuzp2xxxx | Superuser, Create role, Create DB, Replication | {}  -- 这里可能暴露了主机名，建议改改
+ replicator              | Superuser, Replication                         | {}
+
+
+
+待续。。。
+后期再测试使用plproxy分布式处理的性能
+
+【参考】
+http://blog.163.com/digoal@126/blog/static/163877040201542103933969/
+http://blog.163.com/digoal@126/blog/static/1638770402015463252387/
+http://blog.163.com/digoal@126/blog/static/16387704020154651655783/
+http://blog.163.com/digoal@126/blog/static/16387704020154653422892/
+http://blog.163.com/digoal@126/blog/static/16387704020154811421484/
+http://blog.163.com/digoal@126/blog/static/16387704020154129958753/
+Flag Counter

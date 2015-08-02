@@ -1,0 +1,158 @@
+PostgreSQL research
+
+PostgreSQL to_date function Validation patch
+
+2013-01-27 20:53:35   查看原文>>
+
+PostgreSQL 对to_date函数增加了数据格式校验的补丁, 未打这个补丁前, 使用to_date函数可能插入非法值. 
+1. PostgreSQL 9.2.1 (unpatched)
+
+ocz@db-172-16-3-150-> psql
+psql (9.2.1)
+Type "help" for help.
+postgres=# set client_min_messages=log;
+SET
+postgres=# \set VERBOSITY verbose
+postgres=# select to_date('9999-12-10 BC', 'YYYY-MM-DD BC')::timestamp;
+ERROR:  22008: timestamp out of range
+LOCATION:  timestamp_out, timestamp.c:226
+
+
+注意这里报错的是timestamp_out函数, 而非to_date函数, 因为to_date没有对数据进行校验.
+
+2. PostgreSQL 9.3devel (patched)
+
+pgdev@db-172-16-3-150-> psql
+psql (9.3devel)
+Type "help" for help.
+digoal=# set client_min_messages=log;
+SET
+digoal=# \set VERBOSITY verbose
+digoal=# select to_date('9999-12-10 BC', 'YYYY-MM-DD BC')::timestamp;
+ERROR:  22008: date out of range: "9999-12-10 BC"
+LOCATION:  to_date, formatting.c:3339
+
+
+打完补丁后, 注意这里报错的是to_date函数.
+
+问题测试 : 
+未打补丁的环境可能出的问题如下 : 
+
+ocz@db-172-16-3-150-> psql
+psql (9.2.1)
+Type "help" for help.
+digoal=# set client_min_messages=log;
+SET
+digoal=# create table t as select to_date('9999-12-10 BC', 'YYYY-MM-DD BC')::timestamp;
+SELECT 1
+digoal=# table t;
+ERROR:  22008: timestamp out of range
+LOCATION:  timestamp_out, timestamp.c:226
+
+
+
+打补丁后, 不存在这个问题 : 
+
+pgdev@db-172-16-3-150-> psql
+psql (9.3devel)
+Type "help" for help.
+digoal=# \set VERBOSITY verbose
+digoal=# set client_min_messages=log;
+SET
+digoal=# create table t as select to_date('9999-12-10 BC', 'YYYY-MM-DD BC')::timestamp;
+ERROR:  22008: date out of range: "9999-12-10 BC"
+LOCATION:  to_date, formatting.c:3339
+
+
+
+【其他】
+1. table t; 语法上相当于 select * from t;
+
+【参考】
+1. http://www.postgresql.org/message-id/flat/CAP7QgmkvW6KeogQnNJHno1pyb7ifqQGShGoygN=fxsuv+36hdQ@mail.gmail.com#CAP7QgmkvW6KeogQnNJHno1pyb7ifqQGShGoygN=fxsuv+36hdQ@mail.gmail.com
+2. src/include/datatype/timestamp.h
+
+/*
+ * Julian date support.
+ *
+ * IS_VALID_JULIAN checks the minimum date exactly, but is a bit sloppy
+ * about the maximum, since it's far enough out to not be especially
+ * interesting.
+ */
+
+#define JULIAN_MINYEAR (-4713)
+#define JULIAN_MINMONTH (11)
+#define JULIAN_MINDAY (24)
+#define JULIAN_MAXYEAR (5874898)
+
+#define IS_VALID_JULIAN(y,m,d) \
+        (((y) > JULIAN_MINYEAR \
+          || ((y) == JULIAN_MINYEAR && \
+                  ((m) > JULIAN_MINMONTH \
+                   || ((m) == JULIAN_MINMONTH && (d) >= JULIAN_MINDAY)))) \
+         && (y) < JULIAN_MAXYEAR)
+
+#define JULIAN_MAX (2147483494) /* == date2j(JULIAN_MAXYEAR, 1, 1) */
+
+
+3. src/backend/utils/adt/timestamp.c
+
+/* timestamp_out()
+ * Convert a timestamp to external form.
+ */
+Datum
+timestamp_out(PG_FUNCTION_ARGS)
+{
+        Timestamp       timestamp = PG_GETARG_TIMESTAMP(0);
+        char       *result;
+        struct pg_tm tt,
+                           *tm = &tt;
+        fsec_t          fsec;
+        char            buf[MAXDATELEN + 1];
+
+        if (TIMESTAMP_NOT_FINITE(timestamp))
+                EncodeSpecialTimestamp(timestamp, buf);
+        else if (timestamp2tm(timestamp, NULL, tm, &fsec, NULL, NULL) == 0)
+                EncodeDateTime(tm, fsec, false, 0, NULL, DateStyle, buf);
+        else
+                ereport(ERROR,
+                                (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+                                 errmsg("timestamp out of range")));
+
+        result = pstrdup(buf);
+        PG_RETURN_CSTRING(result);
+}
+
+
+4. src/backend/utils/adt/formatting.c
+补丁部分, 增加IS_VALID_JULIAN : 
+
+/* ----------
+ * TO_DATE
+ *      Make Date from date_str which is formated at argument 'fmt'
+ * ----------
+ */
+Datum
+to_date(PG_FUNCTION_ARGS)
+{
+        text       *date_txt = PG_GETARG_TEXT_P(0);
+        text       *fmt = PG_GETARG_TEXT_P(1);
+        DateADT         result;
+        struct pg_tm tm;
+        fsec_t          fsec;
+
+        do_to_timestamp(date_txt, fmt, &tm, &fsec);
+
+        if (!IS_VALID_JULIAN(tm.tm_year, tm.tm_mon, tm.tm_mday))
+                ereport(ERROR,
+                                (errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+                                 errmsg("date out of range: \"%s\"",
+                                                text_to_cstring(date_txt))));
+
+        result = date2j(tm.tm_year, tm.tm_mon, tm.tm_mday) - POSTGRES_EPOCH_JDATE;
+
+        PG_RETURN_DATEADT(result);
+}
+
+
+Flag Counter

@@ -1,0 +1,609 @@
+PostgreSQL research
+
+mongoDB indexing topic - 1
+
+2011-01-05 15:28:29   查看原文>>
+
+mongoDB的index和我们常见的RDBMS的index差不多,目的都是为了提高查询性能。
+在mongoDB中,除了常见的B-Tree索引,还有Geospatial索引(一般用于定位搜索)。
+B-Tree索引支持在key,内嵌key,内嵌文档,array等上面建索引,支持复合索引(compound index),唯一索引;在1.7.4以后还引入了稀疏索引的概念.
+范例 :
+# 新建测试collection
+> for (i=0;i<10000;i++) {                                                             
+... db.userinfo.insert({"firstname" : "zhou","lastname" : "digoal" + "." + i,"age" : i})
+... }
+> db.userinfo.find().limit(10)
+{ "_id" : ObjectId("4d23fdc69ae655253f811078"), "firstname" : "zhou", "lastname" : "digoal.0", "age" : 0 }
+{ "_id" : ObjectId("4d23fdc69ae655253f811079"), "firstname" : "zhou", "lastname" : "digoal.1", "age" : 1 }
+{ "_id" : ObjectId("4d23fdc69ae655253f81107a"), "firstname" : "zhou", "lastname" : "digoal.2", "age" : 2 }
+{ "_id" : ObjectId("4d23fdc69ae655253f81107b"), "firstname" : "zhou", "lastname" : "digoal.3", "age" : 3 }
+{ "_id" : ObjectId("4d23fdc69ae655253f81107c"), "firstname" : "zhou", "lastname" : "digoal.4", "age" : 4 }
+{ "_id" : ObjectId("4d23fdc69ae655253f81107d"), "firstname" : "zhou", "lastname" : "digoal.5", "age" : 5 }
+{ "_id" : ObjectId("4d23fdc69ae655253f81107e"), "firstname" : "zhou", "lastname" : "digoal.6", "age" : 6 }
+{ "_id" : ObjectId("4d23fdc69ae655253f81107f"), "firstname" : "zhou", "lastname" : "digoal.7", "age" : 7 }
+{ "_id" : ObjectId("4d23fdc69ae655253f811080"), "firstname" : "zhou", "lastname" : "digoal.8", "age" : 8 }
+{ "_id" : ObjectId("4d23fdc69ae655253f811081"), "firstname" : "zhou", "lastname" : "digoal.9", "age" : 9 }
+# 当前只有_id的默认索引
+> db.system.indexes.find({"ns" : "test.userinfo"})
+{ "name" : "_id_", "ns" : "test.userinfo", "key" : { "_id" : 1 } }
+
+1. basic usage
+# 全表扫描
+> db.userinfo.find({"lastname" : "digoal.0"})
+{ "_id" : ObjectId("4d23fdc69ae655253f811078"), "firstname" : "zhou", "lastname" : "digoal.0", "age" : 0 }
+> db.userinfo.find({"lastname" : "digoal.0"}).explain()
+{
+        "cursor" : "BasicCursor",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 1,
+        "millis" : 5,
+        "indexBounds" : {
+
+        }
+}
+# nscanned 扫描了多少条记录,n返回多少条记录,cursor扫描方法.
+# create index on lastname key
+# 正向索引
+> db.userinfo.ensureIndex({"lastname" : 1})
+> db.system.indexes.find({"ns" : "test.userinfo"})     
+{ "name" : "_id_", "ns" : "test.userinfo", "key" : { "_id" : 1 } }
+{ "_id" : ObjectId("4d2402a39ae655253f813789"), "ns" : "test.userinfo", "key" : { "lastname" : 1 }, "name" : "lastname_1" }
+# 反向索引
+> db.userinfo.ensureIndex({"lastname" : -1})      
+> db.system.indexes.find({"ns" : "test.userinfo"})
+{ "name" : "_id_", "ns" : "test.userinfo", "key" : { "_id" : 1 } }
+{ "_id" : ObjectId("4d2402a39ae655253f813789"), "ns" : "test.userinfo", "key" : { "lastname" : 1 }, "name" : "lastname_1" }
+{ "_id" : ObjectId("4d2402ad9ae655253f81378a"), "ns" : "test.userinfo", "key" : { "lastname" : -1 }, "name" : "lastname_-1" }
+# 重复建同样的索引,mongoDB不会干任何事情
+> db.userinfo.ensureIndex({"lastname" : -1})      
+> db.system.indexes.find({"ns" : "test.userinfo"})
+{ "name" : "_id_", "ns" : "test.userinfo", "key" : { "_id" : 1 } }
+{ "_id" : ObjectId("4d2402a39ae655253f813789"), "ns" : "test.userinfo", "key" : { "lastname" : 1 }, "name" : "lastname_1" }
+{ "_id" : ObjectId("4d2402ad9ae655253f81378a"), "ns" : "test.userinfo", "key" : { "lastname" : -1 }, "name" : "lastname_-1" }
+> db.getLastError()
+null
+# but that's ok(驱动列一样的两个索引)
+> db.system.indexes.find({"ns" : "test.userinfo"})   
+{ "name" : "_id_", "ns" : "test.userinfo", "key" : { "_id" : 1 } }
+{ "_id" : ObjectId("4d24050e9ae655253f813790"), "ns" : "test.userinfo", "key" : { "lastname" : 1 }, "name" : "lastname_1" }
+{ "_id" : ObjectId("4d24051a9ae655253f813791"), "ns" : "test.userinfo", "key" : { "lastname" : 1, "age" : 1 }, "name" : "lastname_1_age_1" }
+# 执行计划测试
+# 单个lastname条件时走lastname_1索引
+> db.userinfo.find({"lastname" : "digoal.0"}).explain()
+{
+        "cursor" : "BtreeCursor lastname_1",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+                "lastname" : [
+                        [
+                                "digoal.0",
+                                "digoal.0"
+                        ]
+                ]
+        }
+}
+# 复合条件"lastname" : "digoal.0","age" : 0走lastname_1_age_1索引
+> db.userinfo.find({"lastname" : "digoal.0","age" : 0}).explain()
+{
+        "cursor" : "BtreeCursor lastname_1_age_1",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+                "lastname" : [
+                        [
+                                "digoal.0",
+                                "digoal.0"
+                        ]
+                ],
+                "age" : [
+                        [
+                                0,
+                                0
+                        ]
+                ]
+        }
+}
+# 非驱动列查询条件不走索引
+> db.userinfo.find({"age" : 0}).explain()                        
+{
+        "cursor" : "BasicCursor",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 1,
+        "millis" : 5,
+        "indexBounds" : {
+
+        }
+}
+> db.userinfo.find({"firstname" : "zhou"}).explain()
+{
+        "cursor" : "BasicCursor",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 10000,
+        "millis" : 5,
+        "indexBounds" : {
+
+        }
+}
+# 排序与索引,单KEY索引正向反向排序输出都可以走索引,复合索引需要注意,索引KEY必须同时被正或被反,否则不可以走索引.
+> db.userinfo.find().sort({"lastname" : 1}).explain()
+{
+        "cursor" : "BtreeCursor lastname_1",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 10000,
+        "millis" : 6,
+        "indexBounds" : {
+                "lastname" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ]
+        }
+}
+> db.userinfo.find().sort({"lastname" : -1}).explain()          
+{
+        "cursor" : "BtreeCursor lastname_1 reverse",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 10000,
+        "millis" : 6,
+        "indexBounds" : {
+                "lastname" : [
+                        [
+                                {
+                                        "$maxElement" : 1
+                                },
+                                {
+                                        "$minElement" : 1
+                                }
+                        ]
+                ]
+        }
+}
+> db.userinfo.find().sort({"lastname" : 1,"age" : 1}).explain()
+{
+        "cursor" : "BtreeCursor lastname_1_age_1",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 10000,
+        "millis" : 8,
+        "indexBounds" : {
+                "lastname" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ],
+                "age" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ]
+        }
+}
+> db.userinfo.find().sort({"lastname" : -1,"age" : -1}).explain()
+{
+        "cursor" : "BtreeCursor lastname_1_age_1 reverse",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 10000,
+        "millis" : 8,
+        "indexBounds" : {
+                "lastname" : [
+                        [
+                                {
+                                        "$maxElement" : 1
+                                },
+                                {
+                                        "$minElement" : 1
+                                }
+                        ]
+                ],
+                "age" : [
+                        [
+                                {
+                                        "$maxElement" : 1
+                                },
+                                {
+                                        "$minElement" : 1
+                                }
+                        ]
+                ]
+        }
+}
+> db.userinfo.find().sort({"lastname" : -1,"age" : 1}).explain()
+{
+        "cursor" : "BasicCursor",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 10000,
+        "scanAndOrder" : true,
+        "millis" : 51,
+        "indexBounds" : {
+
+        }
+}
+> db.userinfo.find().sort({"lastname" : 1,"age" : -1}).explain()
+{
+        "cursor" : "BasicCursor",
+        "nscanned" : 10000,
+        "nscannedObjects" : 10000,
+        "n" : 10000,
+        "scanAndOrder" : true,
+        "millis" : 51,
+        "indexBounds" : {
+
+        }
+}
+
+2. 内嵌KEY索引
+# 新建测试数据
+for (i=0;i<1000;i++) {
+db.userinfo1.insert({"firstname" : "zhou","lastname" : "digoal","age" : 27,"other" : {"corp" : "sky-mobi","city" : "hangzhou","phone" : i}})
+}
+# 内嵌KEY索引
+> db.userinfo1.ensureIndex({"other.phone" : 1})
+> db.userinfo1.getIndexes()
+[
+        {
+                "name" : "_id_",
+                "ns" : "test.userinfo1",
+                "key" : {
+                        "_id" : 1
+                }
+        },
+        {
+                "_id" : ObjectId("4d2408e59ae655253f813b7c"),
+                "ns" : "test.userinfo1",
+                "key" : {
+                        "other.phone" : 1
+                },
+                "name" : "other.phone_1"
+        }
+]
+# 执行计划,走索引other.phone_1,注意到索引的长度是内嵌文档+.$key_正或反,所以索引的名字
+> db.userinfo1.find({"other.phone" : 0}).explain()
+{
+        "cursor" : "BtreeCursor other.phone_1",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+                "other.phone" : [
+                        [
+                                0,
+                                0
+                        ]
+                ]
+        }
+}
+# 使用自定义索引名字:phone,由于mongoDB中namespace的长度是受限制的127,所以选择适当的名字是非常有必要的
+> db.userinfo1.dropIndex({"other.phone" : 1})     
+{ "nIndexesWas" : 2, "ok" : 1 }
+> db.userinfo1.ensureIndex({"other.phone" : 1},{"name" : "phone"})
+> db.userinfo1.find({"other.phone" : 0}).explain()                
+{
+        "cursor" : "BtreeCursor phone",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+                "other.phone" : [
+                        [
+                                0,
+                                0
+                        ]
+                ]
+        }
+}
+# 内嵌KEY索引也可以做复合索引
+
+3. 内嵌文档索引
+# 拿上面的表继续测试
+> db.userinfo1.ensureIndex({"other" : 1},{"name" : "ebd"})        
+> db.userinfo1.getIndexes()
+[
+        {
+                "name" : "_id_",
+                "ns" : "test.userinfo1",
+                "key" : {
+                        "_id" : 1
+                }
+        },
+        {
+                "_id" : ObjectId("4d2409989ae655253f813b7d"),
+                "ns" : "test.userinfo1",
+                "key" : {
+                        "other.phone" : 1
+                },
+                "name" : "phone"
+        },
+        {
+                "_id" : ObjectId("4d240a0f9ae655253f813b7e"),
+                "ns" : "test.userinfo1",
+                "key" : {
+                        "other" : 1
+                },
+                "name" : "ebd"
+        }
+]
+# 测试文档索引的使用,只有当使用文档类型时才走索引,直接引用内嵌KEY是无法走内嵌文档索引的.
+# 这点和array的索引不太一样,array的索引是建立在array的每个值上面的.
+> db.userinfo1.find({"other.corp" : "sky-mobi"}).explain()
+{
+        "cursor" : "BasicCursor",
+        "nscanned" : 1001,
+        "nscannedObjects" : 1001,
+        "n" : 1001,
+        "millis" : 1,
+        "indexBounds" : {
+
+        }
+}
+> db.userinfo1.find({"other" : {"corp" : "sky-mobi"}}).explain()
+{
+        "cursor" : "BtreeCursor ebd",
+        "nscanned" : 0,
+        "nscannedObjects" : 0,
+        "n" : 0,
+        "millis" : 0,
+        "indexBounds" : {
+                "other" : [
+                        [
+                                {
+                                        "corp" : "sky-mobi"
+                                },
+                                {
+                                        "corp" : "sky-mobi"
+                                }
+                        ]
+                ]
+        }
+}
+# 内嵌文档索引也可以被拆成复合内嵌KEY索引,这样的话引导KEY可以被执行计划使用。
+
+3. array索引
+# 参考我之前写的《mongoDB's Multikeys feature》
+
+4. 复合索引
+# 如在a,b,c上建索引
+可以被条件
+a
+a,b
+a,c
+a,b,c使用
+# 测试
+> db.userinfo.drop()
+true
+> for (i=0;i<1000;i++) {
+... db.userinfo.insert({"firstname" : "zhou","lastname" : "digoal" + "." + i,"age" : i})
+... }
+> db.userinfo.ensureIndex({"firstname" :1,"lastname" :1,"age" :1})
+> db.userinfo.getIndexes()
+[
+        {
+                "name" : "_id_",
+                "ns" : "test.userinfo",
+                "key" : {
+                        "_id" : 1
+                }
+        },
+        {
+                "_id" : ObjectId("4d240cbf9ae655253f813f67"),
+                "ns" : "test.userinfo",
+                "key" : {
+                        "firstname" : 1,
+                        "lastname" : 1,
+                        "age" : 1
+                },
+                "name" : "firstname_1_lastname_1_age_1"
+        }
+]
+> db.userinfo.find({"firstname" : "zhou"}).explain()
+{
+        "cursor" : "BtreeCursor firstname_1_lastname_1_age_1",
+        "nscanned" : 1000,
+        "nscannedObjects" : 1000,
+        "n" : 1000,
+        "millis" : 1,
+        "indexBounds" : {
+                "firstname" : [
+                        [
+                                "zhou",
+                                "zhou"
+                        ]
+                ],
+                "lastname" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ],
+                "age" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ]
+        }
+}
+> db.userinfo.find({"firstname" : "zhou","lastname" : "digoal.0"}).explain()
+{
+        "cursor" : "BtreeCursor firstname_1_lastname_1_age_1",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+                "firstname" : [
+                        [
+                                "zhou",
+                                "zhou"
+                        ]
+                ],
+                "lastname" : [
+                        [
+                                "digoal.0",
+                                "digoal.0"
+                        ]
+                ],
+                "age" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ]
+        }
+}
+> db.userinfo.find({"firstname" : "zhou","lastname" : "digoal.0","age" : 0}).explain()
+{
+        "cursor" : "BtreeCursor firstname_1_lastname_1_age_1",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+                "firstname" : [
+                        [
+                                "zhou",
+                                "zhou"
+                        ]
+                ],
+                "lastname" : [
+                        [
+                                "digoal.0",
+                                "digoal.0"
+                        ]
+                ],
+                "age" : [
+                        [
+                                0,
+                                0
+                        ]
+                ]
+        }
+}
+> db.userinfo.find({"firstname" : "zhou","age" : 0}).explain()                        
+{
+        "cursor" : "BtreeCursor firstname_1_lastname_1_age_1",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 2,
+        "indexBounds" : {
+                "firstname" : [
+                        [
+                                "zhou",
+                                "zhou"
+                        ]
+                ],
+                "lastname" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ],
+                "age" : [
+                        [
+                                0,
+                                0
+                        ]
+                ]
+        }
+}
+> db.userinfo.find({"lastname" : "digoal.0","age" : 0}).explain()
+{
+        "cursor" : "BasicCursor",
+        "nscanned" : 1000,
+        "nscannedObjects" : 1000,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+
+        }
+}
+# 当然,如果你愿意的话使用hint强制索引也行
+> db.userinfo.find({"lastname" : "digoal.0","age" : 0}).hint({"firstname" :1,"lastname" :1,"age" :1}).explain()
+{
+        "cursor" : "BtreeCursor firstname_1_lastname_1_age_1",
+        "nscanned" : 1,
+        "nscannedObjects" : 1,
+        "n" : 1,
+        "millis" : 0,
+        "indexBounds" : {
+                "firstname" : [
+                        [
+                                {
+                                        "$minElement" : 1
+                                },
+                                {
+                                        "$maxElement" : 1
+                                }
+                        ]
+                ],
+                "lastname" : [
+                        [
+                                "digoal.0",
+                                "digoal.0"
+                        ]
+                ],
+                "age" : [
+                        [
+                                0,
+                                0
+                        ]
+                ]
+        }
+}
+
+5. 松散索引,New in 1.7.4,以下来自官方网站介绍
+A "sparse index" is an index that only includes documents with the indexed field.
+Any document that is missing the sparsely indexed field will not be stored in the index; the index will therefor be sparse because of the missing documents when values are missing.
+
+Sparse indexes, by definition, are not complete (for the collection) and behave differently than complete indexes. When using a "sparse index" for sorting (or possibly just filtering) some documents in the collection may not be returned. This is because only documents in the index will be returned
+# 范例
+db.people.ensureIndex({title : 1}, {sparse : true})
+db.people.save({name:"Jim"})
+db.people.save({name:"Sarah", title:"Princess"})
+db.people.find({title:{$ne:null}}).sort({title:1})        // returns only Sarah
+You can combine sparse with unique to produce a unique constraint that ignores documents with missing fields

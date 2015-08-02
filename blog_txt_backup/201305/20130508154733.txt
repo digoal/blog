@@ -1,0 +1,428 @@
+PostgreSQL research
+
+PostgreSQL 9.3 Allow a streaming replication standby to follow a timeline switch
+
+2013-05-08 15:47:33   查看原文>>
+
+Allow a streaming replication standby to follow a timeline switch.
+
+Before this patch, streaming replication would refuse to start replicating
+if the timeline in the primary doesn't exactly match the standby. The
+situation where it doesn't match is when you have a master, and two
+standbys, and you promote one of the standbys to become new master.
+Promoting bumps up the timeline ID, and after that bump, the other standby
+would refuse to continue.
+
+There's significantly more timeline related logic in streaming replication
+now. First of all, when a standby connects to primary, it will ask the
+primary for any timeline history files that are missing from the standby.
+The missing files are sent using a new replication command TIMELINE_HISTORY,
+and stored in standby's pg_xlog directory. Using the timeline history files,
+the standby can follow the latest timeline present in the primary
+(recovery_target_timeline='latest'), just as it can follow new timelines
+appearing in an archive directory.
+
+START_REPLICATION now takes a TIMELINE parameter, to specify exactly which
+timeline to stream WAL from. This allows the standby to request the primary
+to send over WAL that precedes the promotion. The replication protocol is
+changed slightly (in a backwards-compatible way although there's little hope
+of streaming replication working across major versions anyway), to allow
+replication to stop when the end of timeline reached, putting the walsender
+back into accepting a replication command.
+
+Many thanks to Amit Kapila for testing and reviewing various versions of
+this patch.
+
+
+PostgreSQL 9.3 对流复制协议进行了修改, 实现了通过流复制协议实现时间线文件的复制. 非常适合用在角色切换以及多standby的环境.
+以前流复制协议并不支持复制时间线文件, 所以每当切换角色后, 都需要手工复制这个文件到standby中.
+具体的实现见本文参考部分.
+
+[测试]
+一. PostgreSQL 9.2 : 
+1.建立standby
+主库参数 : 
+
+$PGDATA : /pgdata1919
+no other tablespace.
+
+postgresql.conf
+
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 1919                             # (change requires restart)
+max_connections = 100                   # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directory = '.'             # (change requires restart)
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # synchronization level;
+wal_sync_method = fdatasync             # the default is the first option
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+wal_writer_delay = 10ms         # 1-10000 milliseconds
+checkpoint_segments = 32                # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+max_wal_senders = 32            # max number of walsender processes
+wal_keep_segments = 64          # in logfile segments, 16MB each; 0 disables
+hot_standby = on                        # "on" allows queries during recovery
+max_standby_archive_delay = 300s        # max delay before canceling queries
+max_standby_streaming_delay = 300s      # max delay before canceling queries
+wal_receiver_status_interval = 1s       # send replies at least this often
+hot_standby_feedback = on               # send info from standby to prevent
+random_page_cost = 2.0                  # same scale as above
+effective_cache_size = 8192MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = 'pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+standard_conforming_strings = off
+
+
+
+recovery.done
+
+recovery_target_timeline = 'latest'
+standby_mode = on
+primary_conninfo = 'host=127.0.0.1 port=11919 user=postgres keepalives_idle=60'         # e.g. 'host=localhost port=5432'
+
+pg_hba.conf
+
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+local   replication     postgres                                trust
+host    replication     postgres        127.0.0.1/32            trust
+host all all 0.0.0.0/0 md5
+
+
+
+备库参数 : 
+
+$PGDATA : /pgdata11919
+no other tablespace.
+
+
+
+postgresql.conf
+
+port = 11919                             # (change requires restart)
+# 其他与primary配置相同
+
+recovery.conf
+
+recovery_target_timeline = 'latest'
+standby_mode = on
+primary_conninfo = 'host=127.0.0.1 port=1919 user=postgres keepalives_idle=60'         # e.g. 'host=localhost port=5432'
+
+pg_hba.conf
+
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+local   replication     postgres                                trust
+host    replication     postgres        127.0.0.1/32            trust
+host all all 0.0.0.0/0 md5
+
+
+
+启动主库和备库后, 确定正常复制.
+pg_ctl start -D /pgdata1919
+pg_ctl start -D /pgdata11919
+ps -ewf|grep pg92
+
+pg92     11644     1  0 15:27 pts/1    00:00:00 /opt/pgsql9.2.4/bin/postgres
+pg92     11645 11644  0 15:27 ?        00:00:00 postgres: logger process    
+pg92     11647 11644  0 15:27 ?        00:00:00 postgres: checkpointer process   
+pg92     11648 11644  0 15:27 ?        00:00:00 postgres: writer process    
+pg92     11649 11644  0 15:27 ?        00:00:00 postgres: wal writer process   
+pg92     11650 11644  0 15:27 ?        00:00:00 postgres: autovacuum launcher process   
+pg92     11651 11644  0 15:27 ?        00:00:00 postgres: archiver process   
+pg92     11652 11644  0 15:27 ?        00:00:00 postgres: stats collector process   
+pg92     11658     1  0 15:27 pts/1    00:00:00 /opt/pgsql9.2.4/bin/postgres -D /pgdata11919
+pg92     11659 11658  0 15:27 ?        00:00:00 postgres: logger process                    
+pg92     11660 11658  0 15:27 ?        00:00:00 postgres: startup process   recovering 0000000100000001000000A1
+pg92     11661 11658  0 15:27 ?        00:00:00 postgres: checkpointer process              
+pg92     11662 11658  0 15:27 ?        00:00:00 postgres: writer process                    
+pg92     11663 11658  0 15:27 ?        00:00:00 postgres: stats collector process           
+pg92     11729 11658  0 15:28 ?        00:00:00 postgres: wal receiver process   streaming 1/A10245E0
+pg92     11730 11644  0 15:28 ?        00:00:00 postgres: wal sender process postgres 127.0.0.1(61278) streaming 1/A10245E0
+
+
+
+2.正常关闭primary
+
+pg_ctl stop -m fast -D /pgdata1919
+
+
+
+3.promote standby
+
+pg92@db-172-16-3-33-> pg_ctl promote -D /pgdata11919
+server promoting
+
+
+4.将primary改成standby启动
+
+pg92@db-172-16-3-33-> cd /pgdata1919
+pg92@db-172-16-3-33-> mv recovery.done recovery.conf
+pg92@db-172-16-3-33-> pg_ctl start -D /pgdata1919
+server starting
+
+
+查看日志
+
+cd /pgdata1919/pg_log
+2013-05-08 15:32:05.887 CST,,,11840,,5189ff75.2e40,1,,2013-05-08 15:32:05 CST,,0,FATAL,XX000,"timeline 2 of the primary does not match recovery target timeline 1",,,,,,,,"libpqrcv_connect, libpqwalreceiver.c:154",""
+
+
+需要手工将时间线文件拷贝到pg_xlog中.
+
+pg92@db-172-16-3-33-> cp /pgdata11919/pg_xlog/00000002.history /pgdata1919/pg_xlog/
+
+
+再次查看日志, 正常复制
+
+2013-05-08 15:33:20.884 CST,,,11763,,5189ff39.2df3,5,,2013-05-08 15:31:05 CST,1/0,0,LOG,00000,"new target timeline is 2",,,,,,,,"rescanLatestTimeLine, xlog.c:4644",""
+2013-05-08 15:33:21.177 CST,,,11876,,5189ffc0.2e64,1,,2013-05-08 15:33:20 CST,,0,LOG,00000,"streaming replication successfully connected to primary",,,,,,,,"libpqrcv_connect, libpqwalreceiver.c:171",""
+2013-05-08 15:33:21.372 CST,,,11763,,5189ff39.2df3,6,,2013-05-08 15:31:05 CST,1/0,0,LOG,00000,"redo starts at 1/A2000080",,,,,,,,"StartupXLOG, xlog.c:6817",""
+
+
+
+二. PostgreSQL 9.3 : 
+1.建立standby
+主库参数 : 
+
+$PGDATA : /pgdata1999
+no other tablespace.
+
+
+postgresql.conf
+
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 1999                             # (change requires restart)
+max_connections = 100                   # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directories = '.'   # comma-separated list of directories
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+tcp_keepalives_idle = 60                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 60            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 60               # TCP_KEEPCNT;
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+max_stack_depth = 8MB                   # min 100kB
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # synchronization level;
+wal_sync_method = fdatasync             # the default is the first option
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+wal_writer_delay = 10ms         # 1-10000 milliseconds
+commit_delay = 10                       # range 0-100000, in microseconds
+commit_siblings = 5                     # range 1-1000
+checkpoint_segments = 32                # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+max_wal_senders = 32            # max number of walsender processes
+wal_keep_segments = 64          # in logfile segments, 16MB each; 0 disables
+hot_standby = on                        # "on" allows queries during recovery
+max_standby_archive_delay = 300s        # max delay before canceling queries
+max_standby_streaming_delay = 300s      # max delay before canceling queries
+wal_receiver_status_interval = 1s       # send replies at least this often
+hot_standby_feedback = on               # send info from standby to prevent
+random_page_cost = 2.0                  # same scale as above
+effective_cache_size = 8192MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = 'pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+client_min_messages = notice            # values in order of decreasing detail:
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'en_US.utf8'                      # locale for system error message
+lc_monetary = 'en_US.utf8'                      # locale for monetary formatting
+lc_numeric = 'en_US.utf8'                       # locale for number formatting
+lc_time = 'en_US.utf8'                          # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+
+
+recovery.done
+
+recovery_target_timeline = 'latest'
+standby_mode = on
+primary_conninfo = 'host=127.0.0.1 port=11999 user=postgres keepalives_idle=60'         # e.g. 'host=localhost port=5432'
+
+
+pg_hba.conf
+
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+local   replication     postgres                                trust
+host    replication     postgres        127.0.0.1/32            trust
+host all all 0.0.0.0/0 md5
+
+
+
+备库参数 : 
+
+$PGDATA : /pgdata11999
+no other tablespace.
+
+
+postgresql.conf
+
+port = 11999                             # (change requires restart)
+# 其他与primary配置相同
+
+
+recovery.conf
+
+recovery_target_timeline = 'latest'
+standby_mode = on
+primary_conninfo = 'host=127.0.0.1 port=1999 user=postgres keepalives_idle=60'          # e.g. 'host=localhost port=5432'
+
+
+pg_hba.conf
+
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+local   replication     postgres                                trust
+host    replication     postgres        127.0.0.1/32            trust
+host all all 0.0.0.0/0 md5
+
+
+启动主库和备库后, 确定正常复制.
+pg_ctl start -D /pgdata1999
+pg_ctl start -D /pgdata11999
+ps -ewf|grep pg93
+
+pg93     12122     1  0 15:39 pts/1    00:00:00 /opt/pgsql9.3/bin/postgres
+pg93     12123 12122  0 15:39 ?        00:00:00 postgres: logger process   
+pg93     12125 12122  0 15:39 ?        00:00:00 postgres: checkpointer process   
+pg93     12126 12122  0 15:39 ?        00:00:00 postgres: writer process   
+pg93     12127 12122  0 15:39 ?        00:00:00 postgres: wal writer process   
+pg93     12128 12122  0 15:39 ?        00:00:00 postgres: autovacuum launcher process   
+pg93     12129 12122  0 15:39 ?        00:00:00 postgres: archiver process   
+pg93     12130 12122  0 15:39 ?        00:00:00 postgres: stats collector process   
+pg93     12135     1  0 15:39 pts/1    00:00:00 /opt/pgsql9.3/bin/postgres -D /pgdata11999
+pg93     12136 12135  0 15:39 ?        00:00:00 postgres: logger process                  
+pg93     12137 12135  0 15:39 ?        00:00:00 postgres: startup process   recovering 000000010000000200000050
+pg93     12138 12135  0 15:39 ?        00:00:00 postgres: checkpointer process            
+pg93     12139 12135  0 15:39 ?        00:00:00 postgres: writer process                  
+pg93     12140 12135  0 15:39 ?        00:00:00 postgres: stats collector process         
+pg93     12141 12135  0 15:39 ?        00:00:00 postgres: wal receiver process            
+pg93     12142 12122  0 15:39 ?        00:00:00 postgres: wal sender process postgres 127.0.0.1(9639) streaming 2/50000090
+
+
+
+2.正常关闭primary
+
+pg93@db-172-16-3-33-> pg_ctl stop -m fast -D /pgdata1999
+waiting for server to shut down.... done
+server stopped
+
+
+3.promote standby
+
+pg93@db-172-16-3-33-> pg_ctl promote -D /pgdata11999
+server promoting
+
+
+4.将primary改成standby启动
+
+pg93@db-172-16-3-33-> cd /pgdata1999
+pg93@db-172-16-3-33-> mv recovery.done recovery.conf
+pg93@db-172-16-3-33-> pg_ctl start
+server starting
+
+
+查看日志, 时间线文件已经自动获取了.
+
+pg93@db-172-16-3-33-> cd pg_log
+2013-05-08 15:43:07.089 CST,,,12196,,518a020b.2fa4,1,,2013-05-08 15:43:07 CST,,0,LOG,00000,"database system was shut down at 2013-05-08 15:42:38 CST",,,,,,,,"StartupXLOG, xlog.c:4885",""
+2013-05-08 15:43:07.089 CST,,,12196,,518a020b.2fa4,2,,2013-05-08 15:43:07 CST,,0,LOG,00000,"entering standby mode",,,,,,,,"StartupXLOG, xlog.c:4958",""
+2013-05-08 15:43:07.098 CST,,,12196,,518a020b.2fa4,3,,2013-05-08 15:43:07 CST,1/0,0,LOG,00000,"consistent recovery state reached at 2/51000090",,,,,,,,"CheckRecoveryConsistency, xlog.c:6175",""
+2013-05-08 15:43:07.098 CST,,,12196,,518a020b.2fa4,4,,2013-05-08 15:43:07 CST,1/0,0,LOG,00000,"record with zero length at 2/51000090",,,,,,,,"ReadRecord, xlog.c:3283",""
+2013-05-08 15:43:07.099 CST,,,12194,,518a020a.2fa2,1,,2013-05-08 15:43:06 CST,,0,LOG,00000,"database system is ready to accept read only connections",,,,,,,,"sigusr1_handler, postmaster.c:4656",""
+2013-05-08 15:43:07.102 CST,,,12200,,518a020b.2fa8,1,,2013-05-08 15:43:07 CST,,0,LOG,00000,"fetching timeline history file for timeline 2 from primary server",,,,,,,,"WalRcvFetchTimeLineHistoryFiles, walreceiver.c:660",""
+2013-05-08 15:43:07.128 CST,,,12200,,518a020b.2fa8,2,,2013-05-08 15:43:07 CST,,0,LOG,00000,"started streaming WAL from primary at 2/51000000 on timeline 1",,,,,,,,"WalReceiverMain, walreceiver.c:365",""
+2013-05-08 15:43:07.128 CST,,,12200,,518a020b.2fa8,3,,2013-05-08 15:43:07 CST,,0,LOG,00000,"replication terminated by primary server","End of WAL reached on timeline 1 at 2/51000090",,,,,,,"WalReceiverMain, walreceiver.c:438",""
+2013-05-08 15:43:07.128 CST,,,12196,,518a020b.2fa4,5,,2013-05-08 15:43:07 CST,1/0,0,LOG,00000,"new target timeline is 2",,,,,,,,"rescanLatestTimeLine, xlog.c:3455",""
+2013-05-08 15:43:07.128 CST,,,12200,,518a020b.2fa8,4,,2013-05-08 15:43:07 CST,,0,LOG,00000,"restarted WAL streaming at 2/51000000 on timeline 2",,,,,,,,"WalReceiverMain, walreceiver.c:370",""
+2013-05-08 15:43:07.303 CST,,,12196,,518a020b.2fa4,6,,2013-05-08 15:43:07 CST,1/0,0,LOG,00000,"redo starts at 2/51000090",,,,,,,,"StartupXLOG, xlog.c:5524",""
+
+
+数据库进程正常
+
+pg93     12135     1  0 15:39 pts/1    00:00:00 /opt/pgsql9.3/bin/postgres -D /pgdata11999
+pg93     12136 12135  0 15:39 ?        00:00:00 postgres: logger process                  
+pg93     12138 12135  0 15:39 ?        00:00:00 postgres: checkpointer process            
+pg93     12139 12135  0 15:39 ?        00:00:00 postgres: writer process                  
+pg93     12140 12135  0 15:39 ?        00:00:00 postgres: stats collector process         
+pg93     12179 12135  0 15:42 ?        00:00:00 postgres: wal writer process              
+pg93     12180 12135  0 15:42 ?        00:00:00 postgres: autovacuum launcher process     
+pg93     12181 12135  0 15:42 ?        00:00:00 postgres: archiver process   last was 00000002.history
+pg93     12194     1  0 15:43 pts/1    00:00:00 /opt/pgsql9.3/bin/postgres
+pg93     12195 12194  0 15:43 ?        00:00:00 postgres: logger process   
+pg93     12196 12194  0 15:43 ?        00:00:00 postgres: startup process   recovering 000000020000000200000051
+pg93     12197 12194  0 15:43 ?        00:00:00 postgres: checkpointer process   
+pg93     12198 12194  0 15:43 ?        00:00:00 postgres: writer process   
+pg93     12199 12194  0 15:43 ?        00:00:00 postgres: stats collector process   
+pg93     12200 12194  0 15:43 ?        00:00:00 postgres: wal receiver process   streaming 2/5100EC10
+pg93     12201 12135  0 15:43 ?        00:00:00 postgres: wal sender process postgres 127.0.0.1(61597) streaming 2/5100EC10
+pg93     12211 12135  0 15:43 ?        00:00:00 postgres: autovacuum worker process   postgres
+
+
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=abfd192b1b5ba5216ac4b1f31dcd553106304b19
+2. http://www.postgresql.org/docs/devel/static/protocol-replication.html
+流复制协议新增了TIMELINE_HISTORY 命令, 同时对START_REPLICATION命令做了修改支持TIMELINE参数.
+
+TIMELINE_HISTORY tli
+Requests the server to send over the timeline history file for timeline tli. Server replies with a result set of a single row, containing two fields:
+
+filename
+Filename of the timeline history file, e.g 00000002.history.
+
+content
+Contents of the timeline history file.
+
+START_REPLICATION XXX/XXX TIMELINE tli
+
+
+3. src/backend/replication/walreceiver.c
+
++           ereport(LOG,
++                   (errmsg("fetching timeline history file for timeline %u from primary server",
++                           tli)));
+
+

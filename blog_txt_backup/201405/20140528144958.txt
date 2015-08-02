@@ -1,0 +1,880 @@
+PostgreSQL research
+
+CentOS 6.x Cluster configure Best Practices with ccs command
+
+2014-05-28 14:49:58   查看原文>>
+
+架构借用一张以前的图片, 当时用的是CentOS 5.x. 其实配置方法和6.x差不多.
+http://blog.163.com/digoal@126/blog/static/163877040201041110156427/
+这个架构实际上跑了两个服务, 1个数据库, 1个memcached. 分别跑在两台主机上. 互为主备.
+使用共享存储来存放PostgreSQL的数据.
+CentOS 6.x Cluster configure with ccs command - 德哥@Digoal - PostgreSQL
+ 
+本文将讲解一下CentOS 6.x下的共享存储的数据库集群配置.
+简化讲解, 本文的例子只跑1个数据库服务.
+首先安装必要的包 : 
+
+yum install -y cluster rgmanager* cman* lvm2* gfs2* cmirror ccs
+
+
+关闭这两台主机的高级电源管理服务, 方便fence.
+
+chkconfig acpid off
+
+
+创建cluster.conf配置文件. 如果配置文件已经存在的话会覆盖掉. 集群名yumdemo.
+
+[root@db-192-168-10-146 ~]# ccs -f /etc/cluster/cluster.conf --createcluster yumdemo
+
+
+添加两台主机.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addnode 192.168.10.146
+Node 192.168.10.146 added.
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addnode 192.168.10.150
+Node 192.168.10.150 added.
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsnodes
+192.168.10.146: nodeid=1
+192.168.10.150: nodeid=2
+
+
+添加完后, 配置文件如下
+
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="3" name="yumdemo">
+  <fence_daemon/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1"/>
+    <clusternode name="192.168.10.150" nodeid="2"/>
+  </clusternodes>
+  <cman/>
+  <fencedevices/>
+  <rm>
+    <failoverdomains/>
+    <resources/>
+  </rm>
+</cluster>
+
+
+为两台主机添加两个fence方法, 方法名字随意.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addmethod BMC 192.168.10.146
+Method BMC added to 192.168.10.146.
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addmethod BMC 192.168.10.150
+Method BMC added to 192.168.10.150.
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="5" name="yumdemo">
+  <fence_daemon/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC"/>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC"/>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices/>
+  <rm>
+    <failoverdomains/>
+    <resources/>
+  </rm>
+</cluster>
+
+
+
+设置fence的属性, fail延迟和加入延迟.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --setfencedaemon post_fail_delay=6 post_join_delay=30
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="8" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC"/>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC"/>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices/>
+  <rm>
+    <failoverdomains/>
+    <resources/>
+  </rm>
+</cluster>
+
+
+
+本文两台主机的fence设备是服务器的管理卡, 所以我们首先要配置服务器的ipmi接口.
+一般在bios或WEB中可以配置, 注意开启用户的ipmi功能, 选择适当的角色. 
+例如本文两台联想的服务器, 角色OPERATOR.
+测试ipmi管理是否正常
+
+[root@db-192-168-10-150 ~]# fence_ipmilan -a 192.168.9.66 -l user2014 -p abc -o status -L OPERATOR
+Getting status of IPMI:192.168.9.66...Chassis power = On
+Done
+
+[root@db-192-168-10-150 ~]# fence_ipmilan -a 192.168.9.72 -l user -p abc -o status -L OPERATOR
+Getting status of IPMI:192.168.9.72...Chassis power = On
+Done
+
+
+
+查看操作系统支持的fence设备, 以及fence设备对应的配置项, 参考本文末尾.
+这里用到的agent为fence_ipmilan
+添加两个fence设备, 对应的用户密码等属性. fence设备的名称注意区分, 分别用于两台主机的fence.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfencedev fence_146 agent=fence_ipmilan ipaddr=192.168.9.66 login=user2014 passwd=abc privlvl=OPERATOR
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfencedev fence_150 agent=fence_ipmilan ipaddr=192.168.9.72 login=user passwd=abc privlvl=OPERATOR
+
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="10" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC"/>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC"/>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.66" login="user2014" name="fence_146" passwd="abc" privlvl="OPERATOR"/>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.72" login="user" name="fence_150" passwd="abc" privlvl="OPERATOR"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains/>
+    <resources/>
+  </rm>
+</cluster>
+
+
+
+为每台主机添加对应的fence操作, 注意对应的fence设备名, 是上一步添加的fence设备名.
+fence设备的属性见本文末尾. 我们这里使用到的是action=off和action=on, 用于关机和开机.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfenceinst fence_146 192.168.10.146 BMC action=off
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfenceinst fence_146 192.168.10.146 BMC action=on
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfenceinst fence_150 192.168.10.150 BMC action=off
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfenceinst fence_150 192.168.10.150 BMC action=on
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="12" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_146"/>
+          <device action="on" name="fence_146"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_150"/>
+          <device action="on" name="fence_150"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.66" login="user2014" name="fence_146" passwd="abc" privlvl="OPERATOR"/>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.72" login="user" name="fence_150" passwd="abc" privlvl="OPERATOR"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains/>
+    <resources/>
+  </rm>
+</cluster>
+
+
+
+新建failover域, failover域支持的属性见本文末尾  : 
+这里开启了ordered, 但是不开启failback. 
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfailoverdomain yumdemo_fd restricted ordered nofailback
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="13" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_146"/>
+          <device action="on" name="fence_146"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_150"/>
+          <device action="on" name="fence_150"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.66" login="user2014" name="fence_146" passwd="abc" privlvl="OPERATOR"/>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.72" login="user" name="fence_150" passwd="abc" privlvl="OPERATOR"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains>
+      <failoverdomain name="yumdemo_fd" nofailback="1" ordered="1" restricted="1"/>
+    </failoverdomains>
+    <resources/>
+  </rm>
+</cluster>
+
+
+
+把两台主机添加到failover域.
+优先级都设置为1.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfailoverdomainnode yumdemo_fd 192.168.10.146 1
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addfailoverdomainnode yumdemo_fd 192.168.10.150 1
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="15" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_146"/>
+          <device action="on" name="fence_146"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_150"/>
+          <device action="on" name="fence_150"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.66" login="user2014" name="fence_146" passwd="abc" privlvl="OPERATOR"/>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.72" login="user" name="fence_150" passwd="abc" privlvl="OPERATOR"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains>
+      <failoverdomain name="yumdemo_fd" nofailback="1" ordered="1" restricted="1">
+        <failoverdomainnode name="192.168.10.146" priority="1"/>
+        <failoverdomainnode name="192.168.10.150" priority="1"/>
+      </failoverdomain>
+    </failoverdomains>
+    <resources/>
+  </rm>
+</cluster>
+
+
+
+列出系统支持的资源, 以及资源对应的配置项.
+添加虚拟IP资源.
+后面的服务中会用到这里的资源.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addresource ip address=192.168.10.151 monitor_link=1
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="20" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_146"/>
+          <device action="on" name="fence_146"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_150"/>
+          <device action="on" name="fence_150"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.66" login="user2014" name="fence_146" passwd="abc" privlvl="OPERATOR"/>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.72" login="user" name="fence_150" passwd="abc" privlvl="OPERATOR"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains>
+      <failoverdomain name="yumdemo_fd" nofailback="1" ordered="1" restricted="1">
+        <failoverdomainnode name="192.168.10.146" priority="1"/>
+        <failoverdomainnode name="192.168.10.150" priority="1"/>
+      </failoverdomain>
+    </failoverdomains>
+    <resources>
+      <ip address="192.168.10.151" monitor_link="1"/>
+    </resources>
+  </rm>
+</cluster>
+
+
+
+添加服务, 服务的属性见本文末尾.
+不使用自动启动. 因为它不需要在两个节点同时启用, 只能在一个节点启用. 
+对于共享服务的话, 可以自动启用, 但也要考虑启用顺序, 例如共享卷, 可以考虑自动启用.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addservice yumdemo_pg domain=yumdemo_fd autostart=0 
+
+
+在上一步添加的服务中, 添加子服务, 即资源. 我们这里把IP资源作为子服务添加到这个服务下.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --addsubservice yumdemo_pg ip ref=192.168.10.151
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="27" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_146"/>
+          <device action="on" name="fence_146"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_150"/>
+          <device action="on" name="fence_150"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman/>
+  <fencedevices>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.66" login="user2014" name="fence_146" passwd="abc" privlvl="OPERATOR"/>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.72" login="user" name="fence_150" passwd="abc" privlvl="OPERATOR"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains>
+      <failoverdomain name="yumdemo_fd" nofailback="1" ordered="1" restricted="1">
+        <failoverdomainnode name="192.168.10.146" priority="1"/>
+        <failoverdomainnode name="192.168.10.150" priority="1"/>
+      </failoverdomain>
+    </failoverdomains>
+    <resources>
+      <ip address="192.168.10.151" monitor_link="1"/>
+    </resources>
+    <service autostart="0" domain="yumdemo_fd" name="yumdemo_pg">
+      <ip ref="192.168.10.151"/>
+    </service>
+  </rm>
+</cluster>
+
+
+
+设置cluster management的参数. 本文使用2个节点, 所以投票时单节点无法满足超过一半的票数.
+那么需要设置这里的CMAN属性为2节点, 期望票数为1.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --setcman two_node=1 expected_votes=1
+[root@db-192-168-10-146 yum.repos.d]# cat /etc/cluster/cluster.conf 
+<cluster config_version="2" name="yumdemo">
+  <fence_daemon post_fail_delay="6" post_join_delay="30"/>
+  <clusternodes>
+    <clusternode name="192.168.10.146" nodeid="1">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_146"/>
+          <device action="on" name="fence_146"/>
+        </method>
+      </fence>
+    </clusternode>
+    <clusternode name="192.168.10.150" nodeid="2">
+      <fence>
+        <method name="BMC">
+          <device action="off" name="fence_150"/>
+          <device action="on" name="fence_150"/>
+        </method>
+      </fence>
+    </clusternode>
+  </clusternodes>
+  <cman expected_votes="1" two_node="1"/>
+  <fencedevices>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.66" login="user2014" name="fence_146" passwd="abc" privlvl="OPERATOR"/>
+    <fencedevice agent="fence_ipmilan" ipaddr="192.168.9.72" login="user" name="fence_150" passwd="abc" privlvl="OPERATOR"/>
+  </fencedevices>
+  <rm>
+    <failoverdomains>
+      <failoverdomain name="yumdemo_fd" nofailback="1" ordered="1" restricted="1">
+        <failoverdomainnode name="192.168.10.146" priority="1"/>
+        <failoverdomainnode name="192.168.10.150" priority="1"/>
+      </failoverdomain>
+    </failoverdomains>
+    <resources>
+      <ip address="192.168.10.151" monitor_link="1"/>
+    </resources>
+    <service autostart="0" domain="yumdemo_fd" name="yumdemo_pg">
+      <ip ref="192.168.10.151"/>
+    </service>
+  </rm>
+</cluster>
+
+
+
+开启所有组件的日志
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --setlogging
+
+
+把/etc/cluster/cluster.conf拷贝到集群中的另一台主机上.
+确保两台主机可以相互通信, 所以如果开启了iptables 的话, 需要配置一下防火墙.
+然后两个节点同时启动cman服务, 注意是同时, 否则另一个节点会因为加入延迟超时被fence掉.
+
+[root@db-192-168-10-146 yum.repos.d]# service cman start
+Starting cluster: 
+   Checking if cluster has been disabled at boot... [  OK  ]
+   Checking Network Manager... [  OK  ]
+   Global setup... [  OK  ]
+   Loading kernel modules... [  OK  ]
+   Mounting configfs... [  OK  ]
+   Starting cman... [  OK  ]
+   Waiting for quorum... [  OK  ]
+   Starting fenced... [  OK  ]
+   Starting dlm_controld... [  OK  ]
+   Tuning DLM kernel config... [  OK  ]
+   Starting gfs_controld... [  OK  ]
+   Unfencing self... [  OK  ]
+   Joining fence domain... [  OK  ]
+
+[root@db-192-168-10-150 ~]# service cman start
+Starting cluster: 
+   Checking if cluster has been disabled at boot... [  OK  ]
+   Checking Network Manager... [  OK  ]
+   Global setup... [  OK  ]
+   Loading kernel modules... [  OK  ]
+   Mounting configfs... [  OK  ]
+   Starting cman... [  OK  ]
+   Waiting for quorum... [  OK  ]
+   Starting fenced... [  OK  ]
+   Starting dlm_controld... [  OK  ]
+   Tuning DLM kernel config... [  OK  ]
+   Starting gfs_controld... [  OK  ]
+   Unfencing self... [  OK  ]
+   Joining fence domain... [  OK  ]
+[root@db-192-168-10-150 ~]# service rgmanager start
+Starting Cluster Service Manager: [  OK  ]
+
+
+
+2个节点都启动资源管理服务
+
+[root@db-192-168-10-146 yum.repos.d]# service rgmanager start
+Starting Cluster Service Manager: [  OK  ]
+
+
+查看集群状态
+
+[root@db-192-168-10-146 yum.repos.d]# clustat
+Cluster Status for yumdemo @ Wed May 28 10:18:16 2014
+Member Status: Quorate
+
+ Member Name                                                     ID   Status
+ ------ ----                                                     ---- ------
+ 192.168.10.146                                                     1 Online, Local, rgmanager
+ 192.168.10.150                                                     2 Online, rgmanager
+
+ Service Name                                             Owner (Last)                                             State         
+ ------- ----                                             ----- ------                                             -----         
+ service:yumdemo_pg                                       (none)                                                   disabled      
+
+
+使用clusvcadm启动服务.
+我们这里的服务yumdemo_pg中只包含了1个虚拟IP地址资源.
+所以启动后, 这个虚拟IP就跑在某台主机上了. 
+
+[root@db-192-168-10-146 yum.repos.d]# clusvcadm -e yumdemo_pg
+Local machine trying to enable service:yumdemo_pg...Success
+service:yumdemo_pg is now running on 192.168.10.146
+
+[root@db-192-168-10-146 yum.repos.d]# ping 192.168.10.151
+PING 192.168.10.151 (192.168.10.151) 56(84) bytes of data.
+64 bytes from 192.168.10.151: icmp_seq=1 ttl=64 time=0.077 ms
+64 bytes from 192.168.10.151: icmp_seq=2 ttl=64 time=0.032 ms
+
+
+
+切换测试, 把主节点的
+
+[root@db-192-168-10-146 ~]# ifdown eth0
+
+
+查看另一台主机的日志
+
+[root@db-192-168-10-150 ~]# tail -f -n 1 /var/log/messages
+May 28 13:31:30 db-192-168-10-150 rgmanager[2534]: State change: 192.168.10.146 UP
+May 28 13:33:31 db-192-168-10-150 corosync[2272]:   [TOTEM ] A processor failed, forming new configuration.
+May 28 13:33:33 db-192-168-10-150 corosync[2272]:   [QUORUM] Members[1]: 2
+May 28 13:33:33 db-192-168-10-150 corosync[2272]:   [TOTEM ] A processor joined or left the membership and a new membership was formed.
+May 28 13:33:33 db-192-168-10-150 rgmanager[2534]: State change: 192.168.10.146 DOWN
+May 28 13:33:33 db-192-168-10-150 corosync[2272]:   [CPG   ] chosen downlist: sender r(0) ip(192.168.10.150) ; members(old:2 left:1)
+May 28 13:33:33 db-192-168-10-150 kernel: dlm: closing connection to node 1
+May 28 13:33:33 db-192-168-10-150 corosync[2272]:   [MAIN  ] Completed service synchronization, ready to provide service.
+May 28 13:33:39 db-192-168-10-150 fenced[2327]: fencing node 192.168.10.146
+May 28 13:33:54 db-192-168-10-150 fenced[2327]: fence 192.168.10.146 success
+May 28 13:33:55 db-192-168-10-150 rgmanager[2534]: Taking over service service:yumdemo_pg from down member 192.168.10.146
+May 28 13:33:55 db-192-168-10-150 rgmanager[3479]: [ip] Adding IPv4 address 192.168.10.151/24 to eth0
+May 28 13:33:58 db-192-168-10-150 rgmanager[2534]: Service service:yumdemo_pg started
+
+
+fence成功后, 服务yumdemo_pg 切换到这台主机了.
+
+[root@db-192-168-10-150 ~]# clustat
+Cluster Status for yumdemo @ Wed May 28 10:22:37 2014
+Member Status: Quorate
+
+ Member Name                                                     ID   Status
+ ------ ----                                                     ---- ------
+ 192.168.10.146                                                     1 Offline
+ 192.168.10.150                                                     2 Online, Local, rgmanager
+
+ Service Name                                             Owner (Last)                                             State         
+ ------- ----                                             ----- ------                                             -----         
+ service:yumdemo_pg                                       192.168.10.150                                          started
+
+
+我们这个例子的fence包含了关机和开机操作, 所以一段时间后可以看到被fence掉的主机重启了.
+重启后, 我们需要做的是把它的cman和rgmanager服务开启来. 
+
+service cman start
+service rgmanager start
+
+
+然后看这个集群的状态
+
+[root@db-192-168-10-150 ~]# clustat
+Cluster Status for yumdemo @ Wed May 28 10:29:42 2014
+Member Status: Quorate
+
+ Member Name                                                     ID   Status
+ ------ ----                                                     ---- ------
+ 192.168.10.146                                                     1 Online
+ 192.168.10.150                                                     2 Online, Local, rgmanager
+
+ Service Name                                             Owner (Last)                                             State         
+ ------- ----                                             ----- ------                                             -----         
+ service:yumdemo_pg                                       192.168.10.150                                          started
+
+
+到这里, 简单的HA就搭建完成了.
+后面我们还要做的是把逻辑卷的管理, 文件系统的管理, 数据库的管理等加到HA的资源和服务中来.
+让rgmanager来管理这些资源, 达到HA的目的.
+下一篇文章再详细介绍.
+
+例如, 如果集群文件系统基于逻辑卷的话, 那么需要配置lvm.conf
+https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Cluster_Administration/ap-ha-halvm-CA.html
+
+
+# vi /etc/lvm/lvm.conf 
+locking_type = 3
+
+chkconfig clvmd on
+service clvmd restart
+
+[root@db-192-168-10-150 ~]# pvcreate /dev/sdb
+  Physical volume "/dev/sdb" successfully created
+[root@db-192-168-10-150 ~]# pvcreate /dev/sdc
+  Physical volume "/dev/sdc" successfully created
+[root@db-192-168-10-150 ~]# pvcreate /dev/sdd
+  Physical volume "/dev/sdd" successfully created
+[root@db-192-168-10-150 ~]# pvcreate /dev/sde
+  Physical volume "/dev/sde" successfully created
+[root@db-192-168-10-150 ~]# pvcreate /dev/sdf
+  Physical volume "/dev/sdf" successfully created
+
+vgcreate
+        [-c|--clustered {y|n}] 
+
+[root@db-192-168-10-150 ~]# vgcreate -cy vgdata01 /dev/sd[b-f]
+  Clustered volume group "vgdata01" successfully created
+
+
+
+如果要把脚本作为资源的话, 需要的配置如下 : 
+注意脚本的调用规格必须和LSB兼容, 例如test.sh start|stop|restart|status|reload
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts script
+script - LSB-compliant init script as a clustered resource.
+  Required Options:
+    name: Name
+    file: Path to script
+  Optional Options:
+    service_name: Inherit the service name.
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+
+
+[参考]
+1. https://access.redhat.com/site/documentation/en-US/
+2. https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Cluster_Administration/index.html
+3. https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Cluster_Administration/ap-ha-halvm-CA.html
+4. man ccs
+5. man ipmitool
+6. man cluster.conf
+7. 查看操作系统支持的fence设备和对应的配置项.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsfenceopts
+fence_apc - Fence agent for APC over telnet/ssh
+fence_apc_snmp - Fence agent for APC over SNMP
+fence_bladecenter - Fence agent for IBM BladeCenter
+fence_bladecenter_snmp - Fence agent for IBM BladeCenter over SNMP
+fence_brocade - Fence agent for Brocade over telnet
+fence_cisco_mds - Fence agent for Cisco MDS
+fence_cisco_ucs - Fence agent for Cisco UCS
+fence_drac - fencing agent for Dell Remote Access Card
+fence_drac5 - Fence agent for Dell DRAC CMC/5
+fence_eaton_snmp - Fence agent for Eaton over SNMP
+fence_egenera - I/O Fencing agent for the Egenera BladeFrame
+fence_eps - Fence agent for ePowerSwitch
+fence_hpblade - Fence agent for HP BladeSystem
+fence_ibmblade - Fence agent for IBM BladeCenter over SNMP
+fence_idrac - Fence agent for IPMI over LAN
+fence_ifmib - Fence agent for IF MIB
+fence_ilo - Fence agent for HP iLO
+fence_ilo2 - Fence agent for HP iLO
+fence_ilo3 - Fence agent for IPMI over LAN
+fence_ilo4 - Fence agent for IPMI over LAN
+fence_ilo_mp - Fence agent for HP iLO MP
+fence_imm - Fence agent for IPMI over LAN
+fence_intelmodular - Fence agent for Intel Modular
+fence_ipdu - Fence agent for iPDU over SNMP
+fence_ipmilan - Fence agent for IPMI over LAN
+fence_kdump - Fence agent for use with kdump
+fence_pcmk - Helper that presents a RHCS-style interface to stonith-ng for CMAN based clusters
+fence_rhevm - Fence agent for RHEV-M REST API
+fence_rsa - Fence agent for IBM RSA
+fence_rsb - I/O Fencing agent for Fujitsu-Siemens RSB
+fence_sanbox2 - Fence agent for QLogic SANBox2 FC switches
+fence_sanlock - Fence agent for watchdog and shared storage
+fence_scsi - fence agent for SCSI-3 persistent reservations
+fence_virsh - Fence agent for virsh
+fence_virt - Fence agent for virtual machines
+fence_vmware - Fence agent for VMWare
+fence_vmware_soap - Fence agent for VMWare over SOAP API
+fence_wti - Fence agent for WTI
+fence_xvm - Fence agent for virtual machines
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsfenceopts fence_ipmilan
+fence_ipmilan - Fence agent for IPMI over LAN
+  Required Options:
+  Optional Options:
+    option: No description available
+    auth: IPMI Lan Auth type (md5, password, or none)
+    ipaddr: IPMI Lan IP to talk to
+    passwd: Password (if required) to control power on IPMI device
+    passwd_script: Script to retrieve password (if required)
+    lanplus: Use Lanplus to improve security of connection
+    login: Username/Login (if required) to control power on IPMI device
+    action: Operation to perform. Valid operations: on, off, reboot, status, list, diag, monitor or metadata
+    timeout: Timeout (sec) for IPMI operation
+    cipher: Ciphersuite to use (same as ipmitool -C parameter)
+    method: Method to fence (onoff or cycle)
+    power_wait: Wait X seconds after on/off operation
+    delay: Wait X seconds before fencing is started
+    privlvl: Privilege level on IPMI device
+    verbose: Verbose mode
+
+
+8. failover域属性
+
+A failover domain is  a named subset of cluster nodes  that are eligible to run a cluster service in the
+event of a node failure.  A failover domain can have the following characteristics :
+Unrestricted — Allows  you to specify that a subset of members  are preferred,  but that a cluster
+service as signed to this  domain can run on any available member.
+Restricted — Allows  you to restrict the members  that can run a particular cluster service.  If none of
+the members  in a restricted failover domain are available,  the cluster service cannot be started
+(either manually or by the cluster software).
+Unordered — When a clus ter s ervice is  as signed to an unordered failover domain,  the member on
+which the cluster service runs  is  chosen from the available failover domain members  with no priority
+ordering.
+Ordered — Allows  you to specify a preference order among the members  of a failover domain.  The
+member at the top of the list is  the most preferred,  followed by the second member in the list,  and so
+on.
+Failback — Allows  you to specify whether a s ervice in the failover domain should fail back to the node
+that it was  originally running on before that node failed.  Configuring this  characteristic is  useful in
+circumstances  where a node repeatedly fails  and is  part of an ordered failover domain.  In that
+circumstance,  if a node is  the preferred node in a failover domain,  it is  possible for a service to fail
+over and fail back repeatedly between the preferred node and another node,  causing severe impact
+on performance.
+
+
+9. 操作系统支持的资源, 以及资源对应的配置选项.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts
+service - Defines a service (resource group).
+ASEHAagent - Sybase ASE Failover Instance
+SAPDatabase - Manages any SAP database (based on Oracle, MaxDB, or DB2)
+SAPInstance - SAP instance resource agent
+apache - Defines an Apache web server
+clusterfs - Defines a cluster file system mount.
+fs - Defines a file system mount.
+ip - This is an IP address.
+lvm - LVM Failover script
+mysql - Defines a MySQL database server
+named - Defines an instance of named server
+netfs - Defines an NFS/CIFS file system mount.
+nfsclient - Defines an NFS client.
+nfsexport - This defines an NFS export.
+nfsserver - This defines an NFS server resource.
+openldap - Defines an Open LDAP server
+oracledb - Oracle 10g/11g Failover Instance
+orainstance - Oracle 10g Failover Instance
+oralistener - Oracle 10g Listener Instance
+postgres-8 - Defines a PostgreSQL server
+samba - Dynamic smbd/nmbd resource agent
+script - LSB-compliant init script as a clustered resource.
+tomcat-6 - Defines a Tomcat server
+vm - Defines a Virtual Machine
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts ip
+ip - This is an IP address.
+  Required Options:
+    address: IP Address
+  Optional Options:
+    family: Family
+    monitor_link: Monitor NIC Link
+    nfslock: Enable NFS lock workarounds
+    sleeptime: Amount of time (seconds) to sleep.
+    disable_rdisc: Disable updating of routing using RDISC protocol
+    prefer_interface: Network interface
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts fs
+fs - Defines a file system mount.
+  Required Options:
+    name: File System Name
+    mountpoint: Mount Point
+    device: Device or Label
+  Optional Options:
+    fstype: File system type
+    force_unmount: Force Unmount
+    quick_status: Quick/brief status checks.
+    self_fence: Seppuku Unmount
+    nfslock: Enable NFS lock workarounds
+    nfsrestart: Enable NFS daemon and lockd workaround
+    fsid: NFS File system ID
+    force_fsck: Force fsck support
+    options: Mount Options
+    use_findmnt: Utilize findmnt to detect if and where filesystems are mounted
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+[root@db-192-168-10-146 yum.repos.d]# ccs -f /etc/cluster/cluster.conf --lsserviceopts lvm
+lvm - LVM Failover script
+  Required Options:
+    name: Name
+    vg_name: Volume group name
+  Optional Options:
+    lv_name: Logical Volume name (optional).
+    self_fence: Fence the node if it is not able to clean up LVM tags
+    nfslock: Enable NFS lock workarounds
+    __independent_subtree: Treat this and all children as an independent subtree.
+    __enforce_timeouts: Consider a timeout for operations as fatal.
+    __max_failures: Maximum number of failures before returning a failure to a status check.
+    __failure_expire_time: Amount of time before a failure is forgotten.
+    __max_restarts: Maximum number restarts for an independent subtree before giving up.
+    __restart_expire_time: Amount of time before a failure is forgotten for an independent subtree.
+
+
+10. 服务的属性
+
+When you add a service to the clus ter configuration,  you configure the following attributes :
+autostart — Specifies  whether to autos tart the s ervice when the clus ter starts .  Use " 1"  to
+enable and " 0 "  to disable;  the default is  enabled.
+domain — Specifies  a failover domain (if required).
+exclusive — Specifies  a policy wherein the s ervice only runs  on nodes  that have no other
+services  running on them.
+recovery — Specifies  a recovery policy for the s ervice.  T he options  are to relocate,  res tart,
+disable,  or restart-disable the s ervice.  T he res tart recovery policy indicates  that the s ys tem
+should attempt to res tart the failed s ervice before trying to relocate the s ervice to another
+node.  T he relocate policy indicates  that the s ys tem s hould try to res tart the s ervice in a
+different node.  T he dis able policy indicates  that the s ys tem s hould dis able the res ource group
+if any component fails .  T he restart-disable policy indicates  that the system should attempt to
+res tart the s ervice in place if it fails ,  but if res tarting the s ervice fails  the s ervice will be
+dis abled ins tead of being moved to another hos t in the cluster.
+If you s elect Restart  or Restart - Disable  as  the recovery policy for the s ervice,  you can
+specify the maximum number of res tart failures  before relocating or dis abling the s ervice,  and
+you can s pecify the length of time in s econds  after which to forget a restart.
+
+
+11. 配置多播地址, 可选. 如果不配置, 多播地址从集群ID中运算出来.
+所以我们需要在同一个多播域中使用不同的集群名来区分多播地址.
+多播是用于集群中的心跳检测的.
+
+If you do not specify a multicast address  in the cluster configuration file,  the Red Hat High Availability
+Add-On software creates  one based on the cluster ID.  It generates  the lower 16 bits  of the address  and
+appends  them to the upper portion of the address  according to whether the IP protocol is  IPv4  or IPv6:
+For IPv4  — The address  formed is  239.192.  plus  the lower 16 bits  generated by Red Hat High
+Availability Add-On software.
+For IPv6 — The addres s  formed is  FF15: :  plus  the lower 16 bits  generated by Red Hat High
+Availability Add-On software.
+
+The cluster ID is  a unique identifier that cman generates  for each cluster.  To view the cluster ID,
+run the cman_tool status command on a cluster node.
+
+[root@db-192-168-10-146 ~]# cman_tool status
+Version: 6.2.0
+Config Version: 6
+Cluster Name: yumdemo
+Cluster Id: 57130
+Cluster Member: Yes
+Cluster Generation: 20
+Membership state: Cluster-Member
+Nodes: 1
+Expected votes: 1
+Total votes: 1
+Node votes: 1
+Quorum: 1  
+Active subsystems: 8
+Flags: 2node 
+Ports Bound: 0 177  
+Node name: 192.168.10.146
+Node ID: 1
+Multicast addresses: 239.192.223.10 
+Node addresses: 192.168.10.146 
+
+
+12. cluster配置文件有一个版本号, 每次修改配置文件后, 如果要使配置文件在重启cman后生效必须把版本号加1. 
+同时必须确保集群中的所有服务器的cluster.conf文件内容一致, 版本号一致.
+13. /usr/share/cluster/cluster.rng 包含了详细的cluster.conf文件的说明.
+
+Flag Counter

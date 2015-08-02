@@ -1,0 +1,536 @@
+PostgreSQL research
+
+PostgreSQL log and trace and debug
+
+2014-03-20 11:09:32   查看原文>>
+
+PostgreSQL在代码中放了大量的输出数据库运行状态的函数, 例如这段代码, 在参数文件postgresql.conf中开启了log_connections的情况下, 将输出数据库接收到连接请求时的客户端主机和端口信息.
+src/backend/postmaster/postmaster.c
+
+        if (Log_connections)
+        {
+                if (remote_port[0])
+                        ereport(LOG,
+                                        (errmsg("connection received: host=%s port=%s",
+                                                        remote_host,
+                                                        remote_port)));
+                else
+                        ereport(LOG,
+                                        (errmsg("connection received: host=%s",
+                                                        remote_host)));
+        }
+
+
+PostgreSQL一般使用elog或ereport来输出消息. 输出消息时包含了消息级别, 这些级别被用于日志文件或客户端作为过滤条件, 定义如下 : 
+src/include/utils/elog.h
+
+#ifdef HAVE__BUILTIN_CONSTANT_P
+#define elog(elevel, ...)  \
+        do { \
+                elog_start(__FILE__, __LINE__, PG_FUNCNAME_MACRO); \
+                elog_finish(elevel, __VA_ARGS__); \
+                if (__builtin_constant_p(elevel) && (elevel) >= ERROR) \
+                        pg_unreachable(); \
+        } while(0)
+#else                                                   /* !HAVE__BUILTIN_CONSTANT_P */
+#define elog(elevel, ...)  \
+        do { \
+                int             elevel_; \
+                elog_start(__FILE__, __LINE__, PG_FUNCNAME_MACRO); \
+                elevel_ = (elevel); \
+                elog_finish(elevel_, __VA_ARGS__); \
+                if (elevel_ >= ERROR) \
+                        pg_unreachable(); \
+        } while(0)
+#endif   /* HAVE__BUILTIN_CONSTANT_P */
+#define ereport(elevel, rest)   \
+        ereport_domain(elevel, TEXTDOMAIN, rest)
+
+
+消息级别的定义如下 : 
+
+/* Error level codes */
+#define DEBUG5          10                      /* Debugging messages, in categories of
+                                                                 * decreasing detail. */
+#define DEBUG4          11
+#define DEBUG3          12
+#define DEBUG2          13
+#define DEBUG1          14                      /* used by GUC debug_* variables */
+#define LOG                     15                      /* Server operational messages; sent only to
+                                                                 * server log by default. */
+#define COMMERROR       16                      /* Client communication problems; same as LOG
+                                                                 * for server reporting, but never sent to
+                                                                 * client. */
+#define INFO            17                      /* Messages specifically requested by user (eg
+                                                                 * VACUUM VERBOSE output); always sent to
+                                                                 * client regardless of client_min_messages,
+                                                                 * but by default not sent to server log. */
+#define NOTICE          18                      /* Helpful messages to users about query
+                                                                 * operation; sent to client and server log by
+                                                                 * default. */
+#define WARNING         19                      /* Warnings.  NOTICE is for expected messages
+                                                                 * like implicit sequence creation by SERIAL.
+                                                                 * WARNING is for unexpected messages. */
+#define ERROR           20                      /* user error - abort transaction; return to
+                                                                 * known state */
+#ifdef WIN32
+#define PGERROR         20
+#endif
+#define FATAL           21                      /* fatal error - abort process */
+#define PANIC           22                      /* take down the other backends with me */
+
+
+那么这些信息都输出到哪里去了呢? PostgreSQL日志信息输出位置配置, 如下举例 : 
+
+log_destination = 'csvlog'              # Valid values are combinations of
+                                        # stderr, csvlog, syslog, and eventlog,
+                                        # depending on platform.  csvlog
+                                        # requires logging_collector to be on.
+log_directory = '/mnt/csvlog'           # directory where log files are written,
+                                        # can be absolute or relative to PGDATA
+#log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'        # log file name pattern,
+                                        # can include strftime() escapes
+log_error_verbosity = verbose           # terse, default, or verbose messages
+
+
+以csvlog为例, 日志信息记录在/mnt/csvlog中, 信息举例 : 
+
+pg93@db-172-16-3-150-> less postgresql-2014-03-19_171700.csv
+2014-03-19 17:17:02.870 CST,,,17705,"",5329608e.4529,1,"",2014-03-19 17:17:02 CST,,0,LOG,00000,"connection received: host=[local]",,,,,,,,"BackendInitialize, postmaster.c:3854",""
+
+
+因为设置了log_error_verbosity = verbose, 将输出代码信息, 指这条log信息是哪个函数输出的.
+哪些日志会打印到csvlog, 或者客户端会话呢? 由以下参数决定, 级别越高, 输出的消息越多 : 
+需要注意log_min_messages的log位置在比较低的级别, 如果设置为log, 将不会在csvlog中输出error级别以及以上级别的消息.
+但是client_min_messages的log位置在error之上, 所以设置为log的话, 客户端能看到错误级别的消息.
+
+#client_min_messages = notice           # values in order of decreasing detail:
+                                        #   debug5
+                                        #   debug4
+                                        #   debug3
+                                        #   debug2
+                                        #   debug1
+                                        #   log
+                                        #   notice
+                                        #   warning
+                                        #   error
+#log_min_messages = warning             # values in order of decreasing detail:
+                                        #   debug5
+                                        #   debug4
+                                        #   debug3
+                                        #   debug2
+                                        #   debug1
+                                        #   info
+                                        #   notice
+                                        #   warning
+                                        #   error
+                                        #   log
+                                        #   fatal
+                                        #   panic
+#log_min_error_statement = error        # values in order of decreasing detail:
+                                        #   debug5
+                                        #   debug4
+                                        #   debug3
+                                        #   debug2
+                                        #   debug1
+                                        #   info
+                                        #   notice
+                                        #   warning
+                                        #   error
+                                        #   log
+                                        #   fatal
+                                        #   panic (effectively off)
+
+
+例如 : 
+把客户端的日志打印级别改为error, 那么notice级别的消息将不会被打印.
+
+digoal=# set client_min_messages=error;
+SET
+digoal=# do language plpgsql $$
+digoal$# declare
+digoal$# begin
+digoal$#   raise notice 'this is a test.';
+digoal$# end;
+digoal$# $$;
+DO
+
+
+把客户端的日志打印级别改为notice, 那么这个例子的notice级别的消息会被打印出来.
+
+digoal=# set client_min_messages=notice;
+SET
+digoal=# do language plpgsql $$
+declare
+begin
+  raise notice 'this is a test.';
+end;
+$$;
+NOTICE:  this is a test.
+DO
+
+
+因此要输出最详细的全局信息, 把log_min_messages设置为debug5, 如果要得到当前会话的最详细的信息, 把client_min_messages设置为debug5即可.
+除此之外, 数据库还定义了一些隐藏的消息输出, 需要开启某些参数, 或者在编译前打开一些定义才会输出, 例如 : 
+1. 开发参数中提到的某些参数需要在编译时开启某些宏的定义, 这些参数才能生效.
+http://www.postgresql.org/docs/9.3/static/runtime-config-developer.html
+
+debug_assertions 需要开启宏USE_ASSERT_CHECKING 
+trace_locks , trace_lwlocks , trace_userlocks , trace_lock_oidmin , trace_lock_table , debug_deadlocks 需要开启宏LOCK_DEBUG 
+log_btree_build_stats 需要开启宏BTREE_BUILD_STATS 
+wal_debug 需要开启宏WAL_DEBUG.
+
+
+
+2.  在参数文件What To Log中提到的一些
+http://www.postgresql.org/docs/9.3/static/runtime-config-logging.html#RUNTIME-CONFIG-LOGGING-WHAT
+
+application_name (string) 输出客户端指定的应用名
+debug_print_parse (boolean) 输出parse阶段的信息
+debug_print_rewritten (boolean) 输出rewritten阶段的信息
+debug_print_plan (boolean) 输出执行计划信息
+debug_pretty_print (boolean) 以比较易读的方式输出以上三个参数的信息
+log_checkpoints (boolean) 输出检查点信息
+log_connections (boolean) 输出连接信息
+log_disconnections (boolean) 输出断开连接信息
+log_duration (boolean) 输出SQL语句执行时间信息
+log_error_verbosity (enum) 输出详细级别, 例如函数以及代码文件名
+log_hostname (boolean) 主机名
+log_line_prefix (string) 输出位置为标准输出或者系统日志时, 指定输出格式
+log_lock_waits (boolean) 输出锁等待
+log_statement (enum) 按过滤条件输出SQL语句, 例如ddl, mod, all
+log_temp_files (integer)  按过滤条件输出临时文件相关信息
+log_timezone (string) 指定时区
+
+
+
+3. 在代码中定义的宏, 可以开启一些隐藏的输出, 例如:
+
+src/include/pg_config_manual.h
+/*
+ * Define this to force all parse and plan trees to be passed through
+ * copyObject(), to facilitate catching errors and omissions in
+ * copyObject().
+ */
+/* #define COPY_PARSE_PLAN_TREES */
+/*
+ * Enable debugging print statements for lock-related operations.
+ */
+/* #define LOCK_DEBUG */
+/*
+ * Enable debugging print statements for WAL-related operations; see
+ * also the wal_debug GUC var.
+ */
+/* #define WAL_DEBUG */
+/*
+ * Enable tracing of resource consumption during sort operations;
+ * see also the trace_sort GUC var.  For 8.1 this is enabled by default.
+ */
+#define TRACE_SORT 1
+/*
+ * Enable tracing of syncscan operations (see also the trace_syncscan GUC var).
+ */
+/* #define TRACE_SYNCSCAN */
+/*
+ * Other debug #defines (documentation, anyone?)
+ */
+/* #define HEAPDEBUGALL */
+/* #define ACLDEBUG */
+/* #define RTDEBUG */
+
+src/backend/optimizer/path/allpaths.c
+#ifdef OPTIMIZER_DEBUG
+        debug_print_rel(root, rel);
+#endif
+
+src/backend/optimizer/geqo/geqo_main.c
+#ifdef GEQO_DEBUG
+        elog(DEBUG1, "GEQO best is %.2f after %d generations",
+                 pool->data[0].worth, number_generations);
+#endif
+
+src/backend/regex/regcomp.c
+#ifdef REG_DEBUG
+        if (debug != NULL)
+        {
+                fprintf(debug, "\n\n\n========= TREE FIXED ==========\n");
+                dumpst(v->tree, debug, 1);
+        }
+#endif
+
+src/backend/utils/adt/acl.c
+#ifdef ACLDEBUG
+        elog(LOG, "aclparse: input = \"%s\"", s);
+#endif
+
+src/backend/utils/adt/arrayfuncs.c
+#ifdef ARRAYDEBUG
+        printf("array_in- ndim %d (", ndim);
+        for (i = 0; i < ndim; i++)
+        {
+                printf(" %d", dim[i]);
+        };
+        printf(") for %s\n", string);
+#endif
+...
+
+
+
+PostgreSQL还有专门的统计信息收集进程, 用来收集数据库运行过程的信息. 
+例如在postgresql.conf文件中可以定义的参数如下 : 
+
+#track_activities = on    # 跟踪SQL语句的状态以及SQL语句的内容. 输出到pg_stat_activity
+#track_counts = on    # 计数器, 例如表被插入了多少次, 更新了多少次
+#track_io_timing = off   #  跟踪IO操作的时间, 例如一个SQL语句带来的IO时间是多少. 
+#track_functions = none                 # none, pl, all   # 跟踪函数的调用次数, 时间.
+track_activity_query_size = 4096        # (change requires restart)  # 输出SQL语句的最大长度, 超出截断
+#update_process_title = on   # 更新进程状态信息, 例如从select到idle, 显示进程当前的状态.
+#stats_temp_directory = 'pg_stat_tmp'  
+# - Statistics Monitoring -
+#log_parser_stats = off
+#log_planner_stats = off
+#log_executor_stats = off
+#log_statement_stats = off
+
+
+
+使用举例 : 
+默认情况下可跟踪的信息举例
+1. 跟踪排序
+
+digoal=# set client_min_messages=log;
+digoal=# set trace_sort=on;
+digoal=# select count(*) from (select * from pg_class order by relpages) t;
+LOG:  begin tuple sort: nkeys = 1, workMem = 1024, randomAccess = f
+LOG:  performsort starting: CPU 0.00s/0.00u sec elapsed 0.00 sec
+LOG:  performsort done: CPU 0.00s/0.00u sec elapsed 0.00 sec
+LOG:  internal sort ended, 108 KB used: CPU 0.00s/0.00u sec elapsed 0.00 sec
+ count 
+-------
+   304
+(1 row)
+
+
+2. 跟踪执行计划
+
+digoal=# set client_min_messages=log;
+digoal=# set debug_pretty_print = on;
+digoal=# set debug_print_parse=on;
+SET
+digoal=# select count(*) from (select * from pg_class order by relpages) t;
+LOG:  parse tree:
+DETAIL:     {QUERY 
+... 略
+digoal=# set debug_print_rewritten = on;
+LOG:  rewritten parse tree:
+DETAIL:  (
+   {QUERY 
+... 略
+digoal=# set debug_print_plan = on;
+digoal=# select count(*) from (select * from pg_class order by relpages) t;
+LOG:  plan:
+DETAIL:     {PLANNEDSTMT 
+   :commandType 1 
+... 略
+
+
+3. 跟踪死锁
+
+SESSION A : 
+digoal=# create table t(id int, info text);
+CREATE TABLE
+digoal=# insert into t values (1,'test'),(2,'test');
+INSERT 0 2
+digoal=# begin;
+BEGIN
+digoal=# update t set info='new' where id=1;
+UPDATE 1
+SESSOIN B : 
+digoal=# begin;
+BEGIN
+digoal=# update t set info='new' where id=2;
+UPDATE 1
+digoal=# update t set info='new' where id=1;
+SESSION A : 
+digoal=# update t set info='new' where id=2;
+ERROR:  deadlock detected
+DETAIL:  Process 6173 waits for ShareLock on transaction 3268512748; blocked by process 6214.
+Process 6214 waits for ShareLock on transaction 3268512747; blocked by process 6173.
+HINT:  See server log for query details.
+
+
+4. 跟踪锁超时SQL
+
+log_lock_waits = on
+deadlock_timeout = 1s
+SESSION A : 
+digoal=# begin;
+BEGIN
+digoal=# update t set info='new' where id=1;
+UPDATE 1
+SESSION B : 
+digoal=# set client_min_messages=log;
+SET
+digoal=# begin;
+BEGIN
+digoal=# update t set info='new' where id=1;
+LOG:  statement: update t set info='new' where id=1;
+LOG:  process 6499 still waiting for ShareLock on transaction 3268512749 after 1000.177 ms
+
+
+5. 跟踪超时SQL
+log_min_duration_statement = 100ms  # 记录执行时间超过100毫秒的SQL
+6. 跟踪检查点,连接和断开连接信息
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+7. 跟踪函数
+track_functions = all
+
+需要打开某些宏才可以跟踪的信息, 不推荐在生产环境中使用, 举例
+
+[root@db-172-16-3-150 postgresql-9.3.3]# vi src/Makefile.custom
+CFLAGS+=-DLOCK_DEBUG
+CFLAGS+=-DBTREE_BUILD_STATS
+CFLAGS+=-DWAL_DEBUG
+CFLAGS+=-DOPTIMIZER_DEBUG
+CFLAGS+=-DGEQO_DEBUG
+CFLAGS+=-DCOPY_PARSE_PLAN_TREES
+CFLAGS+=-DTRACE_SYNCSCAN
+
+
+重新编译安装PostgreSQL.
+1. 跟踪btree索引建立时的信息
+
+digoal=# create table test(id int, info text);
+digoal=# set client_min_messages=log;
+digoal=# insert into test select generate_series(1,100000),'test';
+LOG:  statement: insert into test select generate_series(1,100000),'test';
+INSERT 0 100000
+digoal=# set log_btree_build_stats =on;
+SET
+digoal=# \set VERBOSITY verbose
+digoal=# create index idx_test_1 on test(id);
+LOG:  00000: statement: create index idx_test_1 on test(id);
+LOCATION:  exec_simple_query, postgres.c:890
+LOG:  00000: BTREE BUILD (Spool) STATISTICS
+DETAIL:  ! system usage stats:
+!       0.048502 elapsed 0.040993 user 0.006999 system sec
+!       [0.328949 user 0.038994 sys total]
+!       0/0 [0/13888] filesystem blocks in/out
+!       0/1706 [0/8926] page faults/reclaims, 0 [0] swaps
+!       0 [0] signals rcvd, 0/0 [0/0] messages rcvd/sent
+!       0/0 [74/1] voluntary/involuntary context switches
+LOCATION:  ShowUsage, postgres.c:4400
+LOG:  00000: BTREE BUILD STATS
+DETAIL:  ! system usage stats:
+!       0.043534 elapsed 0.031996 user 0.002999 system sec
+!       [0.360945 user 0.041993 sys total]
+!       0/4864 [0/18752] filesystem blocks in/out
+!       0/741 [0/9667] page faults/reclaims, 0 [0] swaps
+!       0 [0] signals rcvd, 0/0 [0/0] messages rcvd/sent
+!       9/1 [83/2] voluntary/involuntary context switches
+LOCATION:  ShowUsage, postgres.c:4400
+CREATE INDEX
+
+
+2. 跟踪锁
+
+digoal=# set trace_locks=on;
+LOG:  00000: LockReleaseAll: lockmethod=1
+LOCATION:  LockReleaseAll, lock.c:1954
+LOG:  00000: LockReleaseAll done
+LOCATION:  LockReleaseAll, lock.c:2199
+SET
+digoal=# update t set info='test' where id=1;
+LOG:  00000: statement: update t set info='test' where id=1;
+LOCATION:  exec_simple_query, postgres.c:890
+LOG:  00000: LockAcquire: lock [16384,26061] RowExclusiveLock
+LINE 1: update t set info='test' where id=1;
+               ^
+LOCATION:  LockAcquireExtended, lock.c:729
+LOG:  00000: LockAcquire: lock [16384,26061] RowExclusiveLock
+LOCATION:  LockAcquireExtended, lock.c:729
+LOG:  00000: LockAcquire: lock [16384,26061] ExclusiveLock
+LOCATION:  LockAcquireExtended, lock.c:729
+LOG:  00000: LockAcquire: new: lock(0x7f6970d12b00) id(16384,26061,0,1,3,1) grantMask(0) req(0,0,0,0,0,0,0)=0 grant(0,0,0,0,0,0,0)=0 wait(0) type(ExclusiveLock)
+LOCATION:  LOCK_PRINT, lock.c:318
+LOG:  00000: LockAcquire: new: proclock(0x7f6970d98440) lock(0x7f6970d12b00) method(1) proc(0x7f6971004860) hold(0)
+LOCATION:  PROCLOCK_PRINT, lock.c:330
+LOG:  00000: LockCheckConflicts: no conflict: proclock(0x7f6970d98440) lock(0x7f6970d12b00) method(1) proc(0x7f6971004860) hold(0)
+LOCATION:  PROCLOCK_PRINT, lock.c:330
+LOG:  00000: GrantLock: lock(0x7f6970d12b00) id(16384,26061,0,1,3,1) grantMask(80) req(0,0,0,0,0,0,1)=1 grant(0,0,0,0,0,0,1)=1 wait(0) type(ExclusiveLock)
+LOCATION:  LOCK_PRINT, lock.c:318
+LOG:  00000: process 6499 still waiting for ShareLock on transaction 3268512749 after 1000.118 ms
+LOCATION:  ProcSleep, proc.c:1246
+LOG:  00000: process 6499 acquired ShareLock on transaction 3268512749 after 5021.627 ms
+LOCATION:  ProcSleep, proc.c:1250
+LOG:  00000: LockRelease: lock [16384,26061] ExclusiveLock
+LOCATION:  LockRelease, lock.c:1761
+LOG:  00000: LockRelease: found: lock(0x7f6970d12b00) id(16384,26061,0,1,3,1) grantMask(80) req(0,0,0,0,0,0,1)=1 grant(0,0,0,0,0,0,1)=1 wait(0) type(ExclusiveLock)
+LOCATION:  LOCK_PRINT, lock.c:318
+LOG:  00000: LockRelease: found: proclock(0x7f6970d98440) lock(0x7f6970d12b00) method(1) proc(0x7f6971004860) hold(80)
+LOCATION:  PROCLOCK_PRINT, lock.c:330
+LOG:  00000: UnGrantLock: updated: lock(0x7f6970d12b00) id(16384,26061,0,1,3,1) grantMask(0) req(0,0,0,0,0,0,0)=0 grant(0,0,0,0,0,0,0)=0 wait(0) type(ExclusiveLock)
+LOCATION:  LOCK_PRINT, lock.c:318
+LOG:  00000: UnGrantLock: updated: proclock(0x7f6970d98440) lock(0x7f6970d12b00) method(1) proc(0x7f6971004860) hold(0)
+LOCATION:  PROCLOCK_PRINT, lock.c:330
+LOG:  00000: CleanUpLock: deleting: proclock(0x7f6970d98440) lock(0x7f6970d12b00) method(1) proc(0x7f6971004860) hold(0)
+LOCATION:  PROCLOCK_PRINT, lock.c:330
+LOG:  00000: CleanUpLock: deleting: lock(0x7f6970d12b00) id(16384,26061,0,1,3,1) grantMask(0) req(0,0,0,0,0,0,0)=0 grant(0,0,0,0,0,0,0)=0 wait(0) type(INVALID)
+LOCATION:  LOCK_PRINT, lock.c:318
+LOG:  00000: LockReleaseAll: lockmethod=1
+LOCATION:  LockReleaseAll, lock.c:1954
+LOG:  00000: LockReleaseAll done
+LOCATION:  LockReleaseAll, lock.c:2199
+UPDATE 1
+
+
+3. 跟踪wal
+
+#ifdef WAL_DEBUG
+
+static void
+xlog_outrec(StringInfo buf, XLogRecord *record)
+{
+        int                     i;
+
+        appendStringInfo(buf, "prev %X/%X; xid %u",
+                                         (uint32) (record->xl_prev >> 32),
+                                         (uint32) record->xl_prev,
+                                         record->xl_xid);
+
+        appendStringInfo(buf, "; len %u",
+                                         record->xl_len);
+
+        for (i = 0; i < XLR_MAX_BKP_BLOCKS; i++)
+        {
+                if (record->xl_info & XLR_BKP_BLOCK(i))
+                        appendStringInfo(buf, "; bkpb%d", i);
+        }
+
+        appendStringInfo(buf, ": %s", RmgrTable[record->xl_rmid].rm_name);
+}
+#endif   /* WAL_DEBUG */
+digoal=# set wal_debug=on;
+digoal=# select pg_switch_xlog();
+LOG:  00000: INSERT @ 20E/D4BB2878: prev 20E/D4BB2848; xid 0; len 0: XLOG
+LOCATION:  XLogInsert, xlog.c:1077
+ pg_switch_xlog 
+----------------
+ 20E/D4BB2898
+(1 row)
+
+
+
+其他跟踪方法, 本文不再举例.
+1. stap
+2. strace
+3. gdb
+...
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201302843359574/
+2. src/include/utils/elog.h
+3. http://www.postgresql.org/docs/9.3/static/runtime-config-developer.html
+4. http://www.postgresql.org/docs/9.3/static/runtime-config-logging.html#RUNTIME-CONFIG-LOGGING-WHAT

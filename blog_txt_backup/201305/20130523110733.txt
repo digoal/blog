@@ -1,0 +1,132 @@
+PostgreSQL research
+
+PostgreSQL md5 auth method introduce, with random salt protect
+
+2013-05-23 11:07:33   查看原文>>
+
+在上一篇BLOG中介绍了不要在pg_hba.conf中使用password认证方法, 除非你的客户端和数据库服务器之间的网络是绝对安全的.
+http://blog.163.com/digoal@126/blog/static/1638770402013423102431541/
+
+MD5方法,认证过程 : 
+
+Encrypting Passwords Across A Network
+The MD5 authentication method double-encrypts the password on the client before sending it to the server. It first MD5-encrypts it based on the user name, and then encrypts it based on a random salt sent by the server when the database connection was made. It is this double-encrypted value that is sent over the network to the server. Double-encryption not only prevents the password from being discovered, it also prevents another connection from using the same encrypted password to connect to the database server at a later time.
+
+
+
+数据库服务器给客户端连接进程发送认证请求包 : 
+src/backend/libpq/auth.c
+
+/*
+ * Send an authentication request packet to the frontend.
+ */
+static void
+sendAuthRequest(Port *port, AuthRequest areq)
+{
+        StringInfoData buf;
+
+        pq_beginmessage(&buf, 'R');
+        pq_sendint(&buf, (int32) areq, sizeof(int32));
+
+        /* Add the salt for encrypted passwords. */
+        if (areq == AUTH_REQ_MD5)
+                pq_sendbytes(&buf, port->md5Salt, 4);
+
+#if defined(ENABLE_GSS) || defined(ENABLE_SSPI)
+
+        /*
+         * Add the authentication data for the next step of the GSSAPI or SSPI
+         * negotiation.
+         */
+        else if (areq == AUTH_REQ_GSS_CONT)
+        {
+                if (port->gss->outbuf.length > 0)
+                {
+                        elog(DEBUG4, "sending GSS token of length %u",
+                                 (unsigned int) port->gss->outbuf.length);
+
+                        pq_sendbytes(&buf, port->gss->outbuf.value, port->gss->outbuf.length);
+                }
+        }
+#endif
+
+        pq_endmessage(&buf);
+
+        /*
+         * Flush message so client will see it, except for AUTH_REQ_OK, which need
+         * not be sent until we are ready for queries.
+         */
+        if (areq != AUTH_REQ_OK)
+                pq_flush();
+}
+
+
+
+服务端接收到客户端发过来的经过salt和原密码md5合成后的md5, 校验是否正确.
+src/backend/libpq/crypt.c
+
+ * crypt.c
+ *        Look into the password file and check the encrypted password with
+ *        the one passed in from the frontend.
+int
+md5_crypt_verify(const Port *port, const char *role, char *client_pass)
+{
+        int                     retval = STATUS_ERROR;
+        char       *shadow_pass,
+                           *crypt_pwd;
+... 略.
+        /*
+         * Compare with the encrypted or plain password depending on the
+         * authentication method being used for this connection.
+         */
+        switch (port->hba->auth_method)
+        {
+                case uaMD5:
+                        crypt_pwd = palloc(MD5_PASSWD_LEN + 1);
+                        if (isMD5(shadow_pass))
+                        {
+                                /* stored password already encrypted, only do salt */
+                                if (!pg_md5_encrypt(shadow_pass + strlen("md5"),
+                                                                        port->md5Salt,
+                                                                        sizeof(port->md5Salt), crypt_pwd))
+                                {
+                                        pfree(crypt_pwd);
+                                        return STATUS_ERROR;
+                                }
+                        }
+                        else
+                        {
+                                /* stored password is plain, double-encrypt */
+                                char       *crypt_pwd2 = palloc(MD5_PASSWD_LEN + 1);
+
+                                if (!pg_md5_encrypt(shadow_pass,
+                                                                        port->user_name,
+                                                                        strlen(port->user_name),
+                                                                        crypt_pwd2))
+                                {
+                                        pfree(crypt_pwd);
+                                        pfree(crypt_pwd2);
+                                        return STATUS_ERROR;
+                                }
+                                if (!pg_md5_encrypt(crypt_pwd2 + strlen("md5"),
+                                                                        port->md5Salt,
+                                                                        sizeof(port->md5Salt),
+                                                                        crypt_pwd))
+                                {
+                                        pfree(crypt_pwd);
+                                        pfree(crypt_pwd2);
+                                        return STATUS_ERROR;
+                                }
+                                pfree(crypt_pwd2);
+                        }
+                        break;
+... 略.
+
+
+
+[参考]
+1. src/backend/libpq/auth.c
+2. src/backend/libpq/crypt.c
+3. http://www.postgresql.org/docs/9.3/static/protocol-flow.html
+4. http://www.postgresql.org/docs/9.3/static/encryption-options.html
+5. http://blog.163.com/digoal@126/blog/static/1638770402013423102431541/

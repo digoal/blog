@@ -1,0 +1,224 @@
+PostgreSQL research
+
+ceph - add osd
+
+2014-12-11 9:50:48   查看原文>>
+
+    本文主要讲一下给一个已经存在的ceph存储集群添加osd 节点.
+    OSD节点存储用户的实际数据, 分散为对象存储在placement group中, placement group 可以理解为osd中的一些对象组.
+    一般来说我们会对数据存储2份或以上, 那么问题来了.
+    当OSD节点存储快满的时候, 如果一个OSD节点挂了, 会怎么样呢?
+    因为数据要存储多份, 所以OSD挂了之后, 挂掉的OSD节点上的对象相当于少了一份, Ceph会从健康的OSD节点找到对应的对象, 复制到其他OSD节点, 使数据重新恢复要求的拷贝份数.
+    如果OSD存储快满了, 就可能导致拷贝失败.
+    因此我们需要通过参数来控制 .
+
+BACKFILLING
+
+When you add or remove Ceph OSD Daemons to a cluster, the CRUSH algorithm will want to rebalance the cluster by moving placement groups to or from Ceph OSD Daemons to restore the balance. The process of migrating placement groups and the objects they contain can reduce the cluster’s operational performance considerably. To maintain operational performance, Ceph performs this migration with ‘backfilling’, which allows Ceph to set backfill operations to a lower priority than requests to read or write data.
+
+osd max backfills
+
+Description:    The maximum number of backfills allowed to or from a single OSD.
+Type:   64-bit Unsigned Integer
+Default:        10
+osd backfill scan min
+
+Description:    The minimum number of objects per backfill scan.
+Type:   32-bit Integer
+Default:        64
+osd backfill scan max
+
+Description:    The maximum number of objects per backfill scan.
+Type:   32-bit Integer
+Default:        512
+osd backfill full ratio
+
+Description:    Refuse to accept backfill requests when the Ceph OSD Daemon’s full ratio is above this value.
+Type:   Float
+Default:        0.85
+osd backfill retry interval
+
+Description:    The number of seconds to wait before retrying backfill requests.
+Type:   Double
+Default:        10.0
+
+
+
+接下来进入正题, 当ceph存储使用率遇超标, 集群需要扩容时, 如何添加OSD节点呢?
+首选要对操作系统内核, 文件系统, 磁盘参数做一定的限制.
+http://blog.163.com/digoal@126/blog/static/163877040201411132433623/
+http://blog.163.com/digoal@126/blog/static/163877040201411711835765/
+1. 系统建议使用CentOS7, 
+2. 文件系统建议使用xfs, 
+3. 关闭硬盘的写缓存(仅限于老内核<2.6.33需要这么做)
+4. 建议使用OMAP存储文件系统XATTR, 集群配置文件中加入
+filestore xattr use omap = true
+
+5. 建议每个osd daemon对应不同的物理块设备.
+6. 建议journal使用SSD. (文件系统或直接使用块设备)
+
+osd journal
+Description:    The path to the OSD’s journal. This may be a path to a file or a block device (such as a partition of an SSD). If it is a file, you must create the directory to contain it. We recommend using a drive separate from the osd data drive.
+Type:   String
+Default:        /var/lib/ceph/osd/$cluster-$id/journal
+
+osd journal size
+Description:    The size of the journal in megabytes. If this is 0, and the journal is a block device, the entire block device is used. Since v0.54, this is ignored if the journal is a block device, and the entire block device is used.
+Type:   32-bit Integer
+Default:        5120
+Recommended:    Begin with 1GB. Should be at least twice the product of the expected speed multiplied by filestore max sync interval.
+
+
+7. journal大小建议, 1GB起步, 每TB OSD数据分配1GB journal.
+
+操作系统配置建议 : 
+1. /etc/hosts
+    包含所有osd,mon节点的hostname -s条目
+
+2. 内核参数, limit
+
+# /etc/sysctl.conf
+kernel.pid_max=4194303
+kernel.shmmni = 4096
+kernel.sem = 50100 64128000 50100 1280
+fs.file-max = 7672460
+net.ipv4.ip_local_port_range = 9000 65000
+net.core.rmem_default = 1048576
+net.core.rmem_max = 4194304
+net.core.wmem_default = 262144
+net.core.wmem_max = 1048576
+net.ipv4.tcp_tw_recycle = 1
+net.ipv4.tcp_max_syn_backlog = 4096
+net.core.netdev_max_backlog = 10000
+
+# /etc/security/limits.conf
+* soft    nofile  131072
+* hard    nofile  131072
+* soft    nproc   131072
+* hard    nproc   131072
+* soft    core    unlimited
+* hard    core    unlimited
+* soft    memlock 50000000
+* hard    memlock 50000000
+
+# /etc/security/limits.d/90-nproc.conf 
+* soft    nproc   131072
+* hard    nproc   131072
+
+
+
+3. 建议关闭selinux
+
+# setenforce 0
+# vi /etc/selinux/config
+SELINUX=disabled
+
+
+
+安装软件
+1. 添加ceph和epel的源
+http://blog.163.com/digoal@126/blog/static/163877040201410269169450/
+2. 安装软件
+
+yum install -y yum-plugin-priorities
+yum install -y snappy leveldb gdisk python-argparse gperftools-libs
+yum install -y ceph
+
+
+
+添加 OSD
+参考
+http://blog.163.com/digoal@126/blog/static/163877040201411141846487/
+1. 为每个osd daemon生成osd uuid
+2. 从mon节点获取KEY, 拷贝到osd节点的/etc/ceph目录下.
+
+[root@mon2 ~]# cd /etc/ceph/
+[root@mon2 ceph]# ll
+total 12
+-rw------- 1 root root  63 Dec  9 15:47 ceph.client.admin.keyring
+-rw-r--r-- 1 root root 529 Dec  9 15:46 ceph.conf
+
+
+3. 从mon节点获取集群配置文件 (配置文件中务必包含mon节点的信息)
+如  : 
+
+mon initial members = mon1, mon2, mon3
+mon host = 172.17.0.2, 172.17.0.3, 172.17.0.4
+
+
+4. 创建OSD daemon
+例如 : 
+
+ceph osd create 854777b2-c188-4509-9df4-02f57bd17e12
+
+
+# 该命令返回osd id.
+
+5. 为每个OSD daemon创建OSD数据目录和journal所在目录. (建议分开物理块设备存储)
+数据目录软链接指向  /var/lib/ceph/osd/{clustername}-{id}
+journal软链接指向  /var/lib/ceph/osd/{clustername}-{id}/journal
+如不做以上软链接, 不能使用/etc/init.d/ceph来管理osd服务, 那么就需要手工启动ceph-osd了.
+6. 初始化osd 数据目录
+
+ceph-osd -i {osd-num} --mkfs --mkkey --osd-uuid [{uuid}] --cluster {cluster_name}
+
+
+例如
+
+ceph-osd -i 1 --mkfs --mkjournal --mkkey --osd-uuid 854777b2-c188-4509-9df4-02f57bd17e12 --cluster ceph --osd-data=/data01/ceph/osd/ceph-1 --osd-journal=/data01/ceph/osd/ceph-1/journal
+
+
+7. 注册OSD认证key
+
+ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
+例如
+# ceph auth add osd.1 osd 'allow *' mon 'allow profile osd' -i /data01/ceph/osd/ceph-1/keyring
+added key for osd.1
+
+
+8. 添加bucket, 例如将新增的Ceph Node添加到CRUSH map(一个主机只需要添加一次).
+
+ceph osd crush add-bucket {hostname} host
+
+
+例如 : 
+
+ceph osd crush add-bucket osd1 host
+
+
+9. 添加ceph node到default root.
+
+ceph osd crush move osd1 root=default
+
+
+10. 添加osd daemon到对应主机的bucket. 同样是修改crush map. (如果一台主机有多个osd daemon, 每个osd daemon都要添加到对应的bucket)
+
+ceph osd crush add osd.{osd_num}|{id-or-name} {weight} [{bucket-type}={bucket-name} ...]
+例如
+ceph osd crush add osd.1 1.0 host=osd1
+
+
+11. 如果要使用sysv来管理服务, 务必在/var/lib/ceph/osd/{clustername}-{osd id}目录下添加两个空文件
+例如
+
+touch /var/lib/ceph/osd/ceph-1/sysvinit
+
+
+12. 启动osd daemon
+例如 : 
+
+使用sysv启动
+service ceph start osd.1
+或手工启动 
+/usr/bin/ceph-osd -i 1 --pid-file /var/run/ceph/osd.1.pid -c /etc/ceph/ceph.conf --cluster ceph --osd-data=/data01/ceph/osd/ceph-1 --osd-journal=/data01/ceph/osd/ceph-1/journal
+
+
+
+[参考]
+1. http://docs.ceph.com/docs/master/rados/operations/add-or-rm-osds/
+2. http://blog.163.com/digoal@126/blog/static/163877040201411141846487/
+3. http://blog.163.com/digoal@126/blog/static/163877040201411132433623/
+4. http://blog.163.com/digoal@126/blog/static/163877040201411711835765/
+5. http://blog.163.com/digoal@126/blog/static/16387704020141119337851/
+
+Flag Counter

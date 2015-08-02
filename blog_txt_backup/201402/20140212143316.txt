@@ -1,0 +1,460 @@
+PostgreSQL research
+
+use pg_reorg re-organize tables in postgresql avoid LONG time AccessExclusiveLock
+
+2014-02-12 14:33:16   查看原文>>
+
+在PostgreSQL中重组表一个比较老的话题了, 至于为什么要重组表, 不了解PG的朋友可以阅读以下PG的MVCC相关原理, 不喜欢阅读的朋友也可以看我的视频教程.
+http://www.tudou.com/home/digoal
+通过解读fsm中的统计信息可以了解数据库中哪些对象需要重组, 方法如下 : 
+http://blog.163.com/digoal@126/blog/static/1638770402013527920474/
+对于索引, 由于PG支持对同列定义多个索引, 所以使用concurrently的方法新建索引就可以达到重组索引的目的 : 
+http://blog.163.com/digoal@126/blog/static/163877040201231781923116/
+http://blog.163.com/digoal@126/blog/static/163877040201343031159876
+如果是表需要重组, 最简单的做法是执行vacuum full或者cluster命令, 但是这两个命令需要AccessExclusiveLock锁, 所以会堵塞DML包括查询. 
+本文要说的pg_reorg插件就是解决这个锁问题的, 使用这个插件, 不需要整个过程加载AccessExclusiveLock锁, 我们可以打开数据库QUERY审计来观察pg_reorg都干了些什么?本文将详细解说. pg_reorg只短暂的使用了AccessExclusiveLock锁.
+首先下载一个比较新的pg_reorg版本, 中间断档了一段时间, 现在又出新版本了. (期间有一位网友把pg_reorg的代码拿去更名为pg_repack, 后来还是回归pg_reorg了, 代码去pgfoundry下载吧)
+
+# wget http://pgfoundry.org/frs/download.php/3558/pg_reorg-1.1.9.tar.gz
+
+
+安装
+
+# unzip pg_reorg-1.1.9.tar.gz
+# mv pg_reorg-1.1.9 /opt/soft_bak/postgresql-9.3.1/contrib
+# less postgresql-9.3.1/config.log
+./configure --prefix=/home/pg931/pgsql9.3.1 --with-pgport=1922 --with-perl --with-tcl --with-python --with-openssl --with-pam --without-ldap --with-libxml --with-libxslt --enable-thread-safety --with-wal-blocksize=64 --with-blocksize=32 --enable-dtrace --enable-debug
+所以我们要把pg_reorg安装到/home/pg931/pgsql9.3.1
+# export PATH=/home/pg931/pgsql9.3.1/bin:$PATH
+# which pg_config
+/home/pg931/pgsql9.3.1/bin/pg_config
+# cd /opt/soft_bak/postgresql-9.3.1/contrib/pg_reorg-1.1.9
+# gmake clean
+# gmake
+# gmake install
+# ll /home/pg931/pgsql9.3.1/lib/pg_reorg.so 
+-rwxr-xr-x 1 root root 82562 Feb 12 13:18 /home/pg931/pgsql9.3.1/lib/pg_reorg.so
+[root@db-172-16-3-150 pgsql9.3.1]# su - pg931
+pg931@db-172-16-3-150-> psql
+psql (9.3.1)
+Type "help" for help.
+digoal=# create extension pg_reorg;
+
+
+
+创建测试表 : 
+
+digoal=# create table test (id int primary key, info text, crt_time timestamp);
+CREATE TABLE
+
+
+插入测试数据 : 
+
+digoal=# insert into test select generate_series(1,10000000), md5(random()::text), clock_timestamp();
+
+
+创建相关的索引 : 
+
+digoal=# set maintenance_work_mem='2GB';
+SET
+digoal=# create index idx_test_1 on test(info);
+CREATE INDEX
+digoal=# create index idx_test_2 on test(crt_time);
+CREATE INDEX
+digoal=# select pg_total_relation_size('test')/1024/1024||'MB';
+ ?column? 
+----------
+ 1705MB
+(1 row)
+
+
+人为的产生一个高水位, 保留ctid最大的一行, 其他的行删除 : 
+
+digoal=# delete from test where id <> (select id from test order by ctid desc limit 1);
+DELETE 9999999
+
+
+使用普通的vacuum无法从磁盘释放高水位以下的空间, 仅仅能回收到fsm供后期的dml使用, 传统的vacuum full, cluster则可以释放这些空间, 当然会加AccessExclusiveLock锁从而堵塞查询和DML.
+
+digoal=# vacuum verbose test;
+INFO:  vacuuming "public.test"
+INFO:  index "test_pkey" now contains 1 row versions in 6806 pages
+DETAIL:  0 index row versions were removed.
+6802 index pages have been deleted, 6802 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.01 sec.
+INFO:  index "idx_test_1" now contains 1 row versions in 17711 pages
+DETAIL:  0 index row versions were removed.
+17704 index pages have been deleted, 17704 are currently reusable.
+CPU 0.00s/0.01u sec elapsed 0.04 sec.
+INFO:  index "idx_test_2" now contains 1 row versions in 6802 pages
+DETAIL:  0 index row versions were removed.
+6798 index pages have been deleted, 6798 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.02 sec.
+INFO:  "test": found 0 removable, 0 nonremovable row versions in 0 out of 23256 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.03u sec elapsed 0.09 sec.
+INFO:  vacuuming "pg_toast.pg_toast_16480"
+INFO:  index "pg_toast_16480_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_16480": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+
+
+可以看到普通的vacuum未释放空间
+
+digoal=# select pg_total_relation_size('test')/1024/1024||'MB';
+ ?column? 
+----------
+ 1705MB
+(1 row)
+
+
+接下来要使用pg_reorg来实现空间释放 : 
+首先我们把SQL审计打开
+
+pg931@db-172-16-3-150-> cd $PGDATA
+log_statement = 'all'
+pg931@db-172-16-3-150-> pg_ctl reload
+
+
+pg_reorg 的帮助信息 : 
+
+pg931@db-172-16-3-150-> pg_reorg --help
+pg_reorg re-organizes a PostgreSQL database.
+
+Usage:
+  pg_reorg [OPTION]... [DBNAME]
+Options:
+  -a, --all                 reorg all databases
+  -n, --no-order            do vacuum full instead of cluster
+  -o, --order-by=columns    order by columns instead of cluster keys
+  -t, --table=TABLE         reorg specific table only
+  -T, --wait-timeout=secs   timeout to cancel other backends on conflict
+  -Z, --no-analyze          don't analyze at end
+
+Connection options:
+  -d, --dbname=DBNAME       database to connect
+  -h, --host=HOSTNAME       database server host or socket directory
+  -p, --port=PORT           database server port
+  -U, --username=USERNAME   user name to connect as
+  -w, --no-password         never prompt for password
+  -W, --password            force password prompt
+
+Generic options:
+  -e, --echo                echo queries
+  -E, --elevel=LEVEL        set output message level
+  --help                    show this help, then exit
+  --version                 output version information, then exit
+Read the website for details. <http://reorg.projects.postgresql.org/>
+Report bugs to <reorg-general@lists.pgfoundry.org>.
+
+
+为了输出详细的信息, 从代码中找到pg_reorg的elevel支持的级别如下 : 
+
+pgut.c
+/*
+ * log_required -- is elevel logically >= log_min_level?
+ *
+ * physical order:
+ *   DEBUG < LOG < INFO < NOTICE < WARNING < ERROR < FATAL < PANIC
+ * log_min_messages order:
+ *   DEBUG < INFO < NOTICE < WARNING < ERROR < LOG < FATAL < PANIC
+ */
+bool
+log_required(int elevel, int log_min_level)
+{
+
+
+执行reorg, 重组TEST表, 不按特定排序, 输出DEBUG级别的信息, 但是还没有postgresql的输出多 : 
+从解说中我们能看到pg_reorg其实是需要超级用户权限的, 因为需要交换pg_class的信息.
+
+pg931@db-172-16-3-150-> pg_reorg -n -t test -d digoal -h $PGDATA -e -E DEBUG
+LOG: (query) SET statement_timeout = 0
+LOG: (query) SET search_path = pg_catalog, pg_temp, public
+LOG: (query) SET client_min_messages = warning
+LOG: (query) SELECT * FROM reorg.tables WHERE relid = $1::regclass
+LOG:    (param:0) = test
+DEBUG: ---- reorg_one_table ----
+DEBUG: target_name    : test
+DEBUG: target_oid     : 16480
+DEBUG: target_toast   : 16483
+DEBUG: target_tidx    : 16485
+DEBUG: pkid           : 16486
+DEBUG: ckid           : 0
+DEBUG: create_pktype  : CREATE TYPE reorg.pk_16480 AS (id integer)
+DEBUG: create_log     : CREATE TABLE reorg.log_16480 (id bigserial PRIMARY KEY, pk reorg.pk_16480, row test)
+DEBUG: create_trigger : CREATE TRIGGER z_reorg_trigger BEFORE INSERT OR DELETE OR UPDATE ON test FOR EACH ROW EXECUTE PROCEDURE reorg.reorg_trigger('INSERT INTO reorg.log_16480(pk, row) VALUES( CASE WHEN $1 IS NULL THEN NULL ELSE (ROW($1.id)::reorg.pk_16480) END, $2)')
+DEBUG: create_table   : CREATE TABLE reorg.table_16480 WITH (oids=false) TABLESPACE pg_default AS SELECT id,info,crt_time FROM ONLY test
+DEBUG: drop_columns   : (skipped)
+DEBUG: delete_log     : DELETE FROM reorg.log_16480
+DEBUG: lock_table     : LOCK TABLE test IN ACCESS EXCLUSIVE MODE
+DEBUG: sql_peek       : SELECT * FROM reorg.log_16480 ORDER BY id LIMIT $1
+DEBUG: sql_insert     : INSERT INTO reorg.table_16480 VALUES ($1.*)
+DEBUG: sql_delete     : DELETE FROM reorg.table_16480 WHERE (id) = ($1.id)
+DEBUG: sql_update     : UPDATE reorg.table_16480 SET (id, info, crt_time) = ($2.id, $2.info, $2.crt_time) WHERE (id) = ($1.id)
+DEBUG: sql_pop        : DELETE FROM reorg.log_16480 WHERE id <= $1
+DEBUG: ---- setup ----
+LOG: (query) BEGIN ISOLATION LEVEL READ COMMITTED
+LOG: (query) SET LOCAL statement_timeout = 100
+LOG: (query) LOCK TABLE test IN ACCESS EXCLUSIVE MODE
+LOG: (query) RESET statement_timeout
+LOG: (query) SELECT reorg.conflicted_triggers($1)
+LOG:    (param:0) = 16480
+LOG: (query) CREATE TYPE reorg.pk_16480 AS (id integer)
+LOG: (query) CREATE TABLE reorg.log_16480 (id bigserial PRIMARY KEY, pk reorg.pk_16480, row test)
+LOG: (query) CREATE TRIGGER z_reorg_trigger BEFORE INSERT OR DELETE OR UPDATE ON test FOR EACH ROW EXECUTE PROCEDURE reorg.reorg_trigger('INSERT INTO reorg.log_16480(pk, row) VALUES( CASE WHEN $1 IS NULL THEN NULL ELSE (ROW($1.id)::reorg.pk_16480) END, $2)')
+LOG: (query) SELECT reorg.disable_autovacuum('reorg.log_16480')
+LOG: (query) COMMIT
+DEBUG: ---- copy tuples ----
+LOG: (query) BEGIN ISOLATION LEVEL SERIALIZABLE
+LOG: (query) SELECT set_config('work_mem', current_setting('maintenance_work_mem'), true)
+LOG: (query) SET LOCAL synchronize_seqscans = off
+LOG: (query) SELECT reorg.array_accum(virtualtransaction) FROM pg_locks WHERE locktype = 'virtualxid' AND pid <> pg_backend_pid() AND (virtualxid, virtualtransaction) <> ('1/1', '-1/0')
+LOG: (query) DELETE FROM reorg.log_16480
+LOG: (query) CREATE TABLE reorg.table_16480 WITH (oids=false) TABLESPACE pg_default AS SELECT id,info,crt_time FROM ONLY test
+LOG: (query) SELECT reorg.disable_autovacuum('reorg.table_16480')
+LOG: (query) COMMIT
+DEBUG: ---- create indexes ----
+LOG: (query) SELECT indexrelid, reorg.reorg_indexdef(indexrelid, indrelid), indisvalid, pg_get_indexdef(indexrelid) FROM pg_index WHERE indrelid = $1
+LOG:    (param:0) = 16480
+DEBUG: [0]
+DEBUG: target_oid   : 16489
+DEBUG: create_index : CREATE INDEX index_16489 ON reorg.table_16480 USING btree (crt_time)
+LOG: (query) CREATE INDEX index_16489 ON reorg.table_16480 USING btree (crt_time)
+DEBUG: [1]
+DEBUG: target_oid   : 16488
+DEBUG: create_index : CREATE INDEX index_16488 ON reorg.table_16480 USING btree (info)
+LOG: (query) CREATE INDEX index_16488 ON reorg.table_16480 USING btree (info)
+DEBUG: [2]
+DEBUG: target_oid   : 16486
+DEBUG: create_index : CREATE UNIQUE INDEX index_16486 ON reorg.table_16480 USING btree (id)
+LOG: (query) CREATE UNIQUE INDEX index_16486 ON reorg.table_16480 USING btree (id)
+LOG: (query) SELECT reorg.reorg_apply($1, $2, $3, $4, $5, $6)
+LOG:    (param:0) = SELECT * FROM reorg.log_16480 ORDER BY id LIMIT $1
+LOG:    (param:1) = INSERT INTO reorg.table_16480 VALUES ($1.*)
+LOG:    (param:2) = DELETE FROM reorg.table_16480 WHERE (id) = ($1.id)
+LOG:    (param:3) = UPDATE reorg.table_16480 SET (id, info, crt_time) = ($2.id, $2.info, $2.crt_time) WHERE (id) = ($1.id)
+LOG:    (param:4) = DELETE FROM reorg.log_16480 WHERE id <= $1
+LOG:    (param:5) = 1000
+LOG: (query) SELECT pid FROM pg_locks WHERE locktype = 'virtualxid' AND pid <> pg_backend_pid() AND virtualtransaction = ANY($1)
+LOG:    (param:0) = {}
+DEBUG: ---- swap ----
+LOG: (query) BEGIN ISOLATION LEVEL READ COMMITTED
+LOG: (query) SET LOCAL statement_timeout = 100
+LOG: (query) LOCK TABLE test IN ACCESS EXCLUSIVE MODE
+LOG: (query) RESET statement_timeout
+LOG: (query) SELECT reorg.reorg_apply($1, $2, $3, $4, $5, $6)
+LOG:    (param:0) = SELECT * FROM reorg.log_16480 ORDER BY id LIMIT $1
+LOG:    (param:1) = INSERT INTO reorg.table_16480 VALUES ($1.*)
+LOG:    (param:2) = DELETE FROM reorg.table_16480 WHERE (id) = ($1.id)
+LOG:    (param:3) = UPDATE reorg.table_16480 SET (id, info, crt_time) = ($2.id, $2.info, $2.crt_time) WHERE (id) = ($1.id)
+LOG:    (param:4) = DELETE FROM reorg.log_16480 WHERE id <= $1
+LOG:    (param:5) = 0
+LOG: (query) SELECT reorg.reorg_swap($1)
+LOG:    (param:0) = 16480
+LOG: (query) COMMIT
+DEBUG: ---- drop ----
+LOG: (query) BEGIN ISOLATION LEVEL READ COMMITTED
+LOG: (query) SELECT reorg.reorg_drop($1)
+LOG:    (param:0) = 16480
+LOG: (query) COMMIT
+DEBUG: ---- analyze ----
+LOG: (query) BEGIN ISOLATION LEVEL READ COMMITTED
+LOG: (query) ANALYZE test
+LOG: (query) COMMIT
+
+
+
+postgresql输出的日志以及解说 : 
+
+2014-02-12 13:54:30.618 CST,,,26833,"",52fb0c96.68d1,1,"",2014-02-12 13:54:30 CST,,0,LOG,00000,"connection received: host=[local]",,
+,,,,,,"BackendInitialize, postmaster.c:3857",""
+2014-02-12 13:54:30.619 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,2,"authentication",2014-02-12 13:54:30 CST,3/45,0,LOG,
+00000,"connection authorized: user=postgres database=digoal",,,,,,,,"PerformAuthentication, postinit.c:239",""
+2014-02-12 13:54:30.620 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,3,"idle",2014-02-12 13:54:30 CST,3/46,0,LOG,00000,"sta
+tement: SET statement_timeout = 0",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.620 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,4,"idle",2014-02-12 13:54:30 CST,3/47,0,LOG,00000,"sta
+tement: SET search_path = pg_catalog, pg_temp, public",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.621 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,5,"idle",2014-02-12 13:54:30 CST,3/48,0,LOG,00000,"sta
+tement: SET client_min_messages = warning",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.632 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,6,"SELECT",2014-02-12 13:54:30 CST,3/49,0,LOG,00000,"e
+xecute <unnamed>: SELECT * FROM reorg.tables WHERE relid = $1::regclass","parameters: $1 = 'test'",,,,,,,"exec_execute_message, post
+gres.c:1906","pg_reorg"
+
+
+打开一个事务
+
+2014-02-12 13:54:30.641 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,7,"idle",2014-02-12 13:54:30 CST,3/50,0,LOG,00000,"sta
+tement: BEGIN ISOLATION LEVEL READ COMMITTED",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.641 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,8,"idle in transaction",2014-02-12 13:54:30 CST,3/50,0,LOG,00000,"statement: SET LOCAL statement_timeout = 100",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+短暂的对test加access exclusive mode 锁, 为了创建触发器.
+
+2014-02-12 13:54:30.642 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,9,"idle in transaction",2014-02-12 13:54:30 CST,3/50,0,LOG,00000,"statement: LOCK TABLE test IN ACCESS EXCLUSIVE MODE",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.642 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,10,"idle in transaction",2014-02-12 13:54:30 CST,3/50,2000,LOG,00000,"statement: RESET statement_timeout",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.642 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,11,"SELECT",2014-02-12 13:54:30 CST,3/50,2000,LOG,00000,"execute <unnamed>: SELECT reorg.conflicted_triggers($1)","parameters: $1 = '16480'",,,,,,,"exec_execute_message, postgres.c:1906","pg_reorg"
+
+
+创建主键类型的中间表
+
+2014-02-12 13:54:30.643 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,12,"idle in transaction",2014-02-12 13:54:30 CST,3/50,2000,LOG,00000,"statement: CREATE TYPE reorg.pk_16480 AS (id integer)",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+创建中间日志表, 记录重组过程TEST产生的DML : 
+
+2014-02-12 13:54:30.646 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,13,"idle in transaction",2014-02-12 13:54:30 CST,3/50,2000,LOG,00000,"statement: CREATE TABLE reorg.log_16480 (id bigserial PRIMARY KEY, pk reorg.pk_16480, row test)",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+创建触发器, 负责将重组过程产生的DML写入中间日志表.
+
+2014-02-12 13:54:30.657 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,14,"idle in transaction",2014-02-12 13:54:30 CST,3/50,2000,LOG,00000,"statement: CREATE TRIGGER z_reorg_trigger BEFORE INSERT OR DELETE OR UPDATE ON test FOR EACH ROW EXECUTE PROCEDURE reorg.reorg_trigger('INSERT INTO reorg.log_16480(pk, row) VALUES( CASE WHEN $1 IS NULL THEN NULL ELSE (ROW($1.id)::reorg.pk_16480) END, $2)')",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+禁止中间日志表的自动vacuum
+
+2014-02-12 13:54:30.657 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,15,"idle in transaction",2014-02-12 13:54:30 CST,3/50,2000,LOG,00000,"statement: SELECT reorg.disable_autovacuum('reorg.log_16480')",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+结束事务
+
+2014-02-12 13:54:30.658 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,16,"idle in transaction",2014-02-12 13:54:30 CST,3/50,2000,LOG,00000,"statement: COMMIT",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+开启事务, 注意是串行隔离级别, 因为要把TEST表的结果引入中间表 : 
+
+2014-02-12 13:54:30.658 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,17,"idle",2014-02-12 13:54:30 CST,3/51,0,LOG,00000,"statement: BEGIN ISOLATION LEVEL SERIALIZABLE",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.658 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,18,"idle in transaction",2014-02-12 13:54:30 CST,3/51,0,LOG,00000,"statement: SELECT set_config('work_mem', current_setting('maintenance_work_mem'), true)",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.659 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,19,"idle in transaction",2014-02-12 13:54:30 CST,3/51,0,LOG,00000,"statement: SET LOCAL synchronize_seqscans = off",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.659 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,20,"idle in transaction",2014-02-12 13:54:30 CST,3/51,0,LOG,00000,"statement: SELECT reorg.array_accum(virtualtransaction) FROM pg_locks WHERE locktype = 'virtualxid' AND pid <> pg_backend_pid() AND (virtualxid, virtualtransaction) <> ('1/1', '-1/0')",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+清除中间日志表记录的截止当前已提交的DML信息, 马上就要把test表写入到一个中间表了.
+
+2014-02-12 13:54:30.660 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,21,"idle in transaction",2014-02-12 13:54:30 CST,3/51,0,LOG,00000,"statement: DELETE FROM reorg.log_16480",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+把TEST表的数据导入中间表, 注意不是中间日志表哦.
+
+2014-02-12 13:54:30.661 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,22,"idle in transaction",2014-02-12 13:54:30 CST,3/51,0,LOG,00000,"statement: CREATE TABLE reorg.table_16480 WITH (oids=false) TABLESPACE pg_default AS SELECT id,info,crt_time FROM ONLY test",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+关闭中间表的自动VACUUM
+
+2014-02-12 13:54:30.746 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,23,"idle in transaction",2014-02-12 13:54:30 CST,3/51,2001,LOG,00000,"statement: SELECT reorg.disable_autovacuum('reorg.table_16480')",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.746 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,24,"idle in transaction",2014-02-12 13:54:30 CST,3/51,2001,LOG,00000,"statement: COMMIT",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+获取TEST表的索引定义
+
+2014-02-12 13:54:30.747 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,25,"SELECT",2014-02-12 13:54:30 CST,3/52,0,LOG,00000,"execute <unnamed>: SELECT indexrelid, reorg.reorg_indexdef(indexrelid, indrelid), indisvalid, pg_get_indexdef(indexrelid) FROM pg_index WHERE indrelid = $1","parameters: $1 = '16480'",,,,,,,"exec_execute_message, postgres.c:1906","pg_reorg"
+
+
+给中间表创建和TEST表一致的索引
+
+2014-02-12 13:54:30.748 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,26,"idle",2014-02-12 13:54:30 CST,3/53,0,LOG,00000,"statement: CREATE INDEX index_16489 ON reorg.table_16480 USING btree (crt_time)",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.752 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,27,"idle",2014-02-12 13:54:30 CST,3/54,0,LOG,00000,"statement: CREATE INDEX index_16488 ON reorg.table_16480 USING btree (info)",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.754 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,28,"idle",2014-02-12 13:54:30 CST,3/55,0,LOG,00000,"statement: CREATE UNIQUE INDEX index_16486 ON reorg.table_16480 USING btree (id)",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+把中间日志表记录的DML在中间表上执行一遍, 类似增量同步TEST表的数据到中间表.
+
+2014-02-12 13:54:30.757 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,29,"SELECT",2014-02-12 13:54:30 CST,3/56,0,LOG,00000,"execute <unnamed>: SELECT reorg.reorg_apply($1, $2, $3, $4, $5, $6)","parameters: $1 = 'SELECT * FROM reorg.log_16480 ORDER BY id LIMIT $1', $2 = 'INSERT INTO reorg.table_16480 VALUES ($1.*)', $3 = 'DELETE FROM reorg.table_16480 WHERE (id) = ($1.id)', $4 = 'UPDATE reorg.table_16480 SET (id, info, crt_time) = ($2.id, $2.info, $2.crt_time) WHERE (id) = ($1.id)', $5 = 'DELETE FROM reorg.log_16480 WHERE id <= $1', $6 = '1000'",,,,,,,"exec_execute_message, postgres.c:1906","pg_reorg"
+2014-02-12 13:54:30.757 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,30,"SELECT",2014-02-12 13:54:30 CST,3/57,0,LOG,00000,"execute <unnamed>: SELECT pid FROM pg_locks WHERE locktype = 'virtualxid' AND pid <> pg_backend_pid() AND virtualtransaction = ANY($:1)","parameters: $1 = '{}'",,,,,,,"exec_execute_message, postgres.c:1906","pg_reorg"
+
+
+开启一个事务
+
+2014-02-12 13:54:30.758 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,31,"idle",2014-02-12 13:54:30 CST,3/58,0,LOG,00000,"statement: BEGIN ISOLATION LEVEL READ COMMITTED",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.758 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,32,"idle in transaction",2014-02-12 13:54:30 CST,3/58,0,LOG,00000,"statement: SET LOCAL statement_timeout = 100",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+再次锁TEST表, 这次要做最后一步增量同步和表交换了.
+
+2014-02-12 13:54:30.758 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,33,"idle in transaction",2014-02-12 13:54:30 CST,3/58,0,LOG,00000,"statement: LOCK TABLE test IN ACCESS EXCLUSIVE MODE",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.758 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,34,"idle in transaction",2014-02-12 13:54:30 CST,3/58,2005,LOG,00000,"statement: RESET statement_timeout",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+增量应用中间日志表的数据到中间表, 完成后中间表和TEST表完全一致.
+
+2014-02-12 13:54:30.758 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,35,"SELECT",2014-02-12 13:54:30 CST,3/58,2005,LOG,00000,"execute <unnamed>: SELECT reorg.reorg_apply($1, $2, $3, $4, $5, $6)","parameters: $1 = 'SELECT * FROM reorg.log_16480 ORDER BY id LIMIT $1', $2 = 'INSERT INTO reorg.table_16480 VALUES ($1.*)', $3 = 'DELETE FROM reorg.table_16480 WHERE (id) = ($1.id)', $4 = 'UPDATE reorg.table_16480 SET (id, info, crt_time) = ($2.id, $2.info, $2.crt_time) WHERE (id) = ($1.id)', $5 = 'DELETE FROM reorg.log_16480 WHERE id <= $1', $6 = '0'",,,,,,,"exec_execute_message, postgres.c:1906","pg_reorg"
+
+
+交换test表和中间表, 实际上是通过服务端编程接口SPI, 交换test和中间表在pg_class的记录, 详见代码lib/reorg.c中的swap_heap_or_index_files代码.
+
+2014-02-12 13:54:30.759 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,36,"SELECT",2014-02-12 13:54:30 CST,3/58,2005,LOG,00000,"execute <unnamed>: SELECT reorg.reorg_swap($1)","parameters: $1 = '16480'",,,,,,,"exec_execute_message, postgres.c:1906","pg_reorg"
+2014-02-12 13:54:30.762 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,37,"idle in transaction",2014-02-12 13:54:30 CST,3/58,2005,LOG,00000,"statement: COMMIT",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+
+
+最后一步是调用reorg_drop清除中间日志表和中间表(交换后的).
+
+2014-02-12 13:54:30.762 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,38,"idle",2014-02-12 13:54:30 CST,3/59,0,LOG,00000,"statement: BEGIN ISOLATION LEVEL READ COMMITTED",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.762 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,39,"SELECT",2014-02-12 13:54:30 CST,3/59,0,LOG,00000,"execute <unnamed>: SELECT reorg.reorg_drop($1)","parameters: $1 = '16480'",,,,,,,"exec_execute_message, postgres.c:1906","pg_reorg"
+2014-02-12 13:54:30.764 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,40,"idle in transaction",2014-02-12 13:54:30 CST,3/59,2006,LOG,00000,"statement: COMMIT",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:30.906 CST,,,25235,,52fb043d.6293,14,,2014-02-12 13:18:53 CST,,0,LOG,00000,"checkpoint complete: wrote 9901 buffers (1.5%); 0 transaction log file(s) added, 0 removed, 184 recycled; write=37.489 s, sync=0.024 s, total=37.528 s; sync files=8, longest=0.015 s, average=0.003 s",,,,,,,,"LogCheckpointEnd, xlog.c:6746",""
+2014-02-12 13:54:31.396 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,41,"idle",2014-02-12 13:54:30 CST,3/60,0,LOG,00000,"statement: BEGIN ISOLATION LEVEL READ COMMITTED",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:31.397 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,42,"idle in transaction",2014-02-12 13:54:30 CST,3/60,0,LOG,00000,"statement: ANALYZE test",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:31.397 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,43,"idle in transaction",2014-02-12 13:54:30 CST,3/60,2007,LOG,00000,"statement: COMMIT",,,,,,,,"exec_simple_query, postgres.c:890","pg_reorg"
+2014-02-12 13:54:31.398 CST,"postgres","digoal",26833,"[local]",52fb0c96.68d1,44,"idle",2014-02-12 13:54:30 CST,,0,LOG,00000,"disconnection: session time: 0:00:00.780 user=postgres database=digoal host=[local]",,,,,,,,"log_disconnections, postgres.c:4429","pg_reorg"
+
+
+
+触发器代码  : 
+
+reorg_trigger
+digoal=# \sf+ reorg.reorg_trigger
+        CREATE OR REPLACE FUNCTION reorg.reorg_trigger()
+         RETURNS trigger
+         LANGUAGE c
+         STRICT SECURITY DEFINER
+1       AS '$libdir/pg_reorg', $function$reorg_trigger$function$
+对应的代码 : 
+lib/reorg.c
+/**
+ * @fn      Datum reorg_trigger(PG_FUNCTION_ARGS)
+ * @brief   Insert a operation log into log-table.
+ *
+ * reorg_trigger(sql)
+ *
+ * @param       sql     SQL to insert a operation log into log-table.
+ */
+Datum
+reorg_trigger(PG_FUNCTION_ARGS)
+{
+...
+略.
+
+
+
+[参考]
+1. https://github.com/reorg/pg_repack
+2. http://pgxn.org/dist/pg_repack/
+3. http://reorg.projects.pgfoundry.org/pg_reorg.html
+4. http://blog.163.com/digoal@126/blog/static/163877040201063041635986/
+5. src/include/storage/lock.h
+
+/* NoLock is not a lock mode, but a flag value meaning "don't get a lock" */
+#define NoLock                                  0
+
+#define AccessShareLock                 1               /* SELECT */
+#define RowShareLock                    2               /* SELECT FOR UPDATE/FOR SHARE */
+#define RowExclusiveLock                3               /* INSERT, UPDATE, DELETE */
+#define ShareUpdateExclusiveLock 4              /* VACUUM (non-FULL),ANALYZE, CREATE
+                                                                                 * INDEX CONCURRENTLY */
+#define ShareLock                               5               /* CREATE INDEX (WITHOUT CONCURRENTLY) */
+#define ShareRowExclusiveLock   6               /* like EXCLUSIVE MODE, but allows ROW
+                                                                                 * SHARE */
+#define ExclusiveLock                   7               /* blocks ROW SHARE/SELECT...FOR
+                                                                                 * UPDATE */
+#define AccessExclusiveLock             8               /* ALTER TABLE, DROP TABLE, VACUUM
+                                                                                 * FULL, and unqualified LOCK TABLE */
+
+

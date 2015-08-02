@@ -1,0 +1,178 @@
+PostgreSQL research
+
+PostgreSQL pgtrashcan use hook _PG_init catch feature like Oracle's recycle bin
+
+2014-04-03 10:09:39   查看原文>>
+
+PostgreSQL 本身不支持类似Oracle recycle bin这样的回收站机制.
+但是可利用 PostgreSQL 动态模块, 以及_PG_init函数来创建钩子程序. (_PG_init函数在加载动态模块时立即执行, 动态模块在会话建立时被加载, 所以很好被利用)
+在钩子程序中写一些逻辑, 将删除表的操作, 转移到其他SCHEMA.
+pgtrashcan就是利用这种机制来实现类似Oracle recycle bin的功能的.
+pgtrashcan写的_PG_init如下 : 
+
+void
+_PG_init(void)
+{
+        prev_ProcessUtility = ProcessUtility_hook;
+        if (!prev_ProcessUtility)
+                prev_ProcessUtility = standard_ProcessUtility;
+        ProcessUtility_hook = pgtrashcan_ProcessUtility;
+}
+
+
+钩子程序对应的函数部分内容 : 
+
+static void
+pgtrashcan_ProcessUtility(Node *parsetree,
+                                                  const char *queryString,
+                                                  ParamListInfo params,
+                                                  bool isTopLevel,
+                                                  DestReceiver *dest,
+                                                  char *completionTag)
+#endif
+{
+        if (nodeTag(parsetree) == T_DropStmt)
+        {
+                DropStmt *stmt = (DropStmt *) parsetree;
+
+                if (stmt->removeType == OBJECT_TABLE)
+                {
+                        RangeVar *r;
+                        AlterObjectSchemaStmt *newstmt = makeNode(AlterObjectSchemaStmt);
+                        newstmt->objectType = stmt->removeType;
+                        newstmt->newschema = pstrdup(trashcan_nspname);
+#if PG_VERSION_NUM >= 90200
+                        newstmt->missing_ok = stmt->missing_ok;
+#endif
+                        if (stmt->behavior != DROP_RESTRICT)
+                        ereport(ERROR,
+                                        (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                                         errmsg("trash can does not support DROP CASCADE")));
+
+                        r = makeRangeVarFromAnyName(linitial(stmt->objects));
+                        r->inhOpt = INH_YES;
+                        r->alias = NULL;
+                        newstmt->relation = r;
+
+                        if (!r->schemaname || strcmp(r->schemaname, trashcan_nspname) != 0)
+                        {
+                                parsetree = (Node *) newstmt;
+                                create_trashcan_schema();
+                        }
+                }
+        }
+
+#if PG_VERSION_NUM >= 90300
+        (*prev_ProcessUtility) (parsetree, queryString, context, params, dest, completionTag);
+#else
+        (*prev_ProcessUtility) (parsetree, queryString, params, isTopLevel, dest, completionTag);
+#endif
+}
+
+static void
+create_trashcan_schema(void)
+{
+        HeapTuple   tuple;
+        Oid                     datdba;
+
+        if (SearchSysCacheExists1(NAMESPACENAME, PointerGetDatum(trashcan_nspname)))
+                return;
+
+        tuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(MyDatabaseId));
+        if (!HeapTupleIsValid(tuple))
+                ereport(ERROR,
+                                (errcode(ERRCODE_UNDEFINED_DATABASE),
+                                 errmsg("database with OID %u does not exist", MyDatabaseId)));
+
+        datdba = ((Form_pg_database) GETSTRUCT(tuple))->datdba;
+        ReleaseSysCache(tuple);
+
+        NamespaceCreate(trashcan_nspname, datdba, false);
+
+        CommandCounterIncrement();
+}
+
+
+
+pgtrashcan的做法是, 在 drop一个表时, 创建一个名为Trash的schema, 然后将被删除的表移动到这个schema下面.
+目前pgtrashcan的功能比较单一, 且缺少一些判断, 见本文末尾, 还需要改进.
+使用测试 : 
+
+su - root
+git clone https://github.com/petere/pgtrashcan
+cd pgtrashcan/
+export PATH=/home/pg93/pgsql9.3.3/bin:$PATH
+make
+make install
+su - pg93
+cd $PGDATA
+vi postgresql.conf
+shared_preload_libraries = 'auto_explain,pgtrashcan'
+pg_ctl restart -m fast
+pg93@db-172-16-3-150-> psql
+psql (9.3.3)
+Type "help" for help.
+
+digoal=# \dt
+          List of relations
+ Schema |   Name   | Type  |  Owner   
+--------+----------+-------+----------
+ public | logtable | table | postgres
+ public | test     | table | postgres
+(2 rows)
+
+digoal=# drop table test;
+DROP TABLE
+digoal=# \dn
+  List of schemas
+  Name  |  Owner   
+--------+----------
+ Trash  | postgres
+ digoal | postgres
+ public | postgres
+(3 rows)
+这个表被重定向到"Trash" schema下面.
+digoal=# \dt+ "Trash".test 
+                   List of relations
+ Schema | Name | Type  |  Owner   | Size  | Description 
+--------+------+-------+----------+-------+-------------
+ Trash  | test | table | postgres | 32 kB | 
+(1 row)
+
+
+
+pgtrashcan插件的使用限制 : 
+1. 目前pgtrashcan不支持drop cascade用法(例如删除主表, 或者删除连带的FK关系).
+例如 : 
+
+digoal=# drop table test cascade;
+ERROR:  0A000: trash can does not support DROP CASCADE
+LOCATION:  pgtrashcan_ProcessUtility, pgtrashcan.c:146
+
+
+2. 代码中, 并没有同名表的判断, 所以当Trash schema中存在同名的表时, 也会报错.
+例如 : 
+
+digoal=# \set VERBOSITY verbose
+digoal=# drop table test;
+ERROR:  42P07: relation "test" already exists in schema "Trash"
+LOCATION:  AlterRelationNamespaceInternal, tablecmds.c:10054
+
+
+3. drop table 的用户需要创建schema的权限, 以及写Trash schema的权限. 如果没有创建schema 的权限也会报错.
+
+digoal=> drop table t;
+ERROR:  42501: permission denied for schema Trash
+LOCATION:  aclcheck_error, aclchk.c:3371
+
+
+
+[参考]
+1. https://github.com/petere/pgtrashcan
+2. http://www.postgresql.org/docs/9.3/static/xfunc-c.html
+
+Optionally, a dynamically loaded file can contain initialization and finalization functions. If the file includes a function named _PG_init, that function will be called immediately after loading the file. The function receives no parameters and should return void. If the file includes a function named _PG_fini, that function will be called immediately before unloading the file. Likewise, the function receives no parameters and should return void. Note that _PG_fini will only be called during an unload of the file, not during process termination. (Presently, unloads are disabled and will never occur, but this may change in the future.)
+
+
+
+Flag Counter

@@ -1,0 +1,384 @@
+PostgreSQL research
+
+PostgreSQL排序索引建立不当造成的显性Sort现象优化一例
+
+2012-06-20 16:47:37   查看原文>>
+
+今天一位同事找到我, 在一个业务中有个查询在三个表之间JOIN, 发现当用到order by ext.current_dc desc时特别慢, 其他的速度都很快.
+SQL 如下 : 
+
+SELECT apk.id, apk.app_id, apk.app_ver, apk.app_show_ver, apk.cn_name, apk.apk_size, apk.authentic, apk.app_class_id, apk.create_time, apk.deleted, apk.promotion, COALESCE(ext.current_dc, 0::numeric) AS current_dc, COALESCE(price.price, 0::numeric) AS price
+FROM
+tbl_digoal_1 apk
+JOIN tbl_digoal_2 ext
+ON (apk.app_id = ext.app_id AND apk.deleted = 0::numeric and ext.current_dc is not null)
+LEFT JOIN tbl_digoal_3 price
+ON (apk.app_id = price.app_id and price.start_date::date <= now()::date AND price.end_date::date >= now()::date)
+         --where apk.cn_name like '%WPS%'
+         order by ext.current_dc desc
+         --order by apk.create_time desc
+         --order by apk.apk_size desc
+         --order by apk.id desc
+         --order by apk.cn_name desc
+         limit 24
+         --offset 48
+         ;
+
+
+
+三个表的结构和count(distinct)如下 : 
+
+digoal=> \d+ tbl_digoal_1
+                                          Table "digoal.tbl_digoal_1"
+      Column      |            Type             |       Modifiers        | Storage  |           Description           
+------------------+-----------------------------+------------------------+----------+---------------------------------
+ id               | numeric(19,0)               | not null               | main     | 
+ app_id           | numeric(19,0)               | not null               | main     | 
+ app_ver          | numeric(19,0)               | not null               | main     | 
+ app_show_ver     | character varying(32)       | not null               | extended | 
+ cn_name          | character varying(128)      | not null               | extended | 
+ eng_name         | character varying(128)      |                        | extended | 
+ apk_md5          | character varying(32)       | not null               | extended | 
+ apk_size         | numeric(19,0)               | not null               | main     | 
+ sdk_ver          | numeric(19,0)               |                        | main     | 
+ authentic        | numeric(10,0)               | not null               | main     | 
+ app_class_id     | numeric(19,0)               | not null               | main     | 
+ description      | character varying(1024)     |                        | extended | 
+ block_size       | numeric(10,0)               |                        | main     | 
+ package          | character varying(128)      | not null               | extended | 
+ developer_id     | numeric(19,0)               | not null               | main     | 
+ content_provider | numeric(10,0)               | not null               | main     | 
+ create_user      | character varying(32)       | not null               | extended | 
+ create_time      | timestamp without time zone | not null default now() | plain    | 
+ modify_user      | character varying(32)       |                        | extended | 
+ modify_time      | timestamp without time zone | default now()          | plain    | 
+ deleted          | numeric(5,0)                | not null default 0     | main     | 
+ new_feature_desc | character varying(512)      |                        | extended | 
+ on_off           | numeric(1,0)                | default 1              | main     | 
+ promotion        | numeric(1,0)                | default 1              | main     | 
+Indexes:
+    "pk_tbl_digoal_1" PRIMARY KEY, btree (id)
+    "idx_tbl_digoal_1_ctime" btree (create_time, modify_time), tablespace "tbs_digoal_idx"
+    "idx_tbl_digoal_1_tbl_digoal_1_apk_size" btree (apk_size), tablespace "tbs_digoal_idx"
+    "tbl_digoal_1_app_id_index" btree (app_id), tablespace "tbs_digoal_idx"
+    "tbl_digoal_1_cn_name_index" btree (cn_name), tablespace "tbs_digoal_idx"
+    "tbl_digoal_1_create_time_index" btree (create_time), tablespace "tbs_digoal_idx"
+Has OIDs: no
+
+digoal=> \d tbl_digoal_2
+    Table "digoal.tbl_digoal_2"
+    Column     |     Type      | Modifiers 
+---------------+---------------+-----------
+ id            | numeric(19,0) | not null
+ app_id        | numeric(19,0) | not null
+ current_dc    | numeric(19,0) | default 0
+ current_cc    | numeric(19,0) | default 0
+ day_dc        | numeric(19,0) | 
+ day_cc        | numeric(19,0) | 
+ week_dc       | numeric(19,0) | 
+ week_cc       | numeric(19,0) | 
+ month_dc      | numeric(19,0) | 
+ month_cc      | numeric(19,0) | 
+ comment_score | numeric(19,0) | 
+ base_dc       | numeric(19,0) | default 0
+ base_cc       | numeric(19,0) | default 0
+ score_manual  | numeric(1,0)  | default 0
+Indexes:
+    "pk_tbl_digoal_2" PRIMARY KEY, btree (id)
+    "tbl_digoal_2_app_id_index" btree (app_id), tablespace "tbs_digoal_idx"
+    "tbl_digoal_2_app_id_index2" btree (current_dc) WHERE current_dc IS NOT NULL
+
+digoal=> \d tbl_digoal_3
+       Table "digoal.tbl_digoal_3"
+   Column    |            Type             |     Modifiers      
+-------------+-----------------------------+--------------------
+ id          | numeric(19,0)               | not null
+ app_id      | numeric(19,0)               | 
+ app_name    | character varying(64)       | 
+ app_pkg     | character varying(128)      | 
+ price       | numeric(19,0)               | 
+ settle_type | numeric(9,0)                | 
+ description | character varying(1024)     | 
+ cpcode      | character varying(128)      | 
+ create_user | character varying(30)       | 
+ create_time | timestamp(0) with time zone | default now()
+ modify_user | character varying(30)       | 
+ modify_time | timestamp(0) with time zone | 
+ deleted     | numeric(1,0)                | not null default 0
+ start_date  | timestamp(0) with time zone | 
+ end_date    | timestamp(0) with time zone | 
+Indexes:
+    "pk_tbl_digoal_3" PRIMARY KEY, btree (id)
+    "tbl_digoal_3_app_id_index" btree (app_id), tablespace "tbs_digoal_idx"
+    "tbl_digoal_3_price_index" btree (price), tablespace "tbs_digoal_idx"
+
+
+
+使用到order by的字段的distinct值如下, 一开始我怀疑是distinct值的原因, 后来仔细看才发现是索引建立的有问题 : 
+
+digoal=> select count(distinct cn_name),count(distinct create_time),count(distinct apk_size),count(distinct id),count(*) from tbl_digoal_1;
+ count | count  | count  | count  | count  
+-------+--------+--------+--------+--------
+ 79770 | 108583 | 105912 | 108584 | 108584
+(1 row)
+
+digoal=> select count(distinct current_dc),count(*) from tbl_digoal_2;
+ count | count 
+-------+-------
+   215 | 91292
+(1 row)
+
+
+
+各种order by执行计划如下 : 
+
+digoal=> explain SELECT apk.id, apk.app_id, apk.app_ver, apk.app_show_ver, apk.cn_name, apk.apk_size, apk.authentic, apk.app_class_id, apk.create_time, apk.deleted, apk.promotion, COALESCE(current_dc, 0::numeric) AS current_dc, COALESCE(price.price, 0::numeric) AS price
+digoal-> FROM
+tbl_digoal_1 apk
+digoal-> tbl_digoal_1 apk
+digoal-> JOIN tbl_digoal_2 ext
+digoal-> ON (apk.app_id = ext.app_id AND apk.deleted = 0::numeric)
+digoal-> LEFT JOIN tbl_digoal_3 price
+digoal-> ON (apk.app_id = price.app_id and price.start_date::date <= now()::date AND price.end_date::date >= now()::date)
+digoal->  -- where apk.cn_name like '%WPS%'
+digoal->  order by ext.current_dc desc
+digoal->          --order by apk.create_time desc
+digoal->          --order by apk.apk_size desc
+digoal->          --order by apk.id desc
+digoal->          --order by apk.cn_name desc
+digoal->          limit 24
+digoal->          --offset 48
+digoal->          ;
+                                                                       QUERY PLAN                                                   
+                     
+------------------------------------------------------------------------------------------------------------------------------------
+---------------------
+ Limit  (cost=38680.15..38680.21 rows=24 width=77)
+   ->  Sort  (cost=38680.15..38951.09 rows=108377 width=77)
+         Sort Key: ext.current_dc
+         ->  Hash Left Join  (cost=19202.26..35653.74 rows=108377 width=77)
+               Hash Cond: (apk.app_id = price.app_id)
+               ->  Hash Join  (cost=19197.44..35242.44 rows=108377 width=73)
+                     Hash Cond: (apk.app_id = ext.app_id)
+                     ->  Index Scan using tbl_digoal_1_app_id_index on tbl_digoal_1 apk  (cost=0.00..11293.87 rows=108377 width=70)
+                           Filter: (deleted = 0::numeric)
+                     ->  Hash  (cost=17604.37..17604.37 rows=91606 width=9)
+                           ->  Index Scan using tbl_digoal_2_app_id_index on tbl_digoal_2 ext  (cost=0.00..17604.37 rows=91606 width=9
+)
+               ->  Hash  (cost=4.76..4.76 rows=5 width=10)
+                     ->  Index Scan using tbl_digoal_3_app_id_index on tbl_digoal_3 price  (cost=0.00..4
+.76 rows=5 width=10)
+                           Filter: (((start_date)::date <= (now())::date) AND ((end_date)::date >= (now())::date))
+(14 rows)
+
+Time: 1.789 ms
+
+
+
+digoal=> explain SELECT apk.id, apk.app_id, apk.app_ver, apk.app_show_ver, apk.cn_name, apk.apk_size, apk.authentic, apk.app_class_id, apk.create_time, apk.deleted, apk.promotion, COALESCE(current_dc, 0::numeric) AS current_dc, COALESCE(price.price, 0::numeric) AS price
+digoal-> FROM
+digoal-> tbl_digoal_1 apk
+digoal-> JOIN tbl_digoal_2 ext
+digoal-> ON (apk.app_id = ext.app_id AND apk.deleted = 0::numeric)
+digoal-> LEFT JOIN tbl_digoal_3 price
+digoal-> ON (apk.app_id = price.app_id and price.start_date::date <= now()::date AND price.end_date::date >= now()::date)
+digoal->  -- where apk.cn_name like '%WPS%'
+digoal->  --order by ext.current_dc desc
+digoal->          order by apk.create_time desc
+digoal->          --order by apk.apk_size desc
+digoal->          --order by apk.id desc
+digoal->          --order by apk.cn_name desc
+digoal->          limit 24
+digoal->          --offset 48
+digoal->          ;
+                                                                    QUERY PLAN                                                      
+               
+------------------------------------------------------------------------------------------------------------------------------------
+---------------
+ Limit  (cost=0.00..15.31 rows=24 width=77)
+   ->  Nested Loop Left Join  (cost=0.00..69125.92 rows=108377 width=77)
+         Join Filter: (apk.app_id = price.app_id)
+         ->  Nested Loop  (cost=0.00..60992.87 rows=108377 width=73)
+               ->  Index Scan Backward using tbl_digoal_1_create_time_index on tbl_digoal_1 apk  (cost=0.00..11241.87 rows=108377 widt
+h=70)
+                     Filter: (deleted = 0::numeric)
+               ->  Index Scan using tbl_digoal_2_app_id_index on tbl_digoal_2 ext  (cost=0.00..0.45 rows=1 width=9)
+                     Index Cond: (app_id = apk.app_id)
+         ->  Materialize  (cost=0.00..4.78 rows=5 width=10)
+               ->  Index Scan using tbl_digoal_3_app_id_index on tbl_digoal_3 price  (cost=0.00..4.76 ro
+ws=5 width=10)
+                     Filter: (((start_date)::date <= (now())::date) AND ((end_date)::date >= (now())::date))
+(11 rows)
+
+Time: 2.389 ms
+
+
+
+digoal=> explain SELECT apk.id, apk.app_id, apk.app_ver, apk.app_show_ver, apk.cn_name, apk.apk_size, apk.authentic, apk.app_class_id, apk.create_time, apk.deleted, apk.promotion, COALESCE(current_dc, 0::numeric) AS current_dc, COALESCE(price.price, 0::numeric) AS price
+FROM
+tbl_digoal_1 apk
+JOIN tbl_digoal_2 ext
+ON (apk.app_id = ext.app_id AND apk.deleted = 0::numeric)
+LEFT JOIN tbl_digoal_3 price
+ON (apk.app_id = price.app_id and price.start_date::date <= now()::date AND price.end_date::date >= now()::date)
+ -- where apk.cn_name like '%WPS%'
+ --order by ext.current_dc desc
+         --order by apk.create_time desc
+         order by apk.apk_size desc  
+         --order by apk.id desc
+         --order by apk.cn_name desc
+         limit 24
+         --offset 48
+         ;
+                                                                    QUERY PLAN                                                      
+               
+------------------------------------------------------------------------------------------------------------------------------------
+---------------
+ Limit  (cost=0.00..15.31 rows=24 width=77)
+   ->  Nested Loop Left Join  (cost=0.00..69123.92 rows=108377 width=77)
+         Join Filter: (apk.app_id = price.app_id)
+         ->  Nested Loop  (cost=0.00..60990.87 rows=108377 width=73)
+               ->  Index Scan Backward using idx_tbl_digoal_1_tbl_digoal_1_apk_size on tbl_digoal_1 apk  (cost=0.00..11239.87 rows=1083
+77 width=70)
+                     Filter: (deleted = 0::numeric)
+               ->  Index Scan using tbl_digoal_2_app_id_index on tbl_digoal_2 ext  (cost=0.00..0.45 rows=1 width=9)
+                     Index Cond: (app_id = apk.app_id)
+         ->  Materialize  (cost=0.00..4.78 rows=5 width=10)
+               ->  Index Scan using tbl_digoal_3_app_id_index on tbl_digoal_3 price  (cost=0.00..4.76 ro
+ws=5 width=10)
+                     Filter: (((start_date)::date <= (now())::date) AND ((end_date)::date >= (now())::date))
+(11 rows)
+
+Time: 3.317 ms
+
+
+
+digoal=> explain SELECT apk.id, apk.app_id, apk.app_ver, apk.app_show_ver, apk.cn_name, apk.apk_size, apk.authentic, apk.app_class_id, apk.create_time, apk.deleted, apk.promotion, COALESCE(current_dc, 0::numeric) AS current_dc, COALESCE(price.price, 0::numeric) AS price
+FROM
+tbl_digoal_1 apk
+JOIN tbl_digoal_2 ext
+ON (apk.app_id = ext.app_id AND apk.deleted = 0::numeric)
+LEFT JOIN tbl_digoal_3 price
+ON (apk.app_id = price.app_id and price.start_date::date <= now()::date AND price.end_date::date >= now()::date)
+ -- where apk.cn_name like '%WPS%'
+ --order by ext.current_dc desc
+         --order by apk.create_time desc
+         --order by apk.apk_size desc
+         order by apk.id desc  
+         --order by apk.cn_name desc
+         limit 24
+         --offset 48
+         ;
+                                                                    QUERY PLAN                                                      
+               
+------------------------------------------------------------------------------------------------------------------------------------
+---------------
+ Limit  (cost=0.00..15.33 rows=24 width=77)
+   ->  Nested Loop Left Join  (cost=0.00..69234.92 rows=108377 width=77)
+         Join Filter: (apk.app_id = price.app_id)
+         ->  Nested Loop  (cost=0.00..61101.88 rows=108377 width=73)
+               ->  Index Scan Backward using pk_app_apk on tbl_digoal_1 apk  (cost=0.00..11350.87 rows=108377 width=70)
+                     Filter: (deleted = 0::numeric)
+               ->  Index Scan using tbl_digoal_2_app_id_index on tbl_digoal_2 ext  (cost=0.00..0.45 rows=1 width=9)
+                     Index Cond: (app_id = apk.app_id)
+         ->  Materialize  (cost=0.00..4.78 rows=5 width=10)
+               ->  Index Scan using tbl_digoal_3_app_id_index on tbl_digoal_3 price  (cost=0.00..4.76 ro
+ws=5 width=10)
+                     Filter: (((start_date)::date <= (now())::date) AND ((end_date)::date >= (now())::date))
+(11 rows)
+
+Time: 1.800 ms
+
+
+
+digoal=> explain SELECT apk.id, apk.app_id, apk.app_ver, apk.app_show_ver, apk.cn_name, apk.apk_size, apk.authentic, apk.app_class_id, apk.create_time, apk.deleted, apk.promotion, COALESCE(current_dc, 0::numeric) AS current_dc, COALESCE(price.price, 0::numeric) AS price
+FROM
+tbl_digoal_1 apk
+JOIN tbl_digoal_2 ext
+ON (apk.app_id = ext.app_id AND apk.deleted = 0::numeric)
+LEFT JOIN tbl_digoal_3 price
+ON (apk.app_id = price.app_id and price.start_date::date <= now()::date AND price.end_date::date >= now()::date)
+ -- where apk.cn_name like '%WPS%'
+ --order by ext.current_dc desc
+         --order by apk.create_time desc
+         --order by apk.apk_size desc
+         --order by apk.id desc
+         order by apk.cn_name desc  
+         limit 24
+         --offset 48
+         ;
+                                                                    QUERY PLAN                                                      
+               
+------------------------------------------------------------------------------------------------------------------------------------
+---------------
+ Limit  (cost=0.00..15.37 rows=24 width=77)
+   ->  Nested Loop Left Join  (cost=0.00..69428.92 rows=108377 width=77)
+         Join Filter: (apk.app_id = price.app_id)
+         ->  Nested Loop  (cost=0.00..61295.88 rows=108377 width=73)
+               ->  Index Scan Backward using tbl_digoal_1_cn_name_index on tbl_digoal_1 apk  (cost=0.00..11544.87 rows=108377 width=70
+)
+                     Filter: (deleted = 0::numeric)
+               ->  Index Scan using tbl_digoal_2_app_id_index on tbl_digoal_2 ext  (cost=0.00..0.45 rows=1 width=9)
+                     Index Cond: (app_id = apk.app_id)
+         ->  Materialize  (cost=0.00..4.78 rows=5 width=10)
+               ->  Index Scan using tbl_digoal_3_app_id_index on tbl_digoal_3 price  (cost=0.00..4.76 ro
+ws=5 width=10)
+                     Filter: (((start_date)::date <= (now())::date) AND ((end_date)::date >= (now())::date))
+(11 rows)
+
+Time: 1.874 ms
+
+
+
+【优化】
+正常的计划都没有显式的Sort这个环节, 全部都是Nested Loop的时候走了排序输出的那个索引.
+而慢的这个SQL, 使用的是Merge Join, 后面显示的Sort了结果集.
+原因是用于排序的列current_dc和索引建立的条件不匹配, 索引多了个WHERE.current_dc IS NOT NULL, 因此在SQL中无法使用到它.
+    "tbl_digoal_2_app_id_index2" btree (current_dc) WHERE current_dc IS NOT NULL
+重建索引就可以了,
+create index tbl_digoal_2_app_id_index2 on tbl_digoal_2 (current_dc desc) tablespace tbs_digoal_idx;
+
+重看执行计划 : 
+
+digoal=> explain SELECT apk.id, apk.app_id, apk.app_ver, apk.app_show_ver, apk.cn_name, apk.apk_size, apk.authentic, apk.app_class_id, apk.create_time, apk.deleted, apk.promotion, COALESCE(current_dc, 0::numeric) AS current_dc, COALESCE(price.price, 0::numeric) AS price
+digoal-> FROM
+digoal-> tbl_digoal_1 apk
+digoal-> JOIN tbl_digoal_2 ext
+digoal-> ON (apk.app_id = ext.app_id AND apk.deleted = 0::numeric)
+digoal-> LEFT JOIN tbl_digoal_3 price
+digoal-> ON (apk.app_id = price.app_id and price.start_date::date <= now()::date AND price.end_date::date >= now()::date)
+digoal->  -- where apk.cn_name like '%WPS%'
+digoal->  order by ext.current_dc desc
+digoal->          --order by apk.create_time desc
+digoal->          --order by apk.apk_size desc
+digoal->          --order by apk.id desc
+digoal->          --order by apk.cn_name desc
+digoal->          limit 24
+digoal->          --offset 48
+digoal->          ;
+                                                                    QUERY PLAN                                                      
+               
+------------------------------------------------------------------------------------------------------------------------------------
+---------------
+ Limit  (cost=0.00..13.03 rows=24 width=77)
+   ->  Nested Loop Left Join  (cost=0.00..58846.45 rows=108377 width=77)
+         Join Filter: (apk.app_id = price.app_id)
+         ->  Nested Loop  (cost=0.00..50713.41 rows=108377 width=73)
+               ->  Index Scan using tbl_digoal_2_app_id_index2 on tbl_digoal_2 ext  (cost=0.00..15128.34 rows=91606 width=9)
+               ->  Index Scan using tbl_digoal_1_app_id_index on tbl_digoal_1 apk  (cost=0.00..0.38 rows=1 width=70)
+                     Index Cond: (app_id = ext.app_id)
+                     Filter: (deleted = 0::numeric)
+         ->  Materialize  (cost=0.00..4.78 rows=5 width=10)
+               ->  Index Scan using tbl_digoal_3_app_id_index on tbl_digoal_3 price  (cost=0.00..4.76 ro
+ws=5 width=10)
+                     Filter: (((start_date)::date <= (now())::date) AND ((end_date)::date >= (now())::date))
+(11 rows)
+
+Time: 1.988 ms
+
+
+
+这时候就没有显式的Sort步骤了.
+
+【小结】
+1. 由于PostgreSQL可以建立partial index, 所以需要特别注意索引是否能被真正使用和SQL有非常大的关系. 本例就是一个很典型的例子, 多了个条件, 所以不是全范围的索引, 因此也就无法满足SQL要求的使用条件.

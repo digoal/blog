@@ -1,0 +1,125 @@
+PostgreSQL research
+
+[转]PostgreSQL::Snapshots aka Materialized Views
+
+2010-09-30 11:21:57   查看原文>>
+
+一个巴西兄弟写的，几年前在ORACLE到PG的数据迁移中用过。感谢这位巴西哥们。
+
+[原文]:
+
+http://cunha17.cristianoduarte.pro.br/postgresql/snapshots.en_us.php
+
+摘记:
+
+1. Problem and motivation
+
+When migrating from Oracle to PostgreSQL, we may face situations when we need the same data on both database servers. This situation could be "easily" resolved if we could make "database links" or dblinks between a PostgreSQL server and an Oracle server. That's when the problem arise.
+
+
+2. Available solutions
+
+We have some solutions, like DBLink and DBI-Link. The first one make "views" that return the result of a function, which in turn makes a query to the remote database server. The second works almost the same way, but creates a whole bunch of structures like tables, types, views and functions to make the handling of
+remote tables as transparent as possible.
+
+
+3. Current implementation problems
+
+Comparing the two approaches, it's evident that the DBI-Link is much more elegant and elaborated. But the two suffer from a severe problem: they bring the whole result from the remote query into the local database server. For instance:
+
+Let's take a table on an Oracle database having a list of person (PERSON table). The primary key is the social security number (SSN), this table hold many other fields of person information and  has about 250.000 records. The filesystem size of the table is about 122Mb.
+
+If we make the following query on Oracle using SQLPlus:
+SELECT name FROM person WHERE ssn='012345678'; (1)
+the database server will search at the index(PK) for the given SSN and will return immediately (time < 1 second) the name of the person whose SSN is 012345678.
+
+Now we want a new application, that is being written to use PostgreSQL, to transparently access this Oracle table, that is, to access this table through the PostgreSQL server(like if it was a native table).
+Using DBLink we may create a view named "PERSON" based on a call to dblink's query function passing "SELECT * FROM PERSON" (2).
+Using DBI-Link we may create a local mirror of the remote schema structure, and with this, at the local schema, we would find a view called "PERSON", that invoke a function that makes a remote query [2], besides many types and associated functions.
+
+If we make the same query as we did before on Oracle [1], we will have a considerable delay and an absurd computational waste (in my experience, time ~ 5 minutes and process memory consumption ~ 1Gb), what makes these solutions inviable for any corporate project.
+
+
+4. Internals and the origin of the problems
+
+On the two solutions, the request that originate the function execution was:
+SELECT name FROM person WHERE ssn='012345678'; (1)
+
+However, we must notice that both functions were created to make the following remote query:
+SELECT * FROM PERSON; (2)
+
+[转]PostgreSQL::Snapshots aka Materialized Views - 德哥@Digoal - The Heart,The World.
+
+ What really happen is that the query present on these functions[2] is always executed, no matter the filter clauses present on the request query that originated the function execution[1]. The result of these functions[2] is, finally, processed by PostgreSQL (on this case filtered by the SSN column) sequentially and
+the final result is returned(3).
+
+A not so simple way would be to intercept the PostgreSQL planner and gather information about the query that originated the function execution and pass, dynamically, additional parameters to the remote database query. Unfortunately, this doesn't exist yet.
+
+However, we can take another way, when the information access doesn't need to be done in real-time. On these cases, we can make a local copy of the remote table. The previous problem is solved, right? Nope.
+
+How would this copy be made? Using a DBLink or DBI-Link connection we could execute a CREATE TABLE PERSON AS SELECT * FROM REMOTE_PERSON,  what would create a copy of the remote table at the local database. Now, any query executed at PostgreSQL would use the local table, which is much faster and efficient. But this
+approach suffer from one of the previous related problems, the excessive memory consumption when the function gets called (in my experience, the process grew to ~ 1Gb). Even if this operation needs to be done only a few times per day, the high memory consumption makes this approach not practical.
+
+
+5. Solving with Materialized Views: the PostgreSQL::Snapshots
+
+That's the reason why I created the PostgreSQL::Snapshots project, as an efficient and corporate way to address the current DBLinks solutions problems. This solution was based and inspired by the DBI-LINK project.
+
+The implemented functionalities include:
+
+CREATE DBLINK
+This command, available on Oracle, but not on PostgreSQL, create a link between two databases, using a user, a password and the location of the server on the network.
+On our case, we use a PL/Perl function (create_dblink) that takes the DBLink name, a DBI:Perl connection string, the user name, the password and some additional attributes needed for the connection establishment.
+The table where those data will be saved is pg_dblink and it's worthy remind that access to this table should only be allowed to the DBA(postgres user), despite it's created on the public schema.
+Before inserting a record on this table, we check if we can successfully establish a connection with the remote database using the given parameters.
+
+DROP DBLINK
+This command, available on Oracle, but not on PostgreSQL, removes a link between two databases, taking only the DBLink name.
+On our case, we use a PL/Perl function (drop_dblink) that takes the DBLink name and removes the entry at the pg_dblinks table. The foreign key disallow the deletion if any snapshot references the DBLink to be removed.
+
+CREATE SNAPSHOT
+This command, available on Oracle, but not on PostgreSQL, creates a materialized view (aka SNAPSHOT) based on a query. This query may, or may not, be referencing a DBLink.
+On our case, we use a PL/Perl function (create_snapshot) that takes the schema name, the Snapshot name, the query, the DBLink name and the refresh method. The DBLink name is optional and, when not given(NULL), create a snapshot based on a query to the local database. The refresh method can be:
+
+  • COMPLETE: allows only complete refreshes, that is, at the refresh time, the snapshot is truncated and all data from the query is inseted.
+  • FAST: allows only fast refreshes (based on materialized view logs), that is, at the refresh time, only the modified records get removed from the snapshot and inserted from the query.
+  • FORCE: try a FAST refresh and if it's not possible, try a COMPLETE refresh.
+
+The query is executed with a WHERE 1=0 clause as a way to bring only the query result structure. With this structure, a type mapping is done and an empty local table is created with that same structure. Finally, an entry on the snapshots table (pg_snapshots) is added.
+The table is not filled by this command.
+
+DROP SNAPSHOT
+This command, available on Oracle, but not on PostgreSQL, removes a materialized view(aka SNAPSHOT) taking only the Snapshot name.
+On our case, we use a PL/Perl function (drop_snapshot) that takes the schema name and the Snapshot name, removes the object and the entry at the pg_snapshots table.
+
+CREATE SNAPSHOT LOG
+This command, available on Oracle, but not on PostgreSQL, creates a materialized view log(aka SNAPSHOT LOG) bound to another table(called master table). When a snapshot is created with a query that references this master table, it will be possible to use fast refreshes (REFRESH FAST) based on the log. This allows, for
+instance, that, at the snapshot refreshing time , only the deleted, updated and inserted records be retrieved, highly increasing the performance and the refresh time.
+On our case, we use a PL/Perl function (create_snapshot_log) that takes the schema name, the master table name and the comma-separated field list on which the log filter will be applied. This list can contain a keyword like "primary key" or "oid" or field names.
+To make "snapshot log" functional, this function created a log table with the "mlog$_" prefix and a dynamically coded trigger that monitors any modifications on the master table and records the necessary information on the log table. Finally, an entry on the snapshot log table (pg_mlogs) is created, along with the
+necessary entries on the snapshot log columns table (pg_mlog_refcols).
+
+DROP SNAPSHOT LOG
+This command, available on Oracle, but not on PostgreSQL, removes a materialzed view log (aka SNAPSHOT LOG) taking only the schema name and the master table name.
+On our case, we use a PL/Perl function (drop_snapshot_log) that takes the schema name and the master table name and removes the materialized view log table, along with the master table trigger, the pg_mlogs entry and the pg_mlog_refcols entries.
+
+REFRESH SNAPSHOT
+This command, available on Oracle as a "Stored Procedure", but not on PostgreSQL, refreshes the data on a materialized view (aka SNAPSHOT) taking only the Snapshot name.
+On our case, we use a PL/Perl function (refresh_snapshot) that takes the schema name and the snapshot name and fill it with the results of its creation query.
+The secret behind is the use of distinct connections for SPI communications with the backend, for data insertion in the Snapshot and for remote data reading. The insertion process is done in one transaction of 1000 records at a time and make use of "Prepared Statements" to make the process faster and smarter (in my
+test with the PERSON table, the rate was ~ 650 records/second).
+At this function we also check the refresh method and do fast refreshes when configured(or allowed). The fast refreshes depend on the chosen method, on the materialized view log presence, on the log row count and on the row count of the result query. For big tables with few updates/inserts/deletes, the FAST method can
+refresh the snapshot within a few seconds.
+The fast refresh (REFRESH FAST) is only available on driver-supported databases (at the moment, only on PostgreSQL and Oracle) since operations will be performed on internal system tables at the master database (where the query will be executed). On Oracle, for example, tables like SLOG$, MLOG$, MLOG_REFCOL$, etc.
+needs to be directly accessed and the SLOG$ table must be accessed for modifications.
+
+
+6. Conclusion
+
+With the PostgreSQL::Snapshots, the basic functionalities of Materialized Views are implemented, what does not avoid a future association with an efficient DBLink solution. The use of Materialized Views is not restricted to table copies from other databases, they can be used as a way to persist results of highly
+complex and slow queries, giving the responsiveness that front-end systems need.
+
+ 
+
+ 
+

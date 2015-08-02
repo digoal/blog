@@ -1,0 +1,306 @@
+PostgreSQL research
+
+PostgreSQL backup case use pg_basebackup & restore database
+
+2014-11-10 15:50:17   查看原文>>
+
+一个简单的备份案例 : 
+数据库服务器
+
+172.16.3.221
+CentOS 6.x x64
+PostgreSQL 9.3.5
+
+
+
+备份机服务器
+
+172.16.3.150
+CentOS 6.x x64
+PostgreSQL 9.3.5 
+
+
+
+数据库服务器创建归档目录 : 
+
+[root@db-172-16-3-221 src]# mkdir /data01/archive
+[root@db-172-16-3-221 src]# chown postgres:postgres /data01/archive
+
+
+将归档目录export出去, 便于备份, 或者你可以选择使用rsync.
+
+[root@db-172-16-3-221 src]# vi /etc/exports
+/data01/archive 172.16.3.150/32(ro,no_root_squash,sync)
+[root@db-172-16-3-221 src]# service nfs reload
+
+
+
+配置postgresql.conf, 开启归档, 允许流复制连接, 配置WAL级别.
+
+wal_level = hot_standby
+archive_mode = on
+archive_command = 'DIR="/data01/archive/`date +%F`"; test ! -d $DIR && mkdir -p $DIR; test ! -f $DIR/%f && cp %p $DIR/%f && chmod 755 $DIR/%f'
+archive_timeout = 300
+max_wal_senders = 32
+
+
+
+重启数据库
+
+pg_ctl restart -m fast
+
+
+创建备份用户, 允许登录, 允许流复制权限
+
+digoal=# create role rep nosuperuser replication login encrypted password 'abcd_REP9923_+fw223fffffffff';
+
+
+配置pg_hba.conf, 允许备份机使用流复制连接数据库
+
+postgres@db-172-16-3-221-> vi pg_hba.conf
+host replication rep 172.16.3.150/32 md5
+
+postgres@db-172-16-3-221-> pg_ctl reload
+
+
+
+配置备份机, 创建备份数据文件目录, 备份归档目录
+
+[root@150 data01]# mkdir /data01/backup
+[root@150 data01]# chown postgres:postgres /data01/backup
+[root@150 data01]# mkdir -p /data01/backup/archive
+[root@150 data01]# chown postgres:postgres /data01/backup/archive
+
+
+
+配置密码文件, 注意权限.
+
+[root@150 data01]# su - postgres
+postgres@150-> mkdir .backup
+postgres@150-> chmod 700 .backup
+
+postgres@150-> vi .backup/.pgpass
+172.16.3.221:5432:replication:rep:abcd_REP9923_+fw223fffffffff
+postgres@150-> chmod 400 ~/.backup/.pgpass
+
+postgres@150-> ll /home/postgres/.backup/.pgpass
+-r-------- 1 postgres postgres 63 Nov 10 14:33 /home/postgres/.backup/.pgpass
+
+
+
+配置归档挂载
+
+[root@150 data01]# mkdir -p /data01/backup/archive_rmt
+[root@150 data01]# mount -t nfs -o tcp,ro 172.16.3.221:/data01/archive /data01/backup/archive_rmt
+
+
+
+配置备份脚本
+
+postgres@150-> cd ~
+postgres@150-> vi backup.sh
+#!/bin/bash
+
+export LANG=en_US.utf8
+export PGHOME=/opt/pgsql
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH
+export PATH=$PGHOME/bin:$PATH:.
+
+
+export PGHOST=172.16.3.221
+export PGPORT=5432
+export PGUSER=rep
+export PGDATABASE=postgres
+export PGPASSFILE=/home/postgres/.backup/.pgpass
+export DATE=`date +%F`
+export DIR="/data01/backup/$DATE"
+export ARC_RMT_DIR="/data01/backup/archive_rmt"
+export ARC_LOC_DIR="/data01/backup/archive"
+
+if [ $# -ne 1 ]; then
+  echo "exp: $0 base|archive"
+  exit 1
+fi
+
+if [ $1 == "archive" ]; then
+  echo "`date +%F%T`: start backup archive file."
+  # 使用cp, 删除7天前的归档
+  cp -n -r -p $ARC_RMT_DIR/* $ARC_LOC_DIR/ && echo "`date +%F%T`: stop backup archive file success." && rm -rf $ARC_RMT_DIR/`date -d '-7 day' +%F` && exit 0
+  # 或者使用rsync
+  # rsync -a $ARC_RMT_DIR/* $ARC_LOC_DIR/ && echo "`date +%F%T`: stop backup archive file success." && exit 0
+  echo "`date +%F%T`: stop backup archive file failed." && exit 1
+fi
+
+if [ $1 == "base" ]; then
+  STD=`psql -c "select 'this_is_standby' where pg_is_in_recovery()"|grep -c "this_is_standby"`
+  if [ $STD -ne 1 ]; then
+    test ! -d $DIR && mkdir -p $DIR && echo "`date +%F%T`: start base backup." && pg_basebackup -D $DIR -F t -R -z -d postgresql://$PGUSER:@$PGHOST:$PGPORT/$PGDATABASE && echo "`date +%F%T`: stop base backup success." && exit 0
+  else
+    echo -e "This is standby, don't need backup in this node."
+    exit 1
+  fi
+  echo "`date +%F%T`: base backup error OR base backup set exists." && exit 1
+fi
+
+
+echo "exp: $0 base|archive"
+exit 1
+
+postgres@150-> chmod 500 backup.sh
+
+
+测试  : 
+
+[root@150 backup]# /home/postgres/backup.sh archive
+2014-11-1015:46:50: start backup archive file.
+2014-11-1015:46:51: stop backup archive file success.
+
+[root@150 backup]# /home/postgres/backup.sh base
+2014-11-1015:46:56: start base backup.
+WARNING:  skipping special file "./.s.PGSQL.5432"
+2014-11-1015:48:33: stop base backup success.
+
+[root@150 backup]# /home/postgres/backup.sh archive
+2014-11-1015:49:31: start backup archive file.
+2014-11-1015:49:31: stop backup archive file success.
+
+[root@150 backup]# /home/postgres/backup.sh base
+2014-11-1015:49:32: base backup error OR base backup set exists.
+
+
+
+配置备份频率 : 
+例如基础备份1周1次, 归档1天1次.
+crontab -e
+1 1 * * 1 /home/postgres/backup.sh base >>/tmp/base_backup.log 2>&1
+1 2 * * * /home/postgres/backup.sh archive >>/tmp/archive_backup.log 2>&1
+
+注意删除生产机的历史归档和备份机的历史基础备份.
+例如在数据库服务器配置后台脚本, 自动删除30天前的归档.
+在备份机配置后台脚本, 自动删除30天前的基础备份.
+
+如果使用cp的话, 注意软链接, 权限的保留问题, 还需要注意手工start backup.
+
+接下来举例使用备份进行还原.
+创建目录, 即数据库还原到哪个目录, 如果有多个表空间的话, 可以将表空间还原到不同的目录, 在$PGDATA/pg_tblspc使用软链接即可. 同时需要注意容量足够.
+本例将数据, 表空间都还原到一个文件系统下.
+创建目录, 修改权限
+
+[root@deploy soft_bak]# cd /data01/
+[root@deploy data01]# mkdir new_pgdata
+[root@deploy data01]# chown postgres:postgres new_pgdata
+
+
+将备份文件拷贝到目标目录
+
+[root@deploy data01]# su - postgres
+postgres@deploy-> cd /data01/backup/2014-12-16/
+postgres@deploy-> ll
+total 1.1G
+-rw-rw-r-- 1 postgres postgres 681M Dec 16 16:01 16397.tar.gz
+-rw-rw-r-- 1 postgres postgres 361M Dec 16 16:03 base.tar.gz
+postgres@deploy-> cp * /data01/new_pgdata/
+
+postgres@deploy-> cd /data01/new_pgdata/
+postgres@deploy-> ll
+total 1.1G
+-rw-rw-r-- 1 postgres postgres 681M Dec 16 16:01 16397.tar.gz
+-rw-rw-r-- 1 postgres postgres 361M Dec 16 16:03 base.tar.gz
+
+
+解压$PGDATA
+
+postgres@deploy-> tar -zxvf base.tar.gz 
+
+
+删除原有的表空间软链接
+
+postgres@deploy-> cd pg_tblspc/
+postgres@deploy-> ll
+total 0
+lrwxrwxrwx 1 postgres postgres 23 Dec 16 15:47 16397 -> /data01/pgdata/tbs_test
+postgres@deploy-> rm -f 16397
+
+
+解压表空间
+
+postgres@deploy-> cd ..
+postgres@deploy-> tar -zxvf 16397.tar.gz
+
+
+将表空间文件还原到pg_tblspc(或者你可以使用软链接, 如果和本例不一样的话)
+
+postgres@deploy-> mkdir pg_tblspc/16397      
+postgres@deploy-> mv PG_9.3_201306121 pg_tblspc/16397/
+
+
+删除备份文件
+
+postgres@deploy-> rm -f base.tar.gz 16397.tar.gz 
+
+
+编辑还原配置文件, 本例恢复到最后一个归档.
+你也可以配置恢复目标, 例如恢复到某个时间点, 某个XID, 某个target.
+
+postgres@deploy-> vi recovery.conf 
+restore_command = 'cp /data01/backup/archive_loc/*/%f %p'
+
+
+编辑数据库配置文件, 主要修改监听端口, 日志目录(不要和已有的端口或目录冲突即可)
+
+postgres@deploy-> vi postgresql.conf
+port = 1922
+log_directory = 'pg_log'
+archive_mode = off
+
+
+
+修改数据库目录权限, 启动数据库.
+
+postgres@deploy-> chmod -R 700 /data01/new_pgdata
+postgres@deploy-> pg_ctl start -D /data01/new_pgdata
+
+
+开始自动恢复.
+恢复完成后可以看到进程已启动 : 
+
+  18023 postgres  20   0 2230768  72484  71600 S   0.0  0.1   0:00.05 /opt/pgsql9.3.5/bin/postgres -D /data01/new_pgdata            
+  18024 postgres  20   0   59876   1264    428 S   0.0  0.0   0:00.03 postgres: logger process                                      
+  18028 postgres  20   0 2232792 2.020g 2.018g S   0.0  2.1   0:02.40 postgres: checkpointer process                                
+  18029 postgres  20   0 2231796  50308  49392 S   0.0  0.1   0:00.87 postgres: writer process                                      
+  18461 postgres  20   0 2231796   1260    376 S   0.0  0.0   0:00.01 postgres: wal writer process                                  
+  18462 postgres  20   0 2232484   2580   1172 S   0.0  0.0   0:00.00 postgres: autovacuum launcher process                         
+  18464 postgres  20   0   61964   1396    508 S   0.0  0.0   0:00.00 postgres: stats collector process                             
+
+恢复完成, 
+
+postgres@deploy-> psql -h 127.0.0.1 -p 1922 -U postgres postgres
+psql (9.3.5)
+Type "help" for help.
+
+postgres=# \dt+
+                    List of relations
+ Schema | Name | Type  |  Owner   |  Size   | Description 
+--------+------+-------+----------+---------+-------------
+ public | test | table | postgres | 4075 MB | 
+(1 row)
+
+postgres=# \l+
+                                                               List of databases
+   Name    |  Owner   | Encoding | Collate | Ctype |   Access privileges   |  Size   | Tablespace |                Description      
+           
+-----------+----------+----------+---------+-------+-----------------------+---------+------------+---------------------------------
+-----------
+ postgres  | postgres | UTF8     | C       | C     |                       | 6146 MB | pg_default | default administrative connectio
+n database
+ template0 | postgres | UTF8     | C       | C     | =c/postgres          +| 6209 kB | pg_default | unmodifiable empty database
+           |          |          |         |       | postgres=CTc/postgres |         |            | 
+ template1 | postgres | UTF8     | C       | C     | =c/postgres          +| 6209 kB | pg_default | default template for new databas
+es
+           |          |          |         |       | postgres=CTc/postgres |         |            | 
+(3 rows)
+
+
+
+
+Flag Counter

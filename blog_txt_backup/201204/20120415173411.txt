@@ -1,0 +1,317 @@
+PostgreSQL research
+
+PostgreSQL Patch: Collecting statistics on foreign tables
+
+2012-04-15 17:34:11   查看原文>>
+
+PostgreSQL 一个比较兴奋的补丁, 终于可以收集foreign table的统计信息了, 以前没有统计信息, 执行计划无法达到最优.
+收集foreign table的统计信息必须手动去执行analyze. 
+
+下面在一台同时安装了PostgreSQL 9.1.3和PostgreSQL9.2 devel版本的服务器上测试两者的差别, 使用file_fdw模块.
+
+创建存放csv文件的目录.
+
+mkdir /file_fs
+chmod 777 /file_fs
+
+
+PostgreSQL 9.1.3版本测试 : 
+生成测试数据 : 
+
+COPY (SELECT s.a, repeat('a', 100) FROM generate_series(1,5000000) AS s(a)) TO '/file_fs/sample_csv_data1.csv' (FORMAT csv, DELIMITER ',');
+COPY (SELECT (random()*10000)::int, repeat('b', 100) FROM generate_series(1, 5000000)) TO '/file_fs/sample_csv_data2.csv' (FORMAT csv, DELIMITER ',');
+
+
+创建测试外部表.
+
+CREATE EXTENSION file_fdw;
+CREATE SERVER file_fs FOREIGN DATA WRAPPER file_fdw;
+CREATE FOREIGN TABLE tab1 (aid INTEGER, msg text) SERVER file_fs OPTIONS (filename '/file_fs/sample_csv_data1.csv', format 'csv', delimiter ',');
+CREATE FOREIGN TABLE tab2 (aid INTEGER, msg text) SERVER file_fs OPTIONS (filename '/file_fs/sample_csv_data2.csv', format 'csv', delimiter ',');
+
+
+查看外部表的pg_class.relpages和reltuples, 目前都是0 . 一会看看能不能通过analyze 外部表收集到relpages和reltuples的数据.
+
+postgres=# select * from pg_class where relname='tab1';
+-[ RECORD 1 ]--+------
+relname        | tab1
+relnamespace   | 2200
+reltype        | 25438
+reloftype      | 0
+relowner       | 10
+relam          | 0
+relfilenode    | 25436
+reltablespace  | 0
+relpages       | 0
+reltuples      | 0
+reltoastrelid  | 0
+reltoastidxid  | 0
+relhasindex    | f
+relisshared    | f
+relpersistence | p
+relkind        | f
+relnatts       | 2
+relchecks      | 0
+relhasoids     | f
+relhaspkey     | f
+relhasrules    | f
+relhastriggers | f
+relhassubclass | f
+relfrozenxid   | 0
+relacl         | 
+reloptions     | 
+
+
+PostgreSQL 9.1.3 跳过对外部表进行的analyze操作.
+
+postgres=# analyze verbose tab1;
+WARNING:  skipping "tab1" --- cannot analyze non-tables or special system tables
+ANALYZE
+postgres=# analyze verbose tab2;
+WARNING:  skipping "tab2" --- cannot analyze non-tables or special system tables
+ANALYZE
+
+
+pg_statistic的外部表亦无数据
+
+postgres=# select * from pg_statistic where starelid=(select oid from pg_class where relname='tab1');
+(No rows)
+postgres=# \d+ tab1
+              Foreign table "public.tab1"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ aid    | integer |           | plain    | 
+ msg    | text    |           | extended | 
+Server: file_fs
+Has OIDs: no
+
+
+查看SELECT count(*) FROM tab1, tab2 WHERE tab1.aid >= 0 AND tab1.aid <= 10000 AND tab1.aid = tab2.aid;的执行计划
+
+EXPLAIN ANALYZE SELECT count(*) FROM tab1, tab2 WHERE tab1.aid >= 0 AND tab1.aid <= 10000 AND tab1.aid = tab2.aid;
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=128591583.65..128591583.66 rows=1 width=0) (actual time=23609.686..23609.686 rows=1 loops=1)
+   ->  Merge Join  (cost=5560896.77..111015831.94 rows=7030300684 width=0) (actual time=20227.876..22984.161 rows=4999763 loops=1)
+         Merge Cond: (tab1.aid = tab2.aid)
+         ->  Sort  (cost=1857986.37..1858198.83 rows=84983 width=4) (actual time=8436.255..8438.372 rows=10000 loops=1)
+               Sort Key: tab1.aid
+               Sort Method: quicksort  Memory: 853kB
+               ->  Foreign Scan on tab1  (cost=0.00..1851028.44 rows=84983 width=4) (actual time=0.089..8433.209 rows=10000 loops=1)
+                     Filter: ((aid >= 0) AND (aid <= 10000))
+                     Foreign File: /file_fs/sample_csv_data1.csv
+                     Foreign File Size: 543888896
+         ->  Sort  (cost=3702910.39..3744273.38 rows=16545193 width=4) (actual time=11791.497..13090.106 rows=5000000 loops=1)
+               Sort Key: tab2.aid
+               Sort Method: quicksort  Memory: 430984kB
+               ->  Foreign Scan on tab2  (cost=0.00..1719149.30 rows=16545193 width=4) (actual time=0.081..8134.567 rows=5000000 loops=1)
+                     Foreign File: /file_fs/sample_csv_data2.csv
+                     Foreign File Size: 529446176
+ Total runtime: 23625.582 ms
+(17 rows)
+
+
+
+以下是postgresql 9.2 devel版本的测试
+创建外部表  : 
+
+CREATE EXTENSION file_fdw;
+CREATE SERVER file_fs FOREIGN DATA WRAPPER file_fdw;
+CREATE FOREIGN TABLE tab1 (aid INTEGER, msg text) SERVER file_fs OPTIONS (filename '/file_fs/sample_csv_data1.csv', format 'csv', delimiter ',');
+CREATE FOREIGN TABLE tab2 (aid INTEGER, msg text) SERVER file_fs OPTIONS (filename '/file_fs/sample_csv_data2.csv', format 'csv', delimiter ',');
+
+
+查看在未收集统计信息之前, 外部表tab1的pg_class中的reltuples和relpages是否有内容, 目前是0 , 因为外部表的统计信息不是自动收集的, 需要手动执行analyze .
+
+postgres=# select * from pg_class where relname='tab1';
+-[ RECORD 1 ]--+------
+relname        | tab1
+relnamespace   | 2200
+reltype        | 49199
+reloftype      | 0
+relowner       | 10
+relam          | 0
+relfilenode    | 49197
+reltablespace  | 0
+relpages       | 0
+reltuples      | 0
+relallvisible  | 0
+reltoastrelid  | 0
+reltoastidxid  | 0
+relhasindex    | f
+relisshared    | f
+relpersistence | p
+relkind        | f
+relnatts       | 2
+relchecks      | 0
+relhasoids     | f
+relhaspkey     | f
+relhasrules    | f
+relhastriggers | f
+relhassubclass | f
+relfrozenxid   | 0
+relacl         | 
+reloptions     | 
+
+
+PostgreSQL 9.2在打上该补丁后允许对外部表执行analyze操作收集统计信息.
+
+postgres=# analyze verbose tab1;
+INFO:  analyzing "public.tab1"
+INFO:  "tab1": file contains 5000000 rows; 30000 rows in sample
+ANALYZE
+postgres=# analyze verbose tab2;
+INFO:  analyzing "public.tab2"
+INFO:  "tab2": file contains 5000000 rows; 30000 rows in sample
+ANALYZE
+
+
+查看analyze后的外部表pg_class已经有了relpages和reltuples数据.
+
+postgres=# select * from pg_class where relname='tab1';
+-[ RECORD 1 ]--+------
+relname        | tab1
+relnamespace   | 2200
+reltype        | 49199
+reloftype      | 0
+relowner       | 10
+relam          | 0
+relfilenode    | 49197
+reltablespace  | 0
+relpages       | 66393
+reltuples      | 5e+06
+relallvisible  | 0
+reltoastrelid  | 0
+reltoastidxid  | 0
+relhasindex    | f
+relisshared    | f
+relpersistence | p
+relkind        | f
+relnatts       | 2
+relchecks      | 0
+relhasoids     | f
+relhaspkey     | f
+relhasrules    | f
+relhastriggers | f
+relhassubclass | f
+relfrozenxid   | 0
+relacl         | 
+reloptions     | 
+
+
+查看pg_statistic也有了外部表的统计信息 : 
+
+postgres=# select * from pg_statistic where starelid=(select oid from pg_class where relname='tab1');
+-[ RECORD 1 ]-----------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+----
+starelid    | 49197
+staattnum   | 1
+stainherit  | f
+stanullfrac | 0
+stawidth    | 4
+stadistinct | -1
+stakind1    | 2
+stakind2    | 3
+stakind3    | 0
+stakind4    | 0
+stakind5    | 0
+staop1      | 97
+staop2      | 97
+staop3      | 0
+staop4      | 0
+staop5      | 0
+stanumbers1 | 
+stanumbers2 | {-0.00145074}
+stanumbers3 | 
+stanumbers4 | 
+stanumbers5 | 
+stavalues1  | {64,45138,96558,146107,195251,244890,296409,345362,399679,450229,500085,546948,594174,644942,695135,749016,796848,8433
+75,893093,940543,993741,1045987,1092762,1142360,1194823,1242866,1290344,1336056,1382886,1432152,1485551,1536115,1586818,1643513,1693
+833,1743447,1794890,1843058,1891758,1946281,1994360,2042113,2091052,2143976,2192358,2242362,2293625,2345667,2391590,2446378,2493545,
+2541756,2592268,2644583,2698045,2749034,2800525,2850449,2897967,2951279,3000001,3049707,3102024,3151457,3203828,3251561,3303093,3352
+534,3401694,3454456,3503757,3553817,3601108,3650945,3700275,3751244,3803914,3851209,3902904,3946282,3999067,4054233,4103943,4151056,
+4201156,4253090,4304326,4358183,4404782,4452839,4499508,4550811,4599711,4649441,4700715,4750748,4800096,4852553,4900656,4947608,4999
+663}
+stavalues2  | 
+stavalues3  | 
+stavalues4  | 
+stavalues5  | 
+-[ RECORD 2 ]-----------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------
+----
+starelid    | 49197
+staattnum   | 2
+stainherit  | f
+stanullfrac | 0
+stawidth    | 101
+stadistinct | 1
+stakind1    | 1
+stakind2    | 3
+stakind3    | 0
+stakind4    | 0
+stakind5    | 0
+staop1      | 98
+staop2      | 664
+staop3      | 0
+staop4      | 0
+staop5      | 0
+stanumbers1 | {1}
+stanumbers2 | {1}
+stanumbers3 | 
+stanumbers4 | 
+stanumbers5 | 
+stavalues1  | {aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+stavalues2  | 
+stavalues3  | 
+stavalues4  | 
+stavalues5  | 
+
+postgres=# \d+ tab1
+                            Foreign table "public.tab1"
+ Column |  Type   | Modifiers | FDW Options | Storage  | Stats target | Description 
+--------+---------+-----------+-------------+----------+--------------+-------------
+ aid    | integer |           |             | plain    |              | 
+ msg    | text    |           |             | extended |              | 
+Server: file_fs
+FDW Options: (filename '/file_fs/sample_csv_data1.csv', format 'csv', delimiter ',')
+Has OIDs: no
+
+
+
+查看SELECT count(*) FROM tab1, tab2 WHERE tab1.aid >= 0 AND tab1.aid <= 10000 AND tab1.aid = tab2.aid;的执行计划
+
+EXPLAIN ANALYZE SELECT count(*) FROM tab1, tab2 WHERE tab1.aid >= 0 AND tab1.aid <= 10000 AND tab1.aid = tab2.aid;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1200036.05..1200036.06 rows=1 width=0) (actual time=19874.058..19874.058 rows=1 loops=1)
+   ->  Hash Join  (cost=591524.53..1200009.75 rows=10522 width=0) (actual time=8235.555..19189.282 rows=4999763 loops=1)
+         Hash Cond: (tab2.aid = tab1.aid)
+         ->  Foreign Scan on tab2  (cost=0.00..564630.00 rows=5000000 width=4) (actual time=0.057..8233.713 rows=5000000 loops=1)
+               Foreign File: /file_fs/sample_csv_data2.csv
+               Foreign File Size: 529446176
+         ->  Hash  (cost=591393.00..591393.00 rows=10522 width=4) (actual time=8235.476..8235.476 rows=10000 loops=1)
+               Buckets: 2048  Batches: 1  Memory Usage: 352kB
+               ->  Foreign Scan on tab1  (cost=0.00..591393.00 rows=10522 width=4) (actual time=0.046..8232.379 rows=10000 loops=1)
+                     Filter: ((aid >= 0) AND (aid <= 10000))
+                     Rows Removed by Filter: 4990000
+                     Foreign File: /file_fs/sample_csv_data1.csv
+                     Foreign File Size: 543888896
+ Total runtime: 19874.174 ms
+(14 rows)
+
+
+
+从以上例子可以看出, 对外部表收集统计信息后, 使得数据库选择了最优的执行计划, 因此执行效率有大幅提升.
+
+【参考】
+http://blog.163.com/digoal@126/blog/static/163877040201041111454178/
+https://commitfest.postgresql.org/action/patch_view?id=661

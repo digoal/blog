@@ -1,0 +1,355 @@
+PostgreSQL research
+
+[转接]2008PGCON PostgreSQL/Materialized Views
+
+2010-09-30 11:24:43   查看原文>>
+
+Introduction
+
+Materialized views are certainly possible in PostgreSQL. Because of PostgreSQL's powerful PL/pgSQL language, and the functional trigger system, materialized views are somewhat easy to implement. I will examine several methods of implementing materialized views in PostgreSQL.
+
+Definitions
+
+A materialized view is a table that actually contains rows, but behaves like a view. That is, the data in the table changes when the data in the underlying tables changes.
+
+There are several different types of materialized views:
+
+  • Snapshot materialized views are the simplest to implement. They are only updated when manually refreshed.
+  • Eager materialized views are updated as soon as any change is made to the database that would affect it. Eagerly updated materialized views may have incorrect data if the view it is based on has dependencies on mutable functions like now().
+  • Lazy materialized views are updated when the transaction commits. They too may fall out of sync with the base view if the view depends on mutable functions like now().
+  • Very Lazy materialized views are functionally equivalent to Snapshot materialized views. The only difference is that changes are recorded incrementally and applied when the table is manually refreshed. (This may be faster than a full snapshot upon refresh.)
+
+Why Materialized Views?
+
+Before we get too deep into how to implement materialized views, let's first examine why we may want to use materialized views.
+
+You may notice that certain queries are very slow. You may have exhausted all the techniques in the standard bag of techniques to speed up those queries. In the end, you realize that getting the queries to run as fast as you like simply isn't possible without completely restructuring the data.
+
+What you end up doing is storing pre-queried bits of information so that you don't have to run the real query when you need the data. This is typically called "caching" outside of the database world.
+
+What you are really doing is creating a materialized view. You are taking a view and turning it into a real table that holds real data, rather than a gateway to a SELECT query.
+
+Caveats and Assumptions
+
+I assume you are not new to PostgreSQL. I assume that you have a fairly solid understanding of how a database works, and in particular, the PostgreSQL database. I also assume you are comfortable with PL/pgSQL, PostgreSQL's SQL syntax, and tools to access and modify the database. All the information you need is in the
+PostgreSQL documentation.
+
+Note that unless otherwise noted, all of the commands are executed in the database as a root user. If you know what you are doing, you don't have to do this as a root user. If you don't know what a root user is, or how to create one, then read the previous paragraph again.
+
+Snapshot Materialized Views
+
+Snapshot materialized views are very easy to implement. They will serve as a foundation for all other materialized views I discuss in this article.
+
+I use a system where the materialized view is based off of a view. I assume that the view definition will never change. All bets are off if it does. Of course, I do expect that the data in the view will change as data in the database is modified.
+
+matviews Table
+
+I create a table called matviews to store the information about a materialized view.
+
+CREATE TABLE matviews (    mv_name NAME NOT NULL PRIMARY KEY    , v_name NAME NOT NULL    , last_refresh TIMESTAMP WITH TIME ZONE  );
+
+The columns are:
+
+mv_name
+    The name of the materialized view represented by this row.
+v_name
+    The name of the view that the materialized view is based on.
+last_refresh
+    The time of the last refresh of the materialized view.
+
+This table will allow us to keep track of our materialized views, how they should behave, and their current status.
+
+create_matview Function
+
+Here is a function written in PL/pgSQL to insert a row into the matviews table and to create the materialized view. Pass in the name of the materialized view, and the name of the view that it is based on. Note that you have to create the view first, of course.
+
+This function will see if a materialized view with that name is already created. If so, it raises an exception. Otherwise, it creates a new table from the view, and inserts a row into the matviews table.
+
+CREATE OR REPLACE FUNCTION create_matview(NAME, NAME)   RETURNS VOID   SECURITY DEFINER   LANGUAGE plpgsql AS '   DECLARE       matview ALIAS FOR $1;       view_name ALIAS FOR $2;       entry matviews%ROWTYPE;   BEGIN       SELECT * INTO entry FROM matviews WHERE mv_name = matview;          IF FOUND THEN           RAISE EXCEPTION ''Materialized view ''''%'''' already exists.'',             matview;       END IF;          EXECUTE ''REVOKE ALL ON '' || view_name || '' FROM PUBLIC'';           EXECUTE ''GRANT SELECT ON '' || view_name || '' TO PUBLIC'';          EXECUTE ''CREATE TABLE '' || matview || '' AS SELECT * FROM '' || view_name;          EXECUTE ''REVOKE ALL ON '' || matview || '' FROM PUBLIC'';          EXECUTE ''GRANT SELECT ON '' || matview || '' TO PUBLIC'';          INSERT INTO matviews (mv_name, v_name, last_refresh)         VALUES (matview, view_name, CURRENT_TIMESTAMP);               RETURN;   END   ';
+
+
+drop_matview Function
+
+If there is a function to create, there must be a function to destroy. drop_matview only drops the materialized view and removes the entry from matviews. It will leave the view alone.
+
+CREATE OR REPLACE FUNCTION drop_matview(NAME) RETURNS VOID   SECURITY DEFINER   LANGUAGE plpgsql AS '   DECLARE       matview ALIAS FOR $1;       entry matviews%ROWTYPE;   BEGIN          SELECT * INTO entry FROM matviews WHERE mv_name = matview;          IF NOT FOUND THEN           RAISE EXCEPTION ''Materialized view % does not exist.'', matview;       END IF;          EXECUTE ''DROP TABLE '' || matview;       DELETE FROM matviews WHERE mv_name=matview;          RETURN;   END   ';
+
+refresh_matview Function
+
+Finally, you need a way to refresh the materialized views so that the data does not become completely stale. This function only needs the name of the matview. It uses a brute-force algorithm that will delete all the rows and reinsert them from the view.
+
+Note that you may want to drop the indexes on your materialized view before executing this, and recreate them after it finishes. This step could be automated, perhaps.
+
+
+CREATE OR REPLACE FUNCTION refresh_matview(name) RETURNS VOID   SECURITY DEFINER   LANGUAGE plpgsql AS '   DECLARE        matview ALIAS FOR $1;       entry matviews%ROWTYPE;   BEGIN          SELECT * INTO entry FROM matviews WHERE mv_name = matview;          IF NOT FOUND THEN           RAISE EXCEPTION <nowiki>''Materialized view % does not exist.'', matview;      END IF;        EXECUTE ''DELETE FROM '' || matview;      EXECUTE ''INSERT INTO '' || matview          || '' SELECT * FROM '' || entry.v_name;        UPDATE matviews          SET last_refresh=CURRENT_TIMESTAMP          WHERE mv_name=matview;        RETURN;  END  ';</nowiki>
+
+Example of a Snapshot Materialized View
+
+Let's pretend you are running a database that has the following tables and views:
+
+CREATE TABLE player ( pname VARCHAR(255) PRIMARY KEY );    CREATE TABLE game_score (    pname VARCHAR(255) NOT NULL,    score INTEGER NOT NULL  );    CREATE VIEW player_total_score_v AS  SELECT    pname,    sum(score) AS total_score  FROM game_score  GROUP BY pname;
+
+Since a lot of players play games each day, and running the view is kind of expensive, you decide you want to implement a materialized view on player_total_score_v. This is done with the following command.
+
+SELECT create_matview('player_total_score_mv', 'player_total_score_v');  CREATE INDEX pname_idx ON player_total_score_mv(pname);
+
+Every night (or every hour, depending on how eager the players are to see their score), you can refresh the materialized view with the following command.
+
+DROP INDEX pname_idx ON player_total_score_mv;  SELECT refresh_matview('player_total_score_mv');  CREATE INDEX pname_idx ON player_total_score_mv(pname);
+
+Even though the scores in player_total_score_mv isn't going to change to reflect the most current scores until the refresh is run, the players will learn to accept that.
+
+Eager Materialized View
+
+An eager materialized view will be updated whenever the view changes. This is done with a system of triggers on all of the underlying tables. Dependencies on mutable functions (like now()) will cause the materialized view to become corrupt, but that can be corrected with minor refreshes, that only refresh affected
+rows.
+
+Underlying Tables
+
+First, let's step back and consider what actually makes up the data in a materialized view, or where the data in the view is coming from. Obviously, information in the materialized view will come from any tables mentioned in the view definition. If the view definition relies on other views, then we'll have to consider
+all the tables that compose that view as well.
+
+Relation Between Materialized Views and Underlying Tables
+
+Now we need to consider how the data in the underlying table relates to or affects the data in the materialized view.
+
+One-to-one. The simplest case is a one-to-one relation. The view is merely selecting all or some of the columns from a table. Multiple rows in the view do not depend on the same row in the underlying table. In the example below, if the username of a single user changes, then only one row in the user_v will change.
+
+CREATE VIEW user_v AS  SELECT username, password AS '******', uid FROM users;
+
+Many-to-one. A more complicated case is many-to-one. Many rows in the view depend on a single row in an underlying relation. This is most common when you are joining two tables. In the example below, if the groupname changes, many rows in the user_group_v may change.
+
+CREATE VIEW user_group_v AS  SELECT username, groupname  FROM groups, users  WHERE users.group = groups.group;
+
+One-to-many. Another complicated case is one-to-many. One row in the view is derived from multiple rows in the underlying table. This is most common with aggregates. In this example, the total_score is derived from many rows in game_score.
+
+CREATE VIEW player_total_score_v AS  SELECT pname, sum(score) AS total_score  FROM game_score;
+
+Many-to-many. There is also some rare cases where many rows in the view will be affected by many rows in the underlying tables. These are usually a combination of the relations above.
+
+Other. There are also cases when the data in the view isn't related to the data in the underlying tables at all. For instance, this would occur if a column depended on the value of now(), or some other configuration. Although this cannot be handled perfectly, it can be satisfactorily approached. For instance, you may
+only summarize data that is old, or you may decide to update the data in distinct intervals, as for our snapshot solution above.
+
+We need to keep in mind all the cases as we design the functions and triggers below.
+
+mv_refresh_row Function
+
+We first need to design an mv_refresh_row function. I don't know how to make a generic function that will work for all materialized views, so we have to hand-craft one for each materialized view we create. It isn't hard to do. This simple algorithm will get you through this process.
+
+ 1. Identify the primary key of the materialized view. If there isn't one, you must redefine the view so as to create one. The function will accept the primary key as an argument.
+ 2. In the function, first delete the row with that primary key from the materialized view.
+ 3. Next, select the row with that primary key from the view and insert it into the materialized view.
+
+We'll see an example below.
+
+mv_refresh Function
+
+If the view relies on some mutable functions, then you will have to run a refresh function that will only refresh those rows that are affected. Most commonly, this occurs when there is some sort of time-dependence.
+
+A lot of thought needs to go into the mv_refresh function. There may be a way to write a generic one for all views, but for now, you'll have to hand-craft your own. I don't even have a generic algorithm to pass along. I think this is largely dependent on the mutable and how the mutable behaves.
+
+Table Triggers
+
+You will have to create triggers for every action on every underlying table. I write three triggers for each table, one each for INSERT, UPDATE, and DELETE. I feel it is more efficient than writing one function that handles all three cases.
+
+The basic algorithm for the trigger functions follows. I'll show you a concrete example below of these functions.
+
+ 1. Identify the primary key value(s) for the materialized view of the affected rows. If there is a many-to-one or many-to-many, many rows in the materialized view will be affected.
+ 2. For DELETE and INSERT, merely call the mv_refresh_row function for each primary key value.
+ 3. For UPDATE, identify whether the update is going to change which row(s) in the materialized view this row will affect. If so, then you'll have to refresh rows for both the old and new values. Otherwise, only the old or new values will do.
+
+Apply the triggers so that they are called after the operation is performed.
+
+Examples
+
+These examples are long and contrived; I am using them merely to demonstrate how it all works. Don't bother trying to make sense of the tables. I couldn't come up with any real world examples that would show all three instances.
+
+CREATE TABLE a (    a_id INT PRIMARY KEY,    v INT  );  CREATE TABLE b (    b_id INT PRIMARY KEY,    a_id INT REFERENCES a,    v INT,    expires TIMESTAMP  );  CREATE TABLE c (    c_id INT PRIMARY KEY,    b_id INT REFERENCES b,    v INT  );    CREATE VIEW b_v AS   SELECT b.b_id AS b_id,    a.v AS a_v,    b.v AS b_v,    sum(c.v) AS sum_c_v  FROM a JOIN b USING (a_id) JOIN c USING (b_id)  WHERE (b.expires IS NULL OR b.expires >= now())  GROUP BY b.b_id, a.v, b.v;    SELECT create_matview('b_mv', 'b_v');
+
+Notice that one row in a may contribute to multiple rows in b_v. Only one row in b contribute to one row in b_v Also, many rows in c contribute to a single row in b_v. The primary key of b_v is b_id. Also, the view has a dependence on the mutable function now().
+
+The mv_refresh_row function is defined as follows.
+
+CREATE FUNCTION b_mv_refresh_row(b_mv.b_id%TYPE) RETURNS VOID  SECURITY DEFINER  LANGUAGE 'plpgsql' AS '  BEGIN    DELETE FROM b_mv WHERE b_id = $1;    INSERT INTO b_mv SELECT * FROM b_v WHERE b_id = $1;    RETURN;  END  ';
+
+The mv_refresh function is defined as follows. If it weren't for the dependence on now(), this would be unnecessary. We store the last time this was refreshed in the matviews table.
+
+CREATE FUNCTION b_mv_refresh() RETURNS VOID   SECURITY DEFINER   LANGUAGE 'plpgsql' AS '   BEGIN       PERFORM b_mv_refresh_row(b_id)           FROM b, matviews           WHERE matviews.mv_name = ''b_mv''               AND b.expires >= matviews.last_refresh               AND b.expires < now();          UPDATE matviews           SET last_refresh = now()           WHERE mv_name = ''b_mv'';          RETURN;   END   ';
+
+The trigger function definitions are long and tedious, but this is where all the magic is.
+
+-- a triggers  CREATE FUNCTION b_mv_a_ut() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    IF OLD.a_id = NEW.a_id THEN      PERFORM b_mv_refresh_row(b.b_id) FROM b WHERE b.a_id = NEW.a_id;    ELSE      PERFORM b_mv_refresh_row(b.b_id) FROM b WHERE b.a_id = OLD.a_id;      PERFORM b_mv_refresh_row(b.b_id) FROM b WHERE b.a_id = NEW.a_id;    END IF;    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_ut AFTER UPDATE ON a    FOR EACH ROW EXECUTE PROCEDURE b_mv_a_ut();     CREATE FUNCTION b_mv_a_dt() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    PERFORM b_mv_refresh_row(b.b_id) FROM b WHERE b.a_id = OLD.a_id;    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_dt AFTER DELETE ON a    FOR EACH ROW EXECUTE PROCEDURE b_mv_a_dt();     CREATE FUNCTION b_mv_a_it() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    PERFORM b_mv_refresh_row(b.b_id) FROM b WHERE b.a_id = NEW.a_id;    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_it AFTER INSERT ON a    FOR EACH ROW EXECUTE PROCEDURE b_mv_a_it();     -- b triggers  CREATE FUNCTION b_mv_b_ut() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    IF OLD.b_id = NEW.b_id THEN      PERFORM b_mv_refresh_row(NEW.b_id);    ELSE      PERFORM b_mv_refresh_row(OLD.b_id);      PERFORM b_mv_refresh_row(NEW.b_id);    END IF;    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_ut AFTER UPDATE ON b    FOR EACH ROW EXECUTE PROCEDURE b_mv_b_ut();     CREATE FUNCTION b_mv_b_dt() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    PERFORM b_mv_refresh_row(OLD.b_id);    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_dt AFTER DELETE ON b    FOR EACH ROW EXECUTE PROCEDURE b_mv_b_dt();     CREATE FUNCTION b_mv_b_it() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    PERFORM b_mv_refresh_row(NEW.b_id);    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_it AFTER INSERT ON b    FOR EACH ROW EXECUTE PROCEDURE b_mv_b_it();     -- c triggers  CREATE FUNCTION b_mv_c_ut() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    IF OLD.b_id = NEW.b_id THEN      PERFORM b_mv_refresh_row(NEW.b_id);    ELSE      PERFORM b_mv_refresh_row(OLD.b_id);      PERFORM b_mv_refresh_row(NEW.b_id);    END IF;    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_ut AFTER UPDATE ON c    FOR EACH ROW EXECUTE PROCEDURE b_mv_c_ut();     CREATE FUNCTION b_mv_c_dt() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    PERFORM b_mv_refresh_row(OLD.b_id);    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_dt AFTER DELETE ON c    FOR EACH ROW EXECUTE PROCEDURE b_mv_c_dt();     CREATE FUNCTION b_mv_c_it() RETURNS TRIGGER  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  BEGIN    PERFORM b_mv_refresh_row(NEW.b_id);    RETURN NULL;  END  ';  CREATE TRIGGER b_mv_it AFTER INSERT ON c    FOR EACH ROW EXECUTE PROCEDURE b_mv_c_it();
+
+Lazy Materialized Views
+
+The lazy materialized view would record which rows in the materialized views need to be updated, and update them when the transaction is committed. This useful if many change will affect the same rows, and will also allow those changes to be made much more quickly.
+
+Currently, I know of no way to put a hook in when the transaction is committed. Pending that development, this materialized view scheme cannot be implemented.
+
+If there was such a hook, it would be implemented like the Very Lazy method below, but the refresh would be called before the end of the transaction.
+
+Very Lazy Materialized Views
+
+Very lazy materialized views would record which rows in the materialized view need to be updated, but won't update until directed to. This would be useful if you are committing multiple transactions that affect the materialized views, but don't want to actually update the materialized view until later. Does this sound
+familiar? It should, because it is functionally equivalent to the snapshot materialized view I described earlier.
+
+CREATE TABLE matview_changes (    mv_oid OID PRIMARY KEY    , pkey INTEGER NOT NULL  );
+
+Recording the Changes in matview_changes
+
+Replacing the mv_refresh_row function with one that merely records the change to be made at a later time is pretty easy. First, we need a table to store our changes -- one that could store any change to any materialized view (assuming the primary key is a single column of integers).
+
+matview_queue_refresh_row() Function
+
+Next, we need to create a generic matview_queue_refresh_row() function that inserts the primary key into matview_changes if it is not already present.
+
+CREATE FUNCTION matview_queue_refresh_row(NAME, INTEGER) RETURNS VOID  SECURITY DEFINER LANGUAGE 'plpgsql' AS '  DECLARE    mv OID;    test INTEGER;  BEGIN    SELECT INTO mv oid FROM matviews WHERE mv_name = $1;      SELECT INTO test pkey FROM matview_changes      WHERE matview_changes.mv_oid = mv      AND matview_changes.pkey = $2;      IF NOT FOUND THEN        INSERT INTO matview_changes (mv_oid, pkey) VALUES (mv, $2);    END IF;      RETURN NULL;  END  ';
+
+Modify the Eager Materialized View System
+
+The very lazy materialized view works mostly like the eager materialized view system, with a few modification. Apply the following changes on top of the eager materialized view setup above.
+
+ 1. Modify the triggers you defined for eager materialized views above so that it calls matview_queue_refresh_row() rather than mv_refresh_row().
+ 2. Modify (or create, if it doesn't exist yet) mv_refresh() so that it first applies the mutable-function dependencies first, and then performs the actual changes in bulk with mv_refresh_row(), deleting all the changes from the matview_changes table.
+
+Refresh Strategies
+
+Now that refreshing the materialized view won't be so expensive, we can look at some alternative refresh strategies that are out of the question for snapshot materialized views.
+
+  • We can implement a rule on select such that the materialized view is refreshed whenever data is selected from it.
+  • We can improve performance by implementing a rule that will only refresh the materialized view if 1 second, 10 seconds, 1 minute, or 1 hour has passed since the last refresh and the data is being selected.
+  • We can forget about the rules altogether and have the materialized view get refreshed at a preset time interval - 10 second, 1 minute, 10 minutes, etc.
+
+Example
+
+Borrowing from our eager example, we are now going to implement the triggers and mv_refresh() function so that it uses the very lazy updating technique. It also implements a rule that will refresh the materialized view if 10 seconds have passed since the last refresh.
+
+-- b_mv_refresh()   CREATE OR REPLCE FUNCTION b_mv_refresh() RETURNS VOID   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   DECLARE     mv OID;   BEGIN     SELECT INTO mv oid FROM matviews WHERE mv_name = ''b_mv'';        PERFORM b_mv_refresh_row(b_id)       FROM b, matviews       WHERE matviews.oid = mv         AND b.expires >= matviews.last_refresh         AND b.expires < now();          PERFORM b_mv_refresh_row(pkey)       FROM matview_changes       WHERE mv_oid = mv;        UPDATE matviews       SET last_refresh = now()       WHERE mv_name = ''b_mv'';      END   ';    -- a triggers   CREATE FUNCTION b_mv_a_ut() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     IF OLD.a_id = NEW.a_id THEN       PERFORM matview_queue_refresh_row(''b_mv'', b.b_id)         FROM b WHERE b.a_id = NEW.a_id;     ELSE       PERFORM matview_queue_refresh_row(''b_mv'', b.b_id)         FROM b WHERE b.a_id = OLD.a_id;       PERFORM matview_queue_refresh_row(''b_mv'', b.b_id)         FROM b WHERE b.a_id = NEW.a_id;     END IF;     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_ut AFTER UPDATE ON a     FOR EACH ROW EXECUTE PROCEDURE b_mv_a_ut();    CREATE FUNCTION b_mv_a_dt() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     PERFORM matview_queue_refresh_row(''b_mv'', b.b_id)       FROM b WHERE b.a_id = OLD.a_id;     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_dt AFTER DELETE ON a     FOR EACH ROW EXECUTE PROCEDURE b_mv_a_dt();     CREATE FUNCTION b_mv_a_it() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     PERFORM matview_queue_refresh_row(''b_mv'', b.b_id)       FROM b WHERE b.a_id = NEW.a_id;     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_it AFTER INSERT ON a     FOR EACH ROW EXECUTE PROCEDURE b_mv_a_it();     -- b triggers   CREATE FUNCTION b_mv_b_ut() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     IF OLD.b_id = NEW.b_id THEN       PERFORM matview_queue_refresh_row(''b_mv'', NEW.b_id);     ELSE       PERFORM matview_queue_refresh_row(''b_mv'', OLD.b_id);       PERFORM matview_queue_refresh_row(''b_mv'', NEW.b_id);     END IF;     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_ut AFTER UPDATE ON b     FOR EACH ROW EXECUTE PROCEDURE b_mv_b_ut();     CREATE FUNCTION b_mv_b_dt() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     PERFORM matview_queue_refresh_row(''b_mv'', OLD.b_id);     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_dt AFTER DELETE ON b     FOR EACH ROW EXECUTE PROCEDURE b_mv_b_dt();     CREATE FUNCTION b_mv_b_it() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     PERFORM matview_queue_refresh_row(''b_mv'', NEW.b_id);     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_it AFTER INSERT ON b     FOR EACH ROW EXECUTE PROCEDURE b_mv_b_it();     -- c triggers   CREATE FUNCTION b_mv_c_ut() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     IF OLD.b_id = NEW.b_id THEN       PERFORM matview_queue_refresh_row(''b_mv'', NEW.b_id);     ELSE       PERFORM matview_queue_refresh_row(''b_mv'', OLD.b_id);       PERFORM matview_queue_refresh_row(''b_mv'', NEW.b_id);     END IF;     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_ut AFTER UPDATE ON c     FOR EACH ROW EXECUTE PROCEDURE b_mv_c_ut();     CREATE FUNCTION b_mv_c_dt() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     PERFORM matview_queue_refresh_row(''b_mv'', OLD.b_id);     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_dt AFTER DELETE ON c     FOR EACH ROW EXECUTE PROCEDURE b_mv_c_dt();     CREATE FUNCTION b_mv_c_it() RETURNS TRIGGER   SECURITY DEFINER LANGUAGE 'plpgsql' AS '   BEGIN     PERFORM matview_queue_refresh_row(''b_mv'', NEW.b_id);     RETURN NULL;   END   ';   CREATE TRIGGER b_mv_it AFTER INSERT ON c     FOR EACH ROW EXECUTE PROCEDURE b_mv_c_it();
+
+Switching Between Techniques
+
+With the right support functions, and a column to track the type of materialized view, it should be possible to switch between the various techniques. Right now, I don't have a way to do this because generating the triggers, the mv_refresh_row function, and the mv_refresh function is not generic. However, should I
+discover a way to make them generic, then it should be possible to track what type of technique the materialized view is using in the matviews table. Then, I would write a generic function to apply the necessary changes to switch between techniques.
+
+Comparison of Techniques
+
+Let's review the various techniques and their benefits and disadvantages.
+
+Snapshot Materialized Views
+
+The snapshots are really easy to implement. However, they take a lot of work to regenerate the data. This is good if it is going to take a lot of work anyway, but bad if there are only a few small changes to make at each update. The refresh function must be called regularly.
+
+The data will be out-of-sync with the view as soon as the data starts to change. This may be good or bad, depending on what you want.
+
+Eager Materialized Views
+
+The eager updated materialized views are always updated - even in a transaction. This comes at a cost - changes that affect the materialized view are going to be more expensive. This is fine if you don't change the data much, but can lead to problems when you do bulk imports or modifications.
+
+The data may fall out of sync if there is a dependence on mutable functions. A regular specialized refresh function can be called to remedy the data. However, discovering the correct algorithm for this function can be difficult.
+
+Lazy Materialized Views
+
+Lazy materialized views offer a balance between the eager and snapshot types. Changes to the data are not instantly propagated, allowing multiple changes to the same records to be applied in one shot rather than mutliple shots. However, the data is not consistent during a transaction, and so it must be carefully
+handled.
+
+Like eager materialized views, the data may fall out of sync if there is a dependence on a mutable function. A similar solution must be implemented.
+
+The only drawback to lazy materialized views is that I don't know how to implement them yet, as I can't put a hook in before the transaction is committed.
+
+Very Lazy Materialized Views
+
+Very lazy materialized views are like snapshots, except the updates can be lighter-weight. This is good if there are few updates to the data. Like snapshots, the data will begin to be out of sync as soon as the data changes, but the refresh function is much faster and uses less resources.
+
+General Suggestions
+
+Know When to Use a Materialized View
+
+It doesn't take a genius to realize that materialized views are not simple. If you can find a way to improve your database performance with partitions or indexes, by all means, do so. However, certain situations are best served with materialized views. These situations are obvious in that there are relatively few data
+modifications compared to the queries being performed, and the queries are very complicated and heavy-weight. It also goes without saying that the different kinds of materialized views are useful in different situations.
+
+Avoid Mutable Function Dependence
+
+Avoid mutable functions if you can. Sometimes, like the example above with the expires column, the solution is obvious. Othertimes, it is not. If possible, summarize the mutable function in a column in the table. For instance, we could've added a column called expired, set it to a boolean, and ran a query to update
+that column with respect to the expires column nightly. Then we could create the view and thus the materialized view with a dependence on the expired column, and ignore the expires column. This would've made the materialized view simpler and always synchronized with the data.
+
+Keep it Organized
+
+Due to the sheer volume of SQL code required to write a materialized view that is either eagerly updated or very lazily updated (nearly 1,000 in one instance I have implemented), it is important to combine all the functions together into a script that is executed in one transaction. I also like to have a partner
+script to back out all the changes. This way, when I create the materialized view quickly, and I can quickly back out if things go bad. It also helps me to keep track of all the changes in one neat bundle.
+
+Note on Time Dependence
+
+(New as of 2009-07-28)
+
+Having worked with several systems where we cache data that has time-dependence in it, I would like to point out the following techniques and their deficiencies.
+
+Snapshot
+
+A snapshot is just like a picture that a camera takes. What it sees is what is happening at the moment in time the picture is taken. However, as time marches on, that picture becomes less and less descriptive of the current state of the world.
+
+Records in a snapshot may be modified, deleted, or even inserted as time marches on. Thus, data with a time-dependency may either be wrong, existing when they should not, or missing when they should exist. There is no way to tell from looking at the snapshot.
+
+Of course, if the underlying data changes, then the snapshot can be updated using any of the methods I talk about above. At which point, the snapshot is valid but only for that instance when the update was performed.
+
+Snapshot with Windows
+
+An alternative is a snapshot with windows. This is a snapshot with a disclaimer that describes how long the data is valid for. It even contains data that should exist in the future with a disclaimer that the data isn't valid yet. Many records will be duplicated, but without overlapping valid time periods.
+
+This is, surprisingly, the fundamental concept of PostgreSQL data storage itself. Every row in the database system has a transaction ID representing when the record should first exist and a transaction ID representing when the record will no longer exist. Every query only sees records that are valid for their
+transaction ID.
+
+When you look at such a snapshot, you have to filter out all the data that isn't valid because you are not in the right window, just like PostgreSQL filters out rows that are not valid for your transaction ID.
+
+Of course, if the underlying data changes, then you can update the data in the snapshot according to any of the materialized view methods I describe above.
+
+Snapshot with Scheduled Refreshes
+
+What I said about snapshots above isn't really true. Snapshots are valid until they aren't valid. However, looking at the data, we can predict exactly when the data is no longer valid, and even schedule an action to update the data as it becomes invalid.
+
+There is a small problem with this. There is always going to be a small period of time between the data becoming invalid and the scheduled refresh completing. Even if you are very clever, perhaps by pre-generating the future values, and having them ready to go, you are not going to be able to make these two events
+occur at exactly the same point in time, even with multi-core processors and parallel memory. In many cases, however, this small period of time is perfectly tolerable.
+
+Snapshot with Lazy Refreshes
+
+Rather than have scheduled refreshes, you can simply mark the data as wrong and then have whoever is interested in seeing the correct data rebuild it and store the result. If you are very clever, you can combine this with the "Snapshot with Windows" method to include records that will be correct in the future.
+
+Many caching methods I have seen rely on the processes who use the cache to keep it organized and fresh. This isn't unreasonable in the database world, either.
+
+However, there is a significant development cost for this kind of behavior. A typical session would look like:
+
+ 1. Examine records you are interested in looking at.
+ 2. If there are old records, refresh them.
+ 3. Actually run the query you were interested in again with the fresh data.
+
+Why These Techniques Work (And Other Mutable Functions Won't)
+
+The only reason these techniques work is due to the linear and progressive nature of time. Time is predictable, even though each moment in time is different from the rest.
+
+Other mutable functions may not be predictable. For instance, the random function or a function relying on data from a different source. As long as these are not predictable, then we cannot use techniques like this.
+
+However, if you can make the data predictable, or bend the rules a bit to make them predictable, then you should be able to use methods similar to these to solve the mutable problem.
+
+Future Directions
+
+I would like to begin work on generic functions to implement the mv_refresh_row() functions, as well as the triggers and trigger functions. I think I will need to begin writing code in C for this to work properly.
+
+If the generic functions become available, I would like to drop the snapshot method and instead replace the mv_refresh() function with one that will determine if it makes more sense to delete all the rows and reselect them, or apply the changes incrementally.
+
+I would also like to investigate how to put a hook into the transaction process. Having that ability would add a powerful materialized view to the existing arsenal.
+
+Current Direction
+
+Today, I recommend the following.
+
+ 1. Understand what Materialized Views really are, and their costs, and why they are not a panacea. Yes, you get great performance improvements, but they come with a huge cost and overhead as well.
+ 2. Understand you particular data needs in detail. If you need materialized views, it may make sense to implement them outside of the database where you have greater control over the data.
+
+I do not recommend that PostgreSQL add Materialized Views in its core. Why?
+
+ 1. Materialized Views are insanely complicated, and you cannot get past their arbitrary requirements and limitations. In other words, they are not a very good abstraction because they leak details of the underlying implementations.
+ 2. Implementing Materialized Views properly is not easy. Until it is, we should avoid a general solution, relying instead on particular, detailed solutions.
+
+Comments Welcome!
+
+I welcome your comments on this document, as well as any questions you may have. Please email me at jgardner@jonathangardner.net and CC the SQL, Performance, or Hackers list on the PostgreSQL site
+

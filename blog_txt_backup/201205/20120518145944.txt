@@ -1,0 +1,138 @@
+PostgreSQL research
+
+PostgreSQL 9.2 add plain indexscans when use in OR =any conditions
+
+2012-05-18 14:59:44   查看原文>>
+
+PostgreSQL 9.2 beta release notes里面提到的
+
+Allow indexedcol op ANY(ARRAY[...]) conditions to be used in plain indexscans (Tom Lane)
+
+
+注意是允许, 也就是说早期的版本是不允许的.
+
+PostgreSQL  早期的版本处理IN和=any这种查询条件时是怎么样的呢?
+来看个测试 : 
+9.1.3版本
+创建测试表，插入测试数据，创建需要测试的列的索引。
+
+digoal=# create table info_test (id int , username text);
+CREATE TABLE
+digoal=# insert into info_test select generate_series(1,2000000),'digoal'||generate_series(1,2000000);
+INSERT 0 2000000
+digoal=# create index idx_info_test_username on info_test (username);
+CREATE INDEX
+
+
+分析表
+
+digoal=# analyze info_test ;
+ANALYZE
+
+
+查看= any这种查询条件的执行计划, 这里使用的是bitmap index scan和bitmap heap scan.
+
+digoal=# explain analyze select * from info_test where username = any (ARRAY['digoal1','digoal1000']);
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on info_test  (cost=2.59..4.62 rows=2 width=17) (actual time=0.112..0.114 rows=2 loops=1)
+   Recheck Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+   ->  Bitmap Index Scan on idx_info_test_username  (cost=0.00..2.59 rows=2 width=0) (actual time=0.103..0.103 rows=2 loops=1)
+         Index Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 0.159 ms
+(5 rows)
+
+
+= any和in 的执行计划一样
+
+digoal=# explain analyze select * from info_test where username in ('digoal1','digoal1000');
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on info_test  (cost=2.59..4.62 rows=2 width=17) (actual time=0.048..0.051 rows=2 loops=1)
+   Recheck Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+   ->  Bitmap Index Scan on idx_info_test_username  (cost=0.00..2.59 rows=2 width=0) (actual time=0.039..0.039 rows=2 loops=1)
+         Index Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 0.091 ms
+(5 rows)
+
+
+如果关闭bitmapscan看看会走什么执行计划, 结果走了全表扫描.
+
+digoal=# set enable_bitmapscan=off;
+SET
+digoal=# explain analyze select * from info_test where username = any (ARRAY['digoal1','digoal1000']);
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Seq Scan on info_test  (cost=0.00..37643.00 rows=2 width=17) (actual time=0.020..423.427 rows=2 loops=1)
+   Filter: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 423.471 ms
+(3 rows)
+
+
+9.2 beta的release notes用到了allow这个词, 那就是说以前的版本是not allow的, 所以我这里关闭全表扫描看看会走什么执行计划.
+从结果上看走了bitmap scan . 所以确实是不允许index scan的.
+
+digoal=# set enable_seqscan=off;
+SET
+digoal=# explain analyze select * from info_test where username = any (ARRAY['digoal1','digoal1000']);
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on info_test  (cost=10000000002.59..10000000004.62 rows=2 width=17) (actual time=0.044..0.047 rows=2 loops=1)
+   Recheck Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+   ->  Bitmap Index Scan on idx_info_test_username  (cost=0.00..2.59 rows=2 width=0) (actual time=0.034..0.034 rows=2 loops=1)
+         Index Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 0.080 ms
+(5 rows)
+
+
+
+来看看PostgreSQL 9.2怎么处理这种查询条件 : 
+确实使用了indexscan。
+
+digoal=# explain analyze select * from info_test where username = any (ARRAY['digoal1','digoal1000']);
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_info_test_username on info_test  (cost=0.00..4.69 rows=2 width=17) (actual time=0.014..0.022 rows=2 loops=1)
+   Index Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 0.044 ms
+(3 rows)
+
+
+同时in也使用了indexscan。
+
+digoal=# explain analyze select * from info_test where username in ('digoal1','digoal1000');
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_info_test_username on info_test  (cost=0.00..4.69 rows=2 width=17) (actual time=0.014..0.023 rows=2 loops=1)
+   Index Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 0.043 ms
+(3 rows)
+
+
+那么关闭indexscan会走什么执行计划呢, 从结果上看它走了bitmap scan 。
+
+digoal=# set enable_indexscan=off;
+SET
+digoal=# explain analyze select * from info_test where username in ('digoal1','digoal1000');
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on info_test  (cost=2.82..4.87 rows=2 width=17) (actual time=0.054..0.059 rows=2 loops=1)
+   Recheck Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+   ->  Bitmap Index Scan on idx_info_test_username  (cost=0.00..2.82 rows=2 width=0) (actual time=0.042..0.042 rows=2 loops=1)
+         Index Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 0.098 ms
+(5 rows)
+
+digoal=# explain analyze select * from info_test where username = any (ARRAY['digoal1','digoal1000']);
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on info_test  (cost=2.82..4.87 rows=2 width=17) (actual time=0.024..0.027 rows=2 loops=1)
+   Recheck Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+   ->  Bitmap Index Scan on idx_info_test_username  (cost=0.00..2.82 rows=2 width=0) (actual time=0.019..0.019 rows=2 loops=1)
+         Index Cond: (username = ANY ('{digoal1,digoal1000}'::text[]))
+ Total runtime: 0.052 ms
+(5 rows)
+
+
+
+因此PostgreSQL 9.2对待in和=any的查询条件多了一个执行计划的选择, index  scan 。

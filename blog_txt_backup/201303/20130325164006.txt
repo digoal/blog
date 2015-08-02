@@ -1,0 +1,221 @@
+PostgreSQL research
+
+PostgreSQL 9.3 regexp search use index scan attached in pg_trgm extension
+
+2013-03-25 16:40:06   查看原文>>
+
+pg_trgm是PostgreSQL的一个扩展插件, 可以用来做近似匹配的查询. 效率比模糊查询高很多. 有兴趣的朋友可以参考以下文章.
+http://blog.163.com/digoal@126/blog/static/163877040201191882553803/
+现在pg_trgm的作者在这个模块中加入了更强大的功能, 可以使规则表达式查询使用gin索引.
+具体测试如下 : 
+
+1. 下载PostgreSQL
+
+su - pgdev
+pgdev@db-172-16-3-150-> wget --no-check-certificate https://github.com/postgres/postgres/archive/master.zip -O postgresql9.3.zip
+unzip postgresql9.3.zip
+
+
+
+2. 下载补丁
+去一下网站下载最新的补丁 : 
+
+http://www.postgresql.org/message-id/flat/5280.1364161844@sss.pgh.pa.us#5280.1364161844@sss.pgh.pa.us
+wget http://www.postgresql.org/message-id/attachment/28634/trgm-regexp-0.13.patch.gz
+
+
+
+3. 应用补丁
+
+gunzip trgm-regexp-0.13.patch.gz
+mv trgm-regexp-0.13.patch /home/pgdev/postgres-master
+cd /home/pgdev/postgres-master
+pgdev@db-172-16-3-150-> patch -p1 < trgm-regexp-0.13.patch
+patching file contrib/pg_trgm/Makefile
+patching file contrib/pg_trgm/expected/pg_trgm.out
+patching file contrib/pg_trgm/pg_trgm--1.0--1.1.sql
+patching file contrib/pg_trgm/pg_trgm--1.0.sql
+patching file contrib/pg_trgm/pg_trgm--1.1.sql
+patching file contrib/pg_trgm/pg_trgm.control
+patching file contrib/pg_trgm/sql/pg_trgm.sql
+patching file contrib/pg_trgm/trgm.h
+patching file contrib/pg_trgm/trgm_gin.c
+patching file contrib/pg_trgm/trgm_op.c
+patching file contrib/pg_trgm/trgm_regexp.c
+patching file doc/src/sgml/pgtrgm.sgml
+patching file src/backend/regex/Makefile
+patching file src/backend/regex/regextract.c
+patching file src/backend/utils/adt/regexp.c
+patching file src/backend/utils/adt/selfuncs.c
+patching file src/include/mb/pg_wchar.h
+patching file src/include/regex/regex.h
+patching file src/include/regex/regextract.h
+patching file src/include/regex/regguts.h
+
+
+如果没有报错则继续, 有报错的话需要手工修改一下reject的补丁文件.
+当然, 当您看到此文的时候也许不需要打补丁了, 也许该补丁已经committed了.
+
+4. 编译安装数据库软件
+
+pgdev@db-172-16-3-150-> unzip postgresql9.3.zip
+pgdev@db-172-16-3-150-> less .bash_profile
+export PS1="$USER@`/bin/hostname -s`-> "
+export PGPORT=9300
+export PGUSER=postgres
+export PGDATA=/data06/pgdev/pg_root
+export LANG=en_US.utf8
+export PGHOME=/home/pgdev/pgsql9.3
+export PGHOST=127.0.0.1
+export PGDATABASE=digoal
+export LD_LIBRARY_PATH=/opt/uuid-1.6.2/lib:$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+alias rm='rm -i'
+alias ll='ls -lh'
+
+su - root
+[root@db-172-16-3-150 ~]# . /home/pgdev/.bash_profile 
+root@db-172-16-3-150-> cd postgres-master/
+root@db-172-16-3-150-> ./configure --prefix=/home/pgdev/pgsql9.3 --with-pgport=9300 --with-perl --with-python --with-tcl --with-openssl --with-pam --without-ldap --with-libxml --with-libxslt --enable-thread-safety --enable-cassert --with-wal-blocksize=16 --enable-debug && gmake
+root@db-172-16-3-150-> gmake install
+root@db-172-16-3-150-> cd contrib/
+root@db-172-16-3-150-> gmake install
+
+
+5. 初始化数据库
+
+root@db-172-16-3-150-> su - pgdev
+pgdev@db-172-16-3-150-> initdb -D $PGDATA --locale=C -E UTF8 -U postgres
+pgdev@db-172-16-3-150-> pg_ctl start
+server starting
+
+
+6. 测试
+
+pgdev@db-172-16-3-150-> psql
+psql (9.3devel)
+Type "help" for help.
+# 数据库编码以及collate如下
+digoal=# \l
+                             List of databases
+   Name    |  Owner   | Encoding | Collate | Ctype |   Access privileges   
+-----------+----------+----------+---------+-------+-----------------------
+ digoal    | postgres | UTF8     | C       | C     | 
+ postgres  | postgres | UTF8     | C       | C     | 
+ template0 | postgres | UTF8     | C       | C     | =c/postgres          +
+           |          |          |         |       | postgres=CTc/postgres
+ template1 | postgres | UTF8     | C       | C     | =c/postgres          +
+           |          |          |         |       | postgres=CTc/postgres
+(4 rows)
+# 创建pg_trgm, extension 
+digoal=# create extension pg_trgm;
+# 创建测试表
+digoal=# create table trgm_test(id int, info text, crt_time timestamp);
+CREATE TABLE
+# 插入测试数据
+digoal=# insert into trgm_test select generate_series(1,50000),md5(random()::text),clock_timestamp();
+INSERT 0 50000
+# 创建gin索引, 使用gin_trgm_ops class.
+digoal=# create index idx_trgm_test_1 on trgm_test using gin(info gin_trgm_ops);
+CREATE INDEX
+# 规则表达式查询, 走索引了, 需要20毫秒.
+digoal=# explain analyze select * from trgm_test where info ~ '01+[1-2]+[1-3]+[1-2]';
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on trgm_test  (cost=352.04..370.55 rows=5 width=45) (actual time=20.239..20.443 rows=18 loops=1)
+   Recheck Cond: (info ~ '01+[1-2]+[1-3]+[1-2]'::text)
+   Rows Removed by Index Recheck: 22
+   ->  Bitmap Index Scan on idx_trgm_test_1  (cost=0.00..352.04 rows=5 width=0) (actual time=20.192..20.192 rows=40 loops=1)
+         Index Cond: (info ~ '01+[1-2]+[1-3]+[1-2]'::text)
+ Total runtime: 20.545 ms
+(6 rows)
+# 查询结果
+digoal=# select * from trgm_test where info ~ '01+[1-2]+[1-3]+[1-2]';
+  id   |               info               |          crt_time          
+-------+----------------------------------+----------------------------
+  4369 | 91c64a176b01211b33726b7a4100d912 | 2013-03-25 16:25:09.837613
+  8465 | f94260123240be2554bba6798206c963 | 2013-03-25 16:25:09.867742
+ 11284 | ac56fed0da451bd051ec5c01211d08e7 | 2013-03-25 16:25:09.888348
+ 11300 | 61e3549df82ea901131d74b28294f59d | 2013-03-25 16:25:09.88846
+ 12202 | 75bbde63759ef6da01222e557d87cfdc | 2013-03-25 16:25:09.895056
+ 16881 | 7d691ca1dd540011220cf4029ea73c85 | 2013-03-25 16:25:09.937671
+ 19933 | e105501121e1398400002b7ff70a7369 | 2013-03-25 16:25:09.964563
+ 21462 | cfdaf07eefe414b1c01222bcc2c782bd | 2013-03-25 16:25:09.977906
+ 21792 | 461ca99f3bf733aa6e7deaf28901232d | 2013-03-25 16:25:09.98084
+ 24929 | f0f08af28201122dc5507e9b9b4ce791 | 2013-03-25 16:25:10.008475
+ 25644 | 8680bbd77ecfa27a0c740111285836ff | 2013-03-25 16:25:10.014714
+ 30171 | bb51e8a5cd3c27d337ec001132371790 | 2013-03-25 16:25:10.054527
+ 31430 | a4ecd84d2e5ad101211a1c408fdc05f2 | 2013-03-25 16:25:10.065567
+ 33981 | f21250cc9f0123105092e2a39fd9f574 | 2013-03-25 16:25:10.087895
+ 40919 | 61bd00112264a317202b71ba2a5e1d7b | 2013-03-25 16:25:10.142668
+ 42287 | 730121105a9390aa1ce7cdfeaf3dad4d | 2013-03-25 16:25:10.1527
+ 42994 | a7bc72101222da1e0ebfc45c7aa59321 | 2013-03-25 16:25:10.157871
+ 45679 | 034131800121261b2cbf2056d1d03a3d | 2013-03-25 16:25:10.177582
+(18 rows)
+# 删除索引
+digoal=# drop index idx_trgm_test_1 ;
+DROP INDEX
+# 全表扫描需要113毫秒
+digoal=# explain analyze select * from trgm_test where info ~ '01+[1-2]+[1-3]+[1-2]';
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Seq Scan on trgm_test  (cost=0.00..1093.00 rows=5 width=45) (actual time=9.887..113.151 rows=18 loops=1)
+   Filter: (info ~ '01+[1-2]+[1-3]+[1-2]'::text)
+   Rows Removed by Filter: 49982
+ Total runtime: 113.189 ms
+(4 rows)
+# 查询结果一致
+digoal=# select * from trgm_test where info ~ '01+[1-2]+[1-3]+[1-2]';
+  id   |               info               |          crt_time          
+-------+----------------------------------+----------------------------
+  4369 | 91c64a176b01211b33726b7a4100d912 | 2013-03-25 16:25:09.837613
+  8465 | f94260123240be2554bba6798206c963 | 2013-03-25 16:25:09.867742
+ 11284 | ac56fed0da451bd051ec5c01211d08e7 | 2013-03-25 16:25:09.888348
+ 11300 | 61e3549df82ea901131d74b28294f59d | 2013-03-25 16:25:09.88846
+ 12202 | 75bbde63759ef6da01222e557d87cfdc | 2013-03-25 16:25:09.895056
+ 16881 | 7d691ca1dd540011220cf4029ea73c85 | 2013-03-25 16:25:09.937671
+ 19933 | e105501121e1398400002b7ff70a7369 | 2013-03-25 16:25:09.964563
+ 21462 | cfdaf07eefe414b1c01222bcc2c782bd | 2013-03-25 16:25:09.977906
+ 21792 | 461ca99f3bf733aa6e7deaf28901232d | 2013-03-25 16:25:09.98084
+ 24929 | f0f08af28201122dc5507e9b9b4ce791 | 2013-03-25 16:25:10.008475
+ 25644 | 8680bbd77ecfa27a0c740111285836ff | 2013-03-25 16:25:10.014714
+ 30171 | bb51e8a5cd3c27d337ec001132371790 | 2013-03-25 16:25:10.054527
+ 31430 | a4ecd84d2e5ad101211a1c408fdc05f2 | 2013-03-25 16:25:10.065567
+ 33981 | f21250cc9f0123105092e2a39fd9f574 | 2013-03-25 16:25:10.087895
+ 40919 | 61bd00112264a317202b71ba2a5e1d7b | 2013-03-25 16:25:10.142668
+ 42287 | 730121105a9390aa1ce7cdfeaf3dad4d | 2013-03-25 16:25:10.1527
+ 42994 | a7bc72101222da1e0ebfc45c7aa59321 | 2013-03-25 16:25:10.157871
+ 45679 | 034131800121261b2cbf2056d1d03a3d | 2013-03-25 16:25:10.177582
+(18 rows)
+
+
+
+[注意]
+1. 当前仅支持GIN索引, GIST索引的支持作者还在开发中.
+
+digoal=# create index idx_trgm_test_1 on trgm_test using gist(info gist_trgm_ops);
+CREATE INDEX
+digoal=# explain analyze select * from trgm_test where info ~ '01+[1-2]+[1-3]+[1-2]';
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Seq Scan on trgm_test  (cost=0.00..1093.00 rows=5 width=45) (actual time=9.852..113.573 rows=18 loops=1)
+   Filter: (info ~ '01+[1-2]+[1-3]+[1-2]'::text)
+   Rows Removed by Filter: 49982
+ Total runtime: 113.613 ms
+(4 rows)
+
+
+2. 不是所有的字符集都支持, 以下字符集不在支持的行列. 所以本文的测试是在UTF-8下做的.
+
+> While I've hardcoded some dirty solution. So
+> PG_EUC_JP, PG_EUC_CN, PG_EUC_KR, PG_EUC_TW, PG_EUC_JIS_2004 are not
+> supported yet.
+
+
+
+[参考]
+1. https://commitfest.postgresql.org/action/patch_view?id=1000
+2. http://blog.163.com/digoal@126/blog/static/163877040201191882553803/
+3. http://www.postgresql.org/docs/9.2/static/pgtrgm.html

@@ -1,0 +1,483 @@
+PostgreSQL research
+
+PostgreSQL function cost performance tuning
+
+2013-07-15 16:22:33   查看原文>>
+
+前段时间介绍过关于视图限制条件被攻克的文章, 通过调整函数成本的方法来控制查询树中节点执行的顺序.
+http://blog.163.com/digoal@126/blog/static/163877040201361031431669/
+本文将要介绍通过调整函数成本来优化SQL语句的场景.
+创建测试表 : 
+
+digoal=# create table dir1(id int primary key, info name);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "dir1_pkey" for table "dir1"
+CREATE TABLE
+digoal=# create table test(dir1_id int, col1 text);
+CREATE TABLE
+digoal=# create index idx_test_1 on test(col1);
+
+
+插入测试数据
+
+digoal=# insert into dir1 select generate_series(1,10000),md5(random()::text);
+INSERT 0 10000
+digoal=# insert into test select 1,md5(random()::text) from generate_series(1,3);
+INSERT 0 3
+
+
+创建测试函数
+
+create or replace function get_dir1(int) returns name as $$
+declare
+  v_name name;
+begin
+  raise notice 'get_dir1 called';
+  select info into v_name from dir1 where id=$1 limit 1;
+  return v_name;
+end;
+$$ language plpgsql strict cost 0.1;
+CREATE FUNCTION
+
+
+将要用到的关联数据 : 
+
+digoal=# select * from test ;
+ dir1_id |               col1               
+---------+----------------------------------
+       1 | 83d87c9a250ca38878fa4137505e39da
+       1 | e51a16dba9d22a0e34deddba4f8f361e
+       1 | 2f9f6f3a1e1bb195f0a1d9af2d9c54c3
+(3 rows)
+digoal=# select * from dir1 where id=1 ;
+ id |               info               
+----+----------------------------------
+  1 | 9e85accd8a9113e9804212a6f9a9e9e5
+(1 row)
+
+
+
+测试SQL 1 : 
+
+digoal=# select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e';
+ dir1_id | col1 
+---------+------
+(0 rows)
+
+
+这个SQL get_dir1(int)没有被调用到. 下面来分析一下为什么它没有被调用.
+首先get_dir1(int)的成本是多少? 结果0.1
+
+digoal=# select procost from pg_proc where proname='get_dir1';
+ procost 
+---------
+     0.1
+(1 row)
+
+
+接下来看看get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5'这个表达式中用到的等号对应的函数的成本是多少?结果0.1 
+
+digoal=# select oid from pg_type where typname='name';
+ oid 
+-----
+  19
+(1 row)
+digoal=# select oprcode from pg_operator where oprname='=' and oprleft=19 and oprright=19;
+ oprcode 
+---------
+ nameeq
+(1 row)
+digoal=# select procost from pg_proc where proname='nameeq';
+ procost 
+---------
+     0.1
+(1 row)
+
+
+接下来看看col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e'这个表达式中的等号对应的函数的成本是多少?结果1
+
+digoal=# select oid from pg_type where typname='text';
+ oid 
+-----
+  25
+(1 row)
+digoal=# select oprcode from pg_operator where oprname='=' and oprleft=25 and oprright=25;
+ oprcode 
+---------
+ texteq
+(1 row)
+digoal=# select procost from pg_proc where proname='texteq';
+ procost 
+---------
+       1
+(1 row)
+
+
+从以上结果分析, get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' 这个表达式的开销总和是0.2
+col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e'这个表达式的开销是1.
+正常情况下应该是先执行成本低的表达式, 但是这里为什么没有这么做呢?
+来看看执行计划 : 
+
+digoal=# explain analyze select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e';
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_test_1 on test  (cost=0.00..8.27 rows=1 width=37) (actual time=0.009..0.009 rows=0 loops=1)
+   Index Cond: (col1 = '7c1e6df53c8ef6c4ffe2f9c2ad45a42e'::text)
+   Filter: (get_dir1(dir1_id) = '9e85accd8a9113e9804212a6f9a9e9e5'::name)
+ Total runtime: 0.027 ms
+(4 rows)
+
+
+原来它走索引了, 表达式col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e'作为索引条件, 而不是过滤条件. 所以get_dir1(int)就没有机会被调用到了.
+如果使用一个已经存在的值,通过NOTICE可以看到get_dir1(int)被调用1次.
+
+digoal=# select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='83d87c9a250ca38878fa4137505e39da';
+NOTICE:  get_dir1 called
+ dir1_id |               col1               
+---------+----------------------------------
+       1 | 83d87c9a250ca38878fa4137505e39da
+(1 row)
+
+
+
+测试SQL 2 : 
+与上一条SQL一样, 只是这次不走索引. 
+
+digoal=# \d test
+      Table "public.test"
+ Column  |  Type   | Modifiers 
+---------+---------+-----------
+ dir1_id | integer | 
+ col1    | text    | 
+Indexes:
+    "idx_test_1" btree (col1)
+postgres=# drop index idx_test_1;
+LOG:  statement: drop index idx_test_1;
+DROP INDEX
+
+
+现在看到, git_dir1(int)被调用了3次. 因为get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5'和col1 = '7c1e6df53c8ef6c4ffe2f9c2ad45a42e'都在过滤条件中了, 那么就需要通过cost的大小来判断谁先执行.
+
+digoal=# explain analyze select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e';
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on test  (cost=0.00..25.73 rows=1 width=37) (actual time=0.155..0.155 rows=0 loops=1)
+   Filter: ((get_dir1(dir1_id) = '9e85accd8a9113e9804212a6f9a9e9e5'::name) AND (col1 = '7c1e6df53c8ef6c4ffe2f9c2ad45a42e'::text))
+   Rows Removed by Filter: 3
+ Total runtime: 0.175 ms
+(4 rows)
+
+
+使用执行树能看得更加清楚一些. 
+从执行树中能看出先执行哪个,后执行哪个.
+执行树中使用oid来表述, 可以通过系统表来查询对应的函数,操作符等信息.
+
+digoal=# set client_min_messages=debug;
+SET
+digoal=# set debug_print_plan=on;
+SET
+digoal=# explain analyze select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e';
+LOG:  plan:
+DETAIL:     {PLANNEDSTMT 
+   :commandType 1 
+   :queryId 0 
+   :hasReturning false 
+   :hasModifyingCTE false 
+   :canSetTag true 
+   :transientPlan false 
+   :planTree 
+      {SEQSCAN 
+      :startup_cost 0.00 
+      :total_cost 25.73 
+      :plan_rows 1 
+      :plan_width 37 
+      :targetlist (
+         {TARGETENTRY 
+         :expr 
+            {VAR 
+            :varno 1 
+            :varattno 1 
+            :vartype 23 
+            :vartypmod -1 
+            :varcollid 0 
+            :varlevelsup 0 
+            :varnoold 1 
+            :varoattno 1 
+            :location 23
+            }
+         :resno 1 
+         :resname dir1_id 
+         :ressortgroupref 0 
+         :resorigtbl 32773 
+         :resorigcol 1 
+         :resjunk false
+         }
+         {TARGETENTRY 
+         :expr 
+            {VAR 
+            :varno 1 
+            :varattno 2 
+            :vartype 25 
+            :vartypmod -1 
+            :varcollid 100 
+            :varlevelsup 0 
+            :varnoold 1 
+            :varoattno 2 
+            :location 23
+            }
+         :resno 2 
+         :resname col1 
+         :ressortgroupref 0 
+         :resorigtbl 32773 
+         :resorigcol 2 
+         :resjunk false
+         }
+      )
+      :qual (
+         {OPEXPR # 对应get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5'::name
+         :opno 93 # 对应=, select oprname,oprleft,oprright from pg_operator where oid=93;
+         :opfuncid 62 # 对应nameeq  select proname from pg_proc where oid=62;
+         :opresulttype 16 
+         :opretset false 
+         :opcollid 0 
+         :inputcollid 0 
+         :args (
+            {FUNCEXPR 
+            :funcid 32785 # 对应get_dir1(dir1_id), select proname from pg_proc where oid=32785;
+            :funcresulttype 19 
+            :funcretset false 
+            :funcformat 0 
+            :funccollid 0 
+            :inputcollid 0 
+            :args (
+               {VAR 
+               :varno 1 
+               :varattno 1 
+               :vartype 23 
+               :vartypmod -1 
+               :varcollid 0 
+               :varlevelsup 0 
+               :varnoold 1 
+               :varoattno 1 
+               :location 50
+               }
+            )
+            :location 41
+            }
+            {CONST 
+            :consttype 19 
+            :consttypmod -1 
+            :constcollid 0 
+            :constlen 64 
+            :constbyval false 
+            :constisnull false 
+            :location 59 
+            :constvalue 64 [ 57 101 56 53 97 99 99 100 56 97 57 49 49 51 101 5
+            7 56 48 52 50 49 50 97 54 102 57 97 57 101 57 101 53 0 0 0 0 0 0 0
+             0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 ]
+            }
+         )
+         :location 58
+         }
+         {OPEXPR # 对应col1='7c1e6df53c8ef6c4ffe2f9c2ad45a42e'::text
+         :opno 98 # 对应=, select oprname,oprleft,oprright from pg_operator where oid=98;
+         :opfuncid 67 # 对应texteq, select proname from pg_proc where oid=67;
+         :opresulttype 16 
+         :opretset false 
+         :opcollid 0 
+         :inputcollid 100 
+         :args (
+            {VAR 
+            :varno 1 
+            :varattno 2 
+            :vartype 25 
+            :vartypmod -1 
+            :varcollid 100 
+            :varlevelsup 0 
+            :varnoold 1 
+            :varoattno 2 
+            :location 98
+            }
+            {CONST 
+            :consttype 25 
+            :consttypmod -1 
+            :constcollid 100 
+            :constlen -1 
+            :constbyval false 
+            :constisnull false 
+            :location 103 
+            :constvalue 36 [ -112 0 0 0 55 99 49 101 54 100 102 53 51 99 56 10
+            1 102 54 99 52 102 102 101 50 102 57 99 50 97 100 52 53 97 52 50 1
+            01 ]
+            }
+         )
+         :location 102
+         }
+      )
+      :lefttree <> 
+      :righttree <> 
+      :initPlan <> 
+      :extParam (b)
+      :allParam (b)
+      :scanrelid 1
+      }
+   :rtable (
+      {RTE 
+      :alias <> 
+      :eref 
+         {ALIAS 
+         :aliasname test 
+         :colnames ("dir1_id" "col1")
+         }
+      :rtekind 0 
+      :relid 32773 
+      :relkind r 
+      :inh false 
+      :inFromCl true 
+      :requiredPerms 2 
+      :checkAsUser 0 
+      :selectedCols (b 9 10)
+      :modifiedCols (b)
+      }
+   )
+   :resultRelations <> 
+   :utilityStmt <> 
+   :subplans <> 
+   :rewindPlanIDs (b)
+   :rowMarks <> 
+   :relationOids (o 32773)
+   :invalItems (
+      {PLANINVALITEM 
+      :cacheId 40 
+      :hashValue 3188174810
+      }
+   )
+   :nParamExec 0
+   }
+
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on test  (cost=0.00..25.73 rows=1 width=37) (actual time=0.182..0.182 rows=0 loops=1)
+   Filter: ((get_dir1(dir1_id) = '9e85accd8a9113e9804212a6f9a9e9e5'::name) AND (col1 = '7c1e6df53c8ef6c4ffe2f9c2ad45a42e'::text))
+   Rows Removed by Filter: 3
+ Total runtime: 0.204 ms
+(4 rows)
+
+
+因为先执行get_dir1 , 所以每条记录都被调用一次, 总计调用了3次.
+通过调整cost的值即可决定哪个表达式先执行, 例如降低texteq的cost. 那么会先调用texteq, 后调用get_dir(int)=?
+
+digoal=# alter function texteq(text,text) cost 0.19;
+ALTER FUNCTION
+digoal=# select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='83d87c9a250ca38878fa4137505e39da';
+NOTICE:  get_dir1 called
+ dir1_id |               col1               
+---------+----------------------------------
+       1 | 83d87c9a250ca38878fa4137505e39da
+(1 row)
+
+digoal=# explain analyze select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='83d87c9a250ca38878fa4137505e39da';
+NOTICE:  get_dir1 called
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on test  (cost=0.00..23.28 rows=1 width=37) (actual time=0.080..0.081 rows=1 loops=1)
+   Filter: ((col1 = '83d87c9a250ca38878fa4137505e39da'::text) AND (get_dir1(dir1_id) = '9e85accd8a9113e9804212a6f9a9e9e5'::name))
+   Rows Removed by Filter: 2
+ Total runtime: 0.100 ms
+(4 rows)
+
+
+调成texteq更大, 那么会先调用get_dir(int)=?, 后调用texteq.
+
+digoal=# alter function texteq(text,text) cost 0.21;
+ALTER FUNCTION
+digoal=# explain analyze select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='83d87c9a250ca38878fa4137505e39da';
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on test  (cost=0.00..23.34 rows=1 width=37) (actual time=0.038..0.084 rows=1 loops=1)
+   Filter: ((get_dir1(dir1_id) = '9e85accd8a9113e9804212a6f9a9e9e5'::name) AND (col1 = '83d87c9a250ca38878fa4137505e39da'::text))
+   Rows Removed by Filter: 2
+ Total runtime: 0.092 ms
+(4 rows)
+digoal=# select * from test where get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5' and col1='83d87c9a250ca38878fa4137505e39da';
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+NOTICE:  get_dir1 called
+ dir1_id |               col1               
+---------+----------------------------------
+       1 | 83d87c9a250ca38878fa4137505e39da
+(1 row)
+
+
+
+测试SQL 3 : 
+1. 调整函数的成本有什么意义呢?
+下面分别创建一个慢函数和一个快函数.
+
+digoal=# create or replace function fast(boolean) returns boolean as $$
+declare
+begin
+  raise notice 'fast';
+  return $1;          
+end;        
+$$ language plpgsql strict cost 1;
+CREATE FUNCTION
+digoal=# create or replace function slow(boolean) returns boolean as $$
+declare
+begin
+  perform pg_sleep(2); -- 延迟2秒.
+  raise notice 'slow';
+  return $1;
+end;                       
+$$ language plpgsql strict cost 1;
+CREATE FUNCTION
+
+
+接下来做一个查询.
+
+digoal=# select 1 where fast(false) and slow(false);
+NOTICE:  fast
+ ?column? 
+----------
+(0 rows)
+Time: 0.256 ms
+digoal=# select 1 where slow(false) and fast(false);
+NOTICE:  slow
+ ?column? 
+----------
+(0 rows)
+Time: 2000.128 ms
+
+
+对于and的过滤条件, 只要第一个条件为false, 后面就不用再执行了.
+当cost一样的情况下, 执行顺序和SQL的写法有关. 先执行前面.
+但是我们已知slow函数更慢的时候,可以调整它的cost更大, 那么执行计划会把它排到后面执行.
+
+digoal=# alter function slow(boolean) cost 100;
+ALTER FUNCTION
+Time: 0.125 ms
+digoal=# select 1 where slow(false) and fast(false);
+NOTICE:  fast
+ ?column? 
+----------
+(0 rows)
+Time: 0.173 ms
+
+
+上面的例子很好的说明了函数cost在SQL优化中占有非常重要的意义. 特别是数据分析函数, 成本的精确性很重要.
+
+[注意]
+1. 在计算过滤条件的cost时, 不要忘记操作符的成本. 
+例如本例中的get_dir1(dir1_id)='9e85accd8a9113e9804212a6f9a9e9e5'表达式, 不要忘记=的成本.
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201361031431669/
+

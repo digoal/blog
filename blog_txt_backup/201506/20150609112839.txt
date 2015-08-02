@@ -1,0 +1,349 @@
+PostgreSQL research
+
+Convert PostgreSQL materialized view to normal table , modify catalog dictionary
+
+2015-06-09 11:28:39   查看原文>>
+
+PostgreSQL的可编辑化字典为我们提供了很多便利，例如，我们在PostgreSQL中创建了一些物化视图，可以通过编辑字典，将其转化为普通的表使用。
+例子:
+创建MV的语法：
+
+postgres=# \h create materialized view
+Command:     CREATE MATERIALIZED VIEW
+Description: define a new materialized view
+Syntax:
+CREATE MATERIALIZED VIEW table_name
+    [ (column_name [, ...] ) ]
+    [ WITH ( storage_parameter [= value] [, ... ] ) ]
+    [ TABLESPACE tablespace_name ]
+    AS query
+    [ WITH [ NO ] DATA ]
+
+
+创建基表
+
+postgres=# create table p(id int primary key, info text);
+CREATE TABLE
+postgres=# insert into p select generate_series(1,1000),repeat(md5(random()::text),50000);
+INSERT 0 1000
+postgres=# select pg_relation_size('mvp');
+ pg_relation_size
+------------------
+            65536
+(1 row)
+
+postgres=# select pg_total_relation_size('mvp');
+ pg_total_relation_size
+------------------------
+               22052864
+(1 row)
+
+
+创建物化视图
+
+postgres=# create materialized view mvp as select * from p;
+SELECT 1000
+postgres=# select count(*) from mvp;
+ count 
+-------
+ 1000
+(1 row)
+
+
+查看物化视图的描述
+
+postgres=# \d+ mvp
+                    Materialized view "public.mvp"
+ Column |  Type   | Modifiers | Storage  | Stats target | Description 
+--------+---------+-----------+----------+--------------+-------------
+ id     | integer |           | plain    |              | 
+ info   | text    |           | extended |              | 
+View definition:
+ SELECT p.id,
+    p.info
+   FROM p;
+postgres=# \dmv
+              List of relations
+ Schema | Name |       Type        |  Owner   
+--------+------+-------------------+----------
+ public | mvp  | materialized view | postgres
+(1 row)
+
+
+对物化视图是不能执行DML的
+
+postgres=# delete from mvp;
+ERROR:  cannot change materialized view "mvp"
+
+
+刷新没问题
+
+postgres=# refresh materialized view mvp;
+REFRESH MATERIALIZED VIEW
+
+
+接下来看看基表和物化视图的差别在哪里：
+
+postgres=# select * from pg_class where relname in ('mvp', 'p');
+ relname | relnamespace | reltype | reloftype | relowner | relam | relfilenode | reltablespace | relpages | reltuples | relallvisibl
+e | reltoastrelid | relhasindex | relisshared | relpersistence | relkind | relnatts | relchecks | relhasoids | relhaspkey | relhasru
+les | relhastriggers | relhassubclass | relispopulated | relreplident | relfrozenxid | relminmxid | relacl | reloptions
+---------+--------------+---------+-----------+----------+-------+-------------+---------------+----------+-----------+-------------
+--+---------------+-------------+-------------+----------------+---------+----------+-----------+------------+------------+---------
+----+----------------+----------------+----------------+--------------+--------------+------------+--------+------------
+ p       |         2200 |   24915 |         0 |       10 |     0 |       24919 |             0 |      125 |      1000 |
+0 |         24916 | f           | f           | p              | r       |        2 |         0 | f          | f          | f
+    | f              | f              | t              | d            |   2140665323 |          1 |        |
+ mvp     |         2200 |   24924 |         0 |       10 |     0 |       24922 |             0 |      125 |      1000 |
+0 |         24925 | f           | f           | p              | m       |        2 |         0 | f          | f          | t
+    | f              | f              | t              | d            |   2140665326 |          1 |        |
+(2 rows)
+
+
+
+差别在这里：
+
+relkind
+relhasindex
+relhaspkey
+relhasrules
+
+
+其实最主要的就是对象类型，是否有重写规则。
+把这两个改掉，同时删除对应的规则。
+除此以外，还有依赖关系需要处理。pg_depend系统表记录了对象间的依赖关系。
+这里我们看到的依赖关系是物化视图在pg_rewrite中的规则和对象mvp,p的依赖，所以必须清理掉。
+
+postgres=# select oid from pg_rewrite where ev_class ='mvp'::regclass;
+  oid  
+-------
+ 24928
+(1 row)
+postgres=# select classid::regclass,refclassid::regclass,refobjid::regclass,* from pg_depend where objid=24928;
+  classid   | refclassid | refobjid | classid | objid | objsubid | refclassid | refobjid | refobjsubid | deptype 
+------------+------------+----------+---------+-------+----------+------------+----------+-------------+---------
+ pg_rewrite | pg_class   | mvp      |    2618 | 24928 |        0 |       1259 |    24922 |           0 | n
+ pg_rewrite | pg_class   | p        |    2618 | 24928 |        0 |       1259 |    24913 |           2 | n
+ pg_rewrite | pg_class   | p        |    2618 | 24928 |        0 |       1259 |    24913 |           1 | n
+ pg_rewrite | pg_class   | mvp      |    2618 | 24928 |        0 |       1259 |    24922 |           0 | i
+(4 rows)
+
+
+DEPENDENCY_NORMAL (n)
+
+    A normal relationship between separately-created objects. The dependent object can be dropped without affecting the referenced object. The referenced object can only be dropped by specifying CASCADE, in which case the dependent object is dropped, too. Example: a table column has a normal dependency on its data
+    type.
+
+DEPENDENCY_INTERNAL (i)
+
+    The dependent object was created as part of creation of the referenced object, and is really just a part of its internal implementation. A DROP of the dependent object will be disallowed outright (we'll tell the user to issue a DROP against the referenced object, instead). A DROP of the referenced object will be
+    propagated through to drop the dependent object whetherCASCADE is specified or not. Example: a trigger that's created to enforce a foreign-key constraint is made internally dependent on the constraint's pg_constraint entry.
+
+    以下操作完成物化视图到表的转换：
+
+    postgres=# begin;
+    BEGIN
+    postgres=# delete from pg_depend where objid=(select oid from pg_rewrite where ev_class ='mvp'::regclass);
+    DELETE 4
+    postgres=# update pg_class set relhasrules=false,relkind='r' where relname='mvp';
+    UPDATE 1
+    postgres=# delete from pg_rewrite where ev_class = 'mvp'::regclass;
+    DELETE 1
+    postgres=# end;
+    COMMIT
+
+
+    现在，mvp已经是表了
+
+    postgres=# \d+ mvp
+                              Table "public.mvp"
+     Column |  Type   | Modifiers | Storage  | Stats target | Description 
+    --------+---------+-----------+----------+--------------+-------------
+     id     | integer |           | plain    |              | 
+     info   | text    |           | extended |              | 
+
+    postgres=# \dmv
+    No relations found.
+
+
+    执行DML：
+
+    postgres=# select * from mvp limit 1;
+     id |               info               
+    ----+----------------------------------
+      1 | e21975f390393d923193e77d249afe63
+    (1 row)
+
+    postgres=# update mvp set info='new' where id=1;
+    UPDATE 1
+    postgres=# select * from mvp where id=1;
+     id | info 
+    ----+------
+      1 | new
+    (1 row)
+
+
+    增加主键
+
+    postgres=# alter table mvp add constraint pk_mvp primary key(id);
+    ALTER TABLE
+    postgres=# \d+ mvp
+                              Table "public.mvp"
+     Column |  Type   | Modifiers | Storage  | Stats target | Description 
+    --------+---------+-----------+----------+--------------+-------------
+     id     | integer | not null  | plain    |              | 
+     info   | text    |           | extended |              | 
+    Indexes:
+        "pk_mvp" PRIMARY KEY, btree (id)
+
+
+    查看更新后的pg_class：
+
+    postgres=# select * from pg_class where relname='mvp';
+    -[ RECORD 1 ]--+-----------
+    relname        | mvp
+    relnamespace   | 2200
+    reltype        | 24885
+    reloftype      | 0
+    relowner       | 10
+    relam          | 0
+    relfilenode    | 24890
+    reltablespace  | 0
+    relpages       | 21
+    reltuples      | 10000
+    relallvisible  | 0
+    reltoastrelid  | 26947  -- toast对象
+    relhasindex    | t
+    relisshared    | f
+    relpersistence | p
+    relkind        | r  -- 更新为表
+    relnatts       | 2
+    relchecks      | 0
+    relhasoids     | f
+    relhaspkey     | t
+    relhasrules    | f  -- 无规则
+    relhastriggers | f
+    relhassubclass | f
+    relispopulated | t
+    relreplident   | d
+    relfrozenxid   | 2140665293
+    relminmxid     | 1
+    relacl         | 
+    reloptions     | 
+
+
+
+    使用这种手法，我们非常容易的将物化视图转换为普通的表了。
+    可以用在迁移数据的案例中，例如在PostgreSQL 中创建oracle 外部表，基于外部表创建物化视图，增量更新，将物化视图转换为表。
+    修改字典有风险，操作需谨慎～
+
+    删除正常：
+
+    postgres=# select pg_relation_filepath('mvp');
+     pg_relation_filepath 
+    ----------------------
+     base/12944/26944
+    (1 row)
+    postgres=# select pg_relation_filepath(26947);
+     pg_relation_filepath 
+    ----------------------
+     base/12944/26947
+    (1 row)
+
+    postgres=# drop table p;
+    DROP TABLE
+    postgres=# drop table mvp;
+    DROP TABLE
+    postgres=# \q
+    postgres@digoal-> cd $PGDATA
+    postgres@digoal-> ll base/12944/26944*
+    -rw-------. 1 postgres postgres 0 Jun  9 16:22 base/12944/26944
+    postgres@digoal-> ll base/12944/26947*
+    -rw-------. 1 postgres postgres 0 Jun  9 16:22 base/12944/26947
+
+
+
+    [参考]
+    1. pg_get_viewdef_worker@src/backend/utils/adt/ruleutils.c
+
+    /*
+     * Common code for by-OID and by-name variants of pg_get_viewdef
+     */
+    static char *
+    pg_get_viewdef_worker(Oid viewoid, int prettyFlags, int wrapColumn)
+    {
+            Datum           args[2];
+            char            nulls[2];
+            int                     spirc;
+            HeapTuple       ruletup;
+            TupleDesc       rulettc;
+            StringInfoData buf;
+
+            /*
+             * Do this first so that string is alloc'd in outer context not SPI's.
+             */
+            initStringInfo(&buf);
+
+            /*
+             * Connect to SPI manager
+             */
+            if (SPI_connect() != SPI_OK_CONNECT)
+                    elog(ERROR, "SPI_connect failed");
+
+            /*
+             * On the first call prepare the plan to lookup pg_rewrite. We read
+             * pg_rewrite over the SPI manager instead of using the syscache to be
+             * checked for read access on pg_rewrite.
+             */
+            if (plan_getviewrule == NULL)
+            {
+                    Oid                     argtypes[2];
+                    SPIPlanPtr      plan;
+
+                    argtypes[0] = OIDOID;
+                    argtypes[1] = NAMEOID;
+                    plan = SPI_prepare(query_getviewrule, 2, argtypes);
+                    if (plan == NULL)
+                            elog(ERROR, "SPI_prepare failed for \"%s\"", query_getviewrule);
+                    SPI_keepplan(plan);
+                    plan_getviewrule = plan;
+            }
+
+            /*
+             * Get the pg_rewrite tuple for the view's SELECT rule
+             */
+            args[0] = ObjectIdGetDatum(viewoid);
+            args[1] = DirectFunctionCall1(namein, CStringGetDatum(ViewSelectRuleName));
+            nulls[0] = ' ';
+            nulls[1] = ' ';
+            spirc = SPI_execute_plan(plan_getviewrule, args, nulls, true, 0);
+            if (spirc != SPI_OK_SELECT)
+                    elog(ERROR, "failed to get pg_rewrite tuple for view %u", viewoid);
+            if (SPI_processed != 1)
+                    appendStringInfoString(&buf, "Not a view");
+            else
+            {
+                    /*
+                     * Get the rule's definition and put it into executor's memory
+                     */
+                    ruletup = SPI_tuptable->vals[0];
+                    rulettc = SPI_tuptable->tupdesc;
+                    make_viewdef(&buf, ruletup, rulettc, prettyFlags, wrapColumn);
+            }
+
+            /*
+             * Disconnect from SPI manager
+             */
+            if (SPI_finish() != SPI_OK_FINISH)
+                    elog(ERROR, "SPI_finish failed");
+
+            return buf.data;
+    }
+
+
+    2. http://www.postgresql.org/docs/9.4/static/catalog-pg-class.html
+    3. http://www.postgresql.org/docs/9.4/static/view-pg-matviews.html
+    4. http://www.postgresql.org/docs/9.4/static/catalog-pg-rewrite.html
+    5. http://www.postgresql.org/docs/9.4/static/catalog-pg-depend.html
+    6. http://www.postgresql.org/docs/9.4/static/catalog-pg-shdepend.html
+     Flag Counter

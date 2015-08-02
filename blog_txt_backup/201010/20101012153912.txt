@@ -1,0 +1,189 @@
+PostgreSQL research
+
+Differ Between PostgreSQL's pg_cancel_backend pg_terminate_backend function
+
+2010-10-12 15:39:12   查看原文>>
+
+pg_cancel_backend 作用是退出事务（所有未提交的信息回滚），但是不退出SESSION；
+
+pg_terminate_backend 作用是退出session（所有未提交的信息回滚）。
+
+测试结果如下:
+
+Server1:
+
+mrp_url=> create table tbl_test (id int);
+CREATE TABLE
+mrp_url=> begin ;
+BEGIN
+mrp_url=> insert into tbl_test values(1);
+INSERT 0 1
+mrp_url=> select * from tbl_test;
+ id
+----
+  1
+(1 row)
+
+mrp_url=> insert into tbl_test select generate_series(2,10000000);
+
+Server2(Server1正在写入记录):
+
+mrp_url=# select * from pg_stat_activity;
+
+ datid | datname | procpid | usesysid | usename  | application_name |   client_addr   | client_port |         backend_start        
+|          xact_start           |          query_start          | waiting |                                                        
+                         current_query                                                                                  
+-------+---------+---------+----------+----------+------------------+-----------------+-------------+-------------------------------
++-------------------------------+-------------------------------+---------+---------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+
+ 16389 | mrp_url |    3253 |    16384 | mrp_url  | psql             | 127.0.0.1       |       23633 | 2010-10-12 14:51:01.119572+08
+| 2010-10-12 14:53:21.350747+08 | 2010-10-12 14:53:30.179774+08 | f       | insert into tbl_test select generate_series(2,10000000);
+
+mrp_url=# select pg_cancel_backend(3253);
+ pg_cancel_backend
+-------------------
+ t
+(1 row)
+
+Server1(接收到canceling statement due to user request消息,输入查询语句无效,commit提示回滚):
+
+ERROR:  canceling statement due to user request
+mrp_url=> select * from tbl_test;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+mrp_url=> commit;
+ROLLBACK
+
+Server2(查看Server1的SESSION并没有退出):
+
+mrp_url=# select * from pg_stat_activity;
+ datid | datname | procpid | usesysid | usename  | application_name |   client_addr   | client_port |         backend_start        
+|          xact_start           |          query_start          | waiting |                                                        
+                         current_query                                                                                  
+-------+---------+---------+----------+----------+------------------+-----------------+-------------+-------------------------------
++-------------------------------+-------------------------------+---------+---------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+
+16389 | mrp_url |    3253 |    16384 | mrp_url  | psql             | 127.0.0.1       |       23633 | 2010-10-12 14:51:01.119572+08
+| 2010-10-12 14:53:21.350747+08 | 2010-10-12 14:53:30.179774+08 | f       | <IDLE>
+
+pg_terminate_backend测试:
+
+Server1:
+
+mrp_url=> begin;
+BEGIN
+mrp_url=> insert into tbl_Test values(1);
+INSERT 0 1
+mrp_url=> insert into tbl_test select generate_series(2,10000000);
+
+Server2:
+
+postgres=# select pg_terminate_backend(4044);
+ pg_terminate_backend
+----------------------
+ t
+(1 row)
+
+Server1():
+
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+mrp_url=> select pg_total_relation_size('tbl_test')/1024/1024;
+ ?column?
+----------
+      249
+(1 row)
+
+mrp_url=> select * from tbl_Test;
+ id
+----
+(0 rows)
+
+mrp_url=> vacuum full tbl_test;
+VACUUM
+mrp_url=> select * from tbl_Test;
+ id
+----
+(0 rows)
+
+mrp_url=> select pg_total_relation_size('tbl_test')/1024/1024;
+ ?column?
+----------
+        0
+(1 row)
+
+Server2:
+
+ 16389 | mrp_url  |    4092 |    16384 | mrp_url  | psql             | 127.0.0.1       |       18986 | 2010-10-12 15:36:32.240069+08
+ |                               | 2010-10-12 15:36:57.470988+08 | f       | <IDLE>
+
+（server1被terminate后自动重连，PROCPID已经改变）
+
+官方文档解释:
+
+PostgreSQL :
+
+┌──────────────────────────────┬───────────┬─────────────────────────────────┐
+│             Name             │Return Type│           Description           │
+├──────────────────────────────┼───────────┼─────────────────────────────────┤
+│pg_cancel_backend(pid int)    │boolean    │Cancel a backend's current query │
+├──────────────────────────────┼───────────┼─────────────────────────────────┤
+│pg_terminate_backend(pid int) │boolean    │Terminate a backend              │
+└──────────────────────────────┴───────────┴─────────────────────────────────┘
+
+pg_cancel_backend and pg_terminate_backend send signals (SIGINT or SIGTERM respectively) to backend processes identified by process ID. The process ID of an active backend can be found from the procpid column of the pg_stat_activity view, or by listing the postgres processes on the server (using ps on Unix or the Task
+Manager on Windows.
+
+Oracle :
+
+alter system 子句 :
+
+DISCONNECT SESSION Clause
+
+Use the DISCONNECT SESSION clause to disconnect the current session by destroying the dedicated server process (or virtual circuit if the connection was made by way of a Shared Sever). To use this clause, your instance must have the database open. You must identify the session with both of the following values from
+the V$SESSION view:
+
+  • For integer1, specify the value of the SID column.
+
+  • For integer2, specify the value of the SERIAL# column.
+
+If system parameters are appropriately configured, then application failover will take effect.
+
+  • The POST_TRANSACTION setting allows ongoing transactions to complete before the session is disconnected. If the session has no ongoing transactions, then this clause has the same effect described for as KILL SESSION.
+
+  • The IMMEDIATE setting disconnects the session and recovers the entire session state immediately, without waiting for ongoing transactions to complete.
+
+      □ If you also specify POST_TRANSACTION and the session has ongoing transactions, then the IMMEDIATE keyword is ignored.
+
+      □ If you do not specify POST_TRANSACTION, or you specify POST_TRANSACTION but the session has no ongoing transactions, then this clause has the same effect as described for KILL SESSION IMMEDIATE.
+
+        See Also:
+
+        "Disconnecting a Session: Example"
+
+KILL SESSION Clause
+
+The KILL SESSION clause lets you mark a session as terminated, roll back ongoing transactions, release all session locks, and partially recover session resources. To use this clause, your instance must have the database open. Your session and the session to be terminated must be on the same instance unless you specify
+integer3.You must identify the session with the following values from the V$SESSION view:
+
+  • For integer1, specify the value of the SID column.
+
+  • For integer2, specify the value of the SERIAL# column.
+
+  • For the optional integer3, specify the ID of the instance where the target session to be killed exists. You can find the instance ID by querying the GV$ tables.
+
+If the session is performing some activity that must be completed, such as waiting for a reply from a remote database or rolling back a transaction, then Oracle Database waits for this activity to complete, marks the session as terminated, and then returns control to you. If the waiting lasts a minute, then Oracle
+Database marks the session to be terminated and returns control to you with a message that the session is marked to be terminated. The PMON background process then marks the session as terminated when the activity is complete.
+
+Whether or not the session has an ongoing transaction, Oracle Database does not recover the entire session state until the session user issues a request to the session and receives a message that the session has been terminated.
+
+See Also:
+
+"Terminating a Session: Example"
+
+IMMEDIATE Specify IMMEDIATE to instruct Oracle Database to roll back ongoing transactions, release all session locks, recover the entire session state, and return control to you immediately.
+

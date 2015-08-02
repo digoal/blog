@@ -1,0 +1,341 @@
+PostgreSQL research
+
+PostgreSQL ERROR: 54000: out of memory
+
+2013-02-21 9:36:16   查看原文>>
+
+昨天joan那边聊到的一个问题 : 
+
+2013-02-20 14:29:28 CST aischool_1221_01LOG:  incomplete message from client
+2013-02-20 14:29:28 CST aischool_1221_01ERROR:  out of memory
+2013-02-20 14:29:28 CST aischool_1221_01DETAIL:  Cannot enlarge string buffer containing 0 bytes by 1342177281 more bytes.
+2013-02-20 14:29:28 CST aischool_1221_01LOG:  could not send data to client: 断开的管道
+2013-02-20 14:29:28 CST aischool_1221_01LOG:  unexpected EOF on client connection
+
+
+首先要确定问题出在哪块代码中, 经过检索后发现错误来自enlargeStringInfo函数如下 :
+src/backend/lib/stringinfo.c
+
+00235 /*
+00236  * enlargeStringInfo
+00237  *
+00238  * Make sure there is enough space for 'needed' more bytes
+00239  * ('needed' does not include the terminating null).
+00240  *
+00241  * External callers usually need not concern themselves with this, since
+00242  * all stringinfo.c routines do it automatically.  However, if a caller
+00243  * knows that a StringInfo will eventually become X bytes large, it
+00244  * can save some palloc overhead by enlarging the buffer before starting
+00245  * to store data in it.
+00246  *
+00247  * NB: because we use repalloc() to enlarge the buffer, the string buffer
+00248  * will remain allocated in the same memory context that was current when
+00249  * initStringInfo was called, even if another context is now current.
+00250  * This is the desired and indeed critical behavior!
+00251  */
+00252 void
+00253 enlargeStringInfo(StringInfo str, int needed)
+00254 {
+00255     int         newlen;
+00256 
+00257     /*
+00258      * Guard against out-of-range "needed" values.  Without this, we can get
+00259      * an overflow or infinite loop in the following.
+00260      */
+00261     if (needed < 0)             /* should not happen */
+00262         elog(ERROR, "invalid string enlargement request size: %d", needed);
+00263     if (((Size) needed) >= (MaxAllocSize - (Size) str->len))
+00264         ereport(ERROR,
+00265                 (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+00266                  errmsg("out of memory"),
+00267                  errdetail("Cannot enlarge string buffer containing %d bytes by %d more bytes.",
+00268                            str->len, needed)));
+00269 
+00270     needed += str->len + 1;     /* total space required now */
+00271 
+00272     /* Because of the above test, we now have needed <= MaxAllocSize */
+00273 
+00274     if (needed <= str->maxlen)
+00275         return;                 /* got enough space already */
+00276 
+00277     /*
+00278      * We don't want to allocate just a little more space with each append;
+00279      * for efficiency, double the buffer size each time it overflows.
+00280      * Actually, we might need to more than double it if 'needed' is big...
+00281      */
+00282     newlen = 2 * str->maxlen;
+00283     while (needed > newlen)
+00284         newlen = 2 * newlen;
+00285 
+00286     /*
+00287      * Clamp to MaxAllocSize in case we went past it.  Note we are assuming
+00288      * here that MaxAllocSize <= INT_MAX/2, else the above loop could
+00289      * overflow.  We will still have newlen >= needed.
+00290      */
+00291     if (newlen > (int) MaxAllocSize)
+00292         newlen = (int) MaxAllocSize;
+00293 
+00294     str->data = (char *) repalloc(str->data, newlen);
+00295 
+00296     str->maxlen = newlen;
+00297 }
+
+
+从错误的输出Cannot enlarge string buffer containing 0 bytes by 1342177281 more bytes.可以得知.
+((Size) needed) >= (MaxAllocSize - (Size) str->len)
+同时
+needed = 1342177281
+str->len = 0
+1342177281已经超过了MaxAllocSize的大小如下 : 
+src/include/utils/memutils.h
+
+00023 /*
+00024  * MaxAllocSize
+00025  *      Quasi-arbitrary limit on size of allocations.
+00026  *
+00027  * Note:
+00028  *      There is no guarantee that allocations smaller than MaxAllocSize
+00029  *      will succeed.  Allocation requests larger than MaxAllocSize will
+00030  *      be summarily denied.
+00031  *
+00032  * XXX This is deliberately chosen to correspond to the limiting size
+00033  * of varlena objects under TOAST.  See VARSIZE_4B() and related macros
+00034  * in postgres.h.  Many datatypes assume that any allocatable size can
+00035  * be represented in a varlena header.
+00036  *
+00037  * XXX Also, various places in aset.c assume they can compute twice an
+00038  * allocation's size without overflow, so beware of raising this.
+00039  */
+00040 #define MaxAllocSize    ((Size) 0x3fffffff)     /* 1 gigabyte - 1 */
+
+
+但是调用enlargeStringInfo的函数有很多, 到底是哪个函数调用的从日志上反映不出来. 需要更详细的信息.
+
+void enlargeStringInfo  (       StringInfo      str,
+int     needed   
+)
+Definition at line 253 of file stringinfo.c.
+
+References StringInfoData::data, elog, ereport, errcode(), errdetail(), errmsg(), ERROR, StringInfoData::len, MaxAllocSize, StringInfoData::maxlen, and repalloc().
+
+Referenced by appendBinaryStringInfo(), appendStringInfo(), appendStringInfoChar(), appendStringInfoSpaces(), CopyReadAttributesCSV(), CopyReadAttributesText(), CopyReadBinaryAttribute(), GetOldFunctionMessage(), PLy_elog(), pq_getmessage(), and XLogSend().
+
+
+要找出到底是哪个函数调用的, 检索以上函数哪些会爆出这个日志LOG:  incomplete message from client
+检索到了 : 
+src/backend/libpq/pqcomm.c
+
+/* --------------------------------
+ *              pq_getmessage   - get a message with length word from connection
+ *
+ *              The return value is placed in an expansible StringInfo, which has
+ *              already been initialized by the caller.
+ *              Only the message body is placed in the StringInfo; the length word
+ *              is removed.  Also, s->cursor is initialized to zero for convenience
+ *              in scanning the message contents.
+ *
+ *              If maxlen is not zero, it is an upper limit on the length of the
+ *              message we are willing to accept.  We abort the connection (by
+ *              returning EOF) if client tries to send more than that.
+ *
+ *              returns 0 if OK, EOF if trouble
+ * --------------------------------
+ */
+int
+pq_getmessage(StringInfo s, int maxlen)
+{
+        int32           len;
+
+        resetStringInfo(s);
+
+        /* Read message length word */
+        if (pq_getbytes((char *) &len, 4) == EOF)
+        {
+                ereport(COMMERROR,
+                                (errcode(ERRCODE_PROTOCOL_VIOLATION),
+                                 errmsg("unexpected EOF within message length word")));
+                return EOF;
+        }
+
+        len = ntohl(len);
+
+        if (len < 4 ||
+                (maxlen > 0 && len > maxlen))
+        {
+                ereport(COMMERROR,
+                                (errcode(ERRCODE_PROTOCOL_VIOLATION),
+                                 errmsg("invalid message length")));
+                return EOF;
+        }
+
+        len -= 4;                                       /* discount length itself */
+
+        if (len > 0)
+        {
+                /*
+                 * Allocate space for message.  If we run out of room (ridiculously
+                 * large message), we will elog(ERROR), but we want to discard the
+                 * message body so as not to lose communication sync.
+                 */
+                PG_TRY();
+                {
+                        enlargeStringInfo(s, len);
+                }
+                PG_CATCH();
+                {
+                        if (pq_discardbytes(len) == EOF)
+                                ereport(COMMERROR,
+                                                (errcode(ERRCODE_PROTOCOL_VIOLATION),
+                                                 errmsg("incomplete message from client")));
+                        PG_RE_THROW();
+                }
+                PG_END_TRY();
+
+                /* And grab the message */
+                if (pq_getbytes(s->data, len) == EOF)
+                {
+                        ereport(COMMERROR,
+                                        (errcode(ERRCODE_PROTOCOL_VIOLATION),
+                                         errmsg("incomplete message from client")));
+                        return EOF;
+                }
+                s->len = len;
+                /* Place a trailing null per StringInfo convention */
+                s->data[len] = '\0';
+        }
+
+        return 0;
+}
+
+
+知道原因后, 就需要找出是哪个客户端触发的了, 由于日志中没有客户端IP和端口信息, 所以需要修改一下postgresql.conf
+
+log_destination = 'csvlog'
+logging_collector = on
+-- 同时建议开启以下
+log_error_verbosity = verbose
+
+
+重启数据库.
+如果是一个可实时重现的错误, 那么建议用gdb跟踪一下, 观察执行过程中的变量值.
+如果是随记出现的错误, 下次再触发的时候可以根据日志中的客户端IP和端口找出客户端.
+同时结合客户端的日志找出原因并解决它.
+
+【其他】
+1. 开启log_error_verbosity = verbose后, 可以看到日志输出对应的代码位置, 这样就不需要自己去检索了 : 
+
+2013-02-20 17:45:02 CST LOG:  08P01: incomplete message from client
+2013-02-20 17:45:02 CST LOCATION:  pq_getmessage, pqcomm.c:1105
+2013-02-20 17:45:02 CST ERROR:  54000: out of memory
+2013-02-20 17:45:02 CST DETAIL:  Cannot enlarge string buffer containing 0 bytes by 1157627900 more bytes.
+2013-02-20 17:45:02 CST LOCATION:  enlargeStringInfo, stringinfo.c:268
+
+
+2. 
+
+/* --------------------------------
+ *              pq_getbytes             - get a known number of bytes from connection
+ *
+ *              returns 0 if OK, EOF if trouble
+ * --------------------------------
+ */
+int
+pq_getbytes(char *s, size_t len)
+{
+        size_t          amount;
+
+        while (len > 0)
+        {
+                while (PqRecvPointer >= PqRecvLength)
+                {
+                        if (pq_recvbuf())       /* If nothing in buffer, then recv some */
+                                return EOF;             /* Failed to recv data */
+                }
+                amount = PqRecvLength - PqRecvPointer;
+                if (amount > len)
+                        amount = len;
+                memcpy(s, PqRecvBuffer + PqRecvPointer, amount);
+                PqRecvPointer += amount;
+                s += amount;
+                len -= amount;
+        }
+        return 0;
+}
+
+
+3. 
+
+/* --------------------------------
+ *              pq_recvbuf - load some bytes into the input buffer
+ *
+ *              returns 0 if OK, EOF if trouble
+ * --------------------------------
+ */
+static int
+pq_recvbuf(void)
+{
+        if (PqRecvPointer > 0)
+        {
+                if (PqRecvLength > PqRecvPointer)
+                {
+                        /* still some unread data, left-justify it in the buffer */
+                        memmove(PqRecvBuffer, PqRecvBuffer + PqRecvPointer,
+                                        PqRecvLength - PqRecvPointer);
+                        PqRecvLength -= PqRecvPointer;
+                        PqRecvPointer = 0;
+                }
+                else
+                        PqRecvLength = PqRecvPointer = 0;
+        }
+
+        /* Ensure that we're in blocking mode */
+        pq_set_nonblocking(false);
+
+        /* Can fill buffer from PqRecvLength and upwards */
+        for (;;)
+        {
+                int                     r;
+
+                r = secure_read(MyProcPort, PqRecvBuffer + PqRecvLength,
+                                                PQ_RECV_BUFFER_SIZE - PqRecvLength);
+
+                if (r < 0)
+                {
+                        if (errno == EINTR)
+                                continue;               /* Ok if interrupted */
+
+                        /*
+                         * Careful: an ereport() that tries to write to the client would
+                         * cause recursion to here, leading to stack overflow and core
+                         * dump!  This message must go *only* to the postmaster log.
+                         */
+                        ereport(COMMERROR,
+                                        (errcode_for_socket_access(),
+                                         errmsg("could not receive data from client: %m")));
+                        return EOF;
+                }
+                if (r == 0)
+                {
+                        /*
+                         * EOF detected.  We used to write a log message here, but it's
+                         * better to expect the ultimate caller to do that.
+                         */
+                        return EOF;
+                }
+                /* r contains number of bytes read, so just incr length */
+                PqRecvLength += r;
+                return 0;
+        }
+}
+
+
+4. 使用psql时, 设置VERBOSITY也可以获取到错误信息的代码位置.
+
+postgres=# \set VERBOSITY verbose
+postgres=# s;
+ERROR:  42601: syntax error at or near "s"
+LINE 1: s;
+        ^
+LOCATION:  scanner_yyerror, scan.l:1053
+
+

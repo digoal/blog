@@ -1,0 +1,109 @@
+PostgreSQL research
+
+About consistent read in PostgreSQL and Oracle
+
+2011-04-08 13:11:56   查看原文>>
+
+昨天一位同事问到一个数据库一致性读的问题，如下
+假设有一个帐户表：
+tbl_user_account (id int,user_id int,currency_id int,amount int);
+数据量10亿. 假设SESSION A开始时,sum(amount)=1000亿
+  所有SESSION隔离级别  :  ISOLATION LEVEL READ COMMITTED
+SESSION A : (a long running transaction)
+select sum(amount) from tbl_user_account ; 
+
+SESSION B :
+update tbl_user_account set amount=amount+100 where user_id=10000;
+commit;
+
+SESSION C :
+vacuum tbl_user_account;
+
+long time past.....
+
+SESSION A :
+SQL run success.
+  第一个问题是，结果返回肯定是10亿,而不是10亿+100; 原因很简单,根据TUPLE头部上的XMIN,XMAX，SESSION A看不到SESSION B更新的TUPLE，它看到的是老的TUPLE。
+  第二个问题是，SESSION C 是否可以清理掉被更新的user_id=10000的老的那条TUPLE呢？答案是不可以。因为VACUUM时会判断当前活动的事务号和TUPLE上的XMIN,XMAX。只要SESSION A没有结束，那么小于等于SESSION A的年龄的TUPLE都不会被VACUUM掉。
+  假设SESSION A执行时间实在太长了。何时会导致SESSION A执行失败？
+  不过这种情况基本上不会发生,因为还有freeze相关的参数会强制FREEZE这个表，假设执行SESSION A时的年龄 = 5000W (vacuum_freeze_min_age) 基本上已经是极限大的年龄，那么整个数据库集群还允许SESSION A持续执行直到数据库分配出去接近19.5亿的事务，这个几乎是不可能达到的一个数字。打个比方，一天分配2亿的事务（平均每秒约3000的事务量
+）,则允许SESSION A可以执行9天多。
+  1. 当 age ( pg_class.relfrozenxid ) > 20亿 - 100W 时 , 数据库系统将自动关闭。     
+        ERROR : database is not accepting commands to avoid wraparound data loss in database "mydb"
+        HINT : Stop the postmaster and use a standalone backend to VACUUM in "mydb" .       
+        在此之前 20亿 - 1000W ，系统将发出警告 .     
+        WARNING : database "mydb" must be vacuumed within 177009986 transactions
+        HINT : To avoid a database shutdown, execute a database-wide VACUUM in "mydb" . 
+  2. 当设置了 statement_timeout , 超过这个值将阻止执行 , ERROR :  canceling statement due to statement timeout 。
+
+实例:
+digoal=> select t1.sm+t2.sm+t3.sm+t4.sm+t5.sm+t6.sm from (select sum(id) sm from tbl_user) t1,(select sum(id) sm from tbl_user) t2,(select sum(id) sm from tbl_user) t3,(select sum(id) sm from tbl_user) t4,(select sum(id) sm from tbl_user) t5,(select sum(id) sm from tbl_user) t6;
+    ?column?    
+-----------------
+ 189000681003096
+(1 row)
+
+Time: 21544.620 ms
+SESSION A :
+digoal=> select t1.sm+t2.sm+t3.sm+t4.sm+t5.sm+t6.sm from (select sum(id) sm from tbl_user) t1,(select sum(id) sm from tbl_user) t2,(select sum(id) sm from tbl_user) t3,(select sum(id) sm from tbl_user) t4,(select sum(id) sm from tbl_user) t5,(select sum(id) sm from tbl_user) t6;
+    ?column?    
+-----------------
+ 189000681003096
+(1 row)
+
+Time: 22062.166 ms
+
+SESSION B : start before session a return result
+digoal=> update tbl_user set id=7000011 where id>=7000000;
+UPDATE 1000001
+Time: 4775.486 ms
+digoal=> vacuum freeze verbose tbl_user;
+INFO:  vacuuming "digoal.tbl_user"
+INFO:  index "idx_user" now contains 9999987 row versions in 35108 pages
+DETAIL:  0 index row versions were removed.
+5446 index pages have been deleted, 5446 are currently reusable.
+CPU 0.06s/0.03u sec elapsed 0.09 sec.
+INFO:  "tbl_user": found 0 removable, 10000101 nonremovable row versions in 48674 out of 48674 pages
+DETAIL:  1000001 dead row versions cannot be removed yet.
+There were 1000099 unused item pointers.
+0 pages are entirely empty.
+CPU 0.11s/0.69u sec elapsed 2.08 sec.
+VACUUM
+Time: 3090.838 ms
+digoal=> select age(relfrozenxid) from pg_class where relname='tbl_user';
+ age
+-----
+   1
+(1 row)
+
+Time: 0.481 ms
+
+SESSION B : start after session a return result
+digoal=> vacuum freeze verbose tbl_user;
+INFO:  vacuuming "digoal.tbl_user"
+INFO:  scanned index "idx_user" to remove 999887 row versions
+DETAIL:  CPU 0.11s/1.06u sec elapsed 1.17 sec.
+INFO:  "tbl_user": removed 999887 row versions in 4425 pages
+DETAIL:  CPU 0.00s/0.02u sec elapsed 0.02 sec.
+INFO:  index "idx_user" now contains 9000100 row versions in 35108 pages
+DETAIL:  999887 index row versions were removed.
+8901 index pages have been deleted, 5460 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "tbl_user": found 1000001 removable, 9000100 nonremovable row versions in 48674 out of 48674 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 1000099 unused item pointers.
+0 pages are entirely empty.
+CPU 0.11s/1.66u sec elapsed 1.78 sec.
+VACUUM
+Time: 1789.878 ms
+digoal=> select age(relfrozenxid) from pg_class where relname='tbl_user';
+ age
+-----
+   0
+(1 row)
+
+结果与预期符合。
+
+Oracle在测试中达到同样的效果，Oracle使用UNDO区域来保存老的镜像数据。
+但是假设SESSION A执行时间实在太长了。何时会导致SESSION A执行失败？
+这个在ORACLE中，如果UNDO表空间不是足够大的话，SESSION A将会执行不下去，报SNAPSHOT TOO OLD的错误。

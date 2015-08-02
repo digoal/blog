@@ -1,0 +1,94 @@
+PostgreSQL research
+
+PostgreSQL can auto close server process on server when client dead?
+
+2014-11-10 17:24:34   查看原文>>
+
+有朋友反映在客户端杀掉后, PostgreSQL服务端依旧在运行并占用100%CPU的情况.
+这里来做一个测试 : 
+
+postgres=# select * from generate_series(1,10000000000);
+
+[root@150 backup]# ps -ewf|grep psql
+postgres 12578 12310  0 16:42 pts/1    00:00:00 psql -h 172.16.3.221 -p 5432 -U postgres postgres
+root     12580  8582  0 16:43 pts/0    00:00:00 grep psql
+[root@150 backup]# kill -9 12578
+
+Killed
+
+
+
+服务端依旧存在
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 6710 postgres  20   0 2515m 7472 4536 R 99.3  0.0  23:38.37 postgres: postgres postgres 172.16.3.150(51130) SELECT  
+
+
+
+甚至服务端的sock已经不在了, 服务端进程依旧存在.
+碰到这种情况, 只能通过主动pg_terminate_backend, 或等SQL执行完.
+
+digoal=# select * from pg_stat_activity ;
+-[ RECORD 1 ]----+----------------------------------------------
+datid            | 12840
+datname          | postgres
+pid              | 6710
+usesysid         | 10
+usename          | postgres
+application_name | psql
+client_addr      | 172.16.3.150
+client_hostname  | 
+client_port      | 51130
+backend_start    | 2014-11-10 16:43:18.327109+08
+xact_start       | 2014-11-10 16:43:29.070519+08
+query_start      | 2014-11-10 16:43:29.070519+08
+state_change     | 2014-11-10 16:43:29.070522+08
+waiting          | f
+state            | active
+query            | select * from generate_series(1,10000000000);
+
+postgres@db-172-16-3-221-> netstat -anpo|grep 6710
+(Not all processes could be identified, non-owned process info
+ will not be shown, you would have to be root to see it all.)
+
+
+
+从以下图来看, 客户端被KILL后, 客户端发出了主动关闭申请, 并等待服务端这边的应用程序关闭SOCKet.
+但是服务端一直在运行select * from generate_series(1,10000000000);, 并没有响应客户端关闭socket的请求.
+当客户端socket到达fin timeout后, 客户端的内核主动关闭了socket,
+服务端也在多次keepalive timeout后, kernel主动关闭了socket.
+而服务端的postgresql backend process已经在运行select * from generate_series(1,10000000000); CPU占用100%
+和TCP keep alive无关.
+
+PostgreSQL can active close server process on server when client dead? - 德哥@Digoal - PostgreSQL research
+PostgreSQL can active close server process on server when client dead? - 德哥@Digoal - PostgreSQL research
+
+换一个例子 : 
+直接从表输出数据, (全表扫描).
+
+digoal=# \dt+ t11
+                   List of relations
+ Schema | Name | Type  |  Owner   | Size  | Description 
+--------+------+-------+----------+-------+-------------
+ public | t11  | table | postgres | 10 GB | 
+(1 row)
+
+digoal=# select * from t11;
+Killed
+
+
+杀掉后, 服务端立刻回收资源.
+数据传输过程杀掉客户端进程, 服务端可以感知并迅速关闭资源.
+说明服务端在不处理数据传输时, 并未监测SOCKET的状态, 如果有这个监测的话, 可以更快的释放资源.
+
+这个监测任务可以交给postmaster进程,一个新的进程,或backend process线程来处理这样的话在遇到本文第一个例子出现的情况时, 可以缩短关闭服务端process的时间.
+在没有这项功能前, 我们可以在服务端主动监测和执行pg_terminate_backend;
+例如 : 
+1. 当服务端的tcp端口状态变成close_wait后, 其实说明客户端已经主动关闭了SOCKET, 这时就可以执行pg_terminate_backend杀服务端进程了.
+2. 当服务端的tcp端口不存在时, 说明已经被内核主动关闭了, 也可以执行pg_terminate_backend杀服务端进程了.
+注意不要错杀unix socket的连接.
+
+[参考]
+1. http://en.wikipedia.org/wiki/Transmission_Control_Protocol
+
+Flag Counter

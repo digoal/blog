@@ -1,0 +1,172 @@
+PostgreSQL research
+
+Postgre-XC ERROR: XX000: attempted to delete invisible tuple
+
+2013-04-09 22:39:01   查看原文>>
+
+Postgres-XC的gtm模块主要用于提供全局的函数, 序列等.
+同时还提供统一分配的xid管理, 事务状态信息的管理.
+以前写过两篇关于PostgreSQL xid模拟数据"消失", 以及flashback query的文章. 原理可以参照此文 : 
+http://blog.163.com/digoal@126/blog/static/163877040201183043153622/
+http://blog.163.com/digoal@126/blog/static/163877040201251911813661/
+
+Postgres-XC与单节点的PostgreSQL数据库原理类似, 只是将xid的snapshot以及提交状态交给GTM来管理了.
+当节点(datanode or coordinator)申请的gxid小于gtm节点当前的gtid时, 会报xid非法的错误, 例如 : 
+
+2013-04-05 21:41:19.091 CST,,,4146,,515ed20f.1032,241,,2013-04-05 21:30:55 CST,1/31,0,WARNING,01000,"Xid is invalid.",,,,,,,,"GetNewTransactionId, varsup.c:158",""
+2013-04-05 21:41:19.091 CST,,,4146,,515ed20f.1032,242,,2013-04-05 21:30:55 CST,1/31,0,WARNING,08000,"can not connect to GTM: Connection refused",,,,,,,,"InitGTM, gtm.c:94",""
+2013-04-05 21:41:19.092 CST,,,4146,,515ed20f.1032,243,,2013-04-05 21:30:55 CST,1/31,0,WARNING,08000,"can not connect to GTM: Connection refused",,,,,,,,"InitGTM, gtm.c:94",""
+2013-04-05 21:41:19.092 CST,,,4146,,515ed20f.1032,244,,2013-04-05 21:30:55 CST,1/31,0,ERROR,08006,"GTM error, could not obtain snapshot",,,,,,,,"GetSnapshotDataCoordinator, procarray.c:2836",""
+
+
+当发生以上错误的同时, 可能会出现某些节点的xid信息比gtm的xid更新的情况, 因此会出现某些数据库对象短暂"消失"的情形.
+这种情况下可以通过重启gtm, 并且指定有个更大的xid可以解决.
+例如 : 
+
+gtm_ctl -Z gtm start -D /data01/pgxc_gtm -o "-x 200000"
+
+
+当然, 除了以上报错, 还可能隐藏更隐晦的错误, 例如表在gxid=10000时创建, 在gxid=10500时写入记录. 然后gtm调到10010, 去删除表.
+会报什么错误呢?
+在以下环境中进行测试.
+
+gtm : 172.16.122.171
+coordinator : 172.16.122.172
+datanode : 172.16.122.173 - 172.16.122.178
+
+
+1. 在coordinator中创建测试表
+
+[pgxc@db-192-168-122-172 ~]$ psql
+psql (PGXC 1.1devel, based on PG 9.2beta2)
+Type "help" for help.
+postgres=# create table user_info (id int primary key, info text);
+NOTICE:  CREATE TABLE / PRIMARY KEY will create implicit index "user_info_pkey" for table "user_info"
+CREATE TABLE
+postgres=# select txid_current();
+ txid_current 
+--------------
+      1005699
+(1 row)
+
+
+2. 通过gtm.log查看当前的gxid : 
+
+[pgxc@db-192-168-122-171 pgxc_gtm]$ tail -n 10 gtm.log
+1:47746624751936:2013-04-09 22:17:58.745 CST -LOG:  Cancelling transaction id 1005698
+LOCATION:  ProcessRollbackTransactionCommand, gtm_txn.c:1989
+1:47746624751936:2013-04-09 22:18:03.664 CST -LOG:  Assigning new transaction ID = 1005699
+LOCATION:  GTM_GetGlobalTransactionIdMulti, gtm_txn.c:581
+1:47746624751936:2013-04-09 22:18:03.664 CST -LOG:  Sending transaction id 1005699
+LOCATION:  ProcessBeginTransactionGetGXIDCommand, gtm_txn.c:1172
+1:47746624751936:2013-04-09 22:18:03.665 CST -LOG:  Received transaction ID 1005699 for snapshot obtention
+LOCATION:  ProcessGetSnapshotCommand, gtm_snap.c:307
+1:47746624751936:2013-04-09 22:18:03.667 CST -LOG:  Committing transaction id 1005699
+LOCATION:  ProcessCommitTransactionCommand, gtm_txn.c:1592
+
+
+3. 关闭集群
+
+[pgxc@db-192-168-122-172 ~]$ pg_ctl -Z coordinator stop -m fast -D /data02/pgxc_coordinate
+[pgxc@db-192-168-122-173 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-174 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-175 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-176 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-177 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-178 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-171 pgxc_gtm]$ gtm_ctl -Z gtm stop -m fast -D /data02/pgxc_gtm
+waiting for server to shut down.... done
+server stopped
+
+
+4. 查看集群关闭后的gxid信息
+
+1:47746637396288:2013-04-09 22:20:13.264 CST -LOG:  Cancelling transaction id 1005710
+....
+
+
+5. 启动集群, gxid在原有基础上增加10000, 保证大于结束时的id.
+
+[pgxc@db-192-168-122-171 pgxc_gtm]$ gtm_ctl -Z gtm start -D /data02/pgxc_gtm -o "-x 1015699"
+server starting
+[pgxc@db-192-168-122-173 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-174 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-175 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-176 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-177 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-178 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-172 ~]$ pg_ctl -Z coordinator start -D /data02/pgxc_coordinate
+
+
+
+6. 插入测试数据
+
+[pgxc@db-192-168-122-172 ~]$ psql
+psql (PGXC 1.1devel, based on PG 9.2beta2)
+Type "help" for help.
+postgres=# insert into user_info values (1,'digoal');
+INSERT 0 1
+postgres=# insert into user_info values (2,'digoal');
+INSERT 0 1
+postgres=# insert into user_info values (3,'digoal');
+INSERT 0 1
+postgres=# select txid_current();
+ txid_current 
+--------------
+      1015705
+(1 row)
+
+
+
+7. 关闭数据库集群
+
+[pgxc@db-192-168-122-172 ~]$ pg_ctl -Z coordinator stop -m fast -D /data02/pgxc_coordinate
+[pgxc@db-192-168-122-173 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-174 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-175 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-176 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-177 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-178 ~]$ pg_ctl -Z datanode stop -m fast -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-171 pgxc_gtm]$ gtm_ctl -Z gtm stop -m fast -D /data02/pgxc_gtm
+waiting for server to shut down.... done
+server stopped
+
+
+
+8. 启动数据库集群, 同时指定gxid为user_info表创建后, 数据插入前的id. 例如 1006710
+
+[pgxc@db-192-168-122-171 pgxc_gtm]$ gtm_ctl -Z gtm start -D /data02/pgxc_gtm -o "-x 1006710"
+server starting
+[pgxc@db-192-168-122-173 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-174 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-175 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-176 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-177 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-178 ~]$ pg_ctl -Z datanode start -D /data02/pgxc_datanode
+[pgxc@db-192-168-122-172 ~]$ pg_ctl -Z coordinator start -D /data02/pgxc_coordinate
+
+
+
+9. 查询以及删除表测试 : 
+因为数据是未来的, 所以查询不到.
+
+postgres=# select * from user_info;
+ id | info 
+----+------
+(0 rows)
+postgres=# drop table user_info;
+DROP TABLE
+
+如果drop失败, 报错
+ERROR:  XX000: attempted to delete invisible tuple
+怎么办呢?, 可以这样试试 : 
+
+select pgxc_pool_reload();
+trunc table user_info;
+drop table user_info;
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201183043153622/
+2. http://blog.163.com/digoal@126/blog/static/163877040201251911813661/

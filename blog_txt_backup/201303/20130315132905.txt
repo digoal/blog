@@ -1,0 +1,200 @@
+PostgreSQL research
+
+PostgreSQL Server Encoding sql_ascii attention
+
+2013-03-15 13:29:05   查看原文>>
+
+群里一位兄弟问到的一个问题 : 
+" 我有一个postgresql，比较大，编码是sqlascii码，我想转换成有utf8 ，有方案可行吗? "
+如果使用场景中未用到non-ASCII编码的字符, 那很幸运, 导出导入就可以了.
+但是如果场景中使用了non-ASCII编码的字符, 那就没那么幸运了, 因为SQL_ASCII字符集不会对non-ASCII字符做合法性检验, 同时不做任何的编码转换, 客户端上来是什么值就是什么值.
+例如 : 
+
+pgdev@db-172-16-3-150-> initdb -D $PGDATA -E SQL_ASCII --locale=C -U postgres
+pg_ctl start
+
+
+-- 当前服务端编码
+
+pgdev@db-172-16-3-150-> locale
+LANG=en_US.utf8
+LC_CTYPE="en_US.utf8"
+LC_NUMERIC="en_US.utf8"
+LC_TIME="en_US.utf8"
+LC_COLLATE="en_US.utf8"
+LC_MONETARY="en_US.utf8"
+LC_MESSAGES="en_US.utf8"
+LC_PAPER="en_US.utf8"
+LC_NAME="en_US.utf8"
+LC_ADDRESS="en_US.utf8"
+LC_TELEPHONE="en_US.utf8"
+LC_MEASUREMENT="en_US.utf8"
+LC_IDENTIFICATION="en_US.utf8"
+LC_ALL=
+
+psql
+postgres=# create role digoal login encrypted password 'digoal';
+CREATE ROLE
+postgres=# create database digoal owner digoal;
+CREATE DATABASE
+digoal=# \l
+                             List of databases
+   Name    |  Owner   | Encoding  | Collate | Ctype |   Access privileges   
+-----------+----------+-----------+---------+-------+-----------------------
+ digoal    | digoal   | SQL_ASCII | C       | C     | 
+postgres=# \c digoal digoal
+digoal=> create schema digoal;
+CREATE SCHEMA
+digoal=> create table t(id int, info text);
+CREATE TABLE
+digoal=> insert into t values (1, '中国');
+INSERT 0 1
+
+
+-- 插入中文没有问题, 当前插入的汉字是UTF8编码.
+
+digoal=> \q
+pgdev@db-172-16-3-150-> export LANG=zh_CN.gbk
+pgdev@db-172-16-3-150-> locale
+LANG=zh_CN.gbk
+LC_CTYPE="zh_CN.gbk"
+LC_NUMERIC="zh_CN.gbk"
+LC_TIME="zh_CN.gbk"
+LC_COLLATE="zh_CN.gbk"
+LC_MONETARY="zh_CN.gbk"
+LC_MESSAGES="zh_CN.gbk"
+LC_PAPER="zh_CN.gbk"
+LC_NAME="zh_CN.gbk"
+LC_ADDRESS="zh_CN.gbk"
+LC_TELEPHONE="zh_CN.gbk"
+LC_MEASUREMENT="zh_CN.gbk"
+LC_IDENTIFICATION="zh_CN.gbk"
+LC_ALL=
+
+
+-- 同时修改一下secureCRT的字符集.
+
+pgdev@db-172-16-3-150-> psql digoal digoal
+psql (9.3devel)
+Type "help" for help.
+digoal=> insert into t values (2, '美国');
+INSERT 0 1
+digoal=> insert into t values (3, '德国');
+INSERT 0 1
+
+
+-- 插入中文没有问题, 当前插入的汉字是GBK编码.
+
+digoal=> select *,info::bytea from t;
+ id |  info  |      info      
+----+--------+----------------
+  1 | 涓??浗 | \xe4b8ade59bbd
+  2 | 美国   | \xc3c0b9fa
+  3 | 德国   | \xb5c2b9fa
+
+
+-- 由于'中国' 是以UTF8编码插入的, 美国德国是以GBK编码插入的,
+-- 像这种保护混合编码的数值要导出并导入到另一个UTF8编码的数据库, GBK编码的必然会导致导入失败.
+-- 后面使用BYTEA插入UTF8字符集的数据库看看就知道了.
+-- 插入一些字节流, SQL_ASCII对non-ASCII也就是0-127以外的值都不做判断, 直接插入.
+
+digoal=> insert into t values (4, E'\xe2\x82\xad');
+INSERT 0 1
+
+
+-- 0x00为0-127范围内的值, SQL_ASCII编码的无效字节.  这个是被正常的检测出来了.
+
+digoal=> insert into t values (4, E'\xe2\x82\x00');
+ERROR:  invalid byte sequence for encoding "SQL_ASCII": 0x00
+
+
+-- 其他字节流随便插入.
+
+digoal=> insert into t values (4, E'\xe2\x82\x01');
+INSERT 0 1
+digoal=> insert into t values (4, E'\xe2\x82\xae');
+INSERT 0 1
+
+
+-- 由于服务端是SQL_ASCII的, 所以虽然以下编码在UTF8中是非法的, 但是插入到SQL_ASCII的数据库还是没有问题.
+
+digoal=> set client_encoding='UTF8';
+SET
+digoal=> insert into t values (4, E'\xe2\x82\xae');
+INSERT 0 1
+digoal=> insert into t values (4, E'\xe2\x82\x0e');
+INSERT 0 1
+digoal=> insert into t values (4, E'\x8f');
+INSERT 0 1
+
+
+-- 查询结果 : 
+
+digoal=> select * from t;
+ id |  info  
+----+--------
+  1 | 涓??浗
+  2 | 美国
+  3 | 德国
+  4 | 鈧
+  4 | 鈧
+  4 | 鈧\x01
+  4 | 鈧
+  4 | 鈧
+  4 | 鈧\x0E
+  4 | 
+  4 | 
+(11 rows)
+
+
+
+-- 如果数据库是UTF8字符集的话 : 
+
+postgres=# \l
+                              List of databases
+    Name     |  Owner   | Encoding | Collate | Ctype |   Access privileges   
+-------------+----------+----------+---------+-------+-----------------------
+ digoal      | digoal   | UTF8     | C       | C     | 
+
+
+-- UTF8的非法字符将不允许插入.
+
+postgres=# insert into t values (4, E'\x8f');
+ERROR:  invalid byte sequence for encoding "UTF8": 0x8f
+postgres=# insert into t values (2, E'\xc3\xc0\xb9\xfa');
+ERROR:  invalid byte sequence for encoding "UTF8": 0xc3 0xc0
+postgres=# insert into t values (2, E'\xb5\xc2\xb9\xfa');
+ERROR:  invalid byte sequence for encoding "UTF8": 0xb5
+
+
+-- 即使将客户端编码改成SQL_ASCII, 插入到数据库时也是会报错的.
+
+postgres=# set client_encoding='SQL_ASCII';
+SET
+postgres=# insert into t values (2, E'\xc3\xc0\xb9\xfa');
+ERROR:  invalid byte sequence for encoding "UTF8": 0xc3 0xc0
+postgres=# insert into t values (2, E'\xb5\xc2\xb9\xfa');
+ERROR:  invalid byte sequence for encoding "UTF8": 0xb5
+postgres=# insert into t values (2, E'\xc3\xc0\xb9\xfa');
+ERROR:  22021: invalid byte sequence for encoding "UTF8": 0xc3 0xc0
+LOCATION:  report_invalid_encoding, wchar.c:2015
+
+
+所以如果存在混合编码的数据插入到SQL_ASCII数据库后, 要把数据正常的导入到UTF8字符集的数据库中, 是一件非常困难的事情.
+需将数据导出, 并做好相应的转码再导入到数据库中. 
+
+【小结】
+1. 如果数据库中需要存储非ASCII字符, 那么不推荐数据库使用SQL_ASCII字符集.
+2. 使用SQL_ASCII字符集必须了解的几种情况 : 
+
+The SQL_ASCII setting behaves considerably differently from the other settings. When the server character set is SQL_ASCII, the server interprets byte values 0-127 according to the ASCII standard, while byte values 128-255 are taken as uninterpreted characters. No encoding conversion will be done when the setting is SQL_ASCII. Thus, this setting is not so much a declaration that a specific encoding is in use, as a declaration of ignorance about the encoding. In most cases, if you are working with any non-ASCII data, it is unwise to use the SQL_ASCII setting because PostgreSQL will be unable to help you by converting or validating non-ASCII characters.
+
+PostgreSQL will allow superusers to create databases with SQL_ASCII encoding even when LC_CTYPE is not C or POSIX. As noted above, SQL_ASCII does not enforce that the data stored in the database has any particular encoding, and so this choice poses risks of locale-dependent misbehavior. Using this combination of settings is deprecated and may someday be forbidden altogether.
+
+If the client character set is defined as SQL_ASCII, encoding conversion is disabled, regardless of the server's character set. Just as for the server, use of SQL_ASCII is unwise unless you are working with all-ASCII data.
+
+
+
+【参考】
+1. http://www.postgresql.org/docs/9.2/static/multibyte.html
+2. http://blog.163.com/digoal@126/blog/static/163877040201211281407682/

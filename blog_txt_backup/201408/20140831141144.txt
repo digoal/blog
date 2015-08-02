@@ -1,0 +1,341 @@
+PostgreSQL research
+
+PostgreSQL xlog flush & O_DIRECT flag
+
+2014-08-31 14:11:44   查看原文>>
+
+PostgreSQL支持几种xlog的flush到磁盘的方法.
+如配置文件 : 
+
+#wal_sync_method = fsync                # the default is the first option
+                                        #   supported by the operating system:
+                                        #   open_datasync
+                                        #   fdatasync (default on Linux)
+                                        #   fsync
+                                        #   fsync_writethrough
+                                        #   open_sync
+
+
+
+其中open_sync和open_datasync是使用O_DIRECT flag的, 会绕过系统缓存, 直接写到块设备(但是不能绕过块设备本身的缓存或RAID卡的缓存, 这里需要注意).
+怎么验证是否使用了directIO呢? 可以使用lsof来验证, 注意FILE-FLAG列, 包含DIR则属于directIO.
+
+# lsof +f gG | grep pgdata
+COMMAND     PID      USER   FD      TYPE         FILE-FLAG             DEVICE SIZE/OFF       NODE NAME
+postgres  21400  postgres    6u      REG     RW,SYN,DIR,LG               8,33 16777216    4980777 /data02/pgdata/pg_root/pg_xlog/0000000100000004000000D4
+
+
+例如postgresql 打开这个XLOG文件时, 包含4个flag: 
+RW,SYN,DIR,LG
+通过man  lsof查看这几个flag的含义如下 : 
+# man lsof
+
+       FILE-FLAG  when  g  or  G has been specified to +f, this field contains the contents of the f_flag[s] member of
+                  the kernel file structure and the kernel’s per-process open file flags (if  available);  ‘G’  causes
+                  them  to  be  displayed  in  hexadecimal;  ‘g’, as short-hand names; two lists may be displayed with
+                  entries separated by commas, the lists separated by a semicolon (‘;’); the first  list  may  contain
+                  short-hand names for f_flag[s] values from the following table:
+.....
+                       DIR       direct
+                       SYN       file integrity while writing
+                       RW        read and write access
+                       LG        large file
+.......
+
+
+
+
+参数配置对应的fsync方法如下 : 
+
+/*
+ * GUC support
+ */
+const struct config_enum_entry sync_method_options[] = {
+        {"fsync", SYNC_METHOD_FSYNC, false},
+#ifdef HAVE_FSYNC_WRITETHROUGH
+        {"fsync_writethrough", SYNC_METHOD_FSYNC_WRITETHROUGH, false},
+#endif
+#ifdef HAVE_FDATASYNC
+        {"fdatasync", SYNC_METHOD_FDATASYNC, false},
+#endif
+#ifdef OPEN_SYNC_FLAG
+        {"open_sync", SYNC_METHOD_OPEN, false},
+#endif
+#ifdef OPEN_DATASYNC_FLAG
+        {"open_datasync", SYNC_METHOD_OPEN_DSYNC, false},
+#endif
+        {NULL, 0, false}
+};
+
+
+
+通过issue_xlog_fsync这个函数来完成指定XLOG文件打开的文件描述符的flush.  不同的方法对应调用不同的flush函数.
+
+/*
+ * Issue appropriate kind of fsync (if any) for an XLOG output file.
+ *
+ * 'fd' is a file descriptor for the XLOG file to be fsync'd.
+ * 'log' and 'seg' are for error reporting purposes.
+ */
+void
+issue_xlog_fsync(int fd, XLogSegNo segno)
+{
+        switch (sync_method)
+        {
+                case SYNC_METHOD_FSYNC:
+                        if (pg_fsync_no_writethrough(fd) != 0)
+                                ereport(PANIC,
+                                                (errcode_for_file_access(),
+                                                 errmsg("could not fsync log file %s: %m",
+                                                                XLogFileNameP(ThisTimeLineID, segno))));
+                        break;
+#ifdef HAVE_FSYNC_WRITETHROUGH
+                case SYNC_METHOD_FSYNC_WRITETHROUGH:
+                        if (pg_fsync_writethrough(fd) != 0)
+                                ereport(PANIC,
+                                                (errcode_for_file_access(),
+                                          errmsg("could not fsync write-through log file %s: %m",
+                                                         XLogFileNameP(ThisTimeLineID, segno))));
+                        break;
+#endif
+#ifdef HAVE_FDATASYNC
+                case SYNC_METHOD_FDATASYNC:
+                        if (pg_fdatasync(fd) != 0)
+                                ereport(PANIC,
+                                                (errcode_for_file_access(),
+                                                 errmsg("could not fdatasync log file %s: %m",
+                                                                XLogFileNameP(ThisTimeLineID, segno))));
+                        break;
+#endif
+                case SYNC_METHOD_OPEN:    // 注意这两个flush方法, 不需要调用flush函数, 因为使用了O_DIRECT, 不会写缓存, 所以也不需要FLUSH操作.
+                case SYNC_METHOD_OPEN_DSYNC:
+                        /* write synced it already */
+                        break;
+                default:
+                        elog(PANIC, "unrecognized wal_sync_method: %d", sync_method);
+                        break;
+        }
+}
+
+
+
+这些flush函数的定义如下 : 
+
+/*
+ * pg_fsync --- do fsync with or without writethrough
+ */
+int
+pg_fsync(int fd)
+{
+        /* #if is to skip the sync_method test if there's no need for it */
+#if defined(HAVE_FSYNC_WRITETHROUGH) && !defined(FSYNC_WRITETHROUGH_IS_FSYNC)
+        if (sync_method == SYNC_METHOD_FSYNC_WRITETHROUGH)
+                return pg_fsync_writethrough(fd);
+        else
+#endif
+                return pg_fsync_no_writethrough(fd);
+}
+
+/*
+ * pg_fsync_no_writethrough --- same as fsync except does nothing if
+ *      enableFsync is off
+ */
+int
+pg_fsync_no_writethrough(int fd)
+{
+        if (enableFsync)
+                return fsync(fd);
+        else
+                return 0;
+}
+
+/*
+ * pg_fsync_writethrough
+ */
+int
+pg_fsync_writethrough(int fd)
+{
+        if (enableFsync)
+        {
+#ifdef WIN32
+                return _commit(fd);
+#elif defined(F_FULLFSYNC)
+                return (fcntl(fd, F_FULLFSYNC, 0) == -1) ? -1 : 0;
+#else
+                errno = ENOSYS;
+                return -1;
+#endif
+        }
+        else
+                return 0;
+}
+
+/*
+ * pg_fdatasync --- same as fdatasync except does nothing if enableFsync is off
+ *
+ * Not all platforms have fdatasync; treat as fsync if not available.
+ */
+int
+pg_fdatasync(int fd)
+{
+        if (enableFsync)
+        {
+#ifdef HAVE_FDATASYNC
+                return fdatasync(fd);
+#else
+                return fsync(fd);
+#endif
+        }
+        else
+                return 0;
+}
+
+/*
+ * pg_flush_data --- advise OS that the data described won't be needed soon
+ *
+ * Not all platforms have sync_file_range or posix_fadvise; treat as no-op
+ * if not available.  Also, treat as no-op if enableFsync is off; this is
+ * because the call isn't free, and some platforms such as Linux will actually
+ * block the requestor until the write is scheduled.
+ */
+int
+pg_flush_data(int fd, off_t offset, off_t amount)
+{
+        if (enableFsync)
+        {
+#if defined(HAVE_SYNC_FILE_RANGE)
+                return sync_file_range(fd, offset, amount, SYNC_FILE_RANGE_WRITE);
+#elif defined(USE_POSIX_FADVISE) && defined(POSIX_FADV_DONTNEED)
+                return posix_fadvise(fd, offset, amount, POSIX_FADV_DONTNEED);
+#endif
+        }
+        return 0;
+}
+
+
+
+
+通过以下BasicOpenFile 函数来打开一个XLOG文件, 其实这个函数就是open函数的一个封装, 
+
+/*
+ * BasicOpenFile --- same as open(2) except can free other FDs if needed
+ *
+ * This is exported for use by places that really want a plain kernel FD,
+ * but need to be proof against running out of FDs.  Once an FD has been
+ * successfully returned, it is the caller's responsibility to ensure that
+ * it will not be leaked on ereport()!  Most users should *not* call this
+ * routine directly, but instead use the VFD abstraction level, which
+ * provides protection against descriptor leaks as well as management of
+ * files that need to be open for more than a short period of time.
+ *
+ * Ideally this should be the *only* direct call of open() in the backend.
+ * In practice, the postmaster calls open() directly, and there are some
+ * direct open() calls done early in backend startup.  Those are OK since
+ * this module wouldn't have any open files to close at that point anyway.
+ */
+int
+BasicOpenFile(FileName fileName, int fileFlags, int fileMode)
+{
+        int                     fd;
+
+tryAgain:
+        fd = open(fileName, fileFlags, fileMode);
+
+        if (fd >= 0)
+                return fd;                              /* success! */
+
+        if (errno == EMFILE || errno == ENFILE)
+        {
+                int                     save_errno = errno;
+
+                ereport(LOG,
+                                (errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+                                 errmsg("out of file descriptors: %m; release and retry")));
+                errno = 0;
+                if (ReleaseLruFile())
+                        goto tryAgain;
+                errno = save_errno;
+        }
+
+        return -1;                                      /* failure */
+}
+
+
+
+在打开XLOG文件时, 使用get_sync_bit来获得打开文件的FLAG, 例如是否需要O_DIRECT. 只有open_datasync和open_sync需要O_DIRECT, 
+同时需要注意, 当配置了归档以及流复制时, 因为接收到XLOG后需要立即读出来APPLY, 所以为了提高效率, 这种情况不会开启O_DIRECT. 因为O_DIRECT写到硬盘了, 在缓存中没有, 影响接下来的读的效率.
+
+/*
+ * Is WAL-logging necessary for archival or log-shipping, or can we skip
+ * WAL-logging if we fsync() the data before committing instead?
+ */
+#define XLogIsNeeded() (wal_level >= WAL_LEVEL_ARCHIVE)
+
+
+include/miscadmin.h:#define AmWalReceiverProcess()              (MyAuxProcType == WalReceiverProcess)
+
+
+/*
+ * Return the (possible) sync flag used for opening a file, depending on the
+ * value of the GUC wal_sync_method.
+ */
+static int
+get_sync_bit(int method)
+{
+        int                     o_direct_flag = 0;
+
+        /* If fsync is disabled, never open in sync mode */
+        if (!enableFsync)
+                return 0;
+
+        /*
+         * Optimize writes by bypassing kernel cache with O_DIRECT when using
+         * O_SYNC/O_FSYNC and O_DSYNC.  But only if archiving and streaming are
+         * disabled, otherwise the archive command or walsender process will read
+         * the WAL soon after writing it, which is guaranteed to cause a physical
+         * read if we bypassed the kernel cache. We also skip the
+         * posix_fadvise(POSIX_FADV_DONTNEED) call in XLogFileClose() for the same
+         * reason.  // 代码中并没有看到sender进程可以设置o_direct_flag=0的情况. 难道是解释有问题?
+         *
+         * Never use O_DIRECT in walreceiver process for similar reasons; the WAL
+         * written by walreceiver is normally read by the startup process soon
+         * after its written. Also, walreceiver performs unaligned writes, which
+         * don't work with O_DIRECT, so it is required for correctness too.
+         */
+        if (!XLogIsNeeded() && !AmWalReceiverProcess())  // 判断是否开启归档, 并且是否是receiver进程.
+                o_direct_flag = PG_O_DIRECT;
+
+        switch (method)
+        {
+                        /*
+                         * enum values for all sync options are defined even if they are
+                         * not supported on the current platform.  But if not, they are
+                         * not included in the enum option array, and therefore will never
+                         * be seen here.
+                         */
+                case SYNC_METHOD_FSYNC:
+                case SYNC_METHOD_FSYNC_WRITETHROUGH:
+                case SYNC_METHOD_FDATASYNC:
+                        return 0;
+#ifdef OPEN_SYNC_FLAG
+                case SYNC_METHOD_OPEN:
+                        return OPEN_SYNC_FLAG | o_direct_flag;
+#endif
+#ifdef OPEN_DATASYNC_FLAG
+                case SYNC_METHOD_OPEN_DSYNC:
+                        return OPEN_DATASYNC_FLAG | o_direct_flag;
+#endif
+                default:
+                        /* can't happen (unless we are out of sync with option array) */
+                        elog(ERROR, "unrecognized wal_sync_method: %d", method);
+                        return 0;                       /* silence warning */
+        }
+}
+
+
+
+[参考]
+1. man open
+2. xlog.c, fd.c, ...
+
+Flag Counter

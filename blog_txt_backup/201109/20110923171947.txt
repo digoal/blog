@@ -1,0 +1,155 @@
+PostgreSQL research
+
+PostgreSQL operator case
+
+2011-09-23 17:19:47   查看原文>>
+
+今天一位群里的朋友问了一个问题 , 如下 : 
+
+digoal=> select now()::timestamp-'10 min';
+ERROR:  invalid input syntax for type timestamp: "10 min"
+LINE 1: select now()::timestamp-'10 min';
+                                ^
+
+
+但是加法是可以的。
+
+digoal=> select now()::timestamp+'10 min';
+          ?column?          
+----------------------------
+ 2011-09-23 17:13:16.767569
+(1 row)
+
+
+
+解决办法是使用标准写法 : 
+
+digoal=> select now()::timestamp+ interval '10 min';
+          ?column?          
+----------------------------
+ 2011-09-23 17:13:51.697632
+(1 row)
+
+digoal=> select now()::timestamp- interval '10 min';
+          ?column?          
+----------------------------
+ 2011-09-23 16:53:54.793088
+(1 row)
+
+
+
+接下来分析一下原因 : 
+首先来看这条报错的SQL  ： 
+
+digoal=> select now()::timestamp-'10 min';
+
+
+操作符为 " - "
+左边的类型是 timestamp
+右边的类型是字符串 
+
+那么来看看有没有对应的操作符 : 
+
+postgres=# select oid,typname from pg_type where typname ~'timestamp' or typname ~ 'interval';
+ oid  |   typname    
+------+--------------
+  704 | tinterval
+ 1025 | _tinterval
+ 1114 | timestamp
+ 1115 | _timestamp
+ 1184 | timestamptz
+ 1185 | _timestamptz
+ 1186 | interval
+ 1187 | _interval
+(8 rows)
+
+
+
+左边可以确定是1114了.接下来看看操作符
+
+postgres=# select oid,oprname,oprleft,oprright,oprresult from pg_operator where oprleft =1114  order by oprname;
+  oid  | oprname | oprleft | oprright | oprresult 
+-------+---------+---------+----------+-----------
+  2066 | +       |    1114 |     1186 |      1114
+ 24672 | -       |    1114 |     1114 |      1186
+  2068 | -       |    1114 |     1186 |      1114
+
+
+其他的操作符后面略.
+从这里可以看出，左边是timestamp类型的时候，” - “操作符的右边可以是timestamp类型或者interval类型。
+如果是 "+"操作符，左边是timestamp类型的时候，右边只能是interval。
+因此系统在做类型转换的时候，使用" + "操作符，毫无疑问，右边会尝试转成interval类型。由于可以转换，则执行成功。
+然而" - "操作符，从报错上来看，显然系统先尝试把'10 min' 转换为timestamp类型失败。
+转换规则参考 pg_cast 系统表。
+例如 : 
+
+postgres=# select oid,* from pg_cast where casttarget in (1114,1186) order by oid;
+  oid  | castsource | casttarget | castfunc | castcontext | castmethod 
+-------+------------+------------+----------+-------------+------------
+ 10866 |        702 |       1114 |     2023 | i           | f
+ 10868 |        703 |       1186 |     1177 | i           | f
+ 10869 |       1082 |       1114 |     2024 | i           | f
+ 10871 |       1083 |       1186 |     1370 | i           | f
+ 10880 |       1184 |       1114 |     2027 | a           | f
+ 10929 |       1114 |       1114 |     1961 | i           | f
+ 10931 |       1186 |       1186 |     1200 | i           | f
+(7 rows)
+
+postgres=# select typname from pg_type where oid in (select castsource from pg_cast where casttarget in (1114,1186));
+   typname   
+-------------
+ abstime
+ date
+ timestamp
+ reltime
+ time
+ timestamptz
+ interval
+(7 rows)
+
+
+
+接下来我们把其中的一个 " - "操作符( -       |    1114 |     1114 |      1186)删除,来验证一下 : 
+先备份 : 
+
+create table oper_24672 as select * from pg_operator where oid=24672;
+
+
+然后删除这个OPER
+
+delete from pg_operator where oid=24672;
+
+
+然后再次尝试前面报错的SQL ： 
+
+digoal=> select now()::timestamp-'10 min';
+          ?column?          
+----------------------------
+ 2011-09-23 17:08:34.933015
+(1 row)
+
+
+正常。
+
+记得把这个OPER还原回去:
+
+insert into pg_operator select * from oper_24672;
+
+
+
+另外，删除operator也可以使用drop operator的SQL
+
+Command:     DROP OPERATOR
+Description: remove an operator
+Syntax:
+DROP OPERATOR [ IF EXISTS ] name ( { left_type | NONE } , { right_type | NONE } ) [ CASCADE | RESTRICT ]
+
+
+
+【警告】
+1. 一般不建议直接修改系统表, 通过SQL命令比较靠谱.
+2. 建议不要在生产中尝试。
+
+【参考】
+http://www.postgresql.org/docs/9.1/static/catalog-pg-cast.html
+http://www.postgresql.org/docs/9.1/static/catalog-pg-type.html

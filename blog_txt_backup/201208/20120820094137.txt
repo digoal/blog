@@ -1,0 +1,466 @@
+PostgreSQL research
+
+Interprocess communication - 1 data stream
+
+2012-08-20 9:41:37   查看原文>>
+
+当进程间可以共享数据, 并且可以等待其他进程是否执行完毕时, 程序将变得更加强大.
+显然共享数据和等待都是内部进程通信的范畴, 这里主要讲一下 data stream.
+每个进程都有一个descriptor table, 这个表包含了file descriptor(a number) 和 data stream的映射关系. 如图 : 
+Interprocess communication - 1 data stream - 德哥@Digoal - The Heart,The World.
+
+    A file descriptor is a number that represents a data stream.
+
+
+    默认会有3条映射关系, 0, 1 , 2 分别代表stdin, stdout, stderr.
+    这里的映射关系可以通过dup2 系统函数来修改, 例如要把Database connection 这个data stream放到1对应的data stream上. 执行 dup2(3,1) .
+    当使用open打开一个文件的时候, 会在descriptor table里面寻找有没有空的slot, 找到数值最小的空闲slot, 然后在这个file descriptor上建立一条映射. 这个descriptor table最大可以存储255条映射.
+    在命令行中使用> <进行重定向时 , 例如 : 
+      1>? 表示标准输出重定向到?,    
+      2>?表示标准错误重定向到?.  
+      还可以使用&1,&2. 
+           例如2>? 1>&2 表示标准错误重定向到?, 并且标准输出重定向到标准错误.
+
+[root@db-172-16-3-150 ~]# ls -al 1>./ls.log 2>&1
+[root@db-172-16-3-150 ~]# cat ls.log
+total 15216
+drwxr-x--- 16 root     root         4096 Aug 20 08:15 .
+drwxr-xr-x 31 root     root         4096 Jun 14 12:42 ..
+-rw-------  1 root     root         1812 Oct 21  2011 anaconda-ks.cfg
+-rw-------  1 root     root        25321 Aug 19 21:32 .bash_history
+-rw-r--r--  1 root     root           24 Jan  6  2007 .bash_logout
+-rw-r--r--  1 root     root          224 Dec 30  2011 .bash_profile
+-rw-r--r--  1 root     root          176 Jan  6  2007 .bashrc
+
+
+
+    接下来这个程序使用fopen创建一个文件数据流, 并使用dup2将这个数据流放置到 file descriptor= 1 (也就是stdout) 的条目上. 然后往stdout和这个FILE data stream分别写入一条消息. 看看是不是都会写入同一个文件.
+
+[root@db-172-16-3-150 zzz]# cat c.c
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+// 打印错误消息的函数
+void error(char * msg) {
+  fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+  exit(1);
+}
+
+int main() {
+  // 新建一个FILE data stream.
+  FILE * my_file = fopen("/tmp/my_file.log", "a+");
+  if ( my_file == NULL ) {
+    error("open my_file error.");
+  }
+  // fileno()获取file descriptor.
+  int fd = fileno(my_file);
+  // 使用dup2 将my_file的 file descriptor对应的data stream 拷贝到1对应的data stream位置. 替换原来的1对应的stdin
+  if( dup2(fd, 1) == -1 ) {
+    error("dup2 fd to 1 error");
+  }
+  // 分别打印到stdout 和 my_file data stream.
+  fprintf(stdout, "this message will write to /tmp/my_file.log by stdout data stream.\n");
+  fprintf(my_file, "this message will write to /tmp/my_file.log by my_file FILE data stream.\n");
+  // 同步数据到硬盘.
+  if ( fdatasync(fd) == -1 ) {
+    error("fdatasync(fd) error");
+  }
+  // 关闭my_file数据流.
+  if ( fclose(my_file) == EOF ) {
+    error("fclose(my_file) error");
+  }
+  return 0;
+}
+
+
+编译 : 
+
+[root@db-172-16-3-150 zzz]# gcc -O3 -Wall -Wextra -Werror -g ./c.c -o c
+
+
+执行 : 
+
+[root@db-172-16-3-150 zzz]# ./c
+[root@db-172-16-3-150 zzz]# cat /tmp/my_file.log 
+this message will write to /tmp/my_file.log by my_file FILE data stream.
+this message will write to /tmp/my_file.log by stdout data stream.
+
+
+使用fprintf写入 stdout和my_file 都写到了/tmp/my_file.log 
+
+下面穿插一个 fork 和 waitpid 的使用场景.
+为什么主进程要等待子进程执行完毕呢? 
+来看个例子 : 
+
+[root@db-172-16-3-150 zzz]# cat c.c
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+// 要fork的子进程个数
+#define MAX_PROCESS 200
+
+// 错误输出函数
+void error(char * msg) {
+  fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+  exit(1);
+}
+
+int main() {
+  // 创建一个FILE data stream
+  FILE * my_file = fopen("/tmp/my_file.log", "a+");
+  if ( my_file == NULL ) {
+    error("open my_file error.");
+  }
+  int fd = fileno(my_file);
+  if( dup2(fd, 1) == -1 ) {
+    error("dup2 fd to 1 error");
+  }
+  pid_t p[MAX_PROCESS];
+  int i;
+  for (i=0; i<MAX_PROCESS; i++) {
+    p[i] = fork();
+    // 子进程执行以下
+    if ( p[i] == 0 ) {
+      // sleep(100) 模拟子进程执行过程要100秒.
+      sleep(100);
+      fprintf(stdout, "%i, this message will write to /tmp/my_file.log by stdout data stream.\n", i);
+      fprintf(my_file, "%i, this message will write to /tmp/my_file.log by my_file FILE data stream.\n", i);
+      return 0;
+    }
+  }
+  if ( fdatasync(fd) == -1 ) {
+    error("fdatasync(fd) error");
+  }
+  if ( fclose(my_file) == EOF ) {
+    error("fclose(my_file) error");
+  }
+  return 0;
+}
+
+
+执行 : 
+
+[root@db-172-16-3-150 zzz]# gcc -O3 -Wall -Wextra -Werror -g ./c.c -o c
+[root@db-172-16-3-150 zzz]# ./c
+[root@db-172-16-3-150 zzz]# cat /tmp/my_file.log 
+[root@db-172-16-3-150 zzz]# 
+
+
+没有任何内容, 因为子进程还在执行, 并没有往/tmp/my_file.log写入任何信息.
+等待100秒后再次查看这个文件的内容就有了.
+像这种场景, 如果主进程等待子进程执行结束则不会发生误解. 
+修改代码如下 : 
+
+[root@db-172-16-3-150 zzz]# cat c.c
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+
+#define MAX_PROCESS 200
+
+void error(char * msg) {
+  fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+  exit(1);
+}
+
+int main() {
+  FILE * my_file = fopen("/tmp/my_file.log", "a+");
+  if ( my_file == NULL ) {
+    error("open my_file error.");
+  }
+  int fd = fileno(my_file);
+  if( dup2(fd, 1) == -1 ) {
+    error("dup2 fd to 1 error");
+  }
+  pid_t p[MAX_PROCESS];
+  // 存储子进程返回的状态, 注意这不仅仅包含返回值, 还有其他信息. 只是用了int类型来存储, 其实前8个bit位存储的才是返回值 .
+  // 推荐使用WEXITSTATUS()来获取这个返回值.
+  int p_stat[MAX_PROCESS];
+  int i;
+  for (i=0; i<MAX_PROCESS; i++) {
+    p[i] = fork();
+    if ( p[i] == 0 ) {
+      sleep(100);
+      fprintf(stdout, "%i, this message will write to /tmp/my_file.log by stdout data stream.\n", i);
+      fprintf(my_file, "%i, this message will write to /tmp/my_file.log by my_file FILE data stream.\n", i);
+      return 0;
+    }
+  }
+  // 主进程将等待所有子进程结束. 才继续.
+  for (i=0; i<MAX_PROCESS; i++) {
+    if ( waitpid(p[i], &p_stat[i], 0) == -1 ) {
+      error("waitpid error");
+    }
+    if (WIFEXITED(p_stat[i])) {
+      printf("exited, status=%d\n", WEXITSTATUS(p_stat[i]));
+    } else if (WIFSIGNALED(p_stat[i])) {
+      printf("killed by signal %d\n", WTERMSIG(p_stat[i]));
+    } else if (WIFSTOPPED(p_stat[i])) {
+      printf("stopped by signal %d\n", WSTOPSIG(p_stat[i]));
+    }
+  }
+  //
+  if ( fdatasync(fd) == -1 ) {
+    error("fdatasync(fd) error");
+  }
+  if ( fclose(my_file) == EOF ) {
+    error("fclose(my_file) error");
+  }
+  return 0;
+}
+
+
+如果waitpid等待的进程号不是子进程的进程号会怎么样呢?
+
+[root@db-172-16-3-150 zzz]# cat c.c
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+
+// 错误输出函数
+void error(char * msg) {
+  fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+  exit(1);
+}
+
+int main() {
+  int p_stat;
+  waitpid((pid_t) 1, &p_stat, 0);
+  if (WIFEXITED(p_stat)) {
+    printf("exited, status=%d\n", WEXITSTATUS(p_stat));
+  } else if (WIFSIGNALED(p_stat)) {
+    printf("killed by signal %d\n", WTERMSIG(p_stat));
+  } else if (WIFSTOPPED(p_stat)) {
+    printf("stopped by signal %d\n", WSTOPSIG(p_stat));
+  }
+  return 0;
+}
+结果 :
+[root@db-172-16-3-150 zzz]# gcc -O3 -Wall -Wextra -Werror -g ./c.c -o c && ./c
+killed by signal 52
+
+
+
+【参考】
+dup, dup2 : 
+
+NAME
+       dup, dup2 - duplicate a file descriptor
+
+SYNOPSIS
+       #include <unistd.h>
+
+       int dup(int oldfd);
+       int dup2(int oldfd, int newfd);
+
+DESCRIPTION
+       dup() and dup2() create a copy of the file descriptor oldfd.
+
+       After  a  successful return from dup() or dup2(), the old and new file descriptors may be used interchangeably.
+       They refer to the same open file description (see open(2)) and thus share file offset and  file  status  flags;
+       for  example,  if  the  file offset is modified by using lseek(2) on one of the descriptors, the offset is also
+       changed for the other.
+
+       The two descriptors do not share file descriptor  flags  (the  close-on-exec  flag).   The  close-on-exec  flag
+       (FD_CLOEXEC; see fcntl(2)) for the duplicate descriptor is off.
+
+       dup() uses the lowest-numbered unused descriptor for the new descriptor.
+
+       dup2() makes newfd be the copy of oldfd, closing newfd first if necessary.
+
+RETURN VALUE
+       dup()  and  dup2() return the new descriptor, or -1 if an error occurred (in which case, errno is set appropri-
+       ately).
+
+
+wait, waitpid
+
+NAME
+       wait, waitpid - wait for process to change state
+
+SYNOPSIS
+       #include <sys/types.h>
+       #include <sys/wait.h>
+
+       pid_t wait(int *status);
+       pid_t waitpid(pid_t pid, int *status, int options);
+       int waitid(idtype_t idtype, id_t id, siginfo_t *infop, int options);
+
+DESCRIPTION
+       All  of  these  system  calls  are used to wait for state changes in a child of the calling process, and obtain
+       information about the child whose state has changed.  A state change is considered to be: the child terminated;
+       the  child  was  stopped by a signal; or the child was resumed by a signal.  In the case of a terminated child,
+       performing a wait allows the system to release the resources associated with the child; if a wait is  not  per-
+       formed, then terminated the child remains in a "zombie" state (see NOTES below).
+
+       If a child has already changed state, then these calls return immediately.  Otherwise they block until either a
+       child changes state or a signal handler interrupts the call (assuming that system calls are  not  automatically
+       restarted  using  the SA_RESTART flag of sigaction(2)).  In the remainder of this page, a child whose state has
+       changed and which has not yet been waited upon by one of these system calls is termed waitable.
+
+
+fopen
+
+NAME
+       fopen, fdopen, freopen - stream open functions
+
+SYNOPSIS
+       #include <stdio.h>
+
+       FILE *fopen(const char *path, const char *mode);
+       FILE *fdopen(int fildes, const char *mode);
+       FILE *freopen(const char *path, const char *mode, FILE *stream);
+
+DESCRIPTION
+       The  fopen()  function  opens the file whose name is the string pointed to by path and associates a stream with
+       it.
+
+       The argument mode points to a string beginning with one of the following sequences (Additional  characters  may
+       follow these sequences.):
+
+       r      Open text file for reading.  The stream is positioned at the beginning of the file.
+
+       r+     Open for reading and writing.  The stream is positioned at the beginning of the file.
+
+       w      Truncate file to zero length or create text file for writing.  The stream is positioned at the beginning
+              of the file.
+
+       w+     Open for reading and writing.  The file is created if it does not exist, otherwise it is truncated.  The
+              stream is positioned at the beginning of the file.
+
+       a      Open  for  appending (writing at end of file).  The file is created if it does not exist.  The stream is
+              positioned at the end of the file.
+
+       a+     Open for reading and appending (writing at end of file).  The file is created if it does not exist.  The
+              initial  file position for reading is at the beginning of the file, but output is always appended to the
+              end of the file.
+
+
+fclose
+
+NAME
+       fclose - close a stream
+
+SYNOPSIS
+       #include <stdio.h>
+
+       int fclose(FILE *fp);
+
+DESCRIPTION
+       The fclose() function will flush the stream pointed to by fp (writing any buffered output data using fflush(3))
+       and close the underlying file descriptor.
+
+RETURN VALUE
+       Upon successful completion 0 is returned.  Otherwise, EOF is returned and the global variable errno is  set  to
+       indicate  the  error.   In  either  case  any further access (including another call to fclose()) to the stream
+       results in undefined behaviour.
+
+
+fsync, fdatasync
+
+NAME
+       fsync, fdatasync - synchronize a file’s in-core state with storage device
+
+SYNOPSIS
+       #include <unistd.h>
+
+       int fsync(int fd);
+
+       int fdatasync(int fd);
+
+DESCRIPTION
+       fsync()  transfers  ("flushes")  all  modified in-core data of (i.e., modified buffer cache pages for) the file
+       referred to by the file descriptor fd to the disk device (or other permanent storage device)  where  that  file
+       resides.   The call blocks until the device reports that the transfer has completed.  It also flushes  metadata
+       information associated with the file (see stat(2)).
+
+       Calling fsync() does not necessarily ensure that the entry in  the  directory  containing  the  file  has  also
+       reached disk.  For that an explicit fsync() on a file descriptor for the directory is also needed.
+
+       fdatasync() is similar to fsync(), but does not flush modified metadata unless that metadata is needed in order
+       to allow a subsequent data retrieval to be correctly handled.  For example, changes  to  st_atime  or  st_mtime
+       (respectively,  time  of  last  access  and time of last modification; see stat(2)) do not not require flushing
+       because they are not necessary for a subsequent data read to be handled correctly.  On the other hand, a change
+       to the file size (st_size, as made by say ftruncate(2)), would require a metadata flush.
+
+       The aim of fdatasync(2) is to reduce disk activity for applications that do not require all metadata to be syn-
+       chronised with the disk.
+
+
+exit
+
+NAME
+       _exit, _Exit - terminate the current process
+
+SYNOPSIS
+       #include <unistd.h>
+
+       void _exit(int status);
+
+       #include <stdlib.h>
+
+       void _Exit(int status);
+
+DESCRIPTION
+       The  function  _exit() terminates the calling process "immediately". Any open file descriptors belonging to the
+       process are closed; any children of the process are inherited by process 1, init, and the process’s  parent  is
+       sent a SIGCHLD signal.
+
+       The value status is returned to the parent process as the process’s exit status, and can be collected using one
+       of the wait() family of calls.
+
+       The function _Exit() is equivalent to _exit().
+
+RETURN VALUE
+       These functions do not return.
+
+
+fileno
+
+NAME
+       clearerr, feof, ferror, fileno - check and reset stream status
+
+SYNOPSIS
+       #include <stdio.h>
+
+       void clearerr(FILE *stream);
+       int feof(FILE *stream);
+       int ferror(FILE *stream);
+       int fileno(FILE *stream);
+
+DESCRIPTION
+       The function clearerr() clears the end-of-file and error indicators for the stream pointed to by stream.
+
+       The  function feof() tests the end-of-file indicator for the stream pointed to by stream, returning non-zero if
+       it is set.  The end-of-file indicator can only be cleared by the function clearerr().
+
+       The function ferror() tests the error indicator for the stream pointed to by stream, returning non-zero  if  it
+       is set.  The error indicator can only be reset by the clearerr() function.
+
+       The function fileno() examines the argument stream and returns its integer descriptor.
+
+       For non-locking counterparts, see unlocked_stdio(3).
+
+
+
+
+
+
+
+
+

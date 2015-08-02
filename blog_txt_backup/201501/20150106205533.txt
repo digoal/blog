@@ -1,0 +1,274 @@
+PostgreSQL research
+
+PostgreSQL return result "row by row" or "once all"? please see pg driver
+
+2015-01-06 20:55:33   查看原文>>
+
+在PostgreSQL中, 执行一条SQL语句时, 数据是一次性返回还是逐条返回显示的呢?
+这里有一个问题, 如果是逐条返回, 可能返回到中途时出现异常例如网络中断, 那么客户端需要有处理这种异常的能力.
+而如果是一次性返回所有结果集的话, 即数据库驱动将所有数据保存到本地后返回给客户端, 那么不会出现上述问题, 但是其他问题又来了, 如果结果集很大的话, 要等到第一条数据的显示可能要很久, 或者有可能导致本地的内存溢出.
+我们来看看以下几种客户端的返回形态.
+1. psql
+默认情况下是一次性返回, 除非你设置了FETCH_COUNT, 那么是逐条返回的.(使用游标, autocommit=false的模式)
+
+postgres=# \set FETCH_COUNT 1
+postgres=# select * from mod;
+    id    
+----------
+ 17718227
+ 17718228
+ 17718229
+ 17718230
+ 17718231
+ 17718232
+
+
+迅速就能看到结果.
+而postgres=# \set FETCH_COUNT 10000000, 要等很久才能看到结果, 因为需要LOAD10000000条后才返回.
+而不设置FETCH_COUNT 的话, 需要返回所有结果集才返回.
+具体可以见 : 
+src/bin/psql/startup.c 
+src/bin/psql/common.c
+
+2. jdbc
+如果要逐条返回, 可参见
+http://jdbc.postgresql.org/documentation/93/query.html
+逐条返回使用游标接收数据, 必须使用autocommit=false模式.
+例子
+
+// make sure autocommit is off
+conn.setAutoCommit(false);
+Statement st = conn.createStatement();
+
+// Turn use of the cursor on.
+st.setFetchSize(50);
+ResultSet rs = st.executeQuery("SELECT * FROM mytable");
+while (rs.next())
+{
+   System.out.print("a row was returned.");
+}
+rs.close();
+
+// Turn the cursor off.
+st.setFetchSize(0);
+rs = st.executeQuery("SELECT * FROM mytable");
+while (rs.next())
+{
+   System.out.print("many rows were returned.");
+}
+rs.close();
+
+// Close the statement.
+st.close();
+
+
+
+3. dblink
+使用的是逐行返回模式, 详见dblink.c
+
+/*
+ * Execute the given SQL command and store its results into a tuplestore
+ * to be returned as the result of the current function.
+ *
+ * This is equivalent to PQexec followed by materializeResult, but we make
+ * use of libpq's single-row mode to avoid accumulating the whole result
+ * inside libpq before it gets transferred to the tuplestore.
+ */
+static void
+materializeQueryResult(FunctionCallInfo fcinfo,
+                                           PGconn *conn,
+                                           const char *conname,
+                                           const char *sql,
+                                           bool fail)
+{
+..................
+
+/*
+ * Execute query, and send any result rows to sinfo->tuplestore.
+ */
+static PGresult *
+storeQueryResult(storeInfo *sinfo, PGconn *conn, const char *sql)
+{
+        bool            first = true;
+        int                     nestlevel = -1;
+        PGresult   *res;
+
+        if (!PQsendQuery(conn, sql))
+                elog(ERROR, "could not send query: %s", PQerrorMessage(conn));
+
+        if (!PQsetSingleRowMode(conn))          /* shouldn't fail */
+                elog(ERROR, "failed to set single-row mode for dblink query");
+
+....
+for (;;)
+        {
+                CHECK_FOR_INTERRUPTS();
+
+                sinfo->cur_res = PQgetResult(conn);
+                if (!sinfo->cur_res)
+                        break;
+
+                if (PQresultStatus(sinfo->cur_res) == PGRES_SINGLE_TUPLE)
+                {
+                        /* got one row from possibly-bigger resultset */
+
+                        /*
+                         * Set GUCs to ensure we read GUC-sensitive data types correctly.
+                         * We shouldn't do this until we have a row in hand, to ensure
+                         * libpq has seen any earlier ParameterStatus protocol messages.
+                         */
+                        if (first && nestlevel < 0)
+                                nestlevel = applyRemoteGucs(conn);
+
+                        storeRow(sinfo, sinfo->cur_res, first);
+
+                        PQclear(sinfo->cur_res);
+                        sinfo->cur_res = NULL;
+                        first = false;
+                }
+                else
+                {
+                        /* if empty resultset, fill tuplestore header */
+                        if (first && PQresultStatus(sinfo->cur_res) == PGRES_TUPLES_OK)
+                                storeRow(sinfo, sinfo->cur_res, first);
+
+                        /* store completed result at last_res */
+                        PQclear(sinfo->last_res);
+                        sinfo->last_res = sinfo->cur_res;
+                        sinfo->cur_res = NULL;
+                        first = true;
+                }
+
+
+
+4. pgadmin
+参见src, 下载源码太慢还没来得及看.
+如果使用libpq的话, 使用了PQsetSingleRowMode那么就是逐条返回的.
+使用jdbc的话, 参考jdbc api. 看看是否调用了setFetchSize.
+
+5. libpq
+如果要逐条返回, 参见
+http://www.postgresql.org/docs/9.4/static/libpq-single-row-mode.html
+设置当前连接使用逐条返回模式
+
+int PQsetSingleRowMode(PGconn *conn);
+
+
+
+[参考]
+1. http://jdbc.postgresql.org/documentation/93/query.html
+
+2. http://www.postgresql.org/docs/9.4/static/libpq-single-row-mode.html
+
+3. http://www.postgresql.org/docs/9.4/static/libpq-async.html
+
+4. man psql
+
+           FETCH_COUNT
+               If this variable is set to an integer value > 0, the results of SELECT queries are fetched and displayed in
+               groups of that many rows, rather than the default behavior of collecting the entire result set before display.
+               Therefore only a limited amount of memory is used, regardless of the size of the result set. Settings of 100 to
+               1000 are commonly used when enabling this feature. Keep in mind that when using this feature, a query might fail
+               after having already displayed some rows.
+
+                   Tip
+                   Although you can use any output format with this feature, the default aligned format tends to look bad
+                   because each group of FETCH_COUNT rows will be formatted separately, leading to varying column widths across
+                   the row groups. The other output formats work better.
+
+
+
+5. src/bin/psql/common.c
+
+        if (pset.fetch_count <= 0 || !is_select_command(query))
+.......
+        else
+        {
+                /* Fetch-in-segments mode */
+                OK = ExecQueryUsingCursor(query, &elapsed_msec);
+                ResetCancelConn();
+                results = NULL;                 /* PQclear(NULL) does nothing */
+        }
+........
+        for (;;)
+        {
+                if (pset.timing)
+                        INSTR_TIME_SET_CURRENT(before);
+
+                /* get fetch_count tuples at a time */
+                results = PQexec(pset.db, fetch_cmd);
+
+
+
+6. src/bin/psql/startup.c
+
+static void
+fetch_count_hook(const char *newval)
+{
+        pset.fetch_count = ParseVariableNum(newval, -1, -1, false);
+}
+....
+        SetVariableAssignHook(pset.vars, "FETCH_COUNT", fetch_count_hook);
+
+
+Flag Counter
+
+评论
+
+Freya - 2015-01-07 17:58:53
+
+德哥v5啊,发现好久没写blog了，向德哥学习....
+
+德哥@Digoal 回复 Freya - 2015-01-07 17:58:53
+
+老了, 写不动了.[face1]
+
+xmarker - 2015-01-07 15:55:20
+
+德哥，我用psql测试，设置了fetch_count怎么返回数据速度也是很快呢？
+postgres:/home/postgres@db164>psql
+psql (9.3.5)
+Type "help" for help.
+
+postgres=# \timing on
+Timing is on.
+postgres=# select * from t6;
+ id |      name      
+----+----------------
+  1 | aaa
+  2 | 
+  3 | 中华人民共和国
+    | bbb
+  5 | bbb
+(5 rows)
+
+Time: 1.176 ms
+postgres=# \set FETCH_COUNT 10000000;
+postgres=# select * from t6;
+ id |      name      
+----+----------------
+  1 | aaa
+  2 | 
+  3 | 中华人民共和国
+    | bbb
+  5 | bbb
+(5 rows)
+
+Time: 0.360 ms
+
+德哥@Digoal 回复 xmarker - 2015-01-07 15:55:20
+
+HI, 那是因为你总共就5条记录啊.
+
+德哥@Digoal 回复 xmarker - 2015-01-07 15:55:20
+
+你搞1亿条试试, 设置fetch_count=1和=1000000000
+差别就出来了.
+
+xmarker 回复德哥@Digoal - 2015-01-07 15:55:20
+
+知道了，多谢！[face0]
+
+德哥@Digoal 回复 xmarker - 2015-01-07 15:55:20
+
+[face0]嘿嘿

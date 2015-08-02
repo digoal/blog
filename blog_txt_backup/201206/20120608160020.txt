@@ -1,0 +1,102 @@
+PostgreSQL research
+
+use PostgreSQL bytea type custom uuid and range filter
+
+2012-06-08 16:00:20   查看原文>>
+
+今天和一位兄弟聊天的时候了解到的一个需求, 他们在业务中需要使用UUID来作为PK, 并且uuid里面可能要存储一些业务逻辑的信息.同时可能会按照字段里面的位置范围的内容进行过滤或排序取数.
+一开始想用uuid类型, 但是如果使用postgresql里面的uuid类型需要16字节, 
+看能不能使用其他字段来替代, 或者想自建一个类型. 
+我一开始想到的是mongoDB里面的_id的默认类型, BSON objectid
+BSON ObjectID Specification
+use PostgreSQL bytea type custom uuid and range filter - 德哥@Digoal - The Heart,The World.
+ bson objectid使用了12个字节, 相比UUID有一定的优势.
+如上图, 分为四组, 分别存储epoch时间, 机器的md5, 进程ID, 自增数字.
+那么这个怎么在PostgreSQL里面存储比较好呢?
+1. varchar(12) , 1字节的头(长varchar则4字节头) , 因此存储12个字节实际需要13字节 (注意只有存储ascii码表里的字符时是占用1字节1字符, 如果存储中文则和选择的字符集有关, 一般是2-3字节)。
+2. bit(96), 4字节的头, 因此存储12个字节实际需要17字节。
+3. bytea, 1字节的头(长bytea则4字节头), 因此存储12个字节实际需要13字节。
+
+所以选择bytea可能比较合适. 范围取值排序则可以通过substring()的函数索引来加速.
+例如 : 
+-- 创建测试表
+
+postgres=# create table test (uid bytea check (octet_length(uid)=12));
+CREATE TABLE
+
+
+-- 这里假设需要按照最后两个字段查询或排序, 所以建立substring(uid,11,2)索引
+
+postgres=# create index idx_test_uid on test (substring(uid,11,2));
+CREATE INDEX
+
+
+-- 插入测试数据, 建立了约束, 所以仅仅允许插入12字节
+
+postgres=# insert into test values (E'\\x0102030405060708090a0b0c0d');
+ERROR:  new row for relation "test" violates check constraint "test_uid_check"
+DETAIL:  Failing row contains (\x0102030405060708090a0b0c0d).
+postgres=# insert into test values (E'\\x0102030405060708090a0b0c');
+INSERT 0 1
+postgres=# insert into test values (E'\\x0102030405060708090a0b01');
+INSERT 0 1
+postgres=# insert into test values (E'\\x0102030405060708090a0b02');
+INSERT 0 1
+postgres=# insert into test values (E'\\x0102030405060708090a0bff');
+INSERT 0 1
+
+
+-- 查看按最后两字节排序是否会走索引
+
+postgres=# explain select * from test order by substring(uid,11,2) ;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Index Scan using idx_test_uid on test  (cost=0.00..6.32 rows=4 width=13)
+(1 row)
+
+
+-- 查看索引排序是否正常
+
+postgres=# select * from test order by substring(uid,11,2) ;
+            uid             
+----------------------------
+ \x0102030405060708090a0b01
+ \x0102030405060708090a0b02
+ \x0102030405060708090a0b0c
+ \x0102030405060708090a0bff
+(4 rows)
+
+
+-- 查看字段长度
+
+postgres=# select pg_column_size(uid) from test;
+ pg_column_size 
+----------------
+             13
+             13
+             13
+             13
+(4 rows)
+
+
+-- 按照最后两个字段进行检索
+
+postgres=# explain select * from test where substring(uid,11,2) =bytea E'\\x0b01';
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Index Scan using idx_test_uid on test  (cost=0.00..4.27 rows=1 width=13)
+   Index Cond: ("substring"(uid, 11, 2) = '\\x0b01'::bytea)
+(2 rows)
+
+postgres=# select * from test where substring(uid,11,2) =bytea E'\\x0b01';
+            uid             
+----------------------------
+ \x0102030405060708090a0b01
+(1 row)
+
+
+
+【参考】
+http://www.postgresql.org/docs/9.2/static/datatype-binary.html
+http://www.mongodb.org/display/DOCS/Object+IDs#ObjectIDs-UUIDs
+http://www.postgresql.org/docs/9.2/static/datatype-uuid.html

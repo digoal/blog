@@ -1,0 +1,100 @@
+PostgreSQL research
+
+Replica data from other Database to PostgreSQL release 9.0 and formerly
+
+2012-03-10 10:40:14   查看原文>>
+
+PostgreSQL 9.0以前的版本没有办法很方便的加载Oracle fdw模块.
+或者你根本就不想直接在你的数据库里面直接加载Oracle fdw模块, 而是想通过一个集中的数据网关来接入Oracle数据库怎么办呢?
+如图 : 
+Replica data from other Database to PostgreSQL release 9.0 and formerly - 德哥@Digoal - The Heart,The World.
+ 其中FDW Server作为生产PostgreSQL连接其他生产数据库的网关. 
+
+我们来举一个实际的例子, PostgreSQL 通过这个数据网关连接远程的Oracle数据库.
+Oracle 中有一个表 : 
+
+tbl
+(id int
+col1 varchar2(256),
+createtime date);
+
+
+
+在PostgreSQL 数据网关上建立连接到Oracle的FDW : 
+
+superuser :
+create server digoal foreign data wrapper oracle_fdw options (dbserver '//192.168.xxx.xxx:1521/digoal');
+create user mapping for digoal server digoal options (user 'digoal',password '略');
+
+create FOREIGN table digoal.tbl (id int, col1 varchar(256), createtime timestamp(0) without time zone) server digoal options (table 'tbl',schema 'digoal',plan_costs 'true');
+
+grant select on digoal.tbl to digoal;
+
+
+
+在生产PostgreSQL数据库中通过dblink建立连接到PostgreSQL数据网关的对应的oracle 外部表的视图,或者通过postgresql fdw建立外部表. 本例使用dblink建立视图.
+
+create view v_tbl as select id,col1,createtime from dblink('dbname=digoal host=数据网关IP port=端口 password=略 user=digoal','select id,col1,createtime from digoal.tbl') as link_tbl(id int, col1 varchar(256),createtime timestamp(0) without time zone);
+
+
+建立数据同步的控制表和记录表 : 
+
+create table sync_ctl(modifytime timestamp(0) without time zone);
+create table sync_record(cnt int,result text,createtime timestamp(0) without time zone);
+
+
+建立一个本地表, 存放同步过来的记录
+
+tbl
+(id int
+col1 varchar(256),
+createtime timestamp(0) without time zone);
+
+建立数据同步函数 : 
+
+create or replace function sync_tbl() returns text as $$
+declare
+v_modifytime timestamp(0) without time zone;
+v_now timestamp(0) without time zone;
+v_result text;
+v_cnt int;
+begin
+v_result := 'no_operate';
+v_now := now();
+-- 防止多个调用,导致数据重复.
+-- 如果同步是根据createtime来的, 推荐不要放在12点准时执行, 可能远程的记录未来得及插入. 尽量1点以后执行.
+lock table sync_ctl in exclusive mode;
+perform 1 from sync_ctl limit 1;
+if not found then
+  insert into sync_ctl(modifytime) values(v_now-interval '1 day');
+end if;
+select modifytime into v_modifytime from sync_ctl limit 1;
+if v_modifytime < current_date then
+  insert into tbl(id,col1,createtime) select  id,col1,createtime  from v_tbl where createtime >=date(v_modifytime) and createtime < date(v_now);
+  update sync_ctl set modifytime=v_now;
+  select count(*) into v_cnt from tbl where createtime >=date(v_modifytime) and createtime < date(v_now);
+  v_result := 'ok';
+  insert into sync_record(cnt,result,createtime) values(v_cnt,v_result,v_now);
+end if;
+return v_result;
+exception
+when others then
+  v_result := 'error';
+  return v_result;
+end;
+$$ language plpgsql;
+
+
+
+同步时执行上面的函数即可.
+
+select * from sync_tbl();
+
+
+结果no_operate表示没有任何操作, 可能已经同步了.
+结果error表示同步有异常, 需要检查.
+结果ok表示同步正常, 记录最后一次同步时间和同步的记录数.
+
+【参考】
+注意事项如下 : 
+http://blog.163.com/digoal@126/blog/static/1638770402012295525666/

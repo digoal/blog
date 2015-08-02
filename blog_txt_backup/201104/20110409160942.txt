@@ -1,0 +1,291 @@
+PostgreSQL research
+
+Linux I/O vs CheckOut in the supermart
+
+2011-04-09 16:09:42   查看原文>>
+
+今天看到一篇关于Linux iostat输出的有趣文章。特别是比较IOSTAT输出报告和在超市买东西结帐的场景，非常生动有趣。
+摘录如下 :
+I/O 系统 vs. 超市排队
+
+举一个例子，我们在超市排队 checkout 时，怎么决定该去哪个交款台呢? 首当
+是看排的队人数，5个人总比20人要快吧? 除了数人头，我们也常常看看前面人
+购买的东西多少，如果前面有个采购了一星期食品的大妈，那么可以考虑换个队
+排了。还有就是收银员的速度了，如果碰上了连钱都点不清楚的新手，那就有的
+等了。另外，时机也很重要，可能 5 分钟前还人满为患的收款台，现在已是人
+去楼空，这时候交款可是很爽啊，当然，前提是那过去的 5 分钟里所做的事情
+比排队要有意义 (不过我还没发现什么事情比排队还无聊的)。
+
+I/O 系统也和超市排队有很多类似之处:
+
+r/s+w/s 类似于交款人的总数
+平均队列长度(avgqu-sz)类似于单位时间里平均排队人的个数
+平均服务时间(svctm)类似于收银员的收款速度
+平均等待时间(await)类似于平均每人的等待时间
+平均I/O数据(avgrq-sz)类似于平均每人所买的东西多少
+I/O 操作率 (%util)类似于收款台前有人排队的时间比例。
+
+我们可以根据这些数据分析出 I/O 请求的模式，以及 I/O 的速度和响应时间。
+
+原文全文 :
+iostat 输出解析
+
+
+1. /proc/partitions
+
+对于kernel 2.4, iostat 的数据的主要来源是 /proc/partitions，而对于kernel 2.6, 数据主要来自/proc/diskstats或者/sys/block/[block-device-name]/stat。
+
+先看看 /proc/partitions 中有些什么。
+
+# cat /proc/partitions
+major minor #blocks name rio rmerge rsect ruse wio wmerge wsect wuse running use aveq
+
+3 0 19535040 hda 12524 31127 344371 344360 12941 25534 308434 1097290 -1 15800720 28214662
+3 1 7172991 hda1 13 71 168 140 0 0 0 0 0 140 140
+3 2 1 hda2 0 0 0 0 0 0 0 0 0 0 0
+3 5 5116671 hda5 100 477 665 620 1 1 2 30 0 610 650
+3 6 265041 hda6 518 92 4616 2770 257 3375 29056 143880 0 46520 146650
+3 7 6980211 hda7 11889 30475 338890 340740 12683 22158 279376 953380 0 509350 1294120
+
+major: 主设备号。3 代表 hda。
+minor: 次设备号。7 代表 No.7 分区。
+#blocks: 设备总块数 (1024 bytes/block)。19535040*1024 => 20003880960(bytes) ~20G
+name: 设备名称。如 hda7。
+
+rio: 完成的读 I/O 设备总次数。指真正向 I/O 设备发起并完成的读操作数目，
+也就是那些放到 I/O 队列中的读请求。注意很多进程发起的读操作
+(read())很可能会和其他的操作进行 merge，不一定每个 read() 调用
+都引起一个 I/O 请求。
+rmerge: 进行了 merge 的读操作数目。
+rsect: 读扇区总数 (512 bytes/sector)
+
+ruse: 从进入读队列到读操作完成的时间累积 (毫秒)。上面的例子显示从开机
+开始，读 hda7 操作共用了约340秒。
+
+wio: 完成的写 I/O 设备总次数。
+wmerge: 进行了 merge 的写操作数目。
+wsect: 写扇区总数
+wuse: 从进入写队列到写操作完成的时间累积 (毫秒)
+
+running: 已进入 I/O 请求队列，等待进行设备操作的请求总数。上面的例子显
+示 hda7 上的请求队列长度为 0。
+
+use: 扣除重叠等待时间的净等待时间 (毫秒)。一般比 (ruse+wuse) 要小。比
+如 5 个读请求同时等待了 1 毫秒，那么 ruse值为5ms, 而 use值为
+1ms。use 也可以理解为I/O队列处于不为空状态的总时间。hda7 的I/O
+队列非空时间为 509 秒，约合8分半钟。
+
+aveq: 在队列中总的等待时间累积 (毫秒) (约等于ruse+wuse)。为什么是“约等于”而不是等于呢？让我们看看aveq, ruse, wuse的计算方式，这些量一般是在I/O完成后进行更新的：
+  aveq += in-flight * (now - disk->stamp);
+  ruse += jiffies - req->start_time; // 如果是读操作的话
+  wuse += jiffies - req->start_time;  // 如果是写操作的话
+注意aveq计算中的in-flight，这是当前还在队列中的I/O请求数目。这些I/O还没有完成，所以不能计算到ruse或wuse中。理论上，只有在I/O全部完成后，aveq才会等于ruse+wuse。举一个例子，假设初始时队列中有三个读请求，每个请求需要1秒钟完成。在1.5秒这一时刻， aveq和ruse各是多少呢？
+  ruse = 1 // 因为此时只有一个请求完成
+  aveq = 3*1 + 2*0.5 = 4 // 因为第二个请求刚发出0.5秒钟，另还有一个请求在队列中呢。
+                                   // 这样第一秒钟时刻有3个in-flight，而1.5秒时刻有2个in-flight.
+如果三个请求全部完成后，ruse才和aveq相等：
+  ruse = 1 + 2 + 3 = 6
+  aveq = 1 + 2 + 3 = 6
+详细说明请参考 linux/drivers/block/ll_rw_blk.c中的end_that_request_last()和disk_round_stats()函数。
+
+
+2. iostat 结果解析
+
+# iostat -x
+Linux 2.4.21-9.30AX (localhost) 2004年07月14日
+
+avg-cpu: %user %nice %sys %idle
+3.85 0.00 0.95 95.20
+
+Device: rrqm/s wrqm/s r/s w/s rsec/s wsec/s rkB/s wkB/s avgrq-sz avgqu-sz await svctm %util
+/dev/hda 1.70 1.70 0.82 0.82 19.88 20.22 9.94 10.11 24.50 11.83 57.81 610.76 99.96
+/dev/hda1 0.00 0.00 0.00 0.00 0.01 0.00 0.00 0.00 12.92 0.00 10.77 10.77 0.00
+/dev/hda5 0.02 0.00 0.00 0.00 0.03 0.00 0.02 0.00 6.60 0.00 6.44 6.04 0.00
+/dev/hda6 0.01 0.38 0.05 0.03 0.43 3.25 0.21 1.62 46.90 0.15 193.96 52.25 0.41
+/dev/hda7 1.66 1.33 0.76 0.79 19.41 16.97 9.70 8.49 23.44 0.79 51.13 19.79 3.07
+
+rrqm/s: 每秒进行 merge 的读操作数目。即 delta(rmerge)/s
+wrqm/s: 每秒进行 merge 的写操作数目。即 delta(wmerge)/s
+r/s: 每秒完成的读 I/O 设备次数。即 delta(rio)/s
+w/s: 每秒完成的写 I/O 设备次数。即 delta(wio)/s
+rsec/s: 每秒读扇区数。即 delta(rsect)/s
+wsec/s: 每秒写扇区数。即 delta(wsect)/s
+rkB/s: 每秒读K字节数。是 rsect/s 的一半，因为每扇区大小为512字节。
+wkB/s: 每秒写K字节数。是 wsect/s 的一半。
+avgrq-sz: 平均每次设备I/O操作的数据大小 (扇区)。即 delta(rsect+wsect)/delta(rio+wio)
+avgqu-sz: 平均I/O队列长度。即 delta(aveq)/s/1000 (因为aveq的单位为毫秒)。
+await: 平均每次设备I/O操作的等待时间 (毫秒)。即 delta(ruse+wuse)/delta(rio+wio)
+svctm: 平均每次设备I/O操作的服务时间 (毫秒)。即 delta(use)/delta(rio+wio)
+%util: 一秒中有百分之多少的时间用于 I/O 操作，或者说一秒中有多少时间 I/O 队列是非空的。
+即 delta(use)/s/1000 (因为use的单位为毫秒)
+
+如果 %util 接近 100%，说明产生的I/O请求太多，I/O系统已经满负荷，该磁盘
+可能存在瓶颈。
+
+svctm 一般要小于 await (因为同时等待的请求的等待时间被重复计算了)，
+svctm 的大小一般和磁盘性能有关，CPU/内存的负荷也会对其有影响，请求过多
+也会间接导致 svctm 的增加。await 的大小一般取决于服务时间(svctm) 以及
+I/O 队列的长度和 I/O 请求的发出模式。如果 svctm 比较接近 await，说明
+I/O 几乎没有等待时间；如果 await 远大于 svctm，说明 I/O 队列太长，应用
+得到的响应时间变慢，如果响应时间超过了用户可以容许的范围，这时可以考虑
+更换更快的磁盘，调整内核 elevator 算法，优化应用，或者升级 CPU。
+
+队列长度(avgqu-sz)也可作为衡量系统 I/O 负荷的指标，但由于 avgqu-sz 是
+按照单位时间的平均值，所以不能反映瞬间的 I/O 洪水。
+
+
+3. I/O 系统 vs. 超市排队
+
+举一个例子，我们在超市排队 checkout 时，怎么决定该去哪个交款台呢? 首当
+是看排的队人数，5个人总比20人要快吧? 除了数人头，我们也常常看看前面人
+购买的东西多少，如果前面有个采购了一星期食品的大妈，那么可以考虑换个队
+排了。还有就是收银员的速度了，如果碰上了连钱都点不清楚的新手，那就有的
+等了。另外，时机也很重要，可能 5 分钟前还人满为患的收款台，现在已是人
+去楼空，这时候交款可是很爽啊，当然，前提是那过去的 5 分钟里所做的事情
+比排队要有意义 (不过我还没发现什么事情比排队还无聊的)。
+
+I/O 系统也和超市排队有很多类似之处:
+
+r/s+w/s 类似于交款人的总数
+平均队列长度(avgqu-sz)类似于单位时间里平均排队人的个数
+平均服务时间(svctm)类似于收银员的收款速度
+平均等待时间(await)类似于平均每人的等待时间
+平均I/O数据(avgrq-sz)类似于平均每人所买的东西多少
+I/O 操作率 (%util)类似于收款台前有人排队的时间比例。
+
+我们可以根据这些数据分析出 I/O 请求的模式，以及 I/O 的速度和响应时间。
+
+
+4. 一个例子
+
+# iostat -x 1
+avg-cpu: %user %nice %sys %idle
+16.24 0.00 4.31 79.44
+Device: rrqm/s wrqm/s r/s w/s rsec/s wsec/s rkB/s wkB/s avgrq-sz avgqu-sz await svctm %util
+/dev/cciss/c0d0
+0.00 44.90 1.02 27.55 8.16 579.59 4.08 289.80 20.57 22.35 78.21 5.00 14.29
+/dev/cciss/c0d0p1
+0.00 44.90 1.02 27.55 8.16 579.59 4.08 289.80 20.57 22.35 78.21 5.00 14.29
+/dev/cciss/c0d0p2
+0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+
+上面的 iostat 输出表明秒有 28.57 次设备 I/O 操作: delta(io)/s = r/s +
+w/s = 1.02+27.55 = 28.57 (次/秒) 其中写操作占了主体 (w:r = 27:1)。
+
+平均每次设备 I/O 操作只需要 5ms 就可以完成，但每个 I/O 请求却需要等上
+78ms，为什么? 因为发出的 I/O 请求太多 (每秒钟约 29 个)，假设这些请求是
+同时发出的，那么平均等待时间可以这样计算:
+
+平均等待时间 = 单个 I/O 服务时间 * ( 1 + 2 + ... + 请求总数-1) / 请求总数
+
+应用到上面的例子: 平均等待时间 = 5ms * (1+2+...+2[icon_cool]/29 = 70ms，和
+iostat 给出的 78ms 的平均等待时间很接近。这反过来表明 I/O 是同时发起的。
+
+每秒发出的 I/O 请求很多 (约 29 个)，平均队列却不长 (只有 2 个左右)，
+这表明这 29 个请求的到来并不均匀，大部分时间 I/O 是空闲的。
+
+一秒中有 14.29% 的时间 I/O 队列中是有请求的，也就是说，85.71% 的时间里
+I/O 系统无事可做，所有 29 个 I/O 请求都在142毫秒之内处理掉了。
+
+delta(ruse+wuse)/delta(io) = await = 78.21 => delta(ruse+wuse)/s =
+78.21 * delta(io)/s = 78.21*28.57 = 2232.8，表明每秒内的I/O请求总共需
+要等待2232.8ms。所以平均队列长度应为 2232.8ms/1000ms = 2.23，而 iostat
+给出的平均队列长度 (avgqu-sz) 却为 22.35，为什么?! 因为 iostat 中有
+bug，avgqu-sz 值应为 2.23，而不是 22.35。
+
+
+5. iostat 的 bug 修正
+
+iostat.c 中是这样计算avgqu-sz的:
+
+((double) current.aveq) / itv
+
+aveq 的单位是毫秒，而 itv 是两次采样之间的间隔，单位是 jiffies。必须换
+算成同样单位才能相除，所以正确的算法是:
+
+((double) current.aveq) / itv * HZ / 1000
+
+这样，上面 iostat 中输出的 avgqu-sz 值应为 2.23，而不是 22.3。
+
+另外，util值的计算中做了 HZ 值的假设，不是很好，也需要修改。
+
+--- sysstat-4.0.7/iostat.c.orig 2004-07-15 13:31:27.000000000 +0800
++++ sysstat-4.0.7/iostat.c 2004-07-15 13:37:34.000000000 +0800
+@@ -370,7 +370,7 @@
+
+nr_ios = current.rd_ios + current.wr_ios;
+tput = nr_ios * HZ / itv;
+- util = ((double) current.ticks) / itv;
++ util = ((double) current.ticks) / itv * HZ / 1000;
+/* current.ticks (ms), itv (jiffies) */
+svctm = tput ? util / tput : 0.0;
+/* kernel gives ticks already in milliseconds for all platforms -> no need for further scaling */
+@@ -387,12 +387,12 @@
+((double) current.rd_sectors) / itv * HZ, ((double) current.wr_sectors) / itv * HZ,
+((double) current.rd_sectors) / itv * HZ / 2, ((double) current.wr_sectors) / itv * HZ / 2,
+arqsz,
+- ((double) current.aveq) / itv,
++ ((double) current.aveq) / itv * HZ / 1000, /* aveq is in ms */
+await,
+/* again: ticks in milliseconds */
+- svctm * 100.0,
++ svctm,
+/* NB: the ticks output in current sard patches is biased to output 1000 ticks per second */
+- util * 10.0);
++ util * 100.0);
+}
+}
+}
+
+一会儿 jiffies, 一会儿 ms，看来 iostat 的作者也被搞晕菜了。
+
+这个问题在 systat 4.1.6 中得到了修正:
+
+* The average I/O requests queue length as displayed by iostat -x was
+wrongly calculated. This is now fixed.
+
+但 Redhat 的 sysstat 版本有些太过时了 (4.0.7)。
+
+如何计算IO和磁盘的关系？
+
+通常，我们很容易观察到数据库服务器的内存和CPU压力。但是对I/O压力没有直观的判断方法。磁盘有两个重要的参数： Seek time、 Rotational latency。正常的I/O计数为：①1000/(Seek time+Rotational latency)*0.75，在此范围内属正常。当达到85％的I/O计数以上时则基本认为已经存在I/O瓶劲。理论情况下，磁盘的随机读计数为125、顺序读计数为
+225。对于数据文件而言是随机读写，日志文件是顺序读写。因此，数据文件建议存放于RAID5上，而日志文件存放于RAID10或RAID1中。
+
+下面假设在有4块硬盘的RAID5中观察到的Physical Disk性能对象的部分值：
+
+Avg. Disk Queue Length      12
+
+Avg. Disk Sec/Read         .035
+
+Avg. Disk Sec/Write         .045
+
+Disk Reads/sec          320
+
+Disk Writes/sec          100
+
+Avg. Disk Queue Length，12/4=3，每块磁盘的平均队列建议不超过2。
+
+Avg. Disk Sec/Read一般不要超过11～15ms。
+
+Avg. Disk Sec/Write一般建议小于12ms。
+
+从上面的结果，我们看到磁盘本身的I/O能力是满足我们的要求的，原因是因为有大量的请求才导致队列等待，这很可能是因为你的SQL语句导致大量的表扫描所致。在进行优化后，如果还是不能达到要求，下面的公式可以帮助你计算使用几块硬盘可以满足这样的并发要求：
+
+Raid 0 -- I/Os per disk = (reads + writes) / number of disks
+Raid 1 -- I/Os per disk = [reads + (2 * writes)] / 2
+Raid 5 -- I/Os per disk = [reads + (4 * writes)] / number of disks
+Raid 10 -- I/Os per disk = [reads + (2 * writes)] / number of disks
+
+我们得到的结果是：(320+400)/4=180，这时你可以根据公式①来得到磁盘的正常I/O值。假设现在正常I/O计数为125，为了达到这个结果：720/125=5.76。就是说要用6块磁盘才能达到这样的要求。
+
+但是上面的Disk Reads/sec和Disk Writes/sec是个很难正确估算的值。因此只能在系统比较忙时，大概估算一个平均值，作为计算公式的依据。另一个是你很难从客户那里得到Seek time、 Rotational latency参数的值，这也只能用理论值125进行计算。
+
+评论
+
+肖涛 - 2011-04-11 10:17:53
+
+20003880960这个是20G吧
+
+德哥@Digoal 回复肖涛 - 2011-04-11 10:17:53
+
+这必须是20G，肖大侠眼睛就是雪亮的啊。

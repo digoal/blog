@@ -1,0 +1,157 @@
+PostgreSQL research
+
+PostgreSQL cann't wakeup prepared transaction yet, so use advisory lock
+
+2012-11-14 15:04:39   查看原文>>
+
+群里聊到的一个话题, 对于以下场景在一个事务中怎么实现?
+场景 : 
+
+lock table a
+lock table b
+modify a
+release a's lock
+modify b
+release b's lock
+
+
+在一个事务中是不可能做到将a的lock先释放掉的. 肯定是要等到最终事务结束的时候a,b一起释放的.
+那么用2PC能不能做到呢, 就目前的情况来看还无法实现. 因为无法唤醒prepared transaction. 只能rollback或者commit.
+
+一、 prepared transaction 虽然无法实现上面的场景, 但是这里还是要列举一下整个过程, 可能以后PostgreSQL 会实现唤醒prepared transaction的能力. 那就顺理成章了.
+要使用prepared transaction 首先需要修改一下配置文件postgresql.conf, 把max_prepared_transactions 改成一个正数值, 以便开启.
+max_prepared_transactions = 100
+改好后重启数据库.
+创建测试表 : 
+
+digoal=> create table a (id int, info text);
+CREATE TABLE
+digoal=> create table b (id int, info text);
+CREATE TABLE
+
+
+插入测试数据 : 
+
+digoal=> insert into a select generate_series(1,100),'digoal';
+INSERT 0 100
+digoal=> insert into b select generate_series(1,100),'digoal';
+INSERT 0 100
+
+
+锁定b表 : 
+
+digoal=> begin;
+BEGIN
+digoal=> select * from b where id=1 for update;
+ id |  info  
+----+--------
+  1 | digoal
+(1 row)
+digoal=> prepare transaction 'b';
+PREPARE TRANSACTION
+
+
+开启另一个事务对a表进行修改, 修改后提交顺便释放a的锁.
+
+digoal=> begin;
+BEGIN
+digoal=> update a set info='newval' where id=1;
+UPDATE 1
+digoal=> end;
+COMMIT
+
+
+接下来就是难点了, 被锁的b表如何唤醒到可操作的情况. 
+查看当前的prepared transaction.
+
+digoal=> select * from pg_prepared_xacts ;
+ transaction | gid |           prepared            | owner  | database 
+-------------+-----+-------------------------------+--------+----------
+   171985519 | b   | 2012-11-14 14:38:13.413092+08 | digoal | digoal
+(1 row)
+
+
+目的是要唤醒171985519这个事务.
+PostgreSQL  9.2 开始增加了transaction id export的能力, 也就是其他事务可以导入这个transaction id, 能看到这个tid一样的范围. 
+这和唤醒(wakeup) prepared transaction要做的类似, 也要导入tid, 同时还要将锁对象等信息传递过来. 目前还不支持. 但是如果能实现的话确实是一个非常不错的能力. 目前应该还没有数据库实现.
+
+digoal=> begin;
+BEGIN
+digoal=> select * from b where id=1 for update;
+ id |  info  
+----+--------
+  1 | digoal
+(1 row)
+digoal=> select * from pg_export_snapshot();
+ pg_export_snapshot 
+--------------------
+ 0A404A71-1
+(1 row)
+digoal=> prepare transaction 'b';
+ERROR:  cannot PREPARE a transaction that has exported snapshots
+
+
+二、 Advisory Lock
+既然2PC的路子走不通, 那么在PostgreSQL中有没有其他路子能够实现这个场景呢?
+那就是advisory lock. 这个需要配合程序一起来实现它.
+-- 程序设计时假设定义a表的advisory lock id=1; b表的advisory lock id=2;
+-- 注意advisory lock id必须唯一, 如果多次申请了, 也需要多次释放.
+
+digoal=> select pg_advisory_lock(1);
+ pg_advisory_lock 
+------------------
+(1 row)
+digoal=> select pg_advisory_lock(2);
+ pg_advisory_lock 
+------------------
+(1 row)
+
+
+-- 这两个锁获得以后其他会话如果要获得这两个锁就处于等待状态了.
+-- 所以程序设计的时候需要定义好这样的规则.
+
+digoal=> update a set info='newval_a' where id=1;
+UPDATE 1
+
+
+-- 会话A在update a后释放这个advisory lock 1.
+
+digoal=> select pg_advisory_unlock(1);
+ pg_advisory_unlock 
+--------------------
+ t
+(1 row)
+
+
+-- 然后update b
+
+digoal=> update b set info='newval_b' where id=1;
+UPDATE 1
+
+
+-- 最好释放advisory lock 2.
+
+digoal=> select pg_advisory_unlock(2);
+ pg_advisory_unlock 
+--------------------
+ t
+(1 row)
+
+
+其他会话只要遵循这个执行流程, 就能达到本文开始是提到的场景的目的.
+
+【参考】
+1. prepared transaction
+http://blog.163.com/digoal@126/blog/static/16387704020111141103578/
+http://www.postgresql.org/docs/9.2/static/sql-prepare-transaction.html
+http://www.postgresql.org/docs/9.2/static/sql-commit-prepared.html
+http://www.postgresql.org/docs/9.2/static/sql-rollback-prepared.html
+http://www.postgresql.org/docs/9.2/static/view-pg-prepared-xacts.html
+
+2. transaction snapshot
+http://blog.163.com/digoal@126/blog/static/1638770402012416105232835/
+http://www.postgresql.org/docs/9.2/static/sql-set-transaction.html
+
+3. Advisory Locks
+http://blog.163.com/digoal@126/blog/static/163877040201172492217830/
+http://www.postgresql.org/docs/9.2/static/explicit-locking.html#ADVISORY-LOCKS

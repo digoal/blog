@@ -1,0 +1,102 @@
+PostgreSQL research
+
+Don't use subquery with UPDATE,DELETE (when many tuples return), use UPDATE ... set ... from ... where ; instead
+
+2015-06-18 16:21:33   查看原文>>
+
+一位网友使用update t1 set info=(select info from t2 where t1.id=t2.id) where t1.id<9999;这种查询时，发现性能很低。
+而单独执行时很快的。
+原因分析：
+
+postgres=# create table t1(id int,info text);
+CREATE TABLE
+postgres=# create table t2(id int,info text);
+CREATE TABLE
+
+postgres=# insert into t1 select generate_series(1,10000) ;
+INSERT 0 10000
+postgres=# insert into t2 select generate_series(1,1000) ;
+INSERT 0 1000
+
+
+这个SubPlan循环了9998次，慢就慢在这里，虽然单次subquery只需要0.132毫秒，乘以9998后就是1300多毫秒了。
+
+postgres=# explain (analyze,verbose,timing,buffers) update t1 set info=(select info from t2 where t1.id=t2.id) where t1.id<9999;
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Update on public.t1  (cost=0.00..145134.50 rows=9999 width=10) (actual time=1368.041..1368.041 rows=0 loops=1)
+   Buffers: shared hit=39870
+   ->  Seq Scan on public.t1  (cost=0.00..145134.50 rows=9999 width=10) (actual time=0.218..1337.192 rows=9998 loops=1)
+         Output: t1.id, (SubPlan 1), t1.ctid
+         Filter: (t1.id < 9999)
+         Rows Removed by Filter: 2
+         Buffers: shared hit=20020
+         SubPlan 1
+           ->  Seq Scan on public.t2  (cost=0.00..14.50 rows=1 width=32) (actual time=0.127..0.132 rows=0 loops=9998)
+                 Output: t2.info
+                 Filter: (t1.id = t2.id)
+                 Rows Removed by Filter: 1000
+                 Buffers: shared hit=19996
+ Planning time: 0.095 ms
+ Execution time: 1368.077 ms
+(15 rows)
+
+
+将SQL修改为update ... set ... from ... where ...;
+LOOP消失，性能立马提升
+
+postgres=# explain (analyze,verbose,timing,buffers) update t1 set info=t2.info from t2 where t1.id=t2.id and t1.id<9999;
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Update on public.t1  (cost=24.50..221.00 rows=1000 width=48) (actual time=8.103..8.103 rows=0 loops=1)
+   Buffers: shared hit=1940
+   ->  Hash Join  (cost=24.50..221.00 rows=1000 width=48) (actual time=0.569..5.295 rows=1000 loops=1)
+         Output: t1.id, t2.info, t1.ctid, t2.ctid
+         Hash Cond: (t1.id = t2.id)
+         Buffers: shared hit=26
+         ->  Seq Scan on public.t1  (cost=0.00..149.00 rows=9999 width=10) (actual time=0.038..2.600 rows=9998 loops=1)
+               Output: t1.id, t1.ctid
+               Filter: (t1.id < 9999)
+               Rows Removed by Filter: 2
+               Buffers: shared hit=24
+         ->  Hash  (cost=12.00..12.00 rows=1000 width=42) (actual time=0.518..0.518 rows=1000 loops=1)
+               Output: t2.info, t2.ctid, t2.id
+               Buckets: 1024  Batches: 1  Memory Usage: 51kB
+               Buffers: shared hit=2
+               ->  Seq Scan on public.t2  (cost=0.00..12.00 rows=1000 width=42) (actual time=0.025..0.240 rows=1000 loops=1)
+                     Output: t2.info, t2.ctid, t2.id
+                     Buffers: shared hit=2
+ Planning time: 0.237 ms
+ Execution time: 8.156 ms
+(20 rows)
+
+
+
+对于多个子查询的修改例子：
+
+update u_md_rs.s_tmp_zb010s_top4_show t1
+     set sal_store_num_this = (select sal_store_num_this from u_md_rs.s_tmp_zb010s_top4_show t2
+                                where t1.region_no = t2.region_no
+                                  and t1.region_name = t2.region_name
+                                  and t2.product_code='total_sal_num'),
+         inv_store_num = (select inv_store_num from u_md_rs.s_tmp_zb010s_top4_show t2
+                           where t1.region_no = t2.region_no
+                             and t1.region_name = t2.region_name
+                             and t2.product_code='total_inv_num')
+   where t1.merge_flag='top'; 
+
+
+改为
+
+update u_md_rs.s_tmp_zb010s_top4_show t1 set 
+sal_store_num_this = case when t2.product_code='total_sal_num' then t2.sal_store_num_this else t1.sal_store_num_this end ,
+inv_store_num = case when t2.product_code='total_inv_num' then t2.inv_store_num else t1.inv_store_num end 
+from s_tmp_zb010s_top4_show t2 
+where t1.region_no = t2.region_no 
+and t1.region_name = t2.region_name 
+and t1.merge_flag='top' 
+and (t2.product_code='total_sal_num' or t2.product_code='total_inv_num');
+
+
+
+Flag Counter

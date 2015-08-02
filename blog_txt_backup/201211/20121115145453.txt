@@ -1,0 +1,140 @@
+PostgreSQL research
+
+PostgreSQL partial index use caveat in prepared statement
+
+2012-11-15 14:54:53   查看原文>>
+
+最近开发的同事反映的一个问题.
+环境是这样的,
+主机A跨广域网抽取主机B上的PostgreSQL的数据.
+一共抽取两个表, 假设为T1和 T2.
+其中T1表 60GB左右, T2表 30GB左右.
+抽取的规则是按照时间分段抽取, 例如 :
+
+select * from t1 where create_time>=$1::timestamp with time zone and create_time <$2::timestamp with time zone order by create_time limit $3 offset $4;
+
+
+以及
+
+select * from t2 where create_time>=$1::timestamp with time zone and create_time <$2::timestamp with time zone order by create_time limit $3 offset $4;
+
+
+在t1和t2的表中, create_time上都有索引.
+但是t1 表抽取每次耗时约2秒, 而t2表每次耗时需要600秒. 这样分段抽取的话, 总的时间就非常的长.
+从时间上来看, t1表应该是走了索引, 而t2表应该是全表扫描.
+但是奇怪的是, 在psql或者pgadmin客户端中执行同样的SQL, t2 表是很快的.
+为了更清晰的知晓执行计划, 最好是在数据库上启用auto_explain的插件, 但是需要重启数据库, 这个操作也只是为了印证. 对解决问题没有用, 所以这里就不重启数据库来加载auto_explain了.
+那么到底有多少种原因会造成有索引确不走索引的情况呢?
+1. 客户端设置了连接参数, 如enable_indexscan=off. 经过检查并没有这个参数.
+2. t2 表的统计信息未更新. 但是如果是这个问题, 在psql或者pgadmin中都会很慢. 所以排除. 
+    并且如果是这个问题执行analyze后就可以排除.
+3. 禁用用户的全表扫描都无效,  alter user digoal set enable_seqscan=off;
+    t2表的抽取依旧很慢, t1表依旧很快. (这个操作只对重新连接的会话生效, 长连接无效.)
+
+一开始没有仔细看索引的信息, 只是关心有没有建索引. 原来T2表建的是partial index. 如下 : 
+
+"idx_t2_create_time" btree (create_time) WHERE create_time > '2011-04-15 00:00:00+08'::timestamp with time zone
+
+
+所以在执行prepared statement的时候, optimalize后才取传递的参数值, 所以不能使用这个索引.
+而T1表是全量索引, 所以自然优先选择索引. 就出现了本文出现的问题.
+例如 : 
+
+digoal=> prepare p_t2 (timestamp with time zone, timestamp with time zone, bigint, bigint) as SELECT * from digoal.t2 where create_time>=$1 and create_time<$2 order by create_time limit $3 offset $4;
+PREPARE
+digoal=> explain execute p_t2('2012-11-10', '2012-11-11', 10, 10);
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Limit  (cost=10006153796.86..10006153975.12 rows=71304 width=161)
+   ->  Sort  (cost=10006153618.60..10006155401.21 rows=713042 width=161)
+         Sort Key: create_time
+         ->  Seq Scan on t2  (cost=10000000000.00..10005958957.99 rows=713042 width=161)
+               Filter: ((create_time >= $1) AND (create_time < $2))
+(5 rows)
+
+
+T1 的话执行prepared statement就没有这个问题 : 
+
+digoal=> prepare p_t1(timestamp with time zone, timestamp with time zone, bigint, bigint) as SELECT * from digoal.t1 where create_time>=$1 and create_time<$2 order by create_time limit $3 offset $4;
+PREPARE
+digoal=> explain execute p_t1('2012-11-10', '2012-11-11', 10, 10);
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=11730.96..23461.92 rows=158179 width=152)
+   ->  Index Scan using idx_t1 on t1  (cost=0.00..117309.44 rows=1581788 width=152)
+         Index Cond: ((create_time >= $1) AND (create_time < $2))
+(3 rows)
+
+
+
+注意PostgreSQL 9.2优化了这个问题, 有兴趣的朋友可参考 : 
+http://blog.163.com/digoal@126/blog/static/16387704020124219333824/
+测试如下 : 
+
+digoal=> create table t1 (id int, create_time timestamp);
+CREATE TABLE
+digoal=> insert into t1 select generate_series(1,1000000),clock_timestamp();
+INSERT 0 1000000
+digoal=> create index idx_t1 on t1(create_time) where create_time>'2012-11-15 14:45:00';
+CREATE INDEX
+digoal=> explain select * from t1 where create_time>='2012-11-15 14:45:01' and create_time<'2012-11-15 14:45:02' order by create_time limit 10 offset 10;
+                                                                            QUERY PLAN                                              
+                              
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------
+ Limit  (cost=7.07..14.13 rows=10 width=12)
+   ->  Index Scan using idx_t1 on t1  (cost=0.00..3533.52 rows=5000 width=12)
+         Index Cond: ((create_time >= '2012-11-15 14:45:01'::timestamp without time zone) AND (create_time < '2012-11-15 14:45:02'::
+timestamp without time zone))
+(3 rows)
+digoal=> prepare p_t1(timestamp, timestamp, bigint, bigint) as select * from t1 where create_time>=$1 and create_time<$2 order by create_time limit $3 offset $4; 
+PREPARE
+digoal=> explain execute  p_t1('2012-11-15 14:45:01', '2012-11-15 14:45:02', 10, 10);
+                                                                            QUERY PLAN                                              
+                              
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------
+ Limit  (cost=7.07..14.13 rows=10 width=12)
+   ->  Index Scan using idx_t1 on t1  (cost=0.00..3533.52 rows=5000 width=12)
+         Index Cond: ((create_time >= '2012-11-15 14:45:01'::timestamp without time zone) AND (create_time < '2012-11-15 14:45:02'::
+timestamp without time zone))
+(3 rows)
+
+
+
+PostgreSQL 9.1以及以下版本都有这个问题, 测试如下 : 
+
+pg91@db-172-16-3-150-> psql
+psql (9.1.3)
+Type "help" for help.
+
+postgres=# create table t1 (id int, create_time timestamp);
+CREATE TABLE
+postgres=#  insert into t1 select generate_series(1,1000000),clock_timestamp();
+INSERT 0 1000000
+postgres=# create index idx_t1 on t1(create_time) where create_time>'2012-11-15 14:45:00';
+CREATE INDEX
+postgres=# explain select * from t1 where create_time>='2012-11-15 14:45:01' and create_time<'2012-11-15 14:45:02' order by create_time limit 10 offset 10;
+                                                                            QUERY PLAN                                              
+                              
+------------------------------------------------------------------------------------------------------------------------------------
+------------------------------
+ Limit  (cost=7.07..14.13 rows=10 width=12)
+   ->  Index Scan using idx_t1 on t1  (cost=0.00..3533.28 rows=5000 width=12)
+         Index Cond: ((create_time >= '2012-11-15 14:45:01'::timestamp without time zone) AND (create_time < '2012-11-15 14:45:02'::
+timestamp without time zone))
+(3 rows)
+
+postgres=#  prepare p_t1(timestamp, timestamp, bigint, bigint) as select * from t1 where create_time>=$1 and create_time<$2 order by create_time limit $3 offset $4; 
+PREPARE
+postgres=# explain execute  p_t1('2012-11-15 14:45:01', '2012-11-15 14:45:02', 10, 10);
+                              QUERY PLAN                              
+----------------------------------------------------------------------
+ Limit  (cost=20714.44..20715.69 rows=500 width=12)
+   ->  Sort  (cost=20713.19..20725.69 rows=5000 width=12)
+         Sort Key: create_time
+         ->  Seq Scan on t1  (cost=0.00..20406.00 rows=5000 width=12)
+               Filter: ((create_time >= $1) AND (create_time < $2))
+(5 rows)
+
+

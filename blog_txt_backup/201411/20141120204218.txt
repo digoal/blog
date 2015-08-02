@@ -1,0 +1,344 @@
+PostgreSQL research
+
+port added to openvswitch | bridge has to used for 2 lay port, cann't configure IP address
+
+2014-11-20 20:42:18   查看原文>>
+
+桥或OVS交换机的目的是2层通讯, 或2层隔离(OVS VLAN), 所以加到桥里的端口都是2层端口, 不要再配置3层的东西, 例如IP.
+加入到桥或OVS交换机的接口, 我们可以认为它们就像物理交换机的二层物理接口.
+
+桥或OVS交换机的管理, 可以通过配置bridge name, ovs bridge name虚拟接口IP地址来实现, 交换机只有管理口(虚拟接口)具备三层能力. 一般的做法是将某个物理口的VLAN号和虚拟接口的VLAN号设为一致, 则二层可通讯.
+桥或OVS交换机的管理接口(虚拟接口), 就是桥或OVS交换机的名字.
+例如, 以下管理口分别是br0和ob0  : 
+只要在br0和ob0配置IP地址, 实现对交换机的管理.
+[root@150 ~]# brctl show br0
+bridge name     bridge id               STP enabled     interfaces
+br0             8000.2a885650df13       no              v1
+[root@150 ~]# ovs-vsctl show
+fb8f1987-c908-4a8f-bc2c-1f8c19f034fc
+    Bridge "ob0"
+        Port "ob0"
+            Interface "ob0"
+                type: internal
+        Port "v2"
+            Interface "v2"
+        Port "v1"
+            Interface "v1"
+    ovs_version: "1.9.3"
+
+openvswitch , bridge configure introduce for v eth port. - 德哥@Digoal - PostgreSQL research
+
+openvswitch , bridge configure introduce for v eth port. - 德哥@Digoal - PostgreSQL research
+
+openvswitch , bridge configure introduce for v eth port. - 德哥@Digoal - PostgreSQL research
+
+首先测试第一幅图左, (错误用法, 不应该在物理口(二层口)上配置IP地址, 配了也无法通讯).
+
+创建网桥
+[root@150 ~]# ovs-vsctl add-br ob0
+将网桥的link 设置为up状态
+[root@150 ~]# ip link set ob0 up
+创建一对相连的虚拟接口(可以认为这两个口之间是物理相连的, 类似的gre也有这样的功能)
+peer口一般用于netns namespace隔离的场景, 连通两个隔离的namespace, 因此peer亦被docker拿来使用.
+[root@150 ~]# ip link add v1 type veth peer name vp1
+[root@150 ~]# ip link set v1 up
+[root@150 ~]# ip link set vp1 up
+添加一个netns设备
+[root@150 ~]# ip netns add abc
+将peer的一端加入网桥, 另一端加入新建的netns设备
+[root@150 ~]# ovs-vsctl add-port ob0 v1
+[root@150 ~]# ip link set vp1 netns abc
+在加入网桥的端口中设置IP, 这里就是错误所在, 不应该在交换机的物理口上分配IP, 这在物理交换机的配置中也是不允许的(会报错). 但是这是linux, 没有报错.
+[root@150 ~]# ip addr add 10.9.9.1/24 dev v1
+[root@150 ~]# ip addr show v1
+173: v1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 3a:a9:a1:35:d8:d3 brd ff:ff:ff:ff:ff:ff
+    inet 10.9.9.1/24 scope global v1
+    inet6 fe80::38a9:a1ff:fe35:d8d3/64 scope link 
+       valid_lft forever preferred_lft forever
+[root@150 ~]# ping 10.9.9.1
+PING 10.9.9.1 (10.9.9.1) 56(84) bytes of data.
+64 bytes from 10.9.9.1: icmp_seq=1 ttl=64 time=0.030 ms
+本地是可以通讯的.
+
+接下来到netns环境中, 配置IP, 注意把lo和vp1的link起来.
+[root@150 ~]# ip netns exec abc /bin/bash
+[root@150 ~]# ip link
+172: vp1: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN qlen 1000
+    link/ether 2e:7b:39:1f:a5:99 brd ff:ff:ff:ff:ff:ff
+174: lo: <LOOPBACK> mtu 16436 qdisc noop state DOWN 
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+[root@150 ~]# ip link set lo up
+[root@150 ~]# ip link set vp1 up
+配置IP
+[root@150 ~]# ip addr add 10.9.9.2/24 dev vp1
+本地通讯正常
+[root@150 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+64 bytes from 10.9.9.2: icmp_seq=1 ttl=64 time=0.034 ms
+^C
+--- 10.9.9.2 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 355ms
+rtt min/avg/max/mdev = 0.034/0.034/0.034/0.000 ms
+和交换机上的物理口无法通讯.
+[root@150 ~]# ping 10.9.9.1
+PING 10.9.9.1 (10.9.9.1) 56(84) bytes of data.
+From 10.9.9.2 icmp_seq=2 Destination Host Unreachable
+From 10.9.9.2 icmp_seq=3 Destination Host Unreachable
+From 10.9.9.2 icmp_seq=4 Destination Host Unreachable
+[root@150 ~]# exit
+exit
+
+
+
+接下来是第一幅图右, 正确的做法是在网桥的管理口上配IP.
+
+首先删除v1的IP,
+[root@150 ~]# ip addr del 10.9.9.1/24 dev v1
+将IP配置在网桥管理接口(即internal口)上.
+[root@150 ~]# ip addr add 10.9.9.3/24 dev ob0
+[root@150 ~]# ip addr show ob0
+171: ob0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN 
+    link/ether ca:da:7a:44:37:40 brd ff:ff:ff:ff:ff:ff
+    inet 10.9.9.3/24 scope global ob0
+    inet6 fe80::c8da:7aff:fe44:3740/64 scope link 
+       valid_lft forever preferred_lft forever
+[root@150 ~]# ping 10.9.9.3
+PING 10.9.9.3 (10.9.9.3) 56(84) bytes of data.
+64 bytes from 10.9.9.3: icmp_seq=1 ttl=64 time=0.027 ms
+在netns环境中可以正常和交换机通讯.
+[root@150 ~]# ip netns exec abc /bin/bash
+[root@150 ~]# ping 10.9.9.3
+PING 10.9.9.3 (10.9.9.3) 56(84) bytes of data.
+64 bytes from 10.9.9.3: icmp_seq=1 ttl=64 time=0.230 ms
+正常通讯的前提是交换机和netns相连的物理口(即v1) , 必须和交换机的管理口在一个vlan里面(tag相同 , 或都没有tag)
+这里的测试场景中是没有tag.
+[root@150 ~]# ovs-vsctl show
+fb8f1987-c908-4a8f-bc2c-1f8c19f034fc
+    Bridge "ob0"
+        Port "ob0"
+            Interface "ob0"
+                type: internal
+        Port "v1"
+            Interface "v1"
+    ovs_version: "1.9.3"
+
+
+
+接下来看看第二幅图右
+
+再次新增一对peer接口, 将两个veth口放到交换机中, 另外两个分别在主机上, 和netns里面
+主机上的v2和netns的v1可以配置IP, 并通讯. 网桥只负责2层的包转发.
+添加一对虚拟接口
+[root@150 ~]# ip link add v2 type veth peer name vp2
+[root@150 ~]# ip link set v2 up
+[root@150 ~]# ip link set vp2 up
+将一个口加入虚拟交换机
+[root@150 ~]# ovs-vsctl add-port ob0 v2
+[root@150 ~]# ovs-vsctl show
+fb8f1987-c908-4a8f-bc2c-1f8c19f034fc
+    Bridge "ob0"
+        Port "ob0"
+            Interface "ob0"
+                type: internal
+        Port "v1"
+            Interface "v1"
+        Port "v2"
+            Interface "v2"
+    ovs_version: "1.9.3"
+删除网桥的管理IP
+[root@150 ~]# ip addr del 10.9.9.3/24 dev ob0
+配置peer另一端口(未加入虚拟交换机)的IP
+[root@150 ~]# ip addr add 10.9.9.1/24 dev vp2
+
+和netns的设备正常通讯了
+[root@150 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+64 bytes from 10.9.9.2: icmp_seq=1 ttl=64 time=0.903 ms
+^C
+--- 10.9.9.2 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 553ms
+rtt min/avg/max/mdev = 0.903/0.903/0.903/0.000 ms
+[root@150 ~]# ping 10.9.9.1
+PING 10.9.9.1 (10.9.9.1) 56(84) bytes of data.
+64 bytes from 10.9.9.1: icmp_seq=1 ttl=64 time=0.022 ms
+^C
+--- 10.9.9.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 410ms
+rtt min/avg/max/mdev = 0.022/0.022/0.022/0.000 ms
+
+在netns中, 正常和外部设备通讯.
+[root@150 ~]# ip netns exec abc /bin/bash
+[root@150 ~]# ping 10.9.9.1
+PING 10.9.9.1 (10.9.9.1) 56(84) bytes of data.
+64 bytes from 10.9.9.1: icmp_seq=1 ttl=64 time=0.232 ms
+^C
+--- 10.9.9.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 589ms
+rtt min/avg/max/mdev = 0.232/0.232/0.232/0.000 ms
+[root@150 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+64 bytes from 10.9.9.2: icmp_seq=1 ttl=64 time=0.025 ms
+^C
+--- 10.9.9.2 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 544ms
+rtt min/avg/max/mdev = 0.025/0.025/0.025/0.000 ms
+[root@150 ~]# ip link
+172: vp1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 2e:7b:39:1f:a5:99 brd ff:ff:ff:ff:ff:ff
+174: lo: <LOOPBACK,UP,LOWER_UP> mtu 16436 qdisc noqueue state UNKNOWN 
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+[root@150 ~]# ip addr
+172: vp1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 2e:7b:39:1f:a5:99 brd ff:ff:ff:ff:ff:ff
+    inet 10.9.9.2/24 scope global vp1
+    inet6 fe80::2c7b:39ff:fe1f:a599/64 scope link 
+       valid_lft forever preferred_lft forever
+174: lo: <LOOPBACK,UP,LOWER_UP> mtu 16436 qdisc noqueue state UNKNOWN 
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+
+
+
+接下来看看第二幅图左
+
+增加VLAN TAG, 只有tag一致, 才能正常通讯, 实现了交换机VLAN的功能.
+[root@db-172-16-3-221 ~]# ovs-vsctl add-br ob0
+[root@db-172-16-3-221 ~]# ip netns add abc
+[root@db-172-16-3-221 ~]# ip link add v1 type veth peer name vp1
+[root@db-172-16-3-221 ~]# ip link add v2 type veth peer name vp2
+[root@db-172-16-3-221 ~]# ip link set vp1 netns abc
+[root@db-172-16-3-221 ~]# ovs-vsctl add-port ob0 v1 tag=100
+[root@db-172-16-3-221 ~]# ovs-vsctl add-port ob0 v2 tag=100
+[root@db-172-16-3-221 ~]# ip link set ob0 up
+[root@db-172-16-3-221 ~]# ip link set v1 up
+[root@db-172-16-3-221 ~]# ip link set v2 up
+[root@db-172-16-3-221 ~]# ip link set vp2 up
+[root@db-172-16-3-221 ~]# ip netns exec abc ip link set lo up
+[root@db-172-16-3-221 ~]# ip netns exec abc ip link set vp1 up
+[root@db-172-16-3-221 ~]# ip netns exec abc ip addr add 10.9.9.2/24 dev vp1
+[root@db-172-16-3-221 ~]# ip addr add 10.9.9.1/24 dev vp2
+[root@db-172-16-3-221 ~]# ping 10.9.9.1
+PING 10.9.9.1 (10.9.9.1) 56(84) bytes of data.
+64 bytes from 10.9.9.1: icmp_seq=1 ttl=64 time=0.032 ms
+[root@db-172-16-3-221 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+64 bytes from 10.9.9.2: icmp_seq=1 ttl=64 time=1.00 ms
+
+[root@db-172-16-3-221 ~]# ip netns exec abc /bin/bash
+[root@db-172-16-3-221 ~]# ping 10.9.9.1
+PING 10.9.9.1 (10.9.9.1) 56(84) bytes of data.
+64 bytes from 10.9.9.1: icmp_seq=1 ttl=64 time=0.196 ms
+^C
+--- 10.9.9.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 420ms
+rtt min/avg/max/mdev = 0.196/0.196/0.196/0.000 ms
+[root@db-172-16-3-221 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+64 bytes from 10.9.9.2: icmp_seq=1 ttl=64 time=0.026 ms
+^C
+--- 10.9.9.2 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 653ms
+rtt min/avg/max/mdev = 0.026/0.026/0.026/0.000 ms
+
+将v1或v2的vlan tag改变一下, 变成不一样的, 二层隔离, 就不能通讯了.
+[root@db-172-16-3-221 ~]# ovs-vsctl del-port ob0 v1
+[root@db-172-16-3-221 ~]# ovs-vsctl add-port ob0 v1 tag=101
+[root@db-172-16-3-221 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+^C
+--- 10.9.9.2 ping statistics ---
+1 packets transmitted, 0 received, 100% packet loss, time 872ms
+
+或者是一个设置tag, 另一个不设置tag, 也是二层隔离的, 是无法通讯的.
+[root@db-172-16-3-221 ~]# ovs-vsctl del-port ob0 v1
+[root@db-172-16-3-221 ~]# ovs-vsctl add-port ob0 v1
+[root@db-172-16-3-221 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+^C
+--- 10.9.9.2 ping statistics ---
+2 packets transmitted, 0 received, 100% packet loss, time 1242ms
+
+
+
+接下来看看第三幅图, 创建一对peer端口, 其中之一加入ovs, 另一个加入netns, 
+与第一幅图不一样的地方, 加入ovs时指定端口的类型为internal, 类似交换机的管理口, 它可以设置IP.
+
+[root@db-172-16-3-221 ~]# ip netns del abc
+[root@db-172-16-3-221 ~]# ovs-vsctl del-port v1
+[root@db-172-16-3-221 ~]# ovs-vsctl del-port v2
+[root@db-172-16-3-221 ~]# ip link del v2
+[root@db-172-16-3-221 ~]# ovs-vsctl show
+700dd6b1-949f-4899-9370-3bfa886df016
+    Bridge "ob0"
+        Port "ob0"
+            Interface "ob0"
+                type: internal
+    ovs_version: "1.9.3"
+[root@db-172-16-3-221 ~]# ip link add v1 type veth peer name vp1
+[root@db-172-16-3-221 ~]# ovs-vsctl add-port ob0 vp1 tag=10 -- set Interface vp1 type=internal
+[root@db-172-16-3-221 ~]# ovs-vsctl show
+700dd6b1-949f-4899-9370-3bfa886df016
+    Bridge "ob0"
+        Port "vp1"
+            tag: 10
+            Interface "vp1"
+                type: internal
+        Port "ob0"
+            Interface "ob0"
+                type: internal
+    ovs_version: "1.9.3"
+
+[root@db-172-16-3-221 ~]# ip netns add abc
+[root@db-172-16-3-221 ~]# ip link set v1 netns abc
+[root@db-172-16-3-221 ~]# ip link set v1 up 
+Cannot find device "v1"
+[root@db-172-16-3-221 ~]# ip link set vp1 up 
+[root@db-172-16-3-221 ~]# ip addr add 10.9.9.1/24 dev vp1
+
+[root@db-172-16-3-221 ~]# ip netns exec abc /bin/bash
+[root@db-172-16-3-221 ~]# ip link set lo up
+[root@db-172-16-3-221 ~]# ip link set v1 up
+[root@db-172-16-3-221 ~]# ip addr add 10.9.9.2/24 dev v1
+[root@db-172-16-3-221 ~]# ping 10.9.9.2
+PING 10.9.9.2 (10.9.9.2) 56(84) bytes of data.
+64 bytes from 10.9.9.2: icmp_seq=1 ttl=64 time=0.025 ms
+^C
+--- 10.9.9.2 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 476ms
+rtt min/avg/max/mdev = 0.025/0.025/0.025/0.000 ms
+[root@db-172-16-3-221 ~]# ping 10.9.9.1
+PING 10.9.9.1 (10.9.9.1) 56(84) bytes of data.
+64 bytes from 10.9.9.1: icmp_seq=1 ttl=64 time=0.034 ms
+^C
+--- 10.9.9.1 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 466ms
+rtt min/avg/max/mdev = 0.034/0.034/0.034/0.000 ms
+
+
+
+查看ovs交换机信息 : 
+
+[root@db-172-16-3-221 ~]# ovs-dpctl show ob0
+system@ob0:
+        lookups: hit:13 missed:29 lost:0
+        flows: 0
+        port 0: ob0 (internal)
+        port 6: vp1
+        port 8: tap0
+
+
+
+使用bridge的话, 除了没有vlan的功能, 其他都一样, 不再举例.
+命令为brctl.
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/16387704020147111358858/
+2. man ovs-vsctl
+3. man ip
+4. man brctl
+5. man tunctl
+
+Flag Counter

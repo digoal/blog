@@ -1,0 +1,598 @@
+PostgreSQL research
+
+PostgreSQL 9.4 Patch, refresh materialized view concurrently (refresh_by_match_merge)
+
+2013-07-23 10:46:54   查看原文>>
+
+PostgreSQL 9.4新增了物化视图增量更新的功能, 增量更新的原理是merge, 通过比对基表和物化视图的数据, 合并变更或新增, 删除的数据.
+(注意没有用到触发器和xlog进行增量更新. 仅仅是数据比对, merge.)
+对于数据量庞大的物化视图, 合并过程可能比全刷新还要慢, 但是增量更新不会影响物化视图的并行查询, 这一点是值得推荐的. 
+使用限制, 物化视图必须要有一个唯一约束的索引, 且这个索引必须是基于原始列的, 换句话说不能是表达式索引. 另外这个索引必须是full index, 环境话说不能是partial index. (即不能在索引中包含where 子句)
+使用举例 : 
+创建一个测试表, 插入100万条数据.
+
+digoal=# create unlogged table test1(id int, info text,crt_time timestamp);
+digoal=# insert into test1 select generate_series(1,1000000), md5(random()::text), clock_timestamp();
+
+
+创建物化视图
+
+digoal=# create materialized view mv_test1 as select * from test1;
+
+
+给物化视图加唯一索引.
+
+digoal=# create unique index idx_mv_test1 on mv_test1 (id);
+
+
+并行刷新
+
+digoal=# refresh materialized view CONCURRENTLY mv_test1 ;
+
+
+在刷新物化视图的同时查询这个物化视图, 不需要等待锁.
+
+digoal=# select * from mv_test1 where id=10000;
+  id   |               info               |         crt_time          
+-------+----------------------------------+---------------------------
+ 10000 | ee1b1541b3fd709f76372d80c385dc44 | 2013-07-23 10:12:05.09956
+(1 row)
+
+
+增量刷新耗时24.5秒.
+
+REFRESH MATERIALIZED VIEW
+Time: 24506.264 ms
+
+
+全量刷新
+
+digoal=# refresh materialized view mv_test1 ;
+REFRESH MATERIALIZED VIEW
+Time: 2635.838 ms
+
+
+全量刷新的时候, 查询这个物化视图需要等待.
+
+digoal=# select * from mv_test1 where id=1;
+
+
+....等待刷新结束后返回结果.
+
+另外需要注意的是, 如果基表没有唯一约束, 并且针对物化视图列出现了重复值的话, 刷新将失败.
+
+digoal=# insert into test1 values (1,'test',now());
+INSERT 0 1
+
+
+并行刷新
+
+digoal=# refresh materialized view CONCURRENTLY mv_test1 ;
+ERROR:  duplicate key value violates unique constraint "idx_mv_test1"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  SQL statement "INSERT INTO public.mv_test1 SELECT (y).* FROM pg_temp_2.pg_temp_16526_2 WHERE tid IS NULL"
+
+
+
+如果物化视图是一小部分数据的话, 
+
+digoal=# create materialized view mv_test2 as select * from test1 where id=10;
+SELECT 1
+digoal=# create unique index idx_mv_test2 on mv_test2 (id);
+CREATE INDEX
+digoal=# \timing
+Timing is on.
+digoal=# refresh materialized view CONCURRENTLY mv_test2;
+REFRESH MATERIALIZED VIEW
+Time: 117.597 ms
+digoal=# refresh materialized view mv_test2;
+REFRESH MATERIALIZED VIEW
+Time: 137.583 ms
+
+
+
+给基表的物化视图唯一索引所在列新增索引 : 
+
+digoal=# \d test1
+           Unlogged table "public.test1"
+  Column  |            Type             | Modifiers 
+----------+-----------------------------+-----------
+ id       | integer                     | 
+ info     | text                        | 
+ crt_time | timestamp without time zone | 
+digoal=# create index idx_test1 on test1(id);
+CREATE INDEX
+Time: 1211.793 ms
+digoal=# refresh materialized view mv_test2;
+REFRESH MATERIALIZED VIEW
+Time: 41.012 ms
+digoal=# refresh materialized view CONCURRENTLY mv_test2;
+REFRESH MATERIALIZED VIEW
+Time: 4.325 ms
+
+
+可以看到新增基表的索引后增量全量刷新的速度都快了好多.
+
+[小结]
+1. 如果要使用增量刷新, 那么物化视图必须有唯一索引, 并且这个索引必须是原始列索引, 同时是full index.
+2. 在物化视图的数据量小时, 增量刷新可以体现出巨大的速度上的优势, 以及不和查询语句冲突的优势.
+3. 如果要加速增量刷新的速度, 物化视图唯一索引列对应的在基表中的列也要加索引, 加快查询速度.
+4. 如果出现因为违反约束无法刷新的情况, 那么请检查基表是否出现了重复数据.
+5. 并行更新物化视图不会改变物化视图的filenode(因为在现有基础上发生的dml), 而全量更新会产生新的filenode(类似vacuum full, cluster等).
+    所以增量刷新的物化视图需要vacuum操作. 注意, 如果增量刷新带来了大量的数据变更, 垃圾数据会很多, 建议使用pg_reorg回收垃圾空间.
+和Oracle不一样, PostgreSQL增量刷新并不需要基表记录数据的变更轨迹, 增量刷新时完全是物化视图的SQL和当前物化视图结果集进行差异比较, 合并差异的过程.
+
+查看当前filenode.
+
+digoal=# select pg_relation_filepath('mv_test2');
+ pg_relation_filepath 
+----------------------
+ base/16384/16751
+(1 row)
+
+
+全量刷新
+
+digoal=# refresh materialized view mv_test2;
+REFRESH MATERIALIZED VIEW
+
+
+filenode发生变更
+
+digoal=# select pg_relation_filepath('mv_test2');
+ pg_relation_filepath 
+----------------------
+ base/16384/16770
+(1 row)
+
+
+增量刷新
+
+digoal=# refresh materialized view CONCURRENTLY mv_test2;
+REFRESH MATERIALIZED VIEW
+
+
+filenode未变更
+
+digoal=# select pg_relation_filepath('mv_test2');
+ pg_relation_filepath 
+----------------------
+ base/16384/16770
+(1 row)
+
+
+更新基表数据
+
+digoal=# update test1 set info='new' where id=10;
+UPDATE 1
+
+
+增量刷新
+
+digoal=# refresh materialized view CONCURRENTLY mv_test2;
+REFRESH MATERIALIZED VIEW
+
+
+查看物化视图的ctid, 使用了0号块的2号item. 因为增量刷新是数据合并, 而非filenode替代.
+
+digoal=# select ctid,* from mv_test2;
+ ctid  | id | info |          crt_time          
+-------+----+------+----------------------------
+ (0,2) | 10 | new  | 2013-07-23 10:12:05.056385
+(1 row)
+
+
+物化视图的filenode保持不变
+
+digoal=# select pg_relation_filepath('mv_test2');
+ pg_relation_filepath 
+----------------------
+ base/16384/16770
+
+
+继续更新基表
+
+digoal=# update test1 set info='newnew' where id=10;
+UPDATE 1
+
+
+增量刷新
+
+digoal=# refresh materialized view CONCURRENTLY mv_test2;
+REFRESH MATERIALIZED VIEW
+digoal=# select pg_relation_filepath('mv_test2');
+ pg_relation_filepath 
+----------------------
+ base/16384/16770
+(1 row)
+
+
+物化视图的记录ctid又变了. 因为增量刷新是数据合并, 而非filenode替代.
+
+digoal=# select ctid,* from mv_test2;
+ ctid  | id |  info  |          crt_time          
+-------+----+--------+----------------------------
+ (0,3) | 10 | newnew | 2013-07-23 10:12:05.056385
+(1 row)
+
+
+因此大量的更新后需要vacuum物化视图, 才能重复利用废弃的item.
+
+digoal=# vacuum verbose mv_test2;
+INFO:  vacuuming "public.mv_test2"
+INFO:  scanned index "idx_mv_test2" to remove 2 row versions
+DETAIL:  CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "mv_test2": removed 2 row versions in 1 pages
+DETAIL:  CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  index "idx_mv_test2" now contains 1 row versions in 2 pages
+DETAIL:  2 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "mv_test2": found 2 removable, 1 nonremovable row versions in 1 out of 1 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  vacuuming "pg_toast.pg_toast_16691"
+INFO:  index "pg_toast_16691_index" now contains 0 row versions in 1 pages
+DETAIL:  0 index row versions were removed.
+0 index pages have been deleted, 0 are currently reusable.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+INFO:  "pg_toast_16691": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DETAIL:  0 dead row versions cannot be removed yet.
+There were 0 unused item pointers.
+0 pages are entirely empty.
+CPU 0.00s/0.00u sec elapsed 0.00 sec.
+VACUUM
+
+
+vacuum物化视图后, 回收了2行. 继续更新基表.
+
+digoal=# update test1 set info='newnewnew' where id=10;
+UPDATE 1
+
+
+增量更新
+
+digoal=# refresh materialized view CONCURRENTLY mv_test2;
+REFRESH MATERIALIZED VIEW
+
+
+现在就用到废弃的0,1段空间了.
+
+digoal=# select ctid,* from mv_test2;
+ ctid  | id |   info    |          crt_time          
+-------+----+-----------+----------------------------
+ (0,1) | 10 | newnewnew | 2013-07-23 10:12:05.056385
+(1 row)
+
+
+
+[参考]
+1. http://www.postgresql.org/message-id/flat/1371225929.28496.YahooMailNeo@web162905.mail.bf1.yahoo.com#1371225929.28496.YahooMailNeo@web162905.mail.bf1.yahoo.com
+2. 
+
++ /*
++  * refresh_by_match_merge
++  *
++  * Refresh a materialized view with transactional semantics, while allowing
++  * concurrent reads.
++  *
++  * This is called after a new version of the data has been created in a
++  * temporary table.  It performs a full outer join against the old version of
++  * the data, producing "diff" results.        This join cannot work if there are any
++  * duplicated rows in either the old or new versions, in the sense that every
++  * column would compare as equal between the two rows.        It does work correctly
++  * in the face of rows which have at least one NULL value, with all non-NULL
++  * columns equal.  The behavior of NULLs on equality tests and on UNIQUE
++  * indexes turns out to be quite convenient here; the tests we need to make
++  * are consistent with default behavior.  If there is at least one UNIQUE
++  * index on the materialized view, we have exactly the guarantee we need.  By
++  * joining based on equality on all columns which are part of any unique
++  * index, we identify the rows on which we can use UPDATE without any problem.
++  * If any column is NULL in either the old or new version of a row (or both),
++  * we must use DELETE and INSERT, since there could be multiple rows which are
++  * NOT DISTINCT FROM each other, and we could otherwise end up with the wrong
++  * number of occurrences in the updated relation.  The temporary table used to
++  * hold the diff results contains just the TID of the old record (if matched)
++  * and the ROW from the new table as a single column of complex record type
++  * (if matched).
++  *
++  * Once we have the diff table, we perform set-based DELETE, UPDATE, and
++  * INSERT operations against the materialized view, and discard both temporary
++  * tables.
++  *
++  * Everything from the generation of the new data to applying the differences
++  * takes place under cover of an ExclusiveLock, since it seems as though we
++  * would want to prohibit not only concurrent REFRESH operations, but also
++  * incremental maintenance.  It also doesn't seem reasonable or safe to allow
++  * SELECT FOR UPDATE or SELECT FOR SHARE on rows being updated or deleted by
++  * this command.
++  */
++ static void
++ refresh_by_match_merge(Oid matviewOid, Oid tempOid)
++ {
++       StringInfoData querybuf;
++       Relation        matviewRel;
++       Relation        tempRel;
++       char       *matviewname;
++       char       *tempname;
++       char       *diffname;
++       TupleDesc       tupdesc;
++       bool            foundUniqueIndex;
++       List       *indexoidlist;
++       ListCell   *indexoidscan;
++       int16           relnatts;
++       bool       *usedForQual;
++       Oid                     save_userid;
++       int                     save_sec_context;
++       int                     save_nestlevel;
++ 
++       initStringInfo(&querybuf);
++       matviewRel = heap_open(matviewOid, NoLock);
++       matviewname = quote_qualified_identifier(get_namespace_name(RelationGetNamespace(matviewRel)),
++                                                                               RelationGetRelationName(matviewRel));
++       tempRel = heap_open(tempOid, NoLock);
++       tempname = quote_qualified_identifier(get_namespace_name(RelationGetNamespace(tempRel)),
++                                                                                 RelationGetRelationName(tempRel));
++       diffname = make_temptable_name_n(tempname, 2);
++ 
++       relnatts = matviewRel->rd_rel->relnatts;
++       usedForQual = (bool *) palloc0(sizeof(bool) * relnatts);
++ 
++       /* Open SPI context. */
++       if (SPI_connect() != SPI_OK_CONNECT)
++               elog(ERROR, "SPI_connect failed");
++ 
++       /* Analyze the temp table with the new contents. */
++       appendStringInfo(&querybuf, "ANALYZE %s", tempname);
++       if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
++               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++ 
++       /*
++        * We need to ensure that there are not duplicate rows without NULLs in
++        * the new data set before we can count on the "diff" results.  Check for
++        * that in a way that allows showing the first duplicated row found.  Even
++        * after we pass this test, a unique index on the materialized view may
++        * find a duplicate key problem.
++        */
++       resetStringInfo(&querybuf);
++       appendStringInfo(&querybuf,
++                                        "SELECT x FROM %s x WHERE x IS NOT NULL AND EXISTS "
++                                        "(SELECT * FROM %s y WHERE y IS NOT NULL "
++                                        "AND (y.*) = (x.*) AND y.ctid <> x.ctid) LIMIT 1",
++                                        tempname, tempname);
++       if (SPI_execute(querybuf.data, false, 1) != SPI_OK_SELECT)
++               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++       if (SPI_processed > 0)
++       {
++               ereport(ERROR,
++                               (errcode(ERRCODE_CARDINALITY_VIOLATION),
++                                errmsg("new data for \"%s\" contains duplicate rows without any NULL columns",
++                                               RelationGetRelationName(matviewRel)),
++                                errdetail("Row: %s",
++                       SPI_getvalue(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1))));
++       }
++ 
++       /* Start building the query for creating the diff table. */
++       resetStringInfo(&querybuf);
++       appendStringInfo(&querybuf,
++                                        "CREATE TEMP TABLE %s AS "
++                                        "SELECT x.ctid AS tid, y FROM %s x FULL JOIN %s y ON (",
++                                        diffname, matviewname, tempname);
++ 
++       /*
++        * Get the list of index OIDs for the table from the relcache, and look up
++        * each one in the pg_index syscache.  We will test for equality on all
++        * columns present in all unique indexes which only reference columns and
++        * include all rows.
++        */
++       tupdesc = matviewRel->rd_att;
++       foundUniqueIndex = false;
++       indexoidlist = RelationGetIndexList(matviewRel);
++ 
++       foreach(indexoidscan, indexoidlist)
++       {
++               Oid                     indexoid = lfirst_oid(indexoidscan);
++               HeapTuple       indexTuple;
++               Form_pg_index index;
++ 
++               indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
++               if (!HeapTupleIsValid(indexTuple))              /* should not happen */
++                       elog(ERROR, "cache lookup failed for index %u", indexoid);
++               index = (Form_pg_index) GETSTRUCT(indexTuple);
++ 
++               /* We're only interested if it is unique and valid. */
++               if (index->indisunique && IndexIsValid(index))
++               {
++                       int                     numatts = index->indnatts;
++                       int                     i;
++                       bool            expr = false;
++                       Relation        indexRel;
++ 
++                       /* Skip any index on an expression. */
++                       for (i = 0; i < numatts; i++)
++                       {
++                               if (index->indkey.values[i] == 0)
++                               {
++                                       expr = true;
++                                       break;
++                               }
++                       }
++                       if (expr)
++                       {
++                               ReleaseSysCache(indexTuple);
++                               continue;
++                       }
++ 
++                       /* Skip partial indexes. */
++                       indexRel = index_open(index->indexrelid, RowExclusiveLock);
++                       if (indexRel->rd_indpred != NIL)
++                       {
++                               index_close(indexRel, NoLock);
++                               ReleaseSysCache(indexTuple);
++                               continue;
++                       }
++                       /* Hold the locks, since we're about to run DML which needs them. */
++                       index_close(indexRel, NoLock);
++ 
++                       /* Add quals for all columns from this index. */
++                       for (i = 0; i < numatts; i++)
++                       {
++                               int                     attnum = index->indkey.values[i];
++                               Oid                     type;
++                               Oid                     op;
++                               const char *colname;
++ 
++                               /*
++                                * Only include the column once regardless of how many times
++                                * it shows up in how many indexes.
++                                *
++                                * This is also useful later to omit columns which can not
++                                * have changed from the SET clause of the UPDATE statement.
++                                */
++                               if (usedForQual[attnum - 1])
++                                       continue;
++                               usedForQual[attnum - 1] = true;
++ 
++                               /*
++                                * Actually add the qual, ANDed with any others.
++                                */
++                               if (foundUniqueIndex)
++                                       appendStringInfoString(&querybuf, " AND ");
++ 
++                               colname = quote_identifier(NameStr((tupdesc->attrs[attnum - 1])->attname));
++                               appendStringInfo(&querybuf, "y.%s ", colname);
++                               type = attnumTypeId(matviewRel, attnum);
++                               op = lookup_type_cache(type, TYPECACHE_EQ_OPR)->eq_opr;
++                               mv_GenerateOper(&querybuf, op);
++                               appendStringInfo(&querybuf, " x.%s", colname);
++ 
++                               foundUniqueIndex = true;
++                       }
++               }
++               ReleaseSysCache(indexTuple);
++       }
++ 
++       list_free(indexoidlist);
++ 
++       if (!foundUniqueIndex)
++               ereport(ERROR,
++                               (errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
++                          errmsg("cannot refresh materialized view \"%s\" concurrently",
++                                         matviewname),
++                                errhint("Create a UNIQUE index with no WHERE clause on one or more columns of the materialized view.")));
++ 
++       appendStringInfoString(&querybuf,
++                                                  " AND y = x) WHERE (y.*) IS DISTINCT FROM (x.*)"
++                                                  " ORDER BY tid");
++ 
++       /* Create the temporary "diff" table. */
++       if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
++               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++ 
++       /*
++        * We have no further use for data from the "full-data" temp table, but we
++        * must keep it around because its type is reference from the diff table.
++        */
++ 
++       /* Analyze the diff table. */
++       resetStringInfo(&querybuf);
++       appendStringInfo(&querybuf, "ANALYZE %s", diffname);
++       if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
++               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++ 
++       OpenMatViewIncrementalMaintenance();
++ 
++       /*
++        * Switch to the owner's userid, so that any functions are run as that
++        * user.  Also lock down security-restricted operations and arrange to
++        * make GUC variable changes local to this command.
++        */
++       GetUserIdAndSecContext(&save_userid, &save_sec_context);
++       SetUserIdAndSecContext(matviewRel->rd_rel->relowner,
++                                                  save_sec_context | SECURITY_RESTRICTED_OPERATION);
++       save_nestlevel = NewGUCNestLevel();
++ 
++       /* Deletes must come before inserts; do them first. */
++       resetStringInfo(&querybuf);
++       appendStringInfo(&querybuf,
++                                        "DELETE FROM %s WHERE ctid IN "
++                                        "(SELECT d.tid FROM %s d "
++                                        "WHERE d.tid IS NOT NULL "
++                                        "AND (d.y) IS NOT DISTINCT FROM NULL)",
++                                        matviewname, diffname);
++       if (SPI_exec(querybuf.data, 0) != SPI_OK_DELETE)
++               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++ 
++       /* Updates before inserts gives a better chance at HOT updates. */
++       resetStringInfo(&querybuf);
++       appendStringInfo(&querybuf, "UPDATE %s x SET ", matviewname);
++ 
++       {
++               int                     i;
++               bool            targetColFound = false;
++ 
++               for (i = 0; i < tupdesc->natts; i++)
++               {
++                       const char *colname;
++ 
++                       if (tupdesc->attrs[i]->attisdropped)
++                               continue;
++ 
++                       if (usedForQual[i])
++                               continue;
++ 
++                       if (targetColFound)
++                               appendStringInfoString(&querybuf, ", ");
++                       targetColFound = true;
++ 
++                       colname = quote_identifier(NameStr((tupdesc->attrs[i])->attname));
++                       appendStringInfo(&querybuf, "%s = (d.y).%s", colname, colname);
++               }
++ 
++               if (targetColFound)
++               {
++                       appendStringInfo(&querybuf,
++                                                        " FROM %s d "
++                                                        "WHERE d.tid IS NOT NULL AND x.ctid = d.tid",
++                                                        diffname);
++ 
++                       if (SPI_exec(querybuf.data, 0) != SPI_OK_UPDATE)
++                               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++               }
++       }
++ 
++       /* Inserts go last. */
++       resetStringInfo(&querybuf);
++       appendStringInfo(&querybuf,
++                                        "INSERT INTO %s SELECT (y).* FROM %s WHERE tid IS NULL",
++                                        matviewname, diffname);
++       if (SPI_exec(querybuf.data, 0) != SPI_OK_INSERT)
++               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++ 
++       /* Roll back any GUC changes */
++       AtEOXact_GUC(false, save_nestlevel);
++ 
++       /* Restore userid and security context */
++       SetUserIdAndSecContext(save_userid, save_sec_context);
++ 
++       /* We're done maintaining the materialized view. */
++       CloseMatViewIncrementalMaintenance();
++       heap_close(tempRel, NoLock);
++       heap_close(matviewRel, NoLock);
++ 
++       /* Clean up temp tables. */
++       resetStringInfo(&querybuf);
++       appendStringInfo(&querybuf, "DROP TABLE %s, %s", diffname, tempname);
++       if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
++               elog(ERROR, "SPI_exec failed: %s", querybuf.data);
++ 
++       /* Close SPI context. */
++       if (SPI_finish() != SPI_OK_FINISH)
++               elog(ERROR, "SPI_finish failed");
++ }
+
+
+
+Flag Counter

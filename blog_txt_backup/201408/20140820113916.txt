@@ -1,0 +1,330 @@
+PostgreSQL research
+
+keepalived track script introduce
+
+2014-08-20 11:39:16   查看原文>>
+
+前面简单的介绍了一下keepalived track script | interface weight & instance priority & election的关系, 
+http://blog.163.com/digoal@126/blog/static/163877040201471992259474/
+本文将重点介绍一下keepalived跟踪脚本的配置用法以及参数的解释 : 
+keepalived VRRP配置中有一个配置项, vrrp_script : 
+截取自 : keepalived.conf.SYNOPSIS
+
+        2.1. VRRP scripts
+
+        The configuration block looks like :
+
+vrrp_script <STRING> {          # VRRP script declaration
+    script <QUOTED_STRING>      # script to run periodically
+    interval <INTEGER>          # run the script this every seconds
+    weight <INTEGER:-254..254>  # adjust priority by this weight  , 用于动态变更vrrp_instance优先级(by vrrp_update_priority). 或者路由器状态(当weight=0)
+    fall <INTEGER>              # required number of failures for KO switch , 
+    rise <INTEGER>              # required number of successes for OK switch
+}
+
+The script will be executed periodically, every <interval> seconds. Its exit
+code will be recorded for all VRRP instances which will want to monitor it.
+Note that the script will only be executed if at least one VRRP instance
+monitors it with a non-zero weight. Thus, any number of scripts may be
+declared without taking the system down.
+
+If unspecified, the weight equals 2, which means that a success will add +2
+to the priority of all VRRP instances which monitor it. On the opposite, a
+negative weight will be subtracted from the initial priority in case of
+failure.
+
+
+
+以上是对脚本的配置, 是否在实例中使用(监控), 需要在相应的vrrp_instance 配置 : 
+这里的weight配置将覆盖vrrp_script中weight的配置.
+
+vrrp_instance <STRING> {                # VRRP instance declaration
+    track_script {                     # Scripts state we monitor
+      <STRING>
+      <STRING> weight <INTEGER:-254..254>
+      ...
+    }
+}
+
+
+
+脚本对应的数据结构 : 
+
+/* external script we call to track local processes */
+typedef struct _vrrp_script {
+        char                    *sname;         /* instance name */
+        char                    *script;        /* the command to be called */
+        long                    interval;       /* interval between script calls */
+        long                    timeout;        /* seconds before script timeout */
+        int                     weight;         /* weight associated to this script */
+        int                     result;         /* result of last call to this script: 0..R-1 = KO, R..R+F-1 = OK */
+        int                     inuse;          /* how many users have weight>0 ? */  
+        int                     rise;           /* R: how many successes before OK */  
+        int                     fall;           /* F: how many failures before KO */
+} vrrp_script_t;
+
+
+注意当配置的weight不等于0时, 用于动态调整vrrp instance的优先级. 并不会直接的改变vrrp的状态.
+当weight=0时, 用于变更vrrp_instance的状态例如脚本检测失败, 则vrrp的状态直接变为FAULT. (不管有没有其他节点存在来接管MASTER)
+
+只有脚本的weight配置不等于0时才需要被跟踪(用于跟踪result, 判断ko和ok状态).  跟踪脚本对应的数据结构 : 
+
+/* Tracked script structure definition */
+typedef struct _tracked_sc {
+        int                     weight;         /* tracking weight when non-zero */
+        vrrp_script_t           *scr;           /* script pointer, cannot be NULL */
+} tracked_sc_t;
+
+
+
+脚本一旦配置在vrrp instance中启用, 
+在调用过程中, 就会动态的改变对应的instance的优先级. (when weight<>0)
+或者变更vrrp instance的状态 (when weight=0)
+
+vrrp_script <STRING> {          # VRRP script declaration
+    script <QUOTED_STRING>      # script to run periodically
+    interval <INTEGER>          # run the script this every seconds
+    weight <INTEGER:-254..254>  # adjust priority by this weight  , 不等于0时用于动态变更vrrp_instance优先级(by vrrp_update_priority).
+    fall <INTEGER>              # required number of failures for KO switch , 
+    rise <INTEGER>              # required number of successes for OK switch
+}
+
+
+当脚本为OK状态时, 并且最终weight(以track_script中的weight覆盖值为准)>0, 则优先级可以加上weight.
+当脚本为KO状态时, 并且终止的weight(以track_script中的weight覆盖值为准)<0, 则优先级可以减去weight.
+优先级最终的范围是(1到254)
+OK和KO和fall, rise的配置有关. 不要关注状态, 就关注这两个值, 因为没有地方标记状态.
+通过标记与变更脚本的result值, 通过result值和fall, rise来比较, 判断OK还是KO.
+脚本状态的转换过程详细参考 : 
+
+vrrp_script_child_thread 函数
+        if (WIFEXITED(wait_status)) {
+                int status;
+                status = WEXITSTATUS(wait_status);  // 脚本返回值为0, 表示执行成功, 非0表示失败.
+                if (status == 0) {
+                        /* success */
+                        if (vscript->result < vscript->rise - 1) {  // result < rise-1, 表示当前还是KO状态
+                                vscript->result++;   // KO状态下, 调用成功则result+1.
+                        } else { 
+                                if (vscript->result < vscript->rise)  // result = rise 表示当前是KO状态转变成OK状态
+                                        log_message(LOG_INFO, "VRRP_Script(%s) succeeded", vscript->sname);
+                                vscript->result = vscript->rise + vscript->fall - 1;  // 脚本从failed状态转变到success状态后, 直接把result改成最大. 要变回KO的话, 还需要fall-1次failure.
+                        }
+                } else {
+                        /* failure */
+                        if (vscript->result > vscript->rise) {  // result > rise, 表示当前是OK状态
+                                vscript->result--;  //OK状态下, 脚本调用失败的话, result-1.
+                        } else {
+                                if (vscript->result >= vscript->rise)  // result=rise, 表示当前是OK状态转变成KO状态
+                                        log_message(LOG_INFO, "VRRP_Script(%s) failed", vscript->sname);
+                                vscript->result = 0;  // 脚本从success状态转变到failed状态后, 直接把result改到最小. 要变回OK的话还需要rise次success
+                        }
+                }
+        }
+
+
+优先级的变动和脚本状态的关系参考 : 
+注意一个脚本对全局weigh的影响只有一次, 例如多次OK状态也最大加一次正的weight.
+或者多次KO状态下, 最多也只加一次负的weight.
+
+vrrp_script_weight 函数
+        for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+                tsc = ELEMENT_DATA(e);
+                if (tsc->scr->result == VRRP_SCRIPT_STATUS_DISABLED)
+                        continue;
+                if (tsc->scr->result >= tsc->scr->rise) {     // 当脚本的result>=配置的rise时(即OK态), 如果脚本配置的weight>0 , 那么全局weight累加脚本weight.
+                        if (tsc->weight > 0)
+                                weight += tsc->weight;
+                } else if (tsc->scr->result < tsc->scr->rise) {  // 当脚本的result<配置的rise时(即KO态), 如果脚本配置的weight<0, 那么全局weight减去脚本的weight.  脚本的result在vrrp_script_child_thread中跟踪.
+                        if (tsc->weight < 0)
+                                weight += tsc->weight;
+                }
+        }
+
+
+动态调整优先级的范围 : 
+如果配置的instance的初始优先级是255的话, 则不受track weight的影响. 见vrrp_update_priority函数的内容.
+
+        if (vrrp->base_priority == VRRP_PRIO_OWNER) {
+                /* we will not run a PRIO_OWNER into a non-PRIO_OWNER */
+                vrrp->effective_priority = VRRP_PRIO_OWNER;
+        } else {
+                /* WARNING! we must compute new_prio on a signed int in order
+                   to detect overflows and avoid wrapping. */
+                new_prio = vrrp->base_priority + prio_offset;
+                if (new_prio < 1)
+                        new_prio = 1;
+                else if (new_prio > 254)
+                        new_prio = 254;
+                vrrp->effective_priority = new_prio;
+        }
+
+keepalived / include / vrrp.h
+#define VRRP_PRIO_OWNER         255             /* priority of the ip owner -- rfc2338.5.3.4 */
+
+
+换句话说, 只有初始优先级配置<255的instance, 才可以动态调整优先级. 并且动态调整后的优先级范围是1到254.
+
+    priority <INTEGER-0..255>           # VRRP PRIO
+
+
+[参考]
+1. keepalived/vrrp/vrrp_scheduler.c
+
+/* if run after vrrp_init_state(), it will be able to detect scripts that
+ * have been disabled because of a sync group and will avoid to start them.
+ */
+static void
+vrrp_init_script(list l)
+{
+        vrrp_script_t *vscript;
+        element e;
+
+        for (e = LIST_HEAD(l); e; ELEMENT_NEXT(e)) {
+                vscript = ELEMENT_DATA(e);
+                if (vscript->inuse == 0)
+                        vscript->result = VRRP_SCRIPT_STATUS_DISABLED;
+
+                if (vscript->result == VRRP_SCRIPT_STATUS_INIT) {
+                        vscript->result = vscript->rise - 1; /* one success is enough */  // 初始化过程中设置result=rise-1
+                        thread_add_event(master, vrrp_script_thread, vscript, vscript->interval);
+                } else if (vscript->result == VRRP_SCRIPT_STATUS_INIT_GOOD) {
+                        vscript->result = vscript->rise; /* one failure is enough */   // 初始化成功, 设置result=rise
+                        thread_add_event(master, vrrp_script_thread, vscript, vscript->interval);
+                }
+        }
+}
+
+static int
+vrrp_script_child_thread(thread_t * thread)
+{
+        int wait_status;
+        vrrp_script_t *vscript = THREAD_ARG(thread);
+
+        if (thread->type == THREAD_CHILD_TIMEOUT) {
+                pid_t pid;
+
+                pid = THREAD_CHILD_PID(thread);
+
+                /* The child hasn't responded. Kill it off. */
+                if (vscript->result > vscript->rise) {
+                        vscript->result--;
+                } else {
+                        if (vscript->result == vscript->rise)
+                                log_message(LOG_INFO, "VRRP_Script(%s) timed out", vscript->sname);
+                        vscript->result = 0;    // 初始化时, 脚本调用超时, 将result改成0(最小)
+                }
+                kill(pid, SIGTERM);
+                thread_add_child(thread->master, vrrp_script_child_timeout_thread,
+                                 vscript, pid, 2);
+                return 0;
+        }
+
+        wait_status = THREAD_CHILD_STATUS(thread);
+
+        if (WIFEXITED(wait_status)) {
+                int status;
+                status = WEXITSTATUS(wait_status);  // 脚本返回值为0, 表示执行成功, 非0表示失败.
+                if (status == 0) {
+                        /* success */
+                        if (vscript->result < vscript->rise - 1) {  // result < rise-1, 表示当前还是KO状态
+                                vscript->result++;   // KO状态下, 调用成功则result+1.
+                        } else {
+                                if (vscript->result < vscript->rise)  // result = rise 表示当前是KO状态转变成OK状态
+                                        log_message(LOG_INFO, "VRRP_Script(%s) succeeded", vscript->sname);
+                                vscript->result = vscript->rise + vscript->fall - 1;  // 脚本从failed状态转变到success状态后, 直接把result改成最大.
+                        }
+                } else {
+                        /* failure */
+                        if (vscript->result > vscript->rise) {  // result > rise, 表示当前是OK状态
+                                vscript->result--;  //OK状态下, 脚本调用失败的话, result-1.
+                        } else {
+                                if (vscript->result >= vscript->rise)  // result=rise, 表示当前是OK状态转变成KO状态
+                                        log_message(LOG_INFO, "VRRP_Script(%s) failed", vscript->sname);
+                                vscript->result = 0;  // 脚本从success状态转变到failed状态后, 直接把result改到最小.
+                        }
+                }
+        }
+
+        return 0;
+}
+
+/* Update VRRP effective priority based on multiple checkers.
+ * This is a thread which is executed every adver_int.
+ */
+static int
+vrrp_update_priority(thread_t * thread)
+{
+        vrrp_t *vrrp = THREAD_ARG(thread);
+        int prio_offset, new_prio;
+
+        /* compute prio_offset right here */
+        prio_offset = 0;
+
+        /* Now we will sum the weights of all interfaces which are tracked. */
+        if ((!vrrp->sync || vrrp->sync->global_tracking) && !LIST_ISEMPTY(vrrp->track_ifp))
+                 prio_offset += vrrp_tracked_weight(vrrp->track_ifp);
+
+        /* Now we will sum the weights of all scripts which are tracked. */
+        if ((!vrrp->sync || vrrp->sync->global_tracking) && !LIST_ISEMPTY(vrrp->track_script))
+                prio_offset += vrrp_script_weight(vrrp->track_script);
+
+        if (vrrp->base_priority == VRRP_PRIO_OWNER) {
+                /* we will not run a PRIO_OWNER into a non-PRIO_OWNER */
+                vrrp->effective_priority = VRRP_PRIO_OWNER;
+        } else {
+                /* WARNING! we must compute new_prio on a signed int in order
+                   to detect overflows and avoid wrapping. */
+                new_prio = vrrp->base_priority + prio_offset;
+                if (new_prio < 1)
+                        new_prio = 1;
+                else if (new_prio > 254)
+                        new_prio = 254;
+                vrrp->effective_priority = new_prio;
+        }
+
+        /* Register next priority update thread */
+        thread_add_timer(master, vrrp_update_priority, vrrp, vrrp->adver_int);
+        return 0;
+}
+
+
+
+2. keepalived/include/vrrp_track.h
+
+/* VRRP script tracking results.
+ * The result is an integer between 0 and rise-1 to indicate a DOWN state,
+ * or between rise-1 and rise+fall-1 to indicate an UP state. Upon failure,
+ * we decrease result and set it to zero when we pass below rise. Upon
+ * success, we increase result and set it to rise+fall-1 when we pass above
+ * rise-1.
+ */
+#define VRRP_SCRIPT_STATUS_DISABLED  -3
+#define VRRP_SCRIPT_STATUS_INIT_GOOD -2
+#define VRRP_SCRIPT_STATUS_INIT      -1
+
+/* external script we call to track local processes */
+typedef struct _vrrp_script {
+        char                    *sname;         /* instance name */
+        char                    *script;        /* the command to be called */
+        long                    interval;       /* interval between script calls */
+        long                    timeout;        /* seconds before script timeout */
+        int                     weight;         /* weight associated to this script */
+        int                     result;         /* result of last call to this script: 0..R-1 = KO, R..R+F-1 = OK */
+        int                     inuse;          /* how many users have weight>0 ? */
+        int                     rise;           /* R: how many successes before OK */
+        int                     fall;           /* F: how many failures before KO */
+} vrrp_script_t;
+
+/* Tracked script structure definition */
+typedef struct _tracked_sc {
+        int                     weight;         /* tracking weight when non-zero */
+        vrrp_script_t           *scr;           /* script pointer, cannot be NULL */
+} tracked_sc_t;
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201471992259474/
+
+Flag Counter

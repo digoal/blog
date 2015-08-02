@@ -1,0 +1,266 @@
+PostgreSQL research
+
+阿里云免费虚拟主机的PostgreSQL性能测试
+
+2013-12-19 17:42:44   查看原文>>
+
+上一篇文中我测试了一下阿里云免费虚拟主机的IOPS.
+接下来测试一下阿里云免费虚拟主机中PostgreSQL的性能, 使用的测试模型参考如下 : 
+http://blog.163.com/digoal@126/blog/static/163877040201221382150858/
+http://blog.163.com/digoal@126/blog/static/163877040201221333411196/
+测试用户数据500万条, 测试单个事务包含了1条insert, 1条update. 
+使用4个连接, TPS达到了9054.
+
+digoal=> truncate user_info;
+TRUNCATE TABLE
+digoal=> truncate user_session;
+TRUNCATE TABLE
+digoal=> insert into user_info (userid,engname,cnname,occupation,birthday,signname,email,qq,crt_time,mod_time)
+select generate_series(1,5000000), 
+'digoal.zhou',
+'德哥',
+'DBA',
+'1970-01-01'
+,E'公益是一辈子的事, I\'m Digoal.Zhou, Just do it!',
+'digoal@126.com',
+276732431,
+clock_timestamp(),
+NULL;
+INSERT 0 5000000
+digoal=> insert into user_session (userid) select generate_series(1,5000000);
+INSERT 0 5000000
+-- 测试函数 :
+digoal=> \sf f_user_logout
+CREATE OR REPLACE FUNCTION digoal.f_user_logout(i_userid integer, OUT o_result integer)
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+declare
+begin
+insert into user_logout_rec (userid,logout_time,ip) values (i_userid,now(),inet_client_addr());
+update user_session set logouttime=now(),online_interval=online_interval+(now()-logintime) where userid=i_userid;
+o_result := 0;
+return;
+exception 
+when others then
+o_result := 1;
+return;
+end;
+$function$
+
+digoal=> select pgfadvise_willneed('pk_user_session');
+         pgfadvise_willneed         
+------------------------------------
+ (base/16385/16435,4096,27232,2429)
+(1 row)
+
+digoal=> select pgfadvise_willneed('user_session');
+         pgfadvise_willneed         
+------------------------------------
+ (base/16385/16434,4096,73400,2331)
+(1 row)
+
+
+性能 :
+
+postgres@AY131219095142824b87Z-> vi test.sql
+\setrandom userid 1 5000000
+SELECT f_user_logout(:userid);
+postgres@AY131219095142824b87Z-> pgbench -M prepared -n -r -f ./test.sql -c 4 -j 2 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 4
+number of threads: 2
+duration: 60 s
+number of transactions actually processed: 543426
+tps = 9054.346573 (including connections establishing)
+tps = 9055.272495 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002953        \setrandom userid 1 5000000
+        0.434759        SELECT f_user_logout(:userid);
+
+
+纯INSERT的测试, TPS达到2.2万.
+
+postgres@AY131219095142824b87Z-> vi test.sql
+\setrandom userid 1 5000000
+insert into user_login_rec(userid,login_time,ip) values (:userid, now(), inet_client_addr());
+postgres@AY131219095142824b87Z-> pgbench -M prepared -n -r -f ./test.sql -c 4 -j 2 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 4
+number of threads: 2
+duration: 60 s
+number of transactions actually processed: 1335375
+tps = 22254.386566 (including connections establishing)
+tps = 22256.844072 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003117        \setrandom userid 1 5000000
+        0.171751        insert into user_login_rec(userid,login_time,ip) values (:userid, now(), inet_client_addr());
+
+
+
+阿里云给出的RDS-MYSQL的性能图表 : 
+插入这块PG远超MYSQL.
+阿里云免费虚拟主机的PostgreSQL性能测试 - 德哥@Digoal - PostgreSQL
+ 
+MYSQL测试对应的OLTP脚本 : 
+http://bazaar.launchpad.net/~wlxiong/sysbench/sysbench/view/head:/sysbench/tests/db/oltp.lua
+
+阿里云免费虚拟主机的PostgreSQL性能测试 - 德哥@Digoal - PostgreSQL
+ 
+oltp.lua
+
+pathtest = string.match(test, "(.*/)") or ""
+
+dofile(pathtest .. "common.lua")
+
+function thread_init(thread_id)
+   set_vars()
+
+   if (db_driver == "mysql" and mysql_table_engine == "myisam") then
+      begin_query = "LOCK TABLES sbtest WRITE"
+      commit_query = "UNLOCK TABLES"
+   else
+      begin_query = "BEGIN"
+      commit_query = "COMMIT"
+   end
+
+end
+
+function event(thread_id)
+   local rs
+   local i
+   local table_name
+   local range_start
+   local c_val
+   local pad_val
+   local query
+
+   table_name = "sbtest".. sb_rand_uniform(1, oltp_tables_count)
+   if not oltp_skip_trx then
+      db_query(begin_query)
+   end
+
+   for i=1, oltp_point_selects do  -- 匹配单条记录的查询
+      rs = db_query("SELECT c FROM ".. table_name .." WHERE id=" .. sb_rand(1, oltp_table_size))
+   end
+
+   for i=1, oltp_simple_ranges do  -- 范围查询, 输出匹配行
+      range_start = sb_rand(1, oltp_table_size)
+      rs = db_query("SELECT c FROM ".. table_name .." WHERE id BETWEEN " .. range_start .. " AND " .. range_start .. "+" .. oltp_range_size - 1)
+   end
+  
+   for i=1, oltp_sum_ranges do  -- 范围查询, 输出SUM结果
+      range_start = sb_rand(1, oltp_table_size)
+      rs = db_query("SELECT SUM(K) FROM ".. table_name .." WHERE id BETWEEN " .. range_start .. " AND " .. range_start .. "+" .. oltp_range_size - 1)
+   end
+   
+   for i=1, oltp_order_ranges do  -- 范围查询, 排序输出.
+      range_start = sb_rand(1, oltp_table_size)
+      rs = db_query("SELECT c FROM ".. table_name .." WHERE id BETWEEN " .. range_start .. " AND " .. range_start .. "+" .. oltp_range_size - 1 .. " ORDER BY c")
+   end
+
+   for i=1, oltp_distinct_ranges do  -- 范围查询, 输出唯一值.
+      range_start = sb_rand(1, oltp_table_size)
+      rs = db_query("SELECT DISTINCT c FROM ".. table_name .." WHERE id BETWEEN " .. range_start .. " AND " .. range_start .. "+" .. oltp_range_size - 1 .. " ORDER BY c")
+   end
+
+   for i=1, oltp_limit_ranges do  -- 无条件查询, limit限制输出条数.
+      range_start = sb_rand(1, oltp_table_size - oltp_range_size + 1)
+      rs = db_query("SELECT * FROM ".. table_name .." LIMIT " .. range_start .. ", " .. oltp_range_size)
+   end
+
+   if not oltp_read_only then
+
+   for i=1, oltp_index_updates do  -- 索引值更新
+      rs = db_query("UPDATE " .. table_name .. " SET k=k+1 WHERE id=" .. sb_rand(1, oltp_table_size))
+   end
+
+   for i=1, oltp_non_index_updates do  -- 非索引值更新
+      c_val = sb_rand_str("###########-###########-###########-###########-###########-###########-###########-###########-###########-###########")
+      query = "UPDATE " .. table_name .. " SET c='" .. c_val .. "' WHERE id=" .. sb_rand(1, oltp_table_size)
+      rs = db_query(query)
+      if rs then
+        print(query)
+      end
+   end
+
+   i = sb_rand(1, oltp_table_size)
+
+   rs = db_query("DELETE FROM " .. table_name .. " WHERE id=" .. i)    -- 单条匹配, 删除操作.
+   
+   c_val = sb_rand_str([[
+###########-###########-###########-###########-###########-###########-###########-###########-###########-###########]])
+   pad_val = sb_rand_str([[
+###########-###########-###########-###########-###########]])
+
+   rs = db_query("INSERT INTO " .. table_name ..  " (id, k, c, pad) VALUES " .. string.format("(%d, %d, '%s', '%s')",i, sb_rand(1, oltp_table_size) , c_val, pad_val))   -- 插入.
+
+   end   -- oltp_read_only
+
+   if not oltp_skip_trx then
+      db_query(commit_query)
+   end
+
+end
+
+
+文章开头PostgreSQL的测试模型和这个lua有差别, 结果没有可比性.
+接下来做一下类似模型的测试对比.
+
+CREATE TABLE sbtest (id SERIAL primary key, k integer  DEFAULT '0' NOT NULL, c varchar(120) DEFAULT '' NOT NULL, pad varchar(60) DEFAULT '' NOT NULL );
+
+
+-- 类似的OLTP测试函数.
+
+create or replace function oltp_test(i_id int, i_id2 int) returns void as $$ 
+declare
+begin
+ INSERT INTO sbtest(id, k, c, pad) values(i_id, 1, 'test', 'testpad');
+ perform c from sbtest where id=i_id;
+ UPDATE sbtest set k=k+1 where id=i_id;
+ perform c from sbtest where id between i_id and i_id2 group by c;
+ perform c from sbtest where id between i_id and i_id2 order by c;
+ perform SUM(K) from sbtest where id between i_id and i_id+10;
+ perform c from sbtest where id between i_id and i_id2;
+ UPDATE sbtest set c='new' where id=i_id;
+ DELETE from sbtest where id=i_id;
+exception when others then
+return;
+end;
+$$ language plpgsql strict;
+
+
+-- 测试脚本
+
+\setrandom id1 1 500000000
+\set id2 :id1 + 10
+select oltp_test(:id1, :id2);
+
+
+-- 测试结果
+
+postgres@AY131219095142824b87Z-> pgbench -M prepared -n -r -f ./test.sql -c 4 -j 2 -T 60 -U digoal digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 4
+number of threads: 2
+duration: 60 s
+number of transactions actually processed: 368133
+tps = 6135.136799 (including connections establishing)
+tps = 6135.809494 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003715        \setrandom id1 1 500000000
+        0.000944        \set id2 :id1 + 10
+        0.642662        select oltp_test(:id1, :id2);
+
+
+现在唯一不知道的是阿里云的RDS用的什么机器配置, 比如CPU是一个非常重要的指标, 不过相信比免费的2核要好吧.
+阿里云免费虚拟主机的PostgreSQL性能测试 - 德哥@Digoal - PostgreSQL
+ 
+看得出PostgreSQL在本文的测试案例优势非常明显.
+Flag Counter

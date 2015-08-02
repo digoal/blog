@@ -1,0 +1,108 @@
+PostgreSQL research
+
+Compare dblink module Within One Transaction in PostgreSQL
+
+2011-02-14 13:04:28   查看原文>>
+
+测试版本:
+
+PostgreSQL 9.0.3
+RHEL 5 x86_64
+
+
+
+在PostgreSQL的存储函数中不支持自治事务，啥意思呢？也就是说一个存储过程里的SQL被认为是一个事务单元来处理。要么全部成功要么全部失败。有两个例外：dblink和exception 。
+
+each BEGIN/EXCEPTION/END block creates a subtransaction. 
+
+
+下面看看PostgreSQL中dblink在事务中的使用.(实际上PostgreSQL中使用dblink和本地事务是隔离的).
+例一:
+
+digoal=> select now();begin;select pg_sleep(3);select now();select pg_sleep(3);select now();end;
+              now             
+-------------------------------
+ 2011-02-14 10:29:34.924432+08
+(1 row)
+
+BEGIN
+ pg_sleep
+----------
+ 
+(1 row)
+
+              now             
+-------------------------------
+ 2011-02-14 10:29:34.924645+08
+(1 row)
+
+ pg_sleep
+----------
+ 
+(1 row)
+
+              now             
+-------------------------------
+ 2011-02-14 10:29:34.924645+08
+(1 row)
+
+COMMIT
+
+
+now()取到的是事务开始的系统时间(这和now()函数的稳定性有关, now的稳定性是stable, 在事务中取值一致不会变化).
+换到dblink下取这个时间看看是什么情况,
+
+select * from dblink_connect('lk_test','hostaddr=172.16.3.33 port=1921 dbname=digoal user=digoal password=digoal');
+digoal=> begin;
+BEGIN
+digoal=> select * from dblink('lk_test','select now()') as t(v_time timestamp with time zone);
+            v_time            
+-------------------------------
+ 2011-02-14 10:36:17.582965+08
+(1 row)
+
+digoal=> select * from dblink('lk_test','select now()') as t(v_time timestamp with time zone);
+            v_time            
+-------------------------------
+ 2011-02-14 10:36:23.939499+08
+(1 row)
+
+digoal=> end;
+
+
+从 now() 函数的返回, 可以看出dblink执行时, 远端使用了autocommit, 所以每次调用dblink在远端都是一个新的事务, 因此now()返回时间是变的.
+你可以在远端的pg_stat_activity验证这一点.
+
+换个例子更能说明情况.
+
+digoal=> begin;
+BEGIN
+digoal=> select * from dblink_exec('lk_test','begin;insert into tbl_user (id) values(1),(2);commit;');
+ dblink_exec
+-------------
+ COMMIT
+(1 row)
+
+digoal=> insert into tbl_user (id) values(3);
+ERROR:  duplicate key value violates unique constraint "tbl_user_pkey"
+DETAIL:  Key (id)=(3) already exists.
+digoal=> end;
+ROLLBACK
+digoal=> select * from dblink('lk_test','select id from tbl_user where id in (1,2)') as t (id int);
+ id
+----
+  1
+  2
+(2 rows)
+
+
+因为远端是autocommit的, 所以远程执行成功，本地执行失败，事务回滚，但是远程已经提交.
+如有要让远端在一个事务中执行, 我们可以使用begin;
+postgres=# select * from dblink_exec('lk_test','begin;');
+ dblink_exec 
+-------------
+ BEGIN
+(1 row)
+远端提交和回滚
+select * from dblink_exec('lk_test','commit;');
+select * from dblink_exec('lk_test','rollback;');

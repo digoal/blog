@@ -1,0 +1,80 @@
+PostgreSQL research
+
+the frequence of PostgreSQL 9 check the trigger_file
+
+2012-05-07 17:18:38   查看原文>>
+
+在PostgreSQL 8.4以及以前的版本中, 要激活PostgreSQL的standby节点, 使用pg_standby这个contrib来管理比较方便.
+pg_standby也是通过配置检查触发文件来判断是否需要激活standby为master角色的.
+9.0开始PostgreSQL在recovery.conf文件中加入了一个trigger_file, 通过检测这个文件是否存在, 存在则激活standby为master,
+9.1开始在pg_ctl中加入了promote的选项, 可以通过pg_ctl promote来激活standby数据库.
+
+其中使用pg_standby contrib, 间隔多长时间检测trigger文件呢? 手册上没有说明, 但是通过源码可以分析出来.
+检测trigger文件用的是这个函数CheckForExternalTrigger()
+因为不是一个单独的进程来检测这个文件的, 执行这个函数是嵌套在整个pg_standby模块中的, 所以最长的间隔就是sleeptime（默认是5秒）. 也就是说如果没有新的归档文件发送过来, pg_standby将会SLEEP这个时间, 然后再唤醒循环检查新的归档文件和trigger文件.
+【参考】
+contrib/pg_standby/pg_standby.c
+
+如果是使用PostgreSQL 9.0或9.1的recovery.conf中的trigger_file. 数据库是间隔多长时间检查一次trigger_file呢? 手册上也没有说明, 但是通过源码可以分析出来.
+和pg_standby类似, 例如流复制的场景, standby的startup进程会"不停"的去pg_xlog目录找有没有新的数据写入, 有的话就读出来进行恢复操作, 每次读以CHUNK为单位. 每次恢复完一个CHUNK单位后进入下面的步骤,  如果没有的话就会进入sleep, 这个sleep默认也是5秒然后retry循环. 检测trigger_file调用函数CheckForStandbyTrigger(). 也是在这个循环
+当中的. 所以最长检测trigger_file也是5秒.
+有兴趣的朋友可以使用一个繁忙的主节点和一个不干任何事情的主节点去测试standby节点检查trigger_file的时间间隔.
+我在当主节点非常繁忙时去测试, 在standby节点touch一个trigger_file文件. 马上就激活了.
+而在当主节点没有任何操作时, 在standby节点touch一个trigger_file文件, 可以看出有时候会等几秒才看得到激活,
+例如在一个主节点没有任何操作的情况下厕所的激活:
+激活standby, 并查看这个触发文件的创建时间.
+
+touch /pgdata/digoal/1921/data02/pgdba2000/.1234.trigger;stat /pgdata/digoal/1921/data02/pgdba2000/.1234.trigger
+  File: `/pgdata/digoal/1921/data02/pgdba2000/.1234.trigger'
+  Size: 0               Blocks: 0          IO Block: 4096   regular empty file
+Device: fd01h/64769d    Inode: 6816577     Links: 1
+Access: (0664/-rw-rw-r--)  Uid: (  505/pgdba2000)   Gid: (  505/pgdba2000)
+Access: 2012-05-07 16:33:29.140543461 +0800
+Modify: 2012-05-07 16:33:29.140543461 +0800
+Change: 2012-05-07 16:33:29.140543461 +0800
+
+
+查看recovery.done文件的change时间。
+
+stat recovery.done 
+  File: `recovery.done'
+  Size: 4790            Blocks: 16         IO Block: 4096   regular file
+Device: fd01h/64769d    Inode: 6816545     Links: 1
+Access: (0644/-rw-r--r--)  Uid: (  505/pgdba2000)   Gid: (  505/pgdba2000)
+Access: 2012-05-07 16:33:34.883543461 +0800
+Modify: 2012-05-07 16:29:15.757543461 +0800
+Change: 2012-05-07 16:33:32.081543461 +0800
+
+
+将两个时间相减就得出了触发激活的时间. 这里大概是3秒.
+另外一次测试时4秒.
+
+接下来看看一个非常繁忙的主节点的情况,
+
+touch /pgdata/digoal/1921/data02/pgdba2000/.1234.trigger;stat /pgdata/digoal/1921/data02/pgdba2000/.1234.trigger
+  File: `/pgdata/digoal/1921/data02/pgdba2000/.1234.trigger'
+  Size: 0               Blocks: 0          IO Block: 4096   regular empty file
+Device: fd01h/64769d    Inode: 6816551     Links: 1
+Access: (0664/-rw-rw-r--)  Uid: (  505/pgdba2000)   Gid: (  505/pgdba2000)
+Access: 2012-05-07 17:16:19.109081461 +0800
+Modify: 2012-05-07 17:16:19.109081461 +0800
+Change: 2012-05-07 17:16:19.109081461 +0800
+
+
+查看recovery.done文件的change时间。
+
+pgdba2000@db-172-16-3-33-> stat recovery.done 
+  File: `recovery.done'
+  Size: 4790            Blocks: 16         IO Block: 4096   regular file
+Device: fd01h/64769d    Inode: 6816539     Links: 1
+Access: (0644/-rw-r--r--)  Uid: (  505/pgdba2000)   Gid: (  505/pgdba2000)
+Access: 2012-05-07 17:16:21.881081461 +0800
+Modify: 2012-05-07 17:15:43.986081461 +0800
+Change: 2012-05-07 17:16:19.640081461 +0800
+
+
+两者相减是0.5秒, 这个时间不代表检查trigger_file延时了0.5秒因为recovery.conf改名成recover.done前还经过了一些其他的数据库操作, 所以时间上会有一定的延长.
+
+
+【参考】
+src/backend/access/transam/xlog.c

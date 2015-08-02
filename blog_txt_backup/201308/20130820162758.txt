@@ -1,0 +1,392 @@
+PostgreSQL research
+
+CitusDB mongo_fdw BUG when use prepared sql will cause PostgreSQL crash
+
+2013-08-20 16:27:58   查看原文>>
+
+在测试mongo_fdw性能的时候发现一个bug.
+只要使用了prepared statement, 就会导致PostgreSQL数据库crash.
+环境 : 
+PostgreSQL 9.2.4
+mongo_fdw下载自github for 9.2.
+外部表如下 : 
+
+postgres=# \det
+        List of foreign tables
+ Schema |    Table     |    Server    
+--------+--------------+--------------
+ public | f_mongo_test | mongo_server
+(1 row)
+
+postgres=# \d f_mongo_test 
+               Foreign table "public.f_mongo_test"
+  Column  |            Type             | Modifiers | FDW Options 
+----------+-----------------------------+-----------+-------------
+ _id      | name                        |           | 
+ id       | integer                     |           | 
+ info     | text                        |           | 
+ crt_time | timestamp without time zone |           | 
+Server: mongo_server
+FDW Options: (database 'test', collection 'mongo_test')
+
+postgres=# select * from f_mongo_test limit 2;
+           _id            |   id   |               info               |      crt_time       
+--------------------------+--------+----------------------------------+---------------------
+ 52130e1c956db0c777ff0c0f | 712193 | dcf472682b9322c56bcdc04b1f508fed | 2013-08-20 14:03:25
+ 52130e1c956db0c777ff0c10 | 712194 | 0edd0c463c434f8dec5d3be2170c841b | 2013-08-20 14:03:25
+(2 rows)
+
+
+
+使用函数, online code, pgbench -M prepared,extended都会导致crash.
+使用online code导致数据库crash的例子 : 
+
+postgres=# do language plpgsql $$
+declare 
+begin
+  perform 1 from f_mongo_test limit 1;
+end;
+$$;
+The connection to the server was lost. Attempting reset: Succeeded.
+-- 数据库crash掉.
+postgres=# do language plpgsql $$
+declare
+begin
+  perform 1 from f_mongo_test limit 1;
+end;
+$$;
+WARNING:  terminating connection because of crash of another server process
+DETAIL:  The postmaster has commanded this server process to roll back the current transaction and exit, because another server process exited abnormally and possibly corrupted shared memory.
+HINT:  In a moment you should be able to reconnect to the database and repeat your command.
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+
+
+使用prepare导致数据库crash的例子 : 
+
+postgres=# prepare p(int) as select * from f_mongo_test where id=$1;
+PREPARE
+postgres=# execute p(1);
+The connection to the server was lost. Attempting reset: WARNING:  terminating connection because of crash of another server process
+DETAIL:  The postmaster has commanded this server process to roll back the current transaction and exit, because another server process exited abnormally and possibly corrupted shared memory.
+HINT:  In a moment you should be able to reconnect to the database and repeat your command.
+Failed.
+
+
+使用函数导致数据库crash的例子 : 
+
+CREATE OR REPLACE FUNCTION public.fun1(v_id integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ STRICT
+AS $function$
+declare
+begin
+  perform id from f_mongo_test where id=v_id; return;
+end;
+$function$;
+postgres=# select fun1(1);
+The connection to the server was lost. Attempting reset: Succeeded.
+postgres=# select fun1(1);
+WARNING:  terminating connection because of crash of another server process
+DETAIL:  The postmaster has commanded this server process to roll back the current transaction and exit, because another server process exited abnormally and possibly corrupted shared memory.
+HINT:  In a moment you should be able to reconnect to the database and repeat your command.
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+
+
+
+使用简单的查询, pgbench -M simple, 或者在函数中使用动态SQL,不会报错.
+
+postgres=# CREATE OR REPLACE FUNCTION public.fun1(v_id integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ STRICT
+AS $function$
+declare
+begin
+  EXECUTE 'select id from f_mongo_test where id=1' into v_id;
+  raise notice '%', v_id;
+end;
+$function$;
+CREATE FUNCTION
+postgres=# select fun1(1);
+NOTICE:  1
+ fun1 
+------
+ 
+(1 row)
+
+
+
+postgres=# select * from f_mongo_test limit 1;
+           _id            |   id   |               info               |      crt_time       
+--------------------------+--------+----------------------------------+---------------------
+ 52130e1c956db0c777ff0c0f | 712193 | dcf472682b9322c56bcdc04b1f508fed | 2013-08-20 14:03:25
+(1 row)
+
+
+
+pg94@db-172-16-3-33-> pgbench -M simple -n -r -f ./test.sql -h 127.0.0.1 -p 1919 -U postgres -c 24 -j 24 -T 10 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: simple
+number of clients: 24
+number of threads: 24
+duration: 10 s
+number of transactions actually processed: 37239
+tps = 3720.494631 (including connections establishing)
+tps = 3727.239529 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002429        \setrandom id 1 5000000
+        6.430985        select * from f_mongo_test where id=:id;
+
+
+
+数据库报错内容 : 
+
+*** glibc detected *** postgres: postgres postgres 127.0.0.1(43199) SELECT: free(): invalid pointer: 0x000000001fe84f28 ***
+======= Backtrace: =========
+/lib64/libc.so.6[0x369ba7164f]
+======= Backtrace: =========
+/lib64/libc.so.6(cfree+0x4b)[0x369ba7587b]
+/opt/pgsql9.2.4/lib/mongo_fdw.so(bson_destroy+0x11)[0x2b04e1ba2981]
+/opt/pgsql9.2.4/lib/mongo_fdw.so[0x2b04e1ba1142]
+/lib64/libc.so.6[0x369ba7164f]
+/lib64/libc.so.6(cfree+0x4b)[0x369ba7587b]
+/opt/pgsql9.2.4/lib/mongo_fdw.so(bson_destroy+0x11)[0x2b04e1ba2981]
+/opt/pgsql9.2.4/lib/mongo_fdw.so[0x2b04e1ba1142]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(ExecEndForeignScan+0xe)[0x58fd0e]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(ExecEndForeignScan+0xe)[0x58fd0e]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(standard_ExecutorEnd+0x2e)[0x5740ae]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(standard_ExecutorEnd+0x2e)[0x5740ae]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(PortalCleanup+0x99)[0x5412c9]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(PortalCleanup+0x99)[0x5412c9]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(PortalDrop+0x2c)[0x71da4c]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(PortalDrop+0x2c)[0x71da4c]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(PreCommit_Portals+0x66)[0x71ddc6]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(PreCommit_Portals+0x66)[0x71ddc6]
+postgres: postgres postgres 127.0.0.1(43200) SELECT[0x488ed4]
+postgres: postgres postgres 127.0.0.1(43199) SELECT[0x488ed4]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(CommitTransactionCommand+0xe9)[0x48afb9]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(CommitTransactionCommand+0xe9)[0x48afb9]
+postgres: postgres postgres 127.0.0.1(43200) SELECT[0x63e6e1]
+postgres: postgres postgres 127.0.0.1(43199) SELECT[0x63e6e1]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(PostgresMain+0x601)[0x6417c1]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(PostgresMain+0x601)[0x6417c1]
+postgres: postgres postgres 127.0.0.1(43200) SELECT[0x6013d7]
+postgres: postgres postgres 127.0.0.1(43199) SELECT[0x6013d7]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(PostmasterMain+0x781)[0x601f91]
+postgres: postgres postgres 127.0.0.1(43200) SELECT(main+0x17e)[0x5a39ae]
+postgres: postgres postgres 127.0.0.1(43199) SELECT(PostmasterMain+0x781)[0x601f91]
+/lib64/libc.so.6(__libc_start_main+0xf4)[0x369ba1d9c4]
+postgres: postgres postgres 127.0.0.1(43200) SELECT[0x458eb9]
+======= Memory map: ========
+postgres: postgres postgres 127.0.0.1(43199) SELECT(main+0x17e)[0x5a39ae]
+/lib64/libc.so.6(__libc_start_main+0xf4)[0x369ba1d9c4]
+00400000-008f4000 r-xp 00000000 68:01 6117753                            /opt/pgsql9.2.4/bin/postgres
+00af4000-00b01000 rw-p 004f4000 68:01 6117753                            /opt/pgsql9.2.4/bin/postgres
+00b01000-00b5d000 rw-p 00b01000 00:00 0 
+1fd92000-1fec7000 rw-p 1fd92000 00:00 0                                  [heap]
+369b600000-369b61c000 r-xp 00000000 68:01 3270425                        /lib64/ld-2.5.so
+369b81c000-369b81d000 r--p 0001c000 68:01 3270425                        /lib64/ld-2.5.so
+369b81d000-369b81e000 rw-p 0001d000 68:01 3270425                        /lib64/ld-2.5.so
+369ba00000-369bb4f000 r-xp 00000000 68:01 3270704                        /lib64/libc-2.5.so
+369bb4f000-369bd4e000 ---p 0014f000 68:01 3270704                        /lib64/libc-2.5.so
+369bd4e000-369bd52000 r--p 0014e000 68:01 3270704                        /lib64/libc-2.5.so
+369bd52000-369bd53000 rw-p 00152000 68:01 3270704                        /lib64/libc-2.5.so
+369bd53000-369bd58000 rw-p 369bd53000 00:00 0 
+369be00000-369be82000 r-xp 00000000 68:01 3270712                        /lib64/libm-2.5.so
+369be82000-369c081000 ---p 00082000 68:01 3270712                        /lib64/libm-2.5.so
+369c081000-369c082000 r--p 00081000 68:01 3270712                        /lib64/libm-2.5.so
+369c082000-369c083000 rw-p 00082000 68:01 3270712                        /lib64/libm-2.5.so
+369c200000-369c202000 r-xp 00000000 68:01 3270711                        /lib64/libdl-2.5.so
+369c202000-369c402000 ---p 00002000 68:01 3270711                        /lib64/libdl-2.5.so
+369c402000-369c403000 r--p 00002000 68:01 3270711                        /lib64/libdl-2.5.so
+369c403000-369c404000 rw-p 00003000 68:01 3270711                        /lib64/libdl-2.5.so
+369c600000-369c614000 r-xp 00000000 68:01 3270715                        /lib64/libz.so.1.2.3
+369c614000-369c813000 ---p 00014000 68:01 3270715                        /lib64/libz.so.1.2.3
+369c813000-369c814000 rw-p 00013000 68:01 3270715                        /lib64/libz.so.1.2.3
+369d200000-369d23b000 r-xp 00000000 68:01 3270769                        /lib64/libsepol.so.1
+369d23b000-369d43b000 ---p 0003b000 68:01 3270769                        /lib64/libsepol.so.1
+369d43b000-369d43c000 rw-p 0003b000 68:01 3270769                        /lib64/libsepol.so.1
+369d43c000-369d446000 rw-p 369d43c000 00:00 0 
+369d600000-369d615000 r-xp 00000000 68:01 3270770                        /lib64/libselinux.so.1
+369d615000-369d815000 ---p 00015000 68:01 3270770                        /lib64/libselinux.so.1
+369d815000-369d817000 rw-p 00015000 68:01 3270770                        /lib64/libselinux.so.1
+369d817000-369d818000 rw-p 369d817000 00:00 0 
+36a0a00000-36a0b33000 r-xp 00000000 68:01 1479635                        /usr/lib64/libxml2.so.2.6.26
+36a0b33000-36a0d33000 ---p 00133000 68:01 1479635                        /usr/lib64/libxml2.so.2.6.26
+36a0d33000-36a0d3c000 rw-p 00133000 68:01 1479635                        /usr/lib64/libxml2.so.2.6.26
+36a0d3c000-36a0d3d000 rw-p 36a0d3c000 00:00 0 
+36a0e00000-36a0e02000 rpostgres: postgres postgres 127.0.0.1(43199) SELECT[0x458eb9]
+======= Memory map: ========
+-xp 00000000 68:01 3270771                        /lib64/libcom_err.so.2.1
+36a0e02000-36a1001000 ---p 00002000 68:01 3270771                        /lib64/libcom_err.so.2.1
+36a1001000-36a1002000 rw-p 00001000 68:01 3270771                        /lib64/libcom_err.so.2.1
+36a1e00000-36a1e02000 r-xp 00000000 68:01 3270762                        /lib64/libkeyutils-1.2.so
+36a1e02000-36a2001000 ---p 00002000 68:01 3270762                        /lib64/libkeyutils-1.2.so
+36a2001000-36a2002000 rw-p 00001000 68:01 3270762                        /lib64/libkeyutils-1.2.so
+36a2200000-36a232d000 r-xp 00000000 68:01 3270772                        /lib64/libcrypto.so.0.9.8e
+36a232d000-36a252c000 ---p 0012d000 68:01 3270772                        /lib64/libcrypto.so.0.9.8e
+36a252c000-36a254d000 rw-p 0012c000 68:01 3270772                        /lib64/libcrypto.so.0.9.8e
+36a254d000-36a2551000 rw-p 36a254d000 00:00 0 
+36a2e00000-36a2e11000 r-xp 00000000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a2e11000-36a3011000 ---p 00011000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a3011000-36a3012000 r--p 00011000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a3012000-36a3013000 rw-p 00012000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a3013000-36a3015000 rw-p 36a3013000 00:00 0 
+36a3200000-36a3292000 r-xp 00000000 68:01 1503303                        /usr/lib64/libkrb5.so.3.3
+36a3292000-36a3491000 ---p 00092000 68:01 1503303                        /usr/lib64/libkrb5.so.3.3
+36a3491000-36a3495000 rw-p 00091000 68:01 1503303                        /usr/lib64/libkrb5.so.3.3
+36a3600000-36a3608000 r-xp 00000000 68:01 1486691                        /usr/lib64/libkrb5support.so.0.1
+36a3608000-36a3807000 ---p 00008000 68:01 1486691                        /usr/lib64/libkrb5support.so.0.1
+36a3807000-36a3808000 rw-p 00007000 68:01 1486691                        /usr/lib64/libkrb5support.so.0.1
+36a4600000-36a462c000 r-xp 00000000 68:01 1503304                        /usr/lib64/libgssapi_krb5.so.2.2
+36a462c000-36a482c000 ---p 0002c000 68:01 1503304                        /usr/lib64/libgssapi_krb5.so.2.2
+36a482c000-36a482e000 rw-p 0002c000 68:01 1503304                        /usr/lib64/libgssapi_krb5.so.2.2
+36a6200000-36a6224000 r-xp 00000000 68:01 1503302                        /usr/lib64/libk5crypto.so.3.1
+36a6224000-36a6423000 ---p 00024000 68:01 1503302                        /usr/lib64/libk5crypto.so.3.1
+36a6423000-36a6425000 rw-p 00023000 68:01 1503302                        /usr/lib64/libk5crypto.so.3.1
+36a8400000-36a8417000 r-xp 00000000 68:01 3270744                        /lib64/libaudit.so.0.0.0
+36a8417000-36a8616000 ---p 00017000 68:01 3270744                        /lib64/libaudit.so.0.0.0
+36a8616000-36a8618000 rw-p 00016000 68:01 3270744                        /lib64/libaudit.so.0.0.0
+36a8800000-36a8848000 r-xp 00000000 68:01 3270773                        /lib64/libssl.so.0.9.8e
+36a8848000-36a8a48000 ---p 00048000 68:01 3270773                        /lib64/libssl.so00400000-008f4000 r-xp 00000000 68:01 6117753                            /opt/pgsql9.2.4/bin/postgres
+00af4000-00b01000 rw-p 004f4000 68:01 6117753                            /opt/pgsql9.2.4/bin/postgres
+00b01000-00b5d000 rw-p 00b01000 00:00 0 
+1fd92000-1fec7000 rw-p 1fd92000 00:00 0                                  [heap]
+369b600000-369b61c000 r-xp 00000000 68:01 3270425                        /lib64/ld-2.5.so
+369b81c000-369b81d000 r--p 0001c000 68:01 3270425                        /lib64/ld-2.5.so
+369b81d000-369b81e000 rw-p 0001d000 68:01 3270425                        /lib64/ld-2.5.so
+369ba00000-369bb4f000 r-xp 00000000 68:01 3270704                        /lib64/libc-2.5.so
+369bb4f000-369bd4e000 ---p 0014f000 68:01 3270704                        /lib64/libc-2.5.so
+369bd4e000-369bd52000 r--p 0014e000 68:01 3270704                        /lib64/libc-2.5.so
+369bd52000-369bd53000 rw-p 00152000 68:01 3270704                        /lib64/libc-2.5.so
+369bd53000-369bd58000 rw-p 369bd53000 00:00 0 
+369be00000-369.0.9.8e
+36a8a48000-36a8a4e000 rw-p 00048000 68:01 3270773                        /lib64/libssl.so.0.9.8e
+36a9000000-36a900b000 r-xp 00000000 68:01 3270745                        /lib64/libpam.so.0.81.5
+36a900b000-36a920a000 ---p 0000b000 68:01 3270745                        /lib64/libpam.so.0.81.5
+36a920a000-36a920b000 rw-p 0000a000 68:01 3270745                        /lib64/libpam.so.0.81.5
+36a9c00000-36a9c0d000 r-xp 00000000 68:01 3270713                        /lib64/libgcc_s-4.1.2-20080825.so.1
+36a9c0d000-36a9e0d000 ---p 0000d000 68:01 3270713                        /lib64/libgcc_s-4.1.2-20080825.so.1
+36a9e0d000-36a9e0e000 rw-p 0000d000 68:01 3270713                        /lib64/libgcc_s-4.1.2-20080825.so.1
+36af800000-36af809000 r-xp 00000000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36af809000-36afa08000 ---p 00009000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36afa08000-36afa09000 r--p 00008000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36afa09000-36be82000 r-xp 00000000 68:01 3270712                        /lib64/libm-2.5.so
+369be82000-369c081000 ---p 00082000 68:01 3270712                        /lib64/libm-2.5.so
+369c081000-369c082000 r--p 00081000 68:01 3270712                        /lib64/libm-2.5.so
+369c082000-369c083000 rw-p 00082000 68:01 3270712                        /lib64/libm-2.5.so
+369c200000-369c202000 r-xp 00000000 68:01 3270711                        /lib64/libdl-2.5.so
+369c202000-369c402000 ---p 00002000 68:01 3270711                        /lib64/libdl-2.5.so
+369c402000-369c403000 r--p 00002000 68:01 3270711                        /lib64/libdl-2.5.so
+369c403000-369c404000 rw-p 00003000 68:01 3270711                        /lib64/libdl-2.5.so
+369c600000-369c614000 r-xp 00000000 68:01 3270715                        /lib64/libz.so.1.2.3
+369c614000-369c813000 ---p 00014000 68:01 3270715                        /lib64/libz.so.1.2.3
+369c813000-369c814000 rw-p 00013000 68:01 3270715                        /lib64/libz.so.1.2.3
+369d200000-369d2afa0a000 rw-p 00009000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36afa0a000-36afa38000 rw-p 36afa0a000 00:00 0 
+36b1400000-36b1434000 r-xp 00000000 68:01 1501702                        /usr/lib64/libxslt.so.1.1.17
+36b1434000-36b1633000 ---p 00034000 68:01 1501702                        /usr/lib64/libxslt.so.1.1.17
+36b1633000-36b1635000 rw-p 00033000 68:01 1501702                        /usr/lib64/libxslt.so.1.1.17
+2b049b4cd000-2b049b4d7000 rw-p 2b049b4cd000 00:00 0 
+2b049b4d7000-2b049eaa7000 r--p 00000000 68:01 1478193                    /usr/lib/locale/locale-archive
+2b049eaa7000-2b04e18ab000 rw-s 00000000 00:09 24477699                   /SYSV001d4819 (deleted)
+2b04e18ab000-2b04e18b5000 r-xp 00000000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e18b5000-2b04e1ab4000 ---p 0000a000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e1ab4000-2b04e1ab5000 r--p 00009000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e1ab5000-2b04e1ab6000 rw-p 0000a000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e1ab6000-2b04e1b58000 rw-p 2b04e1ab6000 00:00 0 
+2b04e1b59000-2b04e1b9a000 rw-p 2b04e1b59000 00:00 0 
+2b04e1b9a000-2b04e1baf000 r-xp 00000000 68:01 6148671                    /opt/pgsql9.2.4/lib/mongo_fdw.so
+2b04e1baf000-2b04e1daf000 ---p 00015000 68:01 6148671                    /opt/pgsql9.2.4/lib/mongo_fdw.so
+2b04e1daf000-2b04e1db0000 rw-p 00015000 68:01 6148671                    /opt/pgsql9.2.4/lib/mongo_fdw.so
+7fffd36b0000-7fffd36d4000 rw-p 7ffffffda000 00:00 0                      [stack]
+7fffd37b2000-7fffd37b5000 r-xp 7fffd37b2000 00:00 0                      [vdso]
+ffffffffff600000-ffffffffffe00000 ---p 00000000 00:00 0                  [vsyscall]
+3b000 r-xp 00000000 68:01 3270769                        /lib64/libsepol.so.1
+369d23b000-369d43b000 ---p 0003b000 68:01 3270769                        /lib64/libsepol.so.1
+369d43b000-369d43c000 rw-p 0003b000 68:01 3270769                        /lib64/libsepol.so.1
+369d43c000-369d446000 rw-p 369d43c000 00:00 0 
+369d600000-369d615000 r-xp 00000000 68:01 3270770                        /lib64/libselinux.so.1
+369d615000-369d815000 ---p 00015000 68:01 3270770                        /lib64/libselinux.so.1
+369d815000-369d817000 rw-p 00015000 68:01 3270770                        /lib64/libselinux.so.1
+369d817000-369d818000 rw-p 369d817000 00:00 0 
+36a0a00000-36a0b33000 r-xp 00000000 68:01 1479635                        /usr/lib64/libxml2.so.2.6.26
+36a0b33000-36a0d33000 ---p 00133000 68:01 1479635                        /usr/lib64/libxml2.so.2.6.26
+36a0d33000-36a0d3c000 rw-p 00133000 68:01 1479635                        /usr/lib64/libxml2.so.2.6.26
+36a0d3c000-36a0d3d000 rw-p 36a0d3c000 00:00 0 
+36a0e00000-36a0e02000 r-xp 00000000 68:01 3270771                        /lib64/libcom_err.so.2.1
+36a0e02000-36a1001000 ---p 00002000 68:01 3270771                        /lib64/libcom_err.so.2.1
+36a1001000-36a1002000 rw-p 00001000 68:01 3270771                        /lib64/libcom_err.so.2.1
+36a1e00000-36a1e02000 r-xp 00000000 68:01 3270762                        /lib64/libkeyutils-1.2.so
+36a1e02000-36a2001000 ---p 00002000 68:01 3270762                        /lib64/libkeyutils-1.2.so
+36a2001000-36a2002000 rw-p 00001000 68:01 3270762                        /lib64/libkeyutils-1.2.so
+36a2200000-36a232d000 r-xp 00000000 68:01 3270772                        /lib64/libcrypto.so.0.9.8e
+36a232d000-36a252c000 ---p 0012d000 68:01 3270772                        /lib64/libcrypto.so.0.9.8e
+36a252c000-36a254d000 rw-p 0012c000 68:01 3270772                        /lib64/libcrypto.so.0.9.8e
+36a2e00000-36a2e11000 r-xp 00000000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a2e11000-36a3011000 ---p 00011000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a3011000-36a3012000 r--p 00011000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a3012000-36a3013000 rw-p 00012000 68:01 3270768                        /lib64/libresolv-2.5.so
+36a3013000-36a3015000 rw-p 36a3013000 00:00 0 
+36a3200000-36a3292000 r-xp 00000000 68:01 1503303                        /usr/lib64/libkrb5.so.3.3
+36a3292000-36a3491000 ---p 00092000 68:01 1503303                        /usr/lib64/libkrb5.so.3.3
+36a3491000-36a3495000 rw-p 00091000 68:01 1503303                        /usr/lib64/libkrb5.so.3.3
+36a3600000-36a3608000 r-xp 00000000 68:01 1486691                        /usr/lib64/libkrb5support.so.0.1
+36a3608000-36a3807000 ---p 00008000 68:01 1486691                        /usr/lib64/libkrb5support.so.0.1
+36a3807000-36a3808000 rw-p 00007000 68:01 1486691                        /usr/lib64/libkrb5support.so.0.1
+36a4600000-36a462c000 r-xp 00000000 68:01 1503304                        /usr/lib64/libgssapi_krb5.so.2.2
+36a462c000-36a482c000 ---p 0002c000 68:01 1503304                        /usr/lib64/libgssapi_krb5.so.2.2
+36a482c000-36a482e000 rw-p 0002c000 68:01 1503304                        /usr/lib64/libgssapi_krb5.so.2.2
+36a6200000-36a6224000 r-xp 00000000 68:01 1503302                        /usr/lib64/libk5crypto.so.3.1
+36a6224000-36a6423000 ---p 00024000 68:01 1503302                        /usr/lib64/libk5crypto.so.3.1
+36a6423000-36a6425000 rw-p 00023000 68:01 1503302                        /usr/lib64/libk5crypto.so.3.1
+36a8400000-36a8417000 r-xp 00000000 68:01 3270744                        /lib64/libaudit.so.0.0.0
+36a8417000-36a8616000 ---p 00017000 68:01 3270744                        /lib64/libaudit.so.0.0.0
+36a8616000-36a8618000 rw-p 00016000 68:01 3270744                        /lib64/libaudit.so.0.0.0
+36a8800000-36a8848000 r-xp 00000000 68:01 3270773                        /lib64/libssl.so.0.9.8e
+36a8848000-36a8a48000 ---p 00048000 68:01 3270773                        /lib64/libssl.so.0.9.8e
+36a8a48000-36a8a4e000 rw-p 00048000 68:01 3270773                        /lib64/libssl.so.0.9.8e
+36a9000000-36a900b000 r-xp 00000000 68:01 3270745                        /lib64/libpam.so.0.81.5
+36a900b000-36a920a000 ---p 0000b000 68:01 3270745                        /lib64/libpam.so.0.81.5
+36a920a000-36a920b000 rw-p 0000a000 68:01 3270745                        /lib64/libpam.so.0.81.5
+36a9c00000-36a9c0d000 r-xp 00000000 68:01 3270713                        /lib64/libgcc_s-4.1.2-20080825.so.1
+36a9c0d000-36a9e0d000 ---p 0000d000 68:01 3270713                        /lib64/libgcc_s-4.1.2-20080825.so.1
+36a9e0d000-36a9e0e000 rw-p 0000d000 68:01 3270713                        /lib64/libgcc_s-4.1.2-20080825.so.1
+36af800000-36af809000 r-xp 00000000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36af809000-36afa08000 ---p 00009000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36afa08000-36afa09000 r--p 00008000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36afa09000-36afa0a000 rw-p 00009000 68:01 3270441                        /lib64/libcrypt-2.5.so
+36afa0a000-36afa38000 rw-p 36afa0a000 00:00 0 
+36b1400000-36b1434000 r-xp 00000000 68:01 1501702                        /usr/lib64/libxslt.so.1.1.17
+36b1434000-36b1633000 ---p 00034000 68:01 1501702                        /usr/lib64/libxslt.so.1.1.17
+36b1633000-36b1635000 rw-p 00033000 68:01 1501702                        /usr/lib64/libxslt.so.1.1.17
+2b049b4cd000-2b049b4d7000 rw-p 2b049b4cd000 00:00 0 
+2b049b4d7000-2b049eaa7000 r--p 00000000 68:01 1478193                    /usr/lib/locale/locale-archive
+2b049eaa7000-2b04e18ab000 rw-s 00000000 00:09 24477699                   /SYSV001d4819 (deleted)
+2b04e18ab000-2b04e18b5000 r-xp 00000000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e18b5000-2b04e1ab4000 ---p 0000a000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e1ab4000-2b04e1ab5000 r--p 00009000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e1ab5000-2b04e1ab6000 rw-p 0000a000 68:01 3270426                    /lib64/libnss_files-2.5.so
+2b04e1ab6000-2b04e1b58000 rw-p 2b04e1ab6000 00:00 0 
+2b04e1b59000-2b04e1b9a000 rw-p 2b04e1b59000 00:00 0 
+2b04e1b9a000-2b04e1baf000 r-xp 00000000 68:01 6148671                    /opt/pgsql9.2.4/lib/mongo_fdw.so
+2b04e1baf000-2b04e1daf000 ---p 00015000 68:01 6148671                    /opt/pgsql9.2.4/lib/mongo_fdw.so
+2b04e1daf000-2b04e1db0000 rw-p 00015000 68:01 6148671                    /opt/pgsql9.2.4/lib/mongo_fdw.so
+7fffd36b0000-7fffd36d4000 rw-p 7ffffffda000 00:00 0                      [stack]
+7fffd37b2000-7fffd37b5000 r-xp 7fffd37b2000 00:00 0                      [vdso]
+ffffffffff600000-ffffffffffe00000 ---p 00000000 00:00 0                  [vsyscall]
+
+
+详见附件.
+
+[参考]
+1. https://github.com/citusdata/mongo_fdw
+2. http://blog.163.com/digoal@126/blog/static/163877040201321984940903/

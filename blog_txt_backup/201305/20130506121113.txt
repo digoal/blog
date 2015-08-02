@@ -1,0 +1,163 @@
+PostgreSQL research
+
+PostgreSQL 9.3 Improve commit_delay
+
+2013-05-06 12:11:13   查看原文>>
+
+In PostgreSQL releases prior to 9.3, commit_delay behaved differently and was much less effective: it affected only commits, rather than all WAL flushes, and waited for the entire configured delay even if the WAL flush was completed sooner. 
+Beginning in PostgreSQL 9.3, the first process that becomes ready to flush waits for the configured interval, while subsequent processes wait only until the leader completes the flush operation.
+
+
+在9.3以前commit_delay是比较低效的, 首先该参数只对commit起作用, 其他的wal flush请求不起作用. 并且所有参与wal flush和并的进程都要等待commit_delay时长.
+9.3对此做了改进, 具体见参考部分.
+对所有的wal flush请求生效, 同时不需要所有进程都等待commit_delay时长, 只有整组进程的第一个进程需要等待commit_delay时长, 其他进程只需要等到flush结束.
+从测试来看在高并发下提升非常明显.
+测试机 : 
+8核Intel(R) Xeon(R) CPU           E5440  @ 2.83GHz
+146G 10K转sas 2.5寸硬盘.
+CentOS 5.x x64.
+
+[测试]
+postgresql.conf
+
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+wal_level = minimal                     # minimal, archive, or hot_standby
+synchronous_commit = on         # synchronization level;
+wal_sync_method = fdatasync             # the default is the first option
+commit_delay = 10                       # range 0-100000, in microseconds
+commit_siblings = 5                     # range 1-1000
+checkpoint_segments = 32                # in logfile segments, min 1, 16MB each
+autovacuum = off
+
+# 测试表
+
+digoal=# create table test(id int, info text);
+
+
+pgbench脚本 : 
+
+vi ins.sql
+insert into test values (1,'test');
+
+
+
+# 测试前checkpoint.
+
+digoal=# checkpoint;
+
+
+测试结果 : 
+连接数32.
+PostgreSQL 9.2 : 
+
+pg92@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 32 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 1093293
+tps = 18217.546087 (including connections establishing)
+tps = 18232.311774 (excluding connections establishing)
+statement latencies in milliseconds:
+        1.753613        insert into test values (1,'test');
+
+PostgreSQL 9.3 : 
+
+pg93@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 32 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 32
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 1200383
+tps = 20002.815831 (including connections establishing)
+tps = 20018.006205 (excluding connections establishing)
+statement latencies in milliseconds:
+        1.596990        insert into test values (1,'test');
+
+连接数32时看不出PostgreSQL 9.3对commit_delay的改进部分有多少提升, 将并发加到128. 
+就能看出明显的提升了.
+PostgreSQL 9.2 : 
+ 9.2性能下降严重.
+
+pg92@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 128 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 128
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 637837
+tps = 10622.588115 (including connections establishing)
+tps = 10657.532710 (excluding connections establishing)
+statement latencies in milliseconds:
+        12.002027       insert into test values (1,'test');
+
+
+PostgreSQL 9.3 : 
+9.3性能提升明显, 说明commit_delay起到作用了.
+
+pg93@db-172-16-3-33-> pgbench -M prepared -f ./ins.sql -n -r -h $PGDATA -U postgres -c 128 -j 4 -T 60 postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 128
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 2349980
+tps = 39140.073606 (including connections establishing)
+tps = 39260.745775 (excluding connections establishing)
+statement latencies in milliseconds:
+        3.256934        insert into test values (1,'test');
+
+
+
+[其他]
+PostgreSQL 9.3开始commit_delay需要超级用户权限进行配置.
+
+
+[参考]
+1. http://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=13fe298ca06f5390df5edf073cf401f9f0b67458
+
+Change commit_delay to be SUSET for 9.3+
+Prior to 9.3 the commit_delay affected only the current user,
+whereas now only the group leader waits while holding the
+WALWriteLock. Deliberate or accidental settings to a poor
+value could seriously degrade performance for all users.
+Privileges may be delegated by SECURITY DEFINER functions
+for anyone that needs per-user settings in real situations.
+Request for change from Peter Geoghegan
+
+
+2. http://www.postgresql.org/docs/devel/static/runtime-config-wal.html#GUC-COMMIT-DELAY
+3. src/backend/access/transam/xlog.c
+
+/*
+ * Ensure that all XLOG data through the given position is flushed to disk.
+ *
+ * NOTE: this differs from XLogWrite mainly in that the WALWriteLock is not
+ * already held, and we try to avoid acquiring it if possible.
+ */
+void
+XLogFlush(XLogRecPtr record)
+{
+............略
+                /*
+                 * Sleep before flush! By adding a delay here, we may give further
+                 * backends the opportunity to join the backlog of group commit
+                 * followers; this can significantly improve transaction throughput, at
+                 * the risk of increasing transaction latency.
+                 *
+                 * We do not sleep if enableFsync is not turned on, nor if there are
+                 * fewer than CommitSiblings other backends with active transactions.
+                 */
+                if (CommitDelay > 0 && enableFsync &&
+                        MinimumActiveBackends(CommitSiblings))
+                        pg_usleep(CommitDelay);
+
+
+注意fsync=on时commit_delay才会生效.

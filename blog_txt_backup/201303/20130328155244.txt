@@ -1,0 +1,597 @@
+PostgreSQL research
+
+PostgreSQL 9.2.3 performance tested in kvm virtual machine
+
+2013-03-28 15:52:44   查看原文>>
+
+本文主要测试一下PostgreSQL数据库在KVM虚拟机环境中的使用和性能.
+
+一、主机硬件 : 
+
+CPU : 2 * Intel(R) Xeon(R) CPU E5504  @ 2.00GHz(由于PCI-E插槽满插,实际CPU使用1.6G)
+MEM : 96GB DDR3 800MHz
+NETCARD : 1GB
+DISK : DELL MZ-5EA2000-0D3 200G SSD
+OS : Ubuntu 12.04.2 x64
+虚拟机软件 : KVM(磁盘, 网卡使用virtio)
+虚拟机操作系统 : CentOS 5.9 x64
+
+
+
+二、KVM虚拟机环境安装以及配置简要描述 : 
+安装软件包 : 
+
+sudo apt-get install kvm libvirt-bin virt-manager virt-viewer virtinst
+sudo apt-get install bridge-utils
+
+
+给普通用户添加libvirtd, kvm组.
+
+sudo adduser digoal libvirtd
+sudo adduser digoal kvm
+
+
+# 确认kvm硬件加速已正常
+
+sudo kvm-ok
+[sudo] password for digoal: 
+INFO: /dev/kvm exists
+KVM acceleration can be used
+
+
+配置网桥
+
+sudo vi /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto br0
+iface br0 inet static
+        address 192.168.2.8
+        network 192.168.2.0
+        netmask 255.255.255.0
+        broadcast 192.168.2.255
+        gateway 192.168.2.1
+        dns-nameservers 202.101.172.35 192.168.2.1
+        bridge_ports eth0
+        bridge_fd 9
+        bridge_hello 2
+        bridge_maxage 12
+        bridge_stp off
+
+
+重启网络服务
+
+sudo /etc/init.d/networking restart
+
+
+
+配置虚拟机文件分区, /data01 为ssd所在分区.
+
+mkdir /data01/vm
+chown digoal:digoal /data01/vm
+
+
+创建虚拟机磁盘镜像文件.
+
+su - digoal
+qemu-img create -f qcow2 -o encryption=off,cluster_size=2M,preallocation=off /data01/vm/centos5.9_64_01.img 16G
+
+
+
+使用virt-manager创建虚拟机, 内存分配8GB, 1个VCPU
+在虚拟机中安装CentOS 5.9 x64
+最后确认虚拟机使用了硬盘virtio以及网卡virtio.
+详细安装过程略.
+
+启动虚拟机后, 连接到虚拟机环境, 安装PostgreSQL 9.2.3.
+配置虚拟机网络
+略
+安装软件包
+
+yum -y install lrzsz sysstat e4fsprogs ntp readline-devel zlib zlib-devel openssl openssl-devel pam-devel libxml2-devel libxslt-devel python-devel tcl-devel
+wget http://ftp.postgresql.org/pub/source/v9.2.3/postgresql-9.2.3.tar.bz2
+wget flex
+
+
+配置时间同步
+
+crontab -e
+  -- 8 * * * * /usr/sbin/ntpdate asia.pool.ntp.org && /sbin/hwclock --systohc
+/usr/sbin/ntpdate asia.pool.ntp.org && /sbin/hwclock --systohc
+
+
+关闭不必要的服务
+
+chkconfig acpid off
+chkconfig avahi-daemon off
+chkconfig bluetooth off
+chkconfig hidd off
+chkconfig smartd off
+chkconfig yum-updatesd off
+chkconfig hplip off
+chkconfig isdn off
+chkconfig iscsi off
+chkconfig iscsid off
+chkconfig multipathd on
+
+
+配置内核参数
+
+vi /etc/sysctl.conf
+kernel.shmmni = 4096
+kernel.sem = 50100 64128000 50100 1280
+fs.file-max = 7672460
+net.ipv4.ip_local_port_range = 9000 65000
+net.core.rmem_default = 1048576
+net.core.rmem_max = 4194304
+net.core.wmem_default = 262144
+net.core.wmem_max = 1048576
+net.ipv4.tcp_tw_recycle = 1
+net.ipv4.tcp_max_syn_backlog = 4096
+net.core.netdev_max_backlog = 10000
+vm.overcommit_memory = 0
+net.ipv4.ip_conntrack_max = 655360
+fs.aio-max-nr = 1048576
+net.ipv4.tcp_timestamps = 0
+# sysctl -p
+
+
+配置限制参数
+
+vi /etc/security/limits.conf
+* soft    nofile  131072
+* hard    nofile  131072
+* soft    nproc   131072
+* hard    nproc   131072
+* soft    core    unlimited
+* hard    core    unlimited
+* soft    memlock 50000000
+* hard    memlock 50000000
+
+
+关闭selinux
+
+vi /etc/sysconfig/selinux
+SELINUX=disabled
+
+
+重启服务器.
+安装flex
+
+cd /opt/soft_bak
+tar -jxvf flex-2.5.35.tar.bz2
+cd flex-2.5.35
+./configure && make && make install
+
+
+安装postgresql
+
+useradd postgres
+cd /opt/soft_bak
+tar -jxvf postgresql-9.2.3.tar.bz2
+
+
+-- 配置profile
+
+su - postgres
+vi /home/postgres/.bash_profile
+export PGPORT=1921
+export PGDATA=/data01/pgdata/pg_root
+export LANG=en_US.utf8
+export PGHOME=/opt/pgsql
+export LD_LIBRARY_PATH=$PGHOME/lib:/lib64:/usr/lib64:/usr/local/lib64:/lib:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH
+export DATE=`date +"%Y%m%d%H%M"`
+export PATH=$PGHOME/bin:$PATH:.
+export MANPATH=$PGHOME/share/man:$MANPATH
+export PGUSER=postgres
+export PGHOST=$PGDATA
+export PGDATABASE=postgres
+alias rm='rm -i'
+alias ll='ls -lh'
+
+
+-- 安装postgresql软件
+
+su - root
+cd /opt/soft_bak/postgresql-9.2.3
+./configure --prefix=/opt/pgsql9.2.3 --with-pgport=1921 --with-perl --with-tcl --with-python --with-openssl --with-pam --without-ldap --with-libxml --with-libxslt --enable-thread-safety --with-wal-blocksize=16 --enable-debug && gmake world
+gmake install-world
+ln -s /opt/pgsql9.2.3 /opt/pgsql
+
+
+-- 创建数据库目录
+
+mkdir -p /data01/pgdata/pg_root
+chown -R postgres:postgres /data01/pgdata
+
+
+-- 初始化数据库
+
+su - postgres
+initdb -D /data01/pgdata/pg_root -E UTF8 --locale=C -U postgres -W
+
+
+-- 配置postgresql.conf参数文件
+
+vi $PGDATA/postgresql.conf
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 1921                             # (change requires restart)
+max_connections = 500                   # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directory = '.'             # (change requires restart)
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+tcp_keepalives_idle = 10                # TCP_KEEPIDLE, in seconds;
+tcp_keepalives_interval = 10            # TCP_KEEPINTVL, in seconds;
+tcp_keepalives_count = 10               # TCP_KEEPCNT;
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # synchronization level;
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+wal_writer_delay = 10ms         # 1-10000 milliseconds
+checkpoint_segments = 16                # in logfile segments, min 1, 16MB each
+archive_mode = on               # allows archiving to be done
+archive_command = '/bin/date'           # command to use to archive a logfile segment
+archive_timeout = 0             # force a logfile segment switch after this
+max_wal_senders = 10            # max number of walsender processes
+wal_keep_segments = 32          # in logfile segments, 16MB each; 0 disables
+hot_standby = on                        # "on" allows queries during recovery
+wal_receiver_status_interval = 1s       # send replies at least this often
+hot_standby_feedback = on               # send info from standby to prevent
+random_page_cost = 1.0                  # same scale as above
+effective_cache_size = 8192MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = 'pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_timezone = 'PRC'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'en_US.utf8'                      # locale for system error message
+lc_monetary = 'en_US.utf8'                      # locale for monetary formatting
+lc_numeric = 'en_US.utf8'                       # locale for number formatting
+lc_time = 'en_US.utf8'                          # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+
+
+-- 启动数据库
+
+pg_ctl start
+
+
+
+三、测试场景
+-- 创建测试库
+
+create database digoal;
+
+
+-- 创建测试表
+
+create table user_info
+(userid int,
+engname text,
+cnname text,
+occupation text,
+birthday date,
+signname text,
+email text,
+qq numeric,
+crt_time timestamp without time zone,
+mod_time timestamp without time zone
+);
+
+create table user_session
+(userid int,
+logintime timestamp(0) without time zone,
+login_count bigint default 0,
+logouttime timestamp(0) without time zone,
+online_interval interval default interval '0'
+);
+
+create table user_login_rec
+(userid int,
+login_time timestamp without time zone,
+ip inet
+);
+
+create table user_logout_rec
+(userid int,
+logout_time timestamp without time zone,
+ip inet
+);
+
+
+
+-- 初始化测试数据
+
+insert into user_info (userid,engname,cnname,occupation,birthday,signname,email,qq,crt_time,mod_time)
+select generate_series(1,2000000),
+'digoal.zhou',
+'德哥',
+'DBA',
+'1970-01-01'
+,E'公益是一辈子的事, I\'m Digoal.Zhou, Just do it!',
+'digoal@126.com',
+276732431,
+clock_timestamp(),
+NULL;
+
+insert into user_session (userid) select generate_series(1,2000000);
+
+set work_mem='2048MB';
+set maintenance_work_mem='2048MB';
+alter table user_info add constraint pk_user_info primary key (userid);
+alter table user_session add constraint pk_user_session primary key (userid);
+
+
+
+-- 模拟用户登录的函数
+
+create or replace function f_user_login 
+(i_userid int,
+OUT o_userid int,
+OUT o_engname text,
+OUT o_cnname text,
+OUT o_occupation text,
+OUT o_birthday date,
+OUT o_signname text,
+OUT o_email text,
+OUT o_qq numeric
+)
+as $BODY$
+declare
+begin
+select userid,engname,cnname,occupation,birthday,signname,email,qq
+into o_userid,o_engname,o_cnname,o_occupation,o_birthday,o_signname,o_email,o_qq
+from user_info where userid=i_userid;
+insert into user_login_rec (userid,login_time,ip) values (i_userid,now(),inet_client_addr());
+update user_session set logintime=now(),login_count=login_count+1 where userid=i_userid;
+return;
+end;
+$BODY$
+language plpgsql;
+
+
+
+-- 模拟用户退出的函数
+
+create or replace function f_user_logout
+(i_userid int,
+OUT o_result int
+)
+as $BODY$
+declare
+begin
+insert into user_logout_rec (userid,logout_time,ip) values (i_userid,now(),inet_client_addr());
+update user_session set logouttime=now(),online_interval=online_interval+(now()-logintime) where userid=i_userid;
+o_result := 0;
+return;
+exception 
+when others then
+o_result := 1;
+return;
+end;
+$BODY$
+language plpgsql;
+
+
+
+测试脚本 : 
+
+su - postgres
+vi login.sql
+\setrandom userid 1 2000000
+SELECT f_user_login(:userid);
+
+
+
+四、3种虚拟机配置的测试结果
+4.1 虚拟机配置1测试: (1个vcpu, 8G内存), 主机上无其他虚拟机.
+
+# cat /proc/cpuinfo 
+processor       : 0
+vendor_id       : GenuineIntel
+cpu family      : 6
+model           : 15
+model name      : Intel(R) Core(TM)2 Duo CPU     T7700  @ 2.40GHz
+stepping        : 11
+cpu MHz         : 1596.000
+cache size      : 4096 KB
+fpu             : yes
+fpu_exception   : yes
+cpuid level     : 10
+wp              : yes
+flags           : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss syscall nx rdtscp lm constant_tsc up pni ssse3 cx16 sse4_1 sse4_2 popcnt lahf_lm
+bogomips        : 3192.00
+clflush size    : 64
+cache_alignment : 64
+address sizes   : 40 bits physical, 48 bits virtual
+power management:
+
+
+虚拟机启动参数 : 
+
+/usr/bin/kvm -S -M pc-1.0 -cpu core2duo,+lahf_lm,+rdtscp,+popcnt,+sse4.2,+sse4.1,+dca,+xtpr,+cx16,+tm2,+est,+vmx,+ds_cpl,+pbe,+tm,+ht,+ss,+acpi,+ds -enable-kvm -m 8192 -smp 1,sockets=1,cores=1,threads=1 -name centos-5.9-x64-01 -uuid f4a8170a-436d-a731-a5c5-8cc4b59acb71 -nodefconfig -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/centos-5.9-x64-01.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc -no-shutdown -drive file=/data02/vm/centos-5.9-x64_01.img,if=none,id=drive-virtio-disk0,format=qcow2 -device virtio-blk-pci,bus=pci.0,addr=0x4,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1 -drive if=none,media=cdrom,id=drive-ide0-1-0,readonly=on,format=raw -device ide-drive,bus=ide.1,unit=0,drive=drive-ide0-1-0,id=ide0-1-0 -netdev tap,fd=18,id=hostnet0,vhost=on,vhostfd=19 -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:54:00:fa:be:c3,bus=pci.0,addr=0x3 -chardev pty,id=charserial0 -device isa-serial,chardev=charserial0,id=serial0 -usb -vnc 127.0.0.1:0 -vga cirrus -device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x5
+
+
+测试结果(根据经验值连接使用2*cpu个数) : 
+
+pgbench -M prepared -r -c 2 -f /home/postgres/login.sql -j 1 -n -T 60 -h $PGDATA -p 1921 -U postgres digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 2
+number of threads: 1
+duration: 60 s
+number of transactions actually processed: 177779
+tps = 2962.415241 (including connections establishing)
+tps = 2962.810601 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.004217        \setrandom userid 1 2000000
+        0.666220        SELECT f_user_login(:userid);
+
+
+将连接加到16个, 在主机上看到的CPU开销还是120%左右, 与开2个连接一致. 所以KVM分配给虚拟机的CPU个数确实限制了资源的使用.
+CPU的使用率相当于基本开销+100%.
+
+[postgres@db-192-168-122-171 ~]$ pgbench -M prepared -r -c 16 -f /home/postgres/login.sql -j 4 -n -T 60 -h $PGDATA -p 1921 -U postgres digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 189494
+tps = 3152.515039 (including connections establishing)
+tps = 4051.201821 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002934        \setrandom userid 1 2000000
+        3.937482        SELECT f_user_login(:userid);
+
+
+测试过程中主机上看到的虚拟机开销
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 2880 libvirt-  20   0 10.8g 2.3g 6876 S  120  2.4   5:18.23 /usr/bin/kvm -S -M pc-1.0 -cpu core2duo,+lahf_lm,+rdtscp,+popcnt,+sse4.
+
+
+
+4.2 虚拟机配置2测试: (8个vcpu, 8G内存), 主机上无其他虚拟机
+通过virt-manager将该虚拟机的vCPU个数改到8. 重启虚拟机
+
+[root@db-192-168-122-171 ~]# cat /proc/cpuinfo |grep processor
+processor       : 0
+processor       : 1
+processor       : 2
+processor       : 3
+processor       : 4
+processor       : 5
+processor       : 6
+processor       : 7
+
+
+在测试前, 看看CPU的开销, 这个开销是基本开销, 后面会有解释 : 
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 3522 libvirt-  20   0 10.6g 462m 6932 R  120  0.5   4:07.04 /usr/bin/kvm -S -M pc-1.0 -cpu core2duo,+lahf_lm,+rdtscp,+popcnt,+sse4.
+
+测试结果(根据经验值连接使用2*cpu个数) : 
+
+[postgres@db-192-168-122-171 ~]$ pgbench -M prepared -r -c 16 -f /home/postgres/login.sql -j 4 -n -T 60 -h $PGDATA -p 1921 -U postgres digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 870730
+tps = 14506.303944 (including connections establishing)
+tps = 14514.458560 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.003594        \setrandom userid 1 2000000
+        1.093442        SELECT f_user_login(:userid);
+
+
+测试过程中主机上看到的虚拟机开销 : 
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 3522 libvirt-  20   0 10.6g 2.8g 6932 S  635  3.0  16:27.49 /usr/bin/kvm -S -M pc-1.0 -cpu core2duo,+lahf_lm,+rdtscp,+popcnt,+sse4.
+
+
+
+4.3 虚拟机配置3测试: (8个vcpu, 8G内存), 另外在主机上再新开7个其他虚拟机(分别分配1个vcpu,1G内存.), 其他虚拟机开机但是啥都不干.
+在测试前, 看看CPU的开销, 这个开销是基本开销, 后面会有解释 : 
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 3522 libvirt-  20   0 10.6g 3.0g 6932 S   50  3.2  21:48.91 /usr/bin/kvm -S -M pc-1.0 -cpu core2duo,+lahf_lm,+rdtscp,+popcnt,+sse4.
+ 3807 libvirt-  20   0 4147m 242m 6876 S   24  0.3   0:34.87 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3723 libvirt-  20   0 4530m 242m 6876 S   24  0.3   0:34.98 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3681 libvirt-  20   0 3827m 239m 6876 S   21  0.2   0:34.52 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3702 libvirt-  20   0 3698m 238m 6876 S   18  0.2   0:34.60 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3744 libvirt-  20   0 3570m 242m 6876 S   18  0.3   0:35.36 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3786 libvirt-  20   0 3954m 242m 6876 S   18  0.3   0:34.29 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3765 libvirt-  20   0 4146m 241m 6876 S   17  0.3   0:33.41 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+
+测试结果(根据经验值连接使用2*cpu个数) : 
+
+[postgres@db-192-168-122-171 ~]$ pgbench -M prepared -r -c 16 -f /home/postgres/login.sql -j 4 -n -T 60 -h $PGDATA -p 1921 -U postgres digoal
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 549333
+tps = 9150.800430 (including connections establishing)
+tps = 9154.330186 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.004609        \setrandom userid 1 2000000
+        1.736610        SELECT f_user_login(:userid);
+
+
+测试过程中主机上看到的虚拟机开销 : 
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND                                                                
+ 3522 libvirt-  20   0 10.6g 3.0g 6932 S  476  3.2  23:44.33 /usr/bin/kvm -S -M pc-1.0 -cpu core2duo,+lahf_lm,+rdtscp,+popcnt,+sse4.
+ 3702 libvirt-  20   0 3698m 238m 6876 S   15  0.2   0:44.83 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3723 libvirt-  20   0 4530m 242m 6876 R   15  0.3   0:45.47 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3681 libvirt-  20   0 3827m 239m 6876 S   14  0.2   0:44.74 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3744 libvirt-  20   0 3570m 242m 6876 S   14  0.3   0:45.42 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3807 libvirt-  20   0 4147m 242m 6876 S   14  0.3   0:45.09 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3765 libvirt-  20   0 4146m 242m 6876 S   13  0.3   0:42.64 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+ 3786 libvirt-  20   0 3954m 242m 6876 S   13  0.3   0:44.74 /usr/bin/kvm -S -M pc-1.0 -enable-kvm -m 1024 -smp 1,sockets=1,cores=1,
+
+
+
+【小结】
+1. 单个虚拟机的基本CPU开销(虚拟机开着啥也不干)和分配给这个虚拟机的VCPU个数有关, 每个VCPU至少约消耗单核的15% . 
+    例如主机的CPU共有8核, 那么总的可消耗CPU资源算800%. 
+    给某虚拟机分配了2个VCPU, 但有足够多的物理核的情况下, 那么这个虚拟机至少约消耗30%的CPU(在主机中用top命令查看).
+所以前面测试场景3中, 开启了其他虚拟机的情况下, 将降低postgresql数据库所在虚拟机的CPU资源分配.
+总共分配了15个VCPU, 其中数据库所在的虚拟机分配了8个vcpu, 占用中CPU资源的8/15, 对比两次的tps的比例 : 
+
+postgres=# select 8/15.0;
+        ?column?        
+------------------------
+ 0.53333333333333333333
+(1 row)
+postgres=# select 9154.0/14514;
+        ?column?        
+------------------------
+ 0.63070139175968030867
+(1 row)
+
+
+2. 性能优化及测试场景介绍 : 
+http://blog.163.com/digoal@126/blog/static/163877040201221382150858/
+3. 虚拟机安装以及配置详细可参考 : 
+http://blog.163.com/digoal@126/blog/static/163877040201322462042878/
+4. 场景2的测试结果tps 14514, 在主机,非虚拟机下的测试结果tps 23662. 
+数据库使用虚拟机的话性能损失还是较大的.
+
+postgres@digoal-PowerEdge-R610:~$ pgbench -M prepared -r -c 16 -f ./login.sql -j 4 -n -T 60 -h $PGDATA -p 1921 -U postgres postgres
+transaction type: Custom query
+scaling factor: 1
+query mode: prepared
+number of clients: 16
+number of threads: 4
+duration: 60 s
+number of transactions actually processed: 1419819
+tps = 23657.600751 (including connections establishing)
+tps = 23662.542199 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.002911        \setrandom userid 1 2000000
+        0.671418        SELECT f_user_login(:userid);
+
+

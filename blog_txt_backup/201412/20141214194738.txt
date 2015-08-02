@@ -1,0 +1,205 @@
+PostgreSQL research
+
+use trigger audit record which column modified, insert, delete.
+
+2014-12-14 19:47:38   查看原文>>
+
+这个需求需要记录数据被插入的审计, 删除的审计, 更新的审计, 注意更新的审计包括哪些字段发生了变更.
+不需要的审计, 注释对应的触发器代码即可.
+触发器代码如下 : 
+
+create extension hstore;
+
+CREATE TABLE table_change_rec (
+  id serial8 primary key,
+  relid oid,
+  table_schema name,
+  table_name name,
+  when_tg text,
+  level text,
+  op text,
+  old_rec hstore,
+  new_rec hstore,
+  diff_old_rec text,
+  diff_new_rec text,
+  crt_time timestamp without time zone DEFAULT now(),
+  username name,
+  client_addr inet,
+  client_port int
+);
+
+
+
+-- 创建通用的触发器函数
+
+CREATE OR REPLACE FUNCTION dml_trace()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $BODY$
+DECLARE
+  v_new_rec hstore;
+  v_old_rec hstore;
+  v_diff_new_rec text;
+  v_diff_old_rec text;
+  v_username text := session_user;
+  v_client_addr inet := inet_client_addr();
+  v_client_port int := inet_client_port();
+BEGIN
+  case TG_OP
+  when 'DELETE' then 
+    v_old_rec := hstore(OLD.*);
+    insert into table_change_rec (relid, table_schema, table_name, when_tg, level, op, old_rec, username, client_addr, client_port)
+      values (tg_relid, tg_table_schema, tg_table_name, tg_when, tg_level, tg_op, v_old_rec, v_username, v_client_addr, v_client_port);
+  when 'INSERT' then 
+    v_new_rec := hstore(NEW.*);
+    insert into table_change_rec (relid, table_schema, table_name, when_tg, level, op, new_rec, username, client_addr, client_port)
+      values (tg_relid, tg_table_schema, tg_table_name, tg_when, tg_level, tg_op, v_new_rec, v_username, v_client_addr, v_client_port);
+  when 'UPDATE' then 
+    v_old_rec := hstore(OLD.*);
+    v_new_rec := hstore(NEW.*);
+    select array_agg(o)::text,array_agg(n)::text into v_diff_old_rec,v_diff_new_rec from (select row_number() over() as rn,o from each(v_old_rec) as o) as o join
+    (select row_number() over() as rn,n from each(v_new_rec) as n) as n on o.rn=n.rn and o<>n;
+    insert into table_change_rec (relid, table_schema, table_name, when_tg, level, op, old_rec, new_rec, diff_old_rec, diff_new_rec, username, client_addr, client_port)
+      values (tg_relid, tg_table_schema, tg_table_name, tg_when, tg_level, tg_op, v_old_rec, v_new_rec, v_diff_old_rec, v_diff_new_rec, v_username, v_client_addr, v_client_port);
+  else
+    return null;
+  end case;
+  RETURN null;
+END;
+$BODY$ strict;
+
+
+
+测试 : 
+
+postgres=# create table test (id int, c1 int, c2 text, c3 timestamp);
+CREATE TABLE
+postgres=# CREATE TRIGGER tg AFTER DELETE or INSERT or UPDATE ON test FOR EACH ROW EXECUTE PROCEDURE dml_trace();
+CREATE TRIGGER
+postgres=# truncate table_change_rec ;
+TRUNCATE TABLE
+postgres=# insert into test values (1,1,'digoal',now());
+INSERT 0 1
+postgres=# insert into test values (2,2,'digoal',now());
+INSERT 0 1
+postgres=# update test set id=null,c1=null,c2=null,c3=null where id=1;
+UPDATE 1
+postgres=# update test set c1=2,c3=now() where id=2;
+UPDATE 1
+postgres=# delete from test;
+DELETE 2
+
+
+
+查看审计
+
+postgres=# select * from table_change_rec;
+-[ RECORD 1 ]+-------------------------------------------------------------------------
+id           | 11
+relid        | 16593
+table_schema | public
+table_name   | test
+when_tg      | AFTER
+level        | ROW
+op           | INSERT
+old_rec      | 
+new_rec      | "c1"=>"1", "c2"=>"digoal", "c3"=>"2014-12-15 03:43:12.135139", "id"=>"1"
+diff_old_rec | 
+diff_new_rec | 
+crt_time     | 2014-12-15 03:43:12.135139
+username     | postgres
+client_addr  | 
+client_port  | 
+-[ RECORD 2 ]+-------------------------------------------------------------------------
+id           | 12
+relid        | 16593
+table_schema | public
+table_name   | test
+when_tg      | AFTER
+level        | ROW
+op           | INSERT
+old_rec      | 
+new_rec      | "c1"=>"2", "c2"=>"digoal", "c3"=>"2014-12-15 03:43:14.803063", "id"=>"2"
+diff_old_rec | 
+diff_new_rec | 
+crt_time     | 2014-12-15 03:43:14.803063
+username     | postgres
+client_addr  | 
+client_port  | 
+diff的内容, 只有更新的字段被记录
+-[ RECORD 3 ]+-------------------------------------------------------------------------
+id           | 13
+relid        | 16593
+table_schema | public
+table_name   | test
+when_tg      | AFTER
+level        | ROW
+op           | UPDATE
+old_rec      | "c1"=>"1", "c2"=>"digoal", "c3"=>"2014-12-15 03:43:12.135139", "id"=>"1"
+new_rec      | "c1"=>NULL, "c2"=>NULL, "c3"=>NULL, "id"=>NULL
+diff_old_rec | {"(c1,1)","(c2,digoal)","(c3,\"2014-12-15 03:43:12.135139\")","(id,1)"}
+diff_new_rec | {"(c1,)","(c2,)","(c3,)","(id,)"}
+crt_time     | 2014-12-15 03:43:18.832179
+username     | postgres
+client_addr  | 
+client_port  | 
+diff的内容: 只有更新的字段被记录, 未更新的字段不会被记录
+-[ RECORD 4 ]+-------------------------------------------------------------------------
+id           | 14
+relid        | 16593
+table_schema | public
+table_name   | test
+when_tg      | AFTER
+level        | ROW
+op           | UPDATE
+old_rec      | "c1"=>"2", "c2"=>"digoal", "c3"=>"2014-12-15 03:43:14.803063", "id"=>"2"
+new_rec      | "c1"=>"2", "c2"=>"digoal", "c3"=>"2014-12-15 03:43:35.977674", "id"=>"2"
+diff_old_rec | {"(c3,\"2014-12-15 03:43:14.803063\")"}
+diff_new_rec | {"(c3,\"2014-12-15 03:43:35.977674\")"}
+crt_time     | 2014-12-15 03:43:35.977674
+username     | postgres
+client_addr  | 
+client_port  | 
+-[ RECORD 5 ]+-------------------------------------------------------------------------
+id           | 15
+relid        | 16593
+table_schema | public
+table_name   | test
+when_tg      | AFTER
+level        | ROW
+op           | DELETE
+old_rec      | "c1"=>NULL, "c2"=>NULL, "c3"=>NULL, "id"=>NULL
+new_rec      | 
+diff_old_rec | 
+diff_new_rec | 
+crt_time     | 2014-12-15 03:43:39.352938
+username     | postgres
+client_addr  | 
+client_port  | 
+-[ RECORD 6 ]+-------------------------------------------------------------------------
+id           | 16
+relid        | 16593
+table_schema | public
+table_name   | test
+when_tg      | AFTER
+level        | ROW
+op           | DELETE
+old_rec      | "c1"=>"2", "c2"=>"digoal", "c3"=>"2014-12-15 03:43:35.977674", "id"=>"2"
+new_rec      | 
+diff_old_rec | 
+diff_new_rec | 
+crt_time     | 2014-12-15 03:43:39.352938
+username     | postgres
+client_addr  | 
+client_port  | 
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201252575529358/
+2. http://www.postgresql.org/docs/9.3/static/plpgsql-trigger.html
+3. http://www.postgresql.org/docs/9.3/static/hstore.html
+4. http://blog.163.com/digoal@126/blog/static/1638770402014721981288/
+5. http://blog.163.com/digoal@126/blog/static/16387704020121118112533410/
+6. http://www.postgresql.org/docs/9.2/static/sql-createaggregate.html
+Flag Counter

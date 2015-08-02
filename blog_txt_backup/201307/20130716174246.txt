@@ -1,0 +1,397 @@
+PostgreSQL research
+
+PostgreSQL transformArraySubscripts BUG? or because PostgreSQL's array don't limit dimensional
+
+2013-07-16 17:42:46   查看原文>>
+
+PostgreSQL 数组类型在plpgsql中的应用例子, 遇到一个比较怪异的错误. 来自LOCATION:  transformArrayType, parse_node.c:241的调用.
+但是这样并不能看不出来有什么问题, 赋值类型和源数据类型一致.
+原因后面解释. 你可以说这是PostgreSQL的 BUG, 也可以说它对array设计的功能缺陷. 未来也许会弥补.
+
+测试函数1 : 
+
+digoal=# do language plpgsql $$
+declare
+  res text[];
+  x text;
+  i int := 0;
+begin
+  foreach x in array array['1','2','3'] loop
+    select x into res[i];                   
+    i := i+1;
+  end loop;
+  raise notice '%', res;
+end;
+$$;
+ERROR:  42804: cannot subscript type text because it is not an array
+CONTEXT:  SQL statement "select x         [i]"
+PL/pgSQL function inline_code_block line 8 at SQL statement
+LOCATION:  transformArrayType, parse_node.c:241
+
+
+报错的SQL是select x into res[i]; x是text 类型, res是text数组, 理论上text插入text数组中的一个元素没问题, 为什么为报错呢?
+原因是PostgreSQL不限制数组维度, 所以res text[]定义的数组里面还可能存储text数组, 即多维数组.
+但是这并不能阻止我们把text存进text[], 后面有解决办法 .
+
+测试函数2 : 
+
+digoal=# do language plpgsql $$
+declare
+  res text[];
+  x varchar; -- 把x定义为varchar
+  i int := 0;
+begin
+  foreach x in array array['1','2','3'] loop
+    select x into res[i];
+    i := i+1;
+  end loop;
+  raise notice '%', res;
+end;
+$$;
+ERROR:  42804: cannot subscript type character varying because it is not an array
+CONTEXT:  SQL statement "select x         [i]"
+PL/pgSQL function inline_code_block line 8 at SQL statement
+LOCATION:  transformArrayType, parse_node.c:241
+
+
+第一个函数你可能没看明白, 这个函数把x改成varchar, 报错的信息变成
+ERROR:  42804: cannot subscript type character varying because it is not an array
+这下看清楚了, 报错是说x是varchar类型, 不是数组类型, 所以无法存进数组中.
+不得不说PostgreSQL可以改进一下这块.
+
+测试函数3 : 
+
+digoal=# do language plpgsql $$
+declare
+  res text[];
+  x text;   
+  i int := 0;
+begin               
+  foreach x in array array['1','2','3'] loop
+    execute 'select $1' into res[i] using x;
+    i := i+1;
+  end loop;
+  raise notice '%', res;
+end;
+$$;
+ERROR:  42601: syntax error at or near "["
+LINE 8:     execute 'select $1' into res[i] using x;
+                                        ^
+LOCATION:  plpgsql_yyerror, pl_scanner.c:521
+
+
+使用execute报的又是另一个错误, 它在语法上根本就不允许你将变量赋予数组中的一个元素.
+
+测试函数4 : 
+
+digoal=# do language plpgsql $$
+declare
+  res text[];
+  x text;                       
+  i int := 0;          
+begin
+  foreach x in array array['1','2','3'] loop
+    res[i] := x;                
+    i := i+1;
+  end loop;
+  raise notice '%', res;
+end;
+$$;
+NOTICE:  00000: [0:2]={1,2,3}
+LOCATION:  exec_stmt_raise, pl_exec.c:2840
+DO
+
+
+这个是解决办法, 直接赋值吧, 这样没那么多的检测了. 自己控制就好了.
+如果你遇到同样的问题, 可以尝试这样解决.
+
+以上错误和PostgreSQL不限制维度有关, 因为text[]定义可以存储多维数组. 并不局限1维数组.
+手册原文如下 : 
+
+However, the current implementation ignores any supplied array size limits, i.e., the behavior is the same as for arrays of unspecified length.
+
+
+The current implementation does not enforce the declared number of dimensions either. Arrays of a particular element type are all considered to be of the same type, regardless of size or number of dimensions. So, declaring the array size or number of dimensions in CREATE TABLE is simply documentation; it does not affect run-time behavior.
+
+
+An alternative syntax, which conforms to the SQL standard by using the keyword ARRAY, can be used for one-dimensional arrays. pay_by_quarter could have been defined as:
+
+
+    pay_by_quarter  integer ARRAY[4],
+
+Or, if no array size is to be specified:
+
+    pay_by_quarter  integer ARRAY,
+
+As before, however, PostgreSQL does not enforce the size restriction in any case.
+
+如下 : 
+使用res 存储2维数组.
+
+postgres=# do language plpgsql $$
+declare
+  res text[];
+begin
+  res := '{{a,a,a},{b,b,b},{c,c,c}}';
+  raise notice '%', res[1][1:3];
+end;
+$$;
+NOTICE:  00000: {{a,a,a}}
+LOCATION:  exec_stmt_raise, pl_exec.c:2840
+DO
+
+
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/163877040201201275922529/
+2. src/backend/parser/parse_node.c
+
+/*
+  203  * transformArrayType()
+  204  *      Identify the types involved in a subscripting operation
+  205  *
+  206  * On entry, arrayType/arrayTypmod identify the type of the input value
+  207  * to be subscripted (which could be a domain type).  These are modified
+  208  * if necessary to identify the actual array type and typmod, and the
+  209  * array's element type is returned.  An error is thrown if the input isn't
+  210  * an array type.
+  211  */
+  212 Oid
+  213 transformArrayType(Oid *arrayType, int32 *arrayTypmod)
+  214 {
+  215     Oid         origArrayType = *arrayType;
+  216     Oid         elementType;
+  217     HeapTuple   type_tuple_array;
+  218     Form_pg_type type_struct_array;
+  219 
+  220     /*
+  221      * If the input is a domain, smash to base type, and extract the actual
+  222      * typmod to be applied to the base type.  Subscripting a domain is an
+  223      * operation that necessarily works on the base array type, not the domain
+  224      * itself.  (Note that we provide no method whereby the creator of a
+  225      * domain over an array type could hide its ability to be subscripted.)
+  226      */
+  227     *arrayType = getBaseTypeAndTypmod(*arrayType, arrayTypmod);
+  228 
+  229     /* Get the type tuple for the array */
+  230     type_tuple_array = SearchSysCache1(TYPEOID, ObjectIdGetDatum(*arrayType));
+  231     if (!HeapTupleIsValid(type_tuple_array))
+  232         elog(ERROR, "cache lookup failed for type %u", *arrayType);
+  233     type_struct_array = (Form_pg_type) GETSTRUCT(type_tuple_array);
+  234 
+  235     /* needn't check typisdefined since this will fail anyway */
+  236 
+  237     elementType = type_struct_array->typelem;
+  238     if (elementType == InvalidOid)
+  239         ereport(ERROR,
+  240                 (errcode(ERRCODE_DATATYPE_MISMATCH),
+  241                  errmsg("cannot subscript type %s because it is not an array",
+  242                         format_type_be(origArrayType))));
+  243 
+  244     ReleaseSysCache(type_tuple_array);
+  245 
+  246     return elementType;
+  247 }
+  248 
+
+
+3. src/include/catalog/pg_type.h
+
+   91     /*
+   92      * If typelem is not 0 then it identifies another row in pg_type. The
+   93      * current type can then be subscripted like an array yielding values of
+   94      * type typelem. A non-zero typelem does not guarantee this type to be a
+   95      * "real" array type; some ordinary fixed-length types can also be
+   96      * subscripted (e.g., name, point). Variable-length types can *not* be
+   97      * turned into pseudo-arrays like that. Hence, the way to determine
+   98      * whether a type is a "true" array type is if:
+   99      *
+  100      * typelem != 0 and typlen == -1.
+  101      */
+  102     Oid         typelem;
+
+
+4. src/include/postgres_ext.h
+
+   33 #ifdef __cplusplus
+   34 #define InvalidOid      (Oid(0))
+   35 #else
+   36 #define InvalidOid      ((Oid) 0)
+   37 #endif
+
+
+5. src/backend/parser/parse_node.c
+
+  249 /*
+  250  * transformArraySubscripts()
+  251  *      Transform array subscripting.  This is used for both
+  252  *      array fetch and array assignment.
+  253  *
+  254  * In an array fetch, we are given a source array value and we produce an
+  255  * expression that represents the result of extracting a single array element
+  256  * or an array slice.
+  257  *
+  258  * In an array assignment, we are given a destination array value plus a
+  259  * source value that is to be assigned to a single element or a slice of
+  260  * that array.  We produce an expression that represents the new array value
+  261  * with the source data inserted into the right part of the array.
+  262  *
+  263  * For both cases, if the source array is of a domain-over-array type,
+  264  * the result is of the base array type or its element type; essentially,
+  265  * we must fold a domain to its base type before applying subscripting.
+  266  *
+  267  * pstate       Parse state
+  268  * arrayBase    Already-transformed expression for the array as a whole
+  269  * arrayType    OID of array's datatype (should match type of arrayBase,
+  270  *              or be the base type of arrayBase's domain type)
+  271  * elementType  OID of array's element type (fetch with transformArrayType,
+  272  *              or pass InvalidOid to do it here)
+  273  * arrayTypMod  typmod for the array (which is also typmod for the elements)
+  274  * indirection  Untransformed list of subscripts (must not be NIL)
+  275  * assignFrom   NULL for array fetch, else transformed expression for source.
+  276  */
+  277 ArrayRef *
+  278 transformArraySubscripts(ParseState *pstate,
+  279                          Node *arrayBase,
+  280                          Oid arrayType,
+  281                          Oid elementType,
+  282                          int32 arrayTypMod,
+  283                          List *indirection,
+  284                          Node *assignFrom)
+  285 {
+  286     bool        isSlice = false;
+  287     List       *upperIndexpr = NIL;
+  288     List       *lowerIndexpr = NIL;
+  289     ListCell   *idx;
+  290     ArrayRef   *aref;
+  291 
+  292     /*
+  293      * Caller may or may not have bothered to determine elementType.  Note
+  294      * that if the caller did do so, arrayType/arrayTypMod must be as modified
+  295      * by transformArrayType, ie, smash domain to base type.
+  296      */
+  297     if (!OidIsValid(elementType))
+  298         elementType = transformArrayType(&arrayType, &arrayTypMod);
+  299 
+  300     /*
+  301      * A list containing only single subscripts refers to a single array
+  302      * element.  If any of the items are double subscripts (lower:upper), then
+  303      * the subscript expression means an array slice operation. In this case,
+  304      * we supply a default lower bound of 1 for any items that contain only a
+  305      * single subscript.  We have to prescan the indirection list to see if
+  306      * there are any double subscripts.
+  307      */
+  308     foreach(idx, indirection)
+  309     {
+  310         A_Indices  *ai = (A_Indices *) lfirst(idx);
+  311 
+  312         if (ai->lidx != NULL)
+  313         {
+  314             isSlice = true;
+  315             break;
+  316         }
+  317     }
+  318 
+  319     /*
+  320      * Transform the subscript expressions.
+  321      */
+  322     foreach(idx, indirection)
+  323     {
+  324         A_Indices  *ai = (A_Indices *) lfirst(idx);
+  325         Node       *subexpr;
+  326 
+  327         Assert(IsA(ai, A_Indices));
+  328         if (isSlice)
+  329         {
+  330             if (ai->lidx)
+  331             {
+  332                 subexpr = transformExpr(pstate, ai->lidx, pstate->p_expr_kind);
+  333                 /* If it's not int4 already, try to coerce */
+  334                 subexpr = coerce_to_target_type(pstate,
+  335                                                 subexpr, exprType(subexpr),
+  336                                                 INT4OID, -1,
+  337                                                 COERCION_ASSIGNMENT,
+  338                                                 COERCE_IMPLICIT_CAST,
+  339                                                 -1);
+  340                 if (subexpr == NULL)
+  341                     ereport(ERROR,
+  342                             (errcode(ERRCODE_DATATYPE_MISMATCH),
+  343                              errmsg("array subscript must have type integer"),
+  344                         parser_errposition(pstate, exprLocation(ai->lidx))));
+  345             }
+  346             else
+  347             {
+  348                 /* Make a constant 1 */
+  349                 subexpr = (Node *) makeConst(INT4OID,
+  350                                              -1,
+  351                                              InvalidOid,
+  352                                              sizeof(int32),
+  353                                              Int32GetDatum(1),
+  354                                              false,
+  355                                              true);     /* pass by value */
+  356             }
+  357             lowerIndexpr = lappend(lowerIndexpr, subexpr);
+  358         }
+  359         subexpr = transformExpr(pstate, ai->uidx, pstate->p_expr_kind);
+  360         /* If it's not int4 already, try to coerce */
+  361         subexpr = coerce_to_target_type(pstate,
+  362                                         subexpr, exprType(subexpr),
+  363                                         INT4OID, -1,
+  364                                         COERCION_ASSIGNMENT,
+  365                                         COERCE_IMPLICIT_CAST,
+  366                                         -1);
+  367         if (subexpr == NULL)
+  368             ereport(ERROR,
+  369                     (errcode(ERRCODE_DATATYPE_MISMATCH),
+  370                      errmsg("array subscript must have type integer"),
+  371                      parser_errposition(pstate, exprLocation(ai->uidx))));
+  372         upperIndexpr = lappend(upperIndexpr, subexpr);
+  373     }
+  374 
+  375     /*
+  376      * If doing an array store, coerce the source value to the right type.
+  377      * (This should agree with the coercion done by transformAssignedExpr.)
+  378      */
+  379     if (assignFrom != NULL)
+  380     {
+  381         Oid         typesource = exprType(assignFrom);
+  382         Oid         typeneeded = isSlice ? arrayType : elementType;
+  383         Node       *newFrom;
+  384 
+  385         newFrom = coerce_to_target_type(pstate,
+  386                                         assignFrom, typesource,
+  387                                         typeneeded, arrayTypMod,
+  388                                         COERCION_ASSIGNMENT,
+  389                                         COERCE_IMPLICIT_CAST,
+  390                                         -1);
+  391         if (newFrom == NULL)
+  392             ereport(ERROR,
+  393                     (errcode(ERRCODE_DATATYPE_MISMATCH),
+  394                      errmsg("array assignment requires type %s"
+  395                             " but expression is of type %s",
+  396                             format_type_be(typeneeded),
+  397                             format_type_be(typesource)),
+  398                  errhint("You will need to rewrite or cast the expression."),
+  399                      parser_errposition(pstate, exprLocation(assignFrom))));
+  400         assignFrom = newFrom;
+  401     }
+  402 
+  403     /*
+  404      * Ready to build the ArrayRef node.
+  405      */
+  406     aref = makeNode(ArrayRef);
+  407     aref->refarraytype = arrayType;
+  408     aref->refelemtype = elementType;
+  409     aref->reftypmod = arrayTypMod;
+  410     /* refcollid will be set by parse_collate.c */
+  411     aref->refupperindexpr = upperIndexpr;
+  412     aref->reflowerindexpr = lowerIndexpr;
+  413     aref->refexpr = (Expr *) arrayBase;
+  414     aref->refassgnexpr = (Expr *) assignFrom;
+  415 
+  416     return aref;
+  417 }
+
+
+
+

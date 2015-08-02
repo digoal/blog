@@ -1,0 +1,400 @@
+PostgreSQL research
+
+a powerful upgrade from pgfincore 1.0
+
+2011-07-30 23:35:39   查看原文>>
+
+很久没有关注pgfincore的更新了，昨天Galy老师在群里发布了一条更新消息，我立马看了一下。
+发现pgfincore 1.0 带来了几个令人振奋的函数。灰常有用。感谢Galy老师提供的信息。
+    首先是pgfincore函数的更新,通过这个函数可以输出relation的文件系统每个页的缓存位图信息(是否缓存)。
+    另一个是pgfadvise_loader函数，可以通过页位图信息操纵relation的文件系统的缓存（精细化的载入或清除文件系统缓存）。
+    通过以上两个函数，可以记录下当前relation的页位图信息（活跃数据信息），保存到一个SNAPSHOT表，下次数据库启动的时候可以预先精细化的加载RELATION的文件系统页到系统缓存中。
+
+下面举例来说明一下用法 :
+首先是安装，我测试的时候使用的环境是PostgreSQL 9.1beta2 (9.1的模块安装已经改为create extension,所以安装方式和9.1以前有所不同，以前的安装方式可以参考我之前写的相关BLOG)
+1. 下载pgfincore 1.0 ： http://villemain.org/projects/pgfincore
+解压pgfincore-v1.0到以前编译postgresql的时候的软件目录.
+
+[root@db5 pgfincore-v1.0]# ll
+total 100
+-rw-rw-r-- 1 postgres postgres   341 Jul 28 20:53 AUTHORS
+-rw-rw-r-- 1 postgres postgres  2460 Jul 28 20:53 ChangeLog
+-rw-rw-r-- 1 postgres postgres  1576 Jul 28 20:53 COPYRIGHT
+drwxrwxr-x 3 postgres postgres  4096 Jul 28 20:53 debian
+-rw-rw-r-- 1 postgres postgres  1041 Jul 28 20:53 Makefile
+-rw-rw-r-- 1 postgres postgres  3867 Jul 30 21:15 pgfincore--1.0.sql
+-rw-rw-r-- 1 postgres postgres 24231 Jul 28 20:53 pgfincore.c
+-rw-rw-r-- 1 postgres postgres   154 Jul 28 20:53 pgfincore.control
+-rwxrwxr-x 1 postgres postgres 17056 Jul 30 21:15 pgfincore.so
+-rw-rw-r-- 1 postgres postgres 13483 Jul 28 20:53 README.rst
+drwxrwxr-x 2 postgres postgres  4096 Jul 28 20:53 sql
+-rw-rw-r-- 1 postgres postgres   170 Jul 28 20:53 TODO
+[root@db5 pgfincore-v1.0]# pwd
+/opt/soft_bak/postgresql-9.1beta2/contrib/pgfincore-v1.0
+,另外需要做一个操作(手册上没有提及,可能是个BUG)
+cp /opt/soft_bak/postgresql-9.1beta2/contrib/pgfincore-v1.0/sql/pgfincore--unpackaged--1.0.sql /opt/soft_bak/postgresql-9.1beta2/contrib/pgfincore-v1.0
+否则会报错 /opt/pgsql/lib/pgxs/src/makefiles/../../config/install-sh: ./pgfincore--unpackaged--1.0.sql does not exist.
+
+
+然后,编译
+
+  su - postgres
+  cd /opt/soft_bak/postgresql-9.1beta2/contrib/pgfincore-v1.0
+  gmake USE_PGXS=1 clean
+  gmake USE_PGXS=1
+  su - root
+  cd /opt/soft_bak/postgresql-9.1beta2/contrib/pgfincore-v1.0
+  . /home/postgres/.bash_profile
+  gmake USE_PGXS=1 install
+
+
+
+2. 加载extension
+
+postgres@db5-> psql -h 127.0.0.1 digoal postgres
+psql (9.1beta2)
+digoal=# create EXTENSION pgfincore;
+digoal=# select * from pg_extension ;
+     extname     | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition
+-----------------+----------+--------------+----------------+------------+-----------+--------------
+ pgfincore       |       10 |         2200 | t              | 1.0        |           |
+
+
+
+3. 使用
+# 为了能让测试的时候不受PostgreSQL自身的shared buffers的干扰,先把PostgreSQL的shared_buffers设置小一点。
+
+postgres@db5-> cd $PGDATA
+postgres@db5-> vi postgresql.conf
+shared_buffers = 64MB
+pg_ctl stop -m fast
+pg_ctl start
+
+
+
+# 接下来新建测试数据,测试数据量大于64M，防止shared_buffers干扰。
+
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+digoal=> create table user_info(id bigint,firstname text,lastname text,corp text,post text,age int,crt_time timestamp without time zone,comment text);
+digoal=> insert into user_info(id,firstname,lastname,corp,post,age,crt_time,comment) select generate_series(1,10000000),'zhou','digoal'||generate_series(2,10000001),'sky-mobi','dba team leader',28,clock_timestamp(),'abcdefg'||generate_series(3,10000002);
+digoal=> select pg_relation_size('user_info'::regclass)/1024/1024||' MB';
+ ?column?
+----------
+ 1698 MB
+
+
+
+4. 查询user_info占用了多少个文件系统页。
+
+digoal=> select * from pgfincore('user_info'::regclass);
+                   relpath                    | segment | os_page_size | rel_os_pages | pages_mem | group_mem | os_pages_free | data
+bit
+----------------------------------------------+---------+--------------+--------------+-----------+-----------+---------------+-----
+----
+ pg_tblspc/16385/PG_9.1_201105231/16386/90956 |       0 |         4096 |       434798 |    434798 |         1 |       1177644 |
+(1 row)
+
+
+os_page_size表示文件系统页的SIZE，单位字节。
+rel_os_pages表示占用了多少个文件系统页。
+(rel_os_pages乘以os_page_size结果就等于pg_relation_size('user_info'::regclass)返回的SIZE。)
+pages_mem表示有多少个文件系统页在操作系统的CACHE里面。
+databit 就是页位图信息，比特长度等于os_page_size，也就是说每一个文件系统页在这里占用一个比特位。
+比特位的值0表示这个页没有在OS CACHE里面，1表示这个页在OS CACHE里面。从上门我们查看到的rel_os_pages的结果与pages_mem相等，表示这个表所有的页都在文件系统CACHE里面，比特位的值都等于1.
+如:
+
+digoal=> select bit_length(databit) from pgfincore('user_info'::regclass,true);
+ bit_length
+------------
+     434798
+
+
+
+5. 把user_info表的页缓存全部清除掉。
+首先要获取segment和databit的信息，来自pgfincore('user_info'::regclass,true)函数的输出。
+然后要把databit的等于1的比特位全部反转为0，并且允许UNLOAD，但是不允许LOAD。
+
+digoal=> select pgfadvise_loader('user_info'::regclass,segment,false,true,bitnot(databit)) from (select segment,databit from pgfincore('user_info'::regclass,true)) as t;
+                           pgfadvise_loader                          
+----------------------------------------------------------------------
+ (pg_tblspc/16385/PG_9.1_201105231/16386/90956,4096,1611667,0,434798)
+(1 row)
+Time: 883.412 ms
+digoal=> select * from pgfincore('user_info'::regclass);
+                   relpath                    | segment | os_page_size | rel_os_pages | pages_mem | group_mem | os_pages_free | data
+bit
+----------------------------------------------+---------+--------------+--------------+-----------+-----------+---------------+-----
+----
+ pg_tblspc/16385/PG_9.1_201105231/16386/90956 |       0 |         4096 |       434798 |         0 |         0 |       1611667 |
+(1 row)
+Time: 21.345 ms
+
+
+执行完后，user_info的文件系统层缓存就被全部清除了。这个时候去执行select count(*) from user_info;的话就全部物理IO。
+
+digoal=> select count(*) from user_info;
+  count  
+----------
+ 10000000
+(1 row)
+
+
+Time: 25609.348 ms
+
+在另一个SSH窗口监控操作系统的IO，可以看到物理IO的产生。
+
+postgres@db5-> vmstat -n 1
+ procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+  r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+  1  1  18092 6432696 470456 9065288    0    0 19972     4 1340  646  0  0 96  3  0
+  0  1  18092 6358956 470456 9139008    0    0 73600     0 2190 1505  1  1 88 11  0
+  0  1  18092 6284736 470456 9213184    0    0 74240     0 2185 1449  1  1 87 11  0
+  0  1  18092 6213456 470456 9284576    0    0 71296    12 2145 1455  1  1 86 12  0
+  0  1  18092 6142296 470456 9355616    0    0 71168    56 2117 1587  1  1 87 12  0
+  1  1  18092 6078156 470460 9419632    0    0 64128    96 2038 1331  1  1 86 13  0
+  0  1  18092 6003396 470460 9494404    0    0 74752     0 2180 1499  1  1 87 11  0
+  0  1  18092 5929536 470460 9568124    0    0 73856     0 2181 1495  1  1 88 11  0
+  0  1  18092 5866464 470468 9630988    0    0 62720    80 2012 1437  1  1 87 12  0
+  0  1  18092 5797700 470468 9699664    0    0 68608    56 2102 1524  1  1 87 12  0
+  1  1  18092 5725400 470468 9771780    0    0 72320     0 2160 1519  1  1 88 11  0
+  1  0  18092 5655860 470468 9841620    0    0 69504     0 1714 1406  1  1 87 11  0
+  0  1  18092 5585120 470468 9912168    0    0 70784     0 1615 1442  1  1 88 11  0
+  0  1  18092 5518280 470468 9978904    0    0 66816    16 1578 1380  1  1 87 11  0
+  0  1  18092 5453784 470468 10043692    0    0 64640    56 1567 1372  1  1 87 12  0
+  0  1  18092 5382864 470468 10114696    0    0 70912     0 1609 1447  1  1 88 11  0
+  0  1  18092 5312844 470468 10184676    0    0 70016     0 1611 1443  1  1 88 11  0
+  0  1  18092 5245644 470468 10251800    0    0 67200     0 1589 1385  1  1 88 11  0
+  1  0  18092 5180844 470468 10316472    0    0 64896     0 1574 1358  1  0 88 11  0
+  0  2  18092 5113164 470468 10384372    0    0 67584    56 1589 1404  1  1 87 12  0
+  1  1  18092 5051484 470468 10445868    0    0 61696     0 1548 1322  1  1 87 11  0
+  0  1  18092 4983744 470468 10513768    0    0 67712     0 1589 1391  1  1 88 11  0
+  0  1  18092 4919004 470468 10578628    0    0 64768     0 1567 1357  1  1 88 11  0
+  0  1  18092 4856544 470468 10641096    0    0 62464     0 1560 1337  1  1 88 11  0
+  0  2  18092 4794084 470468 10703408    0    0 62464    56 1550 1331  1  1 87 12  0
+  0  1  18092 4733124 470468 10764324    0    0 60928     0 1543 1297  1  0 87 11  0
+  0  0  18092 4714824 470468 10782704    0    0 18304     0 1182  604  0  0 96  3  0
+
+
+
+再次查看这个表的CACHE信息。因为此前没有使用pgfadvise_willneed,所以CACHE被冲走了一部分，只有434337 。
+
+digoal=> select * from pgfincore('user_info'::regclass);
+                   relpath                    | segment | os_page_size | rel_os_pages | pages_mem | group_mem | os_pages_free | data
+bit
+----------------------------------------------+---------+--------------+--------------+-----------+-----------+---------------+-----
+----
+ pg_tblspc/16385/PG_9.1_201105231/16386/90956 |       0 |         4096 |       434798 |    434337 |         1 |       1178706 |
+(1 row)
+
+Time: 106.333 ms
+digoal=> select * from pgfadvise_willneed('user_info'::regclass);
+                   relpath                    | os_page_size | rel_os_pages | os_pages_free
+----------------------------------------------+--------------+--------------+---------------
+ pg_tblspc/16385/PG_9.1_201105231/16386/90956 |         4096 |       434798 |       1178041
+(1 row)
+
+Time: 7.542 ms
+digoal=> select * from pgfincore('user_info'::regclass);
+                   relpath                    | segment | os_page_size | rel_os_pages | pages_mem | group_mem | os_pages_free | data
+bit
+----------------------------------------------+---------+--------------+--------------+-----------+-----------+---------------+-----
+----
+ pg_tblspc/16385/PG_9.1_201105231/16386/90956 |       0 |         4096 |       434798 |    434798 |         1 |       1177979 |
+(1 row)
+
+Time: 106.427 ms
+
+
+再次执行count(*)速度就块了。
+
+digoal=> select count(*) from user_info;
+  count  
+----------
+ 10000000
+(1 row)
+Time: 2542.474 ms
+
+
+
+6. 实现snapshot的功能。
+说白了就是保存信息供给pgfadvise_loader调用,调用时允许加载和清除OS CACHE。
+测试之前，先手工清除掉一部分OS CACHE信息。
+
+digoal=> select pgfadvise_loader('user_info'::regclass,0,false,true,B'0000000000000000000') ;
+                         pgfadvise_loader                        
+------------------------------------------------------------------
+ (pg_tblspc/16385/PG_9.1_201105231/16386/90956,4096,1177458,0,19)
+(1 row)
+Time: 0.511 ms
+digoal=> select pgfadvise_loader('user_info'::regclass,0,false,true,B'0000000000000000000') ;
+                         pgfadvise_loader                        
+------------------------------------------------------------------
+ (pg_tblspc/16385/PG_9.1_201105231/16386/90956,4096,1177520,0,19)
+(1 row)
+Time: 0.269 ms
+digoal=> select pgfadvise_loader('user_info'::regclass,0,false,true,B'0000000000000000000') ;
+                         pgfadvise_loader                        
+------------------------------------------------------------------
+ (pg_tblspc/16385/PG_9.1_201105231/16386/90956,4096,1177520,0,19)
+(1 row)
+Time: 0.313 ms
+digoal=>
+digoal=> select * from pgfincore('user_info'::regclass);
+                   relpath                    | segment | os_page_size | rel_os_pages | pages_mem | group_mem | os_pages_free | data
+bit
+----------------------------------------------+---------+--------------+--------------+-----------+-----------+---------------+-----
+----
+ pg_tblspc/16385/PG_9.1_201105231/16386/90956 |       0 |         4096 |       434798 |    434741 |         1 |       1177489 |
+(1 row)
+Time: 106.345 ms
+
+
+现在只缓存了434741 个页面。
+把现在的信息做一个SNAPSHOT。等会重启数据库后，预加载执行完也将看到缓存了434741 个页面。
+
+digoal=> create table pgfincore_snap_user_info as select * from pgfincore('user_info'::regclass,true);
+SELECT 1
+Time: 139.425 ms
+
+
+好了，现在把user_info表的OS CACHE都清除掉，然后关闭数据库。
+
+digoal=> select pgfadvise_loader('user_info'::regclass,segment,false,true,bitnot(databit)) from (select segment,databit from pgfincore('user_info'::regclass,true)) as t;
+                           pgfadvise_loader                          
+----------------------------------------------------------------------
+ (pg_tblspc/16385/PG_9.1_201105231/16386/90956,4096,1612768,0,434741)
+(1 row)
+
+Time: 887.642 ms
+postgres@db5-> pg_ctl stop -m fast
+waiting for server to shut down.... done
+server stopped
+
+
+启动数据库，先查看一下当前的user_info表的OS CACHE信息，以免干扰结果。预加载刚才保留的SNAPSHOT。
+
+postgres@db5-> pg_ctl start
+server starting
+postgres@db5-> psql -h 127.0.0.1 digoal digoal
+psql (9.1beta2)
+Type "help" for help.
+
+digoal=> select * from pgfincore('user_info'::regclass);
+                   relpath                    | segment | os_page_size | rel_os_pages | pages_mem | group_mem | os_pages_free | data
+bit
+----------------------------------------------+---------+--------------+--------------+-----------+-----------+---------------+-----
+----
+ pg_tblspc/16385/PG_9.1_201105231/16386/90956 |       0 |         4096 |       434798 |         0 |         0 |       1581057 |
+(1 row)
+
+digoal=> select pgfadvise_loader('user_info'::regclass,segment,true,true,databit) from pgfincore_snap_user_info;
+                           pgfadvise_loader                           
+-----------------------------------------------------------------------
+ (pg_tblspc/16385/PG_9.1_201105231/16386/90956,4096,1146177,434741,57)
+(1 row)
+
+digoal=> select * from pgfincore('user_info'::regclass);
+                    relpath                    | segment | os_page_size |  rel_os_pages | pages_mem | group_mem | os_pages_free | data
+ bit
+ ----------------------------------------------+---------+--------------+--------------+-----------+-----------+---------------+-----
+ ----
+  pg_tblspc/16385/PG_9.1_201105231/16386/90956 |       0 |         4096 |       434798 |    434741 |         1 |       1146144 |
+ (1 row)
+
+
+测试结果表明加载了434741个页面,清除了57个页面。(注意这里的数字只是对BIT信息的一个反馈，如果事先OS层的CACHE已经加载了，则这里不会重复加载，但是数字还是显示这个数字。包括清除也是一样，如果此前就没有在cache里面，那也不会重复清除，但是数字还是显示这个数字)
+例如，再执行一遍还是这个结果。
+
+digoal=> select pgfadvise_loader('user_info'::regclass,segment,true,true,databit) from pgfincore_snap_user_info;
+                           pgfadvise_loader                           
+-----------------------------------------------------------------------
+ (pg_tblspc/16385/PG_9.1_201105231/16386/90956,4096,1146115,434741,57)
+(1 row)
+
+
+
+【参考】
+http://villemain.org/projects/pgfincore
+
+【语法】
+
+SYNOPSIS
+========
+
+::
+
+   pgsysconf(OUT os_page_size bigint, OUT os_pages_free bigint,
+             OUT os_total_pages bigint)
+     RETURNS record
+   
+   pgsysconf_pretty(OUT os_page_size text, OUT os_pages_free text,
+                    OUT os_total_pages text)
+     RETURNS record
+
+   pgfadvise(IN relname regclass, IN fork text, IN action int,
+             OUT relpath text, OUT os_page_size bigint,
+             OUT rel_os_pages bigint, OUT os_pages_free bigint)
+     RETURNS setof record
+
+   pgfadvise_willneed(IN relname regclass,
+                      OUT relpath text, OUT os_page_size bigint,
+                      OUT rel_os_pages bigint, OUT os_pages_free bigint)
+     RETURNS setof record
+
+   pgfadvise_dontneed(IN relname regclass,
+                      OUT relpath text, OUT os_page_size bigint,
+                      OUT rel_os_pages bigint, OUT os_pages_free bigint)
+     RETURNS setof record
+
+   pgfadvise_normal(IN relname regclass,
+                    OUT relpath text, OUT os_page_size bigint,
+                    OUT rel_os_pages bigint, OUT os_pages_free bigint)
+     RETURNS setof record
+
+   pgfadvise_sequential(IN relname regclass,
+                        OUT relpath text, OUT os_page_size bigint,
+                        OUT rel_os_pages bigint, OUT os_pages_free bigint)
+     RETURNS setof record
+
+   pgfadvise_random(IN relname regclass,
+                    OUT relpath text, OUT os_page_size bigint,
+                    OUT rel_os_pages bigint, OUT os_pages_free bigint)
+     RETURNS setof record
+
+   pgfadvise_loader(IN relname regclass, IN fork text, IN segment int,
+                    IN load bool, IN unload bool, IN databit varbit,
+                    OUT relpath text, OUT os_page_size bigint,
+                    OUT os_pages_free bigint, OUT pages_loaded bigint,
+                    OUT pages_unloaded bigint)
+     RETURNS setof record
+
+   pgfadvise_loader(IN relname regclass, IN segment int,
+                    IN load bool, IN unload bool, IN databit varbit,
+                    OUT relpath text, OUT os_page_size bigint,
+                    OUT os_pages_free bigint, OUT pages_loaded bigint,
+                    OUT pages_unloaded bigint)
+     RETURNS setof record
+
+   pgfincore(IN relname regclass, IN fork text, IN getdatabit bool,
+             OUT relpath text, OUT segment int, OUT os_page_size bigint,
+             OUT rel_os_pages bigint, OUT pages_mem bigint,
+             OUT group_mem bigint, OUT os_pages_free bigint,
+             OUT databit      varbit)
+     RETURNS setof record
+
+   pgfincore(IN relname regclass, IN getdatabit bool,
+             OUT relpath text, OUT segment int, OUT os_page_size bigint,
+             OUT rel_os_pages bigint, OUT pages_mem bigint,
+             OUT group_mem bigint, OUT os_pages_free bigint,
+             OUT databit      varbit)
+     RETURNS setof record
+
+   pgfincore(IN relname regclass,
+             OUT relpath text, OUT segment int, OUT os_page_size bigint,
+             OUT rel_os_pages bigint, OUT pages_mem bigint,
+             OUT group_mem bigint, OUT os_pages_free bigint,
+             OUT databit      varbit)
+     RETURNS setof record
+
+
+Flag Counter

@@ -1,0 +1,430 @@
+PostgreSQL research
+
+A case, choose array , hstore or text type, or split column
+
+2012-01-06 17:04:15   查看原文>>
+
+今天和一位合作商的开发人员聊了一下，发现一个以前未测试过的东西，下面来看看这个CASE。
+在这个数据库中，有个业务表的字段存储了用户的任务信息。
+类型为TEXT，格式为一堆固定格式的字符串，如 : 任务ID：？，任务名：？，任务类型：？，任务状态：？，对话：？等。。。。。。重复。。。。。
+所有的任务都存储在一个字段里面。
+另外物品仓库也是类似存储。
+这些字段在PostgreSQL中实际上是存储的TOAST格式，并压缩。
+有些用户的数据压缩后还有几MB甚至10几MB。
+解压后可能到几十MB。
+所以数据库的压力集中在对这个表的更新，查询上面。
+对于业务为啥选择TEXT类型，可能和使用的开发框架有关。
+本文重点测试一下 array 和 text 类型在查询和更新上面的比较。
+以下是一组测试 : 
+
+
+创建测试数据 : 
+
+text : 'digoal0:{0,0,0} digoal1:{1,1,1} ... digoalx:{x,x,x}'
+text[] {'digoal0:{0,0,0}','digoal1:{1,1,1}',...,'digoalx:{x,x,x}'}
+
+
+
+-- 创建测试表
+
+CREATE TABLE test_text (info text);
+
+
+-- 插入测试数据
+
+INSERT INTO test_text VALUES('digoal0:{0,0,0}');
+
+
+-- 创建生成超大行的函数
+
+CREATE OR REPLACE FUNCTION update_test_text()
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$ 
+declare
+begin
+for i in 1..350 loop
+update test_text set info=info||' digoal'||i||':{'||i||','||i||','||i||'}';
+end loop;
+return 0;
+exception
+when others then
+return 1;
+end;
+$function$;
+
+
+-- 生成超大行
+
+SELECT * FROM update_test_text();
+
+
+-- 以上为单笔事务,所以需要VACUUM FULL清理一下.
+
+VACUUM FULL test_text;
+
+
+-- 查看TOAST信息
+
+digoal=> SELECT relname,reltoastrelid FROM pg_class WHERE relname='test_text';
+  relname  | reltoastrelid 
+-----------+---------------
+ test_text |       1293172
+
+
+-- 查看单条记录SIZE
+
+digoal=> SELECT pg_column_size(info) FROM test_text;
+ pg_column_size 
+----------------
+         3545
+
+
+-- 查看表SIZE
+
+digoal=> SELECT pg_relation_size('test_text'::regclass)/1024;
+ ?column? 
+----------
+        8
+
+
+-- 查看TOAST SIZE
+
+digoal=> SELECT pg_relation_size(1293172)/1024;
+ ?column? 
+----------
+      8
+
+
+
+-- text测试 : 
+-- 创建text测试表
+
+CREATE TABLE text (id int primary key,info text);
+
+
+-- 插入500W条测试数据
+
+INSERT INTO text SELECT generate_series(1,5000000),info FROM test_text;
+
+
+-- 索引和表分开物理存储
+
+ALTER TABLE text ADD PRIMARY KEY (id) USING INDEX TABLESPACE digoal_idx;
+
+
+-- 查看表物理存储信息,text为外部压缩存储
+
+digoal=> \d+ text
+                  Table "digoal.text"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ id     | integer | not null  | plain    | 
+ info   | text    |           | extended | 
+Indexes:
+    "text_pkey" PRIMARY KEY, btree (id), tablespace "digoal_idx"
+Has OIDs: no
+
+
+-- 查看TOAST信息
+
+digoal=> SELECT relname,reltoastrelid FROM pg_class WHERE relname='text';
+ relname | reltoastrelid 
+---------+---------------
+ text    |       1293342
+
+
+-- 查看表SIZE
+
+digoal=> SELECT pg_relation_size('text'::regclass)/1024;
+ ?column? 
+----------
+    254784
+
+
+-- 查看TOAST SIZE
+
+digoal=> SELECT pg_relation_size(1293342)/1024;
+ ?column? 
+----------
+ 20000000
+
+
+-- 查看索引SIZE
+
+digoal=> SELECT pg_relation_size('text_pkey'::regclass)/1024;
+ ?column? 
+----------
+    109696
+
+
+
+-- 测试
+-- SELECT
+
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2675714
+tps = 14864.740018 (including connections establishing)
+tps = 14866.318912 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001408        \setrandom id 1 5000000
+        2.149513        select * from text where id=:id;
+
+
+-- vmstat
+
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 5  0    380 127616 156792 23517420    0    0   920    56 38687 50408 44 14 41  2  0
+
+
+-- iostat
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+          42.70    0.00   14.73   11.74    0.00   30.84
+Device:         rrqm/s   wrqm/s   r/s   w/s   rsec/s   wsec/s avgrq-sz avgqu-sz   await  svctm  %util
+sdc               0.00    19.80  0.00  1.98     0.00   174.26    88.00     0.00    0.50   0.50   0.10
+sdd               0.00     0.00 112.00  0.00  1808.00     0.00    16.14     0.47    4.17   2.71  30.30
+
+
+-- sar -n DEV 1 10000
+
+03:44:22 PM     IFACE   rxpck/s   txpck/s   rxbyt/s   txbyt/s   rxcmp/s   txcmp/s  rxmcst/s
+03:44:22 PM      eth0  34459.00  87451.00 3422286.00 123163175.00      0.00      0.00     80.00
+
+
+
+-- UPDATE
+
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 665875
+tps = 3696.889084 (including connections establishing)
+tps = 3697.129571 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001544        \setrandom id 1 5000000
+        8.648408        update text set info='省略6845个字符(字段全内容)' where id=:id;
+
+
+-- vmstat
+
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+11  0    364 122972 156080 23524920    0    0  2712 75664 11478 29135 62 12 19  7  0
+
+
+-- iostat
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+          62.97    0.00   11.35    4.36    0.00   21.32
+Device:         rrqm/s   wrqm/s   r/s   w/s   rsec/s   wsec/s avgrq-sz avgqu-sz   await  svctm  %util
+sdc               0.00 13528.00  0.00 294.00     0.00 110576.00   376.11     0.85    2.89   0.81  23.90
+sdd               0.00     0.00 216.00  0.00  3456.00     0.00    16.00     1.44    6.59   3.17  68.40
+
+
+-- sar -n DEV 1 10000
+
+03:47:32 PM     IFACE   rxpck/s   txpck/s   rxbyt/s   txbyt/s   rxcmp/s   txcmp/s  rxmcst/s
+03:47:32 PM      eth0  25623.47  15282.65 36521704.08 1126430.61      0.00      0.00    143.88
+
+
+
+
+
+-- array测试 : 
+-- 创建text[]测试表
+
+CREATE TABLE text_array1 (info text[]);
+CREATE TABLE text_array (id int,info text[]);
+
+
+-- 插入10W条测试数据
+
+INSERT INTO text_array1 SELECT regexp_split_to_array(info,' ') FROM test_text;
+INSERT INTO text_array SELECT generate_series(1,5000000),info FROM text_array1;
+
+
+-- 索引和表分开物理存储
+
+ALTER TABLE text_array ADD PRIMARY KEY (id) USING INDEX TABLESPACE digoal_idx;
+
+
+-- 查看表物理存储信息
+
+digoal=> \d+ text_array
+               Table "digoal.text_array"
+ Column |  Type   | Modifiers | Storage  | Description 
+--------+---------+-----------+----------+-------------
+ id     | integer | not null  | plain    | 
+ info   | text[]  |           | extended | 
+Indexes:
+    "text_array_pkey" PRIMARY KEY, btree (id), tablespace "digoal_idx"
+Has OIDs: no
+
+
+-- 查看TOAST信息
+
+digoal=> SELECT relname,reltoastrelid FROM pg_class WHERE relname='text_array';
+  relname   | reltoastrelid 
+------------+---------------
+ text_array |      11738092
+
+
+-- 查看表SIZE
+
+digoal=> SELECT pg_relation_size('text_array'::regclass)/1024;
+ ?column? 
+----------
+   254784
+
+
+-- 查看TOAST SIZE
+
+digoal=> SELECT pg_relation_size(11738092)/1024;
+ ?column? 
+----------
+ 20000000
+
+
+-- 查看索引SIZE
+
+digoal=> SELECT pg_relation_size('text_array_pkey'::regclass)/1024;
+ ?column? 
+----------
+   109704
+
+
+-- 测试
+-- SELECT 部分
+
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 5331728
+tps = 29607.171751 (including connections establishing)
+tps = 29609.826647 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001533        \setrandom id 1 5000000
+        1.077225        select info[10] from text_array where id=:id;
+
+
+-- vmstat
+
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+22  0    240 123264   4560 23738836    0    0  1992     0 35325 51674 74 19  6  1  0
+
+
+-- iostat
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+          74.81    0.00   19.20    0.75    0.00    5.24
+Device:         rrqm/s   wrqm/s   r/s   w/s   rsec/s   wsec/s avgrq-sz avgqu-sz   await  svctm  %util
+sdc               0.00    47.00  0.00 34.00     0.00   648.00    19.06     0.02    0.62   0.06   0.20
+sdd               0.00     0.00 242.00  0.00  3872.00     0.00    16.00     0.67    2.76   2.00  48.30
+
+
+-- sar -n DEV 1 10000
+
+04:38:10 PM     IFACE   rxpck/s   txpck/s   rxbyt/s   txbyt/s   rxcmp/s   txcmp/s  rxmcst/s
+04:38:10 PM      eth0  30119.80  30022.77 4775100.00 4323687.13      0.00      0.00     92.08
+
+
+
+-- SELECT 全部
+
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 2409554
+tps = 13386.168450 (including connections establishing)
+tps = 13387.845995 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001380        \setrandom id 1 5000000
+        2.387190        select * from text_array where id=:id;
+
+
+-- vmstat
+
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+ 9  0    240 123516   5952 23750688    0    0   208     8 38086 45752 60 13 27  0  0
+
+
+-- iostat
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+          60.27    0.00   13.33    0.62    0.00   25.78
+Device:         rrqm/s   wrqm/s   r/s   w/s   rsec/s   wsec/s avgrq-sz avgqu-sz   await  svctm  %util
+sdc               0.00    42.00  0.00  2.00     0.00   352.00   176.00     0.01    3.00   3.00   0.60
+sdd               0.00     0.00 31.00  0.00   488.00     0.00    15.74     0.14    4.55   4.45  13.80
+
+
+-- sar -n DEV 1 10000
+
+04:43:36 PM     IFACE   rxpck/s   txpck/s   rxbyt/s   txbyt/s   rxcmp/s   txcmp/s  rxmcst/s
+04:43:36 PM      eth0  33005.94  92742.57 3277501.98 121822100.00      0.00      0.00     94.06
+
+
+
+-- UPDATE
+
+transaction type: Custom query
+scaling factor: 1
+query mode: extended
+number of clients: 32
+number of threads: 32
+duration: 180 s
+number of transactions actually processed: 678739
+tps = 3769.038192 (including connections establishing)
+tps = 3769.401576 (excluding connections establishing)
+statement latencies in milliseconds:
+        0.001467        \setrandom id 1 5000000
+        8.484338        update text_array set info[100]='digoal100:{200,200,200}' where id=:id;
+
+
+-- vmstat
+
+procs -----------memory---------- ---swap-- -----io---- --system-- -----cpu------
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
+15 10    200 122588   4152 23744824    0    0  7216 60936 10438 38948 65 11  9 15  0
+
+
+-- iostat
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+          66.21    0.00   10.64   16.65    0.00    6.51
+Device:         rrqm/s   wrqm/s   r/s   w/s   rsec/s   wsec/s avgrq-sz avgqu-sz   await  svctm  %util
+sdc               0.00 14099.00  0.00 315.00     0.00 115312.00   366.07     1.04    3.32   0.86  27.00
+sdd               0.00     3.00 1039.00  2.00 16520.00    40.00    15.91     9.28    8.92   0.96 100.10
+
+
+-- sar -n DEV 1 10000
+
+04:56:42 PM     IFACE   rxpck/s   txpck/s   rxbyt/s   txbyt/s   rxcmp/s   txcmp/s  rxmcst/s
+04:56:42 PM      eth0   5371.00   5290.00 982338.00 497767.00      0.00      0.00     91.00
+
+
+
+
+小结 : 
+1. array类型更适合查询或更新字段中存储的部分元素的情形. 这种情形下面使用array类型可以大大降低网络传输开销, 当然这种情形还可以考虑hstore类型或者拆分字段来搞定.
+2. 本例中更新测试时遇到IO瓶颈, 因此看不出array和text 有太大区别. 但是由于array类型可以更新部分元素, 同样可以降低网络开销获得性能提升.
+
+【hstore参考】
+http://www.postgresql.org/docs/9.1/static/hstore.html

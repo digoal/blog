@@ -1,0 +1,299 @@
+PostgreSQL research
+
+why postgresql cann't reclaim tuple is HEAPTUPLE_RECENTLY_DEAD
+
+2015-05-03 21:31:27   查看原文>>
+
+前几天写过一篇文章关于如何防止PostgreSQL表膨胀。
+其中有一条是避免持有事务排他锁的长事务，因为这个事务开始到结束之间产生的垃圾无法被回收，容易导致膨胀。
+http://blog.163.com/digoal@126/blog/static/1638770402015329115636287/
+
+具体是什么原因呢？
+看看PostgreSQL垃圾回收代码就知道原因了。
+
+回收垃圾的函数其中之一
+src/backend/commands/vacuumlazy.c
+
+/*
+ *      lazy_scan_heap() -- scan an open heap relation
+ *
+ *              This routine prunes each page in the heap, which will among other
+ *              things truncate dead tuples to dead line pointers, defragment the
+ *              page, and set commit status bits (see heap_page_prune).  It also builds
+ *              lists of dead tuples and pages with free space, calculates statistics
+ *              on the number of live tuples in the heap, and marks pages as
+ *              all-visible if appropriate.  When done, or when we run low on space for
+ *              dead-tuple TIDs, invoke vacuuming of indexes and call lazy_vacuum_heap
+ *              to reclaim dead line pointers.
+ *
+ *              If there are no indexes then we can reclaim line pointers on the fly;
+ *              dead line pointers need only be retained until all index pointers that
+ *              reference them have been killed.
+ */
+static void
+lazy_scan_heap(Relation onerel, LVRelStats *vacrelstats,
+                           Relation *Irel, int nindexes, bool scan_all)
+{
+...
+        for (blkno = 0; blkno < nblocks; blkno++)
+        {
+                Buffer          buf;
+                Page            page;
+                OffsetNumber offnum,
+                                        maxoff;
+                bool            tupgone,  // 表示TUPLE是否可以回收
+......
+                /*
+                 * Note: If you change anything in the loop below, also look at
+                 * heap_page_is_all_visible to see if that needs to be changed.
+                 */
+                for (offnum = FirstOffsetNumber;
+                         offnum <= maxoff;
+                         offnum = OffsetNumberNext(offnum))
+                {
+                        ItemId          itemid;
+......
+                        tupgone = false;
+
+                        switch (HeapTupleSatisfiesVacuum(&tuple, OldestXmin, buf))  // 判断TUPLE状态，是否满足VACUUM条件
+                        {
+                                case HEAPTUPLE_DEAD:
+......
+                                        if (HeapTupleIsHotUpdated(&tuple) ||
+                                                HeapTupleIsHeapOnly(&tuple))
+                                                nkeep += 1;
+                                        else
+                                                tupgone = true; /* we can delete the tuple */
+                                        all_visible = false;
+                                        break;
+......
+                                case HEAPTUPLE_RECENTLY_DEAD:   // 这就表示在最老的活动事务之后产生的垃圾, 无法回收
+
+                                        /*
+                                         * If tuple is recently deleted then we must not remove it
+                                         * from relation.
+                                         */
+                                        nkeep += 1;
+                                        all_visible = false;
+                                        break;
+
+
+
+我们看看HeapTupleSatisfiesVacuum(&tuple, OldestXmin, buf)这个用于判断TUPLE是否满足VACUUM条件的函数
+OldestXmin如何获得？
+src/backend/commands/vacuum.c
+
+/*
+ * vacuum_set_xid_limits() -- compute oldest-Xmin and freeze cutoff points
+ *
+ * The output parameters are:
+ * - oldestXmin is the cutoff value used to distinguish whether tuples are
+ *       DEAD or RECENTLY_DEAD (see HeapTupleSatisfiesVacuum).
+ * - freezeLimit is the Xid below which all Xids are replaced by
+ *       FrozenTransactionId during vacuum.
+ * - xidFullScanLimit (computed from table_freeze_age parameter)
+ *       represents a minimum Xid value; a table whose relfrozenxid is older than
+ *       this will have a full-table vacuum applied to it, to freeze tuples across
+ *       the whole table.  Vacuuming a table younger than this value can use a
+ *       partial scan.
+ * - multiXactCutoff is the value below which all MultiXactIds are removed from
+ *       Xmax.
+ * - mxactFullScanLimit is a value against which a table's relminmxid value is
+ *       compared to produce a full-table vacuum, as with xidFullScanLimit.
+ *
+ * xidFullScanLimit and mxactFullScanLimit can be passed as NULL if caller is
+ * not interested.
+ */
+void
+vacuum_set_xid_limits(Relation rel,
+                                          int freeze_min_age,
+                                          int freeze_table_age,
+                                          int multixact_freeze_min_age,
+                                          int multixact_freeze_table_age,
+                                          TransactionId *oldestXmin,
+                                          TransactionId *freezeLimit,
+                                          TransactionId *xidFullScanLimit,
+                                          MultiXactId *multiXactCutoff,
+                                          MultiXactId *mxactFullScanLimit)
+{
+......
+        /*
+         * We can always ignore processes running lazy vacuum.  This is because we
+         * use these values only for deciding which tuples we must keep in the
+         * tables.  Since lazy vacuum doesn't write its XID anywhere, it's safe to
+         * ignore it.  In theory it could be problematic to ignore lazy vacuums in
+         * a full vacuum, but keep in mind that only one vacuum process can be
+         * working on a particular table at any time, and that each vacuum is
+         * always an independent transaction.
+         */
+        *oldestXmin = GetOldestXmin(rel, true);  // 设置当前系统中最老的未提交的事务号
+
+
+
+src/backend/storage/ipc/procarray.c
+
+/*
+ * GetOldestXmin -- returns oldest transaction that was running
+ *                                      when any current transaction was started.
+ *
+ * If rel is NULL or a shared relation, all backends are considered, otherwise
+ * only backends running in this database are considered.
+ *
+ * If ignoreVacuum is TRUE then backends with the PROC_IN_VACUUM flag set are
+ * ignored.
+ *
+ * This is used by VACUUM to decide which deleted tuples must be preserved in
+ * the passed in table. For shared relations backends in all databases must be
+ * considered, but for non-shared relations that's not required, since only
+ * backends in my own database could ever see the tuples in them. Also, we can
+ * ignore concurrently running lazy VACUUMs because (a) they must be working
+ * on other tables, and (b) they don't need to do snapshot-based lookups.
+ *
+ * This is also used to determine where to truncate pg_subtrans.  For that
+ * backends in all databases have to be considered, so rel = NULL has to be
+ * passed in.
+ *
+ * Note: we include all currently running xids in the set of considered xids.
+ * This ensures that if a just-started xact has not yet set its snapshot,
+ * when it does set the snapshot it cannot set xmin less than what we compute.
+ * See notes in src/backend/access/transam/README.
+ *
+ * Note: despite the above, it's possible for the calculated value to move
+ * backwards on repeated calls. The calculated value is conservative, so that
+ * anything older is definitely not considered as running by anyone anymore,
+ * but the exact value calculated depends on a number of things. For example,
+ * if rel = NULL and there are no transactions running in the current
+ * database, GetOldestXmin() returns latestCompletedXid. If a transaction    
+  //  latestCompletedXid集群中最新的已提交事务号，这以后的所有事务
+   //    即使在后来变成垃圾, 也不回收。vacuum不考虑其他未提交事务是否需要看到这些垃圾数据(隔离级别为repeatable read级别及以上的可能会读到)
+ * begins after that, its xmin will include in-progress transactions in other
+ * databases that started earlier, so another call will return a lower value.
+ * Nonetheless it is safe to vacuum a table in the current database with the
+ * first result.  There are also replication-related effects: a walsender
+ * process can set its xmin based on transactions that are no longer running
+ * in the master but are still being replayed on the standby, thus possibly
+ * making the GetOldestXmin reading go backwards.  In this case there is a
+ * possibility that we lose data that the standby would like to have, but
+ * there is little we can do about that --- data is only protected if the
+ * walsender runs continuously while queries are executed on the standby.
+ * (The Hot Standby code deals with such cases by failing standby queries
+ * that needed to access already-removed data, so there's no integrity bug.)
+ * The return value is also adjusted with vacuum_defer_cleanup_age, so
+ * increasing that setting on the fly is another easy way to make
+ * GetOldestXmin() move backwards, with no consequences for data integrity.
+ */
+TransactionId
+GetOldestXmin(Relation rel, bool ignoreVacuum)
+{
+        ProcArrayStruct *arrayP = procArray;
+        TransactionId result;  // 返回结果
+......
+        /*
+         * We initialize the MIN() calculation with latestCompletedXid + 1. This
+         * is a lower bound for the XIDs that might appear in the ProcArray later,
+         * and so protects us against overestimating the result due to future
+         * additions.
+         */
+        result = ShmemVariableCache->latestCompletedXid;
+        Assert(TransactionIdIsNormal(result));
+        TransactionIdAdvance(result);
+
+
+
+src/include/access/transam.h
+
+/* in transam/varsup.c */
+extern PGDLLIMPORT VariableCache ShmemVariableCache;
+
+/*
+ * VariableCache is a data structure in shared memory that is used to track
+ * OID and XID assignment state.  For largely historical reasons, there is
+ * just one struct with different fields that are protected by different
+ * LWLocks.
+ *
+ * Note: xidWrapLimit and oldestXidDB are not "active" values, but are
+ * used just to generate useful messages when xidWarnLimit or xidStopLimit
+ * are exceeded.
+ */
+typedef struct VariableCacheData
+{
+        /*
+         * These fields are protected by OidGenLock.
+         */
+        Oid                     nextOid;                /* next OID to assign */
+        uint32          oidCount;               /* OIDs available before must do XLOG work */
+
+        /*
+         * These fields are protected by XidGenLock.
+         */
+        TransactionId nextXid;          /* next XID to assign */
+
+        TransactionId oldestXid;        /* cluster-wide minimum datfrozenxid */
+        TransactionId xidVacLimit;      /* start forcing autovacuums here */
+        TransactionId xidWarnLimit; /* start complaining here */
+        TransactionId xidStopLimit; /* refuse to advance nextXid beyond here */
+        TransactionId xidWrapLimit; /* where the world ends */
+        Oid                     oldestXidDB;    /* database with minimum datfrozenxid */
+
+        /*
+         * These fields are protected by ProcArrayLock.
+         */
+        TransactionId latestCompletedXid;       /* newest XID that has committed or  这就是集群中最新的已提交事务号
+                                                                                 * aborted */
+} VariableCacheData;
+
+typedef VariableCacheData *VariableCache;
+
+
+可以看到，PostgreSQL垃圾回收时，只是判断TUPLE是否是在垃圾回收开始后产生的，如果是，那么就不回收。
+类似使用这个函数的效果：
+
+txid_current_snapshot()
+Snapshot Components
+Name    Description
+xmin    Earliest transaction ID (txid) that is still active. All earlier transactions will either be committed and visible, or rolled back and dead.
+// 执行vacuum的进程开始时，根据当时snapshot取到这个XMIN，在扫描垃圾TUPLE时，大于这个XMIN的垃圾即是HEAPTUPLE_RECENTLY_DEAD
+
+xmax    First as-yet-unassigned txid. All txids greater than or equal to this are not yet started as of the time of the snapshot, and thus invisible.
+xip_list        Active txids at the time of the snapshot. The list includes only those active txids between xmin and xmax; there might be active txids higher than xmax. A txid that is xmin <= txid < xmax and not in this list was already completed at the time of the snapshot, and thus either visible or dead according to its commit status. The list does not include txids of subtransactions.
+txid_snapshot's textual representation is xmin:xmax:xip_list. For example 10:20:10,14,15 means xmin=10, xmax=20, xip_list=10, 14, 15.
+
+
+要解决这个容易膨胀的问题，我们需要知道数据库中存在的最老的未提交的repeatable read或serializable隔离级别的事务号。
+用这个事务号作为判断HEAPTUPLE_RECENTLY_DEAD的依据。
+例如，当A库中存在级别repeatable read或serializable的最小未结束事务号为Xa, 那么A库中Xa后产生的垃圾不能回收，但是其他库Xa后产生的垃圾能否回收和其他库中的最小repeatable read或serializable未结束事务号有关，和A库无关。
+
+[参考]
+1. http://blog.163.com/digoal@126/blog/static/1638770402015329115636287/
+2. src/include/storage/proc.h
+
+/*
+ * Prior to PostgreSQL 9.2, the fields below were stored as part of the
+ * PGPROC.  However, benchmarking revealed that packing these particular
+ * members into a separate array as tightly as possible sped up GetSnapshotData
+ * considerably on systems with many CPU cores, by reducing the number of
+ * cache lines needing to be fetched.  Thus, think very carefully before adding
+ * anything else here.
+ */
+typedef struct PGXACT
+{
+        TransactionId xid;                      /* id of top-level transaction currently being
+                                                                 * executed by this proc, if running and XID
+                                                                 * is assigned; else InvalidTransactionId */
+
+        TransactionId xmin;                     /* minimal running XID as it was when we were
+                                                                 * starting our xact, excluding LAZY VACUUM:
+                                                                 * vacuum must not remove tuples deleted by
+                                                                 * xid >= xmin ! */
+
+        uint8           vacuumFlags;    /* vacuum-related flags, see above */
+        bool            overflowed;
+        bool            delayChkpt;             /* true if this proc delays checkpoint start;
+                                                                 * previously called InCommit */
+
+        uint8           nxids;
+} PGXACT;
+
+
+
+Flag Counter

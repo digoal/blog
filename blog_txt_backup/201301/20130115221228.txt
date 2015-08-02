@@ -1,0 +1,276 @@
+PostgreSQL research
+
+PostgreSQL case: emulate 2nd column based SEQUENCE in MYSQL
+
+2013-01-15 22:12:28   查看原文>>
+
+今天QQ群里一位兄弟问道的一个问题, 如下 : 
+我现在的工作是: 建一颗树
+
+create table tree
+(
+  id bigserial PRIMARY KEY,        
+  name varchar(20),
+  parent_id bigint,   
+  order_by int,
+  CONSTRAINT fk_tree_self FOREIGN KEY (parent_id)
+          REFERENCES tree (id)
+);
+
+
+
+参考数据内容 : 
+
+id name parent_id order_by 
+1  公司  null     0
+2  办公室　1      0
+3  财务科  1      1
+4  质量科  1      2
+.....
+
+
+插入测试数据 : 
+
+digoal=> insert into tree (name,parent_id,order_by) values ('公司', null, 0);
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('办公司', 1, 0);
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('财务科', 1, 1);
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('质量科', 1, 2);
+INSERT 0 1
+
+
+
+对同一级的parent_id，维护一个order_by 顺序, 同一个parent_id, order_by值必须唯一。
+这是用户定义的顺序，所以要加order_by 列。以后用户还可能需要调整这个顺序。
+现在插入新记录时，要做的如下：
+
+start transaction;
+select max(order_by) where parent_id = :parent_id;
+insert into tree(name,parent_id,order_by) values
+(:name,:parent_id,:order_by);
+commit;
+
+
+以上操作存在幻读 : 
+当我按照当前记录数　max+1 -> order_by 时，另一并发进程可能也这样操作，就会有重复的 order_by 值了。
+mysql 有个基于第2列自动递增，不知postgresql有没有?
+
+【下面是解决办法举例】 : 
+1. 首先确保数据一致性, 建立约束.
+
+digoal=> alter table tree add constraint uk_pid_oby unique (parent_id, order_by);
+NOTICE:  ALTER TABLE / ADD UNIQUE will create implicit index "uk_pid_oby" for table "tree"
+ALTER TABLE
+
+
+这样同一个parent_id下不会产生重复的order_by值, 因为如果后插入的数据与前面插入的数据重复了, 会产生约束错误, 整个事务回滚.
+例如 : 
+SESSION A:
+
+digoal=> begin;
+BEGIN
+digoal=> select max(order_by) from tree where parent_id=1;
+ max 
+-----
+   2
+(1 row)
+
+
+
+SESSION B:
+
+digoal=> begin;
+BEGIN
+digoal=> select max(order_by) from tree where parent_id=1;
+ max 
+-----
+   2
+(1 row)
+
+
+
+SESSION A:
+
+digoal=> insert into tree (name,parent_id,order_by) values ('产品科', 1, 3);
+INSERT 0 1
+
+
+
+SESSION B:
+
+digoal=> insert into tree (name,parent_id,order_by) values ('材料科', 1, 3);
+处于等待状态
+
+
+
+SESSION A:
+
+digoal=> commit;
+COMMIT
+
+
+
+SESSION B:
+
+SESSION A提交后, SESSION B将报错, 需要回滚.
+ERROR:  duplicate key value violates unique constraint "uk_pid_oby"
+DETAIL:  Key (parent_id, order_by)=(1, 3) already exists.
+
+
+
+处理失败事务 : 
+SESSION B:
+
+digoal=> rollback;
+ROLLBACK
+digoal=> begin;
+BEGIN
+digoal=> select max(order_by) from tree where parent_id=1;
+ max 
+-----
+   3
+(1 row)
+
+digoal=> insert into tree (name,parent_id,order_by) values ('材料科', 1, 4);
+INSERT 0 1
+digoal=> commit;
+COMMIT
+
+
+
+2. mysql 有个基于第2列自动递增，不知postgresql有没有?
+PostgreSQL 没有这种语法, 但是有解决办法.
+通过一个序列来获取order_by需要的值, 但是需要注意这个值在同一个parent_id里可能不是呈现为1,2,3,4,5这样的连续数值. 可能是2,7,100,200,1333这样的有大小区分的唯一数值. (仍然可以用来满足排序的需求)
+
+digoal=> create sequence seq_order_by start with 5;
+CREATE SEQUENCE
+
+
+SESSION A : 
+
+digoal=> begin;
+BEGIN
+digoal=> insert into tree (name,parent_id,order_by) values ('产品科', 1, nextval('seq_order_by'::regclass));
+INSERT 0 1
+
+
+SESSION B : 
+
+digoal=> begin;
+BEGIN
+digoal=> insert into tree (name,parent_id,order_by) values ('材料科', 1, nextval('seq_order_by'::regclass));
+INSERT 0 1
+
+
+SESSION A : 
+
+digoal=> commit;
+COMMIT
+
+
+SESSION B : 
+
+digoal=> commit;
+COMMIT
+
+
+使用了序列后, 不会有因为幻读导致的等待和回滚.
+
+digoal=> select * from tree;
+ id |  name  | parent_id | order_by 
+----+--------+-----------+----------
+  1 | 公司   |           |        0
+  2 | 办公司 |         1 |        0
+  3 | 财务科 |         1 |        1
+  5 | 质量科 |         1 |        2
+  6 | 产品科 |         1 |        3
+  8 | 材料科 |         1 |        4
+  9 | 产品科 |         1 |        5
+ 10 | 材料科 |         1 |        6
+(8 rows)
+
+
+再次插入一些数据 : 
+
+digoal=> insert into tree (name,parent_id,order_by) values ('test1', 2, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test1', 3, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test1', 5, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test2', 5, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test3', 5, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test4', 5, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test4', 3, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test5', 3, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> insert into tree (name,parent_id,order_by) values ('test1', 3, nextval('seq_order_by'::regclass));
+INSERT 0 1
+digoal=> select * from tree;
+ id |  name  | parent_id | order_by 
+----+--------+-----------+----------
+  1 | 公司   |           |        0
+  2 | 办公司 |         1 |        0
+  3 | 财务科 |         1 |        1
+  5 | 质量科 |         1 |        2
+  6 | 产品科 |         1 |        3
+  8 | 材料科 |         1 |        4
+  9 | 产品科 |         1 |        5
+ 10 | 材料科 |         1 |        6
+ 11 | test1  |         2 |        7
+ 12 | test1  |         3 |        8
+ 14 | test1  |         5 |       10
+ 15 | test2  |         5 |       11
+ 16 | test3  |         5 |       12
+ 17 | test4  |         5 |       13
+ 18 | test4  |         3 |       14
+ 19 | test5  |         3 |       15
+ 20 | test1  |         3 |       16
+  4 | test1  |         3 |       18
+(18 rows)
+
+
+如果要显示1,2,3,4,5这样的连续数值, 可以用row_number()来得到 : 
+
+digoal=> select id,name,parent_id,row_number() over (partition by parent_id order by order_by) as rn from tree order by parent_id nulls first,id;
+ id |  name  | parent_id | rn 
+----+--------+-----------+----
+  1 | 公司   |           |  1
+  2 | 办公司 |         1 |  1
+  3 | 财务科 |         1 |  2
+  5 | 质量科 |         1 |  3
+  6 | 产品科 |         1 |  4
+  8 | 材料科 |         1 |  5
+  9 | 产品科 |         1 |  6
+ 10 | 材料科 |         1 |  7
+ 11 | test1  |         2 |  1
+  4 | test1  |         3 |  5
+ 12 | test1  |         3 |  1
+ 18 | test4  |         3 |  2
+ 19 | test5  |         3 |  3
+ 20 | test1  |         3 |  4
+ 14 | test1  |         5 |  1
+ 15 | test2  |         5 |  2
+ 16 | test3  |         5 |  3
+ 17 | test4  |         5 |  4
+(18 rows)
+
+
+需要调整顺序的话, 交换真实的order_by即可.
+
+另外, 同时需要考虑cache的问题.
+虽然使用单一序列来处理order_by的值, 唯一性没有问题. 开了CACHE的话，并发插入将可能出现后插入的数据order_by 小于前面插入的数据的order_by.
+因此如果要保证序列的顺序和插入时间一致不能开启cache.
+不开cache的情况下取序列的性能：
+2颗Intel(R) Xeon(R) CPU E5504  @ 2.00GHz的机器每秒可取10.29W个序列.
+可参考 : 
+http://blog.163.com/digoal@126/blog/static/163877040201301591241964/
+
+【参考】
+1. http://blog.163.com/digoal@126/blog/static/163877040201101735842150/

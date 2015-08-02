@@ -1,0 +1,275 @@
+PostgreSQL research
+
+PostgreSQL attention : max_standby_archive_delay and max_standby_streaming_delay
+
+2013-08-15 13:05:54   查看原文>>
+
+今天群里的兄弟提到的一个疑问, 
+max_standby_archive_delay = -1
+max_standby_streaming_delay = -1
+不知道有什么影响?
+这两个参数控制了recovery时是否要kill掉hot_standby上与recovery冲突的sql.
+如果配置为-1, 那么在hot_standby上可以无限时常的执行sql. 后果是standby只接收但是不recovery xlog. 造成standby xlog文件越来越多, 甚至撑爆磁盘分区. 还有就是造成了standby的延迟. 
+所以在设置是需要小心.
+
+为了便于理解, 下面将测试过程展示一下 : 
+(primary and standby)安装PostgreSQL : 
+
+tar -zxvf postgresql-1b1d3d9.tar.gz
+
+
+cd postgresql-1b1d3d9
+./configure --prefix=/home/pg94/pgsql9.4devel --with-pgport=2999 --with-perl --with-tcl --with-python --with-openssl --with-pam --without-ldap --with-libxml --with-libxslt --enable-thread-safety --with-wal-blocksize=16 --enable-dtrace && gmake && gmake install
+cd contrib/
+gmake && gmake install
+
+
+(primary)初始化数据库
+
+su - pg94
+initdb -D $PGDATA -E UTF8 --locale=C -W -U postgres
+
+
+
+(primary)配置
+pg94@db-172-16-3-33-> grep "^[a-z]" postgresql.conf 
+
+listen_addresses = '0.0.0.0'            # what IP address(es) to listen on;
+port = 2999                             # (change requires restart)
+max_connections = 100                   # (change requires restart)
+superuser_reserved_connections = 13     # (change requires restart)
+unix_socket_directories = '.'   # comma-separated list of directories
+unix_socket_permissions = 0700          # begin with 0 to use octal notation
+shared_buffers = 1024MB                 # min 128kB
+maintenance_work_mem = 512MB            # min 1MB
+shared_preload_libraries = 'pg_stat_statements'         # (change requires restart)
+wal_level = hot_standby                 # minimal, archive, or hot_standby
+synchronous_commit = off                # synchronization level;
+wal_sync_method = fdatasync             # the default is the first option
+wal_buffers = 16384kB                   # min 32kB, -1 sets based on shared_buffers
+wal_writer_delay = 20ms         # 1-10000 milliseconds
+checkpoint_segments = 32                # in logfile segments, min 1, 16MB each
+max_wal_senders = 32            # max number of walsender processes
+wal_keep_segments = 128                # in logfile segments, 16MB each; 0 disables
+hot_standby = on                        # "on" allows queries during recovery
+max_standby_archive_delay = -1  # max delay before canceling queries
+max_standby_streaming_delay = -1        # max delay before canceling queries
+wal_receiver_status_interval = 1s       # send replies at least this often
+hot_standby_feedback = on               # send info from standby to prevent
+random_page_cost = 1.0                  # same scale as above
+effective_cache_size = 10240MB
+log_destination = 'csvlog'              # Valid values are combinations of
+logging_collector = on          # Enable capturing of stderr and csvlog
+log_directory = 'pg_log'                # directory where log files are written,
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log' # log file name pattern,
+log_file_mode = 0600                    # creation mode for log files,
+log_truncate_on_rotation = on           # If on, an existing log file with the
+log_rotation_age = 1d                   # Automatic rotation of logfiles will
+log_rotation_size = 10MB                # Automatic rotation of logfiles will
+log_checkpoints = on
+log_connections = on
+log_disconnections = on
+log_error_verbosity = verbose           # terse, default, or verbose messages
+log_lock_waits = on                     # log lock waits >= deadlock_timeout
+log_statement = 'ddl'                   # none, ddl, mod, all
+log_timezone = 'PRC'
+track_activity_query_size = 2048        # (change requires restart)
+autovacuum = on                 # Enable autovacuum subprocess?  'on'
+log_autovacuum_min_duration = 0 # -1 disables, 0 logs all actions and
+datestyle = 'iso, mdy'
+timezone = 'PRC'
+lc_messages = 'C'                       # locale for system error message
+lc_monetary = 'C'                       # locale for monetary formatting
+lc_numeric = 'C'                        # locale for number formatting
+lc_time = 'C'                           # locale for time formatting
+default_text_search_config = 'pg_catalog.english'
+pg_stat_statements.max = 1000
+pg_stat_statements.track = all
+
+
+
+pg94@db-172-16-3-33-> grep "^[a-z]" pg_hba.conf 
+
+local   all             all                                     trust
+host    all             all             127.0.0.1/32            trust
+host    all             all             ::1/128                 trust
+host all all 0.0.0.0/0 md5
+host replication postgres 172.16.3.0/24 md5
+
+
+
+pg94@db-172-16-3-33-> grep "^[a-z]" recovery.done 
+
+recovery_target_timeline = 'latest'
+standby_mode = on
+primary_conninfo = 'host=172.16.3.39 port=2999 user=postgres keepalives_idle=60'                # e.g. 'host=localhost port=5432'
+
+
+
+standby配置 : 
+
+pg94@db-172-16-3-39-> vi ~/.pgpass 
+172.16.3.33:2999:replication:postgres:postgres
+pg94@db-172-16-3-39-> chmod 400 ~/.pgpass
+-- 复制节点
+pg94@db-172-16-3-39-> pg_basebackup -D $PGDATA -F p -P -v -U postgres -h 172.16.3.33
+pg94@db-172-16-3-39-> cd $PGDATA
+pg94@db-172-16-3-39-> mv recovery.done recovery.conf
+pg94@db-172-16-3-39-> vi recovery.conf
+primary_conninfo = 'host=172.16.3.33 port=2999 user=postgres keepalives_idle=60'
+
+
+
+启动standby : 
+
+pg94@db-172-16-3-39-> pg_ctl start
+
+
+
+(primary)创建测试表 : 
+
+pg94@db-172-16-3-33-> psql postgres postgres
+psql (9.4devel)
+Type "help" for help.
+postgres=# create database digoal;
+CREATE DATABASE
+\c digoal 
+digoal=# create table t1 (id int);
+CREATE TABLE
+digoal=# insert into t1 values (1);
+INSERT 0 1
+
+
+
+(standby)开启repeatable read查询
+
+digoal=# begin transaction isolation level repeatable read;
+BEGIN
+digoal=# select * from t1;
+ id 
+----
+  1
+(1 row)
+-- 不要退出事务.
+
+
+
+(primary)删除t1表.
+删除t1表后, 这部分xlog信息在standby上面做恢复时将和standby上面的事务冲突.
+
+digoal=# drop table t1;
+DROP TABLE
+
+
+查看standby的replay_location, 这个指的是恢复点.
+
+digoal=# select * from pg_stat_replication ;
+-[ RECORD 1 ]----+------------------------------
+pid              | 5436
+usesysid         | 10
+usename          | postgres
+application_name | walreceiver
+client_addr      | 172.16.3.39
+client_hostname  | 
+client_port      | 22422
+backend_start    | 2013-08-15 12:36:18.844357+08
+state            | streaming
+sent_location    | 0/3012680
+write_location   | 0/3012680
+flush_location   | 0/3012680
+replay_location  | 0/3012140
+sync_priority    | 0
+sync_state       | async
+
+
+
+(primary)执行大量的写操作, 意为产生大量的pg_xlog.
+
+digoal=# create table test(id int, info text, crt_time timestamp);
+CREATE TABLE
+digoal=# insert into test select generate_series(1,1000000),'test',now();
+INSERT 0 1000000
+digoal=# checkpoint;
+CHECKPOINT
+
+
+查询standby的replay_location, 这个指的是恢复点. 
+从write_location看出, 数据在发给standby, 但是standby的replay_location不变. 也就是说现在standby只接收xlog, 但是没有将接收到的xlog做recovery处理.
+因为在standby上设置了如下参数 : 
+
+max_standby_archive_delay = -1  # max delay before canceling queries
+max_standby_streaming_delay = -1        # max delay before canceling queries
+
+
+这个查询和recovery冲突时, 不会被kill掉, recovery将持续等待.
+
+digoal=# select * from pg_stat_replication ;
+-[ RECORD 1 ]----+------------------------------
+pid              | 5436
+usesysid         | 10
+usename          | postgres
+application_name | walreceiver
+client_addr      | 172.16.3.39
+client_hostname  | 
+client_port      | 22422
+backend_start    | 2013-08-15 12:36:18.844357+08
+state            | streaming
+sent_location    | 0/8CA2BA0
+write_location   | 0/8CA2BA0
+flush_location   | 0/8CA2BA0
+replay_location  | 0/3012140
+sync_priority    | 0
+sync_state       | async
+
+
+
+(standby)开启另外一个会话, 查询是否存在test表.
+显然不可能存在, 因为pg_xlog只接收, 却为recovery. 所以standby和primary延迟也随着时间越来越大.
+
+pg94@db-172-16-3-39-> psql
+psql (9.4devel)
+Type "help" for help.
+digoal=# \dt
+        List of relations
+ Schema | Name | Type  |  Owner   
+--------+------+-------+----------
+ public | t1   | table | postgres
+(1 row)
+
+
+代码如下 : 
+1. src/backend/storage/ipc/standby.c
+
+/*
+ * Determine the cutoff time at which we want to start canceling conflicting
+ * transactions.  Returns zero (a time safely in the past) if we are willing
+ * to wait forever.
+ */
+static TimestampTz
+GetStandbyLimitTime(void)
+{
+        TimestampTz rtime;
+        bool            fromStream;
+
+        /*
+         * The cutoff time is the last WAL data receipt time plus the appropriate
+         * delay variable.  Delay of -1 means wait forever.
+         */
+        GetXLogReceiptTime(&rtime, &fromStream);
+        if (fromStream)
+        {
+                if (max_standby_streaming_delay < 0)
+                        return 0;                       /* wait forever */
+                return TimestampTzPlusMilliseconds(rtime, max_standby_streaming_delay);
+        }
+        else
+        {
+                if (max_standby_archive_delay < 0)
+                        return 0;                       /* wait forever */  // 小于0永久等待.
+                return TimestampTzPlusMilliseconds(rtime, max_standby_archive_delay);
+        }
+}
+
+
+
+Flag Counter

@@ -1,0 +1,91 @@
+PostgreSQL research
+
+Replica small data to PostgreSQL from Oracle's Big table
+
+2012-03-09 18:16:24   查看原文>>
+
+有时候会遇到从Oracle同步数据到PostgreSQL数据库的需求, 当Oracle那边的表是大表的时候, 
+即使同步到PostgreSQL的数据量很小也可能很慢.
+原因可能是
+1. Oracle那边的执行计划可能不优. 比如走全表扫描了. 或者走的索引不对. 
+2. 条件没有正确的转换给Oracle, 那就惨了, 数据全部取过来然后在PostgreSQL中过滤.
+
+例如我们需要同步的是前一天的数据, 实际上走分区的全表扫描可能比走索引快. 但是又不好写HINT.
+那么怎么来解决这种问题呢? 来看个例子 : 
+例如我们要从Oracle的tbl表同步前一天的数据, 这个表做了按月分区.  一个月大概5000W记录. 10GB左右.
+我们要同步的数据条件是cond1 = '1' and cond2 in( '10','15'). 这个取出来每天只有几百条记录. 
+同步的SQL应该是
+select a, b, c, createtime from tbl where createtime>=sysdate-1 and createtime<sysdate and cond1 = '1' and cond2 in( '10','15').
+这个SQL可以走时间索引也可以走cond1和cond2的联合索引. 或者走分区扫描.
+几种执行计划的时间相差比较大. 
+走联合索引的效率可能是最高的, 不过这个索引不存在, 在ORACLE中也不存在PostgreSQL中这样的partial索引, 而且建立索引之后会带来写入的延迟. 最终决定不建立.
+
+为了避免第二种情况的发生, 让PG读ORACLE的视图, 而不是直接读表.
+通过限定视图中的数据量来限定PG的最大可能获取量.
+
+oracle : 
+digoal user : 
+
+create view v_tbl as select a,b,c,createtime from tbl where cond1 = '1' and cond2 in( '10','15') and createtime >= sysdate-7;
+
+
+这里限定我们要限定的条件, 并且加了一个时间的限定.
+然后再到PostgreSQL中创建基于这个视图的外部表.
+注 : 如果你的oracle_fdw支持where语句下发的话, 可以不用这么麻烦.
+
+postgresql9.1 : 
+superuser : 
+
+cretae role digoal nosuperuser encrypted password 'DIGOAL';
+create server digoal foreign data wrapper oracle_fdw options (dbserver '//192.168.xxx.xxx:1521/digoal');
+create user mapping for digoal server digoal options (user 'digoal',password 'digoal_oracle');
+
+create FOREIGN table digoal.ora_tbl (a varchar(9),b varchar(420),c varchar(45),createtime timestamp(0) without time zone) server digoal options (table 'v_tbl',schema 'digoal',plan_costs 'true');
+
+grant select on digoal.ora_tbl to digoal;
+
+
+
+digoal user : 
+
+create table tbl (a varchar(9),b varchar(420),c varchar(45),createtime timestamp(0) without time zone);
+create table sync_record(modifytime timestamp(0) without time zone);
+
+
+sync_record 用于记录最后一次同步时间, 防止重复同步.
+下面是同步调用的函数 : 
+
+create or replace function sync_tbl() returns text as $$
+declare
+v_modifytime timestamp(0) without time zone;
+v_now timestamp(0) without time zone;
+begin
+v_now = now();
+-- lock表防止同时调用这个同步过程. 导致重复同步
+
+
+lock table sync_record in exclusive mode;
+perform 1 from sync_record limit 1;
+if not found then
+insert into sync_record(modifytime) values(v_now-interval '1 day');
+end if;
+select modifytime into v_modifytime from sync_record limit 1;
+if v_modifytime < current_date then
+insert into tbl(a,b,c,createtime) select a,b,c,createtime from ora_tbl where createtime >=date(v_modifytime) and createtime < date(v_now);
+update sync_record set modifytime=v_now;
+end if;
+return 'ok';
+exception
+when others then
+return 'error';
+end;
+$$ language plpgsql;
+
+
+digoal=> select * from sync_tbl();
+ sync_tbl_app_charge 
+---------------------
+ ok
+(1 row)
+
+

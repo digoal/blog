@@ -1,0 +1,525 @@
+PostgreSQL research
+
+cgroup (Control Groups)
+
+2014-12-03 15:59:39   查看原文>>
+
+在一个服务器上跑多个程序时, 就有可能出现资源争抢到情况, 有没有什么好的方法可以隔离不同进程对各种资源的使用呢?
+CPU的资源比较好隔离, 例如调整CPU亲和就可以做到, 典型的应用是虚拟机.
+IO资源的隔离有点困难, 一般的做法是将不同的数据放在不同的物理磁盘上. 
+内存的隔离也比较简单, 提前分配好就可以了.
+
+但是以上方法太简单粗暴了, 例如内存不提前分配好的话, 怎样限制进程对内存的使用呢? 还有IO的话, 如果多个进程都用到了同样的块设备, 怎么限制单个进程的请求呢?
+Cgroup很好的解决了这个问题, 在单台服务器提供多种服务的场景中很好用.
+
+什么是cgroup?
+
+Control Groups provide a mechanism for aggregating/partitioning sets of
+tasks, and all their future children, into hierarchical groups with
+specialized behaviour.
+
+Definitions:
+
+A *cgroup* associates a set of tasks(PID) with a set of parameters for one
+or more subsystems.
+
+A *subsystem* is a module that makes use of the task grouping
+facilities provided by cgroups to treat groups of tasks in
+particular ways. A subsystem is typically a "resource controller" that
+schedules a resource or applies per-cgroup limits, but it may be
+anything that wants to act on a group of processes, e.g. a
+virtualization subsystem.
+
+A *hierarchy* is a set of cgroups arranged in a tree, such that
+every task in the system is in exactly one of the cgroups in the
+hierarchy, and a set of subsystems; each subsystem has system-specific
+state attached to each cgroup in the hierarchy.  Each hierarchy has
+an instance of the cgroup virtual filesystem associated with it.
+
+At any one time there may be multiple active hierarchies of task
+cgroups. Each hierarchy is a partition of all tasks in the system.
+
+
+
+使用场景案例 : 
+一台大学里的服务器, 有多个用户使用, 如学生, 老师, 系统任务.
+不同的用户分配不同的资源, 例如
+CPU资源分配, 老师用CPU集合1, 学生用CPU集合2, 系统任务用所有CPU资源.
+内存资源分配, 老师50%, 学生30%, 系统任务20%
+磁盘IO, 老师50%, 学生30%, 系统任务20%
+网络, 老师15%, 学生5%, 网络文件系统60%, 其他20%
+
+As an example of a scenario (originally proposed by vatsa@in.ibm.com)
+that can benefit from multiple hierarchies, consider a large
+university server with various users - students, professors, system
+tasks etc. The resource planning for this server could be along the
+following lines:
+
+       CPU :          "Top cpuset"
+                       /       \
+               CPUSet1         CPUSet2
+                  |               |
+               (Professors)    (Students)
+
+               In addition (system tasks) are attached to topcpuset (so
+               that they can run anywhere) with a limit of 20%
+
+       Memory : Professors (50%), Students (30%), system (20%)
+
+       Disk : Professors (50%), Students (30%), system (20%)
+
+       Network : WWW browsing (20%), Network File System (60%), others (20%)
+                               / \
+               Professors (15%)  students (5%)
+
+
+
+CGROUP如何来控制资源的使用呢?
+是创建好资源组, 然后将进程放到对应的资源组里面去.
+例如上面的例子可以创建2个资源组: 老师, 学生.
+老师和学生跑的进程放到对应的老师, 学生资源组, 系统进程放到顶级组.
+
+以CentOS 7.x x64为例, 看看如何使用cgroup : 
+centos 7安装好后, 系统起来后, 已经挂载了cgroup, 所以不需要再次挂载.
+
+[root@150 cgroup]# cat /proc/mounts 
+tmpfs /sys/fs/cgroup tmpfs rw,nosuid,nodev,noexec,mode=755 0 0
+
+cgroup /sys/fs/cgroup/systemd cgroup rw,nosuid,nodev,noexec,relatime,xattr,release_agent=/usr/lib/systemd/systemd-cgroups-agent,name=systemd 0 0
+cgroup /sys/fs/cgroup/cpuset cgroup rw,nosuid,nodev,noexec,relatime,cpuset 0 0
+cgroup /sys/fs/cgroup/cpu,cpuacct cgroup rw,nosuid,nodev,noexec,relatime,cpuacct,cpu 0 0
+cgroup /sys/fs/cgroup/memory cgroup rw,nosuid,nodev,noexec,relatime,memory 0 0
+cgroup /sys/fs/cgroup/devices cgroup rw,nosuid,nodev,noexec,relatime,devices 0 0
+cgroup /sys/fs/cgroup/freezer cgroup rw,nosuid,nodev,noexec,relatime,freezer 0 0
+cgroup /sys/fs/cgroup/net_cls cgroup rw,nosuid,nodev,noexec,relatime,net_cls 0 0
+cgroup /sys/fs/cgroup/blkio cgroup rw,nosuid,nodev,noexec,relatime,blkio 0 0
+cgroup /sys/fs/cgroup/perf_event cgroup rw,nosuid,nodev,noexec,relatime,perf_event 0 0
+cgroup /sys/fs/cgroup/hugetlb cgroup rw,nosuid,nodev,noexec,relatime,hugetlb 0 0
+
+
+
+自定义继承资源组, 建议使用这种做法.
+
+For example, the following sequence of commands will setup a cgroup
+named "Charlie", containing just CPUs 2 and 3, and Memory Node 1,
+and then start a subshell 'sh' in that cgroup:
+# 如果没有挂载的话, 需要先挂载一次
+  mount -t tmpfs cgroup_root /sys/fs/cgroup    
+创建自定义资源组(cpuset组已经存在, 所以不需要创建)
+  mkdir /sys/fs/cgroup/cpuset
+挂载资源组(cpuset组已经存在, 所以不需要挂载)
+  mount -t cgroup cpuset -o cpuset /sys/fs/cgroup/cpuset
+在cpuset组下面创建一个自定义组
+  cd /sys/fs/cgroup/cpuset
+  mkdir Charlie
+  cd Charlie
+在自定义组中配置CPU和内存资源控制, 如CPU核亲和
+  /bin/echo 2-3 > cpuset.cpus
+  /bin/echo 1 > cpuset.mems
+将当前进程号放到这个组中. $$返回当前进程号
+  /bin/echo $$ > tasks
+  sh
+  # The subshell 'sh' is now running in cgroup Charlie
+  # The next line should display '/Charlie'
+  cat /proc/self/cgroup
+
+
+
+挂载顶级组 : 
+或混合顶级组(如CentOS 7默认已经挂载了名为cgroup的混合顶级组, 混合了cpuset, memory,blkio等) : 
+
+[root@150 ~]# cd /sys/fs/cgroup/
+[root@150 cgroup]# ll
+total 0
+drwxr-xr-x 2 root root 40 Nov 27 19:03 blkio
+lrwxrwxrwx 1 root root 11 Nov 27 19:03 cpu -> cpu,cpuacct
+lrwxrwxrwx 1 root root 11 Nov 27 19:03 cpuacct -> cpu,cpuacct
+drwxr-xr-x 2 root root 40 Nov 27 19:03 cpu,cpuacct
+drwxr-xr-x 2 root root 40 Nov 27 19:03 cpuset
+drwxr-xr-x 2 root root 40 Nov 27 19:03 devices
+drwxr-xr-x 2 root root 40 Nov 27 19:03 freezer
+drwxr-xr-x 2 root root 40 Nov 27 19:03 hugetlb
+drwxr-xr-x 2 root root 40 Nov 27 19:03 memory
+drwxr-xr-x 2 root root 40 Nov 27 19:03 net_cls
+drwxr-xr-x 2 root root 40 Nov 27 19:03 perf_event
+drwxr-xr-x 2 root root 40 Dec  3 23:25 rg1
+drwxr-xr-x 4 root root  0 Nov 27 19:03 systemd
+
+[root@150 ~]# mount
+cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
+cgroup on /sys/fs/cgroup/cpu,cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpuacct,cpu)
+cgroup on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
+cgroup on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,devices)
+cgroup on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,freezer)
+cgroup on /sys/fs/cgroup/net_cls type cgroup (rw,nosuid,nodev,noexec,relatime,net_cls)
+cgroup on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)
+
+
+如果没有自动挂载的话, 我们也可以手工挂载 : 
+
+As explained in section `1.2 Why are cgroups needed?' you should create
+different hierarchies of cgroups for each single resource or group of
+resources you want to control. Therefore, you should mount a tmpfs on
+/sys/fs/cgroup and create directories for each cgroup resource or resource
+group.
+
+# mount -t tmpfs cgroup_root /sys/fs/cgroup
+# mkdir /sys/fs/cgroup/rg1
+
+To mount a cgroup hierarchy with just the cpuset and memory
+subsystems, type:
+# 必须在没有初始化挂载时挂载, 如果系统已经挂载了这些组, 那么不建议重复挂载. (-o中指定的cpuset, memory如果已经挂载, 则不必重复挂载)
+# mount -t cgroup -o cpuset,memory hier1 /sys/fs/cgroup/rg1
+
+While remounting cgroups is currently supported, it is not recommend
+to use it. Remounting allows changing bound subsystems and
+release_agent. Rebinding is hardly useful as it only works when the
+hierarchy is empty and release_agent itself should be replaced with
+conventional fsnotify. The support for remounting will be removed in
+the future.
+
+
+
+以CentOS 7.x x64为例 , 系统自带的子系统类型如下 : 
+可以控制的资源包括CPU, 内存, IO, 大页等.
+
+[root@150 cgroup]# cd /sys/fs/cgroup/
+[root@150 cgroup]# ll
+total 0
+drwxr-xr-x 4 root root  0 Nov 27 19:25 blkio
+lrwxrwxrwx 1 root root 11 Nov 27 19:03 cpu -> cpu,cpuacct
+lrwxrwxrwx 1 root root 11 Nov 27 19:03 cpuacct -> cpu,cpuacct
+drwxr-xr-x 4 root root  0 Nov 27 19:25 cpu,cpuacct
+drwxr-xr-x 2 root root  0 Nov 27 19:03 cpuset
+drwxr-xr-x 2 root root  0 Nov 28 22:20 devices
+drwxr-xr-x 3 root root  0 Nov 27 19:03 freezer
+drwxr-xr-x 2 root root  0 Nov 27 19:03 hugetlb
+drwxr-xr-x 3 root root  0 Nov 27 19:25 memory
+drwxr-xr-x 2 root root  0 Nov 27 19:03 net_cls
+drwxr-xr-x 2 root root  0 Nov 27 19:03 perf_event
+drwxr-xr-x 4 root root  0 Nov 27 19:03 systemd
+
+
+例如cpuset可以控制哪些资源呢?
+如cpus
+
+[root@150 cgroup]# cat cpuset/cpuset.cpus
+0-7
+
+[root@150 cgroup]# ll cpuset/
+total 0
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w- 1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cgroup.procs
+-r--r--r-- 1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.cpu_exclusive
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.cpus
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.mem_exclusive
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.mem_hardwall
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.memory_migrate
+-r--r--r-- 1 root root 0 Nov 27 19:03 cpuset.memory_pressure
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.memory_pressure_enabled
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.memory_spread_page
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.memory_spread_slab
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.mems
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.sched_load_balance
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cpuset.sched_relax_domain_level
+-rw-r--r-- 1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r-- 1 root root 0 Nov 27 19:03 release_agent
+-rw-r--r-- 1 root root 0 Nov 27 19:03 tasks
+
+
+例如memory可以控制哪些资源呢?
+
+[root@150 cgroup]# ll memory/
+total 0
+-rw-r--r--  1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w-  1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r--  1 root root 0 Dec  3 23:30 cgroup.procs
+-r--r--r--  1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.failcnt
+--w-------  1 root root 0 Nov 27 19:03 memory.force_empty
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.failcnt
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.max_usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.kmem.slabinfo
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.failcnt
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.max_usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.kmem.usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.max_usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.memsw.failcnt
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.memsw.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.memsw.max_usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.memsw.usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.move_charge_at_immigrate
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.numa_stat
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.oom_control
+----------  1 root root 0 Nov 27 19:03 memory.pressure_level
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.soft_limit_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.stat
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.swappiness
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.use_hierarchy
+-rw-r--r--  1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r--  1 root root 0 Nov 27 19:03 release_agent
+drwxr-xr-x 10 root root 0 Nov 28 18:33 system.slice
+-rw-r--r--  1 root root 0 Nov 27 19:03 tasks
+
+
+例如devices可以控制哪些资源呢?
+
+[root@150 cgroup]# ll devices/
+total 0
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w- 1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r-- 1 root root 0 Dec  3 23:30 cgroup.procs
+-r--r--r-- 1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+--w------- 1 root root 0 Nov 27 19:03 devices.allow
+--w------- 1 root root 0 Nov 27 19:03 devices.deny
+-r--r--r-- 1 root root 0 Nov 27 19:03 devices.list
+-rw-r--r-- 1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r-- 1 root root 0 Nov 27 19:03 release_agent
+-rw-r--r-- 1 root root 0 Nov 27 19:03 tasks
+
+
+其他资源控制 : 
+
+[root@150 cgroup]# ll net_cls/
+total 0
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w- 1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cgroup.procs
+-r--r--r-- 1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r-- 1 root root 0 Nov 27 19:03 net_cls.classid
+-rw-r--r-- 1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r-- 1 root root 0 Nov 27 19:03 release_agent
+-rw-r--r-- 1 root root 0 Nov 27 19:03 tasks
+[root@150 cgroup]# ll systemd/
+total 0
+-rw-r--r--  1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w-  1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r--  1 root root 0 Nov 27 19:03 cgroup.procs
+-r--r--r--  1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r--  1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r--  1 root root 0 Nov 27 19:03 release_agent
+drwxr-xr-x 85 root root 0 Dec  3 22:10 system.slice
+-rw-r--r--  1 root root 0 Nov 27 19:03 tasks
+drwxr-xr-x  3 root root 0 Nov 27 19:03 user.slice
+[root@150 cgroup]# ll freezer/
+total 0
+-rw-r--r--  1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w-  1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r--  1 root root 0 Nov 27 19:03 cgroup.procs
+-r--r--r--  1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r--  1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r--  1 root root 0 Nov 27 19:03 release_agent
+drwxr-xr-x 10 root root 0 Nov 28 18:33 system.slice
+-rw-r--r--  1 root root 0 Nov 27 19:03 tasks
+[root@150 cgroup]# ll hugetlb/
+total 0
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w- 1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r-- 1 root root 0 Nov 27 19:03 cgroup.procs
+-r--r--r-- 1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r-- 1 root root 0 Nov 27 19:03 hugetlb.2MB.failcnt
+-rw-r--r-- 1 root root 0 Nov 27 19:03 hugetlb.2MB.limit_in_bytes
+-rw-r--r-- 1 root root 0 Nov 27 19:03 hugetlb.2MB.max_usage_in_bytes
+-r--r--r-- 1 root root 0 Nov 27 19:03 hugetlb.2MB.usage_in_bytes
+-rw-r--r-- 1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r-- 1 root root 0 Nov 27 19:03 release_agent
+-rw-r--r-- 1 root root 0 Nov 27 19:03 tasks
+[root@150 cgroup]# ll blkio/
+total 0
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_merged
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_merged_recursive
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_queued
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_queued_recursive
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_service_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_service_bytes_recursive
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_serviced
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_serviced_recursive
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_service_time
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_service_time_recursive
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_wait_time
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.io_wait_time_recursive
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.leaf_weight
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.leaf_weight_device
+--w-------  1 root root 0 Nov 27 19:03 blkio.reset_stats
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.sectors
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.sectors_recursive
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.throttle.io_service_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.throttle.io_serviced
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.throttle.read_bps_device
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.throttle.read_iops_device
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.throttle.write_bps_device
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.throttle.write_iops_device
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.time
+-r--r--r--  1 root root 0 Nov 27 19:03 blkio.time_recursive
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.weight
+-rw-r--r--  1 root root 0 Nov 27 19:03 blkio.weight_device
+-rw-r--r--  1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w-  1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r--  1 root root 0 Dec  3 22:30 cgroup.procs
+-r--r--r--  1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r--  1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r--  1 root root 0 Nov 27 19:03 release_agent
+drwxr-xr-x 77 root root 0 Dec  3 22:10 system.slice
+-rw-r--r--  1 root root 0 Nov 27 19:03 tasks
+drwxr-xr-x  2 root root 0 Nov 27 19:25 user.slice
+
+
+
+不建议重复挂载, 在没有自动挂载的情况下, 可以这么来挂载 : 
+
+[root@150 cgroup]# mount -t cgroup -o cpuset cgroup /sys/fs/cgroup/cpuset
+[root@150 cgroup]# mount -t cgroup -o memory cgroup /sys/fs/cgroup/memory
+[root@150 cgroup]# mount -t cgroup -o blkio cgroup /sys/fs/cgroup/blkio
+
+cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,relatime,cpuset)
+cgroup on /sys/fs/cgroup/memory type cgroup (rw,relatime,memory)
+cgroup on /sys/fs/cgroup/blkio type cgroup (rw,relatime,blkio)
+
+
+将一个资源组放进去是可以的
+
+# 资源加入CGROUP.
+[root@150 cgroup]# cd /sys/fs/cgroup/cpuset
+[root@150 rg1]# ll
+total 0
+-rw-r--r--  1 root root 0 Nov 27 19:03 cgroup.clone_children
+--w--w--w-  1 root root 0 Nov 27 19:03 cgroup.event_control
+-rw-r--r--  1 root root 0 Dec  3 23:20 cgroup.procs
+-r--r--r--  1 root root 0 Nov 27 19:03 cgroup.sane_behavior
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.failcnt
+--w-------  1 root root 0 Nov 27 19:03 memory.force_empty
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.failcnt
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.max_usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.kmem.slabinfo
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.failcnt
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.max_usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.kmem.tcp.usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.kmem.usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.max_usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.memsw.failcnt
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.memsw.limit_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.memsw.max_usage_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.memsw.usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.move_charge_at_immigrate
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.numa_stat
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.oom_control
+----------  1 root root 0 Nov 27 19:03 memory.pressure_level
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.soft_limit_in_bytes
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.stat
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.swappiness
+-r--r--r--  1 root root 0 Nov 27 19:03 memory.usage_in_bytes
+-rw-r--r--  1 root root 0 Nov 27 19:03 memory.use_hierarchy
+-rw-r--r--  1 root root 0 Nov 27 19:03 notify_on_release
+-rw-r--r--  1 root root 0 Nov 27 19:03 release_agent
+drwxr-xr-x 10 root root 0 Nov 28 18:33 system.slice
+-rw-r--r--  1 root root 0 Nov 27 19:03 tasks
+
+
+将进程放到对应的资源组, 只需要将进程号添加到tasks文件即可.
+
+[root@150 cgroup]# cd /sys/fs/cgroup/cpuset/
+[root@150 cpuset]# less tasks 
+1
+2
+3
+5
+7
+8
+9
+10
+11
+......
+
+
+
+卸载资源组, 因为挂载了多次, 所以需要卸载多次.
+
+[root@150 cgroup]# umount cgroup
+[root@150 cgroup]# umount cgroup
+[root@150 cgroup]# umount cgroup
+[root@150 cgroup]# umount cgroup
+umount: /sys/fs/cgroup/systemd: target is busy.
+        (In some cases useful info about processes that use
+         the device is found by lsof(8) or fuser(1))
+
+
+查看进程所在的资源组 : 
+
+[root@150 cpuset]# cat /proc/1/cgroup 
+10:hugetlb:/
+9:perf_event:/
+8:blkio:/
+7:net_cls:/
+6:freezer:/
+5:devices:/
+4:memory:/
+3:cpuacct,cpu:/
+2:cpuset:/
+1:name=systemd:/
+
+
+例如docker进程 : 
+
+[root@150 cpuset]# ps -efw|grep docker
+root        4661       1  0 Nov27 ?        00:02:45 /usr/bin/docker -d --selinux-enabled=false -g /data01/docker
+root       22830   20836  0 23:55 pts/1    00:00:00 grep --color=auto docker
+[root@150 cpuset]# ps -efw|grep 4661
+root        4661       1  0 Nov27 ?        00:02:45 /usr/bin/docker -d --selinux-enabled=false -g /data01/docker
+root       17299    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       17325    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       17351    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       17377    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       17403    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       17429    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       17456    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       17485    4661  0 Nov28 ?        00:00:00 /usr/sbin/sshd -D
+root       22832   20836  0 23:55 pts/1    00:00:00 grep --color=auto 4661
+[root@150 cpuset]# cat /proc/17299/cgroup 
+10:hugetlb:/
+9:perf_event:/
+8:blkio:/system.slice
+7:net_cls:/
+6:freezer:/system.slice/docker-59c41fc9560eb52b549de45d8996a34da2ea00f7711b40b757b0e035169ccd92.scope
+5:devices:/
+4:memory:/system.slice
+3:cpuacct,cpu:/system.slice
+2:cpuset:/
+1:name=systemd:/system.slice/docker-59c41fc9560eb52b549de45d8996a34da2ea00f7711b40b757b0e035169ccd92.scope
+
+
+
+[参考]
+1. https://www.kernel.org/doc/Documentation/cgroups/
+各种不同资源类型的控制详细使用请参考如下
+
+Index of /doc/Documentation/cgroups
+Name                    Last modified      Size  
+Parent Directory                             -   
+00-INDEX                01-Dec-2014 01:00  918   
+blkio-controller.txt    01-Dec-2014 01:00   16K  
+cgroups.txt             01-Dec-2014 01:00   26K  
+cpuacct.txt             01-Dec-2014 01:00  1.9K  
+cpusets.txt             01-Dec-2014 01:00   36K  
+devices.txt             01-Dec-2014 01:00  4.3K  
+freezer-subsystem.txt   01-Dec-2014 01:00  4.8K  
+hugetlb.txt             01-Dec-2014 01:00  1.7K  
+memcg_test.txt          01-Dec-2014 01:00  8.3K  
+memory.txt              01-Dec-2014 01:00   36K  
+net_cls.txt             01-Dec-2014 01:00  1.2K  
+net_prio.txt            01-Dec-2014 01:00  2.5K  
+resource_counter.txt    01-Dec-2014 01:00  6.1K  
+unified-hierarchy.txt   01-Dec-2014 01:00   16K  
+
+
+
+Flag Counter

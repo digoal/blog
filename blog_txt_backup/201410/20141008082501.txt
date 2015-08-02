@@ -1,0 +1,233 @@
+PostgreSQL research
+
+psql ExecQueryUsingCursor when set fetch_count >0 and is_select_command
+
+2014-10-08 8:25:01   查看原文>>
+
+默认情况下, psql在执行一个SELECT查询时, 是将所有的结果集载入内存后再打印结果的(所以在返回结果前, 这条SQL肯定是执行成功的).
+如果设置了psql的变量FETCH_COUNT大于0的话, 那么psql将使用游标来批量获取以及返回结果. (当然这种情况可能导致最后失败的情况.但是对于大结果集的查询来说, 这样做可以避免内存溢出)
+FETCH_COUNT变量的说明如下 : 
+man psql
+
+           FETCH_COUNT
+               If this variable is set to an integer value > 0, the results of SELECT queries are fetched and
+               displayed in groups of that many rows, rather than the default behavior of collecting the entire result
+               set before display. Therefore only a limited amount of memory is used, regardless of the size of the
+               result set. Settings of 100 to 1000 are commonly used when enabling this feature. Keep in mind that
+               when using this feature, a query might fail after having already displayed some rows.
+
+                   Tip
+                   Although you can use any output format with this feature, the default aligned format tends to look
+                   bad because each group of FETCH_COUNT rows will be formatted separately, leading to varying column
+                   widths across the row groups. The other output formats work better.
+
+
+
+使用方法:
+
+postgres@db-172-16-3-221-> psql
+psql (9.3.5)
+Type "help" for help.
+digoal=# \echo :FETCH_COUNT
+:FETCH_COUNT
+digoal=# \set FETCH_COUNT 10
+digoal=# \echo :FETCH_COUNT
+10
+
+
+
+大结果集查询的应用, 例如查询这个344MB的大表. 
+设置FETCH_COUNT>0后查询很快就返回结果, 如果不设置的话, 需要等比较久才返回结果.
+
+digoal=# \set FETCH_COUNT 10
+digoal=# \dt+
+                       List of relations
+ Schema |    Name    | Type  |  Owner   |  Size  | Description 
+--------+------------+-------+----------+--------+-------------
+ public | test_table | table | postgres | 344 MB | 
+digoal=# \timing
+Timing is on.
+digoal=# select * from test_table;
+很快就返回结果
+ id | val 
+----+-----
+  1 | 234
+  2 | 496
+  3 | 306
+  4 | 352
+  5 | 688
+  6 | 846
+  7 | 629
+  8 | 616
+  9 | 236
+ 10 | 491
+ 11 | 546
+ 12 | 197
+ 13 |  37
+ 14 |  78
+ 15 | 287
+ 16 | 464
+ 17 | 641
+ 18 | 378
+ 19 |  81
+ 20 | 409
+ 21 | 309
+ 22 | 266
+ 23 | 379
+ 24 | 160
+ 25 | 531
+ 26 | 849
+ 27 |  36
+ 28 | 660
+ 29 |  44
+ 30 | 690
+ 31 | 196
+ 32 | 278
+ 33 | 186
+ 34 | 502
+ 35 | 630
+ 36 | 874
+q (退出查询)
+Time: 27.886 ms
+
+digoal=# \set FETCH_COUNT 0
+digoal=# select * from test_table;
+等了几秒才开始返回结果
+ id  | val  
+-----+------
+   1 |  234
+   2 |  496
+   3 |  306
+   4 |  352
+   5 |  688
+   6 |  846
+   7 |  629
+   8 |  616
+   9 |  236
+  10 |  491
+  11 |  546
+  12 |  197
+  13 |   37
+  14 |   78
+  15 |  287
+  16 |  464
+  17 |  641
+  18 |  378
+  19 |   81
+  20 |  409
+  21 |  309
+  22 |  266
+  23 |  379
+  24 |  160
+  25 |  531
+  26 |  849
+  27 |   36
+  28 |  660
+  29 |   44
+  30 |  690
+  31 |  196
+  32 |  278
+  33 |  186
+  34 |  502
+  35 |  630
+  36 |  874
+q (退出查询)
+Time: 4331.564 ms (耗时包括查询耗时, 但是不包括返回结果耗时)
+
+
+
+psql定义的内部变量如下, 详细的使用说明参考man psql : 
+src/bin/psql/startup.c
+
+static void
+EstablishVariableSpace(void)
+{
+        pset.vars = CreateVariableSpace();
+
+        SetVariableAssignHook(pset.vars, "AUTOCOMMIT", autocommit_hook);
+        SetVariableAssignHook(pset.vars, "ON_ERROR_STOP", on_error_stop_hook);
+        SetVariableAssignHook(pset.vars, "QUIET", quiet_hook);
+        SetVariableAssignHook(pset.vars, "SINGLELINE", singleline_hook);
+        SetVariableAssignHook(pset.vars, "SINGLESTEP", singlestep_hook);
+        SetVariableAssignHook(pset.vars, "FETCH_COUNT", fetch_count_hook);
+        SetVariableAssignHook(pset.vars, "ECHO", echo_hook);
+        SetVariableAssignHook(pset.vars, "ECHO_HIDDEN", echo_hidden_hook);
+        SetVariableAssignHook(pset.vars, "ON_ERROR_ROLLBACK", on_error_rollback_hook);
+        SetVariableAssignHook(pset.vars, "HISTCONTROL", histcontrol_hook);
+        SetVariableAssignHook(pset.vars, "PROMPT1", prompt1_hook);
+        SetVariableAssignHook(pset.vars, "PROMPT2", prompt2_hook);
+        SetVariableAssignHook(pset.vars, "PROMPT3", prompt3_hook);
+        SetVariableAssignHook(pset.vars, "VERBOSITY", verbosity_hook);
+}
+
+
+
+FETCH_COUNT作用对应的代码 : 
+src/bin/psql/common.c
+
+        if (pset.fetch_count <= 0 || !is_select_command(query))
+        {
+                /* Default fetch-it-all-and-print mode */
+                instr_time      before,
+                                        after;
+
+                if (pset.timing)
+                        INSTR_TIME_SET_CURRENT(before);
+
+                results = PQexec(pset.db, query);
+
+                /* these operations are included in the timing result: */
+                ResetCancelConn();
+                OK = ProcessResult(&results);
+
+                if (pset.timing)
+                {
+                        INSTR_TIME_SET_CURRENT(after);
+                        INSTR_TIME_SUBTRACT(after, before);
+                        elapsed_msec = INSTR_TIME_GET_MILLISEC(after);
+                }
+
+                /* but printing results isn't: */
+                if (OK && results)
+                        OK = PrintQueryResults(results);
+        }
+        else
+        {
+                /* Fetch-in-segments mode */
+                OK = ExecQueryUsingCursor(query, &elapsed_msec);
+                ResetCancelConn();
+                results = NULL;                 /* PQclear(NULL) does nothing */
+        }
+
+*
+ * ExecQueryUsingCursor: run a SELECT-like query using a cursor
+ *
+ * This feature allows result sets larger than RAM to be dealt with.
+ *
+ * Returns true if the query executed successfully, false otherwise.
+ *
+ * If pset.timing is on, total query time (exclusive of result-printing) is
+ * stored into *elapsed_msec.
+ */
+static bool
+ExecQueryUsingCursor(const char *query, double *elapsed_msec)
+{
+..............
+        /* Send DECLARE CURSOR */
+        initPQExpBuffer(&buf);
+        appendPQExpBuffer(&buf, "DECLARE _psql_cursor NO SCROLL CURSOR FOR\n%s",
+                                          query);
+........................
+        snprintf(fetch_cmd, sizeof(fetch_cmd),
+                         "FETCH FORWARD %d FROM _psql_cursor",
+                         fetch_count);
+........
+
+
+
+[参考]
+1. src/bin/psql/common.c
+2. src/bin/psql/startup.c
+3. man psql
+
+Flag Counter

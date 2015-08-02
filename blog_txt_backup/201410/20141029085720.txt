@@ -1,0 +1,216 @@
+PostgreSQL research
+
+share volumns between docker containers & local host
+
+2014-10-29 8:57:20   查看原文>>
+
+某些时候我们可能要在container之间共享数据, 或者在宿主机和container之间共享数据.
+docker提供了这样的功能(-v 以及 --volumes-from).
+下面举几个例子.
+1. 在创建container时创建卷
+2. 在创建container时创建卷对应本地主机目录
+3. 多个container挂载共享的本地主机目录
+4. 创建数据卷container, 其他container挂载数据卷container的卷, 共享数据
+5. 其他container级联挂载数据卷container的卷, 共享数据
+6. 备份container共享卷的方法
+
+1. 在创建container时创建卷
+
+[root@db-172-16-3-221 ~]# docker run --rm -i -t -v /test postgres:9.3.5 /bin/bash
+root@21490fa4b316:/# df -h /test
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sdd1       916G  227G  643G  27% /test
+
+
+
+-v /test 指创建一个卷,   挂载点/test.
+你也可以使用多个-v参数创建多个卷, 例如 : 
+
+[root@db-172-16-3-221 ~]# docker run --rm -i -t -v /test -v /test1 -v /test2 postgres:9.3.5 /bin/bash
+root@00e87adfe3ea:/# df -h /test*
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sdd1       916G  227G  643G  27% /test
+/dev/sdd1       916G  227G  643G  27% /test1
+/dev/sdd1       916G  227G  643G  27% /test2
+
+
+
+2. 在创建container时创建卷对应本地主机目录
+我们可以在container和宿主机之间共享数据, 只要在创建卷时指定本地目录即可.
+例如 : 
+
+[root@db-172-16-3-221 data01]# cd /data01/
+[root@db-172-16-3-221 data01]# mkdir test
+[root@db-172-16-3-221 data01]# docker run --rm -i -t -v /data01/test:/hello:rw postgres:9.3.5 /bin/bash
+root@8238bc46c1da:/# df -h /hello
+Filesystem                 Size  Used Avail Use% Mounted on
+/dev/mapper/vgdata01-lv01  2.7T  339G  2.3T  13% /hello
+root@8238bc46c1da:/# cd /hello
+root@8238bc46c1da:/hello# echo "hello world" >./hello
+root@8238bc46c1da:/hello# ll
+bash: ll: command not found
+root@8238bc46c1da:/hello# ls -la
+total 8
+drwxr-xr-x  2 root root   18 Oct 28 09:35 .
+drwxr-xr-x 23 root root 4096 Oct 28 09:34 ..
+-rw-r--r--  1 root root   12 Oct 28 09:35 hello
+
+
+这个文件在宿主机的/data01/test下可以看到.
+
+[root@db-172-16-3-221 docker]# cd /data01/test/
+[root@db-172-16-3-221 test]# ll
+total 4
+-rw-r--r-- 1 root root 12 Oct 28 17:35 hello
+
+
+
+但是, 使用第一种方法创建的卷, 在宿主机怎么能看到呢? 后面会提到如何利用"数据卷container"将那种卷的数据拷贝到宿主机.
+
+3. 多个container挂载共享的本地主机目录
+不要关闭第一个container, 我们再启动一个container. 挂载同一个本地目录.
+
+[root@db-172-16-3-221 ~]# docker run --rm -i -t -v /data01/test:/hello:rw postgres:9.3.5 /bin/bash
+root@7c99c4f4a01f:/# cd /hello/
+root@7c99c4f4a01f:/hello# ls -la
+total 8
+drwxr-xr-x  2 root root   18 Oct 28 09:35 .
+drwxr-xr-x 23 root root 4096 Oct 28 09:36 ..
+-rw-r--r--  1 root root   12 Oct 28 09:35 hello
+root@7c99c4f4a01f:/hello# echo "hello world too" >>./hello 
+root@7c99c4f4a01f:/hello# cat hello 
+hello world
+hello world too
+
+[root@db-172-16-3-221 ~]# docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
+7c99c4f4a01f        postgres:9          /docker-entrypoint.s   31 seconds ago      Up 30 seconds       5432/tcp            pensive_hoover      
+8238bc46c1da        postgres:9          /docker-entrypoint.s   2 minutes ago       Up 2 minutes        5432/tcp            grave_thompson  
+
+
+   
+可以看到, 现在这两个container是共享挂载了本地的同一个目录的, 宿主机, container都看到了同一份数据.
+有兴趣的朋友可以很方便的利用这一点来做基于共享存储的类似RHCS HA的实验.
+
+4. 创建数据卷container, 其他container挂载"数据卷container"的卷, 共享数据.
+现在有2个container, 接下来我再开启一个container, 同时第三个container要挂载前面实验了-v的container的卷.
+
+[root@db-172-16-3-221 ~]# docker run --rm -i -t --volumes-from=pensive_hoover:rw postgres:9.3.5 /bin/bash
+root@edae35acc741:/# df -h /hello
+Filesystem                 Size  Used Avail Use% Mounted on
+/dev/mapper/vgdata01-lv01  2.7T  339G  2.3T  13% /hello
+
+
+
+5. 其他container级联挂载"数据卷container"的卷, 共享数据.
+
+[root@db-172-16-3-221 ~]# docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
+edae35acc741        postgres:9          /docker-entrypoint.s   2 minutes ago       Up 2 minutes        5432/tcp            lonely_mcclintock   
+7c99c4f4a01f        postgres:9          /docker-entrypoint.s   9 minutes ago       Up 9 minutes        5432/tcp            pensive_hoover      
+8238bc46c1da        postgres:9          /docker-entrypoint.s   11 minutes ago      Up 11 minutes       5432/tcp            grave_thompson
+
+启动一个新的container , 并级联从lonely_mcclintock挂载volume.
+
+[root@db-172-16-3-221 ~]# docker run --rm -i -t --volumes-from=lonely_mcclintock:rw postgres:9.3.5 /bin/bash
+root@aab6a732ddbc:/# df -h /hello
+Filesystem                 Size  Used Avail Use% Mounted on
+/dev/mapper/vgdata01-lv01  2.7T  339G  2.3T  13% /hello
+
+
+
+6. 备份container共享卷的方法
+我们在第一个例子中启动container时创建了一个卷, 因为不是挂载的宿主机目录, 所以宿主机看不到这个卷的内容.
+使用第四个例子的方法, 启动一个新的container(同时挂载本地卷以及共享卷)可以读取到它的内容, 并备份.
+首先启动一个container, 并创建一个卷
+
+[root@db-172-16-3-221 ~]# docker run --rm -t -i --name="digoal" -v /test_v postgres:9.3.5 /bin/bash
+root@041e843a1408:/# cd /test_v
+root@041e843a1408:/test_v# ls -la
+total 8
+drwxr-xr-x  2 root root 4096 Oct 29 00:51 .
+drwxr-xr-x 23 root root 4096 Oct 29 00:51 ..
+root@041e843a1408:/test_v# echo "hello world, i am digoal." >>./hello
+
+
+为了备份前面那个container的卷到本地, 首先在宿主机创建本地目录
+
+[root@db-172-16-3-221 ~]# cd /data01/
+[root@db-172-16-3-221 data01]# mkdir backup_test
+[root@db-172-16-3-221 data01]# cd backup_test/
+[root@db-172-16-3-221 backup_test]# pwd
+/data01/backup_test
+
+
+再启动一个container, 同时挂载本地卷以及要备份的container的卷
+
+[root@db-172-16-3-221 backup_test]# docker run --rm -t -i --name="digoal001" --volumes-from=digoal -v /data01/backup_test:/backup:rw postgres:9.3.5 /bin/bash
+root@e5e8971c46cd:/# cd /test_v
+root@e5e8971c46cd:/test_v# ls -la
+total 12
+drwxr-xr-x  2 root root 4096 Oct 29 00:52 .
+drwxr-xr-x 24 root root 4096 Oct 29 00:54 ..
+-rw-r--r--  1 root root   26 Oct 29 00:52 hello
+root@e5e8971c46cd:/test_v# tar -jcvf /backup/test_v.tar.bz2 /test_v
+tar: Removing leading `/' from member names
+/test_v/
+/test_v/hello
+tar (child): bzip2: Cannot exec: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+root@e5e8971c46cd:/test_v# tar -cvf /backup/test_v.tar /test_v     
+tar: Removing leading `/' from member names
+/test_v/
+/test_v/hello
+root@e5e8971c46cd:/test_v# cd /backup/
+root@e5e8971c46cd:/backup# ls -la
+total 16
+drwxr-xr-x  2 root root    44 Oct 29 00:55 .
+drwxr-xr-x 24 root root  4096 Oct 29 00:54 ..
+-rw-r--r--  1 root root 10240 Oct 29 00:55 test_v.tar
+-rw-r--r--  1 root root     0 Oct 29 00:54 test_v.tar.bz2
+root@e5e8971c46cd:/backup# rm -rf test_v.tar.bz2 
+
+
+此时在宿主机可以看到这个备份文件
+
+[root@db-172-16-3-221 ~]# cd /data01/backup_test/
+[root@db-172-16-3-221 backup_test]# ll
+total 12
+-rw-r--r-- 1 root root 10240 Oct 29 08:55 test_v.tar
+[root@db-172-16-3-221 backup_test]# tar -xvf  test_v.tar 
+test_v/
+test_v/hello
+[root@db-172-16-3-221 backup_test]# ll
+total 12
+drwxr-xr-x 2 root root    18 Oct 29 08:52 test_v
+-rw-r--r-- 1 root root 10240 Oct 29 08:55 test_v.tar
+[root@db-172-16-3-221 backup_test]# cat test_v/hello 
+hello world, i am digoal.
+
+
+
+[参考]
+1. man docker-run
+
+       -v, -volume=volume[:ro|:rw] Bind mount a volume to the container.
+
+       The -v option can be used one or more times to add one or more mounts to a container.  These mounts can then be
+       used in other containers using the --volumes-from option.
+
+       The  volume  may  be  optionally suffixed with :ro or :rw to mount the volumes in read-only or read-write mode,
+       respectively.  By default, the volumes are mounted read-write.  See examples.
+
+       --volumes-from=container-id[:ro|:rw] Will mount volumes from the specified container identified  by  container-
+       id.   Once  a  volume is mounted in a one container it can be shared with other containers using the --volumes-
+       from option when running those other containers.  The volumes can be shared even if the original container with
+       the mount is not running.
+
+       The  container  ID  may  be optionally suffixed with :ro or :rw to mount the volumes in read-only or read-write
+       mode, respectively.  By default, the volumes are mounted in the same mode (read write or read only) as the ref-
+       erence container.
+
+
+
+Flag Counter

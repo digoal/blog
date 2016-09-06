@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# 在blog目录调用
+# 如果文件格式不对, 使用dos2unix转换
+# 例如 file 201608/20160823_01.md
+# 201608/20160823_01.md: UTF-8 Unicode C program text, with CRLF line terminators 说明需要转换 
+
 > ./README.md
 echo "### digoal,德哥的PostgreSQL私房菜  " > ./README.md
 echo "  " >> ./README.md

@@ -13,7 +13,7 @@ for dir in `ll|awk '{print $9}'|grep -E '^[0-9]{6}'`
 do
   cd $dir
   echo "### 文章列表  "  > ./readme.md
-  echo "  "  >> ./readme.md
+  echo "----  "  >> ./readme.md
   for file in `ll *.md|awk '{print $9}'|grep -E '^[0-9]{8}'` 
   do 
     title=`head -n 1 $file|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`

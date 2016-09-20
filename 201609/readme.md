@@ -10,3 +10,8 @@
 ##### 20160916_01.md   [《HAWQ 集群部署 on ECS》](20160916_01.md)  
 ##### 20160918_01.md   [《如何在CentOS 6.x x64系统中创建超过16TB的ext4文件系统》](20160918_01.md)  
 ##### 20160919_01.md   [《bcache / 如何使用bcache构建LVM,软RAID / 如何优化bcache》](20160919_01.md)  
+##### 20160920_01.md   [《PostgreSQL Oracle兼容性之 - REMAINDER》](20160920_01.md)  
+##### 20160920_02.md   [《PostgreSQL Oracle兼容性之 - NEW_TIME , SYS_EXTRACT_UTC》](20160920_02.md)  
+##### 20160920_03.md   [《PostgreSQL Oracle兼容性之 - TZ_OFFSET》](20160920_03.md)  
+##### 20160920_04.md   [《PostgreSQL failed IANA tz database BUG修复》](20160920_04.md)  
+##### 20160920_05.md   [《PostgreSQL Oracle 兼容性之 - ASCIISTR》](20160920_05.md)  

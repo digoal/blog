@@ -15,3 +15,4 @@
 ##### 20160920_03.md   [《PostgreSQL Oracle兼容性之 - TZ_OFFSET》](20160920_03.md)  
 ##### 20160920_04.md   [《PostgreSQL failed IANA tz database BUG修复》](20160920_04.md)  
 ##### 20160920_05.md   [《PostgreSQL Oracle 兼容性之 - ASCIISTR》](20160920_05.md)  
+##### 20160920_06.md   [《PostgreSQL Oracle 兼容性之 - BIT_TO_NUM , BITAND , 比特运算 , 比特与整型互相转换》](20160920_06.md)  

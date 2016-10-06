@@ -9,3 +9,4 @@
 ##### 20161005_01.md   [《PostgreSQL 9.6 sharding + 单元化 (based on postgres_fdw) 最佳实践 - 通用水平分库场景设计与实践》](20161005_01.md)  
 ##### 20161006_01.md   [《PostgreSQL 9.6 等待事件》](20161006_01.md)  
 ##### 20161006_02.md   [《PostgreSQL 9.6 同步多副本 与 remote_apply事务同步级别》](20161006_02.md)  
+##### 20161006_03.md   [《PostgreSQL 9.6 平滑fsync, write原理浅析》](20161006_03.md)  

@@ -67,3 +67,4 @@
 ##### 201610/20161012_01.md   [《PostgreSQL DaaS设计注意 - schema与database的抉择》](201610/20161012_01.md)  
 ##### 201610/20161018_01.md   [《PostgreSQL 使用advisory lock或skip locked消除行锁冲突, 提高几十倍并发更新效率》](201610/20161018_01.md)  
 ##### 201610/20161018_02.md   [《Hacking PostgreSQL》](201610/20161018_02.md)  
+##### 201610/20161018_03.md   [《PostgreSQL pg_stat_ pg_statio_ 统计信息(scan,read,fetch,hit)源码解读》](201610/20161018_03.md)  

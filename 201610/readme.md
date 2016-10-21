@@ -22,3 +22,7 @@
 ##### 20161018_02.md   [《Hacking PostgreSQL》](20161018_02.md)  
 ##### 20161018_03.md   [《PostgreSQL pg_stat_ pg_statio_ 统计信息(scan,read,fetch,hit)源码解读》](20161018_03.md)  
 ##### 20161018_04.md   [《PostgreSQL Oracle 兼容性之 - PL/SQL FORALL, BULK COLLECT》](20161018_04.md)  
+##### 20161019_01.md   [《PostgreSQL 全文检索加速 快到没有朋友 - RUM索引接口(潘多拉魔盒)》](20161019_01.md)  
+##### 20161020_01.md   [《MySQL 增量同步到 PostgreSQL》](20161020_01.md)  
+##### 20161020_02.md   [《PostgreSQL 无缝自增ID的实现 - by advisory lock》](20161020_02.md)  
+##### 20161021_01.md   [《基于 阿里云 RDS PostgreSQL 打造实时用户画像推荐系统》](20161021_01.md)  

@@ -26,3 +26,4 @@
 ##### 20161020_01.md   [《MySQL 增量同步到 PostgreSQL》](20161020_01.md)  
 ##### 20161020_02.md   [《PostgreSQL 无缝自增ID的实现 - by advisory lock》](20161020_02.md)  
 ##### 20161021_01.md   [《基于 阿里云 RDS PostgreSQL 打造实时用户画像推荐系统》](20161021_01.md)  
+##### 20161024_01.md   [《PostgreSQL 9.5+ 高效分区表实现 - pg_pathman》](20161024_01.md)  

@@ -74,3 +74,8 @@
 ##### 201610/20161020_02.md   [《PostgreSQL 无缝自增ID的实现 - by advisory lock》](201610/20161020_02.md)  
 ##### 201610/20161021_01.md   [《基于 阿里云 RDS PostgreSQL 打造实时用户画像推荐系统》](201610/20161021_01.md)  
 ##### 201610/20161024_01.md   [《PostgreSQL 9.5+ 高效分区表实现 - pg_pathman》](201610/20161024_01.md)  
+##### 201610/20161027_01.md   [《PostgreSQL 9.6 sharding based on FDW & pg_pathman》](201610/20161027_01.md)  
+##### 201610/20161030_01.md   [《PostgreSQL 流行 HA 方案》](201610/20161030_01.md)  
+##### 201610/20161030_02.md   [《PostgreSQL 收缩膨胀表或索引 - pg_squeeze or pg_repack》](201610/20161030_02.md)  
+##### 201610/20161031_01.md   [《PostgreSQL 透明加密(TDE,FDE) - 块级加密》](201610/20161031_01.md)  
+##### 201610/20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case》](201610/20161031_02.md)  

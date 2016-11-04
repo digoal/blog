@@ -98,3 +98,4 @@
 ##### 201610/20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case》](201610/20161031_02.md)  
 ----  
 ##### 201611/20161101_01.md   [《给PostgreSQL爱好者的参考资料》](201611/20161101_01.md)  
+##### 201611/20161104_01.md   [《PostgreSQL Oracle兼容性之 - plpgsql 自治事务(autonomous_transaction)补丁》](201611/20161104_01.md)  

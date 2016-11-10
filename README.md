@@ -10,9 +10,21 @@
 ##### 201406/20140606_02.md   [《PostgreSQL LDAP认证之 simple bind配置》](201406/20140606_02.md)  
 ##### 201406/20140609_01.md   [《PostgreSQL LDAP认证之 search bind配置》](201406/20140609_01.md)  
 ----  
+##### 201408/20140801_01.md   [《OpenvSwitch readme & faq》](201408/20140801_01.md)  
+##### 201408/20140801_02.md   [《USE OpenVSwitch Isolating VM traffic using VLANs》](201408/20140801_02.md)  
+##### 201408/20140801_03.md   [《Install OpenVSwitch on CentOS 6.x x64》](201408/20140801_03.md)  
+##### 201408/20140806_01.md   [《tunctl , bridge , sub interface 在multi-network环境中的使用, 无需路由打通不同主机的不同网段》](201408/20140806_01.md)  
+----  
 ##### 201409/20140924_01.md   [《PostgreSQL Windows AD认证配置》](201409/20140924_01.md)  
 ----  
 ##### 201410/20141009_01.md   [《PostgreSQL 密码安全指南》](201410/20141009_01.md)  
+----  
+##### 201412/20141206_01.md   [《Install OpenVSwitch into CentOS 7 userspace》](201412/20141206_01.md)  
+----  
+##### 201504/20150401_01.md   [《install kvm hosts use vnc in CentOS 6》](201504/20150401_01.md)  
+##### 201504/20150401_02.md   [《install kvm hosts use kickstart in CentOS 6 in text mode》](201504/20150401_02.md)  
+##### 201504/20150402_01.md   [《KVM虚拟机CPU开销高性能优化例子 - 配置CPU flag》](201504/20150402_01.md)  
+##### 201504/20150402_02.md   [《如何给KVM虚拟机添加disk, cpu, 内存, 网卡设备》](201504/20150402_02.md)  
 ----  
 ##### 201505/20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](201505/20150509_01.md)  
 ----  
@@ -120,3 +132,5 @@
 ##### 201611/20161107_04.md   [《PostgreSQL 多租户》](201611/20161107_04.md)  
 ##### 201611/20161108_01.md   [《PostgreSQL 并行计算tpc-h测试和优化分析》](201611/20161108_01.md)  
 ##### 201611/20161109_01.md   [《在PostgreSQL中实现按拼音、汉字、拼音首字母搜索的例子》](201611/20161109_01.md)  
+##### 201611/20161109_02.md   [《Linux中的spinlock和mutex》](201611/20161109_02.md)  
+##### 201611/20161110_01.md   [《network namespace与veth pair》](201611/20161110_01.md)  

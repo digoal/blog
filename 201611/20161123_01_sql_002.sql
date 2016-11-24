@@ -46,7 +46,7 @@ insert into snap_pg_stat_database select snap_id, ts snap_ts, datname,round(100*
 insert into snap_pg_stat_bgwriter select snap_id, ts snap_ts,  * from pg_stat_bgwriter; 
 
 -- 全局, archiver 统计信息 
-insert into snap_pg_stat_archiver select snap_id, ts snap_ts,  * from pg_stat_archiver; 
+insert into snap_pg_stat_archiver select snap_id, ts snap_ts, coalesce(pg_xlogfile_name(pg_current_xlog_insert_location()),'-') as now_insert_xlog_file,  * from pg_stat_archiver; 
 
 -- 全局, 数据库年龄 
 insert into snap_pg_database_age select snap_id, ts snap_ts, datname,age(datfrozenxid),2^31-age(datfrozenxid) age_remain from pg_database order by age(datfrozenxid) desc;
@@ -262,7 +262,7 @@ FROM (
 ) AS sml order by wastedibytes desc limit 10;
 
 -- 库级, 垃圾数据前十  
-insert into snap_pg_dead_tup select snap_id, ts snap_ts, current_database(),schemaname,relname,n_dead_tup from pg_stat_all_tables where n_live_tup>0 and n_dead_tup/n_live_tup>0.2 and schemaname not in ($$pg_toast$$,$$pg_catalog$$) order by n_dead_tup desc limit 10;
+insert into snap_pg_dead_tup select snap_id, ts snap_ts, current_database(),schemaname,relname,n_dead_tup from pg_stat_all_tables where n_live_tup>0 and (n_dead_tup/n_live_tup)>0.2 and schemaname not in ($$pg_toast$$,$$pg_catalog$$) order by n_dead_tup desc limit 10;
 
 -- 库级, 表年龄前100
 insert into snap_pg_rel_age select snap_id, ts snap_ts, current_database(),rolname,nspname,relkind,relname,age(relfrozenxid),2^31-age(relfrozenxid) age_remain from pg_authid t1 join pg_class t2 on t1.oid=t2.relowner join pg_namespace t3 on t2.relnamespace=t3.oid where t2.relkind in ($$t$$,$$r$$) order by age(relfrozenxid) desc limit 100;

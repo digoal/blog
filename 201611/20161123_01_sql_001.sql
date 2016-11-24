@@ -36,7 +36,7 @@ create table IF NOT EXISTS snap_pg_stat_database as select 1::int8 snap_id, now(
 create table IF NOT EXISTS snap_pg_stat_bgwriter as select 1::int8 snap_id, now() snap_ts,  * from pg_stat_bgwriter; 
 
 -- 全局, archiver 统计信息
-create table IF NOT EXISTS snap_pg_stat_archiver as select 1::int8 snap_id, now() snap_ts,  * from pg_stat_archiver; 
+create table IF NOT EXISTS snap_pg_stat_archiver as select 1::int8 snap_id, now() snap_ts,coalesce(pg_xlogfile_name(pg_current_xlog_insert_location()),'-') as now_insert_xlog_file,  * from pg_stat_archiver; 
 
 -- 全局, 数据库年龄
 create table IF NOT EXISTS snap_pg_database_age as select 1::int8 snap_id, now() snap_ts, datname,age(datfrozenxid),2^31-age(datfrozenxid) age_remain from pg_database order by age(datfrozenxid) desc;

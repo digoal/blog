@@ -48,7 +48,7 @@ res := array_append(res, '### 1. 用户或数据库级别定制参数');
 res := array_append(res, '  '); 
 res := array_append(res, 'database | role | snap_ts | setconfig'); 
 res := array_append(res, '---|---|---|---'); 
-for tmp in select '```'||datname||'``` | ```'||rolname||'``` | ```'||snap_ts||'``` | '||setconfig::text from snap_pg_db_role_setting t1, pg_database t2, pg_authid t3 where t1.setdatabase=t2.oid and t1.setrole=t3.oid and t1.snap_id >=i_begin_id and t1.snap_id<=i_end_id order by datname,rolname,snap_ts  
+for tmp in select '```'||coalesce(datname,'-')||'``` | ```'||coalesce(rolname,'-')||'``` | ```'||snap_ts||'``` | '||coalesce(setconfig::text,'-') from snap_pg_db_role_setting t1, pg_database t2, pg_authid t3 where t1.setdatabase=t2.oid and t1.setrole=t3.oid and t1.snap_id >=i_begin_id and t1.snap_id<=i_end_id order by datname,rolname,snap_ts  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -65,7 +65,7 @@ res := array_append(res, '### 1. 表空间使用情况');
 res := array_append(res, '  '); 
 res := array_append(res, 'tablespace | tbs_location | snap_ts | size'); 
 res := array_append(res, '---|---|---|---'); 
-for tmp in select spcname||' | ```'||pg_tablespace_location||'``` | ```'||snap_ts||'``` | '||pg_size_pretty from snap_pg_tbs_size where snap_id >=i_begin_id and snap_id<=i_end_id order by spcname,pg_tablespace_location,snap_ts 
+for tmp in select coalesce(spcname,'-')||' | ```'||coalesce(pg_tablespace_location,'-')||'``` | ```'||snap_ts||'``` | '||coalesce(pg_size_pretty,'-') from snap_pg_tbs_size where snap_id >=i_begin_id and snap_id<=i_end_id order by spcname,pg_tablespace_location,snap_ts 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -79,7 +79,7 @@ res := array_append(res, '### 2. 数据库使用情况');
 res := array_append(res, '  '); 
 res := array_append(res, 'database | snap_ts | size'); 
 res := array_append(res, '---|---|---'); 
-for tmp in select '```'||datname||'``` | ```'||snap_ts||'``` | '||pg_size_pretty from snap_pg_db_size where snap_id >=i_begin_id and snap_id<=i_end_id order by datname, snap_ts
+for tmp in select '```'||coalesce(datname,'-')||'``` | ```'||snap_ts||'``` | '||coalesce(pg_size_pretty,'-') from snap_pg_db_size where snap_id >=i_begin_id and snap_id<=i_end_id order by datname, snap_ts
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -96,7 +96,7 @@ res := array_append(res, '### 1. 活跃度');
 res := array_append(res, '  '); 
 res := array_append(res, 'state | snap_ts | connections'); 
 res := array_append(res, '---|---|---'); 
-for tmp in select state||' | ```'||snap_ts||'``` | '||count from snap_pg_stat_activity where snap_id >=i_begin_id and snap_id<=i_end_id order by state, snap_ts
+for tmp in select coalesce(state,'-')||' | ```'||snap_ts||'``` | '||coalesce(count,-1) from snap_pg_stat_activity where snap_id >=i_begin_id and snap_id<=i_end_id order by state, snap_ts
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -110,7 +110,7 @@ res := array_append(res, '### 2. 剩余连接数');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | max_enabled_connections | used | res_for_super | res_for_normal'); 
 res := array_append(res, '---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | '||max_conn||' | '||used||' | '||res_for_super||' | '||res_for_normal from snap_pg_conn_stats where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts 
+for tmp in select '```'||snap_ts||'``` | '||coalesce(max_conn,-1)||' | '||coalesce(used,-1)||' | '||coalesce(res_for_super,-1)||' | '||coalesce(res_for_normal,-1) from snap_pg_conn_stats where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -124,7 +124,7 @@ res := array_append(res, '### 3. 用户连接数限制');
 res := array_append(res, '  '); 
 res := array_append(res, 'rolename | snap_ts | conn_limit | connects'); 
 res := array_append(res, '---|---|---|---'); 
-for tmp in select '```'||rolname||'``` | ```'||snap_ts||'``` | '||rolconnlimit||' | '||connects from snap_pg_role_conn_limit where snap_id >=i_begin_id and snap_id<=i_end_id order by rolname, snap_ts  
+for tmp in select '```'||coalesce(rolname,'-')||'``` | ```'||snap_ts||'``` | '||coalesce(rolconnlimit,-1)||' | '||coalesce(connects,-1) from snap_pg_role_conn_limit where snap_id >=i_begin_id and snap_id<=i_end_id order by rolname, snap_ts  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -138,7 +138,7 @@ res := array_append(res, '### 4. 数据库连接限制');
 res := array_append(res, '  '); 
 res := array_append(res, 'database | snap_ts | conn_limit | connects'); 
 res := array_append(res, '---|---|---|---'); 
-for tmp in select '```'||datname||'``` | ```'||snap_ts||'``` | '||datconnlimit||' | '||connects from snap_pg_db_conn_limit where snap_id >=i_begin_id and snap_id<=i_end_id order by datname, snap_ts  
+for tmp in select '```'||coalesce(datname,'-')||'``` | ```'||snap_ts||'``` | '||coalesce(datconnlimit,-1)||' | '||coalesce(connects,-1) from snap_pg_db_conn_limit where snap_id >=i_begin_id and snap_id<=i_end_id order by datname, snap_ts  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -155,7 +155,7 @@ res := array_append(res, '### 1. TOP 10 SQL : total_cpu_time');
 res := array_append(res, '  '); 
 res := array_append(res, 'rolename | database | calls | total_ms | min_ms | max_ms | mean_ms | stddev_ms | rows | shared_blks_hit | shared_blks_read | shared_blks_dirtied | shared_blks_written | local_blks_hit | local_blks_read | local_blks_dirtied | shared_blks_written | temp_blks_read | temp_blks_written | blk_read_time | blk_write_time | query'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||rolname||'``` | ```'||datname||'``` | '||sum(calls)||' | '||sum(total_time)||' | '||avg(min_time)||' | '||avg(max_time)||' | '||avg(mean_time)||' | '||avg(stddev_time)||' | '||sum(rows)||' | '||sum(shared_blks_hit)||' | '||sum(shared_blks_read)||' | '||sum(shared_blks_dirtied)||' | '||sum(shared_blks_written)||' | '||sum(local_blks_hit)||' | '||sum(local_blks_read)||' | '||sum(local_blks_dirtied)||' | '||sum(local_blks_written)||' | '||sum(temp_blks_read)||' | '||sum(temp_blks_written)||' | '||sum(blk_read_time)||' | '||sum(blk_write_time)||' |  ```'||replace(regexp_replace(query,'\n',' ','g'), '|', '&#124;')||'```' from snap_pg_cputime_topsql where snap_id >=i_begin_id and snap_id<=i_end_id group by rolname,datname,query  
+for tmp in select '```'||coalesce(rolname,'-')||'``` | ```'||coalesce(datname,'-')||'``` | '||coalesce(sum(calls),-1)||' | '||coalesce(sum(total_time),-1)||' | '||coalesce(avg(min_time),-1)||' | '||coalesce(avg(max_time),-1)||' | '||coalesce(avg(mean_time),-1)||' | '||coalesce(avg(stddev_time),-1)||' | '||coalesce(sum(rows),-1)||' | '||coalesce(sum(shared_blks_hit),-1)||' | '||coalesce(sum(shared_blks_read),-1)||' | '||coalesce(sum(shared_blks_dirtied),-1)||' | '||coalesce(sum(shared_blks_written),-1)||' | '||coalesce(sum(local_blks_hit),-1)||' | '||coalesce(sum(local_blks_read),-1)||' | '||coalesce(sum(local_blks_dirtied),-1)||' | '||coalesce(sum(local_blks_written),-1)||' | '||coalesce(sum(temp_blks_read),-1)||' | '||coalesce(sum(temp_blks_written),-1)||' | '||coalesce(sum(blk_read_time),-1)||' | '||coalesce(sum(blk_write_time),-1)||' |  ```'||coalesce(replace(regexp_replace(query,'\n',' ','g'), '|', '&#124;'),'-')||'```' from snap_pg_cputime_topsql where snap_id >=i_begin_id and snap_id<=i_end_id group by rolname,datname,query   order by sum(total_time) desc nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -169,7 +169,7 @@ res := array_append(res, '### 2. 数据库统计信息, 回滚比例, 命中比�
 res := array_append(res, '  '); 
 res := array_append(res, 'database | snap_ts | rollback_ratio | hit_ratio | blk_read_time | blk_write_time | conflicts | deadlocks'); 
 res := array_append(res, '---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||datname||'``` | ```'||snap_ts||'``` | '||rollback_ratio||' | '||hit_ratio||' | '||blk_read_time||' | '||blk_write_time||' | '||conflicts||' | '||deadlocks from snap_pg_stat_database where snap_id >=i_begin_id and snap_id<=i_end_id order by datname, snap_ts  
+for tmp in select '```'||coalesce(datname,'-')||'``` | ```'||snap_ts||'``` | '||coalesce(rollback_ratio,'-1')||' | '||coalesce(hit_ratio,'-1')||' | '||coalesce(blk_read_time,-1)||' | '||coalesce(blk_write_time,-1)||' | '||coalesce(conflicts,-1)||' | '||coalesce(deadlocks,-1) from snap_pg_stat_database where snap_id >=i_begin_id and snap_id<=i_end_id order by datname, snap_ts  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -183,7 +183,7 @@ res := array_append(res, '### 3. 检查点, bgwriter 统计信息');
 res := array_append(res, '  '); 
 res := array_append(res, 'checkpoints_timed | checkpoints_req | checkpoint_write_time | checkpoint_sync_time | buffers_checkpoint | buffers_clean | maxwritten_clean | buffers_backend | buffers_backend_fsync | buffers_alloc'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select sum(checkpoints_timed)||' | '||sum(checkpoints_req)||' | '||sum(checkpoint_write_time)||' | '||sum(checkpoint_sync_time)||' | '||sum(buffers_checkpoint)||' | '||sum(buffers_clean)||' | '||sum(maxwritten_clean)||' | '||sum(buffers_backend)||' | '||sum(buffers_backend_fsync)||' | '||sum(buffers_alloc) from snap_pg_stat_bgwriter where snap_id >=i_begin_id and snap_id<=i_end_id  
+for tmp in select coalesce(sum(checkpoints_timed),-1)||' | '||coalesce(sum(checkpoints_req),-1)||' | '||coalesce(sum(checkpoint_write_time),-1)||' | '||coalesce(sum(checkpoint_sync_time),-1)||' | '||coalesce(sum(buffers_checkpoint),-1)||' | '||coalesce(sum(buffers_clean),-1)||' | '||coalesce(sum(maxwritten_clean),-1)||' | '||coalesce(sum(buffers_backend),-1)||' | '||coalesce(sum(buffers_backend_fsync),-1)||' | '||coalesce(sum(buffers_alloc),-1) from snap_pg_stat_bgwriter where snap_id >=i_begin_id and snap_id<=i_end_id  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -225,7 +225,7 @@ res := array_append(res, '### 4. 归档统计信息');
 res := array_append(res, '  '); 
 res := array_append(res, 'archived_count | last_archived_wal | last_archived_time | failed_count | last_failed_wal | last_failed_time | now_insert_xlog_file'); 
 res := array_append(res, '---|---|---|---|---|---|---'); 
-for tmp in select archived_count||' | '||last_archived_wal||' | '||last_archived_time||' | '||failed_count||' | '||last_failed_wal||' | '||last_failed_time||' | '||pg_xlogfile_name(pg_current_xlog_insert_location()) from snap_pg_stat_archiver where snap_id=i_end_id   
+for tmp in select coalesce(archived_count,-1)||' | '||coalesce(last_archived_wal,'-')||' | ```'||coalesce(last_archived_time,'1970-01-01')||'``` | '||coalesce(failed_count,-1)||' | '||coalesce(last_failed_wal,'-')||' | ```'||coalesce(last_failed_time,'1970-01-01')||'``` | '||coalesce(now_insert_xlog_file,'-') from snap_pg_stat_archiver where snap_id=i_end_id   
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -242,7 +242,7 @@ res := array_append(res, '### 1. 数据库年龄');
 res := array_append(res, '  '); 
 res := array_append(res, 'database | snap_ts | age | age_remain'); 
 res := array_append(res, '---|---|---|---'); 
-for tmp in select '```'||datname||'``` | ```'||snap_ts||'``` | '||age||' | '||age_remain from snap_pg_database_age where snap_id >=i_begin_id and snap_id<=i_end_id order by datname,snap_ts   
+for tmp in select '```'||coalesce(datname,'-')||'``` | ```'||snap_ts||'``` | '||coalesce(age,-1)||' | '||coalesce(age_remain,-1) from snap_pg_database_age where snap_id >=i_begin_id and snap_id<=i_end_id order by datname,snap_ts   
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -256,14 +256,14 @@ res := array_append(res, '### 2. 长事务, 2PC');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | database | user | query | xact_start | xact_duration | query_start | query_duration | state'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||datname||'``` | ```'||usename||'``` | ```'||replace(regexp_replace(query,'\n',' ','g'), '|', '&#124;')||'``` | '||xact_start||' | '||xact_duration||' | '||query_start||' | '||query_duration||' | '||state from snap_pg_long_xact where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts,datname,usename,query     
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(datname,'-')||'``` | ```'||coalesce(usename,'-')||'``` | ```'||coalesce(replace(regexp_replace(query,'\n',' ','g'), '|', '&#124;'),'-')||'``` | ```'||coalesce(xact_start,'1970-01-01')||'``` | ```'||coalesce(xact_duration,'0 s')||'``` | ```'||coalesce(query_start,'1970-01-01')||'``` | ```'||coalesce(query_duration,'0 s')||'``` | '||coalesce(state,'-') from snap_pg_long_xact where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts,datname,usename,query     
 loop 
   res := array_append(res, tmp); 
 end loop; 
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | name | statement | prepare_time | duration | parameter_types | from_sql'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||name||'``` | ```'||replace(regexp_replace(statement,'\n',' ','g'), '|', '&#124;')||'``` | '||prepare_time||' | '||duration||' | '||parameter_types::text||' | '||from_sql from snap_pg_long_2pc where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts,prepare_time,name,statement 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(name,'-')||'``` | ```'||coalesce(replace(regexp_replace(statement,'\n',' ','g'), '|', '&#124;'),'-')||'``` | ```'||coalesce(prepare_time,'1970-01-01')||'``` | ```'||coalesce(duration,'0 s')||'``` | '||coalesce(parameter_types::text,'-')||' | '||coalesce(from_sql,'false') from snap_pg_long_2pc where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts,prepare_time,name,statement 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -282,7 +282,7 @@ res := array_append(res, '### 1. 用户密码到期时间');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | rolname | rolvaliduntil'); 
 res := array_append(res, '---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||rolname||'``` | '||rolvaliduntil from snap_pg_user_deadline where snap_id=i_end_id order by snap_ts,rolname   
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(rolname,'-')||'``` | ```'||coalesce(rolvaliduntil,'9999-01-01')||'```' from snap_pg_user_deadline where snap_id=i_end_id order by snap_ts,rolname   
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -350,7 +350,7 @@ res := array_append(res, '### 1. 当前数据库 TOP 10 SQL : total_cpu_time');
 res := array_append(res, '  '); 
 res := array_append(res, 'calls | total_ms | min_ms | max_ms | mean_ms | stddev_ms | rows | shared_blks_hit | shared_blks_read | shared_blks_dirtied | shared_blks_written | local_blks_hit | local_blks_read | local_blks_dirtied | shared_blks_written | temp_blks_read | temp_blks_written | blk_read_time | blk_write_time | query'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select sum(calls)||' | '||sum(total_time)||' | '||avg(min_time)||' | '||avg(max_time)||' | '||avg(mean_time)||' | '||avg(stddev_time)||' | '||sum(rows)||' | '||sum(shared_blks_hit)||' | '||sum(shared_blks_read)||' | '||sum(shared_blks_dirtied)||' | '||sum(shared_blks_written)||' | '||sum(local_blks_hit)||' | '||sum(local_blks_read)||' | '||sum(local_blks_dirtied)||' | '||sum(local_blks_written)||' | '||sum(temp_blks_read)||' | '||sum(temp_blks_written)||' | '||sum(blk_read_time)||' | '||sum(blk_write_time)||' | ```'||replace(regexp_replace(query,'\n',' ','g'), '|', '&#124;')||'```' from snap_pg_stat_statements where snap_id >=i_begin_id and snap_id<=i_end_id and dbid=(select oid from pg_database where datname=current_database()) group by query order by sum(total_time) desc limit 10
+for tmp in select coalesce(sum(calls),-1)||' | '||coalesce(sum(total_time),-1)||' | '||coalesce(avg(min_time),-1)||' | '||coalesce(avg(max_time),-1)||' | '||coalesce(avg(mean_time),-1)||' | '||coalesce(avg(stddev_time),-1)||' | '||coalesce(sum(rows),-1)||' | '||coalesce(sum(shared_blks_hit),-1)||' | '||coalesce(sum(shared_blks_read),-1)||' | '||coalesce(sum(shared_blks_dirtied),-1)||' | '||coalesce(sum(shared_blks_written),-1)||' | '||coalesce(sum(local_blks_hit),-1)||' | '||coalesce(sum(local_blks_read),-1)||' | '||coalesce(sum(local_blks_dirtied),-1)||' | '||coalesce(sum(local_blks_written),-1)||' | '||coalesce(sum(temp_blks_read),-1)||' | '||coalesce(sum(temp_blks_written),-1)||' | '||coalesce(sum(blk_read_time),-1)||' | '||coalesce(sum(blk_write_time),-1)||' | ```'||coalesce(replace(regexp_replace(query,'\n',' ','g'), '|', '&#124;'),'-')||'```' from snap_pg_stat_statements where snap_id >=i_begin_id and snap_id<=i_end_id and dbid=(select oid from pg_database where datname=current_database()) group by query order by sum(total_time) desc nulls last limit 10
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -364,7 +364,7 @@ res := array_append(res, '### 2. TOP 10 size 表统计信息');
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | nspname | relname | relkind | pg_relation_size | seq_scan | seq_tup_read | idx_scan | idx_tup_fetch | n_tup_ins | n_tup_upd | n_tup_del | n_tup_hot_upd | n_live_tup | n_dead_tup'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||nspname||'``` | ```'||relname||'``` | '||relkind||' | '||pg_size_pretty(avg(pg_relation_size))||' | '||sum(seq_scan)||' | '||sum(seq_tup_read)||' | '||coalesce(sum(idx_scan),0)||' | '||coalesce(sum(idx_tup_fetch),0)||' | '||sum(n_tup_ins)||' | '||sum(n_tup_upd)||' | '||sum(n_tup_del)||' | '||sum(n_tup_hot_upd)||' | '||avg(n_live_tup)||' | '||avg(n_dead_tup) from snap_pg_db_rel_size where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,nspname,relname,relkind order by avg(pg_relation_size) desc limit 10  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(nspname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | '||coalesce(relkind,'-')||' | '||coalesce(pg_size_pretty(avg(pg_relation_size)),'-')||' | '||coalesce(sum(seq_scan),-1)||' | '||coalesce(sum(seq_tup_read),-1)||' | '||coalesce(sum(idx_scan),-1)||' | '||coalesce(sum(idx_tup_fetch),-1)||' | '||coalesce(sum(n_tup_ins),-1)||' | '||coalesce(sum(n_tup_upd),-1)||' | '||coalesce(sum(n_tup_del),-1)||' | '||coalesce(sum(n_tup_hot_upd),-1)||' | '||coalesce(avg(n_live_tup),-1)||' | '||coalesce(avg(n_dead_tup),-1) from snap_pg_db_rel_size where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,nspname,relname,relkind order by avg(pg_relation_size) desc nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -398,7 +398,7 @@ res := array_append(res, '### 3. 全表扫描统计 , 平均实际扫描记录�
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | nspname | relname | relkind | pg_relation_size | seq_scan | seq_tup_read | idx_scan | idx_tup_fetch | n_tup_ins | n_tup_upd | n_tup_del | n_tup_hot_upd | n_live_tup | n_dead_tup'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||nspname||'``` | ```'||relname||'``` | '||relkind||' | '||pg_size_pretty(avg(pg_relation_size))||' | '||sum(seq_scan)||' | '||sum(seq_tup_read)||' | '||coalesce(sum(idx_scan),0)||' | '||coalesce(sum(idx_tup_fetch),0)||' | '||sum(n_tup_ins)||' | '||sum(n_tup_upd)||' | '||sum(n_tup_del)||' | '||sum(n_tup_hot_upd)||' | '||avg(n_live_tup)||' | '||avg(n_dead_tup) from snap_pg_db_rel_size where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,nspname,relname,relkind order by avg(case when seq_tup_read=0 then 1 else seq_tup_read end/case when seq_scan=0 then 1 else seq_scan end) desc limit 10  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(nspname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | '||coalesce(relkind,'-')||' | '||coalesce(pg_size_pretty(avg(pg_relation_size)),'-')||' | '||coalesce(sum(seq_scan),-1)||' | '||coalesce(sum(seq_tup_read),-1)||' | '||coalesce(sum(idx_scan),-1)||' | '||coalesce(sum(idx_tup_fetch),-1)||' | '||coalesce(sum(n_tup_ins),-1)||' | '||coalesce(sum(n_tup_upd),-1)||' | '||coalesce(sum(n_tup_del),-1)||' | '||coalesce(sum(n_tup_hot_upd),-1)||' | '||coalesce(avg(n_live_tup),-1)||' | '||coalesce(avg(n_dead_tup),-1) from snap_pg_db_rel_size where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,nspname,relname,relkind order by avg(case when seq_tup_read=0 then 1 else seq_tup_read end/case when seq_scan=0 then 1 else seq_scan end) desc nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -432,7 +432,7 @@ res := array_append(res, '### 4. 未命中buffer , 热表统计');
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | schemaname | relname | heap_blks_read | heap_blks_hit | idx_blks_read | idx_blks_hit | toast_blks_read | toast_blks_hit | tidx_blks_read | tidx_blks_hit'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||schemaname||'``` | ```'||relname||'``` | '||sum(heap_blks_read)||' | '||sum(heap_blks_hit)||' | '||sum(idx_blks_read)||' | '||sum(idx_blks_hit)||' | '||sum(toast_blks_read)||' | '||sum(toast_blks_hit)||' | '||sum(tidx_blks_read)||' | '||sum(tidx_blks_hit) from snap_pg_statio_all_tables where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname order by sum(heap_blks_read+idx_blks_read+toast_blks_read+tidx_blks_read) desc limit 10  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | '||coalesce(sum(heap_blks_read),-1)||' | '||coalesce(sum(heap_blks_hit),-1)||' | '||coalesce(sum(idx_blks_read),-1)||' | '||coalesce(sum(idx_blks_hit),-1)||' | '||coalesce(sum(toast_blks_read),-1)||' | '||coalesce(sum(toast_blks_hit),-1)||' | '||coalesce(sum(tidx_blks_read),-1)||' | '||coalesce(sum(tidx_blks_hit),-1) from snap_pg_statio_all_tables where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname order by sum(heap_blks_read+idx_blks_read+toast_blks_read+tidx_blks_read) desc nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -446,7 +446,7 @@ res := array_append(res, '### 5. 未命中&命中buffer , 热表统计');
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | schemaname | relname | heap_blks_read | heap_blks_hit | idx_blks_read | idx_blks_hit | toast_blks_read | toast_blks_hit | tidx_blks_read | tidx_blks_hit'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||schemaname||'``` | ```'||relname||'``` | '||sum(heap_blks_read)||' | '||sum(heap_blks_hit)||' | '||sum(idx_blks_read)||' | '||sum(idx_blks_hit)||' | '||sum(toast_blks_read)||' | '||sum(toast_blks_hit)||' | '||sum(tidx_blks_read)||' | '||sum(tidx_blks_hit) from snap_pg_statio_all_tables where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname order by sum(heap_blks_hit+idx_blks_hit+toast_blks_hit+tidx_blks_hit+heap_blks_read+idx_blks_read+toast_blks_read+tidx_blks_read) desc limit 10  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | '||coalesce(sum(heap_blks_read),-1)||' | '||coalesce(sum(heap_blks_hit),-1)||' | '||coalesce(sum(idx_blks_read),-1)||' | '||coalesce(sum(idx_blks_hit),-1)||' | '||coalesce(sum(toast_blks_read),-1)||' | '||coalesce(sum(toast_blks_hit),-1)||' | '||coalesce(sum(tidx_blks_read),-1)||' | '||coalesce(sum(tidx_blks_hit),-1) from snap_pg_statio_all_tables where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname order by sum(heap_blks_hit+idx_blks_hit+toast_blks_hit+tidx_blks_hit+heap_blks_read+idx_blks_read+toast_blks_read+tidx_blks_read) desc nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -460,7 +460,7 @@ res := array_append(res, '### 6. 未命中 , 热索引统计');
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | schemaname | relname | indexrelname | idx_blks_read | idx_blks_hit'); 
 res := array_append(res, '---|---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||schemaname||'``` | ```'||relname||'``` | ```'||indexrelname||'``` | '||sum(idx_blks_read)||' | '||sum(idx_blks_hit) from snap_pg_statio_all_indexes where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname,indexrelname order by sum(idx_blks_read) desc limit 10  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | ```'||coalesce(indexrelname,'-')||'``` | '||coalesce(sum(idx_blks_read),-1)||' | '||coalesce(sum(idx_blks_hit),-1) from snap_pg_statio_all_indexes where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname,indexrelname order by sum(idx_blks_read) desc nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -474,7 +474,7 @@ res := array_append(res, '### 7. 未命中&命中buffer , 热索引统计');
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | schemaname | relname | indexrelname | idx_blks_read | idx_blks_hit'); 
 res := array_append(res, '---|---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||schemaname||'``` | ```'||relname||'``` | ```'||indexrelname||'``` | '||sum(idx_blks_read)||' | '||sum(idx_blks_hit) from snap_pg_statio_all_indexes where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname,indexrelname order by sum(idx_blks_read+idx_blks_hit) desc limit 10  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | ```'||coalesce(indexrelname,'-')||'``` | '||coalesce(sum(idx_blks_read),-1)||' | '||coalesce(sum(idx_blks_hit),-1) from snap_pg_statio_all_indexes where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname,indexrelname order by sum(idx_blks_read+idx_blks_hit) desc nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -488,7 +488,7 @@ res := array_append(res, '### 8. 上次巡检以来未使用，或者使用较�
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | schemaname | relname | indexrelname | idx_scan | idx_tup_read | idx_tup_fetch | pg_size_pretty'); 
 res := array_append(res, '---|---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||schemaname||'``` | ```'||relname||'``` | ```'||indexrelname||'``` | '||sum(idx_scan)||' | '||sum(idx_tup_read)||' | '||sum(idx_tup_fetch)||' | '||pg_size_pretty(avg(pg_relation_size)) from snap_pg_notused_indexes where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname,indexrelname order by sum(idx_scan) limit 10  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | ```'||coalesce(indexrelname,'-')||'``` | '||coalesce(sum(idx_scan),-1)||' | '||coalesce(sum(idx_tup_read),-1)||' | '||coalesce(sum(idx_tup_fetch),-1)||' | '||coalesce(pg_size_pretty(avg(pg_relation_size)),'-') from snap_pg_notused_indexes where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,schemaname,relname,indexrelname order by sum(idx_scan) nulls last limit 10  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -502,7 +502,7 @@ res := array_append(res, '### 9. 索引数超过4并且SIZE大于10MB的表');
 res := array_append(res, '  '); 
 res := array_append(res, 'current_database | schemaname | relname | pg_size_pretty | idx_cnt'); 
 res := array_append(res, '---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | ```'||nspname||'``` | ```'||relname||'``` | '||pg_size_pretty(avg(pg_relation_size))||' | '||max(idx_cnt) from snap_pg_many_indexes_rel where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,nspname,relname order by max(idx_cnt) desc limit 20  
+for tmp in select '```'||coalesce(current_database,'-')||'``` | ```'||coalesce(nspname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | '||coalesce(pg_size_pretty(avg(pg_relation_size)),'-')||' | '||coalesce(max(idx_cnt),-1) from snap_pg_many_indexes_rel where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database,nspname,relname order by max(idx_cnt) desc nulls last limit 20  
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -521,7 +521,7 @@ res := array_append(res, '### 1. 用户对象占用空间的柱状图');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | current_database | this_buk_no | rels_in_this_buk | buk_min | buk_max'); 
 res := array_append(res, '---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||current_database||'``` | '||this_buk_no||' | '||rels_in_this_buk||' | '||buk_min||' | '||buk_max from snap_pg_rel_space_bucket where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts,current_database,this_buk_no 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(current_database,'-')||'``` | '||coalesce(this_buk_no,-1)||' | '||coalesce(rels_in_this_buk,-1)||' | '||coalesce(buk_min,'-')||' | '||coalesce(buk_max,'-') from snap_pg_rel_space_bucket where snap_id >=i_begin_id and snap_id<=i_end_id order by snap_ts,current_database,this_buk_no nulls last
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -538,7 +538,7 @@ res := array_append(res, '### 1. 表膨胀分析');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | db | schemaname | tablename | tups | pages | otta | tbloat | wastedpages | wastedbytes | wastedsize | iname | itups | ipages | iotta | ibloat | wastedipages | wastedibytes | wastedisize | totalwastedbytes'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||db||'``` | ```'||schemaname||'``` | ```'||tablename||'``` | '||tups||' | '||pages||' | '||otta||' | '||tbloat||' | '||wastedpages||' | '||wastedbytes||' | '||wastedsize||' | '||iname||' | '||itups||' | '||ipages||' | '||iotta||' | '||ibloat||' | '||wastedipages||' | '||wastedibytes||' | '||wastedisize||' | '||totalwastedbytes from snap_pg_table_bloat where snap_id=i_end_id order by wastedbytes desc 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(db,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(tablename,'-')||'``` | '||coalesce(tups,-1)||' | '||coalesce(pages,-1)||' | '||coalesce(otta,-1)||' | '||coalesce(tbloat,-1)||' | '||coalesce(wastedpages,-1)||' | '||coalesce(wastedbytes,-1)||' | '||coalesce(wastedsize,'-')||' | '||coalesce(iname,'-')||' | '||coalesce(itups,-1)||' | '||coalesce(ipages,-1)||' | '||coalesce(iotta,-1)||' | '||coalesce(ibloat,-1)||' | '||coalesce(wastedipages,-1)||' | '||coalesce(wastedibytes,-1)||' | '||coalesce(wastedisize,'-')||' | '||coalesce(totalwastedbytes,-1) from snap_pg_table_bloat where snap_id=i_end_id order by wastedbytes desc nulls last 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -568,7 +568,7 @@ res := array_append(res, '### 2. 索引膨胀分析');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | db | schemaname | tablename | tups | pages | otta | tbloat | wastedpages | wastedbytes | wastedsize | iname | itups | ipages | iotta | ibloat | wastedipages | wastedibytes | wastedisize | totalwastedbytes'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||db||'``` | ```'||schemaname||'``` | ```'||tablename||'``` | '||tups||' | '||pages||' | '||otta||' | '||tbloat||' | '||wastedpages||' | '||wastedbytes||' | '||wastedsize||' | '||iname||' | '||itups||' | '||ipages||' | '||iotta||' | '||ibloat||' | '||wastedipages||' | '||wastedibytes||' | '||wastedisize||' | '||totalwastedbytes from snap_pg_index_bloat where snap_id=i_end_id order by wastedibytes desc 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(db,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(tablename,'-')||'``` | '||coalesce(tups,-1)||' | '||coalesce(pages,-1)||' | '||coalesce(otta,-1)||' | '||coalesce(tbloat,-1)||' | '||coalesce(wastedpages,-1)||' | '||coalesce(wastedbytes,-1)||' | '||coalesce(wastedsize,'-')||' | '||coalesce(iname,'-')||' | '||coalesce(itups,-1)||' | '||coalesce(ipages,-1)||' | '||coalesce(iotta,-1)||' | '||coalesce(ibloat,-1)||' | '||coalesce(wastedipages,-1)||' | '||coalesce(wastedibytes,-1)||' | '||coalesce(wastedisize,'-')||' | '||coalesce(totalwastedbytes,-1) from snap_pg_index_bloat where snap_id=i_end_id order by wastedibytes desc nulls last 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -582,7 +582,7 @@ res := array_append(res, '### 3. 垃圾记录 TOP 10 表分析');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | database | schemaname | tablename | n_dead_tup'); 
 res := array_append(res, '---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||current_database||'``` | ```'||schemaname||'``` | ```'||relname||'``` | '||sum(n_dead_tup) from snap_pg_dead_tup where snap_id >=i_begin_id and snap_id<=i_end_id group by snap_ts,current_database,schemaname,relname order by sum(n_dead_tup) desc limit 10 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(current_database,'-')||'``` | ```'||coalesce(schemaname,'-')||'``` | ```'||coalesce(relname,'-')||'``` | '||coalesce(sum(n_dead_tup),-1) from snap_pg_dead_tup where snap_id >=i_begin_id and snap_id<=i_end_id group by snap_ts,current_database,schemaname,relname order by sum(n_dead_tup) desc nulls last limit 10 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -598,7 +598,7 @@ res := array_append(res, '### 4. 未引用的大对象分析');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | database | pg_size_pretty'); 
 res := array_append(res, '---|---|---|---|---'); 
-for tmp in select '```'||current_database||'``` | '||pg_size_pretty(sum(lo_bloat)) from snap_pg_vacuumlo where snap_id >=i_begin_id and snap_id<=i_end_id group by current_database 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(current_database,'-')||'``` | '||coalesce(pg_size_pretty(lo_bloat),'-') from snap_pg_vacuumlo where snap_id=i_end_id 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -619,7 +619,7 @@ res := array_append(res, '### 1. 表年龄前100');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | database | rolname | nspname | relkind | relname | age | age_remain'); 
 res := array_append(res, '---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||current_database||'``` | ```'||rolname||'``` | ```'||nspname||'``` | '||relkind||' | ```'||relname||'``` | '||age||' | '||age_remain from snap_pg_rel_age where snap_id=i_end_id and age_remain<500000000 order by age desc limit 100 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(current_database,'-')||'``` | ```'||coalesce(rolname,'-')||'``` | ```'||coalesce(nspname,'-')||'``` | '||coalesce(relkind,'-')||' | ```'||coalesce(relname,'-')||'``` | '||coalesce(age,-1)||' | '||coalesce(age_remain,-1) from snap_pg_rel_age where snap_id=i_end_id and age_remain<500000000 order by age desc nulls last limit 100 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -633,14 +633,14 @@ res := array_append(res, '### 2. unlogged table和hash index');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | database | rolname | nspname | relname'); 
 res := array_append(res, '---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||current_database||'``` | ```'||rolname||'``` | ```'||nspname||'``` | ```'||relname||'```' from snap_pg_unlogged_table where snap_id=i_end_id 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(current_database,'-')||'``` | ```'||coalesce(rolname,'-')||'``` | ```'||coalesce(nspname,'-')||'``` | ```'||coalesce(relname,'-')||'```' from snap_pg_unlogged_table where snap_id=i_end_id 
 loop 
   res := array_append(res, tmp); 
 end loop; 
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | database | idx'); 
 res := array_append(res, '---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||current_database||'``` | ```'||pg_get_indexdef||'```' from snap_pg_hash_idx where snap_id=i_end_id 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(current_database,'-')||'``` | ```'||coalesce(pg_get_indexdef,'-')||'```' from snap_pg_hash_idx where snap_id=i_end_id 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -658,7 +658,7 @@ res := array_append(res, '### 3. 剩余可使用次数不足1000万次的序列�
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | database | rolname | nspname | relname | times_remain'); 
 res := array_append(res, '---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | ```'||v_datname||'``` | ```'||v_role||'``` | ```'||v_nspname||'``` | ```'||v_relname||'``` | '||v_times_remain from snap_pg_seq_deadline where snap_id=i_end_id 
+for tmp in select '```'||snap_ts||'``` | ```'||coalesce(v_datname,'-')||'``` | ```'||coalesce(v_role,'-')||'``` | ```'||coalesce(v_nspname,'-')||'``` | ```'||coalesce(v_relname,'-')||'``` | '||coalesce(v_times_remain,-1) from snap_pg_seq_deadline where snap_id=i_end_id 
 loop 
   res := array_append(res, tmp); 
 end loop; 
@@ -672,7 +672,7 @@ res := array_append(res, '### 4. 锁等待分析');
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | locktype | r_mode | r_user | r_db | relation | r_pid | r_page | r_tuple | r_xact_start | r_query_start | r_locktime | r_query | w_mode | w_pid | w_page | w_tuple | w_xact_start | w_query_start | w_locktime | w_query'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---'); 
-for tmp in select '```'||snap_ts||'``` | '||locktype||' | '||r_mode||' | '||r_user||' | '||r_db||' | '||relation||' | '||r_pid||' | '||r_page||' | '||r_tuple||' | '||r_xact_start||' | '||r_query_start||' | '||r_locktime||' | ```'||replace(regexp_replace(r_query,'\n',' ','g'), '|', '&#124;')||'``` | '||w_mode||' | '||w_pid||' | '||w_page||' | '||w_tuple||' | '||w_xact_start||' | '||w_query_start||' | '||w_locktime||' | ```'||replace(regexp_replace(w_query,'\n',' ','g'), '|', '&#124;')||'```' from snap_pg_waiting where snap_id>=i_begin_id and snap_id<=i_end_id order by snap_ts,w_locktime desc  
+for tmp in select '```'||snap_ts||'``` | '||coalesce(locktype,'-')||' | '||coalesce(r_mode,'-')||' | ```'||coalesce(r_user,'-')||'``` | ```'||coalesce(r_db,'-')||'``` | '||coalesce(relation,-1)||' | '||coalesce(r_pid,-1)||' | '||coalesce(r_page,-1)||' | '||coalesce(r_tuple,-1)||' | ```'||coalesce(r_xact_start,'1970-01-01')||'``` | ```'||coalesce(r_query_start,'1970-01-01')||'``` | ```'||coalesce(r_locktime,'0 s')||'``` | ```'||coalesce(replace(regexp_replace(r_query,'\n',' ','g'), '|', '&#124;'),'-')||'``` | '||coalesce(w_mode,'-')||' | '||coalesce(w_pid,-1)||' | '||coalesce(w_page,-1)||' | '||coalesce(w_tuple,-1)||' | ```'||coalesce(w_xact_start,'1970-01-01')||'``` | ```'||coalesce(w_query_start,'1970-01-01')||'``` | ```'||coalesce(w_locktime,'0 s')||'``` | ```'||coalesce(replace(regexp_replace(w_query,'\n',' ','g'), '|', '&#124;'),'-')||'```' from snap_pg_waiting where snap_id>=i_begin_id and snap_id<=i_end_id order by snap_ts,w_locktime desc nulls last  
 loop 
   res := array_append(res, tmp); 
 end loop; 

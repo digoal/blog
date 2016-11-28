@@ -41,3 +41,4 @@
 ##### 20161125_01.md   [《PostgreSQL 利用编译器extension 支持int128，提升聚合性能》](20161125_01.md)  
 ##### 20161125_02.md   [《PostgreSQL update returning NEW|OLD column value 在对账|购票|防纂改|原子操作中的妙用》](20161125_02.md)  
 ##### 20161126_01.md   [《PostgreSQL 在视频、图片去重，图像搜索业务中的应用》](20161126_01.md)  
+##### 20161127_01.md   [《Linux 性能诊断 perf使用指南》](20161127_01.md)  

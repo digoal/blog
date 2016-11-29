@@ -4,7 +4,7 @@
 ##### 20161104_01.md   [《PostgreSQL Oracle兼容性之 - plpgsql 自治事务(autonomous_transaction)补丁》](20161104_01.md)  
 ##### 20161106_01.md   [《PostgreSQL clang vs gcc 编译》](20161106_01.md)  
 ##### 20161107_01.md   [《PostgreSQL 流复制xlog异步send》](20161107_01.md)  
-##### 20161107_02.md   [《PostgreSQL 同步流复制锁瓶颈分析》](20161107_02.md)  
+##### 20161107_02.md   [《PostgreSQL 同步流复制(高并发写入)锁瓶颈分析》](20161107_02.md)  
 ##### 20161107_03.md   [《Linux 内核编程基本功之内核同步与互斥锁mutex》](20161107_03.md)  
 ##### 20161107_04.md   [《PostgreSQL 多租户》](20161107_04.md)  
 ##### 20161108_01.md   [《PostgreSQL 并行计算tpc-h测试和优化分析》](20161108_01.md)  

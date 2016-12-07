@@ -5,3 +5,4 @@
 ##### 20161205_01.md   [《PostgreSQL 按拼音排序 - convert to GBK/EUC_CN coding》](20161205_01.md)  
 ##### 20161205_02.md   [《实时数据交换平台 - BottledWater-pg with confluent》](20161205_02.md)  
 ##### 20161206_01.md   [《如何解决数据库分词的拼写纠正问题 - PostgreSQL Hunspell 字典 复数形容词动词等变异还原》](20161206_01.md)  
+##### 20161207_01.md   [《PostgreSQL 从源码找出哪些操作需要超级用户权限》](20161207_01.md)  

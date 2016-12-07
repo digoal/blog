@@ -1,5 +1,9 @@
 ### digoal,德哥的PostgreSQL私房菜  
 ----  
+##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
+##### 201303/20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](201303/20130311_02.md)  
+##### 201303/20130313_01.md   [《PostgreSQL DDL事件触发器》](201303/20130313_01.md)  
+----  
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
 ----  
@@ -20,6 +24,7 @@
 ##### 201410/20141009_01.md   [《PostgreSQL 密码安全指南》](201410/20141009_01.md)  
 ----  
 ##### 201412/20141206_01.md   [《Install OpenVSwitch into CentOS 7 userspace》](201412/20141206_01.md)  
+##### 201412/20141211_01.md   [《DDL审计 , DDL逻辑复制 , 打造DDL统一管理入口 - PostgreSQL DDL 事件触发器应用》](201412/20141211_01.md)  
 ----  
 ##### 201504/20150401_01.md   [《install kvm hosts use vnc in CentOS 6》](201504/20150401_01.md)  
 ##### 201504/20150401_02.md   [《install kvm hosts use kickstart in CentOS 6 in text mode》](201504/20150401_02.md)  

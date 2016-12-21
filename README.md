@@ -213,3 +213,4 @@
 ##### 201612/20161216_01.md   [《分析加速引擎黑科技 - LLVM、列存、多核并行、算子复用 大联姻 - 一起来开启PostgreSQL的百宝箱》](201612/20161216_01.md)  
 ##### 201612/20161219_01.md   [《Oracle log file parallel write 等待事件分析 - PostgreSQL的WAL异曲同工》](201612/20161219_01.md)  
 ##### 201612/20161220_01.md   [《流计算风云再起 - PostgreSQL携PipelineDB力挺IoT》](201612/20161220_01.md)  
+##### 201612/20161221_01.md   [《Linux page allocation failure 的问题处理 - lowmem_reserve_ratio》](201612/20161221_01.md)  

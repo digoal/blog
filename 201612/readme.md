@@ -24,4 +24,4 @@
 ##### 20161229_01.md   [《PostgreSQL standby recover的源码分析 (walreceiver唤醒时机？ 为什么standby crash后walreceiver不会立即被唤醒?)》](20161229_01.md)  
 ##### 20161229_02.md   [《转载 - nf_conntrack: table full, dropping packet. 终结篇》](20161229_02.md)  
 ##### 20161230_01.md   [《PostgreSQL 重复 数据清洗 优化教程》](20161230_01.md)  
-##### 20161231_01.md   [《》](20161231_01.md)  
+##### 20161231_01.md   [《从难缠的模糊查询聊开 - PostgreSQL独门绝招之一 GIN , GiST , SP-GiST , RUM 索引原理与技术背景》](20161231_01.md)  

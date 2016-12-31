@@ -8,3 +8,4 @@
 ##### 20150506_06.md   [《PostgreSQL 检查点性能影响及源码分析 - 6》](20150506_06.md)  
 ##### 20150506_07.md   [《PostgreSQL 检查点性能影响及源码分析 - 7》](20150506_07.md)  
 ##### 20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](20150509_01.md)  
+##### 20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](20150526_01.md)  

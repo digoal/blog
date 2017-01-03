@@ -4,6 +4,10 @@
 ----  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
 ----  
+##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
+----  
+##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
+----  
 ##### 201211/20121115_01.md   [《PostgreSQL 临时表 (Temproary table) style》](201211/20121115_01.md)  
 ----  
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  
@@ -76,6 +80,7 @@
 ##### 201603/20160320_01.md   [《PostgreSQL 如何潇洒的处理每天上百TB的数据增量》](201603/20160320_01.md)  
 ----  
 ##### 201604/20160401_01.md   [《阿里云 PostgreSQL pg_hint_plan插件的用法》](201604/20160401_01.md)  
+##### 201604/20160414_01.md   [《PostgreSQL 物联网黑科技 - 瘦身几百倍的索引(BRIN index)》](201604/20160414_01.md)  
 ##### 201604/20160426_01.md   [《iperf 测试网络性能指标》](201604/20160426_01.md)  
 ----  
 ##### 201605/20160506_01.md   [《论count使用不当的罪名 和 分页的优化》](201605/20160506_01.md)  

@@ -8,12 +8,16 @@
 ----  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
 ----  
+##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
+##### 201208/20120831_02.md   [《表级复制(base on trigger) -- multi master replication & performance tuning》](201208/20120831_02.md)  
+----  
 ##### 201211/20121115_01.md   [《PostgreSQL 临时表 (Temproary table) style》](201211/20121115_01.md)  
 ----  
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  
 ----  
 ##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
 ##### 201303/20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](201303/20130311_02.md)  
+##### 201303/20130311_03.md   [《表级复制(base on trigger) -- PostgreSQL general sync and async multi-master replication trigger function》](201303/20130311_03.md)  
 ##### 201303/20130313_01.md   [《PostgreSQL 事件触发器 - PostgreSQL 9.3 Event Trigger》](201303/20130313_01.md)  
 ----  
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
@@ -263,3 +267,4 @@
 ##### 201701/20170101_01.md   [《元旦技术大礼包 - 2017金秋将要发布的PostgreSQL 10.0已装备了哪些核武器？》](201701/20170101_01.md)  
 ##### 201701/20170101_02.md   [《元旦技术大礼包 - ApsaraDB的左右互搏术 - 解决企业痛处 TP+AP混合需求 - 无须再唱《爱你痛到不知痛》》](201701/20170101_02.md)  
 ##### 201701/20170102_01.md   [《Leap second , 闰秒 , 数据库 , PostgreSQL , Solar time , UNIX time , UTC , UT1》](201701/20170102_01.md)  
+##### 201701/20170103_01.md   [《在OOM现场 谈一谈数据库内存分配, 以及审计的重要性》](201701/20170103_01.md)  

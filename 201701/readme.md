@@ -17,3 +17,6 @@
 ##### 20170106_02.md   [《PostgreSQL != , <> 索引》](20170106_02.md)  
 ##### 20170106_03.md   [《PostgreSQL 在被除数=0时的小纯真和小倔强》](20170106_03.md)  
 ##### 20170106_04.md   [《PostgreSQL 全表 全字段 模糊查询的毫秒级高效实现 - 搜索引擎颤抖了》](20170106_04.md)  
+##### 20170106_05.md   [《PostgreSQL Java tutorial》](20170106_05.md)  
+##### 20170106_06.md   [《PostgreSQL Python tutorial》](20170106_06.md)  
+##### 20170106_07.md   [《PostgreSQL Ruby tutorial》](20170106_07.md)  

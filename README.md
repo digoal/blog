@@ -15,7 +15,9 @@
 ----  
 ##### 201211/20121115_01.md   [《PostgreSQL 临时表 (Temproary table) style》](201211/20121115_01.md)  
 ----  
+##### 201212/20121217_01.md   [《performance tuning about multi-rows query aggregated to single-row query》](201212/20121217_01.md)  
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  
+##### 201212/20121218_02.md   [《PostgreSQL aggregate function customize》](201212/20121218_02.md)  
 ----  
 ##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
 ##### 201303/20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](201303/20130311_02.md)  

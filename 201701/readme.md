@@ -22,3 +22,4 @@
 ##### 20170106_06.md   [《PostgreSQL Python tutorial》](20170106_06.md)  
 ##### 20170106_07.md   [《PostgreSQL Ruby tutorial》](20170106_07.md)  
 ##### 20170106_08.md   [《PostgreSQL PHP tutorial》](20170106_08.md)  
+##### 20170106_09.md   [《PostgreSQL C tutorial》](20170106_09.md)  

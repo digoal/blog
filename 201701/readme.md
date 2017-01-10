@@ -23,3 +23,4 @@
 ##### 20170106_07.md   [《PostgreSQL Ruby tutorial》](20170106_07.md)  
 ##### 20170106_08.md   [《PostgreSQL PHP tutorial》](20170106_08.md)  
 ##### 20170106_09.md   [《PostgreSQL C tutorial》](20170106_09.md)  
+##### 20170110_01.md   [《PostgreSQL 数据库扩展语言编程 之 plpgsql - 1》](20170110_01.md)  

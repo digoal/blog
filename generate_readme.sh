@@ -10,9 +10,13 @@
 > ./README.md
 echo "### PostgreSQL Greenplum 培训视频分享  " > ./README.md
 echo "  "  >> ./README.md
-echo "http://pan.baidu.com/s/1pKVCgHX  " >> ./README.md
+echo "http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢  " >> ./README.md
 echo "  "  >> ./README.md
-echo "如有问题, 可以微信联系我  " >> ./README.md
+echo "![pic](./pic/pg_china_digoal_video.jpg)  " >> ./README.md
+echo "  "  >> ./README.md
+echo "作者个人水平有限, 如发现错误, 请指正, 非常感谢.  "  >> ./README.md
+echo "  "  >> ./README.md
+echo "欢迎转载(注明出处), 如有问题, 可以在这里发issue讨论, 或者微信联系我  " >> ./README.md
 echo "  "  >> ./README.md
 echo "### 二维码  " >> ./README.md
 echo "![pic](./pic/pg_china_weixin.jpg)  " >> ./README.md

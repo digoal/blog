@@ -1,8 +1,12 @@
 ### PostgreSQL Greenplum 培训视频分享  
   
-http://pan.baidu.com/s/1pKVCgHX  
+http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢  
   
-如有问题, 可以微信联系我  
+![pic](./pic/pg_china_digoal_video.jpg)  
+  
+作者个人水平有限, 如发现错误, 请指正, 非常感谢.  
+  
+欢迎转载(注明出处), 如有问题, 可以在这里发issue讨论, 或者微信联系我  
   
 ### 二维码  
 ![pic](./pic/pg_china_weixin.jpg)  
@@ -35,6 +39,7 @@ http://pan.baidu.com/s/1pKVCgHX
 ##### 201303/20130311_03.md   [《表级复制(base on trigger) -- PostgreSQL general sync and async multi-master replication trigger function》](201303/20130311_03.md)  
 ##### 201303/20130313_01.md   [《PostgreSQL 事件触发器 - PostgreSQL 9.3 Event Trigger》](201303/20130313_01.md)  
 ----  
+##### 201305/20130502_01.md   [《Postgres-XC customized aggregate introduction》](201305/20130502_01.md)  
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
@@ -308,3 +313,4 @@ http://pan.baidu.com/s/1pKVCgHX
 ##### 201701/20170106_07.md   [《PostgreSQL Ruby tutorial》](201701/20170106_07.md)  
 ##### 201701/20170106_08.md   [《PostgreSQL PHP tutorial》](201701/20170106_08.md)  
 ##### 201701/20170106_09.md   [《PostgreSQL C tutorial》](201701/20170106_09.md)  
+##### 201701/20170110_01.md   [《PostgreSQL 数据库扩展语言编程 之 plpgsql - 1》](201701/20170110_01.md)  

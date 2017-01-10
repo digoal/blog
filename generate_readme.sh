@@ -8,7 +8,18 @@
 #      dos2unix: converting file ./20161031_02.md to UNIX format ...
 
 > ./README.md
-echo "### digoal,德哥的PostgreSQL私房菜  " > ./README.md
+echo "### PostgreSQL Greenplum 培训视频分享  " > ./README.md
+echo "  "  >> ./README.md
+echo "http://pan.baidu.com/s/1pKVCgHX  " >> ./README.md
+echo "  "  >> ./README.md
+echo "如有问题, 可以微信联系我  " >> ./README.md
+echo "  "  >> ./README.md
+echo "### 二维码  " >> ./README.md
+echo "![pic](./pic/pg_china_weixin.jpg)  " >> ./README.md
+echo "![pic](./pic/pg_china_weibo.jpg)  " >> ./README.md
+echo "![pic](./pic/pg_china_digoal.jpg)  " >> ./README.md
+echo "  "  >> ./README.md
+echo "### digoal,德哥的PostgreSQL私房菜  " >> ./README.md
 
 for dir in `ll|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do

@@ -1,3 +1,14 @@
+### PostgreSQL Greenplum 培训视频分享  
+  
+http://pan.baidu.com/s/1pKVCgHX  
+  
+如有问题, 可以微信联系我  
+  
+### 二维码  
+![pic](./pic/pg_china_weixin.jpg)  
+![pic](./pic/pg_china_weibo.jpg)  
+![pic](./pic/pg_china_digoal.jpg)  
+  
 ### digoal,德哥的PostgreSQL私房菜  
 ----  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  

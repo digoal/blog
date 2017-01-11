@@ -314,3 +314,4 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201701/20170106_08.md   [《PostgreSQL PHP tutorial》](201701/20170106_08.md)  
 ##### 201701/20170106_09.md   [《PostgreSQL C tutorial》](201701/20170106_09.md)  
 ##### 201701/20170110_01.md   [《PostgreSQL 数据库扩展语言编程 之 plpgsql - 1》](201701/20170110_01.md)  
+##### 201701/20170111_01.md   [《PostgreSQL 如何只监听unix socket?》](201701/20170111_01.md)  

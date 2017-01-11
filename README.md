@@ -44,6 +44,11 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
 ----  
+##### 201306/20130617_01.md   [《PostgreSQL 9.0 modify pg_attribute.atttypmod extend variable char length avoid rewrite table》](201306/20130617_01.md)  
+----  
+##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
+##### 201308/20130823_01.md   [《PostgreSQL WHY modify numeric scale must rewrite table》](201308/20130823_01.md)  
+----  
 ##### 201404/20140403_01.md   [《PostgreSQL 回收站功能 - 基于HOOK的recycle bin pgtrashcan》](201404/20140403_01.md)  
 ##### 201404/20140409_01.md   [《PostgreSQL pg_current_xlog_insert_location() & pg_current_xlog_location()》](201404/20140409_01.md)  
 ----  
@@ -315,3 +320,4 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201701/20170106_09.md   [《PostgreSQL C tutorial》](201701/20170106_09.md)  
 ##### 201701/20170110_01.md   [《PostgreSQL 数据库扩展语言编程 之 plpgsql - 1》](201701/20170110_01.md)  
 ##### 201701/20170111_01.md   [《PostgreSQL 如何只监听unix socket?》](201701/20170111_01.md)  
+##### 201701/20170111_02.md   [《Linux cgroup - memory子系统讲解》](201701/20170111_02.md)  

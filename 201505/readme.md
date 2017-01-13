@@ -8,4 +8,6 @@
 ##### 20150506_06.md   [《PostgreSQL 检查点性能影响及源码分析 - 6》](20150506_06.md)  
 ##### 20150506_07.md   [《PostgreSQL 检查点性能影响及源码分析 - 7》](20150506_07.md)  
 ##### 20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](20150509_01.md)  
+##### 20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](20150510_01.md)  
+##### 20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](20150511_01.md)  
 ##### 20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](20150526_01.md)  

@@ -17,6 +17,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  
 ----  
+##### 201010/20101027_01.md   [《batch insert in PostgreSQL》](201010/20101027_01.md)  
+----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ----  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
@@ -50,6 +52,11 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
 ##### 201308/20130823_01.md   [《PostgreSQL WHY modify numeric scale must rewrite table》](201308/20130823_01.md)  
+----  
+##### 201310/20131017_01.md   [《Systemtap EXP: PostgreSQL IN-BUILD mark Class 6 - lock》](201310/20131017_01.md)  
+##### 201310/20131026_01.md   [《PostgreSQL bulk COPY load Bottleneck by extend lock waiting》](201310/20131026_01.md)  
+----  
+##### 201403/20140328_01.md   [《PostgreSQL pg_bulkload speed test》](201403/20140328_01.md)  
 ----  
 ##### 201404/20140403_01.md   [《PostgreSQL 回收站功能 - 基于HOOK的recycle bin pgtrashcan》](201404/20140403_01.md)  
 ##### 201404/20140409_01.md   [《PostgreSQL pg_current_xlog_insert_location() & pg_current_xlog_location()》](201404/20140409_01.md)  
@@ -89,6 +96,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201505/20150506_06.md   [《PostgreSQL 检查点性能影响及源码分析 - 6》](201505/20150506_06.md)  
 ##### 201505/20150506_07.md   [《PostgreSQL 检查点性能影响及源码分析 - 7》](201505/20150506_07.md)  
 ##### 201505/20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](201505/20150509_01.md)  
+##### 201505/20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](201505/20150510_01.md)  
+##### 201505/20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](201505/20150511_01.md)  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  
 ----  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  

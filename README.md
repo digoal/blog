@@ -23,6 +23,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
 ----  
+##### 201206/20120601_01.md   [《PostGIS 2.0 Install》](201206/20120601_01.md)  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
 ----  
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
@@ -46,6 +47,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201306/20130617_01.md   [《PostgreSQL 9.0 modify pg_attribute.atttypmod extend variable char length avoid rewrite table》](201306/20130617_01.md)  
 ----  
+##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
 ##### 201308/20130823_01.md   [《PostgreSQL WHY modify numeric scale must rewrite table》](201308/20130823_01.md)  
 ----  
@@ -116,7 +118,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201604/20160414_01.md   [《PostgreSQL 物联网黑科技 - 瘦身几百倍的索引(BRIN index)》](201604/20160414_01.md)  
 ##### 201604/20160419_01.md   [《PostgreSQL 行级 全文检索》](201604/20160419_01.md)  
 ##### 201604/20160426_01.md   [《iperf 测试网络性能指标》](201604/20160426_01.md)  
+##### 201604/20160428_01.md   [《PostgreSQL 网络延迟 瓶颈定量分析》](201604/20160428_01.md)  
 ----  
+##### 201605/20160505_01.md   [《论云数据库编程能力的重要性》](201605/20160505_01.md)  
 ##### 201605/20160506_01.md   [《论count使用不当的罪名 和 分页的优化》](201605/20160506_01.md)  
 ##### 201605/20160506_02.md   [《中文模糊查询性能优化 by PostgreSQL trgm》](201605/20160506_02.md)  
 ##### 201605/20160510_01.md   [《PostgreSQL 逻辑结构 和 权限体系 介绍》](201605/20160510_01.md)  
@@ -324,3 +328,5 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201701/20170112_01.md   [《PostgreSQL psql 安全设置数据库用户密码的方法之一》](201701/20170112_01.md)  
 ##### 201701/20170112_02.md   [《电商内容去重\内容筛选应用(如何高效识别转载\盗图\侵权?) - 文本相似、图片集相似、数组相似的优化和索引技术》](201701/20170112_02.md)  
 ##### 201701/20170113_01.md   [《(AR虚拟现实)红包 技术思考 - GIS与图像识别的完美结合》](201701/20170113_01.md)  
+##### 201701/20170113_02.md   [《[转载]postgres+socket.io+nodejs实时地图应用实践》](201701/20170113_02.md)  
+##### 201701/20170113_03.md   [《如何编写数据库小程序 - 可不是微信小程序哦》](201701/20170113_03.md)  

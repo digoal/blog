@@ -6,6 +6,7 @@
 #      201608/20160823_01.md: UTF-8 Unicode C program text, with CRLF line terminators 说明需要转换 
 # 例如 dos2unix -c ASCII -o ./20161031_02.md 
 #      dos2unix: converting file ./20161031_02.md to UNIX format ...
+# 迁移从163 blog 63页 <数据挖掘学习站点收集>开始算新文章迁移到本级目录,之前的算老文章迁移到old_blogs_from_163
 
 > ./README.md
 echo "### PostgreSQL Greenplum 培训视频分享  " > ./README.md

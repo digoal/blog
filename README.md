@@ -12,6 +12,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ![pic](./pic/pg_weixin.jpg)  
   
 ### digoal,德哥的PostgreSQL私房菜  
+##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  
 ----  

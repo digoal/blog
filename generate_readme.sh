@@ -22,6 +22,7 @@ echo "### 二维码  " >> ./README.md
 echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "### digoal,德哥的PostgreSQL私房菜  " >> ./README.md
+echo "##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) " >> ./README.md
 
 for dir in `ll|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do

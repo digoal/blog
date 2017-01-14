@@ -19,9 +19,7 @@ echo "  "  >> ./README.md
 echo "欢迎转载(注明出处), 如有问题, 可以在这里发issue讨论, 或者微信联系我  " >> ./README.md
 echo "  "  >> ./README.md
 echo "### 二维码  " >> ./README.md
-echo "![pic](./pic/pg_china_weixin.jpg)  " >> ./README.md
-echo "![pic](./pic/pg_china_weibo.jpg)  " >> ./README.md
-echo "![pic](./pic/pg_china_digoal.jpg)  " >> ./README.md
+echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "### digoal,德哥的PostgreSQL私房菜  " >> ./README.md
 

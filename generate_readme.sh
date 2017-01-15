@@ -39,3 +39,7 @@ do
   done
   cd ..
 done
+
+cd old_blogs_from_163
+. ./generate_readme.sh
+cd ..

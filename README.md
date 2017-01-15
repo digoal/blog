@@ -64,6 +64,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201406/20140606_01.md   [《OpenLDAP 使用方法》](201406/20140606_01.md)  
 ##### 201406/20140606_02.md   [《PostgreSQL LDAP认证之 simple bind配置》](201406/20140606_02.md)  
 ##### 201406/20140609_01.md   [《PostgreSQL LDAP认证之 search bind配置》](201406/20140609_01.md)  
+##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  
 ----  
 ##### 201408/20140801_01.md   [《OpenvSwitch readme & faq》](201408/20140801_01.md)  
 ##### 201408/20140801_02.md   [《USE OpenVSwitch Isolating VM traffic using VLANs》](201408/20140801_02.md)  

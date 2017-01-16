@@ -82,11 +82,21 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201412/20141211_01.md   [《PostgreSQL 事件触发器 - DDL审计 , DDL逻辑复制 , 打造DDL统一管理入》](201412/20141211_01.md)  
 ----  
 ##### 201502/20150228_01.md   [《PostgreSQL 统计信息之 - 逻辑与物理存储的线性相关性》](201502/20150228_01.md)  
+##### 201502/20150228_02.md   [《population & sample covariance, standard deviation Aggregate in PostgreSQL》](201502/20150228_02.md)  
+----  
+##### 201503/20150302_01.md   [《PostgreSQL aggregate function 1 : General-Purpose Aggregate Functions》](201503/20150302_01.md)  
+##### 201503/20150303_01.md   [《在PostgreSQL中用线性回归分析(linear regression) - 实现数据预测》](201503/20150303_01.md)  
+##### 201503/20150303_02.md   [《用PostgreSQL了解一些统计学术语以及计算方法和表示方法 - 1》](201503/20150303_02.md)  
+##### 201503/20150303_03.md   [《PostgreSQL aggregate function 2 : Aggregate Functions for Statistics》](201503/20150303_03.md)  
+##### 201503/20150304_01.md   [《PostgreSQL 线性回归 - 股价预测 1》](201503/20150304_01.md)  
+##### 201503/20150305_01.md   [《在PostgreSQL中用线性回归分析linear regression做预测 - 例子2, 预测未来数日某股收盘价》](201503/20150305_01.md)  
 ----  
 ##### 201504/20150401_01.md   [《install kvm hosts use vnc in CentOS 6》](201504/20150401_01.md)  
 ##### 201504/20150401_02.md   [《install kvm hosts use kickstart in CentOS 6 in text mode》](201504/20150401_02.md)  
 ##### 201504/20150402_01.md   [《KVM虚拟机CPU开销高性能优化例子 - 配置CPU flag》](201504/20150402_01.md)  
 ##### 201504/20150402_02.md   [《如何给KVM虚拟机添加disk, cpu, 内存, 网卡设备》](201504/20150402_02.md)  
+##### 201504/20150407_01.md   [《PostgreSQL aggregate function 3 : Aggregate Functions for Ordered-Set》](201504/20150407_01.md)  
+##### 201504/20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](201504/20150407_02.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
 ##### 201504/20150429_01.md   [《PostgreSQL 事件触发器 - 实现类似Oracle的回收站功能》](201504/20150429_01.md)  
 ----  

@@ -20,6 +20,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ----  
+##### 201108/20110830_01.md   [《the order of chinese char in PostgreSQL DB with different encoding and it's collate》](201108/20110830_01.md)  
+----  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
 ----  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
@@ -150,6 +152,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201605/20160506_01.md   [《论count使用不当的罪名 和 分页的优化》](201605/20160506_01.md)  
 ##### 201605/20160506_02.md   [《中文模糊查询性能优化 by PostgreSQL trgm》](201605/20160506_02.md)  
 ##### 201605/20160510_01.md   [《PostgreSQL 逻辑结构 和 权限体系 介绍》](201605/20160510_01.md)  
+##### 201605/20160511_01.md   [《PostgreSQL 获取拼音首字母的函数 - 摘自互联网》](201605/20160511_01.md)  
 ##### 201605/20160523_01.md   [《PostgreSQL 9.6 黑科技 bloom 算法索引，一个索引支撑任意列组合查询》](201605/20160523_01.md)  
 ##### 201605/20160523_02.md   [《PostgreSQL 特性分析 Plan Hint》](201605/20160523_02.md)  
 ##### 201605/20160528_01.md   [《深入浅出PostgreSQL B-Tree索引结构》](201605/20160528_01.md)  

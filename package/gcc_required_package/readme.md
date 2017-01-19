@@ -20,11 +20,16 @@ mv isl-0.15 isl
 cd ..
 mkdir objdir
 cd objdir
-../gcc-6.x/configure --prefix=/home/digoal/gcc6.3 --disable-isl-version-check --disable-multilib
+../gcc-6.2.0/configure --prefix=/home/digoal/gcc6.2.0 --disable-isl-version-check --disable-multilib
 make -j 32
 make install
 
-export LD_LIBRARY_PATH=/home/digoal/gcc6.3/lib:$LD_LIBRARY_PATH  
+export LD_LIBRARY_PATH=/home/digoal/gcc6.2.0/lib64:$LD_LIBRARY_PATH  
 export LD_RUN_PATH=$LD_LIBRARY_PATH  
-export PATH=/home/digoal/gcc6.3/bin:$PATH 
+export PATH=/home/digoal/gcc6.2.0/bin:$PATH 
+
+vi /etc/ld.so.conf
+/home/digoal/gcc6.2.0/lib64
+
+ldconfig
 ```

@@ -20,9 +20,17 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ----  
+##### 201105/20110511_01.md   [《PostgreSQL replication monitor》](201105/20110511_01.md)  
+----  
+##### 201106/20110623_01.md   [《PostgreSQL Archived in the Cloud》](201106/20110623_01.md)  
+----  
+##### 201107/20110701_01.md   [《Use nagios monitor PostgreSQL archive status》](201107/20110701_01.md)  
+----  
 ##### 201108/20110830_01.md   [《the order of chinese char in PostgreSQL DB with different encoding and it's collate》](201108/20110830_01.md)  
 ----  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
+----  
+##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  
 ----  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
 ----  
@@ -32,12 +40,20 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
 ##### 201208/20120831_02.md   [《表级复制(base on trigger) -- multi master replication & performance tuning》](201208/20120831_02.md)  
 ----  
+##### 201210/20121022_01.md   [《use pg_stat_plans in PostgreSQL 9.0, 9.1 and 9.2》](201210/20121022_01.md)  
+----  
 ##### 201211/20121115_01.md   [《PostgreSQL 临时表 (Temproary table) style》](201211/20121115_01.md)  
 ----  
 ##### 201212/20121217_01.md   [《performance tuning about multi-rows query aggregated to single-row query》](201212/20121217_01.md)  
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  
 ##### 201212/20121218_02.md   [《PostgreSQL aggregate function customize》](201212/20121218_02.md)  
 ##### 201212/20121228_01.md   [《PostgreSQL WHY ERROR: invalid byte sequence for encoding "UTF8"》](201212/20121228_01.md)  
+----  
+##### 201301/20130104_01.md   [《PostgreSQL partition table or inherits table predict count and gap and privilege monitor》](201301/20130104_01.md)  
+##### 201301/20130105_01.md   [《PostgreSQL partition table name convert to data type》](201301/20130105_01.md)  
+----  
+##### 201302/20130221_01.md   [《PostgreSQL LOCK WAITING monitor script for nagios》](201302/20130221_01.md)  
+##### 201302/20130222_01.md   [《PostgreSQL CSVLOG monitor script for nagios》](201302/20130222_01.md)  
 ----  
 ##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
 ##### 201303/20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](201303/20130311_02.md)  
@@ -51,6 +67,11 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
 ----  
+##### 201306/20130603_01.md   [《PostgreSQL monitor - nagios server installation》](201306/20130603_01.md)  
+##### 201306/20130603_02.md   [《PostgreSQL monitor - nagios client installation》](201306/20130603_02.md)  
+##### 201306/20130605_01.md   [《PostgreSQL monitor - check_postgres usage - 1》](201306/20130605_01.md)  
+##### 201306/20130605_02.md   [《PostgreSQL monitor - check_postgres usage - 2》](201306/20130605_02.md)  
+##### 201306/20130605_03.md   [《PostgreSQL monitor - customize nagios script》](201306/20130605_03.md)  
 ##### 201306/20130617_01.md   [《PostgreSQL 9.0 modify pg_attribute.atttypmod extend variable char length avoid rewrite table》](201306/20130617_01.md)  
 ----  
 ##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
@@ -59,6 +80,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201310/20131017_01.md   [《Systemtap EXP: PostgreSQL IN-BUILD mark Class 6 - lock》](201310/20131017_01.md)  
 ##### 201310/20131026_01.md   [《PostgreSQL bulk COPY load Bottleneck by extend lock waiting》](201310/20131026_01.md)  
+----  
+##### 201402/20140227_01.md   [《PostgreSQL nagios monitor script (archive, vacuum, age, conn, rollback, standby, lock, xact, seq, index...)》](201402/20140227_01.md)  
 ----  
 ##### 201403/20140328_01.md   [《PostgreSQL pg_bulkload speed test》](201403/20140328_01.md)  
 ----  
@@ -78,6 +101,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201408/20140828_01.md   [《PostgreSQL 闪回 - flash back query emulate by trigger》](201408/20140828_01.md)  
 ----  
 ##### 201409/20140924_01.md   [《PostgreSQL Windows AD认证配置》](201409/20140924_01.md)  
+##### 201409/20140930_01.md   [《PostgreSQL数据库在上市公司重要应用中的SOX审计》](201409/20140930_01.md)  
 ----  
 ##### 201410/20141009_01.md   [《PostgreSQL 密码安全指南》](201410/20141009_01.md)  
 ----  
@@ -127,6 +151,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201510/20151015_01.md   [《基于PostgreSQL的流式PipelineDB, 1000万/s实时统计不是梦》](201510/20151015_01.md)  
 ----  
 ##### 201512/20151215_01.md   [《"物联网"流式处理应用 - 用PostgreSQL实时处理(万亿每天)》](201512/20151215_01.md)  
+##### 201512/20151224_01.md   [《PostgreSQL 金融行业高可用和容灾解决方案》](201512/20151224_01.md)  
 ----  
 ##### 201601/20160119_01.md   [《PostgreSQL 百亿地理位置数据 近邻查询性能》](201601/20160119_01.md)  
 ##### 201601/20160125_01.md   [《Greenplum PostgreSQL --enable-profiling 产生gprof性能诊断代码》](201601/20160125_01.md)  
@@ -408,4 +433,4 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201701/20170116_02.md   [《PostgreSQL结合余弦、线性相关算法 在文本、图片、数组相似 等领域的应用 - 1 文本(关键词)分析理论基础 - TF(Term Frequency 词频)/IDF(Inverse Document Frequency 逆向文本频率)》](201701/20170116_02.md)  
 ##### 201701/20170116_03.md   [《PostgreSQL结合余弦、线性相关算法 在文本、图片、数组相似 等领域的应用 - 2 smlar插件详解》](201701/20170116_03.md)  
 ##### 201701/20170116_04.md   [《PostgreSQL结合余弦、线性相关算法 在文本、图片、数组相似 等领域的应用 - 3 rum, smlar应用场景分析》](201701/20170116_04.md)  
-##### 201701/20170120_01.md   [《小鸡吉吉小猪佩吉小象(PG)Pi吉 祝大家吉祥如意，幸福安康，阖家欢乐!》](201701/20170120_01.md)  
+##### 201701/20170120_01.md   [《小鸡吉吉小猪佩吉小象Pi吉(PostgreSQL) 祝大家吉祥如意，幸福安康，阖家欢乐!》](201701/20170120_01.md)  

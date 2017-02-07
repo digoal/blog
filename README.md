@@ -20,6 +20,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ----  
+##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique》](201103/20110329_01.md)  
+----  
 ##### 201105/20110511_01.md   [《PostgreSQL replication monitor》](201105/20110511_01.md)  
 ----  
 ##### 201106/20110623_01.md   [《PostgreSQL Archived in the Cloud》](201106/20110623_01.md)  
@@ -29,6 +31,10 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201108/20110830_01.md   [《the order of chinese char in PostgreSQL DB with different encoding and it's collate》](201108/20110830_01.md)  
 ----  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
+----  
+##### 201201/20120105_01.md   [《TOAST table with pgfincore》](201201/20120105_01.md)  
+----  
+##### 201202/20120216_01.md   [《how difference when update a table's column which it in TOAST or BASETABLE(in-line)》](201202/20120216_01.md)  
 ----  
 ##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  
 ----  
@@ -51,10 +57,13 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201301/20130104_01.md   [《PostgreSQL partition table or inherits table predict count and gap and privilege monitor》](201301/20130104_01.md)  
 ##### 201301/20130105_01.md   [《PostgreSQL partition table name convert to data type》](201301/20130105_01.md)  
+##### 201301/20130109_01.md   [《PostgreSQL large row|column performance tuning case》](201301/20130109_01.md)  
+##### 201301/20130110_01.md   [《HOW to Change PostgreSQL's TOAST_TUPLE_THRESHOLD》](201301/20130110_01.md)  
 ----  
 ##### 201302/20130221_01.md   [《PostgreSQL LOCK WAITING monitor script for nagios》](201302/20130221_01.md)  
 ##### 201302/20130222_01.md   [《PostgreSQL CSVLOG monitor script for nagios》](201302/20130222_01.md)  
 ----  
+##### 201303/20130306_01.md   [《Use PostgreSQL server program import binary data into database bytea type》](201303/20130306_01.md)  
 ##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
 ##### 201303/20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](201303/20130311_02.md)  
 ##### 201303/20130311_03.md   [《表级复制(base on trigger) -- PostgreSQL general sync and async multi-master replication trigger function》](201303/20130311_03.md)  
@@ -63,7 +72,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201305/20130502_01.md   [《Postgres-XC customized aggregate introduction》](201305/20130502_01.md)  
 ##### 201305/20130510_01.md   [《PostgreSQL SQL_ASCII encoding introduce》](201305/20130510_01.md)  
+##### 201305/20130510_02.md   [《PostgreSQL 9.3 Add API for 64-bit large object access》](201305/20130510_02.md)  
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
+##### 201305/20130521_01.md   [《PostgreSQL quote ident and literal》](201305/20130521_01.md)  
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
 ----  
@@ -73,6 +84,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201306/20130605_02.md   [《PostgreSQL monitor - check_postgres usage - 2》](201306/20130605_02.md)  
 ##### 201306/20130605_03.md   [《PostgreSQL monitor - customize nagios script》](201306/20130605_03.md)  
 ##### 201306/20130617_01.md   [《PostgreSQL 9.0 modify pg_attribute.atttypmod extend variable char length avoid rewrite table》](201306/20130617_01.md)  
+----  
+##### 201307/20130726_01.md   [《PostgreSQL varlena field upto 1GB and large object upto 4TB(8KB block_size)(>=9.3) 2GB(<=9.2)》](201307/20130726_01.md)  
 ----  
 ##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
@@ -186,6 +199,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201606/20160608_01.md   [《精确度量Linux下进程占用多少内存的方法》](201606/20160608_01.md)  
 ##### 201606/20160610_01.md   [《B-Tree和B+Tree》](201606/20160610_01.md)  
 ##### 201606/20160613_1.md   [《Linux cgroup - cpu与cpuset子系统讲解》](201606/20160613_1.md)  
+##### 201606/20160614_01.md   [《在java中正确使用PostgreSQL大对象和字节流(bytea)类型的姿势》](201606/20160614_01.md)  
 ##### 201606/20160621_1.md   [《为了部落 - 如何通过PostgreSQL基因配对，产生优良下一代》](201606/20160621_1.md)  
 ----  
 ##### 201607/20160709_01.md   [《PostgreSQL relcache在长连接应用中的内存霸占"坑"》](201607/20160709_01.md)  
@@ -447,3 +461,4 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201702/20170204_01.md   [《PostgreSQL GIN索引实现原理》](201702/20170204_01.md)  
 ##### 201702/20170205_01.md   [《宝剑赠英雄 - 任意组合字段等效查询, 探探PostgreSQL多列展开式B树》](201702/20170205_01.md)  
 ##### 201702/20170205_02.md   [《PostgreSQL 10 新特性, 流式接收端在线压缩redo》](201702/20170205_02.md)  
+##### 201702/20170207_01.md   [《PostgreSQL 内核自带的Oracle兼容函数》](201702/20170207_01.md)  

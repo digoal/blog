@@ -23,8 +23,11 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique》](201103/20110329_01.md)  
 ----  
 ##### 201105/20110511_01.md   [《PostgreSQL replication monitor》](201105/20110511_01.md)  
+##### 201105/20110518_01.md   [《Use SecureCRT and Chrome & Proxy Switchy! Plugin》](201105/20110518_01.md)  
 ----  
 ##### 201106/20110623_01.md   [《PostgreSQL Archived in the Cloud》](201106/20110623_01.md)  
+##### 201106/20110627_01.md   [《SSH Tunnels Compression speed up PostgreSQL data transport in WAN environment》](201106/20110627_01.md)  
+##### 201106/20110629_01.md   [《a simple wan speed method》](201106/20110629_01.md)  
 ----  
 ##### 201107/20110701_01.md   [《Use nagios monitor PostgreSQL archive status》](201107/20110701_01.md)  
 ----  
@@ -77,6 +80,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201305/20130521_01.md   [《PostgreSQL quote ident and literal》](201305/20130521_01.md)  
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
+##### 201305/20130523_01.md   [《PostgreSQL performance test use ssh tunnel》](201305/20130523_01.md)  
 ----  
 ##### 201306/20130603_01.md   [《PostgreSQL monitor - nagios server installation》](201306/20130603_01.md)  
 ##### 201306/20130603_02.md   [《PostgreSQL monitor - nagios client installation》](201306/20130603_02.md)  
@@ -105,6 +109,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201406/20140606_01.md   [《OpenLDAP 使用方法》](201406/20140606_01.md)  
 ##### 201406/20140606_02.md   [《PostgreSQL LDAP认证之 simple bind配置》](201406/20140606_02.md)  
 ##### 201406/20140609_01.md   [《PostgreSQL LDAP认证之 search bind配置》](201406/20140609_01.md)  
+##### 201406/20140614_01.md   [《使用 ssh -R 建立反向/远程TCP端口转发代理》](201406/20140614_01.md)  
 ##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  
 ----  
 ##### 201408/20140801_01.md   [《OpenvSwitch readme & faq》](201408/20140801_01.md)  
@@ -463,3 +468,6 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201702/20170205_02.md   [《PostgreSQL 10 新特性, 流式接收端在线压缩redo》](201702/20170205_02.md)  
 ##### 201702/20170207_01.md   [《PostgreSQL 内核自带的Oracle兼容函数》](201702/20170207_01.md)  
 ##### 201702/20170207_02.md   [《[转自叶大师博文] tpcc-mysql安装、使用、结果解读》](201702/20170207_02.md)  
+##### 201702/20170208_01.md   [《PostgreSQL 表和列权限(ACL)解读》](201702/20170208_01.md)  
+##### 201702/20170208_02.md   [《PostgreSQL MySQL 数据类型映射》](201702/20170208_02.md)  
+##### 201702/20170208_03.md   [《数据库选型思考》](201702/20170208_03.md)  

@@ -10,3 +10,4 @@
 ##### 20170208_01.md   [《PostgreSQL 表和列权限(ACL)解读》](20170208_01.md)  
 ##### 20170208_02.md   [《PostgreSQL MySQL 数据类型映射》](20170208_02.md)  
 ##### 20170208_03.md   [《数据库选型思考》](20170208_03.md)  
+##### 20170209_02.md   [《HOW PostgreSQL deal NULL-Values follow Three|ternary valued logic RULE》](20170209_02.md)  

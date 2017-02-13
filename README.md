@@ -89,7 +89,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201306/20130605_03.md   [《PostgreSQL monitor - customize nagios script》](201306/20130605_03.md)  
 ##### 201306/20130617_01.md   [《PostgreSQL 9.0 modify pg_attribute.atttypmod extend variable char length avoid rewrite table》](201306/20130617_01.md)  
 ----  
+##### 201307/20130710_01.md   [《PostgreSQL views privilege attack and security with security_barrier(视图攻击)》](201307/20130710_01.md)  
 ##### 201307/20130726_01.md   [《PostgreSQL varlena field upto 1GB and large object upto 4TB(8KB block_size)(>=9.3) 2GB(<=9.2)》](201307/20130726_01.md)  
+##### 201307/20130727_01.md   [《PostgreSQL 9.4 patch : Row-Level Security》](201307/20130727_01.md)  
 ----  
 ##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
@@ -104,6 +106,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201404/20140403_01.md   [《PostgreSQL 回收站功能 - 基于HOOK的recycle bin pgtrashcan》](201404/20140403_01.md)  
 ##### 201404/20140409_01.md   [《PostgreSQL pg_current_xlog_insert_location() & pg_current_xlog_location()》](201404/20140409_01.md)  
+##### 201404/20140414_01.md   [《PostgreSQL leakproof function in rule rewrite("attack" security_barrier views)》](201404/20140414_01.md)  
 ----  
 ##### 201406/20140604_01.md   [《OpenLDAP 安装指南》](201406/20140604_01.md)  
 ##### 201406/20140606_01.md   [《OpenLDAP 使用方法》](201406/20140606_01.md)  
@@ -161,12 +164,18 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  
+##### 201507/20150717_01.md   [《PostgreSQL function's SECURITY DEFINER | INVOKER, SET configuration_parameter { TO value | = value | FROM CURRENT }》](201507/20150717_01.md)  
+----  
 ##### 201508/20150818_01.md   [《PostgreSQL SSL链路压缩例子》](201508/20150818_01.md)  
 ----  
 ##### 201509/20150925_01.md   [《PostgreSQL cancel 安全漏洞》](201509/20150925_01.md)  
+##### 201509/20150929_01.md   [《PostgreSQL 安全陷阱 - 利用触发器或规则，结合security invoker函数制造反噬陷阱》](201509/20150929_01.md)  
 ----  
 ##### 201510/20151010_01.md   [《PostgreSQL 逻辑复制插件 UDR, 可以愉快的玩类似MySQL的binlog复制了》](201510/20151010_01.md)  
 ##### 201510/20151015_01.md   [《基于PostgreSQL的流式PipelineDB, 1000万/s实时统计不是梦》](201510/20151015_01.md)  
+##### 201510/20151022_01.md   [《开放dblink , fdw带来的安全隐患》](201510/20151022_01.md)  
+----  
+##### 201511/20151130_01.md   [《PostgreSQL 安全警钟长鸣》](201511/20151130_01.md)  
 ----  
 ##### 201512/20151215_01.md   [《"物联网"流式处理应用 - 用PostgreSQL实时处理(万亿每天)》](201512/20151215_01.md)  
 ##### 201512/20151224_01.md   [《PostgreSQL 金融行业高可用和容灾解决方案》](201512/20151224_01.md)  
@@ -205,6 +214,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201606/20160610_01.md   [《B-Tree和B+Tree》](201606/20160610_01.md)  
 ##### 201606/20160613_1.md   [《Linux cgroup - cpu与cpuset子系统讲解》](201606/20160613_1.md)  
 ##### 201606/20160614_01.md   [《在java中正确使用PostgreSQL大对象和字节流(bytea)类型的姿势》](201606/20160614_01.md)  
+##### 201606/20160614_02.md   [《EnterpriseDB (PPAS) Oracle兼容性Virtual Private Database(VPD) 数据隔离以及当前缺陷》](201606/20160614_02.md)  
 ##### 201606/20160621_1.md   [《为了部落 - 如何通过PostgreSQL基因配对，产生优良下一代》](201606/20160621_1.md)  
 ----  
 ##### 201607/20160709_01.md   [《PostgreSQL relcache在长连接应用中的内存霸占"坑"》](201607/20160709_01.md)  

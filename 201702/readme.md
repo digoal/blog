@@ -14,3 +14,4 @@
 ##### 20170209_02.md   [《HOW PostgreSQL deal NULL-Values follow Three|ternary valued logic RULE》](20170209_02.md)  
 ##### 20170213_01.md   [《数据库common安全自动渗透测试与防范 - sqlmap》](20170213_01.md)  
 ##### 20170214_01.md   [《PostgreSQL、Greenplum DML合并操作 最佳实践》](20170214_01.md)  
+##### 20170214_02.md   [《PostgreSQL 2017 2月份 相关新闻》](20170214_02.md)  

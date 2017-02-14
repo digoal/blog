@@ -10,13 +10,13 @@
 > ./README.md
 echo "### 以前写在163 BLOG的老文章迁移至此  " > ./README.md
 
-for dir in `ll|awk '{print $9}'|grep -E '^[0-9]{6}'` 
+for dir in `ls -lr|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do
   cd $dir
   echo "### 文章列表  "  > ./readme.md
   echo "----  "  >> ./readme.md
   echo "----  " >> ../README.md
-  for file in `ll *.md|awk '{print $9}'|grep -E '^[0-9]{8}'` 
+  for file in `ls -lr *.md|awk '{print $9}'|grep -E '^[0-9]{8}'` 
   do 
     title=`head -n 1 $file|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`
     echo "##### $file   [《$title》]($file)  " >> ./readme.md

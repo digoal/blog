@@ -25,13 +25,13 @@ echo "  "  >> ./README.md
 echo "### digoal,德哥的PostgreSQL私房菜  " >> ./README.md
 echo "##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) " >> ./README.md
 
-for dir in `ll|awk '{print $9}'|grep -E '^[0-9]{6}'` 
+for dir in `ls -lr|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do
   cd $dir
   echo "### 文章列表  "  > ./readme.md
   echo "----  "  >> ./readme.md
   echo "----  " >> ../README.md
-  for file in `ll *.md|awk '{print $9}'|grep -E '^[0-9]{8}'` 
+  for file in `ls -lr *.md|awk '{print $9}'|grep -E '^[0-9]{8}'` 
   do 
     title=`head -n 1 $file|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`
     echo "##### $file   [《$title》]($file)  " >> ./readme.md

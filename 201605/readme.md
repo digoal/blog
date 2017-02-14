@@ -8,4 +8,5 @@
 ##### 20160523_01.md   [《PostgreSQL 9.6 黑科技 bloom 算法索引，一个索引支撑任意列组合查询》](20160523_01.md)  
 ##### 20160523_02.md   [《PostgreSQL 特性分析 Plan Hint》](20160523_02.md)  
 ##### 20160524_01.md   [《通过ODBC连接PostgreSQL和Greenplum》](20160524_01.md)  
+##### 20160524_02.md   [《PostgreSQL 如何实现upsert与新旧数据自动分离》](20160524_02.md)  
 ##### 20160528_01.md   [《深入浅出PostgreSQL B-Tree索引结构》](20160528_01.md)  

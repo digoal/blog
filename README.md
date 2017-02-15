@@ -14,6 +14,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201702/20170215_02.md   [《[转载]sysctl加载配置顺序问题》](201702/20170215_02.md)  
+##### 201702/20170215_01.md   [《PostgreSQL 打开文件句柄优化 - 百万以上实体对象初始化优化》](201702/20170215_01.md)  
 ##### 201702/20170214_02.md   [《PostgreSQL 2017 2月份 相关新闻》](201702/20170214_02.md)  
 ##### 201702/20170214_01.md   [《PostgreSQL、Greenplum DML合并操作 最佳实践》](201702/20170214_01.md)  
 ##### 201702/20170213_01.md   [《数据库common安全自动渗透测试与防范 - sqlmap》](201702/20170213_01.md)  
@@ -342,6 +344,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201507/20150717_01.md   [《PostgreSQL function's SECURITY DEFINER | INVOKER, SET configuration_parameter { TO value | = value | FROM CURRENT }》](201507/20150717_01.md)  
 ----  
+##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  

@@ -1,6 +1,6 @@
 ### 文章列表  
 ----  
-##### 20150429_01.md   [《PostgreSQL 事件触发器 - 实现类似Oracle的回收站功能》](20150429_01.md)  
+##### 20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](20150429_01.md)  
 ##### 20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](20150419_01.md)  
 ##### 20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](20150407_02.md)  
 ##### 20150407_01.md   [《PostgreSQL aggregate function 3 : Aggregate Functions for Ordered-Set》](20150407_01.md)  

@@ -293,6 +293,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201607/20160709_01.md   [《PostgreSQL relcache在长连接应用中的内存霸占"坑"》](201607/20160709_01.md)  
 ----  
 ##### 201606/20160621_1.md   [《为了部落 - 如何通过PostgreSQL基因配对，产生优良下一代》](201606/20160621_1.md)  
+##### 201606/20160617_02.md   [《为什么用 PostgreSQL 绑定变量 没有 Oracle pin S 等待问题》](201606/20160617_02.md)  
+##### 201606/20160617_01.md   [《PostgreSQL plan cache 源码浅析 - 如何确保不会计划倾斜》](201606/20160617_01.md)  
 ##### 201606/20160614_03.md   [《PostgreSQL Oracle 兼容性之 - connect by》](201606/20160614_03.md)  
 ##### 201606/20160614_02.md   [《EnterpriseDB (PPAS) Oracle兼容性Virtual Private Database(VPD) 数据隔离以及当前缺陷》](201606/20160614_02.md)  
 ##### 201606/20160614_01.md   [《在java中正确使用PostgreSQL大对象和字节流(bytea)类型的姿势》](201606/20160614_01.md)  
@@ -475,10 +477,12 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201301/20130104_01.md   [《PostgreSQL partition table or inherits table predict count and gap and privilege monitor》](201301/20130104_01.md)  
 ----  
 ##### 201212/20121228_01.md   [《PostgreSQL WHY ERROR: invalid byte sequence for encoding "UTF8"》](201212/20121228_01.md)  
+##### 201212/20121224_01.md   [《执行计划选择算法 与 绑定变量 - PostgreSQL prepared statement: SPI_prepare, prepare|execute COMMAND, PL/pgsql STYLE: custom & generic plan cache》](201212/20121224_01.md)  
 ##### 201212/20121218_02.md   [《PostgreSQL aggregate function customize》](201212/20121218_02.md)  
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  
 ##### 201212/20121217_01.md   [《performance tuning about multi-rows query aggregated to single-row query》](201212/20121217_01.md)  
 ----  
+##### 201211/20121115_02.md   [《PostgreSQL partial index use caveat in prepared statement <= ver 9.1》](201211/20121115_02.md)  
 ##### 201211/20121115_01.md   [《PostgreSQL 临时表 (Temproary table) style》](201211/20121115_01.md)  
 ----  
 ##### 201210/20121022_01.md   [《use pg_stat_plans in PostgreSQL 9.0, 9.1 and 9.2》](201210/20121022_01.md)  
@@ -490,6 +494,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
 ##### 201206/20120601_01.md   [《PostGIS 2.0 Install》](201206/20120601_01.md)  
 ----  
+##### 201205/20120521_01.md   [《PostgreSQL 9.2 improve prepared statements plan's selectivity》](201205/20120521_01.md)  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
 ----  
 ##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  
@@ -516,6 +521,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique》](201103/20110329_01.md)  
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
+##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  
 ----  
 ##### 201010/20101027_01.md   [《batch insert in PostgreSQL》](201010/20101027_01.md)  
 ----  

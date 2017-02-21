@@ -1,5 +1,8 @@
 ### 文章列表  
 ----  
+##### 20170221_03.md   [《PostgreSQL merge join 评估成本时可能会查询索引 - 硬解析务必引起注意 - 批量删除数据后, 未释放empty索引页导致mergejoin执行计划变慢 case》](20170221_03.md)  
+##### 20170221_02.md   [《PostgreSQL bitmapAnd, bitmapOr, bitmap index scan, bitmap heap scan》](20170221_02.md)  
+##### 20170221_01.md   [《PostgreSQL GIN 单列聚集索引 应用》](20170221_01.md)  
 ##### 20170219_01.md   [《PostgreSQL 聚集存储 与 BRIN索引 - 高并发行为、轨迹类大吞吐数据查询场景解说》](20170219_01.md)  
 ##### 20170217_02.md   [《Oracle 迁移至 PostgreSQL 文档、工具大集合》](20170217_02.md)  
 ##### 20170217_01.md   [《PostgreSQL Oracle 兼容性之 - 函数、类型、多国语言》](20170217_01.md)  

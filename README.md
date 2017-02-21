@@ -14,6 +14,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201702/20170221_03.md   [《PostgreSQL merge join 评估成本时可能会查询索引 - 硬解析务必引起注意 - 批量删除数据后, 未释放empty索引页导致mergejoin执行计划变慢 case》](201702/20170221_03.md)  
+##### 201702/20170221_02.md   [《PostgreSQL bitmapAnd, bitmapOr, bitmap index scan, bitmap heap scan》](201702/20170221_02.md)  
+##### 201702/20170221_01.md   [《PostgreSQL GIN 单列聚集索引 应用》](201702/20170221_01.md)  
 ##### 201702/20170219_01.md   [《PostgreSQL 聚集存储 与 BRIN索引 - 高并发行为、轨迹类大吞吐数据查询场景解说》](201702/20170219_01.md)  
 ##### 201702/20170217_02.md   [《Oracle 迁移至 PostgreSQL 文档、工具大集合》](201702/20170217_02.md)  
 ##### 201702/20170217_01.md   [《PostgreSQL Oracle 兼容性之 - 函数、类型、多国语言》](201702/20170217_01.md)  
@@ -494,6 +497,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
 ##### 201206/20120601_01.md   [《PostGIS 2.0 Install》](201206/20120601_01.md)  
 ----  
+##### 201205/20120521_02.md   [《PostgreSQL nestloop/hash/merge join讲解》](201205/20120521_02.md)  
 ##### 201205/20120521_01.md   [《PostgreSQL 9.2 improve prepared statements plan's selectivity》](201205/20120521_01.md)  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
 ----  

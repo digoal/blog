@@ -14,6 +14,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201702/20170228_01.md   [《PostgreSQL Oracle 兼容性之 - SQL OUTLINE插件sr_plan (保存、篡改、固定 执行计划)》](201702/20170228_01.md)  
 ##### 201702/20170225_01.md   [《PostgreSQL 向量化执行插件(瓦片式实现) 10x提速OLAP》](201702/20170225_01.md)  
 ##### 201702/20170221_03.md   [《PostgreSQL merge join 评估成本时可能会查询索引 - 硬解析务必引起注意 - 批量删除数据后, 未释放empty索引页导致mergejoin执行计划变慢 case》](201702/20170221_03.md)  
 ##### 201702/20170221_02.md   [《PostgreSQL bitmapAnd, bitmapOr, bitmap index scan, bitmap heap scan》](201702/20170221_02.md)  
@@ -370,6 +371,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201507/20150703_01.md   [《PostgreSQL Oracle 兼容性之 - orafce (包、函数、DUAL)》](201507/20150703_01.md)  
 ----  
 ##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
+##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  
@@ -495,6 +497,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201208/20120831_02.md   [《表级复制(base on trigger) -- multi master replication & performance tuning》](201208/20120831_02.md)  
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
 ----  
+##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
 ##### 201206/20120601_01.md   [《PostGIS 2.0 Install》](201206/20120601_01.md)  
 ----  
@@ -527,6 +530,11 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  
+##### 201102/20110209_01.md   [《Can session_replication_role used like MySQL's BlackHole Engine?》](201102/20110209_01.md)  
+----  
+##### 201101/20110104_01.md   [《PostgreSQL HOT STANDBY using Stream replication》](201101/20110104_01.md)  
+----  
+##### 201012/20101230_01.md   [《PostgreSQL HOT STANDBY using log shipping》](201012/20101230_01.md)  
 ----  
 ##### 201010/20101027_01.md   [《batch insert in PostgreSQL》](201010/20101027_01.md)  
 ----  

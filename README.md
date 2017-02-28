@@ -15,6 +15,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
 ##### 201702/20170228_01.md   [《PostgreSQL Oracle 兼容性之 - SQL OUTLINE插件sr_plan (保存、篡改、固定 执行计划)》](201702/20170228_01.md)  
+##### 201702/20170227_01.md   [《PostgreSQL 10.0 逻辑复制原理与最佳实践》](201702/20170227_01.md)  
 ##### 201702/20170225_01.md   [《PostgreSQL 向量化执行插件(瓦片式实现) 10x提速OLAP》](201702/20170225_01.md)  
 ##### 201702/20170221_03.md   [《PostgreSQL merge join 评估成本时可能会查询索引 - 硬解析务必引起注意 - 批量删除数据后, 未释放empty索引页导致mergejoin执行计划变慢 case》](201702/20170221_03.md)  
 ##### 201702/20170221_02.md   [《PostgreSQL bitmapAnd, bitmapOr, bitmap index scan, bitmap heap scan》](201702/20170221_02.md)  

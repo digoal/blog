@@ -15,11 +15,15 @@ DBGeeK联盟 专家团成员。
 完成了对数据库HA、容灾、备份、恢复、分布式、数据仓库架构设计和建设；  
 建立了数据库管理和开发的标准化体系。  
 SKYMOBI于纳斯达克上市前使用PostgreSQL完成去O，并顺利通过SOX审计。  
-现就职于阿里巴巴，阿里云数据库内核技术架构组。  
+现任职于阿里巴巴，阿里云数据库内核技术架构组。  
   
-乐于分享，撰写技术类文章几千余篇，狂热技术分子。  
+痴迷领域: 数据库  
   
-https://github.com/digoal/blog/blob/master/README.md  
+打杂领域: OS、NET、storage、GIS、机器学习、虚拟化、GO、图式计算、流计算、BI     
+  
+打杂行业: 数据库内核、物联网     
+  
+乐于分享，撰写技术类文章几千余篇，狂热技术分子，致力于PostgreSQL数据库在中国的技术推广与人才教育。  
   
 对外输出技术分享数百场次，数据库、系统架构技术大会。  
   
@@ -28,3 +32,5 @@ https://github.com/digoal/blog/blob/master/README.md
 如果您的企业对数据库选型感到迷茫，或者需要构建数据库管理、开发标准化体系，或者有PostgreSQL培训类需求，或者只是有一些数据库类的问题，总之一切与数据库有关的问题，随时欢迎与我交流。  
   
 愿景 -- 公益是一辈子的事，I'm digoal, just do it。  
+  
+GIT: https://github.com/digoal/   

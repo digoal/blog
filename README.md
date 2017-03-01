@@ -14,6 +14,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170301_01.md   [《PostgreSQL 备库apply延迟原理分析与诊断》](201703/20170301_01.md)  
+----  
 ##### 201702/20170228_01.md   [《PostgreSQL Oracle 兼容性之 - SQL OUTLINE插件sr_plan (保存、篡改、固定 执行计划)》](201702/20170228_01.md)  
 ##### 201702/20170227_01.md   [《PostgreSQL 10.0 逻辑复制原理与最佳实践》](201702/20170227_01.md)  
 ##### 201702/20170225_01.md   [《PostgreSQL 向量化执行插件(瓦片式实现) 10x提速OLAP》](201702/20170225_01.md)  
@@ -372,6 +374,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201507/20150703_01.md   [《PostgreSQL Oracle 兼容性之 - orafce (包、函数、DUAL)》](201507/20150703_01.md)  
 ----  
 ##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
+##### 201506/20150619_01.md   [《online DDL (or NOWAIT DDL) in PostgreSQL》](201506/20150619_01.md)  
 ##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  

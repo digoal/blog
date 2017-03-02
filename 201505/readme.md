@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](20150526_02.md)  
 ##### 20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](20150526_01.md)  
 ##### 20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](20150515_01.md)  
 ##### 20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](20150511_01.md)  

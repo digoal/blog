@@ -380,6 +380,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  
+##### 201505/20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](201505/20150526_02.md)  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  
 ##### 201505/20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](201505/20150515_01.md)  
 ##### 201505/20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](201505/20150511_01.md)  
@@ -502,6 +503,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201212/20121228_01.md   [《PostgreSQL WHY ERROR: invalid byte sequence for encoding "UTF8"》](201212/20121228_01.md)  
 ##### 201212/20121224_01.md   [《执行计划选择算法 与 绑定变量 - PostgreSQL prepared statement: SPI_prepare, prepare|execute COMMAND, PL/pgsql STYLE: custom & generic plan cache》](201212/20121224_01.md)  
+##### 201212/20121218_03.md   [《CUBE, ROLLUP, GROUPING SETS in GreenPlum and Oracle》](201212/20121218_03.md)  
 ##### 201212/20121218_02.md   [《PostgreSQL aggregate function customize》](201212/20121218_02.md)  
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  
 ##### 201212/20121217_01.md   [《performance tuning about multi-rows query aggregated to single-row query》](201212/20121217_01.md)  

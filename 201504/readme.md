@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20150429_02.md   [《PostgreSQL 垃圾回收原理以及如何预防膨胀 - How to prevent object bloat in PostgreSQL》](20150429_02.md)  
 ##### 20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](20150429_01.md)  
 ##### 20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](20150419_01.md)  
 ##### 20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](20150409_01.md)  

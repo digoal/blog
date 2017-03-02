@@ -360,6 +360,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201512/20151215_01.md   [《"物联网"流式处理应用 - 用PostgreSQL实时处理(万亿每天)》](201512/20151215_01.md)  
 ----  
 ##### 201511/20151130_01.md   [《PostgreSQL 安全警钟长鸣》](201511/20151130_01.md)  
+##### 201511/20151109_01.md   [《PostgreSQL snapshot too old补丁, 防止数据库膨胀》](201511/20151109_01.md)  
 ----  
 ##### 201510/20151022_01.md   [《开放dblink , fdw带来的安全隐患》](201510/20151022_01.md)  
 ##### 201510/20151015_01.md   [《基于PostgreSQL的流式PipelineDB, 1000万/s实时统计不是梦》](201510/20151015_01.md)  
@@ -393,6 +394,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201505/20150506_01.md   [《PostgreSQL 检查点性能影响及源码分析 - 1》](201505/20150506_01.md)  
 ##### 201505/20150503_01.md   [《PostgreSQL垃圾回收代码分析 - why postgresql cann't reclaim tuple is HEAPTUPLE_RECENTLY_DEAD》](201505/20150503_01.md)  
 ----  
+##### 201504/20150429_02.md   [《PostgreSQL 垃圾回收原理以及如何预防膨胀 - How to prevent object bloat in PostgreSQL》](201504/20150429_02.md)  
 ##### 201504/20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](201504/20150429_01.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
 ##### 201504/20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](201504/20150409_01.md)  

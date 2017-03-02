@@ -447,6 +447,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201403/20140328_01.md   [《PostgreSQL pg_bulkload speed test》](201403/20140328_01.md)  
 ##### 201403/20140320_01.md   [《PostgreSQL log AND trace AND debug 详解》](201403/20140320_01.md)  
+##### 201403/20140316_01.md   [《PostgreSQL 嵌套循环成本估算方法 - nestloop loop cost & cost_material run_cost》](201403/20140316_01.md)  
 ----  
 ##### 201402/20140227_01.md   [《PostgreSQL nagios monitor script (archive, vacuum, age, conn, rollback, standby, lock, xact, seq, index...)》](201402/20140227_01.md)  
 ----  

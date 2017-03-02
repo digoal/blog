@@ -85,7 +85,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201701/20170105_01.md   [《PostgreSQL 流式数据处理(聚合、过滤、转换...)系列 - 1》](201701/20170105_01.md)  
 ##### 201701/20170103_01.md   [《在OOM现场 谈一谈数据库内存分配, 以及审计的重要性》](201701/20170103_01.md)  
 ##### 201701/20170102_01.md   [《Leap second , 闰秒 , 数据库 , PostgreSQL , Solar time , UNIX time , UTC , UT1》](201701/20170102_01.md)  
-##### 201701/20170101_02.md   [《元旦技术大礼包 - ApsaraDB的左右互搏术 - 解决企业痛处 TP+AP混合需求 - 无须再唱《爱你痛到不知痛》》](201701/20170101_02.md)  
+##### 201701/20170101_02.md   [《元旦技术大礼包 - ApsaraDB的左右互搏 - 解决OLTP+OLAP混合需求》](201701/20170101_02.md)  
 ##### 201701/20170101_01.md   [《元旦技术大礼包 - 2017金秋将要发布的PostgreSQL 10.0已装备了哪些核武器？》](201701/20170101_01.md)  
 ----  
 ##### 201612/20161231_01.md   [《从难缠的模糊查询聊开 - PostgreSQL独门绝招之一 GIN , GiST , SP-GiST , RUM 索引原理与技术背景》](201612/20161231_01.md)  
@@ -236,6 +236,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201608/20160824_03.md   [《PostgreSQL 最佳实践 - 读写分离》](201608/20160824_03.md)  
 ##### 201608/20160824_02.md   [《PostgreSQL 最佳实践 - 水平分库(基于plproxy)》](201608/20160824_02.md)  
 ##### 201608/20160824_01.md   [《一个笛卡尔积的update from语句引发的(内存泄露?)问题》](201608/20160824_01.md)  
+##### 201608/20160823_09.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)验证 - recovery test script for zfs snapshot clone + postgresql stream replication + archive》](201608/20160823_09.md)  
 ##### 201608/20160823_08.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)双机HA与块级备份部署》](201608/20160823_08.md)  
 ##### 201608/20160823_07.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)单个数据库采用多个zfs卷(如表空间)时如何一致性备份》](201608/20160823_07.md)  
 ##### 201608/20160823_06.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)备份集自动校验》](201608/20160823_06.md)  
@@ -379,6 +380,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  
+##### 201505/20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](201505/20150515_01.md)  
 ##### 201505/20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](201505/20150511_01.md)  
 ##### 201505/20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](201505/20150510_01.md)  
 ##### 201505/20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](201505/20150509_01.md)  
@@ -389,9 +391,11 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201505/20150506_03.md   [《PostgreSQL 检查点性能影响及源码分析 - 3》](201505/20150506_03.md)  
 ##### 201505/20150506_02.md   [《PostgreSQL 检查点性能影响及源码分析 - 2》](201505/20150506_02.md)  
 ##### 201505/20150506_01.md   [《PostgreSQL 检查点性能影响及源码分析 - 1》](201505/20150506_01.md)  
+##### 201505/20150503_01.md   [《PostgreSQL垃圾回收代码分析 - why postgresql cann't reclaim tuple is HEAPTUPLE_RECENTLY_DEAD》](201505/20150503_01.md)  
 ----  
 ##### 201504/20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](201504/20150429_01.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
+##### 201504/20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](201504/20150409_01.md)  
 ##### 201504/20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](201504/20150407_02.md)  
 ##### 201504/20150407_01.md   [《PostgreSQL aggregate function 3 : Aggregate Functions for Ordered-Set》](201504/20150407_01.md)  
 ##### 201504/20150402_02.md   [《如何给KVM虚拟机添加disk, cpu, 内存, 网卡设备》](201504/20150402_02.md)  
@@ -408,7 +412,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201502/20150228_02.md   [《population & sample covariance, standard deviation Aggregate in PostgreSQL》](201502/20150228_02.md)  
 ##### 201502/20150228_01.md   [《PostgreSQL 统计信息之 - 逻辑与物理存储的线性相关性》](201502/20150228_01.md)  
+##### 201502/20150209_01.md   [《PostgreSQL 函数代码隐藏 - How to control who can see PostgreSQL function's source code》](201502/20150209_01.md)  
 ----  
+##### 201412/20141214_01.md   [《PostgreSQL 触发器应用 - use trigger audit record which column modified, insert, delete.》](201412/20141214_01.md)  
 ##### 201412/20141211_01.md   [《PostgreSQL 事件触发器 - DDL审计 , DDL逻辑复制 , 打造DDL统一管理入》](201412/20141211_01.md)  
 ##### 201412/20141206_01.md   [《Install OpenVSwitch into CentOS 7 userspace》](201412/20141206_01.md)  
 ----  
@@ -418,6 +424,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201409/20140930_01.md   [《PostgreSQL数据库在上市公司重要应用中的SOX审计》](201409/20140930_01.md)  
 ##### 201409/20140924_01.md   [《PostgreSQL Windows AD认证配置》](201409/20140924_01.md)  
+##### 201409/20140917_01.md   [《PostgreSQL 触发器应用 - (触发器WHEN)前置条件过滤跟踪目标记录》](201409/20140917_01.md)  
 ----  
 ##### 201408/20140828_01.md   [《PostgreSQL 闪回 - flash back query emulate by trigger》](201408/20140828_01.md)  
 ##### 201408/20140806_01.md   [《tunctl , bridge , sub interface 在multi-network环境中的使用, 无需路由打通不同主机的不同网段》](201408/20140806_01.md)  
@@ -446,6 +453,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201308/20130823_01.md   [《PostgreSQL WHY modify numeric scale must rewrite table》](201308/20130823_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
+##### 201308/20130806_02.md   [《PostgreSQL 配置文件变更审计 - A custom background worker process to log changes to postgresql.conf to a table》](201308/20130806_02.md)  
 ##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ----  
 ##### 201307/20130727_01.md   [《PostgreSQL 9.4 patch : Row-Level Security》](201307/20130727_01.md)  
@@ -466,8 +474,11 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
 ##### 201305/20130510_02.md   [《PostgreSQL 9.3 Add API for 64-bit large object access》](201305/20130510_02.md)  
 ##### 201305/20130510_01.md   [《PostgreSQL SQL_ASCII encoding introduce》](201305/20130510_01.md)  
+##### 201305/20130509_01.md   [《PostgreSQL 审计 - PostgreSQL 9.3 Allow OLD and NEW in multi-row VALUES within rules》](201305/20130509_01.md)  
 ##### 201305/20130502_01.md   [《Postgres-XC customized aggregate introduction》](201305/20130502_01.md)  
 ----  
+##### 201303/20130320_02.md   [《PostgreSQL 审计 - PostgreSQL Audit by Database or Role wide parameter》](201303/20130320_02.md)  
+##### 201303/20130320_01.md   [《PostgreSQL 审计成功事务 - PostgreSQL Fine-Grained Table,Column,Row Level Audit》](201303/20130320_01.md)  
 ##### 201303/20130315_01.md   [《PostgreSQL Server Encoding sql_ascii attention》](201303/20130315_01.md)  
 ##### 201303/20130313_01.md   [《PostgreSQL 事件触发器 - PostgreSQL 9.3 Event Trigger》](201303/20130313_01.md)  
 ##### 201303/20130311_03.md   [《表级复制(base on trigger) -- PostgreSQL general sync and async multi-master replication trigger function》](201303/20130311_03.md)  
@@ -501,8 +512,10 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201208/20120831_02.md   [《表级复制(base on trigger) -- multi master replication & performance tuning》](201208/20120831_02.md)  
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
 ----  
+##### 201206/20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](201206/20120626_01.md)  
 ##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
+##### 201206/20120606_01.md   [《PostgreSQL 函数封装 - Wrap Function code like Oracle package》](201206/20120606_01.md)  
 ##### 201206/20120601_01.md   [《PostGIS 2.0 Install》](201206/20120601_01.md)  
 ----  
 ##### 201205/20120521_02.md   [《PostgreSQL nestloop/hash/merge join讲解》](201205/20120521_02.md)  
@@ -513,6 +526,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201202/20120216_01.md   [《how difference when update a table's column which it in TOAST or BASETABLE(in-line)》](201202/20120216_01.md)  
 ----  
+##### 201201/20120119_01.md   [《PostgreSQL 灵活审计插件 - PostgreSQL per database or per user audit use pg_log_userqueries》](201201/20120119_01.md)  
+##### 201201/20120113_02.md   [《PostgreSQL 跟踪谁动了你的记录 - Use timetravel function trace tuple's DML》](201201/20120113_02.md)  
+##### 201201/20120113_01.md   [《PostgreSQL 跟踪谁动了你的记录 - Use insert_username Tracking Who Changed a Table》](201201/20120113_01.md)  
 ##### 201201/20120105_01.md   [《TOAST table with pgfincore》](201201/20120105_01.md)  
 ----  
 ##### 201111/20111130_01.md   [《whether pg_start_backup() force keep xlog in pg_xlog directory before execute pg_stop_backup() ?》](201111/20111130_01.md)  

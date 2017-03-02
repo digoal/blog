@@ -2,6 +2,7 @@
 ----  
 ##### 20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](20150429_01.md)  
 ##### 20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](20150419_01.md)  
+##### 20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](20150409_01.md)  
 ##### 20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](20150407_02.md)  
 ##### 20150407_01.md   [《PostgreSQL aggregate function 3 : Aggregate Functions for Ordered-Set》](20150407_01.md)  
 ##### 20150402_02.md   [《如何给KVM虚拟机添加disk, cpu, 内存, 网卡设备》](20150402_02.md)  

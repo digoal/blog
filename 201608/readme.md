@@ -13,6 +13,7 @@
 ##### 20160824_03.md   [《PostgreSQL 最佳实践 - 读写分离》](20160824_03.md)  
 ##### 20160824_02.md   [《PostgreSQL 最佳实践 - 水平分库(基于plproxy)》](20160824_02.md)  
 ##### 20160824_01.md   [《一个笛卡尔积的update from语句引发的(内存泄露?)问题》](20160824_01.md)  
+##### 20160823_09.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)验证 - recovery test script for zfs snapshot clone + postgresql stream replication + archive》](20160823_09.md)  
 ##### 20160823_08.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)双机HA与块级备份部署》](20160823_08.md)  
 ##### 20160823_07.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)单个数据库采用多个zfs卷(如表空间)时如何一致性备份》](20160823_07.md)  
 ##### 20160823_06.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)备份集自动校验》](20160823_06.md)  

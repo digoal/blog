@@ -2,6 +2,7 @@
 ----  
 ##### 20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](20150526_02.md)  
 ##### 20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](20150526_01.md)  
+##### 20150525_01.md   [《PostgreSQL 9.5 new feature - table | mview data sample》](20150525_01.md)  
 ##### 20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](20150515_01.md)  
 ##### 20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](20150511_01.md)  
 ##### 20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](20150510_01.md)  

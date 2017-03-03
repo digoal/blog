@@ -341,6 +341,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201603/20160320_01.md   [《PostgreSQL 如何潇洒的处理每天上百TB的数据增量》](201603/20160320_01.md)  
 ##### 201603/20160318_01.md   [《PostgreSQL Oracle 兼容性之 - PL/SQL pipelined》](201603/20160318_01.md)  
 ##### 201603/20160316_01.md   [《PostgreSQL 加载动态库详解》](201603/20160316_01.md)  
+##### 201603/20160315_02.md   [《PostgreSQL MySQL 兼容性之 - 时间类型》](201603/20160315_02.md)  
 ##### 201603/20160315_01.md   [《PostgreSQL Oracle 兼容性之 - sys_guid() UUID》](201603/20160315_01.md)  
 ##### 201603/20160308_01.md   [《让Greenplum 支持反转索引》](201603/20160308_01.md)  
 ##### 201603/20160307_01.md   [《PostgreSQL 1000亿数据量 正则匹配 速度与激情》](201603/20160307_01.md)  
@@ -383,6 +384,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201505/20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](201505/20150526_02.md)  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  
+##### 201505/20150525_01.md   [《PostgreSQL 9.5 new feature - table | mview data sample》](201505/20150525_01.md)  
 ##### 201505/20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](201505/20150515_01.md)  
 ##### 201505/20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](201505/20150511_01.md)  
 ##### 201505/20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](201505/20150510_01.md)  
@@ -396,6 +398,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201505/20150506_01.md   [《PostgreSQL 检查点性能影响及源码分析 - 1》](201505/20150506_01.md)  
 ##### 201505/20150503_01.md   [《PostgreSQL垃圾回收代码分析 - why postgresql cann't reclaim tuple is HEAPTUPLE_RECENTLY_DEAD》](201505/20150503_01.md)  
 ----  
+##### 201504/20150430_01.md   [《PostgreSQL timestamp parse in gram.y (' ' AT TIME ZONE ' ')》](201504/20150430_01.md)  
 ##### 201504/20150429_02.md   [《PostgreSQL 垃圾回收原理以及如何预防膨胀 - How to prevent object bloat in PostgreSQL》](201504/20150429_02.md)  
 ##### 201504/20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](201504/20150429_01.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
@@ -417,6 +420,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201502/20150228_02.md   [《population & sample covariance, standard deviation Aggregate in PostgreSQL》](201502/20150228_02.md)  
 ##### 201502/20150228_01.md   [《PostgreSQL 统计信息之 - 逻辑与物理存储的线性相关性》](201502/20150228_01.md)  
 ##### 201502/20150209_01.md   [《PostgreSQL 函数代码隐藏 - How to control who can see PostgreSQL function's source code》](201502/20150209_01.md)  
+----  
+##### 201501/20150129_01.md   [《随机记录并发查询与更新(转移、删除)的"无耻"优化方法》](201501/20150129_01.md)  
 ----  
 ##### 201412/20141214_01.md   [《PostgreSQL 触发器应用 - use trigger audit record which column modified, insert, delete.》](201412/20141214_01.md)  
 ##### 201412/20141211_01.md   [《PostgreSQL 事件触发器 - DDL审计 , DDL逻辑复制 , 打造DDL统一管理入》](201412/20141211_01.md)  

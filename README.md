@@ -14,6 +14,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170303_01.md   [《pidstat 统计进程、线程、进程组的资源消耗》](201703/20170303_01.md)  
 ##### 201703/20170302_01.md   [《PostgreSQL Oracle 兼容性之 - RATIO_TO_REPORT 分析函数》](201703/20170302_01.md)  
 ##### 201703/20170301_01.md   [《PostgreSQL 备库apply延迟原理分析与诊断》](201703/20170301_01.md)  
 ----  

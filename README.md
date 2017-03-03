@@ -561,6 +561,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  
+##### 201102/20110212_01.md   [《PostgreSQL 随机查询优化》](201102/20110212_01.md)  
 ##### 201102/20110209_01.md   [《Can session_replication_role used like MySQL's BlackHole Engine?》](201102/20110209_01.md)  
 ----  
 ##### 201101/20110104_01.md   [《PostgreSQL HOT STANDBY using Stream replication》](201101/20110104_01.md)  

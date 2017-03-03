@@ -8,6 +8,7 @@
 ##### 20160727_02.md   [《固若金汤 - PostgreSQL pgcrypto加密插件》](20160727_02.md)  
 ##### 20160727_01.md   [《PostgreSQL 会话级资源隔离探索》](20160727_01.md)  
 ##### 20160726_01.md   [《弱水三千,只取一瓢,当图像搜索遇见PostgreSQL(Haar wavelet)》](20160726_01.md)  
+##### 20160725_06.md   [《page fault带来的性能问题》](20160725_06.md)  
 ##### 20160725_05.md   [《PostgreSQL 如何高效解决 按任意字段分词检索的问题 - case 1》](20160725_05.md)  
 ##### 20160725_04.md   [《PostgreSQL Oracle 兼容性之 - 锁定执行计划(Outline system)》](20160725_04.md)  
 ##### 20160725_03.md   [《mongoDB BI 分析利器 - PostgreSQL FDW (MongoDB Connector for BI)》](20160725_03.md)  

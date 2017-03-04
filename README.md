@@ -358,6 +358,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201601/20160125_01.md   [《Greenplum PostgreSQL --enable-profiling 产生gprof性能诊断代码》](201601/20160125_01.md)  
 ##### 201601/20160119_01.md   [《PostgreSQL 百亿地理位置数据 近邻查询性能》](201601/20160119_01.md)  
+##### 201601/20160111_02.md   [《BenchmarkSQL 测试Oracle 12c TPC-C 性能 (含个人测试结果)》](201601/20160111_02.md)  
 ##### 201601/20160111_01.md   [《PostgreSQL hugepage 支持》](201601/20160111_01.md)  
 ##### 201601/20160110_01.md   [《BenchmarkSQL 支持多个 schema》](201601/20160110_01.md)  
 ##### 201601/20160109_01.md   [《BenchmarkSQL 测试PostgreSQL 9.5.0 TPC-C 性能》](201601/20160109_01.md)  

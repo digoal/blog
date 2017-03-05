@@ -315,6 +315,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201606/20160614_02.md   [《EnterpriseDB (PPAS) Oracle兼容性Virtual Private Database(VPD) 数据隔离以及当前缺陷》](201606/20160614_02.md)  
 ##### 201606/20160614_01.md   [《在java中正确使用PostgreSQL大对象和字节流(bytea)类型的姿势》](201606/20160614_01.md)  
 ##### 201606/20160613_01.md   [《Linux cgroup - cpu与cpuset子系统讲解》](201606/20160613_01.md)  
+##### 201606/20160612_01.md   [《PostgreSQL的"天气预报" - 如何预测Freeze IO风暴》](201606/20160612_01.md)  
 ##### 201606/20160610_01.md   [《B-Tree和B+Tree》](201606/20160610_01.md)  
 ##### 201606/20160608_01.md   [《精确度量Linux下进程占用多少内存的方法》](201606/20160608_01.md)  
 ----  
@@ -324,6 +325,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201605/20160524_01.md   [《通过ODBC连接PostgreSQL和Greenplum》](201605/20160524_01.md)  
 ##### 201605/20160523_02.md   [《PostgreSQL 特性分析 Plan Hint》](201605/20160523_02.md)  
 ##### 201605/20160523_01.md   [《PostgreSQL 9.6 黑科技 bloom 算法索引，一个索引支撑任意列组合查询》](201605/20160523_01.md)  
+##### 201605/20160520_01.md   [《PostgreSQL 大表自动 freeze 优化思路》](201605/20160520_01.md)  
 ##### 201605/20160511_01.md   [《PostgreSQL 获取拼音首字母的函数 - 摘自互联网》](201605/20160511_01.md)  
 ##### 201605/20160510_01.md   [《PostgreSQL 逻辑结构 和 权限体系 介绍》](201605/20160510_01.md)  
 ##### 201605/20160507_01.md   [《PostgreSQL Oracle 兼容性之 - add_months》](201605/20160507_01.md)  
@@ -549,6 +551,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ----  
 ##### 201208/20120831_02.md   [《表级复制(base on trigger) -- multi master replication & performance tuning》](201208/20120831_02.md)  
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
+##### 201208/20120814_01.md   [《variable number of arguments function》](201208/20120814_01.md)  
 ----  
 ##### 201206/20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](201206/20120626_01.md)  
 ##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  
@@ -561,6 +564,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
 ----  
 ##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  
+----  
+##### 201203/20120313_02.md   [《PostgreSQL性能优化综合案例讲解 - 2》](201203/20120313_02.md)  
+##### 201203/20120313_01.md   [《PostgreSQL性能优化综合案例讲解 - 1》](201203/20120313_01.md)  
 ----  
 ##### 201202/20120216_01.md   [《how difference when update a table's column which it in TOAST or BASETABLE(in-line)》](201202/20120216_01.md)  
 ----  

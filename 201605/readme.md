@@ -6,6 +6,7 @@
 ##### 20160524_01.md   [《通过ODBC连接PostgreSQL和Greenplum》](20160524_01.md)  
 ##### 20160523_02.md   [《PostgreSQL 特性分析 Plan Hint》](20160523_02.md)  
 ##### 20160523_01.md   [《PostgreSQL 9.6 黑科技 bloom 算法索引，一个索引支撑任意列组合查询》](20160523_01.md)  
+##### 20160520_01.md   [《PostgreSQL 大表自动 freeze 优化思路》](20160520_01.md)  
 ##### 20160511_01.md   [《PostgreSQL 获取拼音首字母的函数 - 摘自互联网》](20160511_01.md)  
 ##### 20160510_01.md   [《PostgreSQL 逻辑结构 和 权限体系 介绍》](20160510_01.md)  
 ##### 20160507_01.md   [《PostgreSQL Oracle 兼容性之 - add_months》](20160507_01.md)  

@@ -14,6 +14,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170307_03.md   [《PostGIS 地理信息数据 多核并行处理》](201703/20170307_03.md)  
 ##### 201703/20170307_02.md   [《连接PostgreSQL时,如何指定参数》](201703/20170307_02.md)  
 ##### 201703/20170307_01.md   [《数据透视 - 商场(如沃尔玛)选址应用》](201703/20170307_01.md)  
 ##### 201703/20170305_01.md   [《PostgreSQL业务函数代码版本管理 - 自动备份存储过程、函数代码到SVN\github\...》](201703/20170305_01.md)  
@@ -588,6 +589,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201106/20110629_01.md   [《a simple wan speed method》](201106/20110629_01.md)  
 ##### 201106/20110627_01.md   [《SSH Tunnels Compression speed up PostgreSQL data transport in WAN environment》](201106/20110627_01.md)  
 ##### 201106/20110623_01.md   [《PostgreSQL Archived in the Cloud》](201106/20110623_01.md)  
+##### 201106/20110612_01.md   [《行列变换 - Use tablefunc complete row & column cross display in PostgreSQL》](201106/20110612_01.md)  
 ----  
 ##### 201105/20110518_01.md   [《Use SecureCRT and Chrome & Proxy Switchy! Plugin》](201105/20110518_01.md)  
 ##### 201105/20110511_01.md   [《PostgreSQL replication monitor》](201105/20110511_01.md)  

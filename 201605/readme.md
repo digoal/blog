@@ -2,6 +2,7 @@
 ----  
 ##### 20160528_01.md   [《深入浅出PostgreSQL B-Tree索引结构》](20160528_01.md)  
 ##### 20160527_01.md   [《PostgreSQL Oracle 兼容性之 - 如何篡改插入值(例如NULL纂改为其他值)》](20160527_01.md)  
+##### 20160524_03.md   [《[转载]用intel编译器icc编译PostgreSQL》](20160524_03.md)  
 ##### 20160524_02.md   [《PostgreSQL 如何实现upsert与新旧数据自动分离》](20160524_02.md)  
 ##### 20160524_01.md   [《通过ODBC连接PostgreSQL和Greenplum》](20160524_01.md)  
 ##### 20160523_02.md   [《PostgreSQL 特性分析 Plan Hint》](20160523_02.md)  

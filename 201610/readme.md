@@ -18,7 +18,7 @@
 ##### 20161011_02.md   [《Greenplum,HAWQ interval parser带来的问题 - TPCH 测试注意啦》](20161011_02.md)  
 ##### 20161011_01.md   [《PostgreSQL 可靠性分析 - 关于redo block原子写》](20161011_01.md)  
 ##### 20161009_02.md   [《PostgreSQL 9.6 内核优化 - sort 性能增强》](20161009_02.md)  
-##### 20161009_01.md   [《PostgreSQL 对比 MySQL - 秘钥认证》](20161009_01.md)  
+##### 20161009_01.md   [《PostgreSQL md5 对比 MySQL - 秘钥认证》](20161009_01.md)  
 ##### 20161008_02.md   [《PostgreSQL 9.6 内核优化 - sort性能增强(batch化quicksort代替replacement selection when work_mem small)》](20161008_02.md)  
 ##### 20161008_01.md   [《PostgreSQL 9.6 内核优化之 聚合代码优化OP复用浅析》](20161008_01.md)  
 ##### 20161006_03.md   [《PostgreSQL 9.6 平滑fsync, write原理浅析》](20161006_03.md)  

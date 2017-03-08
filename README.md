@@ -14,6 +14,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170309_01.md   [《PostgreSQL 10.0 scram-sha-256-plus 安全认证方法》](201703/20170309_01.md)  
 ##### 201703/20170308_02.md   [《PostgreSQL 数据库巡检》](201703/20170308_02.md)  
 ##### 201703/20170308_01.md   [《PostgreSQL Windows和Linux的数据文件通用吗》](201703/20170308_01.md)  
 ##### 201703/20170307_03.md   [《PostGIS 地理信息数据 多核并行处理》](201703/20170307_03.md)  
@@ -188,7 +189,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201610/20161011_02.md   [《Greenplum,HAWQ interval parser带来的问题 - TPCH 测试注意啦》](201610/20161011_02.md)  
 ##### 201610/20161011_01.md   [《PostgreSQL 可靠性分析 - 关于redo block原子写》](201610/20161011_01.md)  
 ##### 201610/20161009_02.md   [《PostgreSQL 9.6 内核优化 - sort 性能增强》](201610/20161009_02.md)  
-##### 201610/20161009_01.md   [《PostgreSQL 对比 MySQL - 秘钥认证》](201610/20161009_01.md)  
+##### 201610/20161009_01.md   [《PostgreSQL md5 对比 MySQL - 秘钥认证》](201610/20161009_01.md)  
 ##### 201610/20161008_02.md   [《PostgreSQL 9.6 内核优化 - sort性能增强(batch化quicksort代替replacement selection when work_mem small)》](201610/20161008_02.md)  
 ##### 201610/20161008_01.md   [《PostgreSQL 9.6 内核优化之 聚合代码优化OP复用浅析》](201610/20161008_01.md)  
 ##### 201610/20161006_03.md   [《PostgreSQL 9.6 平滑fsync, write原理浅析》](201610/20161006_03.md)  

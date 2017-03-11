@@ -14,6 +14,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170310_03.md   [《PostgreSQL 数据文件解析与数据dump》](201703/20170310_03.md)  
 ##### 201703/20170310_02.md   [《PostgreSQL 中如何找出记录中是否包含编码范围内的字符，例如是否包含中文》](201703/20170310_02.md)  
 ##### 201703/20170310_01.md   [《PostgreSQL 区块链条管理举例》](201703/20170310_01.md)  
 ##### 201703/20170309_01.md   [《PostgreSQL 10.0 SASL认证方法 之 scram-sha-256 安全认证机制》](201703/20170309_01.md)  
@@ -511,6 +512,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201307/20130726_01.md   [《PostgreSQL varlena field upto 1GB and large object upto 4TB(8KB block_size)(>=9.3) 2GB(<=9.2)》](201307/20130726_01.md)  
 ##### 201307/20130710_01.md   [《PostgreSQL views privilege attack and security with security_barrier(视图攻击)》](201307/20130710_01.md)  
 ----  
+##### 201306/20130628_01.md   [《PostgreSQL 如何精确计算表膨胀(fsm,数据块layout讲解) - PostgreSQL table exactly bloat monitor use freespace map data》](201306/20130628_01.md)  
+##### 201306/20130626_01.md   [《PostgreSQL 大对象或bytea存取pdf,jpg等文件 - PostgreSQL export regular file like pdf, word, text, doc stored in bytea type》](201306/20130626_01.md)  
 ##### 201306/20130617_01.md   [《PostgreSQL 9.0 modify pg_attribute.atttypmod extend variable char length avoid rewrite table》](201306/20130617_01.md)  
 ##### 201306/20130605_03.md   [《PostgreSQL monitor - customize nagios script》](201306/20130605_03.md)  
 ##### 201306/20130605_02.md   [《PostgreSQL monitor - check_postgres usage - 2》](201306/20130605_02.md)  

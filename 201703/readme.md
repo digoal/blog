@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170313_10.md   [《PostgreSQL 10.0 preview 性能增强 - hash index metapage cache、高并发增强》](20170313_10.md)  
 ##### 20170313_09.md   [《PostgreSQL 10.0 preview 性能增强 - mergesort(Gather merge)》](20170313_09.md)  
 ##### 20170313_08.md   [《PostgreSQL 10.0 preview 多核并行增强 - 索引扫描、子查询、VACUUM、fdw/csp钩子》](20170313_08.md)  
 ##### 20170313_07.md   [《PostgreSQL 10.0 preview 性能增强 - CLOG group commit》](20170313_07.md)  

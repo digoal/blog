@@ -14,6 +14,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170313_13.md   [《PostgreSQL 10.0 preview 功能增强 - 客户端ACL（pg_hba.conf动态视图）》](201703/20170313_13.md)  
+##### 201703/20170313_12.md   [《PostgreSQL 10.0 preview 多核并行增强 - 控制集群并行度》](201703/20170313_12.md)  
+##### 201703/20170313_11.md   [《PostgreSQL 10.0 preview 安全增强 - 任意wal副本数，金融级高可用与可靠性并存需求》](201703/20170313_11.md)  
 ##### 201703/20170313_10.md   [《PostgreSQL 10.0 preview 性能增强 - hash index metapage cache、高并发增强》](201703/20170313_10.md)  
 ##### 201703/20170313_09.md   [《PostgreSQL 10.0 preview 性能增强 - mergesort(Gather merge)》](201703/20170313_09.md)  
 ##### 201703/20170313_08.md   [《PostgreSQL 10.0 preview 多核并行增强 - 索引扫描、子查询、VACUUM、fdw/csp钩子》](201703/20170313_08.md)  
@@ -150,7 +153,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201612/20161220_01.md   [《流计算风云再起 - PostgreSQL携PipelineDB力挺IoT》](201612/20161220_01.md)  
 ##### 201612/20161219_01.md   [《Oracle log file parallel write 等待事件分析 - PostgreSQL的WAL异曲同工》](201612/20161219_01.md)  
 ##### 201612/20161216_01.md   [《分析加速引擎黑科技 - LLVM、列存、多核并行、算子复用 大联姻 - 一起来开启PostgreSQL的百宝箱》](201612/20161216_01.md)  
-##### 201612/20161215_01.md   [《PostgreSQL 10.0 preview - 内置分区表》](201612/20161215_01.md)  
+##### 201612/20161215_01.md   [《PostgreSQL 10.0 preview 功能增强 - 内置分区表》](201612/20161215_01.md)  
 ##### 201612/20161213_01.md   [《金融风控、公安刑侦、社会关系、人脉分析等需求分析与数据库实现 - PostgreSQL图数据库场景应用》](201612/20161213_01.md)  
 ##### 201612/20161208_01.md   [《官人要杯咖啡吗? - PostgreSQL实时监测PLAN tree的执行进度 - pg_query_state》](201612/20161208_01.md)  
 ##### 201612/20161207_01.md   [《PostgreSQL 从源码找出哪些操作需要超级用户权限》](201612/20161207_01.md)  

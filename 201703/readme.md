@@ -1,5 +1,8 @@
 ### 文章列表  
 ----  
+##### 20170313_13.md   [《PostgreSQL 10.0 preview 功能增强 - 客户端ACL（pg_hba.conf动态视图）》](20170313_13.md)  
+##### 20170313_12.md   [《PostgreSQL 10.0 preview 多核并行增强 - 控制集群并行度》](20170313_12.md)  
+##### 20170313_11.md   [《PostgreSQL 10.0 preview 安全增强 - 任意wal副本数，金融级高可用与可靠性并存需求》](20170313_11.md)  
 ##### 20170313_10.md   [《PostgreSQL 10.0 preview 性能增强 - hash index metapage cache、高并发增强》](20170313_10.md)  
 ##### 20170313_09.md   [《PostgreSQL 10.0 preview 性能增强 - mergesort(Gather merge)》](20170313_09.md)  
 ##### 20170313_08.md   [《PostgreSQL 10.0 preview 多核并行增强 - 索引扫描、子查询、VACUUM、fdw/csp钩子》](20170313_08.md)  

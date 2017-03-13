@@ -41,4 +41,4 @@
 ##### 20170103_01.md   [《在OOM现场 谈一谈数据库内存分配, 以及审计的重要性》](20170103_01.md)  
 ##### 20170102_01.md   [《Leap second , 闰秒 , 数据库 , PostgreSQL , Solar time , UNIX time , UTC , UT1》](20170102_01.md)  
 ##### 20170101_02.md   [《ApsaraDB的左右互搏(PgSQL+HybridDB+OSS) - 解决OLTP+OLAP混合需求》](20170101_02.md)  
-##### 20170101_01.md   [《PostgreSQL 10.0 - 已装备了哪些核武器? 2017金秋》](20170101_01.md)  
+##### 20170101_01.md   [《PostgreSQL 10.0 preview - 截至2017元旦装备了哪些核武器》](20170101_01.md)  

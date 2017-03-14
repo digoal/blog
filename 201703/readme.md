@@ -22,7 +22,7 @@
 ##### 20170312_18.md   [《PostgreSQL 10.0 preview 功能增强 - slave支持WAITLSN 'lsn', time;用于设置安全replay栅栏》](20170312_18.md)  
 ##### 20170312_17.md   [《PostgreSQL 10.0 preview 功能增强 - hash index 支持wal(灾难恢复)》](20170312_17.md)  
 ##### 20170312_16.md   [《PostgreSQL 10.0 preview 性能增强 - 分区表子表元信息搜索性能增强》](20170312_16.md)  
-##### 20170312_15.md   [《PostgreSQL 10.0 preview 性能增强 - libqp支持pipeline batch模式减少网络交互提升性能》](20170312_15.md)  
+##### 20170312_15.md   [《PostgreSQL 10.0 preview 性能增强 - libpq支持pipeline batch模式减少网络交互提升性能》](20170312_15.md)  
 ##### 20170312_14.md   [《PostgreSQL 10.0 preview 性能增强 - OLAP提速框架, Faster Expression Evaluation Framework(含JIT)》](20170312_14.md)  
 ##### 20170312_13.md   [《PostgreSQL 10.0 preview 性能增强 - pg_xact align(cacheline对齐)》](20170312_13.md)  
 ##### 20170312_12.md   [《PostgreSQL 10.0 preview 流复制增强 - 支持可配置的wal send max size》](20170312_12.md)  

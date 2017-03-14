@@ -515,6 +515,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201409/20140917_01.md   [《PostgreSQL 触发器应用 - (触发器WHEN)前置条件过滤跟踪目标记录》](201409/20140917_01.md)  
 ----  
 ##### 201408/20140828_01.md   [《PostgreSQL 闪回 - flash back query emulate by trigger》](201408/20140828_01.md)  
+##### 201408/20140823_01.md   [《PostgreSQL 逻辑备份与业务DDL的锁冲突案例 - PostgreSQL logical backup attention on lock and long time dump》](201408/20140823_01.md)  
 ##### 201408/20140806_01.md   [《tunctl , bridge , sub interface 在multi-network环境中的使用, 无需路由打通不同主机的不同网段》](201408/20140806_01.md)  
 ##### 201408/20140801_03.md   [《Install OpenVSwitch on CentOS 6.x x64》](201408/20140801_03.md)  
 ##### 201408/20140801_02.md   [《USE OpenVSwitch Isolating VM traffic using VLANs》](201408/20140801_02.md)  
@@ -568,6 +569,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201305/20130509_01.md   [《PostgreSQL 审计 - PostgreSQL 9.3 Allow OLD and NEW in multi-row VALUES within rules》](201305/20130509_01.md)  
 ##### 201305/20130502_01.md   [《Postgres-XC customized aggregate introduction》](201305/20130502_01.md)  
 ----  
+##### 201304/20130407_01.md   [《PostgreSQL 两阶段(非库级一致性)逻辑备份 - PostgreSQL non-consistent backup script》](201304/20130407_01.md)  
+----  
+##### 201303/20130325_01.md   [《PostgreSQL 并行逻辑备份与一致性讲解 - PostgreSQL 9.3 parallel pg_dump》](201303/20130325_01.md)  
 ##### 201303/20130320_02.md   [《PostgreSQL 审计 - PostgreSQL Audit by Database or Role wide parameter》](201303/20130320_02.md)  
 ##### 201303/20130320_01.md   [《PostgreSQL 审计成功事务 - PostgreSQL Fine-Grained Table,Column,Row Level Audit》](201303/20130320_01.md)  
 ##### 201303/20130315_01.md   [《PostgreSQL Server Encoding sql_ascii attention》](201303/20130315_01.md)  
@@ -575,6 +579,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201303/20130311_03.md   [《表级复制(base on trigger) -- PostgreSQL general sync and async multi-master replication trigger function》](201303/20130311_03.md)  
 ##### 201303/20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](201303/20130311_02.md)  
 ##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
+##### 201303/20130306_02.md   [《PostgreSQL 事务快照功能 - Parallel Export consistent data or Parallel Query use snapshot transaction feature》](201303/20130306_02.md)  
 ##### 201303/20130306_01.md   [《Use PostgreSQL server program import binary data into database bytea type》](201303/20130306_01.md)  
 ----  
 ##### 201302/20130223_01.md   [《PostgreSQL xlog dump - pg_xlogdump 源码讲解》](201302/20130223_01.md)  
@@ -616,6 +621,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201205/20120521_02.md   [《PostgreSQL nestloop/hash/merge join讲解》](201205/20120521_02.md)  
 ##### 201205/20120521_01.md   [《PostgreSQL 9.2 improve prepared statements plan's selectivity》](201205/20120521_01.md)  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
+##### 201205/20120516_01.md   [《PostgreSQL 共享事务快照功能 - PostgreSQL 9.2 can share snapshot between multi transactions》](201205/20120516_01.md)  
+##### 201205/20120511_01.md   [《PostgreSQL 逻辑备份一致性讲解 - Why pg_dump backup a database in consistent status》](201205/20120511_01.md)  
 ----  
 ##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  
 ##### 201204/20120412_01.md   [《PostgreSQL Logical Backup's TOC File》](201204/20120412_01.md)  
@@ -656,6 +663,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201101/20110104_01.md   [《PostgreSQL HOT STANDBY using Stream replication》](201101/20110104_01.md)  
 ----  
 ##### 201012/20101230_01.md   [《PostgreSQL HOT STANDBY using log shipping》](201012/20101230_01.md)  
+----  
+##### 201011/20101129_01.md   [《PostgreSQL 不同版本的保留字不同引发的逻辑备份异常处理 - pg_dump ERROR: syntax error at or near "old"》](201011/20101129_01.md)  
 ----  
 ##### 201010/20101027_01.md   [《batch insert in PostgreSQL》](201010/20101027_01.md)  
 ----  

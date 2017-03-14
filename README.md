@@ -14,6 +14,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170314_02.md   [《PostgreSQL 10.0 preview 功能增强 - 回滚范围可精细控制(事务、语句级)》](201703/20170314_02.md)  
+##### 201703/20170314_01.md   [《PostgreSQL update tbl1 from tbl2 一对多的注意事项(到底匹配哪条)》](201703/20170314_01.md)  
 ##### 201703/20170313_13.md   [《PostgreSQL 10.0 preview 功能增强 - 客户端ACL（pg_hba.conf动态视图）》](201703/20170313_13.md)  
 ##### 201703/20170313_12.md   [《PostgreSQL 10.0 preview 多核并行增强 - 控制集群并行度》](201703/20170313_12.md)  
 ##### 201703/20170313_11.md   [《PostgreSQL 10.0 preview 安全增强 - 任意wal副本数，金融级高可用与可靠性并存需求》](201703/20170313_11.md)  

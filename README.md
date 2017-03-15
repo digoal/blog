@@ -14,6 +14,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170315_04.md   [《PostgreSQL 末尾数据块损坏(如pg_type pg_attribute) case》](201703/20170315_04.md)  
+##### 201703/20170315_03.md   [《PostgreSQL create extension with schema pg_catalog的权限异常case》](201703/20170315_03.md)  
+##### 201703/20170315_02.md   [《基于PostgreSQL和地理位置信息打造的 关键洞察平台 - CARTO》](201703/20170315_02.md)  
 ##### 201703/20170315_01.md   [《PostgreSQL 单机3.9万亿/天(计数器、序列、自增)》](201703/20170315_01.md)  
 ##### 201703/20170314_02.md   [《PostgreSQL 10.0 preview 功能增强 - 回滚范围可精细控制(事务、语句级)》](201703/20170314_02.md)  
 ##### 201703/20170314_01.md   [《PostgreSQL update tbl1 from tbl2 一对多的注意事项(到底匹配哪条)》](201703/20170314_01.md)  

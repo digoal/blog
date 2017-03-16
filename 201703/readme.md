@@ -1,5 +1,7 @@
 ### 文章列表  
 ----  
+##### 20170316_02.md   [《PostgreSQL decimal64 decimal128 扩展数值类型》](20170316_02.md)  
+##### 20170316_01.md   [《PostgreSQL 10.0 preview 功能增强 - 后台运行(pg_background)》](20170316_01.md)  
 ##### 20170315_04.md   [《PostgreSQL 末尾数据块损坏(如pg_type pg_attribute) case》](20170315_04.md)  
 ##### 20170315_03.md   [《PostgreSQL create extension with schema pg_catalog的权限异常case》](20170315_03.md)  
 ##### 20170315_02.md   [《基于PostgreSQL和地理位置信息打造的 关键洞察平台 - CARTO》](20170315_02.md)  
@@ -21,7 +23,7 @@
 ##### 20170313_01.md   [《PostgreSQL 10.0 preview 功能增强 - 支持EUI-64格式MAC地址类型》](20170313_01.md)  
 ##### 20170312_24.md   [《PostgreSQL 10.0 preview 功能增强 - JSON 内容全文检索》](20170312_24.md)  
 ##### 20170312_23.md   [《PostgreSQL 10.0 preview 功能增强 - 唯一约束+附加字段组合功能索引》](20170312_23.md)  
-##### 20170312_22.md   [《PostgreSQL 10.0 preview 功能增强 - 匿名、自治事务(Oracle 兼容性)》](20170312_22.md)  
+##### 20170312_22.md   [《PostgreSQL 10.0 preview 功能增强 - 匿名、自治事务(Oracle 兼容性)(background session)》](20170312_22.md)  
 ##### 20170312_21.md   [《PostgreSQL 10.0 preview 性能增强 - 间接索引(secondary index)》](20170312_21.md)  
 ##### 20170312_20.md   [《PostgreSQL 10.0 preview sharding增强 - pushdown 增强》](20170312_20.md)  
 ##### 20170312_19.md   [《PostgreSQL 10.0 preview 功能增强 - slave提前苏醒》](20170312_19.md)  

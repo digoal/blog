@@ -14,6 +14,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170316_02.md   [《PostgreSQL decimal64 decimal128 扩展数值类型》](201703/20170316_02.md)  
+##### 201703/20170316_01.md   [《PostgreSQL 10.0 preview 功能增强 - 后台运行(pg_background)》](201703/20170316_01.md)  
 ##### 201703/20170315_04.md   [《PostgreSQL 末尾数据块损坏(如pg_type pg_attribute) case》](201703/20170315_04.md)  
 ##### 201703/20170315_03.md   [《PostgreSQL create extension with schema pg_catalog的权限异常case》](201703/20170315_03.md)  
 ##### 201703/20170315_02.md   [《基于PostgreSQL和地理位置信息打造的 关键洞察平台 - CARTO》](201703/20170315_02.md)  
@@ -35,7 +37,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201703/20170313_01.md   [《PostgreSQL 10.0 preview 功能增强 - 支持EUI-64格式MAC地址类型》](201703/20170313_01.md)  
 ##### 201703/20170312_24.md   [《PostgreSQL 10.0 preview 功能增强 - JSON 内容全文检索》](201703/20170312_24.md)  
 ##### 201703/20170312_23.md   [《PostgreSQL 10.0 preview 功能增强 - 唯一约束+附加字段组合功能索引》](201703/20170312_23.md)  
-##### 201703/20170312_22.md   [《PostgreSQL 10.0 preview 功能增强 - 匿名、自治事务(Oracle 兼容性)》](201703/20170312_22.md)  
+##### 201703/20170312_22.md   [《PostgreSQL 10.0 preview 功能增强 - 匿名、自治事务(Oracle 兼容性)(background session)》](201703/20170312_22.md)  
 ##### 201703/20170312_21.md   [《PostgreSQL 10.0 preview 性能增强 - 间接索引(secondary index)》](201703/20170312_21.md)  
 ##### 201703/20170312_20.md   [《PostgreSQL 10.0 preview sharding增强 - pushdown 增强》](201703/20170312_20.md)  
 ##### 201703/20170312_19.md   [《PostgreSQL 10.0 preview 功能增强 - slave提前苏醒》](201703/20170312_19.md)  
@@ -407,6 +409,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201603/20160315_01.md   [《PostgreSQL Oracle 兼容性之 - sys_guid() UUID》](201603/20160315_01.md)  
 ##### 201603/20160308_01.md   [《让Greenplum 支持反转索引》](201603/20160308_01.md)  
 ##### 201603/20160307_01.md   [《PostgreSQL 1000亿数据量 正则匹配 速度与激情》](201603/20160307_01.md)  
+##### 201603/20160303_01.md   [《PostgreSQL fixeddecimal - 用CPU "硬解码" 提升1倍 数值运算能力 助力金融大数据量计算》](201603/20160303_01.md)  
 ##### 201603/20160302_01.md   [《PostgreSQL 百亿数据 秒级响应 正则及模糊查询》](201603/20160302_01.md)  
 ----  
 ##### 201602/20160225_01.md   [《PostgreSQL 优化器逻辑推理能力 源码解析》](201602/20160225_01.md)  

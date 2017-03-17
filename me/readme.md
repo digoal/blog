@@ -24,13 +24,13 @@ SKYMOBI于纳斯达克上市前使用PostgreSQL完成去O，并顺利通过SOX�
   
 乐于分享，撰写技术类文章几千余篇，狂热技术分子，致力于PostgreSQL数据库在中国的技术推广与人才教育。  
   
-技术分享数百场次，感谢各大技术社区和平台对PostgreSQL给予的支持和帮助，PostgreSQL的发展离不开大伙的支持，我尽最大努力提供更多分享。     
+技术分享数百场次，公开PostgreSQL培训不计其数，感谢各大技术社区和平台对PostgreSQL给予的支持和帮助，PostgreSQL的发展离不开大伙的支持，我尽最大努力提供更多分享。     
   
-公开PostgreSQL培训不计其数。  
+PostgreSQL是非常值得信赖的数据库，起源自伯克利，BSD-like开源许可，开放生态，GIS/JSON/数组/高级特性/窗口/GPSETINGS/CUBE/树/GIN/GIST/SPGIST/RUM/BLOOM/BRIN/HASH/BTREE/扩展插件/HOOK/扩展索引/扩展类型/扩展操作符/扩展UDF/扩展函数语言/机器学习/基因/化学/并行计算/列存储/GPU加速/FPGA加速/向量计算/JIT/无所不能。   
   
 如果您的企业对数据库选型感到迷茫，或者需要构建数据库管理/开发/安全标准化体系，PostgreSQL培训类需求，或者只是有一些数据库类的问题，总之一切与数据库有关的问题，随时欢迎与我交流。  
   
-把PostgreSQL的种子洒向四海八荒，加油。   
+把PostgreSQL的种子播至四海八荒，加油。   
   
 愿景 -- 公益是一辈子的事，I'm digoal, just do it。  
   

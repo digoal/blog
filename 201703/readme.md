@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170321_02.md   [《PostgreSQL 数据rotate用法介绍 - 按时间覆盖历史数据》](20170321_02.md)  
 ##### 20170321_01.md   [《PostgreSQL 10.0 preview 性能增强 - Write Amplification Reduction Method (WARM)消除某些情况下的INDEX写放大》](20170321_01.md)  
 ##### 20170316_02.md   [《PostgreSQL decimal64 decimal128 高效率数值 类型扩展》](20170316_02.md)  
 ##### 20170316_01.md   [《PostgreSQL 10.0 preview 功能增强 - 后台运行(pg_background)》](20170316_01.md)  

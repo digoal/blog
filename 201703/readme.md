@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170321_01.md   [《PostgreSQL 10.0 preview 性能增强 - Write Amplification Reduction Method (WARM)消除某些情况下的INDEX写放大》](20170321_01.md)  
 ##### 20170316_02.md   [《PostgreSQL decimal64 decimal128 高效率数值 类型扩展》](20170316_02.md)  
 ##### 20170316_01.md   [《PostgreSQL 10.0 preview 功能增强 - 后台运行(pg_background)》](20170316_01.md)  
 ##### 20170315_04.md   [《PostgreSQL 末尾数据块损坏(如pg_type pg_attribute) case》](20170315_04.md)  

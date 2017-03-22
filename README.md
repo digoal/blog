@@ -446,12 +446,19 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201512/20151222_01.md   [《Linux RHEL6 x64 命令行静默安装 Oracle 12c - 1》](201512/20151222_01.md)  
 ##### 201512/20151221_02.md   [《PostgreSQL Oracle 兼容性之 - WITH 递归 ( connect by )》](201512/20151221_02.md)  
 ##### 201512/20151221_01.md   [《PostgreSQL Oracle 兼容性之 - orafce介绍》](201512/20151221_01.md)  
+##### 201512/20151220_06.md   [《阿里云ApsaraDB RDS for PostgreSQL 试用报告 - 6 任意时间点恢复》](201512/20151220_06.md)  
+##### 201512/20151220_05.md   [《阿里云ApsaraDB RDS for PostgreSQL 试用报告 - 5 长短连接测试》](201512/20151220_05.md)  
+##### 201512/20151220_04.md   [《阿里云ApsaraDB RDS for PostgreSQL 试用报告 - 4 水平分库 之 节点扩展》](201512/20151220_04.md)  
+##### 201512/20151220_03.md   [《阿里云ApsaraDB RDS for PostgreSQL 试用报告 - 3 水平分库 vs 单机 性能》](201512/20151220_03.md)  
+##### 201512/20151220_02.md   [《阿里云ApsaraDB RDS for PostgreSQL 试用报告 - 2 教你RDS PG的水平分库》](201512/20151220_02.md)  
+##### 201512/20151220_01.md   [《阿里云ApsaraDB RDS for PostgreSQL 试用报告 - 1 教你做RDS性能测试》](201512/20151220_01.md)  
 ##### 201512/20151215_01.md   [《"物联网"流式处理应用 - 用PostgreSQL实时处理(万亿每天)》](201512/20151215_01.md)  
 ----  
 ##### 201511/20151130_02.md   [《安装iozone on CentOS 7 x64》](201511/20151130_02.md)  
 ##### 201511/20151130_01.md   [《PostgreSQL 安全警钟长鸣》](201511/20151130_01.md)  
 ##### 201511/20151109_01.md   [《PostgreSQL snapshot too old补丁, 防止数据库膨胀》](201511/20151109_01.md)  
 ----  
+##### 201510/20151210_01.md   [《PostgreSQL 使用pg_xlogdump找到误操作事务号》](201510/20151210_01.md)  
 ##### 201510/20151022_01.md   [《开放dblink , fdw带来的安全隐患》](201510/20151022_01.md)  
 ##### 201510/20151015_01.md   [《基于PostgreSQL的流式PipelineDB, 1000万/s实时统计不是梦》](201510/20151015_01.md)  
 ##### 201510/20151010_01.md   [《PostgreSQL 逻辑复制插件 UDR, 可以愉快的玩类似MySQL的binlog复制了》](201510/20151010_01.md)  
@@ -597,6 +604,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201302/20130222_01.md   [《PostgreSQL CSVLOG monitor script for nagios》](201302/20130222_01.md)  
 ##### 201302/20130221_01.md   [《PostgreSQL LOCK WAITING monitor script for nagios》](201302/20130221_01.md)  
 ----  
+##### 201301/20130130_01.md   [《PostgreSQL recovery target introduce》](201301/20130130_01.md)  
 ##### 201301/20130128_01.md   [《PostgreSQL Developer Options (debug, trace, system table mod and so on...) 详解》](201301/20130128_01.md)  
 ##### 201301/20130127_01.md   [《PostgreSQL 9.3 will add pg_isready script to test PostgreSQL server if allowed to connect》](201301/20130127_01.md)  
 ##### 201301/20130122_01.md   [《PostgreSQL sharding有序UUID最佳实践 - serial global uuid stored in 64bit int8》](201301/20130122_01.md)  

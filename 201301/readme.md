@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20130130_01.md   [《PostgreSQL recovery target introduce》](20130130_01.md)  
 ##### 20130128_01.md   [《PostgreSQL Developer Options (debug, trace, system table mod and so on...) 详解》](20130128_01.md)  
 ##### 20130127_01.md   [《PostgreSQL 9.3 will add pg_isready script to test PostgreSQL server if allowed to connect》](20130127_01.md)  
 ##### 20130122_01.md   [《PostgreSQL sharding有序UUID最佳实践 - serial global uuid stored in 64bit int8》](20130122_01.md)  

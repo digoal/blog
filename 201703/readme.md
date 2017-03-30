@@ -1,5 +1,9 @@
 ### 文章列表  
 ----  
+##### 20170330_06.md   [《PostgreSQL 10.0 preview 性能增强 - hashed aggregation with grouping sets(多维分析)更快,更省内存》](20170330_06.md)  
+##### 20170330_05.md   [《PostgreSQL 10.0 preview 功能增强 - 自由定义统计信息维度》](20170330_05.md)  
+##### 20170330_04.md   [《PostgreSQL 10.0 preview 功能增强 - 国际化功能增强,支持ICU(International Components for Unicode)》](20170330_04.md)  
+##### 20170330_03.md   [《PostgreSQL 10.0 preview 功能增强 - 支持分区表ON CONFLICT .. DO NOTHING》](20170330_03.md)  
 ##### 20170330_02.md   [《PostgreSQL 10.0 preview 性能增强 - 推出JIT开发框架(朝着HTAP迈进)》](20170330_02.md)  
 ##### 20170330_01.md   [《PostgreSQL 10.0 preview 功能增强 - 备库支持逻辑订阅,订阅支持主备漂移了》](20170330_01.md)  
 ##### 20170329_03.md   [《PostgreSQL jdbc batch insert》](20170329_03.md)  

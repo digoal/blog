@@ -14,6 +14,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170330_01.md   [《PostgreSQL 10.0 preview 功能增强 - 逻辑订阅者支持主备漂移了》](201703/20170330_01.md)  
 ##### 201703/20170329_03.md   [《PostgreSQL jdbc batch insert》](201703/20170329_03.md)  
 ##### 201703/20170329_02.md   [《PostgreSQL 10.0 preview 性能增强 - GIN索引vacuum锁降低》](201703/20170329_02.md)  
 ##### 201703/20170329_01.md   [《PostgreSQL 10.0 preview 功能增强 - 流复制延迟评估 动态视图》](201703/20170329_01.md)  

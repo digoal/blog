@@ -1,6 +1,7 @@
 ### 文章列表  
 ----  
-##### 20170330_01.md   [《PostgreSQL 10.0 preview 功能增强 - 逻辑订阅者支持主备漂移了》](20170330_01.md)  
+##### 20170330_02.md   [《PostgreSQL 10.0 preview 性能增强 - 推出JIT开发框架(朝着HTAP迈进)》](20170330_02.md)  
+##### 20170330_01.md   [《PostgreSQL 10.0 preview 功能增强 - 备库支持逻辑订阅,订阅支持主备漂移了》](20170330_01.md)  
 ##### 20170329_03.md   [《PostgreSQL jdbc batch insert》](20170329_03.md)  
 ##### 20170329_02.md   [《PostgreSQL 10.0 preview 性能增强 - GIN索引vacuum锁降低》](20170329_02.md)  
 ##### 20170329_01.md   [《PostgreSQL 10.0 preview 功能增强 - 流复制延迟评估 动态视图》](20170329_01.md)  

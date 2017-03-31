@@ -14,6 +14,8 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201703/20170331_02.md   [《潘金莲改变了历史之 - PostgreSQL舆情事件分析应用》](201703/20170331_02.md)  
+##### 201703/20170331_01.md   [《PostgreSQL 10.0 preview 功能增强 - 动态视图pg_stat_activity新增数据库管理进程信息》](201703/20170331_01.md)  
 ##### 201703/20170330_06.md   [《PostgreSQL 10.0 preview 性能增强 - hashed aggregation with grouping sets(多维分析)更快,更省内存》](201703/20170330_06.md)  
 ##### 201703/20170330_05.md   [《PostgreSQL 10.0 preview 功能增强 - 自由定义统计信息维度》](201703/20170330_05.md)  
 ##### 201703/20170330_04.md   [《PostgreSQL 10.0 preview 功能增强 - 国际化功能增强,支持ICU(International Components for Unicode)》](201703/20170330_04.md)  
@@ -563,6 +565,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ##### 201408/20140801_02.md   [《USE OpenVSwitch Isolating VM traffic using VLANs》](201408/20140801_02.md)  
 ##### 201408/20140801_01.md   [《OpenvSwitch readme & faq》](201408/20140801_01.md)  
 ----  
+##### 201406/20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](201406/20140618_01.md)  
 ##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  
 ##### 201406/20140614_01.md   [《使用 ssh -R 建立反向/远程TCP端口转发代理》](201406/20140614_01.md)  
 ##### 201406/20140609_01.md   [《PostgreSQL LDAP认证之 search bind配置》](201406/20140609_01.md)  

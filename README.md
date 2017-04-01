@@ -14,6 +14,10 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 ##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
 ----  
+##### 201704/20170402_01.md   [《PostgreSQL 转义、UNICODE、与SQL注入》](201704/20170402_01.md)  
+##### 201704/20170401_01.md   [《PostgreSQL 10.0 preview 功能增强 - 触发器函数内置中间表》](201704/20170401_01.md)  
+----  
+##### 201703/20170331_03.md   [《PostgreSQL 10.0 preview sharding增强 - 支持分布式事务》](201703/20170331_03.md)  
 ##### 201703/20170331_02.md   [《潘金莲改变了历史之 - PostgreSQL舆情事件分析应用》](201703/20170331_02.md)  
 ##### 201703/20170331_01.md   [《PostgreSQL 10.0 preview 功能增强 - 动态视图pg_stat_activity新增数据库管理进程信息》](201703/20170331_01.md)  
 ##### 201703/20170330_06.md   [《PostgreSQL 10.0 preview 性能增强 - hashed aggregation with grouping sets(多维分析)更快,更省内存》](201703/20170330_06.md)  

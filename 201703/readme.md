@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170331_03.md   [《PostgreSQL 10.0 preview sharding增强 - 支持分布式事务》](20170331_03.md)  
 ##### 20170331_02.md   [《潘金莲改变了历史之 - PostgreSQL舆情事件分析应用》](20170331_02.md)  
 ##### 20170331_01.md   [《PostgreSQL 10.0 preview 功能增强 - 动态视图pg_stat_activity新增数据库管理进程信息》](20170331_01.md)  
 ##### 20170330_06.md   [《PostgreSQL 10.0 preview 性能增强 - hashed aggregation with grouping sets(多维分析)更快,更省内存》](20170330_06.md)  

@@ -55,9 +55,9 @@ do
   done
 done
 
-# 4. 排序
+# 4. 排序, 去重
 for file in `ls [0-9]*.md`
 do 
-  cat $file | sort -k 2 -n > ./sort.tmp
+  cat $file | sort -k 2 -n | uniq > ./sort.tmp
   cat ./sort.tmp > ./$file
 done

@@ -22,7 +22,7 @@ do
       CNT=`head -n 10 $md | grep -c "\[TAG ${TAG}\]"`
       if [ $CNT -lt 1 ]; then
         # echo "已标记,追加 $TAG $md"
-        sed -i "0,/##### \[TAG/{s/##### \[TAG.*\($\)/\0 [TAG ${TAG}](..\/class\/${TAG}.md)/}" $md
+        sed -i "0,/##### \[TAG/{s/##### \[TAG.*\($\)/\0 , [TAG ${TAG}](..\/class\/${TAG}.md)/}" $md
       else
         echo "已标记 $TAG $md, 无需追加"
       fi

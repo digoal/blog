@@ -12,7 +12,9 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ![pic](./pic/pg_weixin.jpg)  
   
 ### digoal,德哥的PostgreSQL私房菜  
-##### 163的老文章入口 : [进入](old_blogs_from_163/README.md) 
+#### 老文章 : [进入](old_blogs_from_163/README.md) 
+### 已归类 PostgreSQL 文档 : [进入](class/README.md) 
+#### 未归类文档如下 
 ----  
 ##### 201704/20170402_01.md   [《PostgreSQL 转义、UNICODE、与SQL注入》](201704/20170402_01.md)  
 ##### 201704/20170401_01.md   [《PostgreSQL 10.0 preview 功能增强 - 触发器函数内置中间表》](201704/20170401_01.md)  

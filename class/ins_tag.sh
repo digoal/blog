@@ -29,3 +29,35 @@ do
     fi
   done
 done
+
+# 3. 将源文件中已有TAG合并到归类.md文件
+for file in `ls [0-9]*.md`
+do 
+  # TAG=归档文件名中的数字, 不要修改文件名
+  TAG=`echo "$file"|awk -F '.' '{print $1}'`
+  # 遍历所有源文件
+  for dir in `ls -lr ../|awk '{print $9}'|grep -E '^[0-9]{6}'` 
+  do
+    for md in `ls -lr ../$dir/*.md|awk '{print $9}'|grep -E '[0-9]{8}_[0-9]+.md'` 
+    do
+      # 查找是否已标记当前TAG
+      CNT=`head -n 3 $md | grep -c "\[TAG ${TAG}\]"`
+      if [ $CNT -ge 1 ]; then
+        # 已标记当前TAG, 查询是否已合并到归档md
+        CNT=`grep -c "$md" $file`
+        if [ $CNT -lt 1 ]; then
+          title=`head -n 1 $md|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`
+	  s_md=`echo "$md"|sed "s/..\///"`
+	  sed -i "1 a ##### $s_md   [《$title》]($md)  " $file
+	fi
+      fi
+    done
+  done
+done
+
+# 4. 排序
+for file in `ls [0-9]*.md`
+do 
+  cat $file | sort -k 2 > ./sort.tmp
+  cat ./sort.tmp > ./$file
+done

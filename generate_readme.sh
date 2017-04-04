@@ -24,8 +24,9 @@ echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "### digoal,德哥的PostgreSQL私房菜  " >> ./README.md
 echo "#### 老文章 : [进入](old_blogs_from_163/README.md) " >> ./README.md
-echo "### 已归类 PostgreSQL 文档 : [进入](class/README.md) " >> ./README.md
-echo "#### 未归类文档如下 " >> ./README.md
+echo "### 已归类 PostgreSQL 文档如下  " >> ./README.md
+sed 's/](/](class\//' class/README.md >> ./README.md
+echo "### 未归类文档如下  " >> ./README.md
 
 for dir in `ls -lr|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do

@@ -58,6 +58,6 @@ done
 # 4. 排序
 for file in `ls [0-9]*.md`
 do 
-  cat $file | sort -k 2 > ./sort.tmp
+  cat $file | sort -k 2 -n > ./sort.tmp
   cat ./sort.tmp > ./$file
 done

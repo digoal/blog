@@ -14,61 +14,19 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
 ### digoal,德哥的PostgreSQL私房菜  
 #### 老文章 : [进入](old_blogs_from_163/README.md) 
 ### 已归类 PostgreSQL 文档如下  
-#### [1 应用开发](class/1.md)
-
-#### [2 日常维护](class/2.md)
-
-#### [3 监控](class/3.md)
-
-#### [4 备份,恢复,容灾](class/4.md)
-
-#### [5 高可用](class/5.md)
-
-#### [6 安全与审计](class/6.md)
-
-#### [7 问题诊断与性能优化](class/7.md)
-
-#### [8 流式复制](class/8.md)
-
-#### [9 读写分离](class/9.md)
-
-#### [10 水平分库](class/10.md)
-
-#### [11 MPP](class/11.md)
-
-#### [12 数据库扩展插件](class/12.md)
-
-#### [13 版本新特性](class/13.md)
-
-#### [14 内核原理](class/14.md)
-
-#### [15 经典案例](class/15.md)
+<big>[1 应用开发](class/1.md)</big>  <big>[2 日常维护](class/2.md)</big>  <big>[3 监控](class/3.md)</big>  <big>[4 备份,恢复,容灾](class/4.md)</big>  
+    
+<big>[5 高可用](class/5.md)</big>  <big>[6 安全与审计](class/6.md)</big>  <big>[7 问题诊断与性能优化](class/7.md)</big>  <big>[8 流式复制](class/8.md)</big>  
   
-#### [16 HTAP](class/16.md)
+<big>[9 读写分离](class/9.md)</big>  <big>[10 水平分库](class/10.md)</big>  <big>[11 MPP](class/11.md)</big>  <big>[12 数据库扩展插件](class/12.md)</big>  
   
-#### [17 流式计算](class/17.md)
- 
-#### [18 时序数据](class/18.md)
-  
-#### [19 图式搜索](class/19.md)
-
-#### [20 GIS](class/20.md)
-  
-#### [21 Oracle兼容性](class/21.md)
-  
-#### [22 数据库选型](class/22.md)
-  
-#### [23 Benchmark](class/23.md)
-  
-#### [24 最佳实践](class/24.md)
-  
-#### [25 DaaS](class/25.md)
-  
-#### [26 垂直行业应用](class/26.md)
-   
-#### [27 标准化(规约、制度、流程)](class/27.md)
-  
-#### [28 其他](class/28.md)
+<big>[13 版本新特性](class/13.md)</big>  <big>[14 内核原理](class/14.md)</big>  <big>[15 经典案例](class/15.md)</big>  <big>[16 HTAP](class/16.md)</big>  
+    
+<big>[17 流式计算](class/17.md)</big>  <big>[18 时序数据](class/18.md)</big>  <big>[19 图式搜索](class/19.md)</big>  <big>[20 GIS](class/20.md)</big>  
+    
+<big>[21 Oracle兼容性](class/21.md)</big>  <big>[22 数据库选型](class/22.md)</big>  <big>[23 Benchmark](class/23.md)</big>  <big>[24 最佳实践](class/24.md)</big>  
+    
+<big>[25 DaaS](class/25.md)</big>  <big>[26 垂直行业应用](class/26.md)</big>  <big>[27 标准化(规约、制度、流程)</big>](class/27.md)</big>  <big>[28 其他](class/28.md)</big>  
 ### 未归类文档如下  
 ----  
 ##### 201704/20170402_01.md   [《PostgreSQL 转义、UNICODE、与SQL注入》](201704/20170402_01.md)  

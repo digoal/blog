@@ -568,6 +568,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201412/20141214_01.md   [《PostgreSQL 触发器应用 - use trigger audit record which column modified, insert, delete.》](201412/20141214_01.md)  
 ##### 201412/20141211_01.md   [《PostgreSQL 事件触发器 - DDL审计 , DDL逻辑复制 , 打造DDL统一管理入》](201412/20141211_01.md)  
 ##### 201412/20141206_01.md   [《Install OpenVSwitch into CentOS 7 userspace》](201412/20141206_01.md)  
+##### 201412/20141203_01.md   [《consistent status in distributed database for exp postgres-xc xl》](201412/20141203_01.md)  
 ----  
 ##### 201411/20141119_01.md   [《PostgreSQL 的 rpm(yum) 安装方法》](201411/20141119_01.md)  
 ----  
@@ -649,6 +650,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201302/20130223_01.md   [《PostgreSQL xlog dump - pg_xlogdump 源码讲解》](201302/20130223_01.md)  
 ##### 201302/20130222_01.md   [《PostgreSQL CSVLOG monitor script for nagios》](201302/20130222_01.md)  
 ##### 201302/20130221_01.md   [《PostgreSQL LOCK WAITING monitor script for nagios》](201302/20130221_01.md)  
+##### 201302/20130206_01.md   [《PostgreSQL Distributed|Sharded Databases Consistent PITR Thinking》](201302/20130206_01.md)  
+##### 201302/20130205_01.md   [《PostgreSQL PITR THREE recovery target MODE: name,xid,time USE CASE - 2》](201302/20130205_01.md)  
+##### 201302/20130204_01.md   [《PostgreSQL PITR THREE recovery target MODE: name,xid,time USE CASE - 1》](201302/20130204_01.md)  
 ----  
 ##### 201301/20130130_01.md   [《PostgreSQL recovery target introduce》](201301/20130130_01.md)  
 ##### 201301/20130128_01.md   [《PostgreSQL Developer Options (debug, trace, system table mod and so on...) 详解》](201301/20130128_01.md)  
@@ -709,6 +713,9 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
 ----  
+##### 201109/20110930_02.md   [《Get txid from pg_controldata's output》](201109/20110930_02.md)  
+##### 201109/20110930_01.md   [《PostgreSQL xid(int4) to txid(int8)》](201109/20110930_01.md)  
+----  
 ##### 201108/20110830_01.md   [《the order of chinese char in PostgreSQL DB with different encoding and it's collate》](201108/20110830_01.md)  
 ----  
 ##### 201107/20110701_01.md   [《Use nagios monitor PostgreSQL archive status》](201107/20110701_01.md)  
@@ -728,6 +735,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  
+##### 201102/20110214_01.md   [《PostgreSQL's two-phase commit used with dblink example》](201102/20110214_01.md)  
 ##### 201102/20110212_01.md   [《PostgreSQL 随机查询优化》](201102/20110212_01.md)  
 ##### 201102/20110209_01.md   [《Can session_replication_role used like MySQL's BlackHole Engine?》](201102/20110209_01.md)  
 ----  

@@ -28,6 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201704/20170411_04.md   [《一天学会PostgreSQL - 4 高级SQL用法》](201704/20170411_04.md)  
 ##### 201704/20170411_03.md   [《一天学会PostgreSQL - 3 访问你的数据》](201704/20170411_03.md)  
 ##### 201704/20170411_02.md   [《一天学会PostgreSQL - 2 Linux基本操作》](201704/20170411_02.md)  
 ##### 201704/20170411_01.md   [《一天学会PostgreSQL - 1 如何搭建一套学习、开发PostgreSQL的环境》](201704/20170411_01.md)  
@@ -623,10 +624,12 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201308/20130823_01.md   [《PostgreSQL WHY modify numeric scale must rewrite table》](201308/20130823_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
+##### 201308/20130814_01.md   [《PostgreSQL 9.4 pending patch : UNNEST with multiple args, and TABLE with multiple funcs》](201308/20130814_01.md)  
 ##### 201308/20130806_02.md   [《PostgreSQL 配置文件变更审计 - A custom background worker process to log changes to postgresql.conf to a table》](201308/20130806_02.md)  
 ##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130801_01.md   [《PostgreSQL Oracle 兼容性 - WITHIN GROUP (sql standard ordered set aggregate functions)》](201308/20130801_01.md)  
 ----  
+##### 201307/20130730_01.md   [《PostgreSQL 9.4 Add SQL Standard WITH ORDINALITY support for UNNEST (and any other SRF)》](201307/20130730_01.md)  
 ##### 201307/20130727_01.md   [《PostgreSQL 9.4 patch : Row-Level Security》](201307/20130727_01.md)  
 ##### 201307/20130726_01.md   [《PostgreSQL varlena field upto 1GB and large object upto 4TB(8KB block_size)(>=9.3) 2GB(<=9.2)》](201307/20130726_01.md)  
 ##### 201307/20130710_01.md   [《PostgreSQL views privilege attack and security with security_barrier(视图攻击)》](201307/20130710_01.md)  

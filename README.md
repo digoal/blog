@@ -757,7 +757,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201106/20110623_01.md   [《PostgreSQL Archived in the Cloud》](201106/20110623_01.md)  
 ##### 201106/20110612_01.md   [《行列变换 - Use tablefunc complete row & column cross display in PostgreSQL》](201106/20110612_01.md)  
 ----  
+##### 201105/20110527_02.md   [《Use pageinspect EXTENSION view PostgreSQL Page's raw infomation》](201105/20110527_02.md)  
 ##### 201105/20110527_01.md   [《PostgreSQL 树状数据存储与查询(非递归) - Use ltree extension deal tree-like data type》](201105/20110527_01.md)  
+##### 201105/20110526_01.md   [《use pg_filedump dump block contents》](201105/20110526_01.md)  
 ##### 201105/20110518_01.md   [《Use SecureCRT and Chrome & Proxy Switchy! Plugin》](201105/20110518_01.md)  
 ##### 201105/20110511_01.md   [《PostgreSQL replication monitor》](201105/20110511_01.md)  
 ----  

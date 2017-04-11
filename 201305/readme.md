@@ -8,4 +8,5 @@
 ##### 20130510_02.md   [《PostgreSQL 9.3 Add API for 64-bit large object access》](20130510_02.md)  
 ##### 20130510_01.md   [《PostgreSQL SQL_ASCII encoding introduce》](20130510_01.md)  
 ##### 20130509_01.md   [《PostgreSQL 审计 - PostgreSQL 9.3 Allow OLD and NEW in multi-row VALUES within rules》](20130509_01.md)  
+##### 20130506_01.md   [《PostgreSQL 9.3 add lock_timeout parameter》](20130506_01.md)  
 ##### 20130502_01.md   [《Postgres-XC customized aggregate introduction》](20130502_01.md)  

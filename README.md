@@ -722,6 +722,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
 ##### 201206/20120606_01.md   [《PostgreSQL 函数封装 - Wrap Function code like Oracle package》](201206/20120606_01.md)  
+##### 201206/20120605_01.md   [《PostgreSQL plpgsql function debugging module : pldebugger》](201206/20120605_01.md)  
 ##### 201206/20120601_01.md   [《PostGIS 2.0 Install》](201206/20120601_01.md)  
 ----  
 ##### 201205/20120521_02.md   [《PostgreSQL nestloop/hash/merge join讲解》](201205/20120521_02.md)  
@@ -733,6 +734,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  
 ##### 201204/20120412_01.md   [《PostgreSQL Logical Backup's TOC File》](201204/20120412_01.md)  
 ----  
+##### 201203/20120320_01.md   [《PostgreSQL 9.1.3 plpgsql debugger module》](201203/20120320_01.md)  
 ##### 201203/20120313_02.md   [《PostgreSQL性能优化综合案例讲解 - 2》](201203/20120313_02.md)  
 ##### 201203/20120313_01.md   [《PostgreSQL性能优化综合案例讲解 - 1》](201203/20120313_01.md)  
 ----  

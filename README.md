@@ -28,7 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201704/20170413_01.md   [《PostgreSQL 内核层逻辑订阅给业务架构带来了什么？》](201704/20170413_01.md)  
+##### 201704/20170413_01.md   [《PostgreSQL 逻辑订阅 - 给业务架构带来了什么希望？》](201704/20170413_01.md)  
 ##### 201704/20170412_04.md   [《一天学会PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)  
 ##### 201704/20170412_03.md   [《如何判断字符串是否为合法数值、浮点、科学计数等格式》](201704/20170412_03.md)  
 ##### 201704/20170412_02.md   [《一天学会PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)  
@@ -646,6 +646,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201306/20130628_01.md   [《PostgreSQL 如何精确计算表膨胀(fsm,数据块layout讲解) - PostgreSQL table exactly bloat monitor use freespace map data》](201306/20130628_01.md)  
 ##### 201306/20130626_01.md   [《PostgreSQL 大对象或bytea存取pdf,jpg等文件 - PostgreSQL export regular file like pdf, word, text, doc stored in bytea type》](201306/20130626_01.md)  
+##### 201306/20130620_01.md   [《PostgreSQL lock waiting order》](201306/20130620_01.md)  
 ##### 201306/20130617_01.md   [《PostgreSQL 9.0 modify pg_attribute.atttypmod extend variable char length avoid rewrite table》](201306/20130617_01.md)  
 ##### 201306/20130605_03.md   [《PostgreSQL monitor - customize nagios script》](201306/20130605_03.md)  
 ##### 201306/20130605_02.md   [《PostgreSQL monitor - check_postgres usage - 2》](201306/20130605_02.md)  

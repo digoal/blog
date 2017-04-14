@@ -441,6 +441,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201606/20160610_01.md   [《B-Tree和B+Tree》](201606/20160610_01.md)  
 ##### 201606/20160608_01.md   [《精确度量Linux下进程占用多少内存的方法》](201606/20160608_01.md)  
 ----  
+##### 201605/20160529_01.md   [《PostgreSQL 批量权限 管理方法》](201605/20160529_01.md)  
 ##### 201605/20160528_01.md   [《深入浅出PostgreSQL B-Tree索引结构》](201605/20160528_01.md)  
 ##### 201605/20160527_01.md   [《PostgreSQL Oracle 兼容性之 - 如何篡改插入值(例如NULL纂改为其他值)》](201605/20160527_01.md)  
 ##### 201605/20160524_03.md   [《[转载]用intel编译器icc编译PostgreSQL》](201605/20160524_03.md)  
@@ -568,6 +569,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201504/20150429_02.md   [《PostgreSQL 垃圾回收原理以及如何预防膨胀 - How to prevent object bloat in PostgreSQL》](201504/20150429_02.md)  
 ##### 201504/20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](201504/20150429_01.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
+##### 201504/20150409_02.md   [《PostgreSQL 9.5 使用 import foreign schema 语法一键创建外部表》](201504/20150409_02.md)  
 ##### 201504/20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](201504/20150409_01.md)  
 ##### 201504/20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](201504/20150407_02.md)  
 ##### 201504/20150407_01.md   [《PostgreSQL aggregate function 3 : Aggregate Functions for Ordered-Set》](201504/20150407_01.md)  
@@ -576,6 +578,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201504/20150401_02.md   [《install kvm hosts use kickstart in CentOS 6 in text mode》](201504/20150401_02.md)  
 ##### 201504/20150401_01.md   [《install kvm hosts use vnc in CentOS 6》](201504/20150401_01.md)  
 ----  
+##### 201503/20150312_01.md   [《PostgreSQL 使用函数生成 外部表DDL(use function generate foreign table DDL in postgresql)》](201503/20150312_01.md)  
 ##### 201503/20150305_01.md   [《在PostgreSQL中用线性回归分析linear regression做预测 - 例子2, 预测未来数日某股收盘价》](201503/20150305_01.md)  
 ##### 201503/20150304_01.md   [《PostgreSQL 线性回归 - 股价预测 1》](201503/20150304_01.md)  
 ##### 201503/20150303_03.md   [《PostgreSQL aggregate function 2 : Aggregate Functions for Statistics》](201503/20150303_03.md)  
@@ -701,6 +704,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201212/20121228_01.md   [《PostgreSQL WHY ERROR: invalid byte sequence for encoding "UTF8"》](201212/20121228_01.md)  
 ##### 201212/20121224_01.md   [《执行计划选择算法 与 绑定变量 - PostgreSQL prepared statement: SPI_prepare, prepare|execute COMMAND, PL/pgsql STYLE: custom & generic plan cache》](201212/20121224_01.md)  
+##### 201212/20121219_01.md   [《PostgreSQL permission grant/revoke in schema clause emulate》](201212/20121219_01.md)  
 ##### 201212/20121218_03.md   [《Greenplum 最佳实践 - 多维分析的使用(CUBE, ROLLUP, GROUPING SETS in GreenPlum and Oracle)》](201212/20121218_03.md)  
 ##### 201212/20121218_02.md   [《PostgreSQL aggregate function customize》](201212/20121218_02.md)  
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  

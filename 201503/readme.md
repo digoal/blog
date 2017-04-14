@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20150312_01.md   [《PostgreSQL 使用函数生成 外部表DDL(use function generate foreign table DDL in postgresql)》](20150312_01.md)  
 ##### 20150305_01.md   [《在PostgreSQL中用线性回归分析linear regression做预测 - 例子2, 预测未来数日某股收盘价》](20150305_01.md)  
 ##### 20150304_01.md   [《PostgreSQL 线性回归 - 股价预测 1》](20150304_01.md)  
 ##### 20150303_03.md   [《PostgreSQL aggregate function 2 : Aggregate Functions for Statistics》](20150303_03.md)  

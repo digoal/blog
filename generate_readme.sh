@@ -24,7 +24,7 @@ echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "### digoal,德哥的PostgreSQL私房菜  " >> ./README.md
 echo "#### 老文章 : [进入](old_blogs_from_163/README.md) " >> ./README.md
-echo "### 已归类文档如下  " >> ./README.md
+echo "### 已归类文档如下(归档还在紧锣密鼓的进行中,客官请稍等)  " >> ./README.md
 sed 's/](/](class\//g' class/README.md >> ./README.md
 echo "### 未归类文档如下  " >> ./README.md
 

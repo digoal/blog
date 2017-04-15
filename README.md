@@ -13,7 +13,7 @@ http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢
   
 ### digoal,德哥的PostgreSQL私房菜  
 #### 老文章 : [进入](old_blogs_from_163/README.md) 
-### 已归类文档如下  
+### 已归类文档如下(归档还在紧锣密鼓的进行中,客官请稍等)  
   
 digoal's|PostgreSQL|文章|归类
 ---|---|---|---

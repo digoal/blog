@@ -555,6 +555,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201505/20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](201505/20150526_02.md)  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  
 ##### 201505/20150525_01.md   [《PostgreSQL 9.5 new feature - table | mview data sample》](201505/20150525_01.md)  
+##### 201505/20150515_02.md   [《PostgreSQL 9.5 new feature - use FSM fast evaluate bloat and other table level statics(pgstattuple_approx)》](201505/20150515_02.md)  
 ##### 201505/20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](201505/20150515_01.md)  
 ##### 201505/20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](201505/20150511_01.md)  
 ##### 201505/20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](201505/20150510_01.md)  
@@ -651,6 +652,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201307/20130727_01.md   [《PostgreSQL 9.4 patch : Row-Level Security》](201307/20130727_01.md)  
 ##### 201307/20130726_02.md   [《PostgreSQL 如何打印函数调用栈信息》](201307/20130726_02.md)  
 ##### 201307/20130726_01.md   [《PostgreSQL varlena field upto 1GB and large object upto 4TB(8KB block_size)(>=9.3) 2GB(<=9.2)》](201307/20130726_01.md)  
+##### 201307/20130719_01.md   [《PostgreSQL Improve fsm & vm output》](201307/20130719_01.md)  
 ##### 201307/20130710_01.md   [《PostgreSQL views privilege attack and security with security_barrier(视图攻击)》](201307/20130710_01.md)  
 ----  
 ##### 201306/20130628_01.md   [《PostgreSQL 如何精确计算表膨胀(fsm,数据块layout讲解) - PostgreSQL table exactly bloat monitor use freespace map data》](201306/20130628_01.md)  
@@ -667,6 +669,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130521_01.md   [《PostgreSQL quote ident and literal》](201305/20130521_01.md)  
+##### 201305/20130516_02.md   [《PostgreSQL 9.3 improve pgstattuple》](201305/20130516_02.md)  
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
 ##### 201305/20130510_02.md   [《PostgreSQL 9.3 Add API for 64-bit large object access》](201305/20130510_02.md)  
 ##### 201305/20130510_01.md   [《PostgreSQL SQL_ASCII encoding introduce》](201305/20130510_01.md)  
@@ -800,4 +803,5 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201010/20101027_01.md   [《batch insert in PostgreSQL》](201010/20101027_01.md)  
 ----  
+##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  

@@ -28,6 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201704/20170417_01.md   [《PostgreSQL 证券行业数据库需求分析与应用》](201704/20170417_01.md)  
 ##### 201704/20170413_02.md   [《奔跑吧，大屏 - 时间+空间 实时四维数据透视》](201704/20170413_02.md)  
 ##### 201704/20170413_01.md   [《PostgreSQL 逻辑订阅 - 给业务架构带来了什么希望？》](201704/20170413_01.md)  
 ##### 201704/20170412_04.md   [《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)  
@@ -523,9 +524,11 @@ digoal's|PostgreSQL|文章|归类
 ##### 201512/20151220_02.md   [《阿里云ApsaraDB RDS for PostgreSQL 最佳实践 - 2 教你RDS PG的水平分库》](201512/20151220_02.md)  
 ##### 201512/20151220_01.md   [《阿里云ApsaraDB RDS for PostgreSQL 最佳实践 - 1 教你做RDS性能测试》](201512/20151220_01.md)  
 ##### 201512/20151215_01.md   [《"物联网"流式处理应用 - 用PostgreSQL实时处理(万亿每天)》](201512/20151215_01.md)  
+##### 201512/20151214_01.md   [《PostgreSQL 多元线性回归 - 2 股票预测》](201512/20151214_01.md)  
 ----  
 ##### 201511/20151130_02.md   [《安装iozone on CentOS 7 x64》](201511/20151130_02.md)  
 ##### 201511/20151130_01.md   [《PostgreSQL 安全警钟长鸣》](201511/20151130_01.md)  
+##### 201511/20151111_01.md   [《一张图看懂MADlib能干什么》](201511/20151111_01.md)  
 ##### 201511/20151109_01.md   [《PostgreSQL snapshot too old补丁, 防止数据库膨胀》](201511/20151109_01.md)  
 ----  
 ##### 201510/20151210_01.md   [《PostgreSQL 使用pg_xlogdump找到误操作事务号》](201510/20151210_01.md)  
@@ -569,6 +572,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201504/20150429_02.md   [《PostgreSQL 垃圾回收原理以及如何预防膨胀 - How to prevent object bloat in PostgreSQL》](201504/20150429_02.md)  
 ##### 201504/20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](201504/20150429_01.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
+##### 201504/20150414_01.md   [《PivotalR between R & PostgreSQL-like Databases(for exp : Greenplum, hadoop access by hawq)》](201504/20150414_01.md)  
 ##### 201504/20150409_02.md   [《PostgreSQL 9.5 使用 import foreign schema 语法一键创建外部表》](201504/20150409_02.md)  
 ##### 201504/20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](201504/20150409_01.md)  
 ##### 201504/20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](201504/20150407_02.md)  
@@ -642,6 +646,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130801_01.md   [《PostgreSQL Oracle 兼容性 - WITHIN GROUP (sql standard ordered set aggregate functions)》](201308/20130801_01.md)  
 ----  
+##### 201307/20130731_01.md   [《PostgreSQL 多元线性回归 - 1 MADLib Installed in PostgreSQL 9.2》](201307/20130731_01.md)  
 ##### 201307/20130730_01.md   [《PostgreSQL 9.4 Add SQL Standard WITH ORDINALITY support for UNNEST (and any other SRF)》](201307/20130730_01.md)  
 ##### 201307/20130727_01.md   [《PostgreSQL 9.4 patch : Row-Level Security》](201307/20130727_01.md)  
 ##### 201307/20130726_02.md   [《PostgreSQL 如何打印函数调用栈信息》](201307/20130726_02.md)  

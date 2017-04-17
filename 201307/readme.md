@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20130731_01.md   [《PostgreSQL 多元线性回归 - 1 MADLib Installed in PostgreSQL 9.2》](20130731_01.md)  
 ##### 20130730_01.md   [《PostgreSQL 9.4 Add SQL Standard WITH ORDINALITY support for UNNEST (and any other SRF)》](20130730_01.md)  
 ##### 20130727_01.md   [《PostgreSQL 9.4 patch : Row-Level Security》](20130727_01.md)  
 ##### 20130726_02.md   [《PostgreSQL 如何打印函数调用栈信息》](20130726_02.md)  

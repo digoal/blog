@@ -1,5 +1,8 @@
 ### 文章列表  
 ----  
+##### 20170420_05.md   [《PostgreSQL 10.0 preview 性能提升 - radix tree提升字符编码转换性能》](20170420_05.md)  
+##### 20170420_04.md   [《PostgreSQL 10.0 preview 变化 - pg_xlog,pg_clog,pg_log目录更名为pg_wal,pg_xact,log》](20170420_04.md)  
+##### 20170420_03.md   [《PostgreSQL 10.0 preview 功能增强 - WAL一致性校验》](20170420_03.md)  
 ##### 20170420_02.md   [《PostgreSQL 10.0 preview 功能增强 - 增加access method CHECK接口amcheck》](20170420_02.md)  
 ##### 20170420_01.md   [《PostgreSQL 10.0 preview 功能增强 - libpq支持多主机连接(failover,LB)让数据库HA和应用配合更紧密》](20170420_01.md)  
 ##### 20170418_01.md   [《PostgreSQL 物流轨迹系统数据库需求分析与设计 - 包裹侠实时跟踪与召回》](20170418_01.md)  

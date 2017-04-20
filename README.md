@@ -28,6 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201704/20170420_06.md   [《PostgreSQL 10.0 preview 功能增强 - 更强可靠性, 过去式事务状态可查（杜绝unknown事务）》](201704/20170420_06.md)  
 ##### 201704/20170420_05.md   [《PostgreSQL 10.0 preview 性能提升 - radix tree提升字符编码转换性能》](201704/20170420_05.md)  
 ##### 201704/20170420_04.md   [《PostgreSQL 10.0 preview 变化 - pg_xlog,pg_clog,pg_log目录更名为pg_wal,pg_xact,log》](201704/20170420_04.md)  
 ##### 201704/20170420_03.md   [《PostgreSQL 10.0 preview 功能增强 - WAL一致性校验》](201704/20170420_03.md)  

@@ -1,5 +1,11 @@
 ### 文章列表  
 ----  
+##### 20170421_06.md   [《PostgreSQL 10.0 preview 功能增强 - SQL执行剩余时间 - 垃圾回收过程可视pg_stat_progress_vacuum》](20170421_06.md)  
+##### 20170421_05.md   [《PostgreSQL 10.0 preview 功能增强 - 逻辑订阅端worker数控制参数》](20170421_05.md)  
+##### 20170421_04.md   [《PostgreSQL 10.0 preview 功能增强 - 串行隔离级别 预加锁阈值可控》](20170421_04.md)  
+##### 20170421_03.md   [《PostgreSQL 10.0 preview 性能增强 - hash,nestloop join优化(聪明的优化器是这样的)》](20170421_03.md)  
+##### 20170421_02.md   [《PostgreSQL 10.0 preview 性能增强 - 支持64bit atomic》](20170421_02.md)  
+##### 20170421_01.md   [《PostgreSQL 10.0 preview 功能增强 - 增加ProcArrayGroupUpdate等待事件》](20170421_01.md)  
 ##### 20170420_06.md   [《PostgreSQL 10.0 preview 功能增强 - 更强可靠性, 过去式事务状态可查（杜绝unknown事务）》](20170420_06.md)  
 ##### 20170420_05.md   [《PostgreSQL 10.0 preview 性能提升 - radix tree提升字符编码转换性能》](20170420_05.md)  
 ##### 20170420_04.md   [《PostgreSQL 10.0 preview 变化 - pg_xlog,pg_clog,pg_log目录更名为pg_wal,pg_xact,log》](20170420_04.md)  

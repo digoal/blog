@@ -28,6 +28,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201704/20170424_06.md   [《PostgreSQL 如何查找TOP SQL (例如IO消耗最高的SQL)》](201704/20170424_06.md)  
+##### 201704/20170424_05.md   [《PostgreSQL 如何实现批量更新、删除、插入》](201704/20170424_05.md)  
+##### 201704/20170424_04.md   [《PostgreSQL upsert功能(insert on conflict do)的用法》](201704/20170424_04.md)  
+##### 201704/20170424_03.md   [《如何按拼音排序 - 数据库本土化特性(collate, ctype, ...)》](201704/20170424_03.md)  
+##### 201704/20170424_02.md   [《如何在PostgreSQL中调试plpgsql存储过程(pldebugger, pldbgapi)》](201704/20170424_02.md)  
+##### 201704/20170424_01.md   [《如何设置数据库的LC_COLLATE, LC_CTYPE, ENCODING, TEMPLATE》](201704/20170424_01.md)  
 ##### 201704/20170422_01.md   [《geohash vs PostGIS》](201704/20170422_01.md)  
 ##### 201704/20170421_06.md   [《PostgreSQL 10.0 preview 功能增强 - SQL执行剩余时间 - 垃圾回收过程可视pg_stat_progress_vacuum》](201704/20170421_06.md)  
 ##### 201704/20170421_05.md   [《PostgreSQL 10.0 preview 功能增强 - 逻辑订阅端worker数控制参数》](201704/20170421_05.md)  

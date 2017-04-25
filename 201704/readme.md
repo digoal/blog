@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170425_01.md   [《PostgreSQL 中生成随机汉字》](20170425_01.md)  
 ##### 20170424_06.md   [《PostgreSQL 如何查找TOP SQL (例如IO消耗最高的SQL)》](20170424_06.md)  
 ##### 20170424_05.md   [《PostgreSQL 如何实现批量更新、删除、插入》](20170424_05.md)  
 ##### 20170424_04.md   [《PostgreSQL upsert功能(insert on conflict do)的用法》](20170424_04.md)  

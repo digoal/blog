@@ -28,6 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201705/20170503_01.md   [《如何优雅的修改被视图引用的表字段》](201705/20170503_01.md)  
 ##### 201705/20170502_01.md   [《阿里云RDS for PostgreSQL varbitx插件与实时画像应用场景介绍》](201705/20170502_01.md)  
 ----  
 ##### 201704/20170427_01.md   [《radix tree在数据库PostgreSQL中的一些应用举例》](201704/20170427_01.md)  
@@ -601,6 +602,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201504/20150429_01.md   [《PostgreSQL Oracle 兼容性之 - 事件触发器实现类似Oracle的回收站功能》](201504/20150429_01.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
 ##### 201504/20150414_01.md   [《PivotalR between R & PostgreSQL-like Databases(for exp : Greenplum, hadoop access by hawq)》](201504/20150414_01.md)  
+##### 201504/20150410_01.md   [《如何比较PostgreSQL表的定义》](201504/20150410_01.md)  
 ##### 201504/20150409_02.md   [《PostgreSQL 9.5 使用 import foreign schema 语法一键创建外部表》](201504/20150409_02.md)  
 ##### 201504/20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](201504/20150409_01.md)  
 ##### 201504/20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](201504/20150407_02.md)  

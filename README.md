@@ -638,6 +638,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201411/20141119_01.md   [《PostgreSQL 的 rpm(yum) 安装方法》](201411/20141119_01.md)  
 ----  
+##### 201410/20141017_01.md   [《数据库性能会随着对象增加而受影响吗？max_locks_per_transaction & pg_locks entrys limit》](201410/20141017_01.md)  
 ##### 201410/20141009_01.md   [《PostgreSQL 密码安全指南》](201410/20141009_01.md)  
 ----  
 ##### 201409/20140930_01.md   [《PostgreSQL数据库在上市公司重要应用中的SOX审计》](201409/20140930_01.md)  
@@ -822,6 +823,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201104/20110427_01.md   [《PostgreSQL : WITH Queries use case》](201104/20110427_01.md)  
 ----  
 ##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique》](201103/20110329_01.md)  
+##### 201103/20110301_01.md   [《一个事务最多能锁多少对象? how many objects can be locked per transaction》](201103/20110301_01.md)  
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  

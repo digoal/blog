@@ -660,6 +660,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201406/20140606_01.md   [《OpenLDAP 使用方法》](201406/20140606_01.md)  
 ##### 201406/20140604_01.md   [《OpenLDAP 安装指南》](201406/20140604_01.md)  
 ----  
+##### 201404/20140426_01.md   [《索引顺序扫描引发的堆扫描IO放大背后的统计学原理与解决办法 - PostgreSQL index scan enlarge heap page scans when index and column correlation small.》](201404/20140426_01.md)  
 ##### 201404/20140423_01.md   [《优化器成本因子校对(disk,ssd,memory IO开销精算) - PostgreSQL real seq_page_cost & random_page_cost in disks,ssd,memory》](201404/20140423_01.md)  
 ##### 201404/20140414_01.md   [《PostgreSQL leakproof function in rule rewrite("attack" security_barrier views)》](201404/20140414_01.md)  
 ##### 201404/20140409_01.md   [《PostgreSQL pg_current_xlog_insert_location() & pg_current_xlog_location()》](201404/20140409_01.md)  

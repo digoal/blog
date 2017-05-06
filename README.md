@@ -660,6 +660,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201406/20140606_01.md   [《OpenLDAP 使用方法》](201406/20140606_01.md)  
 ##### 201406/20140604_01.md   [《OpenLDAP 安装指南》](201406/20140604_01.md)  
 ----  
+##### 201404/20140423_01.md   [《优化器成本因子校对(disk,ssd,memory IO开销精算) - PostgreSQL real seq_page_cost & random_page_cost in disks,ssd,memory》](201404/20140423_01.md)  
 ##### 201404/20140414_01.md   [《PostgreSQL leakproof function in rule rewrite("attack" security_barrier views)》](201404/20140414_01.md)  
 ##### 201404/20140409_01.md   [《PostgreSQL pg_current_xlog_insert_location() & pg_current_xlog_location()》](201404/20140409_01.md)  
 ##### 201404/20140403_01.md   [《PostgreSQL 回收站功能 - 基于HOOK的recycle bin pgtrashcan》](201404/20140403_01.md)  
@@ -671,6 +672,10 @@ digoal's|PostgreSQL|文章|归类
 ##### 201402/20140227_01.md   [《PostgreSQL nagios monitor script (archive, vacuum, age, conn, rollback, standby, lock, xact, seq, index...)》](201402/20140227_01.md)  
 ----  
 ##### 201312/20131217_01.md   [《PostgreSQL SERIALIZABLE ISOLATION LEVEL introduce》](201312/20131217_01.md)  
+----  
+##### 201311/20131126_03.md   [《优化器成本因子校对 - PostgreSQL explain cost constants alignment to timestamp》](201311/20131126_03.md)  
+##### 201311/20131126_02.md   [《USE blockdev --setra 0 and systemtap test real BLOCKDEV iops》](201311/20131126_02.md)  
+##### 201311/20131126_01.md   [《设置进程亲和 - numactl 或 taskset - retrieve or set a process's CPU affinity (affect SYSTEMTAP TIME)》](201311/20131126_01.md)  
 ----  
 ##### 201310/20131026_01.md   [《PostgreSQL bulk COPY load Bottleneck by extend lock waiting》](201310/20131026_01.md)  
 ##### 201310/20131017_01.md   [《Systemtap EXP: PostgreSQL IN-BUILD mark Class 6 - lock》](201310/20131017_01.md)  

@@ -809,6 +809,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201110/20111027_01.md   [《PostgreSQL BEGIN attention. serializable case》](201110/20111027_01.md)  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
+##### 201110/20111018_01.md   [《PostgreSQL 9.1 nearest-neighbor search use gist index》](201110/20111018_01.md)  
 ----  
 ##### 201109/20110930_02.md   [《Get txid from pg_controldata's output》](201109/20110930_02.md)  
 ##### 201109/20110930_01.md   [《PostgreSQL xid(int4) to txid(int8)》](201109/20110930_01.md)  

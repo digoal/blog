@@ -1,6 +1,7 @@
 ### 文章列表  
 ----  
 ##### 20121228_01.md   [《PostgreSQL WHY ERROR: invalid byte sequence for encoding "UTF8"》](20121228_01.md)  
+##### 20121226_01.md   [《函数稳定性讲解 - retalk PostgreSQL function's [ volatile|stable|immutable ]》](20121226_01.md)  
 ##### 20121224_01.md   [《执行计划选择算法 与 绑定变量 - PostgreSQL prepared statement: SPI_prepare, prepare|execute COMMAND, PL/pgsql STYLE: custom & generic plan cache》](20121224_01.md)  
 ##### 20121219_01.md   [《PostgreSQL permission grant/revoke in schema clause emulate》](20121219_01.md)  
 ##### 20121218_03.md   [《Greenplum 最佳实践 - 多维分析的使用(CUBE, ROLLUP, GROUPING SETS in GreenPlum and Oracle)》](20121218_03.md)  

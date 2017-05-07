@@ -755,6 +755,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201301/20130104_01.md   [《PostgreSQL partition table or inherits table predict count and gap and privilege monitor》](201301/20130104_01.md)  
 ----  
 ##### 201212/20121228_01.md   [《PostgreSQL WHY ERROR: invalid byte sequence for encoding "UTF8"》](201212/20121228_01.md)  
+##### 201212/20121226_01.md   [《函数稳定性讲解 - retalk PostgreSQL function's [ volatile|stable|immutable ]》](201212/20121226_01.md)  
 ##### 201212/20121224_01.md   [《执行计划选择算法 与 绑定变量 - PostgreSQL prepared statement: SPI_prepare, prepare|execute COMMAND, PL/pgsql STYLE: custom & generic plan cache》](201212/20121224_01.md)  
 ##### 201212/20121219_01.md   [《PostgreSQL permission grant/revoke in schema clause emulate》](201212/20121219_01.md)  
 ##### 201212/20121218_03.md   [《Greenplum 最佳实践 - 多维分析的使用(CUBE, ROLLUP, GROUPING SETS in GreenPlum and Oracle)》](201212/20121218_03.md)  
@@ -779,6 +780,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
 ##### 201208/20120814_01.md   [《variable number of arguments function》](201208/20120814_01.md)  
 ----  
+##### 201206/20120626_02.md   [《函数稳定性讲解 - 函数索引思考, pay attention to function index used in PostgreSQL》](201206/20120626_02.md)  
 ##### 201206/20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](201206/20120626_01.md)  
 ##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
@@ -823,6 +825,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201106/20110627_01.md   [《SSH Tunnels Compression speed up PostgreSQL data transport in WAN environment》](201106/20110627_01.md)  
 ##### 201106/20110623_01.md   [《PostgreSQL Archived in the Cloud》](201106/20110623_01.md)  
 ##### 201106/20110612_01.md   [《行列变换 - Use tablefunc complete row & column cross display in PostgreSQL》](201106/20110612_01.md)  
+##### 201106/20110610_01.md   [《函数稳定性讲解 - Thinking PostgreSQL Function's Volatility Categories》](201106/20110610_01.md)  
 ----  
 ##### 201105/20110527_02.md   [《Use pageinspect EXTENSION view PostgreSQL Page's raw infomation》](201105/20110527_02.md)  
 ##### 201105/20110527_01.md   [《PostgreSQL 树状数据存储与查询(非递归) - Use ltree extension deal tree-like data type》](201105/20110527_01.md)  

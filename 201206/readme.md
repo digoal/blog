@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20120626_02.md   [《函数稳定性讲解 - 函数索引思考, pay attention to function index used in PostgreSQL》](20120626_02.md)  
 ##### 20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](20120626_01.md)  
 ##### 20120625_01.md   [《USE hstore store table's trace record》](20120625_01.md)  
 ##### 20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](20120607_01.md)  

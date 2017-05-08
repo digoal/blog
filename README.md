@@ -689,7 +689,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
 ##### 201308/20130814_01.md   [《PostgreSQL 9.4 pending patch : UNNEST with multiple args, and TABLE with multiple funcs》](201308/20130814_01.md)  
 ##### 201308/20130806_02.md   [《PostgreSQL 配置文件变更审计 - A custom background worker process to log changes to postgresql.conf to a table》](201308/20130806_02.md)  
-##### 201308/20130806_01.md   [《PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
+##### 201308/20130806_01.md   [《GIS附近查找性能优化 - PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130801_01.md   [《PostgreSQL Oracle 兼容性 - WITHIN GROUP (sql standard ordered set aggregate functions)》](201308/20130801_01.md)  
 ----  
 ##### 201307/20130731_01.md   [《PostgreSQL 多元线性回归 - 1 MADLib Installed in PostgreSQL 9.2》](201307/20130731_01.md)  

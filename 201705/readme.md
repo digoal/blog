@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170512_01.md   [《Greenplum 最佳实践 - 什么时候选择bitmap索引》](20170512_01.md)  
 ##### 20170511_02.md   [《PostgreSQL 异步IO实测》](20170511_02.md)  
 ##### 20170511_01.md   [《PostgreSQL schemaless 的实现(类mongodb collection)》](20170511_01.md)  
 ##### 20170509_03.md   [《如何用PostgreSQL节能减排 - 1》](20170509_03.md)  

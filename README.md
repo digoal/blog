@@ -28,6 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201705/20170512_01.md   [《Greenplum 最佳实践 - 什么时候选择bitmap索引》](201705/20170512_01.md)  
 ##### 201705/20170511_02.md   [《PostgreSQL 异步IO实测》](201705/20170511_02.md)  
 ##### 201705/20170511_01.md   [《PostgreSQL schemaless 的实现(类mongodb collection)》](201705/20170511_01.md)  
 ##### 201705/20170509_03.md   [《如何用PostgreSQL节能减排 - 1》](201705/20170509_03.md)  
@@ -602,6 +603,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201505/20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](201505/20150511_01.md)  
 ##### 201505/20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](201505/20150510_01.md)  
 ##### 201505/20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](201505/20150509_01.md)  
+##### 201505/20150507_01.md   [《Roaring Bitmap - A better compressed bitset》](201505/20150507_01.md)  
 ##### 201505/20150506_07.md   [《PostgreSQL 检查点性能影响及源码分析 - 7》](201505/20150506_07.md)  
 ##### 201505/20150506_06.md   [《PostgreSQL 检查点性能影响及源码分析 - 6》](201505/20150506_06.md)  
 ##### 201505/20150506_05.md   [《PostgreSQL 检查点性能影响及源码分析 - 5》](201505/20150506_05.md)  

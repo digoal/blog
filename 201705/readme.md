@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170512_02.md   [《facebook\微博 like场景 数据库设计与性能压测》](20170512_02.md)  
 ##### 20170512_01.md   [《Greenplum 最佳实践 - 什么时候选择bitmap索引》](20170512_01.md)  
 ##### 20170511_02.md   [《PostgreSQL 异步IO实测》](20170511_02.md)  
 ##### 20170511_01.md   [《PostgreSQL schemaless 的实现(类mongodb collection)》](20170511_01.md)  

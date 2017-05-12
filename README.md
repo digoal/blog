@@ -593,6 +593,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
 ##### 201506/20150619_01.md   [《online DDL (or NOWAIT DDL) in PostgreSQL》](201506/20150619_01.md)  
+##### 201506/20150618_01.md   [《生成泊松、高斯、指数、随机分布数据 - PostgreSQL 9.5 new feature - pg_bench improve, gaussian (standard normal) & exponential distribution》](201506/20150618_01.md)  
 ##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  

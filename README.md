@@ -28,7 +28,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201705/20170519_02.md   [《无人驾驶、配送机器人背后的技术 - PostGIS点云(pointcloud)应用实践》](201705/20170519_02.md)  
+##### 201705/20170521_01.md   [《PostgreSQL 锁等待监控 珍藏级SQL - 谁堵塞了谁》](201705/20170521_01.md)  
+##### 201705/20170519_02.md   [《无人驾驶背后的技术 - PostGIS点云(pointcloud)应用》](201705/20170519_02.md)  
 ##### 201705/20170519_01.md   [《PostgrSQL 递归SQL的几个应用 - 极客与正常人的思维》](201705/20170519_01.md)  
 ##### 201705/20170518_01.md   [《(流式、lambda、实时)数据处理方案大比拼 - 物联网(IoT)最佳实践》](201705/20170518_01.md)  
 ##### 201705/20170516_01.md   [《行为、审计日志 (实时索引/实时搜索)建模 - 最佳实践》](201705/20170516_01.md)  
@@ -849,6 +850,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201105/20110511_01.md   [《PostgreSQL replication monitor》](201105/20110511_01.md)  
 ----  
 ##### 201104/20110427_01.md   [《PostgreSQL : WITH Queries use case》](201104/20110427_01.md)  
+##### 201104/20110408_01.md   [《Compare PostgreSQL and Oracle dead lock detect and transaction》](201104/20110408_01.md)  
 ----  
 ##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique》](201103/20110329_01.md)  
 ##### 201103/20110301_01.md   [《一个事务最多能锁多少对象? how many objects can be locked per transaction》](201103/20110301_01.md)  

@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170612_04.md   [《懒人推动社会进步 - 多列聚合, gin与数据分布(选择性)》](20170612_04.md)  
 ##### 20170612_03.md   [《数据保留时间窗口的使用》](20170612_03.md)  
 ##### 20170612_02.md   [《PG多节点(quorum based), 0丢失 HA(failover,switchover)方案》](20170612_02.md)  
 ##### 20170612_01.md   [《PostgreSQL (varbit, roaring bitmap) VS pilosa(bitmap库)》](20170612_01.md)  

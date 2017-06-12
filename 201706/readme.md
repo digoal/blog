@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170612_02.md   [《PG多节点(quorum based), 0丢失 HA(failover,switchover)方案》](20170612_02.md)  
 ##### 20170612_01.md   [《PostgreSQL (varbit, roaring bitmap) VS pilosa(bitmap库)》](20170612_01.md)  
 ##### 20170611_02.md   [《PostgreSQL 并行写入堆表，如何保证时序线性存储 - BRIN索引优化》](20170611_02.md)  
 ##### 20170611_01.md   [《为什么PostgreSQL是"最先进的开源数据库"》](20170611_01.md)  

@@ -28,6 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201706/20170612_02.md   [《PG多节点(quorum based), 0丢失 HA(failover,switchover)方案》](201706/20170612_02.md)  
 ##### 201706/20170612_01.md   [《PostgreSQL (varbit, roaring bitmap) VS pilosa(bitmap库)》](201706/20170612_01.md)  
 ##### 201706/20170611_02.md   [《PostgreSQL 并行写入堆表，如何保证时序线性存储 - BRIN索引优化》](201706/20170611_02.md)  
 ##### 201706/20170611_01.md   [《为什么PostgreSQL是"最先进的开源数据库"》](201706/20170611_01.md)  

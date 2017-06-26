@@ -692,6 +692,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201411/20141119_01.md   [《PostgreSQL 的 rpm(yum) 安装方法》](201411/20141119_01.md)  
 ----  
+##### 201410/20141024_01.md   [《PostgreSQL rows return by ProcessQuery queryDesc->estate->es_processed》](201410/20141024_01.md)  
 ##### 201410/20141017_01.md   [《数据库性能会随着对象增加而受影响吗？max_locks_per_transaction & pg_locks entrys limit》](201410/20141017_01.md)  
 ##### 201410/20141009_01.md   [《PostgreSQL 密码安全指南》](201410/20141009_01.md)  
 ----  
@@ -767,6 +768,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201305/20130521_01.md   [《PostgreSQL quote ident and literal》](201305/20130521_01.md)  
 ##### 201305/20130516_02.md   [《PostgreSQL 9.3 improve pgstattuple》](201305/20130516_02.md)  
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
+##### 201305/20130510_03.md   [《PostgreSQL 9.3 Allow PL/pgSQL to access the number of rows processed by COPY》](201305/20130510_03.md)  
 ##### 201305/20130510_02.md   [《PostgreSQL 9.3 Add API for 64-bit large object access》](201305/20130510_02.md)  
 ##### 201305/20130510_01.md   [《PostgreSQL SQL_ASCII encoding introduce》](201305/20130510_01.md)  
 ##### 201305/20130509_01.md   [《PostgreSQL 审计 - PostgreSQL 9.3 Allow OLD and NEW in multi-row VALUES within rules》](201305/20130509_01.md)  
@@ -904,6 +906,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201011/20101129_01.md   [《PostgreSQL 不同版本的保留字不同引发的逻辑备份异常处理 - pg_dump ERROR: syntax error at or near "old"》](201011/20101129_01.md)  
 ----  
 ##### 201010/20101027_01.md   [《batch insert in PostgreSQL》](201010/20101027_01.md)  
+----  
+##### 201006/20100603_01.md   [《Using “GET DIAGNOSTICS integer_var = ROW_COUNT;” capture rows effect by the last SQL》](201006/20100603_01.md)  
 ----  
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  

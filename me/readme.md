@@ -3,6 +3,7 @@
   
 ![pic](digoal.png)  
     
+中国开源软件推进联盟PostgreSQL分会，特聘资深领域专家。   
 PostgreSQL 中国社区发起人之一、常委、兼任社区大学校长。  
 PostgreSQL 中国社区杭州分会会长。  
 PostgreSQL 中国社区大学发起人之一。  

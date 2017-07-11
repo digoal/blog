@@ -23,7 +23,7 @@
 ##### 20161008_01.md   [《PostgreSQL 9.6 内核优化之 聚合代码优化OP复用浅析》](20161008_01.md)  
 ##### 20161006_03.md   [《PostgreSQL 9.6 平滑fsync, write原理浅析》](20161006_03.md)  
 ##### 20161006_02.md   [《PostgreSQL 9.6 同步多副本 与 remote_apply事务同步级别》](20161006_02.md)  
-##### 20161006_01.md   [《PostgreSQL 9.6 新增69个等待事件》](20161006_01.md)  
+##### 20161006_01.md   [《PostgreSQL 等待事件 及 等待采样统计》](20161006_01.md)  
 ##### 20161005_02.md   [《PostgreSQL 9.6 快照过旧 - 源码浅析》](20161005_02.md)  
 ##### 20161005_01.md   [《PostgreSQL 9.6 sharding + 单元化 (based on postgres_fdw) 最佳实践 - 通用水平分库场景设计与实践》](20161005_01.md)  
 ##### 20161004_01.md   [《PostgreSQL 9.6 单元化,sharding (based on postgres_fdw) - 内核层支持前传》](20161004_01.md)  

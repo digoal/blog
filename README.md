@@ -28,6 +28,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201707/20170715_01.md   [《人分九等，数有阶梯 - PostgreSQL 阶品（颗粒）分析函数width_bucket, kmean应用》](201707/20170715_01.md)  
 ##### 201707/20170714_01.md   [《TPC-H测试 - PostgreSQL 10 vs Deepgreen(Greenplum)》](201707/20170714_01.md)  
 ##### 201707/20170713_02.md   [《Oracle业务适合用PostgreSQL去O的一些评判标准》](201707/20170713_02.md)  
 ##### 201707/20170713_01.md   [《阿里云RDS金融数据库(三节点版) - 性能篇》](201707/20170713_01.md)  
@@ -535,6 +536,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201606/20160617_02.md   [《为什么用 PostgreSQL 绑定变量 没有 Oracle pin S 等待问题》](201606/20160617_02.md)  
 ##### 201606/20160617_01.md   [《PostgreSQL plan cache 源码浅析 - 如何确保不会计划倾斜》](201606/20160617_01.md)  
 ##### 201606/20160615_01.md   [《大量使用临时表带来的问题，替代方案，以及如何擦屁股》](201606/20160615_01.md)  
+##### 201606/20160614_05.md   [《在PostgreSQL中如何生成线性相关的测试数据》](201606/20160614_05.md)  
+##### 201606/20160614_04.md   [《在PostgreSQL中如何生成测试kmean算法的数据》](201606/20160614_04.md)  
 ##### 201606/20160614_03.md   [《PostgreSQL Oracle 兼容性之 - connect by》](201606/20160614_03.md)  
 ##### 201606/20160614_02.md   [《EnterpriseDB (PPAS) Oracle兼容性Virtual Private Database(VPD) 数据隔离以及当前缺陷》](201606/20160614_02.md)  
 ##### 201606/20160614_01.md   [《在java中正确使用PostgreSQL大对象和字节流(bytea)类型的姿势》](201606/20160614_01.md)  
@@ -650,6 +653,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201509/20150905_01.md   [《为什么PostgreSQL查询语句也可能产生 xlog， 并且可能对buffer有write操作 ? hint bits》](201509/20150905_01.md)  
 ----  
 ##### 201508/20150818_01.md   [《PostgreSQL SSL链路压缩例子》](201508/20150818_01.md)  
+##### 201508/20150817_01.md   [《K-Means 数据聚集算法》](201508/20150817_01.md)  
 ----  
 ##### 201507/20150717_01.md   [《PostgreSQL function's SECURITY DEFINER | INVOKER, SET configuration_parameter { TO value | = value | FROM CURRENT }》](201507/20150717_01.md)  
 ##### 201507/20150703_01.md   [《PostgreSQL Oracle 兼容性之 - orafce (包、函数、DUAL)》](201507/20150703_01.md)  
@@ -657,6 +661,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
 ##### 201506/20150619_01.md   [《online DDL (or NOWAIT DDL) in PostgreSQL》](201506/20150619_01.md)  
 ##### 201506/20150618_01.md   [《生成泊松、高斯、指数、随机分布数据 - PostgreSQL 9.5 new feature - pg_bench improve, gaussian (standard normal) & exponential distribution》](201506/20150618_01.md)  
+##### 201506/20150616_01.md   [《PostgreSQL 9.5 new feature - width_bucket return the bucket number》](201506/20150616_01.md)  
 ##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
 ----  
@@ -802,6 +807,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201303/20130325_01.md   [《PostgreSQL 并行逻辑备份与一致性讲解 - PostgreSQL 9.3 parallel pg_dump》](201303/20130325_01.md)  
 ##### 201303/20130320_02.md   [《PostgreSQL 审计 - PostgreSQL Audit by Database or Role wide parameter》](201303/20130320_02.md)  
 ##### 201303/20130320_01.md   [《PostgreSQL 审计成功事务 - PostgreSQL Fine-Grained Table,Column,Row Level Audit》](201303/20130320_01.md)  
+##### 201303/20130319_01.md   [《PostgreSQL FDW mongo_fdw usage》](201303/20130319_01.md)  
 ##### 201303/20130315_01.md   [《PostgreSQL Server Encoding sql_ascii attention》](201303/20130315_01.md)  
 ##### 201303/20130313_01.md   [《PostgreSQL 事件触发器 - PostgreSQL 9.3 Event Trigger》](201303/20130313_01.md)  
 ##### 201303/20130311_03.md   [《表级复制(base on trigger) -- PostgreSQL general sync and async multi-master replication trigger function》](201303/20130311_03.md)  

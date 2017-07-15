@@ -7,6 +7,8 @@
 ##### 20160617_02.md   [《为什么用 PostgreSQL 绑定变量 没有 Oracle pin S 等待问题》](20160617_02.md)  
 ##### 20160617_01.md   [《PostgreSQL plan cache 源码浅析 - 如何确保不会计划倾斜》](20160617_01.md)  
 ##### 20160615_01.md   [《大量使用临时表带来的问题，替代方案，以及如何擦屁股》](20160615_01.md)  
+##### 20160614_05.md   [《在PostgreSQL中如何生成线性相关的测试数据》](20160614_05.md)  
+##### 20160614_04.md   [《在PostgreSQL中如何生成测试kmean算法的数据》](20160614_04.md)  
 ##### 20160614_03.md   [《PostgreSQL Oracle 兼容性之 - connect by》](20160614_03.md)  
 ##### 20160614_02.md   [《EnterpriseDB (PPAS) Oracle兼容性Virtual Private Database(VPD) 数据隔离以及当前缺陷》](20160614_02.md)  
 ##### 20160614_01.md   [《在java中正确使用PostgreSQL大对象和字节流(bytea)类型的姿势》](20160614_01.md)  

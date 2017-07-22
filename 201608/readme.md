@@ -6,7 +6,7 @@
 ##### 20160829_03.md   [《PostgreSQL 最佳实践 - pg_rman 数据库恢复示例 与 软件限制解说》](20160829_03.md)  
 ##### 20160829_02.md   [《PostgreSQL 最佳实践 - pg_rman 以standby为源的备份浅析》](20160829_02.md)  
 ##### 20160829_01.md   [《pg_dump一致性备份以及cache lookup failed错误的原因分析》](20160829_01.md)  
-##### 20160827_01.md   [《在PostgreSQL中实现update | delete limit》](20160827_01.md)  
+##### 20160827_01.md   [《在PostgreSQL中实现update | delete limit - CTID扫描实践》](20160827_01.md)  
 ##### 20160826_01.md   [《PostgreSQL 最佳实践 - 块级别增量备份(pg_rman baseon LSN)源码浅析与使用》](20160826_01.md)  
 ##### 20160825_02.md   [《Greenplum 最佳实践 - 估值插件hll的使用(以及hll分式聚合函数优化)》](20160825_02.md)  
 ##### 20160825_01.md   [《PostgreSQL延迟hot standby使用问题及源码浅析》](20160825_01.md)  

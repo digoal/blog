@@ -25,6 +25,7 @@ digoal's|PostgreSQL|文章|归类
 **[21 Oracle兼容性](class/21.md)** | **[22 数据库选型](class/22.md)** | **[23 Benchmark](class/23.md)** | **[24 最佳实践](class/24.md)**       
 **[25 DaaS](class/25.md)** | **[26 垂直行业应用](class/26.md)** | **[27 标准化(规约、制度、流程)](class/27.md)** | **[28 版本升级](class/28.md)**    
 **[29 同、异构数据同步](class/29.md)** | **[30 数据分析](class/30.md)** | **[31 系列课程](class/31.md)** | **[32 其他](class/32.md)**    
+**[33 招聘与求职信息](class/33.md)** | - | - | -    
   
 ### 未归类文档如下  
 ----  

@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20130130_03.md   [《PostgreSQL Function to return the intersection of 2 ARRAYs》](20130130_03.md)  
 ##### 20130130_02.md   [《PostgreSQL add 2 DML LOCK TUPLE MODE to 4》](20130130_02.md)  
 ##### 20130130_01.md   [《PostgreSQL recovery target introduce》](20130130_01.md)  
 ##### 20130128_01.md   [《PostgreSQL Developer Options (debug, trace, system table mod and so on...) 详解》](20130128_01.md)  

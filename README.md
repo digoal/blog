@@ -838,6 +838,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
 ##### 201303/20130306_02.md   [《PostgreSQL 事务快照功能 - Parallel Export consistent data or Parallel Query use snapshot transaction feature》](201303/20130306_02.md)  
 ##### 201303/20130306_01.md   [《Use PostgreSQL server program import binary data into database bytea type》](201303/20130306_01.md)  
+##### 201303/20130305_01.md   [《PostgreSQL convert integer to bit》](201303/20130305_01.md)  
 ----  
 ##### 201302/20130223_01.md   [《PostgreSQL xlog dump - pg_xlogdump 源码讲解》](201302/20130223_01.md)  
 ##### 201302/20130222_01.md   [《PostgreSQL CSVLOG monitor script for nagios》](201302/20130222_01.md)  
@@ -848,6 +849,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201302/20130201_02.md   [《PostgreSQL How to deal TUPLE LOCK : 2 - "one|more transactions waiting one|more transactions release tuple lock"》](201302/20130201_02.md)  
 ##### 201302/20130201_01.md   [《PostgreSQL How to deal TUPLE LOCK : 1 - "One transaction lock single or multiple tuples | rows"》](201302/20130201_01.md)  
 ----  
+##### 201301/20130130_03.md   [《PostgreSQL Function to return the intersection of 2 ARRAYs》](201301/20130130_03.md)  
 ##### 201301/20130130_02.md   [《PostgreSQL add 2 DML LOCK TUPLE MODE to 4》](201301/20130130_02.md)  
 ##### 201301/20130130_01.md   [《PostgreSQL recovery target introduce》](201301/20130130_01.md)  
 ##### 201301/20130128_01.md   [《PostgreSQL Developer Options (debug, trace, system table mod and so on...) 详解》](201301/20130128_01.md)  

@@ -22,7 +22,7 @@
 ##### 20160916_01.md   [《HAWQ 集群部署 on ECS》](20160916_01.md)  
 ##### 20160911_01.md   [《facebook linkbench 测试PostgreSQL社交关系图谱场景性能》](20160911_01.md)  
 ##### 20160910_01.md   [《如何从PostgreSQL json中提取数组》](20160910_01.md)  
-##### 20160909_01.md   [《如何防止数据库雪崩》](20160909_01.md)  
+##### 20160909_01.md   [《如何防止数据库雪崩(泛洪 flood)》](20160909_01.md)  
 ##### 20160906_01.md   [《如何建立GIS测试环境 - 将openstreetmap的样本数据导入PostgreSQL PostGIS库》](20160906_01.md)  
 ##### 20160905_01.md   [《Greenplum , HAWQ outer join与motion问题讲解》](20160905_01.md)  
 ##### 20160903_01.md   [《CentOS 7.x x64 部署 HAWQ》](20160903_01.md)  

@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170807_01.md   [《PostgreSQL 读写分离代理 - Crunchy Proxy(base on golang)》](20170807_01.md)  
 ##### 20170804_02.md   [《[招聘] [探探] PostgreSQL DBA》](20170804_02.md)  
 ##### 20170804_01.md   [《海量数据,海明(simhash)距离高效检索(smlar) - 阿里云RDS PosgreSQL最佳实践》](20170804_01.md)  
 ##### 20170803_02.md   [《记录动态格式化输出(ToB日志转换业务) - 阿里云RDS PostgreSQL, HybridDB for PostgreSQL最佳实践》](20170803_02.md)  

@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201708/20170822_01.md   [《Greenplum segment级锁问题排查方法 - 阿里云HybridDB for PostgreSQL最佳实践》](201708/20170822_01.md)  
 ##### 201708/20170821_02.md   [《分布式DB中数据倾斜的原因和解法 - 阿里云HybridDB for PostgreSQL最佳实践》](201708/20170821_02.md)  
 ##### 201708/20170821_01.md   [《Greenplum 内存与负载管理(resource queue)最佳实践》](201708/20170821_01.md)  
 ##### 201708/20170820_03.md   [《解读PostgreSQL共享存储一写多读技术（类Oracle RAC架构）》](201708/20170820_03.md)  

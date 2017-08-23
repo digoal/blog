@@ -1,10 +1,11 @@
 ### 文章列表  
 ----  
+##### 20170824_01.md   [《PostgreSQL BRIN索引的pages_per_range选项优化与内核代码优化思考》](20170824_01.md)  
 ##### 20170823_03.md   [《PostgreSQL 增量备份集的有效恢复位点》](20170823_03.md)  
 ##### 20170823_02.md   [《时序业务，求最新值（从7秒到7毫秒的优化之旅） - 阿里云RDS PostgreSQL最佳实践》](20170823_02.md)  
 ##### 20170823_01.md   [《万亿(100TB)级电商广告 - PostgreSQL单机如何实现毫秒级圈人》](20170823_01.md)  
 ##### 20170822_01.md   [《Greenplum segment级锁问题排查方法 - 阿里云HybridDB for PostgreSQL最佳实践》](20170822_01.md)  
-##### 20170821_02.md   [《分布式DB中数据倾斜的原因和解法 - 阿里云HybridDB for PostgreSQL最佳实践》](20170821_02.md)  
+##### 20170821_02.md   [《分布式DB(Greenplum)中数据倾斜的原因和解法 - 阿里云HybridDB for PostgreSQL最佳实践》](20170821_02.md)  
 ##### 20170821_01.md   [《Greenplum 内存与负载管理(resource queue)最佳实践》](20170821_01.md)  
 ##### 20170820_03.md   [《解读PostgreSQL共享存储一写多读技术（类Oracle RAC架构）》](20170820_03.md)  
 ##### 20170820_02.md   [《数据寻龙点穴（空间聚集分析） - 阿里云RDS PostgreSQL最佳实践》](20170820_02.md)  

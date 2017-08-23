@@ -779,6 +779,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201408/20140801_02.md   [《USE OpenVSwitch Isolating VM traffic using VLANs》](201408/20140801_02.md)  
 ##### 201408/20140801_01.md   [《OpenvSwitch readme & faq》](201408/20140801_01.md)  
 ----  
+##### 201407/20140725_01.md   [《Postgres-XL you can only see databases with CREATE privilege》](201407/20140725_01.md)  
+----  
 ##### 201406/20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](201406/20140618_01.md)  
 ##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  
 ##### 201406/20140614_01.md   [《使用 ssh -R 建立反向/远程TCP端口转发代理》](201406/20140614_01.md)  

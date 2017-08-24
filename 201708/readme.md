@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170824_02.md   [《Greenplum 空间(GIS)数据检索 b-tree & GiST 索引实践 - 阿里云HybridDB for PostgreSQL最佳实践》](20170824_02.md)  
 ##### 20170824_01.md   [《PostgreSQL BRIN索引的pages_per_range选项优化与内核代码优化思考》](20170824_01.md)  
 ##### 20170823_03.md   [《PostgreSQL 增量备份集的有效恢复位点》](20170823_03.md)  
 ##### 20170823_02.md   [《时序业务，求最新值（从7秒到7毫秒的优化之旅） - 阿里云RDS PostgreSQL最佳实践》](20170823_02.md)  

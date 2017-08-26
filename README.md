@@ -29,7 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201708/20170826_01.md   [《泛电网系统 海量OLTP+OLAP DB设计 - 阿里云(RDS、HybridDB) for PostgreSQL最佳实践》](201708/20170826_01.md)  
+##### 201708/20170826_01.md   [《泛电网系统 海量实时计算+OLTP+OLAP DB设计 - 阿里云(RDS、HybridDB) for PostgreSQL最佳实践》](201708/20170826_01.md)  
 ##### 201708/20170825_02.md   [《Greenplum 行存、列存，堆表、AO表性能对比 - 阿里云HDB for PostgreSQL最佳实践》](201708/20170825_02.md)  
 ##### 201708/20170825_01.md   [《通过空间思想理解GiST索引的构造》](201708/20170825_01.md)  
 ##### 201708/20170824_02.md   [《Greenplum 空间(GIS)数据检索 b-tree & GiST 索引实践 - 阿里云HybridDB for PostgreSQL最佳实践》](201708/20170824_02.md)  

@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201708/20170827_01.md   [《音视图(泛内容)网站透视分析 DB设计 - 阿里云(RDS、HybridDB) for PostgreSQL最佳实践》](201708/20170827_01.md)  
 ##### 201708/20170826_01.md   [《泛电网系统 海量实时计算+OLTP+OLAP DB设计 - 阿里云(RDS、HybridDB) for PostgreSQL最佳实践》](201708/20170826_01.md)  
 ##### 201708/20170825_02.md   [《Greenplum 行存、列存，堆表、AO表性能对比 - 阿里云HDB for PostgreSQL最佳实践》](201708/20170825_02.md)  
 ##### 201708/20170825_01.md   [《通过空间思想理解GiST索引的构造》](201708/20170825_01.md)  
@@ -821,6 +822,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201308/20130823_01.md   [《PostgreSQL WHY modify numeric scale must rewrite table》](201308/20130823_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
 ##### 201308/20130814_01.md   [《PostgreSQL 9.4 pending patch : UNNEST with multiple args, and TABLE with multiple funcs》](201308/20130814_01.md)  
+##### 201308/20130811_01.md   [《PostgreSQL pg_stats used to estimate top N freps values and explain rows》](201308/20130811_01.md)  
 ##### 201308/20130806_02.md   [《PostgreSQL 配置文件变更审计 - A custom background worker process to log changes to postgresql.conf to a table》](201308/20130806_02.md)  
 ##### 201308/20130806_01.md   [《GIS附近查找性能优化 - PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130801_01.md   [《PostgreSQL Oracle 兼容性 - WITHIN GROUP (sql standard ordered set aggregate functions)》](201308/20130801_01.md)  
@@ -930,6 +932,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201205/20120521_02.md   [《PostgreSQL nestloop/hash/merge join讲解》](201205/20120521_02.md)  
 ##### 201205/20120521_01.md   [《PostgreSQL 9.2 improve prepared statements plan's selectivity》](201205/20120521_01.md)  
+##### 201205/20120518_01.md   [《PostgreSQL 9.2 add array elements statistics》](201205/20120518_01.md)  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
 ##### 201205/20120516_01.md   [《PostgreSQL 共享事务快照功能 - PostgreSQL 9.2 can share snapshot between multi transactions》](201205/20120516_01.md)  
 ##### 201205/20120511_01.md   [《PostgreSQL 逻辑备份一致性讲解 - Why pg_dump backup a database in consistent status》](201205/20120511_01.md)  

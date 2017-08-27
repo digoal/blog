@@ -874,6 +874,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201303/20130306_01.md   [《Use PostgreSQL server program import binary data into database bytea type》](201303/20130306_01.md)  
 ##### 201303/20130305_01.md   [《PostgreSQL convert integer to bit》](201303/20130305_01.md)  
 ----  
+##### 201302/20130228_01.md   [《PostgreSQL hll (HyperLogLog) extension for "State of The Art Cardinality Estimation Algorithm" - 3》](201302/20130228_01.md)  
+##### 201302/20130227_01.md   [《PostgreSQL hll (HyperLogLog) extension for "State of The Art Cardinality Estimation Algorithm" - 2》](201302/20130227_01.md)  
+##### 201302/20130226_01.md   [《PostgreSQL hll (HyperLogLog) extension for "State of The Art Cardinality Estimation Algorithm" - 1》](201302/20130226_01.md)  
 ##### 201302/20130223_01.md   [《PostgreSQL xlog dump - pg_xlogdump 源码讲解》](201302/20130223_01.md)  
 ##### 201302/20130222_01.md   [《PostgreSQL CSVLOG monitor script for nagios》](201302/20130222_01.md)  
 ##### 201302/20130221_01.md   [《PostgreSQL LOCK WAITING monitor script for nagios》](201302/20130221_01.md)  

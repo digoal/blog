@@ -808,6 +808,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201403/20140316_01.md   [《PostgreSQL 嵌套循环成本估算方法 - nestloop loop cost & cost_material run_cost》](201403/20140316_01.md)  
 ----  
 ##### 201402/20140227_01.md   [《PostgreSQL nagios monitor script (archive, vacuum, age, conn, rollback, standby, lock, xact, seq, index...)》](201402/20140227_01.md)  
+##### 201402/20140211_01.md   [《分页优化 - order by limit x offset y performance tuning》](201402/20140211_01.md)  
 ----  
 ##### 201312/20131217_01.md   [《PostgreSQL SERIALIZABLE ISOLATION LEVEL introduce》](201312/20131217_01.md)  
 ----  
@@ -928,6 +929,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201206/20120626_02.md   [《函数稳定性讲解 - 函数索引思考, pay attention to function index used in PostgreSQL》](201206/20120626_02.md)  
 ##### 201206/20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](201206/20120626_01.md)  
 ##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  
+##### 201206/20120620_01.md   [《分页优化, add max_tag column speedup Query in max match enviroment》](201206/20120620_01.md)  
 ##### 201206/20120619_01.md   [《如何实现一张表有且只有一条记录 implement PostgreSQL table have one and only one row》](201206/20120619_01.md)  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  
 ##### 201206/20120606_01.md   [《PostgreSQL 函数封装 - Wrap Function code like Oracle package》](201206/20120606_01.md)  
@@ -987,6 +989,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201103/20110301_01.md   [《一个事务最多能锁多少对象? how many objects can be locked per transaction》](201103/20110301_01.md)  
 ----  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
+##### 201102/20110216_02.md   [《PostgreSQL's Cursor USAGE with SQL MODE - 分页优化》](201102/20110216_02.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  
 ##### 201102/20110214_01.md   [《PostgreSQL's two-phase commit used with dblink example》](201102/20110214_01.md)  
 ##### 201102/20110212_01.md   [《PostgreSQL 随机查询优化》](201102/20110212_01.md)  

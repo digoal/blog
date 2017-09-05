@@ -707,6 +707,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201509/20150919_01.md   [《PostgreSQL数据库监控中的统计学 - 对象SIZE的数据分布图》](201509/20150919_01.md)  
 ##### 201509/20150916_01.md   [《Core dump 分析》](201509/20150916_01.md)  
 ##### 201509/20150911_01.md   [《don't shutdown postgresql before call pg_stop_backup() - 备份结束前，不要停库，源码分析》](201509/20150911_01.md)  
+##### 201509/20150908_01.md   [《londiste3 copy table' snapshot & PostgreSQL logical replication's snapshot 不同之处》](201509/20150908_01.md)  
 ##### 201509/20150905_01.md   [《为什么PostgreSQL查询语句也可能产生 xlog， 并且可能对buffer有write操作 ? hint bits》](201509/20150905_01.md)  
 ----  
 ##### 201508/20150818_01.md   [《PostgreSQL SSL链路压缩例子》](201508/20150818_01.md)  
@@ -718,6 +719,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
 ##### 201506/20150619_01.md   [《online DDL (or NOWAIT DDL) in PostgreSQL》](201506/20150619_01.md)  
 ##### 201506/20150618_01.md   [《生成泊松、高斯、指数、随机分布数据 - PostgreSQL 9.5 new feature - pg_bench improve, gaussian (standard normal) & exponential distribution》](201506/20150618_01.md)  
+##### 201506/20150616_02.md   [《PostgreSQL 9.5 new feature - pg_dump use --snapshot taken by another session (exp. slot, pg_export_snapshot())》](201506/20150616_02.md)  
 ##### 201506/20150616_01.md   [《PostgreSQL 9.5 new feature - width_bucket return the bucket number》](201506/20150616_01.md)  
 ##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  
 ##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
@@ -943,6 +945,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201206/20120605_01.md   [《PostgreSQL plpgsql function debugging module : pldebugger》](201206/20120605_01.md)  
 ##### 201206/20120601_01.md   [《PostGIS 2.0 Install》](201206/20120601_01.md)  
 ----  
+##### 201205/20120531_01.md   [《Londiste 3 replicate case - 1 下节》](201205/20120531_01.md)  
+##### 201205/20120530_01.md   [《Londiste 3 replicate case - 1 上节》](201205/20120530_01.md)  
+##### 201205/20120529_01.md   [《Londiste3 Install》](201205/20120529_01.md)  
 ##### 201205/20120521_02.md   [《PostgreSQL nestloop/hash/merge join讲解》](201205/20120521_02.md)  
 ##### 201205/20120521_01.md   [《PostgreSQL 9.2 improve prepared statements plan's selectivity》](201205/20120521_01.md)  
 ##### 201205/20120518_01.md   [《PostgreSQL 9.2 add array elements statistics》](201205/20120518_01.md)  

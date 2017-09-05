@@ -1,5 +1,8 @@
 ### 文章列表  
 ----  
+##### 20120531_01.md   [《Londiste 3 replicate case - 1 下节》](20120531_01.md)  
+##### 20120530_01.md   [《Londiste 3 replicate case - 1 上节》](20120530_01.md)  
+##### 20120529_01.md   [《Londiste3 Install》](20120529_01.md)  
 ##### 20120521_02.md   [《PostgreSQL nestloop/hash/merge join讲解》](20120521_02.md)  
 ##### 20120521_01.md   [《PostgreSQL 9.2 improve prepared statements plan's selectivity》](20120521_01.md)  
 ##### 20120518_01.md   [《PostgreSQL 9.2 add array elements statistics》](20120518_01.md)  

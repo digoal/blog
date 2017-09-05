@@ -769,6 +769,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201501/20150129_01.md   [《随机记录并发查询与更新(转移、删除)的"无耻"优化方法》](201501/20150129_01.md)  
 ----  
+##### 201412/20141219_01.md   [《fast & safe upgrade to PostgreSQL 9.4 use pg_upgrade & zfs》](201412/20141219_01.md)  
 ##### 201412/20141214_01.md   [《PostgreSQL 触发器应用 - use trigger audit record which column modified, insert, delete.》](201412/20141214_01.md)  
 ##### 201412/20141211_01.md   [《PostgreSQL 事件触发器 - DDL审计 , DDL逻辑复制 , 打造DDL统一管理入》](201412/20141211_01.md)  
 ##### 201412/20141206_01.md   [《Install OpenVSwitch into CentOS 7 userspace》](201412/20141206_01.md)  
@@ -856,6 +857,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  
 ##### 201305/20130521_01.md   [《PostgreSQL quote ident and literal》](201305/20130521_01.md)  
+##### 201305/20130520_01.md   [《PostgreSQL pg_upgrade 9.3 improve and example》](201305/20130520_01.md)  
+##### 201305/20130517_01.md   [《inode and hard link》](201305/20130517_01.md)  
 ##### 201305/20130516_02.md   [《PostgreSQL 9.3 improve pgstattuple》](201305/20130516_02.md)  
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
 ##### 201305/20130510_03.md   [《PostgreSQL 9.3 Allow PL/pgSQL to access the number of rows processed by COPY》](201305/20130510_03.md)  

@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20170906_03.md   [《PostgreSQL vs Greenplum Hash outer join hash表的选择》](20170906_03.md)  
 ##### 20170906_02.md   [《A Look at How PostgreSQL Executes a Tiny Join (HashJoin)》](20170906_02.md)  
 ##### 20170906_01.md   [《阿里云RDS PostgreSQL OSS 外部表 - 并行写提速案例》](20170906_01.md)  
 ##### 20170905_01.md   [《PostgreSQL 黑科技 - 空间聚集存储》](20170905_01.md)  

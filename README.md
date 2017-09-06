@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201709/20170906_03.md   [《PostgreSQL vs Greenplum Hash outer join hash表的选择》](201709/20170906_03.md)  
 ##### 201709/20170906_02.md   [《A Look at How PostgreSQL Executes a Tiny Join (HashJoin)》](201709/20170906_02.md)  
 ##### 201709/20170906_01.md   [《阿里云RDS PostgreSQL OSS 外部表 - 并行写提速案例》](201709/20170906_01.md)  
 ##### 201709/20170905_01.md   [《PostgreSQL 黑科技 - 空间聚集存储》](201709/20170905_01.md)  

@@ -834,6 +834,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201309/20130906_01.md   [《upsert - PostgreSQL 9.4 pending patch : INSERT...ON DUPLICATE KEY IGNORE》](201309/20130906_01.md)  
 ----  
+##### 201308/20130823_02.md   [《PostgreSQL Streaming Replication COMMAND used in psql》](201308/20130823_02.md)  
 ##### 201308/20130823_01.md   [《PostgreSQL WHY modify numeric scale must rewrite table》](201308/20130823_01.md)  
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
 ##### 201308/20130814_01.md   [《PostgreSQL 9.4 pending patch : UNNEST with multiple args, and TABLE with multiple funcs》](201308/20130814_01.md)  

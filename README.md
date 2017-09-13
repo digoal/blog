@@ -986,6 +986,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
 ##### 201110/20111018_01.md   [《PostgreSQL 9.1 nearest-neighbor search use gist index》](201110/20111018_01.md)  
 ----  
+##### 201109/20110930_03.md   [《Use pg_resetxlog simulate tuple disappear within PostgreSQL》](201109/20110930_03.md)  
 ##### 201109/20110930_02.md   [《Get txid from pg_controldata's output》](201109/20110930_02.md)  
 ##### 201109/20110930_01.md   [《PostgreSQL xid(int4) to txid(int8)》](201109/20110930_01.md)  
 ----  
@@ -1011,6 +1012,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique》](201103/20110329_01.md)  
 ##### 201103/20110301_01.md   [《一个事务最多能锁多少对象? how many objects can be locked per transaction》](201103/20110301_01.md)  
 ----  
+##### 201102/20110222_01.md   [《Recover droped column from PostgreSQL》](201102/20110222_01.md)  
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ##### 201102/20110216_02.md   [《PostgreSQL's Cursor USAGE with SQL MODE - 分页优化》](201102/20110216_02.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  

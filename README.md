@@ -978,6 +978,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201203/20120313_01.md   [《PostgreSQL性能优化综合案例讲解 - 1》](201203/20120313_01.md)  
 ----  
 ##### 201202/20120216_01.md   [《how difference when update a table's column which it in TOAST or BASETABLE(in-line)》](201202/20120216_01.md)  
+##### 201202/20120214_01.md   [《Use PostgreSQL collect and analyze Operation System statistics》](201202/20120214_01.md)  
 ----  
 ##### 201201/20120119_01.md   [《PostgreSQL 灵活审计插件 - PostgreSQL per database or per user audit use pg_log_userqueries》](201201/20120119_01.md)  
 ##### 201201/20120113_02.md   [《PostgreSQL 跟踪谁动了你的记录 - Use timetravel function trace tuple's DML》](201201/20120113_02.md)  

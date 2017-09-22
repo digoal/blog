@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201709/20170922_01.md   [《PostgreSQL Oracle兼容性之 session_id》](201709/20170922_01.md)  
 ##### 201709/20170921_02.md   [《PostgreSQL GUC 参数级别介绍》](201709/20170921_02.md)  
 ##### 201709/20170921_01.md   [《PostgreSQL 规格评估 - 微观、宏观、精准 多视角估算数据库性能(选型、做预算不求人)》](201709/20170921_01.md)  
 ##### 201709/20170918_02.md   [《空间|时间|对象 圈人 + 透视 - 暨PostgreSQL 10与Greenplum的对比和选择》](201709/20170918_02.md)  
@@ -732,6 +733,20 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201508/20150818_01.md   [《PostgreSQL SSL链路压缩例子》](201508/20150818_01.md)  
 ##### 201508/20150817_01.md   [《K-Means 数据聚集算法》](201508/20150817_01.md)  
+##### 201508/20150815_02.md   [《linux文件系统分配策略》](201508/20150815_02.md)  
+##### 201508/20150815_01.md   [《Linux IO 之 系统缓存(pdflush & dirty page) 及 扩展知识》](201508/20150815_01.md)  
+##### 201508/20150814_02.md   [《试用 PGStrom》](201508/20150814_02.md)  
+##### 201508/20150814_01.md   [《ext4 mount option data mode: journal ordered writeback》](201508/20150814_01.md)  
+##### 201508/20150813_05.md   [《count nulls or not nulls in one record/row》](201508/20150813_05.md)  
+##### 201508/20150813_04.md   [《从一个数据类型/record/row中解析它对应的列名》](201508/20150813_04.md)  
+##### 201508/20150813_03.md   [《路径规划应用 pgRouting 实践与开放地图导入 - Openstreetmap PBF》](201508/20150813_03.md)  
+##### 201508/20150813_02.md   [《PostgreSQL sort or not sort when group by?》](201508/20150813_02.md)  
+##### 201508/20150813_01.md   [《PostgreSQL 轻量级数字对称加密》](201508/20150813_01.md)  
+##### 201508/20150812_01.md   [《Linux内核调试方法总结》](201508/20150812_01.md)  
+##### 201508/20150804_01.md   [《Get stream replication state from standby》](201508/20150804_01.md)  
+##### 201508/20150803_02.md   [《PostgreSQL extend function - C example》](201508/20150803_02.md)  
+##### 201508/20150803_01.md   [《PostgreSQL can continue when postmaster killed》](201508/20150803_01.md)  
+##### 201508/20150802_01.md   [《PostgreSQL How to get upstream node conninfo from standby node》](201508/20150802_01.md)  
 ----  
 ##### 201507/20150717_01.md   [《PostgreSQL function's SECURITY DEFINER | INVOKER, SET configuration_parameter { TO value | = value | FROM CURRENT }》](201507/20150717_01.md)  
 ##### 201507/20150703_01.md   [《PostgreSQL Oracle 兼容性之 - orafce (包、函数、DUAL)》](201507/20150703_01.md)  
@@ -789,6 +804,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201502/20150228_01.md   [《PostgreSQL 统计信息之 - 逻辑与物理存储的线性相关性》](201502/20150228_01.md)  
 ##### 201502/20150209_01.md   [《PostgreSQL 函数代码隐藏 - How to control who can see PostgreSQL function's source code》](201502/20150209_01.md)  
 ----  
+##### 201501/20150129_02.md   [《fast random data query & delete use ctid in postgresql》](201501/20150129_02.md)  
 ##### 201501/20150129_01.md   [《随机记录并发查询与更新(转移、删除)的"无耻"优化方法》](201501/20150129_01.md)  
 ----  
 ##### 201412/20141219_01.md   [《fast & safe upgrade to PostgreSQL 9.4 use pg_upgrade & zfs》](201412/20141219_01.md)  

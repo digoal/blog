@@ -731,8 +731,20 @@ digoal's|PostgreSQL|文章|归类
 ##### 201509/20150908_01.md   [《londiste3 copy table' snapshot & PostgreSQL logical replication's snapshot 不同之处》](201509/20150908_01.md)  
 ##### 201509/20150905_01.md   [《为什么PostgreSQL查询语句也可能产生 xlog， 并且可能对buffer有write操作 ? hint bits》](201509/20150905_01.md)  
 ----  
+##### 201508/20150831_03.md   [《PostgreSQL & LLVM & Vitesse DB》](201508/20150831_03.md)  
+##### 201508/20150831_02.md   [《NFS over RDMA》](201508/20150831_02.md)  
+##### 201508/20150831_01.md   [《使用 PGStrom 2 (GPU JOIN, BulkScan, GpuPreAgg, ...)》](201508/20150831_01.md)  
+##### 201508/20150824_01.md   [《PostgreSQL 结巴分词》](201508/20150824_01.md)  
+##### 201508/20150821_01.md   [《NLPIR 分词准确率接近98.23%》](201508/20150821_01.md)  
+##### 201508/20150818_03.md   [《PostgreSQL 读写操作系统文件函数(File I/O)》](201508/20150818_03.md)  
+##### 201508/20150818_02.md   [《PostgreSQL cann't use NULL ciphers(do not encryption) when use hostssl?》](201508/20150818_02.md)  
 ##### 201508/20150818_01.md   [《PostgreSQL SSL链路压缩例子》](201508/20150818_01.md)  
+##### 201508/20150817_02.md   [《PostgreSQL 单元测试》](201508/20150817_02.md)  
 ##### 201508/20150817_01.md   [《K-Means 数据聚集算法》](201508/20150817_01.md)  
+##### 201508/20150816_04.md   [《sync_file_range - sync a file segment with disk (None of these operations writes out the file's metadata)》](201508/20150816_04.md)  
+##### 201508/20150816_03.md   [《从fread和mmap 谈读文件的性能》](201508/20150816_03.md)  
+##### 201508/20150816_02.md   [《DirectIO & BufferedIO》](201508/20150816_02.md)  
+##### 201508/20150816_01.md   [《lseek, fallocate来快速创建一个空洞文件，lseek不占用空间，fallocate占用空间(快速预分配)》](201508/20150816_01.md)  
 ##### 201508/20150815_02.md   [《linux文件系统分配策略》](201508/20150815_02.md)  
 ##### 201508/20150815_01.md   [《Linux IO 之 系统缓存(pdflush & dirty page) 及 扩展知识》](201508/20150815_01.md)  
 ##### 201508/20150814_02.md   [《试用 PGStrom》](201508/20150814_02.md)  
@@ -748,6 +760,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201508/20150803_01.md   [《PostgreSQL can continue when postmaster killed》](201508/20150803_01.md)  
 ##### 201508/20150802_01.md   [《PostgreSQL How to get upstream node conninfo from standby node》](201508/20150802_01.md)  
 ----  
+##### 201507/20150717_02.md   [《PostgreSQL (User defined Operator) UDO & Operator Optimization Information》](201507/20150717_02.md)  
 ##### 201507/20150717_01.md   [《PostgreSQL function's SECURITY DEFINER | INVOKER, SET configuration_parameter { TO value | = value | FROM CURRENT }》](201507/20150717_01.md)  
 ##### 201507/20150703_01.md   [《PostgreSQL Oracle 兼容性之 - orafce (包、函数、DUAL)》](201507/20150703_01.md)  
 ----  

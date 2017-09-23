@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201709/20170923_01.md   [《经营、销售分析系统DB设计之PostgreSQL, Greenplum - 共享充电宝 案例实践》](201709/20170923_01.md)  
 ##### 201709/20170922_01.md   [《PostgreSQL Oracle兼容性之 session_id》](201709/20170922_01.md)  
 ##### 201709/20170921_02.md   [《PostgreSQL GUC 参数级别介绍》](201709/20170921_02.md)  
 ##### 201709/20170921_01.md   [《PostgreSQL 规格评估 - 微观、宏观、精准 多视角估算数据库性能(选型、做预算不求人)》](201709/20170921_01.md)  
@@ -730,6 +731,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201509/20150911_01.md   [《don't shutdown postgresql before call pg_stop_backup() - 备份结束前，不要停库，源码分析》](201509/20150911_01.md)  
 ##### 201509/20150908_01.md   [《londiste3 copy table' snapshot & PostgreSQL logical replication's snapshot 不同之处》](201509/20150908_01.md)  
 ##### 201509/20150905_01.md   [《为什么PostgreSQL查询语句也可能产生 xlog， 并且可能对buffer有write操作 ? hint bits》](201509/20150905_01.md)  
+##### 201509/20150904_01.md   [《除了xlog，哪些操作可能还需要fsync ?》](201509/20150904_01.md)  
 ----  
 ##### 201508/20150831_03.md   [《PostgreSQL & LLVM & Vitesse DB》](201508/20150831_03.md)  
 ##### 201508/20150831_02.md   [《NFS over RDMA》](201508/20150831_02.md)  

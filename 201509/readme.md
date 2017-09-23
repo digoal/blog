@@ -9,3 +9,4 @@
 ##### 20150911_01.md   [《don't shutdown postgresql before call pg_stop_backup() - 备份结束前，不要停库，源码分析》](20150911_01.md)  
 ##### 20150908_01.md   [《londiste3 copy table' snapshot & PostgreSQL logical replication's snapshot 不同之处》](20150908_01.md)  
 ##### 20150905_01.md   [《为什么PostgreSQL查询语句也可能产生 xlog， 并且可能对buffer有write操作 ? hint bits》](20150905_01.md)  
+##### 20150904_01.md   [《除了xlog，哪些操作可能还需要fsync ?》](20150904_01.md)  

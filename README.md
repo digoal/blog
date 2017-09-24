@@ -791,8 +791,12 @@ digoal's|PostgreSQL|文章|归类
 ##### 201508/20150802_01.md   [《PostgreSQL How to get upstream node conninfo from standby node》](201508/20150802_01.md)  
 ----  
 ##### 201507/20150730_01.md   [《PostgreSQL database cann't startup because memory overcommit》](201507/20150730_01.md)  
+##### 201507/20150723_01.md   [《MySQL & PostgreSQL choice》](201507/20150723_01.md)  
+##### 201507/20150722_01.md   [《PostgreSQL use UDF combine NoSQL DB's Computing Power》](201507/20150722_01.md)  
+##### 201507/20150717_03.md   [《use PostgreSQL trigger manage stock & offer infomation》](201507/20150717_03.md)  
 ##### 201507/20150717_02.md   [《PostgreSQL (User defined Operator) UDO & Operator Optimization Information》](201507/20150717_02.md)  
 ##### 201507/20150717_01.md   [《PostgreSQL function's SECURITY DEFINER | INVOKER, SET configuration_parameter { TO value | = value | FROM CURRENT }》](201507/20150717_01.md)  
+##### 201507/20150713_01.md   [《pg_locks.virtualxid & transactionid》](201507/20150713_01.md)  
 ##### 201507/20150703_01.md   [《PostgreSQL Oracle 兼容性之 - orafce (包、函数、DUAL)》](201507/20150703_01.md)  
 ----  
 ##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
@@ -805,9 +809,13 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201505/20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](201505/20150526_02.md)  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  
+##### 201505/20150525_04.md   [《use PostgreSQL async Notification as a chat group》](201505/20150525_04.md)  
+##### 201505/20150525_03.md   [《PostgreSQL 9.5 new feature - Writing A Custom Scan Provider》](201505/20150525_03.md)  
+##### 201505/20150525_02.md   [《PostgreSQL 9.5 new feature - pg_receivexlog run as synchronous standby》](201505/20150525_02.md)  
 ##### 201505/20150525_01.md   [《PostgreSQL 9.5 new feature - table | mview data sample》](201505/20150525_01.md)  
 ##### 201505/20150515_02.md   [《PostgreSQL 9.5 new feature - use FSM fast evaluate bloat and other table level statics(pgstattuple_approx)》](201505/20150515_02.md)  
 ##### 201505/20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](201505/20150515_01.md)  
+##### 201505/20150514_01.md   [《PostgreSQL Oracle 兼容性 自治事务 - partial/sub commit within function》](201505/20150514_01.md)  
 ##### 201505/20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](201505/20150511_01.md)  
 ##### 201505/20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](201505/20150510_01.md)  
 ##### 201505/20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](201505/20150509_01.md)  
@@ -819,6 +827,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201505/20150506_03.md   [《PostgreSQL 检查点性能影响及源码分析 - 3》](201505/20150506_03.md)  
 ##### 201505/20150506_02.md   [《PostgreSQL 检查点性能影响及源码分析 - 2》](201505/20150506_02.md)  
 ##### 201505/20150506_01.md   [《PostgreSQL 检查点性能影响及源码分析 - 1》](201505/20150506_01.md)  
+##### 201505/20150503_02.md   [《Customize Dictionary or Filter dictionary by Synonym & Thesaurus, customize zhparser's xdb》](201505/20150503_02.md)  
 ##### 201505/20150503_01.md   [《PostgreSQL垃圾回收代码分析 - why postgresql cann't reclaim tuple is HEAPTUPLE_RECENTLY_DEAD》](201505/20150503_01.md)  
 ----  
 ##### 201504/20150430_01.md   [《PostgreSQL timestamp parse in gram.y (' ' AT TIME ZONE ' ')》](201504/20150430_01.md)  
@@ -891,6 +900,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201404/20140403_01.md   [《PostgreSQL 回收站功能 - 基于HOOK的recycle bin pgtrashcan》](201404/20140403_01.md)  
 ----  
 ##### 201403/20140328_01.md   [《PostgreSQL pg_bulkload speed test》](201403/20140328_01.md)  
+##### 201403/20140324_01.md   [《PostgreSQL chinese full text search 中文全文检索》](201403/20140324_01.md)  
 ##### 201403/20140320_01.md   [《PostgreSQL log AND trace AND debug 详解》](201403/20140320_01.md)  
 ##### 201403/20140316_01.md   [《PostgreSQL 嵌套循环成本估算方法 - nestloop loop cost & cost_material run_cost》](201403/20140316_01.md)  
 ----  
@@ -1019,6 +1029,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201206/20120626_02.md   [《函数稳定性讲解 - 函数索引思考, pay attention to function index used in PostgreSQL》](201206/20120626_02.md)  
 ##### 201206/20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](201206/20120626_01.md)  
 ##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  
+##### 201206/20120621_01.md   [《PostgreSQL 使用 nlpbamboo chinesecfg 中文分词》](201206/20120621_01.md)  
 ##### 201206/20120620_01.md   [《分页优化, add max_tag column speedup Query in max match enviroment》](201206/20120620_01.md)  
 ##### 201206/20120619_01.md   [《如何实现一张表有且只有一条记录 implement PostgreSQL table have one and only one row》](201206/20120619_01.md)  
 ##### 201206/20120607_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 20x+ speedup than Mysql index combine query》](201206/20120607_01.md)  

@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201709/20170925_01.md   [《PostgreSQL汉字转拼音的函数》](201709/20170925_01.md)  
 ##### 201709/20170923_01.md   [《经营、销售分析系统DB设计之PostgreSQL, Greenplum - 共享充电宝 案例实践》](201709/20170923_01.md)  
 ##### 201709/20170922_01.md   [《PostgreSQL Oracle兼容性之 session_id》](201709/20170922_01.md)  
 ##### 201709/20170921_02.md   [《PostgreSQL GUC 参数级别介绍》](201709/20170921_02.md)  
@@ -1056,6 +1057,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201205/20120518_01.md   [《PostgreSQL 9.2 add array elements statistics》](201205/20120518_01.md)  
 ##### 201205/20120517_01.md   [《PostgreSQL 黑科技 range 类型及 gist index 助力物联网(IoT)》](201205/20120517_01.md)  
 ##### 201205/20120516_01.md   [《PostgreSQL 共享事务快照功能 - PostgreSQL 9.2 can share snapshot between multi transactions》](201205/20120516_01.md)  
+##### 201205/20120515_01.md   [《PostgreSQL汉字转拼音或拼音首字母的应用》](201205/20120515_01.md)  
 ##### 201205/20120511_01.md   [《PostgreSQL 逻辑备份一致性讲解 - Why pg_dump backup a database in consistent status》](201205/20120511_01.md)  
 ----  
 ##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  

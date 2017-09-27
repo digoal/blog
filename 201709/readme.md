@@ -1,5 +1,7 @@
 ### 文章列表  
 ----  
+##### 20170927_02.md   [《PostgreSQL 10 PostGIS 兼容性 FIX》](20170927_02.md)  
+##### 20170927_01.md   [《PostgreSQL Oracle 兼容性 之 TABLE、PIPELINED函数》](20170927_01.md)  
 ##### 20170926_02.md   [《PostgreSQL Oracle 兼容性 之 USERENV》](20170926_02.md)  
 ##### 20170926_01.md   [《PostgreSQL Oracle 兼容性 之 NUMTODSINTERVAL》](20170926_01.md)  
 ##### 20170925_03.md   [《PostgreSQL 空间、多维 序列 生成方法》](20170925_03.md)  

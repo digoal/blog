@@ -29,6 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201709/20170927_02.md   [《PostgreSQL 10 PostGIS 兼容性 FIX》](201709/20170927_02.md)  
+##### 201709/20170927_01.md   [《PostgreSQL Oracle 兼容性 之 TABLE、PIPELINED函数》](201709/20170927_01.md)  
 ##### 201709/20170926_02.md   [《PostgreSQL Oracle 兼容性 之 USERENV》](201709/20170926_02.md)  
 ##### 201709/20170926_01.md   [《PostgreSQL Oracle 兼容性 之 NUMTODSINTERVAL》](201709/20170926_01.md)  
 ##### 201709/20170925_03.md   [《PostgreSQL 空间、多维 序列 生成方法》](201709/20170925_03.md)  

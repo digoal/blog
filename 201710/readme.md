@@ -1,3 +1,16 @@
 ### 文章列表  
 ----  
+##### 20171002_01.md   [《PostgreSQL 独立事件相关性分析 二 - 人车拟合》](20171002_01.md)  
+##### 20171001_13.md   [《[未完待续] PostgreSQL hadoop生态对接》](20171001_13.md)  
+##### 20171001_12.md   [《[未完待续] Greenplum bitmap插件 - roaring bitmap》](20171001_12.md)  
+##### 20171001_11.md   [《[未完待续] Presto with PostgreSQL (OLAP, sharding, MPP)》](20171001_11.md)  
+##### 20171001_10.md   [《[未完待续] PostgreSQL multi-master 套件》](20171001_10.md)  
+##### 20171001_09.md   [《[未完待续] PostgreSQL sharding 套件(pg_pathman, postgres_fdw, logical replication)》](20171001_09.md)  
+##### 20171001_08.md   [《[未完待续] PostgreSQL 备份恢复管理套件》](20171001_08.md)  
+##### 20171001_07.md   [《[未完待续] PostgreSQL 图计算》](20171001_07.md)  
+##### 20171001_06.md   [《[未完待续] PostgreSQL Elasticsearch 插件 - zomboDB》](20171001_06.md)  
+##### 20171001_05.md   [《[未完待续] PostgreSQL ORC fdw - 列存插件》](20171001_05.md)  
+##### 20171001_04.md   [《[未完待续] PostgreSQL NVM Logging》](20171001_04.md)  
+##### 20171001_03.md   [《[未完待续] PostgreSQL FDW 开发DEMO》](20171001_03.md)  
+##### 20171001_02.md   [《[未完待续] PostgreSQL 培训》](20171001_02.md)  
 ##### 20171001_01.md   [《如何评估一款数据库产品 - 18项火眼金睛》](20171001_01.md)  

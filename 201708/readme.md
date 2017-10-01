@@ -13,7 +13,7 @@
 ##### 20170822_01.md   [《Greenplum segment级锁问题排查方法 - 阿里云HybridDB for PostgreSQL最佳实践》](20170822_01.md)  
 ##### 20170821_02.md   [《分布式DB(Greenplum)中数据倾斜的原因和解法 - 阿里云HybridDB for PostgreSQL最佳实践》](20170821_02.md)  
 ##### 20170821_01.md   [《Greenplum 内存与负载管理(resource queue)最佳实践》](20170821_01.md)  
-##### 20170820_03.md   [《解读PostgreSQL共享存储一写多读技术（类Oracle RAC架构）》](20170820_03.md)  
+##### 20170820_03.md   [《[未完待续] 解读PostgreSQL共享存储一写多读技术（类Oracle RAC架构）》](20170820_03.md)  
 ##### 20170820_02.md   [《数据寻龙点穴（空间聚集分析） - 阿里云RDS PostgreSQL最佳实践》](20170820_02.md)  
 ##### 20170820_01.md   [《PostGIS空间索引(GiST、BRIN、R-Tree)选择、优化 - 阿里云RDS PostgreSQL最佳实践》](20170820_01.md)  
 ##### 20170818_03.md   [《Greenplum 列存储加字段现象 - AO列存储未使用相对偏移》](20170818_03.md)  

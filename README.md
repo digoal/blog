@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201710/20171004_01.md   [《PostgreSQL 空间st_contains，st_within空间包含搜索优化 - 降IO和降CPU(bound box)》](201710/20171004_01.md)  
 ##### 201710/20171002_01.md   [《PostgreSQL 独立事件相关性分析 二 - 人车拟合》](201710/20171002_01.md)  
 ##### 201710/20171001_13.md   [《[未完待续] PostgreSQL hadoop生态对接》](201710/20171001_13.md)  
 ##### 201710/20171001_12.md   [《[未完待续] Greenplum bitmap插件 - roaring bitmap》](201710/20171001_12.md)  

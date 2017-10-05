@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171005_01.md   [《PostgreSQL 空间切割(st_split)功能扩展 - 空间对象网格化》](20171005_01.md)  
 ##### 20171004_01.md   [《PostgreSQL 空间st_contains，st_within空间包含搜索优化 - 降IO和降CPU(bound box)》](20171004_01.md)  
 ##### 20171002_01.md   [《PostgreSQL 独立事件相关性分析 二 - 人车拟合》](20171002_01.md)  
 ##### 20171001_13.md   [《[未完待续] PostgreSQL hadoop生态对接》](20171001_13.md)  

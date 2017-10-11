@@ -8,6 +8,7 @@
 ##### 20130127_01.md   [《PostgreSQL 9.3 will add pg_isready script to test PostgreSQL server if allowed to connect》](20130127_01.md)  
 ##### 20130124_01.md   [《PostgreSQL performance speedup by avoid lock references tuple when add or update(new) Foreign Key's value》](20130124_01.md)  
 ##### 20130122_01.md   [《PostgreSQL sharding有序UUID最佳实践 - serial global uuid stored in 64bit int8》](20130122_01.md)  
+##### 20130121_01.md   [《extend PostgreSQL set_bit() set one bit to serial bits.》](20130121_01.md)  
 ##### 20130110_01.md   [《HOW to Change PostgreSQL's TOAST_TUPLE_THRESHOLD》](20130110_01.md)  
 ##### 20130109_01.md   [《PostgreSQL large row|column performance tuning case》](20130109_01.md)  
 ##### 20130105_01.md   [《PostgreSQL partition table name convert to data type》](20130105_01.md)  

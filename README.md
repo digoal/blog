@@ -1034,6 +1034,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201301/20130127_01.md   [《PostgreSQL 9.3 will add pg_isready script to test PostgreSQL server if allowed to connect》](201301/20130127_01.md)  
 ##### 201301/20130124_01.md   [《PostgreSQL performance speedup by avoid lock references tuple when add or update(new) Foreign Key's value》](201301/20130124_01.md)  
 ##### 201301/20130122_01.md   [《PostgreSQL sharding有序UUID最佳实践 - serial global uuid stored in 64bit int8》](201301/20130122_01.md)  
+##### 201301/20130121_01.md   [《extend PostgreSQL set_bit() set one bit to serial bits.》](201301/20130121_01.md)  
 ##### 201301/20130110_01.md   [《HOW to Change PostgreSQL's TOAST_TUPLE_THRESHOLD》](201301/20130110_01.md)  
 ##### 201301/20130109_01.md   [《PostgreSQL large row|column performance tuning case》](201301/20130109_01.md)  
 ##### 201301/20130105_01.md   [《PostgreSQL partition table name convert to data type》](201301/20130105_01.md)  
@@ -1048,6 +1049,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201212/20121218_01.md   [《PostgreSQL plpgsql variadic argments , parameters - 可变参数个数》](201212/20121218_01.md)  
 ##### 201212/20121217_01.md   [《performance tuning about multi-rows query aggregated to single-row query》](201212/20121217_01.md)  
 ----  
+##### 201211/20121126_01.md   [《get PostgreSQL's next oid》](201211/20121126_01.md)  
 ##### 201211/20121115_02.md   [《PostgreSQL partial index use caveat in prepared statement <= ver 9.1》](201211/20121115_02.md)  
 ##### 201211/20121115_01.md   [《PostgreSQL 临时表 (Temproary table) style》](201211/20121115_01.md)  
 ##### 201211/20121114_01.md   [《PostgreSQL row lock and htup.t_infomask thinking》](201211/20121114_01.md)  

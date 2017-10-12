@@ -1,5 +1,7 @@
 ### 文章列表  
 ----  
+##### 20171012_01.md   [《PostgreSQL 和 Greenplum pgcrypto 加解密bytea处理差异》](20171012_01.md)  
+##### 20171011_01.md   [《PostgreSQL 应用场景与TEST CASE精华》](20171011_01.md)  
 ##### 20171010_01.md   [《PostgreSQL flashback(闪回) 功能实现与介绍》](20171010_01.md)  
 ##### 20171009_01.md   [《PostgreSQL实践 - 内容社区(如论坛)图式搜索应用》](20171009_01.md)  
 ##### 20171005_01.md   [《PostgreSQL 空间切割(st_split)功能扩展 - 空间对象网格化》](20171005_01.md)  

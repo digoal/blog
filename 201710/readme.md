@@ -1,5 +1,7 @@
 ### 文章列表  
 ----  
+##### 20171013_03.md   [《PostgreSQL 自定义自动类型转换(CAST)》](20171013_03.md)  
+##### 20171013_02.md   [《PostgreSQL Oracle 兼容性 - order by INT(select位置 position)》](20171013_02.md)  
 ##### 20171013_01.md   [《PostgreSQL Oracle 兼容性 - synonym 匿名》](20171013_01.md)  
 ##### 20171012_01.md   [《PostgreSQL 和 Greenplum pgcrypto 加解密bytea处理差异》](20171012_01.md)  
 ##### 20171011_01.md   [《PostgreSQL 应用场景与TEST CASE精华》](20171011_01.md)  

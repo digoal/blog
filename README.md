@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201710/20171013_01.md   [《PostgreSQL Oracle 兼容性 - synonym 匿名》](201710/20171013_01.md)  
 ##### 201710/20171012_01.md   [《PostgreSQL 和 Greenplum pgcrypto 加解密bytea处理差异》](201710/20171012_01.md)  
 ##### 201710/20171011_01.md   [《PostgreSQL 应用场景与TEST CASE精华》](201710/20171011_01.md)  
 ##### 201710/20171010_01.md   [《PostgreSQL flashback(闪回) 功能实现与介绍》](201710/20171010_01.md)  

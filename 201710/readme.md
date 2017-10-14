@@ -1,6 +1,6 @@
 ### 文章列表  
 ----  
-##### 20171013_04.md   [《sharding 和 共享分布式存储 数据库架构 优缺点》](20171013_04.md)  
+##### 20171013_04.md   [《HTAP数据库(同时支持oltp和olap业务) - sharding 和 共享分布式存储 数据库架构 优缺点》](20171013_04.md)  
 ##### 20171013_03.md   [《PostgreSQL 自定义自动类型转换(CAST)》](20171013_03.md)  
 ##### 20171013_02.md   [《PostgreSQL Oracle 兼容性 - order by INT(select位置 position)》](20171013_02.md)  
 ##### 20171013_01.md   [《PostgreSQL Oracle 兼容性 - synonym 匿名》](20171013_01.md)  

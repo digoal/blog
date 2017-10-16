@@ -1,5 +1,9 @@
 ### 文章列表  
 ----  
+##### 20171016_04.md   [《Greenplum 模糊查询 实践》](20171016_04.md)  
+##### 20171016_03.md   [《[未完待续] PostgreSQL 64位xid 迁移准备》](20171016_03.md)  
+##### 20171016_02.md   [《PostgreSQL 生成随机身份证ID》](20171016_02.md)  
+##### 20171016_01.md   [《[未完待续] MySQL Oracle PostgreSQL PPAS Greenplum 的异构迁移和同步实现和场景介绍》](20171016_01.md)  
 ##### 20171015_01.md   [《PostgreSQL 10 内置分区 vs pg_pathman perf profiling》](20171015_01.md)  
 ##### 20171014_01.md   [《PostgreSQL 如何让 列存（外部列存） 并行起来》](20171014_01.md)  
 ##### 20171013_04.md   [《HTAP数据库(OLTP+OLAP) - sharding 和 共享分布式存储 数据库架构 优缺点》](20171013_04.md)  

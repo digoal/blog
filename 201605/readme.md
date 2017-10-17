@@ -3,6 +3,7 @@
 ##### 20160529_01.md   [《PostgreSQL 批量权限 管理方法》](20160529_01.md)  
 ##### 20160528_01.md   [《深入浅出PostgreSQL B-Tree索引结构》](20160528_01.md)  
 ##### 20160527_01.md   [《PostgreSQL Oracle 兼容性之 - 如何篡改插入值(例如NULL纂改为其他值)》](20160527_01.md)  
+##### 20160526_01.md   [《PostgreSQL 最佳实践 - 逻辑增量复制(MySQL <-> PgSQL <-> PgSQL)》](20160526_01.md)  
 ##### 20160525_01.md   [《使用Londiste3 增量同步 线下PostgreSQL 到 阿里云RDS PG》](20160525_01.md)  
 ##### 20160524_03.md   [《[转载]用intel编译器icc编译PostgreSQL》](20160524_03.md)  
 ##### 20160524_02.md   [《PostgreSQL 如何实现upsert与新旧数据自动分离》](20160524_02.md)  

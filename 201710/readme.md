@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171017_04.md   [《Greenplum 类型一致性使用注意 - 索引条件、JOIN的类型一致性限制》](20171017_04.md)  
 ##### 20171017_03.md   [《Greenplum 点查询的优化(分布键)》](20171017_03.md)  
 ##### 20171017_02.md   [《PostgreSQL DISTINCT 和 DISTINCT ON 语法的使用》](20171017_02.md)  
 ##### 20171017_01.md   [《[未完待续] PostgreSQL\Greenplum Customer视角TODO》](20171017_01.md)  

@@ -6,7 +6,7 @@
 ##### 20161030_01.md   [《PostgreSQL 流行 HA 方案》](20161030_01.md)  
 ##### 20161027_01.md   [《PostgreSQL 9.6 sharding based on FDW & pg_pathman》](20161027_01.md)  
 ##### 20161024_01.md   [《PostgreSQL 9.5+ 高效分区表实现 - pg_pathman》](20161024_01.md)  
-##### 20161021_01.md   [《基于 阿里云 RDS PostgreSQL 打造实时用户画像推荐系统》](20161021_01.md)  
+##### 20161021_01.md   [《基于 阿里云 RDS PostgreSQL 打造实时用户画像推荐系统(varbitx)》](20161021_01.md)  
 ##### 20161020_02.md   [《PostgreSQL 无缝自增ID的实现 - by advisory lock》](20161020_02.md)  
 ##### 20161020_01.md   [《MySQL 增量同步到 PostgreSQL》](20161020_01.md)  
 ##### 20161019_01.md   [《PostgreSQL 全文检索加速 快到没有朋友 - RUM索引接口(潘多拉魔盒)》](20161019_01.md)  

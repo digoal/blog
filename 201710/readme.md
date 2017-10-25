@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171025_01.md   [《》](20171025_01.md)  
 ##### 20171024_05.md   [《PostgreSQL Oracle 兼容性之 - 系统列(ctid, oid, cmin, cmax, xmin, xmax)》](20171024_05.md)  
 ##### 20171024_04.md   [《PostgreSQL Oracle 兼容性之 - timestamp + numeric》](20171024_04.md)  
 ##### 20171024_03.md   [《Linux page allocation failure 的问题处理 - zone_reclaim_mode》](20171024_03.md)  

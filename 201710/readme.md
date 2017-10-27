@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171027_02.md   [《MySQL准实时同步到PostgreSQL, Greenplum的方案之一 - rds_dbsync》](20171027_02.md)  
 ##### 20171027_01.md   [《MySQL,Oracle,SQL Server等准实时同步到PostgreSQL的方案之一 - FDW外部访问接口》](20171027_01.md)  
 ##### 20171026_02.md   [《PostgreSQL + PostGIS + SFCGAL 优雅的处理3D数据》](20171026_02.md)  
 ##### 20171026_01.md   [《debezium - 数据实时捕获和传输管道(CDC)》](20171026_01.md)  

@@ -376,7 +376,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201703/20170301_01.md   [《PostgreSQL 备库apply延迟(delay)原理分析与诊断》](201703/20170301_01.md)  
 ----  
 ##### 201702/20170228_01.md   [《PostgreSQL Oracle 兼容性之 - SQL OUTLINE插件sr_plan (保存、篡改、固定 执行计划)》](201702/20170228_01.md)  
-##### 201702/20170227_01.md   [《PostgreSQL 10.0 preview 逻辑复制 - 原理与最佳实践》](201702/20170227_01.md)  
+##### 201702/20170227_01.md   [《PostgreSQL 10.0 preview 逻辑订阅 - 原理与最佳实践》](201702/20170227_01.md)  
 ##### 201702/20170225_01.md   [《PostgreSQL 向量化执行插件(瓦片式实现) 10x提速OLAP》](201702/20170225_01.md)  
 ##### 201702/20170221_03.md   [《PostgreSQL merge join 评估成本时可能会查询索引 - 硬解析务必引起注意 - 批量删除数据后, 未释放empty索引页导致mergejoin执行计划变慢 case》](201702/20170221_03.md)  
 ##### 201702/20170221_02.md   [《PostgreSQL bitmapAnd, bitmapOr, bitmap index scan, bitmap heap scan》](201702/20170221_02.md)  

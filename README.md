@@ -29,6 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201710/20171029_02.md   [《PostgreSQL 10 新特性 - identity column (serial, 自增)》](201710/20171029_02.md)  
+##### 201710/20171029_01.md   [《最受开发者欢迎的HTAP数据库PostgreSQL 10特性》](201710/20171029_01.md)  
 ##### 201710/20171027_04.md   [《[未完待续] 情感词分析，维护社会和谐 - PostgreSQL,Greenplum文本挖掘、分析实践》](201710/20171027_04.md)  
 ##### 201710/20171027_03.md   [《[未完待续] PostgreSQL 10 sharding 封装(pg_pathman + postgres_fdw) - 阿里云RDS PG sharding实践》](201710/20171027_03.md)  
 ##### 201710/20171027_02.md   [《MySQL准实时同步到PostgreSQL, Greenplum的方案之一 - rds_dbsync》](201710/20171027_02.md)  

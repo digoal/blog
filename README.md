@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201710/20171030_03.md   [《PostgreSQL 虚拟|虚假 索引(hypothetical index) - HypoPG》](201710/20171030_03.md)  
 ##### 201710/20171030_02.md   [《PostgreSQL 统计信息导入导出dump_stat》](201710/20171030_02.md)  
 ##### 201710/20171030_01.md   [《[未完待续] PostgreSQL 分布式流式计算 最佳实践》](201710/20171030_01.md)  
 ##### 201710/20171029_02.md   [《PostgreSQL 10 新特性 - identity column (serial, 自增)》](201710/20171029_02.md)  

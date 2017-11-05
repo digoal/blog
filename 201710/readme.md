@@ -2,7 +2,7 @@
 ----  
 ##### 20171031_01.md   [《PostgreSQL 电子围栏的应用场景和性能(大疆、共享设备、菜鸟。。。)》](20171031_01.md)  
 ##### 20171030_03.md   [《PostgreSQL 虚拟|虚假 索引(hypothetical index) - HypoPG》](20171030_03.md)  
-##### 20171030_02.md   [《PostgreSQL 统计信息导入导出dump_stat》](20171030_02.md)  
+##### 20171030_02.md   [《PostgreSQL 统计信息pg_statistic格式及导入导出dump_stat - 兼容Oracle》](20171030_02.md)  
 ##### 20171030_01.md   [《[未完待续] PostgreSQL 分布式流式计算 最佳实践》](20171030_01.md)  
 ##### 20171029_02.md   [《PostgreSQL 10 新特性 - identity column (serial, 自增)》](20171029_02.md)  
 ##### 20171029_01.md   [《最受开发者欢迎的HTAP数据库PostgreSQL 10特性》](20171029_01.md)  

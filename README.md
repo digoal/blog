@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201711/20171107_03.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 2 - (OLTP) 多表JOIN》](201711/20171107_03.md)  
 ##### 201711/20171107_02.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 1 - (OLTP) 点查》](201711/20171107_02.md)  
 ##### 201711/20171107_01.md   [《[未完待续] 流式机器学习(online machine learning) - pipelineDB with plR and plPython》](201711/20171107_01.md)  
 ##### 201711/20171104_03.md   [《PostgreSQL 中英文混合分词特殊规则(中文单字、英文单词)》](201711/20171104_03.md)  

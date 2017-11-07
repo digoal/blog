@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171107_01.md   [《[未完待续] 流式机器学习(online machine learning) - pipelineDB with plR and plPython》](20171107_01.md)  
 ##### 20171104_03.md   [《PostgreSQL 中英文混合分词特殊规则(中文单字、英文单词)》](20171104_03.md)  
 ##### 20171104_02.md   [《[未完待续] PostgreSQL on ECS 高效率持续备份设计 - By ZFS on Linux》](20171104_02.md)  
 ##### 20171104_01.md   [《[未完待续] pgrouting在机票业务中的应用 - 实时最佳转机计算》](20171104_01.md)  

@@ -3,7 +3,7 @@
 ##### 20150831_03.md   [《PostgreSQL & LLVM & Vitesse DB》](20150831_03.md)  
 ##### 20150831_02.md   [《NFS over RDMA》](20150831_02.md)  
 ##### 20150831_01.md   [《使用 PGStrom 2 (GPU JOIN, BulkScan, GpuPreAgg, ...)》](20150831_01.md)  
-##### 20150824_01.md   [《PostgreSQL 结巴分词》](20150824_01.md)  
+##### 20150824_01.md   [《PostgreSQL Greenplum 结巴分词(by plpython)》](20150824_01.md)  
 ##### 20150821_01.md   [《NLPIR 分词准确率接近98.23%》](20150821_01.md)  
 ##### 20150818_03.md   [《PostgreSQL 读写操作系统文件函数(File I/O)》](20150818_03.md)  
 ##### 20150818_02.md   [《PostgreSQL cann't use NULL ciphers(do not encryption) when use hostssl?》](20150818_02.md)  

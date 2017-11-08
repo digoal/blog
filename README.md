@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201711/20171108_01.md   [《PostgreSQL Oracle 兼容性之 - rowid (CREATE TABLE WITH OIDS)》](201711/20171108_01.md)  
 ##### 201711/20171107_06.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 5 - (OLTP) 空间应用 - 空间包含查询》](201711/20171107_06.md)  
 ##### 201711/20171107_05.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 4 - (OLAP) 大表OUTER JOIN统计查询》](201711/20171107_05.md)  
 ##### 201711/20171107_04.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 3 - (OLAP) 大表JOIN统计查询》](201711/20171107_04.md)  

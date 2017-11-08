@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171107_04.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 3 - (OLAP) 大表JOIN统计查询》](20171107_04.md)  
 ##### 20171107_03.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 2 - (OLTP) 多表JOIN》](20171107_03.md)  
 ##### 20171107_02.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 1 - (OLTP) 点查》](20171107_02.md)  
 ##### 20171107_01.md   [《[未完待续] 流式机器学习(online machine learning) - pipelineDB with plR and plPython》](20171107_01.md)  

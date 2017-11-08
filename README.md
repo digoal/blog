@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201711/20171107_04.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 3 - (OLAP) 大表JOIN统计查询》](201711/20171107_04.md)  
 ##### 201711/20171107_03.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 2 - (OLTP) 多表JOIN》](201711/20171107_03.md)  
 ##### 201711/20171107_02.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 1 - (OLTP) 点查》](201711/20171107_02.md)  
 ##### 201711/20171107_01.md   [《[未完待续] 流式机器学习(online machine learning) - pipelineDB with plR and plPython》](201711/20171107_01.md)  
@@ -1179,8 +1180,8 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201107/20110701_01.md   [《Use nagios monitor PostgreSQL archive status》](201107/20110701_01.md)  
 ----  
-##### 201106/20110629_01.md   [《a simple wan speed method》](201106/20110629_01.md)  
-##### 201106/20110627_01.md   [《SSH Tunnels Compression speed up PostgreSQL data transport in WAN environment》](201106/20110627_01.md)  
+##### 201106/20110629_01.md   [《ssh隧道加密压缩方法 - a simple wan speed method》](201106/20110629_01.md)  
+##### 201106/20110627_01.md   [《ssh隧道加密压缩方法 - SSH Tunnels Compression speed up PostgreSQL data transport in WAN environment》](201106/20110627_01.md)  
 ##### 201106/20110623_01.md   [《PostgreSQL Archived in the Cloud》](201106/20110623_01.md)  
 ##### 201106/20110612_01.md   [《行列变换 - Use tablefunc complete row & column cross display in PostgreSQL》](201106/20110612_01.md)  
 ##### 201106/20110610_01.md   [《函数稳定性讲解 - Thinking PostgreSQL Function's Volatility Categories》](201106/20110610_01.md)  

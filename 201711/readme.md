@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171107_05.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 4 - (OLAP) 大表OUTER JOIN统计查询》](20171107_05.md)  
 ##### 20171107_04.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 3 - (OLAP) 大表JOIN统计查询》](20171107_04.md)  
 ##### 20171107_03.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 2 - (OLTP) 多表JOIN》](20171107_03.md)  
 ##### 20171107_02.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 1 - (OLTP) 点查》](20171107_02.md)  

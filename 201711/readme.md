@@ -2,7 +2,7 @@
 ----  
 ##### 20171108_01.md   [《PostgreSQL Oracle 兼容性之 - rowid (CREATE TABLE WITH OIDS)》](20171108_01.md)  
 ##### 20171107_08.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 7 - (OLTP) 全文检索 - 含索引实时写入》](20171107_08.md)  
-##### 20171107_07.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 6 - (OLTP) 空间应用 - KNN查询（搜索附近范围的对象，按距离近到远排序输出）》](20171107_07.md)  
+##### 20171107_07.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 6 - (OLTP) 空间应用 - KNN查询（搜索附近对象，由近到远排序输出）》](20171107_07.md)  
 ##### 20171107_06.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 5 - (OLTP) 空间应用 - 空间包含查询》](20171107_06.md)  
 ##### 20171107_05.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 4 - (OLAP) 大表OUTER JOIN统计查询》](20171107_05.md)  
 ##### 20171107_04.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 3 - (OLAP) 大表JOIN统计查询》](20171107_04.md)  

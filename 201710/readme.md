@@ -15,7 +15,7 @@
 ##### 20171025_03.md   [《PostgreSQL 整型除法要注意》](20171025_03.md)  
 ##### 20171025_02.md   [《PostgreSQL Oracle 兼容性之 - substrb (基于字节的字符串截取)》](20171025_02.md)  
 ##### 20171025_01.md   [《Linux 批量依赖库拷贝(ldd)》](20171025_01.md)  
-##### 20171024_05.md   [《PostgreSQL Oracle 兼容性之 - 系统列(ctid, oid, cmin, cmax, xmin, xmax)》](20171024_05.md)  
+##### 20171024_05.md   [《PostgreSQL Oracle 兼容性之 - 系统(关键字、保留字)列的处理(ctid, oid, cmin, cmax, xmin, xmax)》](20171024_05.md)  
 ##### 20171024_04.md   [《PostgreSQL Oracle 兼容性之 - timestamp + numeric》](20171024_04.md)  
 ##### 20171024_03.md   [《Linux page allocation failure 的问题处理 - zone_reclaim_mode》](20171024_03.md)  
 ##### 20171024_02.md   [《[未完待续] 探探的寻找算法与数据库优化》](20171024_02.md)  

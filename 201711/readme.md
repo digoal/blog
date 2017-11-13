@@ -4,6 +4,7 @@
 ##### 20171111_01.md   [《PostgreSQL 异步消息实践 - Feed系统实时监测与响应(如 电商主动服务) - 分钟级到毫秒级的跨域》](20171111_01.md)  
 ##### 20171110_01.md   [《PostgreSQL 电商小需求 - 凑单商品的筛选》](20171110_01.md)  
 ##### 20171108_01.md   [《PostgreSQL Oracle 兼容性之 - rowid (CREATE TABLE WITH OIDS)》](20171108_01.md)  
+##### 20171107_25.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 24 - (OLTP) 物联网 - 时序数据并发写入(含时序索引BRIN)》](20171107_25.md)  
 ##### 20171107_24.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 23 - (OLAP) 并行计算》](20171107_24.md)  
 ##### 20171107_23.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 22 - (OLTP) merge insert|upsert|insert on conflict|合并写入》](20171107_23.md)  
 ##### 20171107_22.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 21 - (OLTP+OLAP) 排序、建索引》](20171107_22.md)  

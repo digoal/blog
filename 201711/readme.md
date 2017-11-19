@@ -1,6 +1,7 @@
 ### 文章列表  
 ----  
-##### 20171118_01.md   [《PostgreSQL compress method 接口 - 暨开放接口系列》](20171118_01.md)  
+##### 20171119_01.md   [《PostgreSQL 11 preview - pgbench 变量、函数扩展 - 暨pgbench 自定义 benchmark讲解》](20171119_01.md)  
+##### 20171118_01.md   [《PostgreSQL 11 preview - compress method 接口 - 暨开放接口系列》](20171118_01.md)  
 ##### 20171116_01.md   [《Greenplum insert的性能(单步\批量\copy) - 暨推荐使用gpfdist、阿里云oss外部表并行导入》](20171116_01.md)  
 ##### 20171111_02.md   [《PostgreSQL 数据库NULL值的默认排序行为与查询、索引定义规范 - nulls first\last, asc\desc》](20171111_02.md)  
 ##### 20171111_01.md   [《PostgreSQL 异步消息实践 - Feed系统实时监测与响应(如 电商主动服务) - 分钟级到毫秒级的实现》](20171111_01.md)  

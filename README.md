@@ -29,7 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201711/20171118_01.md   [《PostgreSQL compress method 接口 - 暨开放接口系列》](201711/20171118_01.md)  
+##### 201711/20171119_01.md   [《PostgreSQL 11 preview - pgbench 变量、函数扩展 - 暨pgbench 自定义 benchmark讲解》](201711/20171119_01.md)  
+##### 201711/20171118_01.md   [《PostgreSQL 11 preview - compress method 接口 - 暨开放接口系列》](201711/20171118_01.md)  
 ##### 201711/20171116_01.md   [《Greenplum insert的性能(单步\批量\copy) - 暨推荐使用gpfdist、阿里云oss外部表并行导入》](201711/20171116_01.md)  
 ##### 201711/20171111_02.md   [《PostgreSQL 数据库NULL值的默认排序行为与查询、索引定义规范 - nulls first\last, asc\desc》](201711/20171111_02.md)  
 ##### 201711/20171111_01.md   [《PostgreSQL 异步消息实践 - Feed系统实时监测与响应(如 电商主动服务) - 分钟级到毫秒级的实现》](201711/20171111_01.md)  
@@ -946,7 +947,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201506/20150626_01.md   [《PostgreSQL earth distance module》](201506/20150626_01.md)  
 ##### 201506/20150619_01.md   [《online DDL (or NOWAIT DDL) in PostgreSQL》](201506/20150619_01.md)  
-##### 201506/20150618_01.md   [《生成泊松、高斯、指数、随机分布数据 - PostgreSQL 9.5 new feature - pg_bench improve, gaussian (standard normal) & exponential distribution》](201506/20150618_01.md)  
+##### 201506/20150618_01.md   [《生成泊松、高斯、指数、随机分布数据 - PostgreSQL 9.5 new feature - pgbench improve, gaussian (standard normal) & exponential distribution》](201506/20150618_01.md)  
 ##### 201506/20150616_02.md   [《PostgreSQL 9.5 new feature - pg_dump use --snapshot taken by another session (exp. slot, pg_export_snapshot())》](201506/20150616_02.md)  
 ##### 201506/20150616_01.md   [《PostgreSQL 9.5 new feature - width_bucket return the bucket number》](201506/20150616_01.md)  
 ##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  

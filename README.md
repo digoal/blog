@@ -1253,7 +1253,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
 ##### 201102/20110216_02.md   [《PostgreSQL's Cursor USAGE with SQL MODE - 分页优化》](201102/20110216_02.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  
-##### 201102/20110214_01.md   [《PostgreSQL's two-phase commit used with dblink example》](201102/20110214_01.md)  
+##### 201102/20110214_02.md   [《Compare dblink module Within One Transaction in PostgreSQL - dblink, 自治事务(Oracle兼容性)》](201102/20110214_02.md)  
+##### 201102/20110214_01.md   [《PostgreSQL's two-phase commit used with dblink example - 2PC , 两阶段事务》](201102/20110214_01.md)  
 ##### 201102/20110212_01.md   [《PostgreSQL 随机查询优化》](201102/20110212_01.md)  
 ##### 201102/20110209_01.md   [《Can session_replication_role used like MySQL's BlackHole Engine?》](201102/20110209_01.md)  
 ----  

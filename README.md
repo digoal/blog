@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201711/20171121_01.md   [《PostgreSQL 如何快速构建 海量 逼真 测试数据》](201711/20171121_01.md)  
 ##### 201711/20171119_01.md   [《PostgreSQL 11 preview - pgbench 变量、函数扩展 - 暨pgbench 自定义 benchmark讲解》](201711/20171119_01.md)  
 ##### 201711/20171118_01.md   [《PostgreSQL 11 preview - compress method 接口 - 暨开放接口系列》](201711/20171118_01.md)  
 ##### 201711/20171116_01.md   [《Greenplum insert的性能(单步\批量\copy) - 暨推荐使用gpfdist、阿里云oss外部表并行导入》](201711/20171116_01.md)  

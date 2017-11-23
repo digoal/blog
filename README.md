@@ -29,7 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201711/20171123_01.md   [《Greenplum “Sort、Group、distinct 聚合、JOIN” 惧怕数据倾斜的黑科技和原理 - 多阶段聚合》](201711/20171123_01.md)  
+##### 201711/20171123_02.md   [《PostgreSQL 流式统计 - insert on conflict 实现 流式 min, max, avg, sum, count ...》](201711/20171123_02.md)  
+##### 201711/20171123_01.md   [《HybridDB PostgreSQL "Sort、Group、distinct 聚合、JOIN" 不惧怕数据倾斜的黑科技和原理 - 多阶段聚合》](201711/20171123_01.md)  
 ##### 201711/20171122_03.md   [《PostgreSQL multipolygon 空间索引查询过滤精简优化 - IO，CPU放大优化》](201711/20171122_03.md)  
 ##### 201711/20171122_02.md   [《PostgreSQL 传统 hash 分区方法和性能》](201711/20171122_02.md)  
 ##### 201711/20171122_01.md   [《PostgreSQL distinct 与 Greenplum distinct 的实现与优化》](201711/20171122_01.md)  

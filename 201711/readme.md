@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171123_01.md   [《Greenplum Group、distinct 聚合 不惧怕数据倾斜的黑科技和原理 - 多阶段聚合》](20171123_01.md)  
 ##### 20171122_03.md   [《PostgreSQL multipolygon 空间索引查询过滤精简优化 - IO，CPU放大优化》](20171122_03.md)  
 ##### 20171122_02.md   [《PostgreSQL 传统 hash 分区方法和性能》](20171122_02.md)  
 ##### 20171122_01.md   [《PostgreSQL distinct 与 Greenplum distinct 的实现与优化》](20171122_01.md)  

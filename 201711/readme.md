@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171127_02.md   [《Greenplum , PostgreSQL pgcrypto 加密算法、mode、PAD的选择 - 与Oracle, MySQL的差异(安全性差异)》](20171127_02.md)  
 ##### 20171127_01.md   [《Greenplum 排序nulls first|last的 SQL写法实现》](20171127_01.md)  
 ##### 20171126_02.md   [《[未完待续] 数据库sharding》](20171126_02.md)  
 ##### 20171126_01.md   [《PostgreSQL手机行业经营分析、决策系统设计 - 实时圈选、透视、估算》](20171126_01.md)  

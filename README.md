@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201711/20171128_01.md   [《一个端口代理软件 - inlab balance》](201711/20171128_01.md)  
 ##### 201711/20171127_02.md   [《Greenplum , PostgreSQL pgcrypto 加密算法、mode、PAD的选择 - 与Oracle, MySQL的差异(安全性差异)》](201711/20171127_02.md)  
 ##### 201711/20171127_01.md   [《Greenplum 排序nulls first|last的 SQL写法实现》](201711/20171127_01.md)  
 ##### 201711/20171126_02.md   [《[未完待续] 数据库sharding》](201711/20171126_02.md)  

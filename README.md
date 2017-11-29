@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201711/20171129_02.md   [《PostgreSQL 10 on ECS 实施 流复制备库镜像+自动快照备份+自动备份验证+自动清理备份与归档》](201711/20171129_02.md)  
 ##### 201711/20171129_01.md   [《PostgreSQL、Greenplum 滑动窗口 分析SQL 实践》](201711/20171129_01.md)  
 ##### 201711/20171128_01.md   [《一个端口代理软件 - inlab balance》](201711/20171128_01.md)  
 ##### 201711/20171127_02.md   [《Greenplum , PostgreSQL pgcrypto 加密算法、mode、PAD的选择 - 与Oracle, MySQL的差异(安全性差异)》](201711/20171127_02.md)  
@@ -1110,6 +1111,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201306/20130603_02.md   [《PostgreSQL monitor - nagios client installation》](201306/20130603_02.md)  
 ##### 201306/20130603_01.md   [《PostgreSQL monitor - nagios server installation》](201306/20130603_01.md)  
 ----  
+##### 201305/20130527_01.md   [《PostgreSQL backup and recovery - online backup & Point-In-Time-Recovery》](201305/20130527_01.md)  
 ##### 201305/20130523_01.md   [《PostgreSQL performance test use ssh tunnel》](201305/20130523_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  
 ##### 201305/20130522_01.md   [《PostgreSQL 如何实现网络压缩传输或加密传输(openssl)》](201305/20130522_01.md)  

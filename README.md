@@ -1111,6 +1111,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201306/20130603_02.md   [《PostgreSQL monitor - nagios client installation》](201306/20130603_02.md)  
 ##### 201306/20130603_01.md   [《PostgreSQL monitor - nagios server installation》](201306/20130603_01.md)  
 ----  
+##### 201305/20130531_01.md   [《PostgreSQL Oracle 兼容性之 - JOB - Daily Maintenance - Timing Tasks(pgagent)》](201305/20130531_01.md)  
 ##### 201305/20130527_01.md   [《PostgreSQL backup and recovery - online backup & Point-In-Time-Recovery》](201305/20130527_01.md)  
 ##### 201305/20130523_01.md   [《PostgreSQL performance test use ssh tunnel》](201305/20130523_01.md)  
 ##### 201305/20130522_02.md   [《PostgreSQL ssl ciphers performance 比较》](201305/20130522_02.md)  

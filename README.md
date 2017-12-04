@@ -29,6 +29,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201712/20171204_02.md   [《Greenplum explain analyze 解读 + 深度明细开关》](201712/20171204_02.md)  
+##### 201712/20171204_01.md   [《GIS术语 - POI、AOI、LOI、路径、轨迹》](201712/20171204_01.md)  
+----  
 ##### 201711/20171129_02.md   [《PostgreSQL 10 on ECS 实施 流复制备库镜像+自动快照备份+自动备份验证+自动清理备份与归档》](201711/20171129_02.md)  
 ##### 201711/20171129_01.md   [《PostgreSQL、Greenplum 滑动窗口 分析SQL 实践》](201711/20171129_01.md)  
 ##### 201711/20171128_01.md   [《一个端口代理软件 - inlab balance》](201711/20171128_01.md)  
@@ -1051,6 +1054,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201407/20140725_01.md   [《Postgres-XL you can only see databases with CREATE privilege》](201407/20140725_01.md)  
 ----  
 ##### 201406/20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](201406/20140618_01.md)  
+##### 201406/20140617_02.md   [《test zfs dedup vs compress which suit in your environment》](201406/20140617_02.md)  
 ##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  
 ##### 201406/20140614_01.md   [《使用 ssh -R 建立反向/远程TCP端口转发代理》](201406/20140614_01.md)  
 ##### 201406/20140609_01.md   [《PostgreSQL LDAP认证之 search bind配置》](201406/20140609_01.md)  

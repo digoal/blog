@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201712/20171204_03.md   [《PostgreSQL Oracle兼容性 - substrb - orafce substrb 适配 Oracle substrb》](201712/20171204_03.md)  
 ##### 201712/20171204_02.md   [《Greenplum explain analyze 解读 + 深度明细开关》](201712/20171204_02.md)  
 ##### 201712/20171204_01.md   [《GIS术语 - POI、AOI、LOI、路径、轨迹》](201712/20171204_01.md)  
 ----  

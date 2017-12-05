@@ -18,7 +18,7 @@
 ##### 20150923_01.md   [《PostgreSQL OID 源码分析》](20150923_01.md)  
 ##### 20150922_01.md   [《PostgreSQL 批量调用函数的方法》](20150922_01.md)  
 ##### 20150921_01.md   [《PostgreSQL Oracle 兼容性之 - Oracle FORALL & PostgreSQL ? op any|all (ARRAY)》](20150921_01.md)  
-##### 20150919_02.md   [《妙用explain Plan Rows快速估算行》](20150919_02.md)  
+##### 20150919_02.md   [《妙用explain Plan Rows快速估算行 - 分页数估算》](20150919_02.md)  
 ##### 20150919_01.md   [《PostgreSQL数据库监控中的统计学 - 对象SIZE的数据分布图》](20150919_01.md)  
 ##### 20150916_02.md   [《substituting access method \"gist\" for obsolete method \"rtree》](20150916_02.md)  
 ##### 20150916_01.md   [《Core dump 分析》](20150916_01.md)  

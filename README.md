@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201712/20171205_01.md   [《SQL流式案例 - 旋转门压缩(前后计算相关滑窗处理例子)》](201712/20171205_01.md)  
 ##### 201712/20171204_05.md   [《PostgreSQL 用 CTE语法 + 继承 实现拆分大表》](201712/20171204_05.md)  
 ##### 201712/20171204_04.md   [《PostgreSQL 逻辑订阅 - DDL 订阅 实现方法》](201712/20171204_04.md)  
 ##### 201712/20171204_03.md   [《PostgreSQL Oracle兼容性 - substrb - orafce substrb 适配 Oracle substrb》](201712/20171204_03.md)  
@@ -908,7 +909,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201509/20150923_01.md   [《PostgreSQL OID 源码分析》](201509/20150923_01.md)  
 ##### 201509/20150922_01.md   [《PostgreSQL 批量调用函数的方法》](201509/20150922_01.md)  
 ##### 201509/20150921_01.md   [《PostgreSQL Oracle 兼容性之 - Oracle FORALL & PostgreSQL ? op any|all (ARRAY)》](201509/20150921_01.md)  
-##### 201509/20150919_02.md   [《妙用explain Plan Rows快速估算行》](201509/20150919_02.md)  
+##### 201509/20150919_02.md   [《妙用explain Plan Rows快速估算行 - 分页数估算》](201509/20150919_02.md)  
 ##### 201509/20150919_01.md   [《PostgreSQL数据库监控中的统计学 - 对象SIZE的数据分布图》](201509/20150919_01.md)  
 ##### 201509/20150916_02.md   [《substituting access method \"gist\" for obsolete method \"rtree》](201509/20150916_02.md)  
 ##### 201509/20150916_01.md   [《Core dump 分析》](201509/20150916_01.md)  

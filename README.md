@@ -30,7 +30,7 @@ digoal's|PostgreSQL|文章|归类
 ### 未归类文档如下  
 ----  
 ##### 201712/20171209_01.md   [《多流实时聚合 - 记录级实时快照 - JSON聚合与json全文检索的功能应用》](201712/20171209_01.md)  
-##### 201712/20171208_05.md   [《人、机客户服务质量 - 实时透视分析》](201712/20171208_05.md)  
+##### 201712/20171208_05.md   [《人、机客户服务质量 - 实时透视分析 - (多股数据流上下文相关实时分析,窗口保持)》](201712/20171208_05.md)  
 ##### 201712/20171208_04.md   [《Greenplum 清理垃圾、修改存储模式（行列变换） 平滑方法 - 交换数据、交互分区》](201712/20171208_04.md)  
 ##### 201712/20171208_03.md   [《PostgreSQL 业务数据质量 实时监控 实践》](201712/20171208_03.md)  
 ##### 201712/20171208_02.md   [《PostgreSQL 元数据库讲解 - 对象(表、索引、函数、序列、视图...)在哪里、如何识别、如何求对象定义》](201712/20171208_02.md)  
@@ -1250,6 +1250,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201202/20120214_01.md   [《Use PostgreSQL collect and analyze Operation System statistics》](201202/20120214_01.md)  
 ----  
 ##### 201201/20120119_01.md   [《PostgreSQL 灵活审计插件 - PostgreSQL per database or per user audit use pg_log_userqueries》](201201/20120119_01.md)  
+##### 201201/20120113_03.md   [《Use pgbouncer connect to GreenPlum's segment node》](201201/20120113_03.md)  
 ##### 201201/20120113_02.md   [《PostgreSQL 跟踪谁动了你的记录 - Use timetravel function trace tuple's DML》](201201/20120113_02.md)  
 ##### 201201/20120113_01.md   [《PostgreSQL 跟踪谁动了你的记录 - Use insert_username Tracking Who Changed a Table》](201201/20120113_01.md)  
 ##### 201201/20120105_01.md   [《TOAST table with pgfincore》](201201/20120105_01.md)  
@@ -1306,5 +1307,6 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201006/20100603_01.md   [《Using “GET DIAGNOSTICS integer_var = ROW_COUNT;” capture rows effect by the last SQL》](201006/20100603_01.md)  
 ----  
+##### 201005/20100511_03.md   [《PostgreSQL数据库开源连接池pgbouncer的使用》](201005/20100511_03.md)  
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  

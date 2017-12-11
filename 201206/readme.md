@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20120628_01.md   [《PostgreSQL plpgsql_check_function 插件 - plpgsql函数体内容CHECK》](20120628_01.md)  
 ##### 20120626_02.md   [《函数稳定性讲解 - 函数索引思考, pay attention to function index used in PostgreSQL》](20120626_02.md)  
 ##### 20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](20120626_01.md)  
 ##### 20120625_01.md   [《USE hstore store table's trace record》](20120625_01.md)  

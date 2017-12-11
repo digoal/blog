@@ -1217,6 +1217,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
 ##### 201208/20120814_01.md   [《variable number of arguments function》](201208/20120814_01.md)  
 ----  
+##### 201206/20120628_01.md   [《PostgreSQL plpgsql_check_function 插件 - plpgsql函数体内容CHECK》](201206/20120628_01.md)  
 ##### 201206/20120626_02.md   [《函数稳定性讲解 - 函数索引思考, pay attention to function index used in PostgreSQL》](201206/20120626_02.md)  
 ##### 201206/20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](201206/20120626_01.md)  
 ##### 201206/20120625_01.md   [《USE hstore store table's trace record》](201206/20120625_01.md)  

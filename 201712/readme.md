@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171214_01.md   [《PostgreSQL UDF妙用 - mybatis等框架，不支持的语法都可以通过UDF来实现》](20171214_01.md)  
 ##### 20171213_01.md   [《Greenplum merge insert 用法与性能 (insert on conflict)》](20171213_01.md)  
 ##### 20171212_02.md   [《Greenplum 点查(按PK查询)性能与提升空间》](20171212_02.md)  
 ##### 20171212_01.md   [《阿里云RDS PostgreSQL varbitx实践 - 流式标签 (阅后即焚流式批量计算) - 万亿级，任意标签圈人，毫秒响应》](20171212_01.md)  

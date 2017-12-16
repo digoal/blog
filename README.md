@@ -634,7 +634,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201611/20161107_01.md   [《PostgreSQL 流复制xlog异步send》](201611/20161107_01.md)  
 ##### 201611/20161106_01.md   [《PostgreSQL clang vs gcc 编译》](201611/20161106_01.md)  
 ##### 201611/20161104_01.md   [《PostgreSQL Oracle 兼容性之 - plpgsql 自治事务(autonomous_transaction)补丁》](201611/20161104_01.md)  
-##### 201611/20161101_01.md   [《给PostgreSQL爱好者的参考资料》](201611/20161101_01.md)  
+##### 201611/20161101_01.md   [《致DBA , 开发者 , 内核开发者 , 架构师 - PostgreSQL 爱好者参考资料》](201611/20161101_01.md)  
 ----  
 ##### 201610/20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case》](201610/20161031_02.md)  
 ##### 201610/20161031_01.md   [《PostgreSQL 透明加密(TDE,FDE) - 块级加密》](201610/20161031_01.md)  

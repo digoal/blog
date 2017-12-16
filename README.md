@@ -1033,6 +1033,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201504/20150401_02.md   [《install kvm hosts use kickstart in CentOS 6 in text mode》](201504/20150401_02.md)  
 ##### 201504/20150401_01.md   [《install kvm hosts use vnc in CentOS 6》](201504/20150401_01.md)  
 ----  
+##### 201503/20150325_03.md   [《PostgreSQL primary-standby failback tools : pg_rewind》](201503/20150325_03.md)  
+##### 201503/20150325_02.md   [《PostgreSQL 9.5 new feature - pg_rewind fast sync Split Brain Primary & Standby》](201503/20150325_02.md)  
+##### 201503/20150325_01.md   [《PostgreSQL 9.5 add pg_rewind for Fast align for PostgreSQL unaligned primary & standby》](201503/20150325_01.md)  
 ##### 201503/20150313_01.md   [《don't mistake the float/double's display & real value》](201503/20150313_01.md)  
 ##### 201503/20150312_01.md   [《PostgreSQL 使用函数生成 外部表DDL(use function generate foreign table DDL in postgresql)》](201503/20150312_01.md)  
 ##### 201503/20150305_01.md   [《在PostgreSQL中用线性回归分析linear regression做预测 - 例子2, 预测未来数日某股收盘价》](201503/20150305_01.md)  

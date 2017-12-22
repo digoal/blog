@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20171222_01.md   [《PostgreSQL pgbench : 冒号处理》](20171222_01.md)  
 ##### 20171221_01.md   [《PostgreSQL OUTER JOIN 优化的几个知识点 - 语义转换、内存带宽、JOIN算法、FILTER亲和力、TSP、HINT、命中率、存储顺序、扫描顺序、索引深度》](20171221_01.md)  
 ##### 20171217_01.md   [《PostgreSQL Oracle 兼容性之 - Partition By Outer Join实现稠化报表》](20171217_01.md)  
 ##### 20171216_01.md   [《PostgreSQL 高并发任务分配系统 实践》](20171216_01.md)  

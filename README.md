@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201801/20180103_01.md   [《PostgreSQL 3D City 应用》](201801/20180103_01.md)  
 ##### 201801/20180102_05.md   [《PostgreSQL Oracle 兼容性之 - connect by 高级选项 CONNECT_BY_ISLEAF、SYS_CONNECT_BY_PATH、CONNECT_BY_ISCYCLE、LEVEL》](201801/20180102_05.md)  
 ##### 201801/20180102_04.md   [《PostgreSQL 图式搜索(graph search)实践 - 百亿级图谱，毫秒响应》](201801/20180102_04.md)  
 ##### 201801/20180102_03.md   [《[未完待续]数据挖掘、可视化与机器学习工具: redash》](201801/20180102_03.md)  

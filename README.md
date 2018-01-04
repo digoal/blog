@@ -48,7 +48,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201712/20171217_01.md   [《PostgreSQL Oracle 兼容性之 - Partition By Outer Join实现稠化报表》](201712/20171217_01.md)  
 ##### 201712/20171216_01.md   [《PostgreSQL 高并发任务分配系统 实践》](201712/20171216_01.md)  
 ##### 201712/20171214_01.md   [《PostgreSQL UDF妙用 - mybatis等框架，不支持的语法都可以通过UDF来实现》](201712/20171214_01.md)  
-##### 201712/20171213_01.md   [《Greenplum merge insert 用法与性能 (insert on conflict)》](201712/20171213_01.md)  
+##### 201712/20171213_02.md   [《Greenplum merge insert 用法与性能 (insert on conflict) - 2》](201712/20171213_02.md)  
+##### 201712/20171213_01.md   [《Greenplum merge insert 用法与性能 (insert on conflict) - 1》](201712/20171213_01.md)  
 ##### 201712/20171212_02.md   [《Greenplum 点查(按PK查询)性能与提升空间》](201712/20171212_02.md)  
 ##### 201712/20171212_01.md   [《阿里云RDS PostgreSQL varbitx实践 - 流式标签 (阅后即焚流式批量计算) - 万亿级，任意标签圈人，毫秒响应》](201712/20171212_01.md)  
 ##### 201712/20171211_03.md   [《Greenplum 统计信息收集参数 - 暨统计信息不准引入的broadcast motion一例》](201712/20171211_03.md)  
@@ -910,7 +911,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201511/20151130_02.md   [《安装iozone on CentOS 7 x64》](201511/20151130_02.md)  
 ##### 201511/20151130_01.md   [《PostgreSQL 安全警钟长鸣》](201511/20151130_01.md)  
-##### 201511/20151126_01.md   [《让greenplum的oltp性能飞起来》](201511/20151126_01.md)  
+##### 201511/20151126_01.md   [《让greenplum的oltp性能飞起来 - 直接读写数据节点》](201511/20151126_01.md)  
 ##### 201511/20151118_01.md   [《Greenplum RT高的原因分析 和 优化方法》](201511/20151118_01.md)  
 ##### 201511/20151111_01.md   [《一张图看懂MADlib能干什么》](201511/20151111_01.md)  
 ##### 201511/20151109_01.md   [《PostgreSQL snapshot too old补丁, 防止数据库膨胀》](201511/20151109_01.md)  
@@ -1278,6 +1279,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201203/20120313_02.md   [《PostgreSQL性能优化综合案例讲解 - 2》](201203/20120313_02.md)  
 ##### 201203/20120313_01.md   [《PostgreSQL性能优化综合案例讲解 - 1》](201203/20120313_01.md)  
 ----  
+##### 201202/20120217_01.md   [《游戏合区、拆区，数据库操作CASE - PostgreSQL Data merge case》](201202/20120217_01.md)  
 ##### 201202/20120216_01.md   [《how difference when update a table's column which it in TOAST or BASETABLE(in-line)》](201202/20120216_01.md)  
 ##### 201202/20120214_01.md   [《Use PostgreSQL collect and analyze Operation System statistics》](201202/20120214_01.md)  
 ----  

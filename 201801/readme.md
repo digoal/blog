@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20180113_04.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) NUMA 架构spin锁等待优化》](20180113_04.md)  
 ##### 20180113_03.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) 自动(postgresql.conf)参数计算与适配功能》](20180113_03.md)  
 ##### 20180113_02.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) 索引推荐功能使用》](20180113_02.md)  
 ##### 20180113_01.md   [《PostgreSQL HTAP功能之资源隔离管理 - CPU与刷脏资源组管理 (阿里云EDB PPAS resource queue)》](20180113_01.md)  

@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20180113_02.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) 索引推荐功能使用》](20180113_02.md)  
 ##### 20180113_01.md   [《PostgreSQL HTAP功能之资源隔离管理 - CPU与刷脏资源组管理 (阿里云EDB PPAS resource queue)》](20180113_01.md)  
 ##### 20180111_02.md   [《PostgreSQL SQL自动优化案例 - 极简，自动推荐索引》](20180111_02.md)  
 ##### 20180111_01.md   [《PostgreSQL SQL filter (SQL 成本|语义过滤器)》](20180111_01.md)  

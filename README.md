@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201801/20180116_01.md   [《[转]流数据库 概率计算概念 - PipelineDB-Probabilistic Data Structures & Algorithms》](201801/20180116_01.md)  
 ##### 201801/20180115_01.md   [《电商订单 + 物流信息对称补齐案例 - A, B表，到达时间交叉，增量JOIN补全C数据》](201801/20180115_01.md)  
 ##### 201801/20180113_04.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) NUMA 架构spin锁等待优化》](201801/20180113_04.md)  
 ##### 201801/20180113_03.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) 自动(postgresql.conf)参数计算与适配功能》](201801/20180113_03.md)  

@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20180117_01.md   [《[转载]MySQL和PostgreSQL的数据类型对比》](20180117_01.md)  
 ##### 20180116_02.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) SQL防火墙使用（白名单管理、防SQL注入、防DDL等）》](20180116_02.md)  
 ##### 20180116_01.md   [《[转]流数据库 概率计算概念 - PipelineDB-Probabilistic Data Structures & Algorithms》](20180116_01.md)  
 ##### 20180115_01.md   [《电商订单 + 物流信息对称补齐案例 - A, B表，到达时间交叉，增量JOIN补全C数据》](20180115_01.md)  

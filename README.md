@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201801/20180118_04.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) 自定义custom plan次数》](201801/20180118_04.md)  
 ##### 201801/20180118_03.md   [《PostgreSQL 模糊查询 与 正则匹配 性能差异与SQL优化建议》](201801/20180118_03.md)  
 ##### 201801/20180118_02.md   [《如何将谷歌地球(google earth) 的数据导入 PostgreSQL》](201801/20180118_02.md)  
 ##### 201801/20180118_01.md   [《OSM(OpenStreetMap) poi、路网 数据导入 PostgreSQL》](201801/20180118_01.md)  

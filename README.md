@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201801/20180127_01.md   [《Greenplum bitmap插件 - roaring bitmap (类阿里云RDS PG varbitx, 应用于实时海量用户画像和圈选、透视)》](201801/20180127_01.md)  
 ##### 201801/20180125_01.md   [《PostgreSQL Oracle 兼容性之 - rownum》](201801/20180125_01.md)  
 ##### 201801/20180124_02.md   [《PostgreSQL 多重含义数组检索与条件过滤 (标签1:属性, 标签n:属性) - 包括UPSERT操作如何修改数组、追加数组元素》](201801/20180124_02.md)  
 ##### 201801/20180124_01.md   [《PostgreSQL 查询涉及分区表过多导致的性能问题 - 性能诊断与优化(大量BIND, spin lock, SLEEP进程)》](201801/20180124_01.md)  
@@ -238,7 +239,6 @@ digoal's|PostgreSQL|文章|归类
 ##### 201710/20171004_01.md   [《PostgreSQL 空间st_contains，st_within空间包含搜索优化 - 降IO和降CPU(bound box) (多边形GiST优化)》](201710/20171004_01.md)  
 ##### 201710/20171002_01.md   [《PostgreSQL 独立事件相关性分析 二 - 人车拟合》](201710/20171002_01.md)  
 ##### 201710/20171001_13.md   [《[未完待续] PostgreSQL hadoop生态对接》](201710/20171001_13.md)  
-##### 201710/20171001_12.md   [《[未完待续] Greenplum bitmap插件 - roaring bitmap》](201710/20171001_12.md)  
 ##### 201710/20171001_11.md   [《[未完待续] Presto with PostgreSQL (OLAP, sharding, MPP)》](201710/20171001_11.md)  
 ##### 201710/20171001_10.md   [《[未完待续] PostgreSQL multi-master 套件》](201710/20171001_10.md)  
 ##### 201710/20171001_09.md   [《[未完待续] PostgreSQL sharding 套件(pg_pathman, postgres_fdw, logical replication)》](201710/20171001_09.md)  

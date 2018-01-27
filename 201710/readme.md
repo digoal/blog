@@ -52,7 +52,6 @@
 ##### 20171004_01.md   [《PostgreSQL 空间st_contains，st_within空间包含搜索优化 - 降IO和降CPU(bound box) (多边形GiST优化)》](20171004_01.md)  
 ##### 20171002_01.md   [《PostgreSQL 独立事件相关性分析 二 - 人车拟合》](20171002_01.md)  
 ##### 20171001_13.md   [《[未完待续] PostgreSQL hadoop生态对接》](20171001_13.md)  
-##### 20171001_12.md   [《[未完待续] Greenplum bitmap插件 - roaring bitmap》](20171001_12.md)  
 ##### 20171001_11.md   [《[未完待续] Presto with PostgreSQL (OLAP, sharding, MPP)》](20171001_11.md)  
 ##### 20171001_10.md   [《[未完待续] PostgreSQL multi-master 套件》](20171001_10.md)  
 ##### 20171001_09.md   [《[未完待续] PostgreSQL sharding 套件(pg_pathman, postgres_fdw, logical replication)》](20171001_09.md)  

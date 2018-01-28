@@ -29,6 +29,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201801/20180128_03.md   [《[转] java - 过滤ASCII码中的不可见字符, ASCII三部分, 各控制字符详解》](201801/20180128_03.md)  
+##### 201801/20180128_02.md   [《[转] SqlServe到PG迁移错误:无效的编码序列"UTF8": 0x00》](201801/20180128_02.md)  
+##### 201801/20180128_01.md   [《PostgreSQL, Greenplum ETL 之 - 非法字符(如0x00)过滤、转换(blob2text, bytea2text)》](201801/20180128_01.md)  
 ##### 201801/20180127_01.md   [《Greenplum roaring bitmap与业务场景 (类阿里云RDS PG varbitx, 应用于海量用户 实时画像和圈选、透视)》](201801/20180127_01.md)  
 ##### 201801/20180125_01.md   [《PostgreSQL Oracle 兼容性之 - rownum》](201801/20180125_01.md)  
 ##### 201801/20180124_02.md   [《PostgreSQL 多重含义数组检索与条件过滤 (标签1:属性, 标签n:属性) - 包括UPSERT操作如何修改数组、追加数组元素》](201801/20180124_02.md)  
@@ -231,7 +234,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201710/20171013_03.md   [《PostgreSQL 自定义自动类型转换(CAST)》](201710/20171013_03.md)  
 ##### 201710/20171013_02.md   [《PostgreSQL Oracle 兼容性 - order by INT(select位置 position)》](201710/20171013_02.md)  
 ##### 201710/20171013_01.md   [《PostgreSQL Oracle 兼容性 - synonym 匿名》](201710/20171013_01.md)  
-##### 201710/20171012_01.md   [《PostgreSQL 和 Greenplum pgcrypto 加解密bytea处理差异》](201710/20171012_01.md)  
+##### 201710/20171012_01.md   [《PostgreSQL 和 Greenplum pgcrypto 加解密bytea处理差异(convert, convert_from)》](201710/20171012_01.md)  
 ##### 201710/20171011_01.md   [《[未完待续] PostgreSQL 应用场景 与 TEST CASE(压测) 精华》](201710/20171011_01.md)  
 ##### 201710/20171010_01.md   [《PostgreSQL flashback(闪回) 功能实现与介绍》](201710/20171010_01.md)  
 ##### 201710/20171009_01.md   [《PostgreSQL 实践 - 内容社区(如论坛)图式搜索应用》](201710/20171009_01.md)  

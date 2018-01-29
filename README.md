@@ -1317,6 +1317,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201205/20120515_01.md   [《PostgreSQL汉字转拼音或拼音首字母的应用》](201205/20120515_01.md)  
 ##### 201205/20120511_01.md   [《PostgreSQL 逻辑备份一致性讲解 - Why pg_dump backup a database in consistent status》](201205/20120511_01.md)  
 ----  
+##### 201204/20120426_01.md   [《PostgreSQL Selectivity Tablespace PITR - 部分表空间恢复》](201204/20120426_01.md)  
 ##### 201204/20120422_01.md   [《使用PostgreSQL和nagios设计统一的应用监控接口》](201204/20120422_01.md)  
 ##### 201204/20120412_01.md   [《PostgreSQL Logical Backup's TOC File》](201204/20120412_01.md)  
 ----  

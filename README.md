@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201802/20180201_02.md   [《PostgreSQL dblink异步调用实现 并行hash分片JOIN - 含数据交、并、差 提速案例》](201802/20180201_02.md)  
 ##### 201802/20180201_01.md   [《PostgreSQL 11 preview - parallel hash join(并行哈希JOIN) 性能极大提升》](201802/20180201_01.md)  
 ----  
 ##### 201801/20180131_02.md   [《PostgreSQL in 与 = any 的SQL语法异同与性能优化》](201801/20180131_02.md)  

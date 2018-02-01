@@ -29,6 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201802/20180201_01.md   [《PostgreSQL 11 preview - parallel hash join(并行哈希JOIN) 性能极大提升》](201802/20180201_01.md)  
+----  
 ##### 201801/20180131_02.md   [《PostgreSQL in 与 = any 的SQL语法异同与性能优化》](201801/20180131_02.md)  
 ##### 201801/20180131_01.md   [《PostgreSQL 整型int与布尔boolean的自动转换设置》](201801/20180131_01.md)  
 ##### 201801/20180129_01.md   [《PostgreSQL 时序数据库插件 timescaleDB 部署实践(含例子 纽约TAXI数据透视分析) - PostGIS + timescaleDB => PG时空数据库》](201801/20180129_01.md)  

@@ -1,6 +1,6 @@
 ### 文章列表  
 ----  
-##### 20180205_03.md   [《PostgreSQL 异步调用与多机并行 - 相似搜索集群线性扩容架构设计与实践》](20180205_03.md)  
+##### 20180205_03.md   [《PostgreSQL 相似搜索分布式架构设计与实践 - dblink异步调用与多机并行(远程 游标+记录 UDF实例)》](20180205_03.md)  
 ##### 20180205_02.md   [《PostgreSQL 11 分区表用法及增强 - 增加HASH分区支持 (hash, range, list)》](20180205_02.md)  
 ##### 20180205_01.md   [《PostgreSQL 与关系代数 (Equi-Join , Semi-Join , Anti-Join , Division)》](20180205_01.md)  
 ##### 20180204_03.md   [《PostgreSQL 11 preview - Parallel Append (多表并行计算) sharding架构并行计算核心功能之一》](20180204_03.md)  

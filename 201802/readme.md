@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20180205_01.md   [《PostgreSQL 与关系代数 (Equi-Join , Semi-Join , Anti-Join , Division)》](20180205_01.md)  
 ##### 20180204_03.md   [《PostgreSQL 11 preview - Parallel Append (多表并行计算) sharding架构并行计算核心功能之一》](20180204_03.md)  
 ##### 20180204_02.md   [《PostgreSQL 11 preview - 新功能, 分区表全局索引管理》](20180204_02.md)  
 ##### 20180204_01.md   [《PostgreSQL 11 preview - 并行排序、并行索引 (性能线性暴增) 单实例100亿TOP-K仅40秒》](20180204_01.md)  

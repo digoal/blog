@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201802/20180205_02.md   [《PostgreSQL 11 分区表用法及增强 - 增加HASH分区支持 (hash, range, list)》](201802/20180205_02.md)  
 ##### 201802/20180205_01.md   [《PostgreSQL 与关系代数 (Equi-Join , Semi-Join , Anti-Join , Division)》](201802/20180205_01.md)  
 ##### 201802/20180204_03.md   [《PostgreSQL 11 preview - Parallel Append (多表并行计算) sharding架构并行计算核心功能之一》](201802/20180204_03.md)  
 ##### 201802/20180204_02.md   [《PostgreSQL 11 preview - 新功能, 分区表全局索引管理》](201802/20180204_02.md)  

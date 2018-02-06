@@ -29,6 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201802/20180206_01.md   [《分区表锁粒度差异 - pg_pathman VS native partition table》](201802/20180206_01.md)  
+##### 201802/20180205_04.md   [《PostgreSQL APP海量FEED LOG实时质量统计CASE(percentile_disc)》](201802/20180205_04.md)  
 ##### 201802/20180205_03.md   [《PostgreSQL 相似搜索分布式架构设计与实践 - dblink异步调用与多机并行(远程 游标+记录 UDF实例)》](201802/20180205_03.md)  
 ##### 201802/20180205_02.md   [《PostgreSQL 11 分区表用法及增强 - 增加HASH分区支持 (hash, range, list)》](201802/20180205_02.md)  
 ##### 201802/20180205_01.md   [《PostgreSQL 与关系代数 (Equi-Join , Semi-Join , Anti-Join , Division)》](201802/20180205_01.md)  
@@ -57,7 +59,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201801/20180122_02.md   [《PostgreSQL 范围过滤 + 其他字段排序OFFSET LIMIT(多字段区间过滤)的优化与加速》](201801/20180122_02.md)  
 ##### 201801/20180122_01.md   [《学习 PostgreSQL Frontend/Backend protocol (通信协议)》](201801/20180122_01.md)  
 ##### 201801/20180121_01.md   [《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践》](201801/20180121_01.md)  
-##### 201801/20180119_04.md   [《PostgreSQL 10 自定义并行计算聚合函数的原理与实践》](201801/20180119_04.md)  
+##### 201801/20180119_04.md   [《PostgreSQL 10 自定义并行计算聚合函数的原理与实践 - (含array_agg合并多个数组为单个一元数组的例子)》](201801/20180119_04.md)  
 ##### 201801/20180119_03.md   [《PostgreSQL bitmap scan的IO放大的原理解释和优化》](201801/20180119_03.md)  
 ##### 201801/20180119_02.md   [《用PostgreSQL 处理 指纹 数据》](201801/20180119_02.md)  
 ##### 201801/20180119_01.md   [《PostgreSQL 商用版本EPAS(阿里云ppas) - 测试环境部署(EPAS 安装、配置、管理、Oracle DBLINK、外表)》](201801/20180119_01.md)  
@@ -1383,7 +1385,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201103/20110301_01.md   [《一个事务最多能锁多少对象? how many objects can be locked per transaction》](201103/20110301_01.md)  
 ----  
 ##### 201102/20110222_01.md   [《Recover droped column from PostgreSQL》](201102/20110222_01.md)  
-##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式》](201102/20110218_01.md)  
+##### 201102/20110218_01.md   [《PostgreSQL 只读模式 , hot standby recovery 模式等介绍，以及如何建立只读账号》](201102/20110218_01.md)  
 ##### 201102/20110216_02.md   [《PostgreSQL's Cursor USAGE with SQL MODE - 分页优化》](201102/20110216_02.md)  
 ##### 201102/20110216_01.md   [《WHY prepared Statement running slower in some situation CASE》](201102/20110216_01.md)  
 ##### 201102/20110214_02.md   [《Compare dblink module Within One Transaction in PostgreSQL - dblink, 自治事务(Oracle兼容性)》](201102/20110214_02.md)  

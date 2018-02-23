@@ -29,7 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201802/20180215_01.md   [《PostgreSQL 11 previes - Surjective indexes - 索引HOT增强（表达式）update评估》](201802/20180215_01.md)  
+##### 201802/20180224_01.md   [《PostgreSQL 11 preview - SQL:2011 window frame clause全面支持 及 窗口、帧用法和业务场景介绍》](201802/20180224_01.md)  
+##### 201802/20180215_01.md   [《PostgreSQL 11 preview - Surjective indexes - 索引HOT增强（表达式）update评估》](201802/20180215_01.md)  
 ##### 201802/20180210_01.md   [《PostgreSQL VOPS 向量计算 + DBLINK异步并行 - 单实例 10亿 聚合计算跑进2秒》](201802/20180210_01.md)  
 ##### 201802/20180208_02.md   [《[未完待续] PostgreSQL 多个数组聚合为一维数组加速(array_agg)》](201802/20180208_02.md)  
 ##### 201802/20180208_01.md   [《PostgreSQL 店铺运营实践 - JSON[]数组 内部标签数据等值、范围检索100倍+加速示例 (含，单值+多值列合成)》](201802/20180208_01.md)  

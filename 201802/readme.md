@@ -1,5 +1,6 @@
 ### 文章列表  
 ----  
+##### 20180226_06.md   [《PostgreSQL raster(栅格数据) st_value 优化举例》](20180226_06.md)  
 ##### 20180226_05.md   [《PostgreSQL SELECT 的高级用法(CTE, LATERAL, ORDINALITY, WINDOW, SKIP LOCKED, DISTINCT, GROUPING SETS, ...)》](20180226_05.md)  
 ##### 20180226_04.md   [《PostgreSQL 11 preview - 支持 数组外键约束》](20180226_04.md)  
 ##### 20180226_03.md   [《PostgreSQL 对称加密、非对称加密用法介绍》](20180226_03.md)  

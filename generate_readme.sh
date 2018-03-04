@@ -9,7 +9,8 @@
 # 迁移从163 blog 63页 <数据挖掘学习站点收集>开始算新文章迁移到本级目录,之前的算老文章迁移到old_blogs_from_163
 
 > ./README.md
-echo "<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>" > ./README.md
+echo "<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  " > ./README.md
+echo "  " >> ./README.md
 echo "### PostgreSQL Greenplum 培训视频分享  " >> ./README.md
 echo "  "  >> ./README.md
 echo "http://pan.baidu.com/s/1pKVCgHX  ,  如果连接失效请通知我, 谢谢  " >> ./README.md
@@ -32,7 +33,8 @@ echo "### 未归类文档如下  " >> ./README.md
 for dir in `ls -lr|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do
   cd $dir
-  echo "<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>" > ./readme.md
+  echo "<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  " > ./readme.md
+  echo "  " >> ./readme.md
   echo "### 文章列表  "  >> ./readme.md
   echo "----  "  >> ./readme.md
   echo "----  " >> ../README.md

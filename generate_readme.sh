@@ -9,7 +9,7 @@
 # 迁移从163 blog 63页 <数据挖掘学习站点收集>开始算新文章迁移到本级目录,之前的算老文章迁移到old_blogs_from_163
 
 > ./README.md
-echo "<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  " > ./README.md
+echo "<a rel=\"nofollow\" href=\"http://info.flagcounter.com/h9V1\"  ><img src=\"http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/\"  alt=\"Flag Counter\"  border=\"0\"  ></a>  " > ./README.md
 echo "  " >> ./README.md
 echo "### PostgreSQL Greenplum 培训视频分享  " >> ./README.md
 echo "  "  >> ./README.md
@@ -33,7 +33,7 @@ echo "### 未归类文档如下  " >> ./README.md
 for dir in `ls -lr|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do
   cd $dir
-  echo "<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  " > ./readme.md
+  echo "<a rel=\"nofollow\" href=\"http://info.flagcounter.com/h9V1\"  ><img src=\"http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/\"  alt=\"Flag Counter\"  border=\"0\"  ></a>  " > ./readme.md
   echo "  " >> ./readme.md
   echo "### 文章列表  "  >> ./readme.md
   echo "----  "  >> ./readme.md
@@ -43,6 +43,12 @@ do
     title=`head -n 1 $file|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`
     echo "##### $file   [《$title》]($file)  " >> ./readme.md
     echo "##### $dir/$file   [《$title》]($dir/$file)  " >> ../README.md
+    FLAG=`grep "flagcounter" $file|grep -c "href"`
+    if [ $FLAG -ne 1 ]; then
+      echo "  " >> ./$file
+      echo "<a rel=\"nofollow\" href=\"http://info.flagcounter.com/h9V1\"  ><img src=\"http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/\"  alt=\"Flag Counter\"  border=\"0\"  ></a>  " >> ./$file
+      echo "  " >> ./$file
+    fi
   done
   cd ..
 done

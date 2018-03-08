@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20180308_02.md   [《阿里云 RDS PostgreSQL 隐藏开关 - hash to btree, unlogged to logged》](20180308_02.md)  
+##### 20180308_01.md   [《PostgreSQL Oracle 兼容性之 - 消息队列 DBMS_AQ》](20180308_01.md)  
+##### 20180307_01.md   [《[未完待续] PostgreSQL 流式fft傅里叶变换 (plpython + numpy + 数据库流式计算)》](20180307_01.md)  
 ##### 20180306_01.md   [《PostgreSQL 多值类型（如数组），元素值全局唯一 - 约束如何实现》](20180306_01.md)  
 ##### 20180305_01.md   [《PostgreSQL 类微博FEED系统 - 设计与性能指标》](20180305_01.md)  
 ##### 20180302_02.md   [《PostgreSQL CVE-2018-1058(search_path) - 暨数据库的那些陷阱与攻防指南》](20180302_02.md)  

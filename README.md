@@ -31,6 +31,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201803/20180308_02.md   [《阿里云 RDS PostgreSQL 隐藏开关 - hash to btree, unlogged to logged》](201803/20180308_02.md)  
+##### 201803/20180308_01.md   [《PostgreSQL Oracle 兼容性之 - 消息队列 DBMS_AQ》](201803/20180308_01.md)  
+##### 201803/20180307_01.md   [《[未完待续] PostgreSQL 流式fft傅里叶变换 (plpython + numpy + 数据库流式计算)》](201803/20180307_01.md)  
 ##### 201803/20180306_01.md   [《PostgreSQL 多值类型（如数组），元素值全局唯一 - 约束如何实现》](201803/20180306_01.md)  
 ##### 201803/20180305_01.md   [《PostgreSQL 类微博FEED系统 - 设计与性能指标》](201803/20180305_01.md)  
 ##### 201803/20180302_02.md   [《PostgreSQL CVE-2018-1058(search_path) - 暨数据库的那些陷阱与攻防指南》](201803/20180302_02.md)  
@@ -1393,6 +1396,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201201/20120105_01.md   [《TOAST table with pgfincore》](201201/20120105_01.md)  
 ----  
 ##### 201111/20111130_01.md   [《whether pg_start_backup() force keep xlog in pg_xlog directory before execute pg_stop_backup() ?》](201111/20111130_01.md)  
+##### 201111/20111122_01.md   [《PostgreSQL Notify/Listen Like ESB》](201111/20111122_01.md)  
 ----  
 ##### 201110/20111027_01.md   [《PostgreSQL BEGIN attention. serializable case》](201110/20111027_01.md)  
 ##### 201110/20111025_01.md   [《A Smart PostgreSQL extension plproxy 2.2 practices》](201110/20111025_01.md)  
@@ -1442,7 +1446,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201010/20101027_01.md   [《batch insert in PostgreSQL》](201010/20101027_01.md)  
 ----  
-##### 201006/20100603_01.md   [《Using “GET DIAGNOSTICS integer_var = ROW_COUNT;” capture rows effect by the last SQL》](201006/20100603_01.md)  
+##### 201006/20100603_01.md   [《Using "GET DIAGNOSTICS integer_var = ROW_COUNT;" capture rows effect by the last SQL》](201006/20100603_01.md)  
 ----  
 ##### 201005/20100511_03.md   [《PostgreSQL数据库开源连接池pgbouncer的使用》](201005/20100511_03.md)  
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  

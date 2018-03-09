@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180309_01.md   [《PostgreSQL 多查询条件，多个索引的选择算法与问题诊断方法》](20180309_01.md)  
 ##### 20180308_02.md   [《阿里云 RDS PostgreSQL 隐藏开关 - hash to btree, unlogged to logged》](20180308_02.md)  
 ##### 20180308_01.md   [《PostgreSQL Oracle 兼容性之 - 消息队列 DBMS_AQ》](20180308_01.md)  
 ##### 20180307_01.md   [《[未完待续] PostgreSQL 流式fft傅里叶变换 (plpython + numpy + 数据库流式计算)》](20180307_01.md)  

@@ -31,6 +31,19 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201803/20180312_01.md   [《[未完待续] PostgreSQL shard 课题 - 如何shard可以方便的扩容(一致性hash, mapping, ...)》](201803/20180312_01.md)  
+##### 201803/20180311_03.md   [《[未完待续] PostgreSQL 哪些状态不可中断 - 杀不掉的QUERY和会话》](201803/20180311_03.md)  
+##### 201803/20180311_02.md   [《[未完待续] PostgreSQL 扩展存储引擎介绍 - zheap - 1》](201803/20180311_02.md)  
+##### 201803/20180311_01.md   [《[未完待续] PostgreSQL Oracle 兼容性之 - pl/sql 迁移到 plpgsql》](201803/20180311_01.md)  
+##### 201803/20180310_09.md   [《[未完待续] PostgreSQL HeroDB GPU 加速 - pl/cuda , pg-strom , herodb》](201803/20180310_09.md)  
+##### 201803/20180310_08.md   [《[未完待续] PostgreSQL 函数编程语言扩展 - pl/go》](201803/20180310_08.md)  
+##### 201803/20180310_07.md   [《[未完待续] PostgreSQL 函数编程语言扩展 - pl/lua》](201803/20180310_07.md)  
+##### 201803/20180310_06.md   [《[未完待续] PostgreSQL 函数编程语言扩展 - pl/swift》](201803/20180310_06.md)  
+##### 201803/20180310_05.md   [《[未完待续] [翻译] PostgreSQL 插件开发 5 (版本迭代) - Writing Postgres Extensions Code Organization and Versioning》](201803/20180310_05.md)  
+##### 201803/20180310_04.md   [《[未完待续] [翻译] PostgreSQL 插件开发 4 (测试) - Writing Postgres Extensions - Testing》](201803/20180310_04.md)  
+##### 201803/20180310_03.md   [《[未完待续] [翻译] PostgreSQL 插件开发 3 (调试) - Writing Postgres Extensions - Debugging》](201803/20180310_03.md)  
+##### 201803/20180310_02.md   [《[未完待续] [翻译] PostgreSQL 插件开发 2 (类型与操作符) - Writing Postgres Extensions - Types and Operators》](201803/20180310_02.md)  
+##### 201803/20180310_01.md   [《[未完待续] [翻译] PostgreSQL 插件开发 1 (基础) - Writing Postgres Extensions - the Basics》](201803/20180310_01.md)  
 ##### 201803/20180309_02.md   [《PostgreSQL 全文检索 - 词频统计》](201803/20180309_02.md)  
 ##### 201803/20180309_01.md   [《PostgreSQL 多查询条件，多个索引的选择算法与问题诊断方法》](201803/20180309_01.md)  
 ##### 201803/20180308_02.md   [《阿里云 RDS PostgreSQL 隐藏开关 - hash to btree, unlogged to logged》](201803/20180308_02.md)  

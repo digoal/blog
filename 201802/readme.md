@@ -31,7 +31,7 @@
 ##### 20180207_02.md   [《PostgreSQL UDF实现tsvector(全文检索), array(数组)多值字段与scalar(单值字段)类型的整合索引(类分区索引) - 单值与多值类型复合查询性能提速100倍+ 案例 (含，单值+多值列合成)》](20180207_02.md)  
 ##### 20180207_01.md   [《PostgreSQL 如何判断idle in transaction的事务中有没有东西要提交》](20180207_01.md)  
 ##### 20180206_01.md   [《分区表锁粒度差异 - pg_pathman VS native partition table》](20180206_01.md)  
-##### 20180205_04.md   [《PostgreSQL APP海量FEED LOG实时质量统计CASE(含percentile_disc)》](20180205_04.md)  
+##### 20180205_04.md   [《PostgreSQL APP海量FEED LOG实时质量统计CASE(含percentile_disc) - 含rotate 分区表》](20180205_04.md)  
 ##### 20180205_03.md   [《PostgreSQL 相似搜索分布式架构设计与实践 - dblink异步调用与多机并行(远程 游标+记录 UDF实例)》](20180205_03.md)  
 ##### 20180205_02.md   [《PostgreSQL 11 preview - 分区表用法及增强 - 增加HASH分区支持 (hash, range, list)》](20180205_02.md)  
 ##### 20180205_01.md   [《PostgreSQL 与关系代数 (Equi-Join , Semi-Join , Anti-Join , Division)》](20180205_01.md)  

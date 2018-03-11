@@ -33,6 +33,8 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201803/20180312_02.md   [《[未完待续] [翻译] PostgreSQL 常见HA方案》](201803/20180312_02.md)  
 ##### 201803/20180312_01.md   [《[未完待续] PostgreSQL shard 课题 - 如何shard可以方便的扩容(一致性hash, mapping, ...)》](201803/20180312_01.md)  
+##### 201803/20180311_06.md   [《PostgreSQL rotate table 自动清理调度 - 约束，触发器》](201803/20180311_06.md)  
+##### 201803/20180311_05.md   [《PostgreSQL checkpoint 相关参数优化设置与解释》](201803/20180311_05.md)  
 ##### 201803/20180311_04.md   [《PostgreSQL 垃圾版本引入的索引扫描性能下降诊断》](201803/20180311_04.md)  
 ##### 201803/20180311_03.md   [《[未完待续] PostgreSQL 哪些状态不可中断 - 杀不掉的QUERY和会话》](201803/20180311_03.md)  
 ##### 201803/20180311_02.md   [《[未完待续] PostgreSQL 扩展存储引擎介绍 - zheap - 1》](201803/20180311_02.md)  
@@ -89,7 +91,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201802/20180207_02.md   [《PostgreSQL UDF实现tsvector(全文检索), array(数组)多值字段与scalar(单值字段)类型的整合索引(类分区索引) - 单值与多值类型复合查询性能提速100倍+ 案例 (含，单值+多值列合成)》](201802/20180207_02.md)  
 ##### 201802/20180207_01.md   [《PostgreSQL 如何判断idle in transaction的事务中有没有东西要提交》](201802/20180207_01.md)  
 ##### 201802/20180206_01.md   [《分区表锁粒度差异 - pg_pathman VS native partition table》](201802/20180206_01.md)  
-##### 201802/20180205_04.md   [《PostgreSQL APP海量FEED LOG实时质量统计CASE(含percentile_disc)》](201802/20180205_04.md)  
+##### 201802/20180205_04.md   [《PostgreSQL APP海量FEED LOG实时质量统计CASE(含percentile_disc) - 含rotate 分区表》](201802/20180205_04.md)  
 ##### 201802/20180205_03.md   [《PostgreSQL 相似搜索分布式架构设计与实践 - dblink异步调用与多机并行(远程 游标+记录 UDF实例)》](201802/20180205_03.md)  
 ##### 201802/20180205_02.md   [《PostgreSQL 11 preview - 分区表用法及增强 - 增加HASH分区支持 (hash, range, list)》](201802/20180205_02.md)  
 ##### 201802/20180205_01.md   [《PostgreSQL 与关系代数 (Equi-Join , Semi-Join , Anti-Join , Division)》](201802/20180205_01.md)  

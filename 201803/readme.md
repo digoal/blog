@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20180312_06.md   [《[未完待续] PostgreSQL Oracle 兼容性之 - sys.anydata》](20180312_06.md)  
+##### 20180312_05.md   [《[未完待续] PostgreSQL 区块链 插件 pg_blkchain》](20180312_05.md)  
+##### 20180312_04.md   [《[转载] [嵌入式开发]Linux性能分析——上下文切换》](20180312_04.md)  
 ##### 20180312_03.md   [《PostgreSQL Oracle 兼容性之 - 自定义并行聚合函数 PARALLEL_ENABLE AGGREGATE》](20180312_03.md)  
 ##### 20180312_02.md   [《[未完待续] [翻译] PostgreSQL 常见HA方案》](20180312_02.md)  
 ##### 20180312_01.md   [《[未完待续] PostgreSQL shard 课题 - 如何shard可以方便的扩容(一致性hash, mapping, ...)》](20180312_01.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180312_03.md   [《[未完待续] PostgreSQL Oracle 兼容性之 - 自定义 PARALLEL_ENABLE AGGREGATE》](20180312_03.md)  
 ##### 20180312_02.md   [《[未完待续] [翻译] PostgreSQL 常见HA方案》](20180312_02.md)  
 ##### 20180312_01.md   [《[未完待续] PostgreSQL shard 课题 - 如何shard可以方便的扩容(一致性hash, mapping, ...)》](20180312_01.md)  
 ##### 20180311_06.md   [《PostgreSQL rotate table 自动清理调度 - 约束，触发器》](20180311_06.md)  

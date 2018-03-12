@@ -31,7 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201803/20180312_03.md   [《[未完待续] PostgreSQL Oracle 兼容性之 - 自定义 PARALLEL_ENABLE AGGREGATE》](201803/20180312_03.md)  
+##### 201803/20180312_03.md   [《PostgreSQL Oracle 兼容性之 - 自定义并行聚合函数 PARALLEL_ENABLE AGGREGATE》](201803/20180312_03.md)  
 ##### 201803/20180312_02.md   [《[未完待续] [翻译] PostgreSQL 常见HA方案》](201803/20180312_02.md)  
 ##### 201803/20180312_01.md   [《[未完待续] PostgreSQL shard 课题 - 如何shard可以方便的扩容(一致性hash, mapping, ...)》](201803/20180312_01.md)  
 ##### 201803/20180311_06.md   [《PostgreSQL rotate table 自动清理调度 - 约束，触发器》](201803/20180311_06.md)  

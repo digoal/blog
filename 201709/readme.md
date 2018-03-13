@@ -8,7 +8,7 @@
 ##### 20170926_02.md   [《PostgreSQL Oracle 兼容性 之 USERENV》](20170926_02.md)  
 ##### 20170926_01.md   [《PostgreSQL Oracle 兼容性 之 NUMTODSINTERVAL》](20170926_01.md)  
 ##### 20170925_03.md   [《PostgreSQL 空间、多维 序列 生成方法》](20170925_03.md)  
-##### 20170925_02.md   [《PostgreSQL 事件触发器应用 - DDL审计记录》](20170925_02.md)  
+##### 20170925_02.md   [《PostgreSQL 事件触发器应用 - DDL审计记录 + 异步通知(notify)》](20170925_02.md)  
 ##### 20170925_01.md   [《PostgreSQL汉字转拼音的函数》](20170925_01.md)  
 ##### 20170923_01.md   [《经营、销售分析系统DB设计之PostgreSQL, Greenplum - 共享充电宝 案例实践》](20170923_01.md)  
 ##### 20170922_01.md   [《PostgreSQL Oracle兼容性之 session_id》](20170922_01.md)  

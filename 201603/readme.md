@@ -6,6 +6,7 @@
 ##### 20160322_01.md   [《PostgreSQL 字符串 collate 与排序 源码分析》](20160322_01.md)  
 ##### 20160320_01.md   [《PostgreSQL 如何潇洒的处理每天上百TB的数据增量》](20160320_01.md)  
 ##### 20160318_01.md   [《PostgreSQL Oracle 兼容性之 - PL/SQL pipelined》](20160318_01.md)  
+##### 20160317_01.md   [《PostgreSQL 启动时会自动清理temporary-files directory》](20160317_01.md)  
 ##### 20160316_02.md   [《PostgreSQL 性能优化之 - 大锁与long sql/xact的蝴蝶效应(泛洪)》](20160316_02.md)  
 ##### 20160316_01.md   [《PostgreSQL 加载动态库详解》](20160316_01.md)  
 ##### 20160315_02.md   [《PostgreSQL MySQL 兼容性之 - 时间类型》](20160315_02.md)  

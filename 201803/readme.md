@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180322_12.md   [《我和大象 - 感恩、感谢、加油、腾飞》](20180322_12.md)  
 ##### 20180322_11.md   [《PostgreSQL 11 preview - 多阶段并行聚合array_agg, string_agg》](20180322_11.md)  
 ##### 20180322_10.md   [《PostgreSQL 11 preview - 虚拟列(自动根据表达式产生值)》](20180322_10.md)  
 ##### 20180322_09.md   [《PostgreSQL 11 preview - 分页内核层优化 - 索引扫描offset优化(使用vm文件skip heap scan)》](20180322_09.md)  

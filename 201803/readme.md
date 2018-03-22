@@ -2,6 +2,17 @@
   
 ### 文章列表  
 ----  
+##### 20180322_11.md   [《PostgreSQL 11 preview - 多阶段并行聚合array_agg, string_agg》](20180322_11.md)  
+##### 20180322_10.md   [《PostgreSQL 11 preview - 虚拟列(自动根据表达式产生值)》](20180322_10.md)  
+##### 20180322_09.md   [《PostgreSQL 11 preview - 分页内核层优化 - 索引扫描offset优化(使用vm文件skip heap scan)》](20180322_09.md)  
+##### 20180322_08.md   [《PostgreSQL 11 preview - 索引优化。filter智能消除、分区索引智能合并》](20180322_08.md)  
+##### 20180322_07.md   [《PostgreSQL 11 preview - 分区表智能并行聚合、分组计算(已类似MPP架构，性能暴增)》](20180322_07.md)  
+##### 20180322_06.md   [《[未完待续] PostgreSQL PRO 特性 - json扩展 jsquery》](20180322_06.md)  
+##### 20180322_05.md   [《[未完待续] PostgreSQL PRO 特性 - pgpro_scheduler(类似Oracle dbms_jobs)》](20180322_05.md)  
+##### 20180322_04.md   [《[未完待续] PostgreSQL PRO 特性 - AQO(机器学习执行计划优化器)》](20180322_04.md)  
+##### 20180322_03.md   [《[未完待续] PostgreSQL PRO 特性 - 内存表(in_memory)》](20180322_03.md)  
+##### 20180322_02.md   [《[未完待续] PostgreSQL PRO 特性 - sharding(pg_shardman)》](20180322_02.md)  
+##### 20180322_01.md   [《[未完待续] PostgreSQL PRO 特性 - multimaster》](20180322_01.md)  
 ##### 20180321_01.md   [《PostgreSQL 生成任意基数数独 - 4》](20180321_01.md)  
 ##### 20180320_02.md   [《PostgreSQL 生成任意基数数独 - 3》](20180320_02.md)  
 ##### 20180320_01.md   [《PostgreSQL 生成任意基数数独 - 2》](20180320_01.md)  

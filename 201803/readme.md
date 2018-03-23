@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180323_02.md   [《PostgreSQL Oracle 兼容性之 - DBMS_SQL(存储过程动态SQL中使用绑定变量)》](20180323_02.md)  
 ##### 20180323_01.md   [《PostgreSQL 11 preview - LLVM JIT接口放开》](20180323_01.md)  
 ##### 20180322_12.md   [《我和大象 - 感恩、感谢、加油、腾飞》](20180322_12.md)  
 ##### 20180322_11.md   [《PostgreSQL 11 preview - 多阶段并行聚合array_agg, string_agg》](20180322_11.md)  

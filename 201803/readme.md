@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180323_04.md   [《PostgreSQL 11 preview - Incremental Sort(排序优化)》](20180323_04.md)  
 ##### 20180323_03.md   [《PostgreSQL Oracle 兼容性之 - INDEX SKIP SCAN (递归查询变态优化) 非驱动列索引扫描优化》](20180323_03.md)  
 ##### 20180323_02.md   [《PostgreSQL Oracle 兼容性之 - DBMS_SQL(存储过程动态SQL中使用绑定变量)》](20180323_02.md)  
 ##### 20180323_01.md   [《PostgreSQL 11 preview - LLVM JIT接口放开》](20180323_01.md)  

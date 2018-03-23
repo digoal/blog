@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180323_05.md   [《PostgreSQL 11 preview - BRIN索引接口功能扩展(BLOOM FILTER、min max分段)》](20180323_05.md)  
 ##### 20180323_04.md   [《PostgreSQL 11 preview - Incremental Sort(排序优化)》](20180323_04.md)  
 ##### 20180323_03.md   [《PostgreSQL Oracle 兼容性之 - INDEX SKIP SCAN (递归查询变态优化) 非驱动列索引扫描优化》](20180323_03.md)  
 ##### 20180323_02.md   [《PostgreSQL Oracle 兼容性之 - DBMS_SQL(存储过程动态SQL中使用绑定变量)》](20180323_02.md)  

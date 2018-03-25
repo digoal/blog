@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201803/20180325_02.md   [《PostgreSQL Huge Page 使用建议》](201803/20180325_02.md)  
+##### 201803/20180325_01.md   [《[转载] Linux进程状态解析之R、S、D、T、Z、X》](201803/20180325_01.md)  
 ##### 201803/20180323_05.md   [《PostgreSQL 11 preview - BRIN索引接口功能扩展(BLOOM FILTER、min max分段)》](201803/20180323_05.md)  
 ##### 201803/20180323_04.md   [《PostgreSQL 11 preview - Incremental Sort(排序优化)》](201803/20180323_04.md)  
 ##### 201803/20180323_03.md   [《PostgreSQL Oracle 兼容性之 - INDEX SKIP SCAN (递归查询变态优化) 非驱动列索引扫描优化》](201803/20180323_03.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180325_04.md   [《PostgreSQL 11 preview - pg_stat_statements 增强，支持执行计划翻转记录》](20180325_04.md)  
 ##### 20180325_03.md   [《PostgreSQL 11 preview - pgbench 支持大于1000链接(ppoll()代替select())》](20180325_03.md)  
 ##### 20180325_02.md   [《PostgreSQL Huge Page 使用建议 - 大内存主机、实例注意》](20180325_02.md)  
 ##### 20180325_01.md   [《[转载] Linux进程状态解析之R、S、D、T、Z、X》](20180325_01.md)  

@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201803/20180325_05.md   [《PostgreSQL 11 preview - 强制auto prepared statment开关(自动化plan cache)(类似Oracle cursor_sharing force)》](201803/20180325_05.md)  
 ##### 201803/20180325_04.md   [《PostgreSQL 11 preview - pg_stat_statements 增强，支持执行计划翻转记录》](201803/20180325_04.md)  
 ##### 201803/20180325_03.md   [《PostgreSQL 11 preview - pgbench 支持大于1000链接(ppoll()代替select())》](201803/20180325_03.md)  
 ##### 201803/20180325_02.md   [《PostgreSQL Huge Page 使用建议 - 大内存主机、实例注意》](201803/20180325_02.md)  

@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201804/20180402_01.md   [《PostgreSQL 数据离散性 与 索引扫描性能》](201804/20180402_01.md)  
+----  
 ##### 201803/20180331_01.md   [《[转载] 磁盘硬件问题(坏块)检测》](201803/20180331_01.md)  
 ##### 201803/20180329_02.md   [《PostgreSQL 恢复大法 - 恢复部分数据库、跳过坏块、修复无法启动的数据库》](201803/20180329_02.md)  
 ##### 201803/20180329_01.md   [《PostgreSQL 相似文本检索与去重 - (银屑病怎么治？银屑病怎么治疗？银屑病怎么治疗好？银屑病怎么能治疗好？)》](201803/20180329_01.md)  
@@ -1288,7 +1290,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201504/20150427_01.md   [《geoip - Geolocation using GeoIP》](201504/20150427_01.md)  
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
 ##### 201504/20150414_01.md   [《PivotalR between R & PostgreSQL-like Databases(for exp : Greenplum, hadoop access by hawq)》](201504/20150414_01.md)  
-##### 201504/20150410_01.md   [《如何比较PostgreSQL表的定义》](201504/20150410_01.md)  
+##### 201504/20150410_01.md   [《如何比较PostgreSQL表的定义(compare table ddl)》](201504/20150410_01.md)  
 ##### 201504/20150409_02.md   [《PostgreSQL 9.5 使用 import foreign schema 语法一键创建外部表》](201504/20150409_02.md)  
 ##### 201504/20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](201504/20150409_01.md)  
 ##### 201504/20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](201504/20150407_02.md)  

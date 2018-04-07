@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180407_03.md   [《PostgreSQL 11 preview - Allow on-line enabling and disabling of data checksums》](20180407_03.md)  
 ##### 20180407_02.md   [《PostgreSQL 11 preview - Faster partition pruning》](20180407_02.md)  
 ##### 20180407_01.md   [《PostgreSQL 11 preview - MERGE 语法支持与CTE内支持，兼容SQL:2016》](20180407_01.md)  
 ##### 20180406_01.md   [《PostgreSQL 递归妙用案例 - 分组数据去重与打散》](20180406_01.md)  

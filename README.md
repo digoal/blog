@@ -31,6 +31,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201804/20180408_03.md   [《PostgreSQL 家谱、族谱类应用实践 - 图式关系存储与搜索》](201804/20180408_03.md)  
+##### 201804/20180408_02.md   [《PostgreSQL Oracle 兼容性之 - ALTER TRIGGER ENABLE|DISABLE》](201804/20180408_02.md)  
+##### 201804/20180408_01.md   [《PostgreSQL 11 preview - Logical replication support for TRUNCATE》](201804/20180408_01.md)  
 ##### 201804/20180407_03.md   [《PostgreSQL 11 preview - Allow on-line enabling and disabling of data checksums》](201804/20180407_03.md)  
 ##### 201804/20180407_02.md   [《PostgreSQL 11 preview - Faster partition pruning》](201804/20180407_02.md)  
 ##### 201804/20180407_01.md   [《PostgreSQL 11 preview - MERGE 语法支持与CTE内支持，兼容SQL:2016》](201804/20180407_01.md)  
@@ -958,7 +961,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201607/20160725_05.md   [《PostgreSQL 如何高效解决 按任意字段分词检索的问题 - case 1》](201607/20160725_05.md)  
 ##### 201607/20160725_04.md   [《PostgreSQL Oracle 兼容性之 - 锁定执行计划(Outline system)》](201607/20160725_04.md)  
 ##### 201607/20160725_03.md   [《mongoDB BI 分析利器 - PostgreSQL FDW (MongoDB Connector for BI)》](201607/20160725_03.md)  
-##### 201607/20160725_02.md   [《如何加快PostgreSQL结巴分词加载速度》](201607/20160725_02.md)  
+##### 201607/20160725_02.md   [《如何加快PostgreSQL结巴分词pg_jieba加载速度》](201607/20160725_02.md)  
 ##### 201607/20160725_01.md   [《PostgreSQL 使用递归SQL 找出数据库对象之间的依赖关系》](201607/20160725_01.md)  
 ##### 201607/20160723_03.md   [《一致性哈希在分布式数据库中的应用探索》](201607/20160723_03.md)  
 ##### 201607/20160723_02.md   [《关键时刻HINT出彩 - PG优化器的参数优化、执行计划固化CASE》](201607/20160723_02.md)  

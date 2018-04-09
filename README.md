@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201804/20180409_03.md   [《PostgreSQL Linux 下 僵尸<defunct>状态的处理》](201804/20180409_03.md)  
+##### 201804/20180409_02.md   [《[未完待续] PostgreSQL json 智能索引 与 操作符扩展》](201804/20180409_02.md)  
 ##### 201804/20180409_01.md   [《PostgreSQL 11 preview - bloom filter 误报率评估测试及如何降低误报 - 暨bloom filter应用于HEAP与INDEX的一致性检测》](201804/20180409_01.md)  
 ##### 201804/20180408_03.md   [《PostgreSQL 家谱、族谱类应用实践 - 图式关系存储与搜索》](201804/20180408_03.md)  
 ##### 201804/20180408_02.md   [《PostgreSQL Oracle 兼容性之 - ALTER TRIGGER ENABLE|DISABLE》](201804/20180408_02.md)  
@@ -1545,6 +1547,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201204/20120412_01.md   [《PostgreSQL Logical Backup's TOC File》](201204/20120412_01.md)  
 ----  
 ##### 201203/20120320_01.md   [《PostgreSQL 9.1.3 plpgsql debugger module》](201203/20120320_01.md)  
+##### 201203/20120315_01.md   [《explain postmaster.pid》](201203/20120315_01.md)  
 ##### 201203/20120313_02.md   [《PostgreSQL性能优化综合案例讲解 - 2》](201203/20120313_02.md)  
 ##### 201203/20120313_01.md   [《PostgreSQL性能优化综合案例讲解 - 1》](201203/20120313_01.md)  
 ----  

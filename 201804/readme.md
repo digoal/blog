@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180409_01.md   [《PostgreSQL 11 preview - bloom filter 误报率评估测试及如何降低误报 - 暨bloom filter应用于HEAP与INDEX的一致性检测》](20180409_01.md)  
 ##### 20180408_03.md   [《PostgreSQL 家谱、族谱类应用实践 - 图式关系存储与搜索》](20180408_03.md)  
 ##### 20180408_02.md   [《PostgreSQL Oracle 兼容性之 - ALTER TRIGGER ENABLE|DISABLE》](20180408_02.md)  
 ##### 20180408_01.md   [《PostgreSQL 11 preview - Logical replication support for TRUNCATE》](20180408_01.md)  

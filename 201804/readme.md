@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20180410_04.md   [《PostgreSQL 单库对象过多，触发Linux系统限制 (ext4_dx_add_entry: Directory index full!) (could not create file "xx/xx/xxxxxx": No space left on device)》](20180410_04.md)  
+##### 20180410_03.md   [《PostgreSQL 变态并行拉取单表的方法 - 按块并行(按行号(ctid)并行) + dblink 异步调用》](20180410_03.md)  
+##### 20180410_02.md   [《PostgreSQL Oracle 兼容性之 - 字符串分割》](20180410_02.md)  
+##### 20180410_01.md   [《PostgreSQL Oracle 兼容性之 - PL/SQL DETERMINISTIC 与PG函数稳定性(immutable, stable, volatile)》](20180410_01.md)  
 ##### 20180409_03.md   [《PostgreSQL Linux 下 僵尸<defunct>状态的处理》](20180409_03.md)  
 ##### 20180409_02.md   [《[未完待续] PostgreSQL json 智能索引 与 操作符扩展》](20180409_02.md)  
 ##### 20180409_01.md   [《PostgreSQL 11 preview - bloom filter 误报率评估测试及如何降低误报 - 暨bloom filter应用于HEAP与INDEX的一致性检测》](20180409_01.md)  

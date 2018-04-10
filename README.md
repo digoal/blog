@@ -31,6 +31,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201804/20180410_04.md   [《PostgreSQL 单库对象过多，触发Linux系统限制 (ext4_dx_add_entry: Directory index full!) (could not create file "xx/xx/xxxxxx": No space left on device)》](201804/20180410_04.md)  
+##### 201804/20180410_03.md   [《PostgreSQL 变态并行拉取单表的方法 - 按块并行(按行号(ctid)并行) + dblink 异步调用》](201804/20180410_03.md)  
+##### 201804/20180410_02.md   [《PostgreSQL Oracle 兼容性之 - 字符串分割》](201804/20180410_02.md)  
+##### 201804/20180410_01.md   [《PostgreSQL Oracle 兼容性之 - PL/SQL DETERMINISTIC 与PG函数稳定性(immutable, stable, volatile)》](201804/20180410_01.md)  
 ##### 201804/20180409_03.md   [《PostgreSQL Linux 下 僵尸<defunct>状态的处理》](201804/20180409_03.md)  
 ##### 201804/20180409_02.md   [《[未完待续] PostgreSQL json 智能索引 与 操作符扩展》](201804/20180409_02.md)  
 ##### 201804/20180409_01.md   [《PostgreSQL 11 preview - bloom filter 误报率评估测试及如何降低误报 - 暨bloom filter应用于HEAP与INDEX的一致性检测》](201804/20180409_01.md)  
@@ -1077,6 +1081,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201604/20160401_02.md   [《GoldenGate - Oracle 实时复制到 PostgreSQL或EnterpriseDB》](201604/20160401_02.md)  
 ##### 201604/20160401_01.md   [《阿里云 PostgreSQL pg_hint_plan插件的用法》](201604/20160401_01.md)  
 ----  
+##### 201603/20160331_02.md   [《CentOS 6.x online change existing running process's ulimits》](201603/20160331_02.md)  
 ##### 201603/20160331_01.md   [《PostgreSQL 在3D 数据内容管理中的应用》](201603/20160331_01.md)  
 ##### 201603/20160329_01.md   [《PostgreSQL 长事务中DML产生的数据无法被及时纳入统计信息导致的问题》](201603/20160329_01.md)  
 ##### 201603/20160325_01.md   [《PostgreSQL 与基友们的故事之 - Redis (无限缓存,实时标签...)》](201603/20160325_01.md)  
@@ -1372,6 +1377,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  
 ##### 201406/20140614_01.md   [《使用 ssh -R 建立反向/远程TCP端口转发代理》](201406/20140614_01.md)  
 ##### 201406/20140609_01.md   [《PostgreSQL LDAP认证之 search bind配置》](201406/20140609_01.md)  
+##### 201406/20140607_01.md   [《CentOS 6.x 优先级 limit change to /etc/security/limits.d/xxx》](201406/20140607_01.md)  
 ##### 201406/20140606_02.md   [《PostgreSQL LDAP认证之 simple bind配置》](201406/20140606_02.md)  
 ##### 201406/20140606_01.md   [《OpenLDAP 使用方法》](201406/20140606_01.md)  
 ##### 201406/20140604_01.md   [《OpenLDAP 安装指南》](201406/20140604_01.md)  

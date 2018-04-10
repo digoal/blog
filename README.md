@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201804/20180410_05.md   [《PostgreSQL Oracle 兼容性之 - create type》](201804/20180410_05.md)  
 ##### 201804/20180410_04.md   [《PostgreSQL 单库对象过多，触发Linux系统限制 (ext4_dx_add_entry: Directory index full!) (could not create file "xx/xx/xxxxxx": No space left on device)》](201804/20180410_04.md)  
 ##### 201804/20180410_03.md   [《PostgreSQL 变态并行拉取单表的方法 - 按块并行(按行号(ctid)并行) + dblink 异步调用》](201804/20180410_03.md)  
 ##### 201804/20180410_02.md   [《PostgreSQL Oracle 兼容性之 - 字符串分割》](201804/20180410_02.md)  

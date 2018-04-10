@@ -44,7 +44,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201804/20180408_01.md   [《PostgreSQL 11 preview - Logical replication support for TRUNCATE》](201804/20180408_01.md)  
 ##### 201804/20180407_03.md   [《PostgreSQL 11 preview - Allow on-line enabling and disabling of data checksums》](201804/20180407_03.md)  
 ##### 201804/20180407_02.md   [《PostgreSQL 11 preview - Faster partition pruning》](201804/20180407_02.md)  
-##### 201804/20180407_01.md   [《PostgreSQL 11 preview - MERGE 语法支持与CTE内支持，兼容SQL:2016》](201804/20180407_01.md)  
+##### 201804/20180407_01.md   [《PostgreSQL 11 preview - MERGE 语法支持与CTE内支持，兼容SQL:2016 , 兼容 Oracle》](201804/20180407_01.md)  
 ##### 201804/20180406_01.md   [《PostgreSQL 递归妙用案例 - 分组数据去重与打散》](201804/20180406_01.md)  
 ##### 201804/20180403_04.md   [《PostgreSQL 11 preview - with_llvm JIT支持部署与试用》](201804/20180403_04.md)  
 ##### 201804/20180403_03.md   [《PostgreSQL 任意列组合条件 行数估算 实践 - 采样估算》](201804/20180403_03.md)  

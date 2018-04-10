@@ -16,7 +16,7 @@
 ##### 20170329_01.md   [《PostgreSQL 10.0 preview 功能增强 - 流复制统计视图pg_stat_replication增强, 新增时间维度延迟评估》](20170329_01.md)  
 ##### 20170328_05.md   [《一张图读懂RDBMS的历史和基因》](20170328_05.md)  
 ##### 20170328_04.md   [《视觉挖掘与PostGIS空间数据库的完美邂逅 - 广告营销\圈人》](20170328_04.md)  
-##### 20170328_03.md   [《PostGIS 多点几何类型 空字符构造异常CASE》](20170328_03.md)  
+##### 20170328_03.md   [《PostGIS 多点几何类型 空字符构造异常CASE - parse error - invalid geometry (lwgeom_pg.c:96)》](20170328_03.md)  
 ##### 20170328_02.md   [《PostgreSQL 10.0 preview 功能增强 - CLOG oldest XID跟踪》](20170328_02.md)  
 ##### 20170328_01.md   [《PostgreSQL 10.0 preview 功能增强 - 逻辑复制支持并行COPY初始化数据》](20170328_01.md)  
 ##### 20170327_01.md   [《开放地图OpenStreetMap与PostGIS的三生三世十里桃花》](20170327_01.md)  

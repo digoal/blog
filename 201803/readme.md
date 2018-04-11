@@ -6,7 +6,7 @@
 ##### 20180329_02.md   [《PostgreSQL 恢复大法 - 恢复部分数据库、跳过坏块、修复无法启动的数据库》](20180329_02.md)  
 ##### 20180329_01.md   [《PostgreSQL 相似文本检索与去重 - (银屑病怎么治？银屑病怎么治疗？银屑病怎么治疗好？银屑病怎么能治疗好？)》](20180329_01.md)  
 ##### 20180328_01.md   [《Greenplum 计算能力估算 - 暨多大表需要分区，单个分区多大适宜》](20180328_01.md)  
-##### 20180326_01.md   [《PostgreSQL 一主多从(多副本,强同步)简明手册 - 配置、压测、监控、切换、防脑裂、修复、0丢失》](20180326_01.md)  
+##### 20180326_01.md   [《PostgreSQL 一主多从(多副本,强同步)简明手册 - 配置、压测、监控、切换、防脑裂、修复、0丢失 - 珍藏级》](20180326_01.md)  
 ##### 20180325_06.md   [《PostgreSQL 11 preview - 增加强制custom plan GUC开关(plancache_mode)，对付倾斜》](20180325_06.md)  
 ##### 20180325_05.md   [《PostgreSQL 11 preview - 强制auto prepared statment开关(自动化plan cache)(类似Oracle cursor_sharing force)》](20180325_05.md)  
 ##### 20180325_04.md   [《PostgreSQL 11 preview - pg_stat_statements 增强，支持执行计划翻转记录》](20180325_04.md)  

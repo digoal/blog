@@ -10,7 +10,7 @@
 ##### 20160426_03.md   [《PostgreSQL prepared statement和simple query的profile及性能差异》](20160426_03.md)  
 ##### 20160426_02.md   [《PostgreSQL SQL log duration time 源码分析》](20160426_02.md)  
 ##### 20160426_01.md   [《iperf 测试网络性能指标》](20160426_01.md)  
-##### 20160421_02.md   [《PostgreSQL IDE pgadmin , edb postgres enterprise manager 查询慢的问题分析》](20160421_02.md)  
+##### 20160421_02.md   [《PostgreSQL IDE pgadmin , edb postgres(Oracle 兼容版) enterprise manager 查询慢的问题分析》](20160421_02.md)  
 ##### 20160421_01.md   [《如何追溯 PostgreSQL 慢查询当时的状态》](20160421_01.md)  
 ##### 20160419_01.md   [《PostgreSQL 行级 全文检索》](20160419_01.md)  
 ##### 20160414_01.md   [《PostgreSQL 物联网黑科技 - 瘦身几百倍的索引(BRIN index)》](20160414_01.md)  

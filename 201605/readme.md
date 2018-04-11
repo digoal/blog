@@ -4,7 +4,7 @@
 ----  
 ##### 20160531_01.md   [《PostgreSQL 函数稳定性与constraint_excluded分区表逻辑推理过滤的CASE》](20160531_01.md)  
 ##### 20160529_03.md   [《PostgreSQL ECPG 开发 DEMO》](20160529_03.md)  
-##### 20160529_02.md   [《EDB PPAS的"坑" 不兼容PostgreSQL一例》](20160529_02.md)  
+##### 20160529_02.md   [《EDB PPAS(Oracle 兼容版)的"坑" 不兼容PostgreSQL一例》](20160529_02.md)  
 ##### 20160529_01.md   [《PostgreSQL 批量权限 管理方法》](20160529_01.md)  
 ##### 20160528_01.md   [《深入浅出PostgreSQL B-Tree索引结构》](20160528_01.md)  
 ##### 20160527_03.md   [《防止短连接耗尽你的动态TCP端口》](20160527_03.md)  
@@ -24,7 +24,7 @@
 ##### 20160511_01.md   [《PostgreSQL 获取拼音首字母的函数 - 摘自互联网》](20160511_01.md)  
 ##### 20160510_04.md   [《PostgreSQL MySQL 兼容性之 - 读写用户的只读影子用户》](20160510_04.md)  
 ##### 20160510_03.md   [《PostgreSQL schema,database owner 的高危注意事项》](20160510_03.md)  
-##### 20160510_02.md   [《使用社区版本pg_dump 逻辑备份导出 EDB PPAS 的风险》](20160510_02.md)  
+##### 20160510_02.md   [《使用社区版本pg_dump 逻辑备份导出 EDB PPAS(Oracle 兼容版) 的风险》](20160510_02.md)  
 ##### 20160510_01.md   [《PostgreSQL 逻辑结构 和 权限体系 介绍》](20160510_01.md)  
 ##### 20160507_02.md   [《PostgreSQL GIN索引limit慢的原因分析》](20160507_02.md)  
 ##### 20160507_01.md   [《PostgreSQL Oracle 兼容性之 - add_months》](20160507_01.md)  

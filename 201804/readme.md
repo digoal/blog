@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180414_03.md   [《滴滴打车 派单系统思考 数据库设计与PostgreSQL实现 - 2万元成本的PG服务器, 1天盈利49亿》](20180414_03.md)  
 ##### 20180414_02.md   [《PostgreSQL 大表扫描策略 - BAS_BULKREAD , synchronize_seqscans》](20180414_02.md)  
 ##### 20180414_01.md   [《[未完待续] pgloader - mysql , sqlserver 迁移到 PostgreSQL - (含DDL自动迁移)》](20180414_01.md)  
 ##### 20180413_01.md   [《PostgreSQL 从文件时间戳获悉一些信息(如数据库创建时间)》](20180413_01.md)  

@@ -1385,6 +1385,8 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201406/20140628_01.md   [《PostgreSQL IOPS performance tuning by flashcache》](201406/20140628_01.md)  
 ##### 201406/20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](201406/20140618_01.md)  
+##### 201406/20140617_04.md   [《PostgreSQL central stream replication unlinked use (scp, cp, pg_basebackup ...)》](201406/20140617_04.md)  
+##### 201406/20140617_03.md   [《PostgreSQL centrol PITR backup with kvm and zfs and nfs or zvol》](201406/20140617_03.md)  
 ##### 201406/20140617_02.md   [《test zfs dedup vs compress which suit in your environment》](201406/20140617_02.md)  
 ##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  
 ##### 201406/20140614_01.md   [《使用 ssh -R 建立反向/远程TCP端口转发代理》](201406/20140614_01.md)  

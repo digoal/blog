@@ -4,6 +4,8 @@
 ----  
 ##### 20140628_01.md   [《PostgreSQL IOPS performance tuning by flashcache》](20140628_01.md)  
 ##### 20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](20140618_01.md)  
+##### 20140617_04.md   [《PostgreSQL central stream replication unlinked use (scp, cp, pg_basebackup ...)》](20140617_04.md)  
+##### 20140617_03.md   [《PostgreSQL centrol PITR backup with kvm and zfs and nfs or zvol》](20140617_03.md)  
 ##### 20140617_02.md   [《test zfs dedup vs compress which suit in your environment》](20140617_02.md)  
 ##### 20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](20140617_01.md)  
 ##### 20140614_01.md   [《使用 ssh -R 建立反向/远程TCP端口转发代理》](20140614_01.md)  

@@ -1175,6 +1175,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201512/20151220_02.md   [《阿里云ApsaraDB RDS for PostgreSQL 最佳实践 - 2 教你RDS PG的水平分库(plproxy)》](201512/20151220_02.md)  
 ##### 201512/20151220_01.md   [《阿里云ApsaraDB RDS for PostgreSQL 最佳实践 - 1 教你做RDS性能测试》](201512/20151220_01.md)  
 ##### 201512/20151218_01.md   [《Greenplum 表空间和filespace的用法》](201512/20151218_01.md)  
+##### 201512/20151217_01.md   [《Greenplum 源码安装》](201512/20151217_01.md)  
 ##### 201512/20151215_01.md   [《"物联网"流式处理应用 - 用PostgreSQL实时处理(万亿每天)》](201512/20151215_01.md)  
 ##### 201512/20151214_01.md   [《PostgreSQL 多元线性回归 - 2 股票预测》](201512/20151214_01.md)  
 ##### 201512/20151210_01.md   [《PostgreSQL 使用pg_xlogdump找到误操作事务号》](201512/20151210_01.md)  
@@ -1377,8 +1378,12 @@ digoal's|PostgreSQL|文章|归类
 ##### 201408/20140801_02.md   [《USE OpenVSwitch Isolating VM traffic using VLANs》](201408/20140801_02.md)  
 ##### 201408/20140801_01.md   [《OpenvSwitch readme & faq》](201408/20140801_01.md)  
 ----  
+##### 201407/20140725_02.md   [《GreenPlum 4.3.2.0 installed in CentOS 6.x x64》](201407/20140725_02.md)  
 ##### 201407/20140725_01.md   [《Postgres-XL you can only see databases with CREATE privilege》](201407/20140725_01.md)  
+##### 201407/20140704_01.md   [《flashcache usage guide》](201407/20140704_01.md)  
+##### 201407/20140701_01.md   [《PostgreSQL xlog $PGDATA and zfs snapshot based central backup & PITR case》](201407/20140701_01.md)  
 ----  
+##### 201406/20140628_01.md   [《PostgreSQL IOPS performance tuning by flashcache》](201406/20140628_01.md)  
 ##### 201406/20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](201406/20140618_01.md)  
 ##### 201406/20140617_02.md   [《test zfs dedup vs compress which suit in your environment》](201406/20140617_02.md)  
 ##### 201406/20140617_01.md   [《zpool raidz vdev how many under block dev choose for optimal performance (Best Practices and Caveats)》](201406/20140617_01.md)  

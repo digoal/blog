@@ -2,4 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20140725_02.md   [《GreenPlum 4.3.2.0 installed in CentOS 6.x x64》](20140725_02.md)  
 ##### 20140725_01.md   [《Postgres-XL you can only see databases with CREATE privilege》](20140725_01.md)  
+##### 20140704_01.md   [《flashcache usage guide》](20140704_01.md)  
+##### 20140701_01.md   [《PostgreSQL xlog $PGDATA and zfs snapshot based central backup & PITR case》](20140701_01.md)  

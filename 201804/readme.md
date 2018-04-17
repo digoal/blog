@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180417_03.md   [《PostgreSQL Oracle 兼容性之 - round interval》](20180417_03.md)  
 ##### 20180417_02.md   [《PostgreSQL bit运算CASE - 最近7天消费金额大于N的用户bits》](20180417_02.md)  
 ##### 20180417_01.md   [《为什么geometry+GIST 比 geohash+BTREE更适合空间搜索 - 多出的不仅仅是20倍性能提升》](20180417_01.md)  
 ##### 20180416_02.md   [《PostgreSQL 滴滴派单 高峰区域集中打车冲突优化1 - 宇宙大爆炸理论与PostgreSQL实践》](20180416_02.md)  

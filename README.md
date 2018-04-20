@@ -1377,6 +1377,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201409/20140930_01.md   [《PostgreSQL数据库在上市公司重要应用中的SOX审计》](201409/20140930_01.md)  
 ##### 201409/20140924_01.md   [《PostgreSQL Windows AD认证配置》](201409/20140924_01.md)  
+##### 201409/20140919_01.md   [《PostgreSQL PGCluster-II like Oracle's RAC can used in PG-XC or other distributed db based pg improve DBsys's Availbility》](201409/20140919_01.md)  
 ##### 201409/20140917_01.md   [《PostgreSQL 触发器应用 - (触发器WHEN)前置条件过滤跟踪目标记录》](201409/20140917_01.md)  
 ----  
 ##### 201408/20140828_01.md   [《PostgreSQL 闪回 - flash back query emulate by trigger》](201408/20140828_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180420_02.md   [《PostgreSQL 分区表的逻辑复制（逻辑订阅）》](20180420_02.md)  
+##### 20180420_01.md   [《[未完待续] PostgreSQL + timescaleDB + Prometheus 物联网时序数据监控组合》](20180420_01.md)  
 ##### 20180418_01.md   [《[未完待续] PostgreSQL 生态 插件 归纳整理》](20180418_01.md)  
 ##### 20180417_03.md   [《PostgreSQL Oracle 兼容性之 - round interval》](20180417_03.md)  
 ##### 20180417_02.md   [《PostgreSQL bit运算CASE - 最近7天消费金额大于N的用户bits》](20180417_02.md)  

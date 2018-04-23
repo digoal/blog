@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180423_02.md   [《Oracle migration to Greenplum - (含 Ora2pg)》](20180423_02.md)  
+##### 20180423_01.md   [《[未完待续] PostgreSQL SQL Parser》](20180423_01.md)  
 ##### 20180420_03.md   [《PostgreSQL 实践 - 广告位推荐》](20180420_03.md)  
 ##### 20180420_02.md   [《PostgreSQL 分区表的逻辑复制（逻辑订阅）》](20180420_02.md)  
 ##### 20180420_01.md   [《[未完待续] PostgreSQL + timescaleDB + Prometheus 物联网时序数据监控组合》](20180420_01.md)  

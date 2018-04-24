@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote》](20180424_01.md)  
 ##### 20180423_03.md   [《[转载] Oracle record、varray、table和%type、%rowtype的使用详解》](20180423_03.md)  
 ##### 20180423_02.md   [《Oracle migration to Greenplum - (含 Ora2pg)》](20180423_02.md)  
 ##### 20180423_01.md   [《[未完待续] PostgreSQL SQL Parser》](20180423_01.md)  

@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201804/20180424_03.md   [《Greenplum 海量数据，大宽表 行存 VS 列存》](201804/20180424_03.md)  
+##### 201804/20180424_02.md   [《PostgreSQL 分区过滤控制参数 - enable_partition_pruning》](201804/20180424_02.md)  
 ##### 201804/20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote》](201804/20180424_01.md)  
 ##### 201804/20180423_03.md   [《[转载] Oracle record、varray、table和%type、%rowtype的使用详解》](201804/20180423_03.md)  
 ##### 201804/20180423_02.md   [《Oracle migration to Greenplum - (含 Ora2pg)》](201804/20180423_02.md)  

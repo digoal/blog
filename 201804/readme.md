@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20180424_05.md   [《PostgreSQL CONCURRENTLY create index LOCK conflict with COPY》](20180424_05.md)  
+##### 20180424_05.md   [《PostgreSQL CREATE INDEX CONCURRENTLY 的原理以及哪些操作可能堵塞索引的创建》](20180424_05.md)  
 ##### 20180424_04.md   [《PostgreSQL 实践 - 广告位推荐 2》](20180424_04.md)  
 ##### 20180424_03.md   [《Greenplum 海量数据，大宽表 行存 VS 列存》](20180424_03.md)  
 ##### 20180424_02.md   [《PostgreSQL 分区过滤控制参数 - enable_partition_pruning》](20180424_02.md)  

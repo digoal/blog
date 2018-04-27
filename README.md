@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201804/20180427_02.md   [《PostgreSQL 改元信息 invalid index》](201804/20180427_02.md)  
 ##### 201804/20180427_01.md   [《阿里云RDS PostgreSQL OSS 外部表实践 - (dblink异步调用封装并行) 从OSS并行导入数据》](201804/20180427_01.md)  
 ##### 201804/20180425_01.md   [《Oracle DBA 增值 PostgreSQL,Greenplum 学习计划》](201804/20180425_01.md)  
 ##### 201804/20180424_05.md   [《PostgreSQL CREATE INDEX CONCURRENTLY 的原理以及哪些操作可能堵塞索引的创建》](201804/20180424_05.md)  

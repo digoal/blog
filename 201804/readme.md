@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180427_03.md   [《PostgreSQL 批量导入性能 (采用dblink 异步调用)》](20180427_03.md)  
 ##### 20180427_02.md   [《PostgreSQL 改元信息 invalid index》](20180427_02.md)  
 ##### 20180427_01.md   [《阿里云RDS PostgreSQL OSS 外部表实践 - (dblink异步调用封装并行) 从OSS并行导入数据》](20180427_01.md)  
 ##### 20180425_01.md   [《Oracle DBA 增值 PostgreSQL,Greenplum 学习计划》](20180425_01.md)  

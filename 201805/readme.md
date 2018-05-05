@@ -2,4 +2,5 @@
   
 ### 文章列表  
 ----  
+##### 20180505_01.md   [《ETL for Oracle to PostgreSQL 1 - Oracle Data Integrator (ODI)》](20180505_01.md)  
 ##### 20180502_01.md   [《PostgreSQL 模糊查询+大量重复值匹配 实践 - 分区索引 = any (array())》](20180502_01.md)  

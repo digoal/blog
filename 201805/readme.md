@@ -2,5 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180505_04.md   [《ETL for Oracle to Greenplum (bulk) - Pentaho Data Integrator (PDI, kettle)》](20180505_04.md)  
+##### 20180505_03.md   [《ETL for Oracle to PostgreSQL 3 - DATAX》](20180505_03.md)  
+##### 20180505_02.md   [《ETL for Oracle to PostgreSQL 2 - Pentaho Data Integrator (PDI, kettle)》](20180505_02.md)  
 ##### 20180505_01.md   [《ETL for Oracle to PostgreSQL 1 - Oracle Data Integrator (ODI)》](20180505_01.md)  
 ##### 20180502_01.md   [《PostgreSQL 模糊查询+大量重复值匹配 实践 - 分区索引 = any (array())》](20180502_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180505_06.md   [《Migration Oracle to PostgreSQL "百家"文档集》](20180505_06.md)  
+##### 20180505_05.md   [《Become a PostgreSQL DBA》](20180505_05.md)  
 ##### 20180505_04.md   [《ETL for Oracle to Greenplum (bulk) - Pentaho Data Integrator (PDI, kettle)》](20180505_04.md)  
 ##### 20180505_03.md   [《ETL for Oracle to PostgreSQL 3 - DATAX》](20180505_03.md)  
 ##### 20180505_02.md   [《ETL for Oracle to PostgreSQL 2 - Pentaho Data Integrator (PDI, kettle)》](20180505_02.md)  

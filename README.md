@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201805/20180505_06.md   [《Migration Oracle to PostgreSQL "百家"文档集》](201805/20180505_06.md)  
+##### 201805/20180505_05.md   [《Become a PostgreSQL DBA》](201805/20180505_05.md)  
 ##### 201805/20180505_04.md   [《ETL for Oracle to Greenplum (bulk) - Pentaho Data Integrator (PDI, kettle)》](201805/20180505_04.md)  
 ##### 201805/20180505_03.md   [《ETL for Oracle to PostgreSQL 3 - DATAX》](201805/20180505_03.md)  
 ##### 201805/20180505_02.md   [《ETL for Oracle to PostgreSQL 2 - Pentaho Data Integrator (PDI, kettle)》](201805/20180505_02.md)  

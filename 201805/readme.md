@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20180505_07.md   [《阿里云 RDS PostgreSQL 高并发特性 vs PgSQL 社区版本》](20180505_07.md)  
+##### 20180505_07.md   [《阿里云 RDS PostgreSQL 高并发特性 vs 社区版本 (1.6万并发: 3倍吞吐，240倍响应速度)》](20180505_07.md)  
 ##### 20180505_06.md   [《Migration Oracle to PostgreSQL "百家"文档集》](20180505_06.md)  
 ##### 20180505_05.md   [《Become a PostgreSQL DBA》](20180505_05.md)  
 ##### 20180505_04.md   [《ETL for Oracle to Greenplum (bulk) - Pentaho Data Integrator (PDI, kettle)》](20180505_04.md)  

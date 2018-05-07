@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180507_01.md   [《PostgreSQL 自动创建分区实践 - 写入触发器》](20180507_01.md)  
 ##### 20180505_07.md   [《阿里云 RDS PostgreSQL 高并发特性 vs 社区版本 (1.6万并发: 3倍吞吐，240倍响应速度)》](20180505_07.md)  
 ##### 20180505_06.md   [《Migration Oracle to PostgreSQL "百家"文档集》](20180505_06.md)  
 ##### 20180505_05.md   [《Become a PostgreSQL DBA》](20180505_05.md)  
@@ -11,3 +12,4 @@
 ##### 20180505_01.md   [《ETL for Oracle to PostgreSQL 1 - Oracle Data Integrator (ODI)》](20180505_01.md)  
 ##### 20180502_01.md   [《PostgreSQL 模糊查询+大量重复值匹配 实践 - 分区索引 = any (array())》](20180502_01.md)  
 ##### 20180501_57.md   [《[未完待续] PostgreSQL 道德经 智慧 - 57》](20180501_57.md)  
+##### 20180501_03.md   [《[未完待续] PostgreSQL 道德经 智慧 - 3》](20180501_03.md)  

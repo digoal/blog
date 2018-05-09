@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201805/20180509_02.md   [《Greenplum Oracle 兼容性之 - LOG ERRORS INTO》](201805/20180509_02.md)  
+##### 201805/20180509_01.md   [《PostgreSQL Oracle 兼容性之 - select for update of column》](201805/20180509_01.md)  
 ##### 201805/20180507_01.md   [《PostgreSQL 自动创建分区实践 - 写入触发器》](201805/20180507_01.md)  
 ##### 201805/20180505_07.md   [《阿里云 RDS PostgreSQL 高并发特性 vs 社区版本 (1.6万并发: 3倍吞吐，240倍响应速度)》](201805/20180505_07.md)  
 ##### 201805/20180505_06.md   [《Migration Oracle to PostgreSQL "百家"文档集》](201805/20180505_06.md)  

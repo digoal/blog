@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180510_02.md   [《PostgreSQL Oracle 兼容性 - Analysis函数之keep》](20180510_02.md)  
+##### 20180510_01.md   [《PostgreSQL copy (quote,DELIMITER,...) single byte char 的输入》](20180510_01.md)  
 ##### 20180509_02.md   [《Greenplum Oracle 兼容性之 - LOG ERRORS INTO》](20180509_02.md)  
 ##### 20180509_01.md   [《PostgreSQL Oracle 兼容性之 - select for update of column》](20180509_01.md)  
 ##### 20180507_01.md   [《PostgreSQL 自动创建分区实践 - 写入触发器》](20180507_01.md)  

@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201805/20180511_01.md   [《PostgreSQL Oracle PL/SQL 兼容性之 - AGGREGATE USING Clause 聚合函数》](201805/20180511_01.md)  
 ##### 201805/20180510_02.md   [《PostgreSQL Oracle 兼容性 - Analysis函数之keep》](201805/20180510_02.md)  
 ##### 201805/20180510_01.md   [《PostgreSQL copy (quote,DELIMITER,...) single byte char 的输入》](201805/20180510_01.md)  
 ##### 201805/20180509_02.md   [《Greenplum Oracle 兼容性之 - LOG ERRORS INTO》](201805/20180509_02.md)  

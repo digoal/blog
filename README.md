@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201805/20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](201805/20180515_02.md)  
+##### 201805/20180515_01.md   [《Greenplum max_prepared_transactions 设置不正确时的症状》](201805/20180515_01.md)  
 ##### 201805/20180512_01.md   [《PostgreSQL, SQL Server 逻辑增量 (通过逻辑标记update,delete) 同步到 Greenplum, PostgreSQL》](201805/20180512_01.md)  
 ##### 201805/20180511_01.md   [《PostgreSQL Oracle PL/SQL 兼容性之 - AGGREGATE USING Clause 聚合函数》](201805/20180511_01.md)  
 ##### 201805/20180510_02.md   [《PostgreSQL Oracle 兼容性 - Analysis函数之keep》](201805/20180510_02.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180515_03.md   [《PostgreSQL 单表并行bulkload的extend file lock 冲突问题解决》](20180515_03.md)  
 ##### 20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](20180515_02.md)  
 ##### 20180515_01.md   [《Greenplum max_prepared_transactions 设置不正确时的症状》](20180515_01.md)  
 ##### 20180512_01.md   [《PostgreSQL, SQL Server 逻辑增量 (通过逻辑标记update,delete) 同步到 Greenplum, PostgreSQL》](20180512_01.md)  

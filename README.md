@@ -31,6 +31,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201805/20180516_04.md   [《PostgreSQL 物理恢复时查找wal record的顺序 - loop(pg_wal, restore_command, stream)》](201805/20180516_04.md)  
+##### 201805/20180516_03.md   [《PostgreSQL 服务端COPY和客户端COPY - 暨PG有哪些服务端操作接口》](201805/20180516_03.md)  
+##### 201805/20180516_02.md   [《PostgreSQL pgbench 支持100万连接》](201805/20180516_02.md)  
 ##### 201805/20180516_01.md   [《PostgreSQL Failover slot - 支持将slot信息发送给物理备库》](201805/20180516_01.md)  
 ##### 201805/20180515_03.md   [《PostgreSQL 单表并行bulkload的extend file lock 冲突问题解决》](201805/20180515_03.md)  
 ##### 201805/20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](201805/20180515_02.md)  

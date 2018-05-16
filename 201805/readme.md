@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20180516_04.md   [《PostgreSQL 物理恢复时查找wal record的顺序 - loop(pg_wal, restore_command, stream)》](20180516_04.md)  
+##### 20180516_03.md   [《PostgreSQL 服务端COPY和客户端COPY - 暨PG有哪些服务端操作接口》](20180516_03.md)  
+##### 20180516_02.md   [《PostgreSQL pgbench 支持100万连接》](20180516_02.md)  
 ##### 20180516_01.md   [《PostgreSQL Failover slot - 支持将slot信息发送给物理备库》](20180516_01.md)  
 ##### 20180515_03.md   [《PostgreSQL 单表并行bulkload的extend file lock 冲突问题解决》](20180515_03.md)  
 ##### 20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](20180515_02.md)  

@@ -31,7 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201805/20180516_01.md   [《PostgreSQL slot failover》](201805/20180516_01.md)  
+##### 201805/20180516_01.md   [《PostgreSQL Failover slot - 支持将slot信息发送给物理备库》](201805/20180516_01.md)  
 ##### 201805/20180515_03.md   [《PostgreSQL 单表并行bulkload的extend file lock 冲突问题解决》](201805/20180515_03.md)  
 ##### 201805/20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](201805/20180515_02.md)  
 ##### 201805/20180515_01.md   [《Greenplum max_prepared_transactions 设置不正确时的症状》](201805/20180515_01.md)  

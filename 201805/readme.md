@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180516_01.md   [《PostgreSQL slot failover》](20180516_01.md)  
 ##### 20180515_03.md   [《PostgreSQL 单表并行bulkload的extend file lock 冲突问题解决》](20180515_03.md)  
 ##### 20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](20180515_02.md)  
 ##### 20180515_01.md   [《Greenplum max_prepared_transactions 设置不正确时的症状》](20180515_01.md)  

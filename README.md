@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201805/20180516_01.md   [《PostgreSQL slot failover》](201805/20180516_01.md)  
 ##### 201805/20180515_03.md   [《PostgreSQL 单表并行bulkload的extend file lock 冲突问题解决》](201805/20180515_03.md)  
 ##### 201805/20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](201805/20180515_02.md)  
 ##### 201805/20180515_01.md   [《Greenplum max_prepared_transactions 设置不正确时的症状》](201805/20180515_01.md)  
@@ -670,7 +671,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201703/20170330_04.md   [《PostgreSQL 10.0 preview 功能增强 - 国际化功能增强,支持ICU(International Components for Unicode)》](201703/20170330_04.md)  
 ##### 201703/20170330_03.md   [《PostgreSQL 10.0 preview 功能增强 - 支持分区表ON CONFLICT .. DO NOTHING》](201703/20170330_03.md)  
 ##### 201703/20170330_02.md   [《PostgreSQL 10.0 preview 性能增强 - 推出JIT开发框架(朝着HTAP迈进)》](201703/20170330_02.md)  
-##### 201703/20170330_01.md   [《PostgreSQL 10.0 preview 功能增强 - 备库支持逻辑订阅,订阅支持主备漂移了》](201703/20170330_01.md)  
+##### 201703/20170330_01.md   [《PostgreSQL 10.0 preview 功能增强 - 物理备库支持逻辑订阅,订阅支持物理主备HA漂移》](201703/20170330_01.md)  
 ##### 201703/20170329_03.md   [《PostgreSQL jdbc batch insert》](201703/20170329_03.md)  
 ##### 201703/20170329_02.md   [《PostgreSQL 10.0 preview 性能增强 - GIN索引vacuum锁降低》](201703/20170329_02.md)  
 ##### 201703/20170329_01.md   [《PostgreSQL 10.0 preview 功能增强 - 流复制统计视图pg_stat_replication增强, 新增时间维度延迟评估》](201703/20170329_01.md)  

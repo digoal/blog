@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20180517_04.md   [《PostgreSQL Oracle兼容性之 - text - text隐式转换》](20180517_04.md)  
+##### 20180517_03.md   [《PostgreSQL Oracle兼容性之 - '' 空字符》](20180517_03.md)  
+##### 20180517_02.md   [《PostgreSQL Oracle兼容性之 时间相减得到NUMBER - timestamp-timestamp=numeric not interval》](20180517_02.md)  
 ##### 20180517_01.md   [《PostgreSQL HooK 介绍》](20180517_01.md)  
 ##### 20180516_05.md   [《[未完待续] x86多机 + 分布式共享存储BeeGFS + HA》](20180516_05.md)  
 ##### 20180516_04.md   [《PostgreSQL 物理恢复时查找wal record的顺序 - loop(pg_wal, restore_command, stream)》](20180516_04.md)  
@@ -16,7 +19,7 @@
 ##### 20180510_02.md   [《PostgreSQL Oracle 兼容性 - Analysis函数之keep》](20180510_02.md)  
 ##### 20180510_01.md   [《PostgreSQL copy (quote,DELIMITER,...) single byte char 的输入》](20180510_01.md)  
 ##### 20180509_02.md   [《Greenplum Oracle 兼容性之 - LOG ERRORS INTO》](20180509_02.md)  
-##### 20180509_01.md   [《PostgreSQL Oracle 兼容性之 - select for update of column》](20180509_01.md)  
+##### 20180509_01.md   [《PostgreSQL Oracle 兼容性之 - select for update of column_name (change to table_name or table_alias)》](20180509_01.md)  
 ##### 20180507_01.md   [《PostgreSQL 自动创建分区实践 - 写入触发器》](20180507_01.md)  
 ##### 20180505_07.md   [《阿里云 RDS PostgreSQL 高并发特性 vs 社区版本 (1.6万并发: 3倍吞吐，240倍响应速度)》](20180505_07.md)  
 ##### 20180505_06.md   [《Migration Oracle to PostgreSQL "百家"文档集》](20180505_06.md)  

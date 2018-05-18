@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180518_01.md   [《PostgreSQL 11 preview - 添加非空默认值不需要 rewrite table》](20180518_01.md)  
 ##### 20180517_04.md   [《PostgreSQL Oracle兼容性之 - text - text隐式转换》](20180517_04.md)  
 ##### 20180517_03.md   [《PostgreSQL Oracle兼容性之 - '' 空字符》](20180517_03.md)  
 ##### 20180517_02.md   [《PostgreSQL Oracle兼容性之 时间相减得到NUMBER - timestamp-timestamp=numeric not interval》](20180517_02.md)  

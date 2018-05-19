@@ -40,7 +40,7 @@
 ##### 20180408_03.md   [《PostgreSQL 家谱、族谱类应用实践 - 图式关系存储与搜索》](20180408_03.md)  
 ##### 20180408_02.md   [《PostgreSQL Oracle 兼容性之 - ALTER TRIGGER ENABLE|DISABLE》](20180408_02.md)  
 ##### 20180408_01.md   [《PostgreSQL 11 preview - Logical replication support for TRUNCATE》](20180408_01.md)  
-##### 20180407_03.md   [《PostgreSQL 11 preview - Allow on-line enabling and disabling of data checksums》](20180407_03.md)  
+##### 20180407_03.md   [《PostgreSQL 11 preview - Allow on-line enabling and disabling of data checksums (含pg_verify_checksums工具，离线检查数据文件有误块错误)》](20180407_03.md)  
 ##### 20180407_02.md   [《PostgreSQL 11 preview - Faster partition pruning》](20180407_02.md)  
 ##### 20180407_01.md   [《PostgreSQL 11 preview - MERGE 语法支持与CTE内支持，兼容SQL:2016 , 兼容 Oracle》](20180407_01.md)  
 ##### 20180406_01.md   [《PostgreSQL 递归妙用案例 - 分组数据去重与打散》](20180406_01.md)  

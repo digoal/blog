@@ -31,7 +31,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201805/20180519_08.md   [《PostgreSQL 11 preview - 增加CREATE PROCEDURE和CALL语法》](201805/20180519_08.md)  
+##### 201805/20180519_11.md   [《PostgreSQL 11 preview - pgbench 压测软件增强》](201805/20180519_11.md)  
+##### 201805/20180519_10.md   [《PostgreSQL 11 preview - pg_resetwal 在线修改 WAL segment size》](201805/20180519_10.md)  
+##### 201805/20180519_09.md   [《PostgreSQL 11 preview - jsonb_plpython, jsonb_plperl 插件, PG类型jsonb与pyton,perl程序类型的相互转换》](201805/20180519_09.md)  
+##### 201805/20180519_08.md   [《PostgreSQL 11 preview - 增加CREATE PROCEDURE和CALL语法 (含过程内commit/rollback, 自治)》](201805/20180519_08.md)  
 ##### 201805/20180519_07.md   [《PostgreSQL 11 preview - 表达式索引柱状图buckets\STATISTICS\default_statistics_target可设置》](201805/20180519_07.md)  
 ##### 201805/20180519_06.md   [《PostgreSQL 11 preview - TOAST切片阈值表级可配置》](201805/20180519_06.md)  
 ##### 201805/20180519_05.md   [《PostgreSQL 11 preview - 通用场景性能 增强 汇总》](201805/20180519_05.md)  
@@ -109,7 +112,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201804/20180408_03.md   [《PostgreSQL 家谱、族谱类应用实践 - 图式关系存储与搜索》](201804/20180408_03.md)  
 ##### 201804/20180408_02.md   [《PostgreSQL Oracle 兼容性之 - ALTER TRIGGER ENABLE|DISABLE》](201804/20180408_02.md)  
 ##### 201804/20180408_01.md   [《PostgreSQL 11 preview - Logical replication support for TRUNCATE》](201804/20180408_01.md)  
-##### 201804/20180407_03.md   [《PostgreSQL 11 preview - Allow on-line enabling and disabling of data checksums》](201804/20180407_03.md)  
+##### 201804/20180407_03.md   [《PostgreSQL 11 preview - Allow on-line enabling and disabling of data checksums (含pg_verify_checksums工具，离线检查数据文件有误块错误)》](201804/20180407_03.md)  
 ##### 201804/20180407_02.md   [《PostgreSQL 11 preview - Faster partition pruning》](201804/20180407_02.md)  
 ##### 201804/20180407_01.md   [《PostgreSQL 11 preview - MERGE 语法支持与CTE内支持，兼容SQL:2016 , 兼容 Oracle》](201804/20180407_01.md)  
 ##### 201804/20180406_01.md   [《PostgreSQL 递归妙用案例 - 分组数据去重与打散》](201804/20180406_01.md)  

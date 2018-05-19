@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180519_08.md   [《PostgreSQL 11 preview - 增加CREATE PROCEDURE和CALL语法》](20180519_08.md)  
+##### 20180519_07.md   [《PostgreSQL 11 preview - 表达式索引柱状图buckets\STATISTICS\default_statistics_target可设置》](20180519_07.md)  
 ##### 20180519_06.md   [《PostgreSQL 11 preview - TOAST切片阈值表级可配置》](20180519_06.md)  
 ##### 20180519_05.md   [《PostgreSQL 11 preview - 通用场景性能 增强 汇总》](20180519_05.md)  
 ##### 20180519_04.md   [《PostgreSQL 11 preview - 优化器 增强 汇总》](20180519_04.md)  

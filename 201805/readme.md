@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180519_01.md   [《PostgreSQL 11 preview - 分区表增强汇总》](20180519_01.md)  
 ##### 20180518_02.md   [《PostgreSQL ADHoc(任意字段组合)查询(rums索引加速) - 非字典化，普通、数组等组合字段生成新数组》](20180518_02.md)  
 ##### 20180518_01.md   [《PostgreSQL 11 preview - 添加非空默认值不需要 rewrite table》](20180518_01.md)  
 ##### 20180517_04.md   [《PostgreSQL Oracle兼容性之 - text - text隐式转换》](20180517_04.md)  

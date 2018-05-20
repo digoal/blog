@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180521_02.md   [《[转载] 面试必备：什么是一致性Hash算法？》](20180521_02.md)  
+##### 20180521_01.md   [《[转载] 什么是一致性哈希算法》](20180521_01.md)  
 ##### 20180519_11.md   [《PostgreSQL 11 preview - pgbench 压测软件增强》](20180519_11.md)  
 ##### 20180519_10.md   [《PostgreSQL 11 preview - pg_resetwal 在线修改 WAL segment size》](20180519_10.md)  
 ##### 20180519_09.md   [《PostgreSQL 11 preview - jsonb_plpython, jsonb_plperl 插件, PG类型jsonb与pyton,perl程序类型的相互转换》](20180519_09.md)  

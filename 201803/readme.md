@@ -56,7 +56,7 @@
 ##### 20180311_03.md   [《[未完待续] PostgreSQL 哪些状态不可中断 - 杀不掉的QUERY和会话》](20180311_03.md)  
 ##### 20180311_02.md   [《[未完待续] PostgreSQL 扩展存储引擎介绍 - zheap - 1》](20180311_02.md)  
 ##### 20180311_01.md   [《[未完待续] PostgreSQL Oracle 兼容性之 - pl/sql 迁移到 plpgsql》](20180311_01.md)  
-##### 20180310_09.md   [《[未完待续] PostgreSQL HeroDB GPU 加速 - pl/cuda , pg-strom , herodb》](20180310_09.md)  
+##### 20180310_09.md   [《[未完待续] PostgreSQL HeteroDB GPU 加速 - pl/cuda , pg-strom , heterodb》](20180310_09.md)  
 ##### 20180310_08.md   [《[未完待续] PostgreSQL 函数编程语言扩展 - pl/go》](20180310_08.md)  
 ##### 20180310_07.md   [《[未完待续] PostgreSQL 函数编程语言扩展 - pl/lua》](20180310_07.md)  
 ##### 20180310_06.md   [《[未完待续] PostgreSQL 函数编程语言扩展 - pl/swift》](20180310_06.md)  

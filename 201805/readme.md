@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180529_01.md   [《PostgreSQL wal_buffers 自动计算算法》](20180529_01.md)  
 ##### 20180528_01.md   [《PostgreSQL Oracle checksum 配置与性能》](20180528_01.md)  
 ##### 20180524_05.md   [《PostgreSQL 9.x, 10, 11 hash分区表 用法举例》](20180524_05.md)  
 ##### 20180524_04.md   [《[招聘] [杭州米雅] PostgreSQL 开发 DBA》](20180524_04.md)  

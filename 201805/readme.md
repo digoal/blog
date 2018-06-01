@@ -36,7 +36,7 @@
 ##### 20180517_02.md   [《PostgreSQL Oracle兼容性之 时间相减得到NUMBER - timestamp-timestamp=numeric not interval》](20180517_02.md)  
 ##### 20180517_01.md   [《PostgreSQL HooK 介绍》](20180517_01.md)  
 ##### 20180516_05.md   [《[未完待续] x86多机 + 分布式共享存储BeeGFS + HA》](20180516_05.md)  
-##### 20180516_04.md   [《PostgreSQL 物理恢复时查找wal record的顺序 - loop(pg_wal, restore_command, stream)》](20180516_04.md)  
+##### 20180516_04.md   [《PostgreSQL 时间点恢复(PITR)时查找wal record的顺序 - loop(pg_wal, restore_command, stream)》](20180516_04.md)  
 ##### 20180516_03.md   [《PostgreSQL 服务端COPY和客户端COPY - 暨PG有哪些服务端操作接口》](20180516_03.md)  
 ##### 20180516_02.md   [《PostgreSQL pgbench 支持100万连接》](20180516_02.md)  
 ##### 20180516_01.md   [《PostgreSQL Failover slot - 支持将slot信息发送给物理备库》](20180516_01.md)  

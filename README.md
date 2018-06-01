@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180601_03.md   [《为什么PostgreSQL流复制备库在启动时不会立即启动wal receiver - startup慢导致需要的WAL在上游已删除》](201806/20180601_03.md)  
+##### 201806/20180601_02.md   [《PostgreSQL standby会不会做检查点? 以及做检查点的用处》](201806/20180601_02.md)  
 ##### 201806/20180601_01.md   [《PostgreSQL pg_recvlogical 与 test_decoding 自定义，支持source table filter, 对接kafka,es等》](201806/20180601_01.md)  
 ----  
 ##### 201805/20180530_02.md   [《PostgreSQL 如何确定某个opclass支持哪些操作符(支持索引)，JOIN方法，排序》](201805/20180530_02.md)  
@@ -67,7 +69,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201805/20180517_02.md   [《PostgreSQL Oracle兼容性之 时间相减得到NUMBER - timestamp-timestamp=numeric not interval》](201805/20180517_02.md)  
 ##### 201805/20180517_01.md   [《PostgreSQL HooK 介绍》](201805/20180517_01.md)  
 ##### 201805/20180516_05.md   [《[未完待续] x86多机 + 分布式共享存储BeeGFS + HA》](201805/20180516_05.md)  
-##### 201805/20180516_04.md   [《PostgreSQL 物理恢复时查找wal record的顺序 - loop(pg_wal, restore_command, stream)》](201805/20180516_04.md)  
+##### 201805/20180516_04.md   [《PostgreSQL 时间点恢复(PITR)时查找wal record的顺序 - loop(pg_wal, restore_command, stream)》](201805/20180516_04.md)  
 ##### 201805/20180516_03.md   [《PostgreSQL 服务端COPY和客户端COPY - 暨PG有哪些服务端操作接口》](201805/20180516_03.md)  
 ##### 201805/20180516_02.md   [《PostgreSQL pgbench 支持100万连接》](201805/20180516_02.md)  
 ##### 201805/20180516_01.md   [《PostgreSQL Failover slot - 支持将slot信息发送给物理备库》](201805/20180516_01.md)  
@@ -1510,6 +1512,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201308/20130817_01.md   [《PostgreSQL How can i decode the NUMERIC precision and scale in pg_attribute.atttypmod》](201308/20130817_01.md)  
 ##### 201308/20130814_01.md   [《PostgreSQL 9.4 pending patch : UNNEST with multiple args, and TABLE with multiple funcs》](201308/20130814_01.md)  
 ##### 201308/20130811_01.md   [《PostgreSQL pg_stats used to estimate top N freps values and explain rows》](201308/20130811_01.md)  
+##### 201308/20130806_03.md   [《PostgreSQL pending patch : fail-back without fresh backup (have bug?)》](201308/20130806_03.md)  
 ##### 201308/20130806_02.md   [《PostgreSQL 配置文件变更审计 - A custom background worker process to log changes to postgresql.conf to a table》](201308/20130806_02.md)  
 ##### 201308/20130806_01.md   [《GIS附近查找性能优化 - PostGIS long lat geometry distance search tuning using gist knn function》](201308/20130806_01.md)  
 ##### 201308/20130801_01.md   [《PostgreSQL Oracle 兼容性 - WITHIN GROUP (sql standard ordered set aggregate functions)》](201308/20130801_01.md)  

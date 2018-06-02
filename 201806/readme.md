@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180602_02.md   [《PostgreSQL GPU 加速(HeteroDB pg_strom) (GPU计算, GPU-DIO-Nvme SSD, 列存, GPU内存缓存)》](20180602_02.md)  
 ##### 20180602_01.md   [《CentOS 7 动态调节CPU频率 - 给CPU升降频》](20180602_01.md)  
 ##### 20180601_03.md   [《为什么PostgreSQL流复制备库在启动时不会立即启动wal receiver - startup慢导致需要的WAL在上游已删除》](20180601_03.md)  
 ##### 20180601_02.md   [《PostgreSQL standby会不会做检查点? 以及做检查点的用处》](20180601_02.md)  

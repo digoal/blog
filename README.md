@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180604_01.md   [《Greenplum & PostgreSQL UPSERT udf 实现》](201806/20180604_01.md)  
 ##### 201806/20180602_02.md   [《PostgreSQL GPU 加速(HeteroDB pg_strom) (GPU计算, GPU-DIO-Nvme SSD, 列存, GPU内存缓存)》](201806/20180602_02.md)  
 ##### 201806/20180602_01.md   [《CentOS 7 动态调节CPU频率 - 给CPU升降频》](201806/20180602_01.md)  
 ##### 201806/20180601_03.md   [《为什么PostgreSQL流复制备库在启动时不会立即启动wal receiver - startup慢导致需要的WAL在上游已删除》](201806/20180601_03.md)  

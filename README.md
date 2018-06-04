@@ -38,7 +38,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201806/20180601_01.md   [《PostgreSQL pg_recvlogical 与 test_decoding 自定义，支持source table filter, 对接kafka,es等》](201806/20180601_01.md)  
 ----  
 ##### 201805/20180530_02.md   [《PostgreSQL 如何确定某个opclass支持哪些操作符(支持索引)，JOIN方法，排序》](201805/20180530_02.md)  
-##### 201805/20180530_01.md   [《[未完待续] PostgreSQL tpcc 测试工具 sqlbench》](201805/20180530_01.md)  
+##### 201805/20180530_01.md   [《PostgreSQL 推荐 TPC-C 测试工具 sqlbench》](201805/20180530_01.md)  
 ##### 201805/20180529_01.md   [《PostgreSQL wal_buffers 自动计算算法》](201805/20180529_01.md)  
 ##### 201805/20180528_01.md   [《PostgreSQL Oracle checksum 配置与性能》](201805/20180528_01.md)  
 ##### 201805/20180524_05.md   [《PostgreSQL 9.x, 10, 11 hash分区表 用法举例》](201805/20180524_05.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180605_02.md   [《PostgreSQL PostGIS 的5种空间距离排序(knn)算法》](20180605_02.md)  
 ##### 20180605_01.md   [《Greenplum & PostgreSQL UPSERT udf 实现 - 2 batch批量模式》](20180605_01.md)  
 ##### 20180604_01.md   [《Greenplum & PostgreSQL UPSERT udf 实现 - 1 单行模式》](20180604_01.md)  
 ##### 20180602_02.md   [《PostgreSQL GPU 加速(HeteroDB pg_strom) (GPU计算, GPU-DIO-Nvme SSD, 列存, GPU内存缓存)》](20180602_02.md)  

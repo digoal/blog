@@ -165,7 +165,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201803/20180323_05.md   [《PostgreSQL 11 preview - BRIN索引接口功能扩展(BLOOM FILTER、min max分段)》](201803/20180323_05.md)  
 ##### 201803/20180323_04.md   [《PostgreSQL 11 preview - Incremental Sort(排序优化)》](201803/20180323_04.md)  
 ##### 201803/20180323_03.md   [《PostgreSQL Oracle 兼容性之 - INDEX SKIP SCAN (递归查询变态优化) 非驱动列索引扫描优化》](201803/20180323_03.md)  
-##### 201803/20180323_02.md   [《PostgreSQL Oracle 兼容性之 - DBMS_SQL(存储过程动态SQL中使用绑定变量)》](201803/20180323_02.md)  
+##### 201803/20180323_02.md   [《PostgreSQL Oracle 兼容性之 - DBMS_SQL(存储过程动态SQL中使用绑定变量-DB端prepare statement)》](201803/20180323_02.md)  
 ##### 201803/20180323_01.md   [《PostgreSQL 11 preview - JIT接口放开》](201803/20180323_01.md)  
 ##### 201803/20180322_12.md   [《我和大象 - 感恩、感谢、加油、腾飞》](201803/20180322_12.md)  
 ##### 201803/20180322_11.md   [《PostgreSQL 11 preview - 多阶段并行聚合array_agg, string_agg》](201803/20180322_11.md)  

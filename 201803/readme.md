@@ -16,7 +16,7 @@
 ##### 20180323_05.md   [《PostgreSQL 11 preview - BRIN索引接口功能扩展(BLOOM FILTER、min max分段)》](20180323_05.md)  
 ##### 20180323_04.md   [《PostgreSQL 11 preview - Incremental Sort(排序优化)》](20180323_04.md)  
 ##### 20180323_03.md   [《PostgreSQL Oracle 兼容性之 - INDEX SKIP SCAN (递归查询变态优化) 非驱动列索引扫描优化》](20180323_03.md)  
-##### 20180323_02.md   [《PostgreSQL Oracle 兼容性之 - DBMS_SQL(存储过程动态SQL中使用绑定变量)》](20180323_02.md)  
+##### 20180323_02.md   [《PostgreSQL Oracle 兼容性之 - DBMS_SQL(存储过程动态SQL中使用绑定变量-DB端prepare statement)》](20180323_02.md)  
 ##### 20180323_01.md   [《PostgreSQL 11 preview - JIT接口放开》](20180323_01.md)  
 ##### 20180322_12.md   [《我和大象 - 感恩、感谢、加油、腾飞》](20180322_12.md)  
 ##### 20180322_11.md   [《PostgreSQL 11 preview - 多阶段并行聚合array_agg, string_agg》](20180322_11.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180607_02.md   [《Greenplum 轨迹相似(伴随分析)》](20180607_02.md)  
 ##### 20180607_01.md   [《PostgreSQL + PostGIS 时态分析》](20180607_01.md)  
 ##### 20180605_02.md   [《PostgreSQL PostGIS 的5种空间距离排序(knn)算法》](20180605_02.md)  
 ##### 20180605_01.md   [《Greenplum & PostgreSQL UPSERT udf 实现 - 2 batch批量模式》](20180605_01.md)  

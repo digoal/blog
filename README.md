@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180607_01.md   [《PostgreSQL + PostGIS 时态分析》](201806/20180607_01.md)  
 ##### 201806/20180605_02.md   [《PostgreSQL PostGIS 的5种空间距离排序(knn)算法》](201806/20180605_02.md)  
 ##### 201806/20180605_01.md   [《Greenplum & PostgreSQL UPSERT udf 实现 - 2 batch批量模式》](201806/20180605_01.md)  
 ##### 201806/20180604_01.md   [《Greenplum & PostgreSQL UPSERT udf 实现 - 1 单行模式》](201806/20180604_01.md)  

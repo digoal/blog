@@ -2,4 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20130912_01.md   [《systemtap probe point's "context variables" or "target variables"》](20130912_01.md)  
+##### 20130911_01.md   [《systemtap probe point followed by ! or ? or "if (expr)"》](20130911_01.md)  
+##### 20130910_03.md   [《find systemtap pre-built probe points & probe points reference manual》](20130910_03.md)  
+##### 20130910_02.md   [《systemtap SAFETY AND SECURITY》](20130910_02.md)  
+##### 20130910_01.md   [《systemtap optimized for variables》](20130910_01.md)  
 ##### 20130906_01.md   [《upsert - PostgreSQL 9.4 pending patch : INSERT...ON DUPLICATE KEY IGNORE》](20130906_01.md)  
+##### 20130903_05.md   [《systemtap receive strings from address》](20130903_05.md)  
+##### 20130903_04.md   [《use systemtap statistics vs pgbench progress output》](20130903_04.md)  
+##### 20130903_03.md   [《Systemtap statistics type example》](20130903_03.md)  
+##### 20130903_02.md   [《Systemtap supported data type (long,string,array,statistic), note don't support numeric except long》](20130903_02.md)  
+##### 20130903_01.md   [《Eclipse Systemtap IDE》](20130903_01.md)  

@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20130930_03.md   [《Systemtap Userspace probing - 4》](20130930_03.md)  
+##### 20130930_02.md   [《Systemtap Userspace probing - 3》](20130930_02.md)  
+##### 20130930_01.md   [《Systemtap Userspace probing - 2》](20130930_01.md)  
+##### 20130929_03.md   [《Systemtap Userspace probing - 1》](20130929_03.md)  
+##### 20130929_02.md   [《Systemtap DWARF-less probing (kprobe)》](20130929_02.md)  
+##### 20130929_01.md   [《systemtap Built-in probe point types (DWARF-based kernel or module probes)》](20130929_01.md)  
+##### 20130913_01.md   [《systemtap Auxiliary functions and Embedded C》](20130913_01.md)  
+##### 20130912_03.md   [《systemtap local & global variables》](20130912_03.md)  
+##### 20130912_02.md   [《systemtap probe aliases (Prologue-style = & Epilogue-style +=) and suffixes》](20130912_02.md)  
 ##### 20130912_01.md   [《systemtap probe point's "context variables" or "target variables"》](20130912_01.md)  
 ##### 20130911_01.md   [《systemtap probe point followed by ! or ? or "if (expr)"》](20130911_01.md)  
 ##### 20130910_03.md   [《find systemtap pre-built probe points & probe points reference manual》](20130910_03.md)  

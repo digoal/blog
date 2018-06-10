@@ -1511,6 +1511,10 @@ digoal's|PostgreSQL|文章|归类
 ##### 201311/20131126_01.md   [《设置进程亲和 - numactl 或 taskset - retrieve or set a process's CPU affinity (affect SYSTEMTAP TIME)》](201311/20131126_01.md)  
 ----  
 ##### 201310/20131026_01.md   [《PostgreSQL bulk COPY load Bottleneck by extend lock waiting》](201310/20131026_01.md)  
+##### 201310/20131018_03.md   [《PostgreSQL Dynamic Tracing using systemtap env prepare》](201310/20131018_03.md)  
+##### 201310/20131018_02.md   [《Systemtap: PostgreSQL probe, USE @var("varname") or $varname get all local and global variables》](201310/20131018_02.md)  
+##### 201310/20131018_01.md   [《Systemtap EXP: fix process probe global variables output BUG?(PostgreSQL checkpoint__done)》](201310/20131018_01.md)  
+##### 201310/20131017_04.md   [《SystemTap Tapset: common used functions - 2》](201310/20131017_04.md)  
 ##### 201310/20131017_03.md   [《SystemTap Tapset: common used functions - 1》](201310/20131017_03.md)  
 ##### 201310/20131017_02.md   [《Systemtap EXP: PostgreSQL IN-BUILD mark Class 7 - others(statement,xlog,sort)》](201310/20131017_02.md)  
 ##### 201310/20131017_01.md   [《Systemtap EXP: PostgreSQL IN-BUILD mark Class 6 - lock》](201310/20131017_01.md)  

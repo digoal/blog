@@ -3,6 +3,10 @@
 ### 文章列表  
 ----  
 ##### 20131026_01.md   [《PostgreSQL bulk COPY load Bottleneck by extend lock waiting》](20131026_01.md)  
+##### 20131018_03.md   [《PostgreSQL Dynamic Tracing using systemtap env prepare》](20131018_03.md)  
+##### 20131018_02.md   [《Systemtap: PostgreSQL probe, USE @var("varname") or $varname get all local and global variables》](20131018_02.md)  
+##### 20131018_01.md   [《Systemtap EXP: fix process probe global variables output BUG?(PostgreSQL checkpoint__done)》](20131018_01.md)  
+##### 20131017_04.md   [《SystemTap Tapset: common used functions - 2》](20131017_04.md)  
 ##### 20131017_03.md   [《SystemTap Tapset: common used functions - 1》](20131017_03.md)  
 ##### 20131017_02.md   [《Systemtap EXP: PostgreSQL IN-BUILD mark Class 7 - others(statement,xlog,sort)》](20131017_02.md)  
 ##### 20131017_01.md   [《Systemtap EXP: PostgreSQL IN-BUILD mark Class 6 - lock》](20131017_01.md)  

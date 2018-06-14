@@ -31,6 +31,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180614_03.md   [《PostgreSQL 流复制协议交互式调试 - replication=true》](201806/20180614_03.md)  
+##### 201806/20180614_02.md   [《PostgreSQL jdbc multi-host 配置与简单HA、Load Balance实现》](201806/20180614_02.md)  
+##### 201806/20180614_01.md   [《PostgreSQL libpq multi-host 配置与简单HA实现》](201806/20180614_01.md)  
 ##### 201806/20180613_04.md   [《PostgreSQL 实时健康监控 大屏 - 低频指标 - 珍藏级》](201806/20180613_04.md)  
 ##### 201806/20180613_03.md   [《PostgreSQL 实时健康监控 大屏 - 高频指标(服务器) - 珍藏级》](201806/20180613_03.md)  
 ##### 201806/20180613_02.md   [《PostgreSQL 实时健康监控 大屏 - 高频指标 - 珍藏级》](201806/20180613_02.md)  
@@ -58,8 +61,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201805/20180524_03.md   [《[招聘] [招商仁和人寿] PostgreSQL 开发 DBA》](201805/20180524_03.md)  
 ##### 201805/20180524_02.md   [《PostgreSQL 多场景 阿里云沙箱实验 预告》](201805/20180524_02.md)  
 ##### 201805/20180524_01.md   [《[未完待续] NVMe on CentOS\RHEL 7》](201805/20180524_01.md)  
-##### 201805/20180522_04.md   [《EDB PPAS (PostgreSQL plus advanced server) 10 参数模板》](201805/20180522_04.md)  
-##### 201805/20180522_03.md   [《PostgreSQL 10 参数模板》](201805/20180522_03.md)  
+##### 201805/20180522_04.md   [《EDB PPAS (PostgreSQL plus advanced server) 10 参数模板 - 珍藏级》](201805/20180522_04.md)  
+##### 201805/20180522_03.md   [《PostgreSQL 10 参数模板 - 珍藏级》](201805/20180522_03.md)  
 ##### 201805/20180522_02.md   [《[未完待续] PostgreSQL 监控、诊断功能设计》](201805/20180522_02.md)  
 ##### 201805/20180522_01.md   [《[未完待续] PostgreSQL 邂逅 word2vec 文本搜索》](201805/20180522_01.md)  
 ##### 201805/20180521_03.md   [《PostgresPro buildin pool(内置连接池)版本 原理与测试》](201805/20180521_03.md)  
@@ -133,7 +136,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201804/20180414_02.md   [《PostgreSQL 大表扫描策略 - BAS_BULKREAD , synchronize_seqscans》](201804/20180414_02.md)  
 ##### 201804/20180414_01.md   [《[未完待续] pgloader - mysql , sqlserver 迁移到 PostgreSQL - (含DDL自动迁移)》](201804/20180414_01.md)  
 ##### 201804/20180413_01.md   [《PostgreSQL 从文件时间戳获悉一些信息(如数据库创建时间)》](201804/20180413_01.md)  
-##### 201804/20180411_02.md   [《EDB PPAS(Oracle 兼容版) Oracle与PostgreSQL 兼容模式的参数配置切换》](201804/20180411_02.md)  
+##### 201804/20180411_02.md   [《EDB PPAS(Oracle 兼容版) Oracle与PostgreSQL 兼容模式的参数配置切换 - 珍藏级》](201804/20180411_02.md)  
 ##### 201804/20180411_01.md   [《PostgreSQL Freeze 风暴预测续 - 珍藏级SQL》](201804/20180411_01.md)  
 ##### 201804/20180410_05.md   [《PostgreSQL Oracle 兼容性之 - create type》](201804/20180410_05.md)  
 ##### 201804/20180410_04.md   [《PostgreSQL 单库对象过多，触发Linux系统限制 (ext4_dx_add_entry: Directory index full!) (could not create file "xx/xx/xxxxxx": No space left on device)》](201804/20180410_04.md)  
@@ -364,7 +367,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201712/20171204_05.md   [《PostgreSQL 用 CTE语法 + 继承 实现拆分大表》](201712/20171204_05.md)  
 ##### 201712/20171204_04.md   [《PostgreSQL 逻辑订阅 - DDL 订阅 实现方法》](201712/20171204_04.md)  
 ##### 201712/20171204_03.md   [《PostgreSQL Oracle兼容性 - substrb - orafce substrb 适配 Oracle substrb》](201712/20171204_03.md)  
-##### 201712/20171204_02.md   [《Greenplum explain analyze 解读 + 深度明细开关》](201712/20171204_02.md)  
+##### 201712/20171204_02.md   [《Greenplum explain analyze 解读 + 深度明细开关 - 珍藏级》](201712/20171204_02.md)  
 ##### 201712/20171204_01.md   [《GIS术语 - POI、AOI、LOI、路径、轨迹》](201712/20171204_01.md)  
 ----  
 ##### 201711/20171129_02.md   [《PostgreSQL 10 on ECS 实施 流复制备库镜像+自动快照备份+自动备份验证+自动清理备份与归档 - 珍藏级》](201711/20171129_02.md)  

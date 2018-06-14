@@ -27,7 +27,7 @@
 ##### 20180414_02.md   [《PostgreSQL 大表扫描策略 - BAS_BULKREAD , synchronize_seqscans》](20180414_02.md)  
 ##### 20180414_01.md   [《[未完待续] pgloader - mysql , sqlserver 迁移到 PostgreSQL - (含DDL自动迁移)》](20180414_01.md)  
 ##### 20180413_01.md   [《PostgreSQL 从文件时间戳获悉一些信息(如数据库创建时间)》](20180413_01.md)  
-##### 20180411_02.md   [《EDB PPAS(Oracle 兼容版) Oracle与PostgreSQL 兼容模式的参数配置切换》](20180411_02.md)  
+##### 20180411_02.md   [《EDB PPAS(Oracle 兼容版) Oracle与PostgreSQL 兼容模式的参数配置切换 - 珍藏级》](20180411_02.md)  
 ##### 20180411_01.md   [《PostgreSQL Freeze 风暴预测续 - 珍藏级SQL》](20180411_01.md)  
 ##### 20180410_05.md   [《PostgreSQL Oracle 兼容性之 - create type》](20180410_05.md)  
 ##### 20180410_04.md   [《PostgreSQL 单库对象过多，触发Linux系统限制 (ext4_dx_add_entry: Directory index full!) (could not create file "xx/xx/xxxxxx": No space left on device)》](20180410_04.md)  

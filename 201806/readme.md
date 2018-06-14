@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20180614_03.md   [《PostgreSQL 流复制协议交互式调试 - replication=true》](20180614_03.md)  
+##### 20180614_02.md   [《PostgreSQL jdbc multi-host 配置与简单HA、Load Balance实现》](20180614_02.md)  
+##### 20180614_01.md   [《PostgreSQL libpq multi-host 配置与简单HA实现》](20180614_01.md)  
 ##### 20180613_04.md   [《PostgreSQL 实时健康监控 大屏 - 低频指标 - 珍藏级》](20180613_04.md)  
 ##### 20180613_03.md   [《PostgreSQL 实时健康监控 大屏 - 高频指标(服务器) - 珍藏级》](20180613_03.md)  
 ##### 20180613_02.md   [《PostgreSQL 实时健康监控 大屏 - 高频指标 - 珍藏级》](20180613_02.md)  

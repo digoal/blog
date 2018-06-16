@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180616_01.md   [《PostgreSQL 开启“审计日志、时间记录”带来的性能影响有多少？》](201806/20180616_01.md)  
 ##### 201806/20180614_03.md   [《PostgreSQL 流复制协议交互式调试 - replication=true》](201806/20180614_03.md)  
 ##### 201806/20180614_02.md   [《PostgreSQL jdbc multi-host 配置与简单HA、Load Balance实现》](201806/20180614_02.md)  
 ##### 201806/20180614_01.md   [《PostgreSQL libpq multi-host 配置与简单HA实现》](201806/20180614_01.md)  

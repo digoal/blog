@@ -31,7 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
-##### 201806/20180620_01.md   [《Greenplum segment级问题的排查 - gp_session_role=utility》](201806/20180620_01.md)  
+##### 201806/20180620_01.md   [《Greenplum segment级问题的排查 - gp_session_role=utility  (含csvlog日志格式解读)》](201806/20180620_01.md)  
 ##### 201806/20180619_01.md   [《[未完待续] PostgreSQL pglogical 逻辑复制实现跨版本升级》](201806/20180619_01.md)  
 ##### 201806/20180616_01.md   [《PostgreSQL 开启“审计日志、时间记录”带来的性能影响有多少？》](201806/20180616_01.md)  
 ##### 201806/20180614_03.md   [《PostgreSQL 流复制协议交互式调试 - replication=true》](201806/20180614_03.md)  

@@ -31,6 +31,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180620_01.md   [《Greenplum segment级问题的排查 - gp_session_role=utility》](201806/20180620_01.md)  
+##### 201806/20180619_01.md   [《[未完待续] PostgreSQL pglogical 逻辑复制实现跨版本升级》](201806/20180619_01.md)  
 ##### 201806/20180616_01.md   [《PostgreSQL 开启“审计日志、时间记录”带来的性能影响有多少？》](201806/20180616_01.md)  
 ##### 201806/20180614_03.md   [《PostgreSQL 流复制协议交互式调试 - replication=true》](201806/20180614_03.md)  
 ##### 201806/20180614_02.md   [《PostgreSQL jdbc multi-host 配置与简单HA、Load Balance实现》](201806/20180614_02.md)  
@@ -93,7 +95,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201805/20180516_01.md   [《PostgreSQL Failover slot - 支持将slot信息发送给物理备库》](201805/20180516_01.md)  
 ##### 201805/20180515_03.md   [《PostgreSQL 单表并行bulkload的extend file lock 冲突问题解决》](201805/20180515_03.md)  
 ##### 201805/20180515_02.md   [《从代码层判断 pg_basebackup 是否已正常结束 - 暨改进建议》](201805/20180515_02.md)  
-##### 201805/20180515_01.md   [《Greenplum max_prepared_transactions 设置不正确时的症状》](201805/20180515_01.md)  
+##### 201805/20180515_01.md   [《Greenplum max_prepared_transactions 设置不正确时的症状 - too many clients already》](201805/20180515_01.md)  
 ##### 201805/20180512_01.md   [《PostgreSQL, SQL Server 逻辑增量 (通过逻辑标记update,delete) 同步到 Greenplum, PostgreSQL》](201805/20180512_01.md)  
 ##### 201805/20180511_01.md   [《PostgreSQL Oracle PL/SQL 兼容性之 - AGGREGATE USING Clause 聚合函数》](201805/20180511_01.md)  
 ##### 201805/20180510_02.md   [《PostgreSQL Oracle 兼容性 - Analysis函数之keep》](201805/20180510_02.md)  

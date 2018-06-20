@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180620_01.md   [《Greenplum segment级问题的排查 - gp_session_role=utility》](20180620_01.md)  
+##### 20180619_01.md   [《[未完待续] PostgreSQL pglogical 逻辑复制实现跨版本升级》](20180619_01.md)  
 ##### 20180616_01.md   [《PostgreSQL 开启“审计日志、时间记录”带来的性能影响有多少？》](20180616_01.md)  
 ##### 20180614_03.md   [《PostgreSQL 流复制协议交互式调试 - replication=true》](20180614_03.md)  
 ##### 20180614_02.md   [《PostgreSQL jdbc multi-host 配置与简单HA、Load Balance实现》](20180614_02.md)  

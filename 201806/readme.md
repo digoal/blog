@@ -2,13 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20180622_02.md   [《PostgreSQL 锁等待排查实践 - 珍藏级 - process xxx1 acquired RowExclusiveLock on relation xxx2 of database xxx3 after xxx4 ms at xxx》](20180622_02.md)  
 ##### 20180622_01.md   [《PostgreSQL 空间包含 OR 组合查询 、 IN 大量重复值 CASE 优化 - 消重、消bitmapOr、消filter》](20180622_01.md)  
 ##### 20180621_03.md   [《在PostgreSQL中跑后台长任务的方法 - 使用dblink异步接口》](20180621_03.md)  
 ##### 20180621_02.md   [《[转载] gdb 调试打印完整字符串》](20180621_02.md)  
 ##### 20180621_01.md   [《Greenplum 逻辑备份增强 - 备份期间不锁metadata(pg_class)，不堵塞DDL》](20180621_01.md)  
 ##### 20180620_04.md   [《PostgreSQL 对象权限如何在元数据中获取 - 权限解读、定制化导出权限》](20180620_04.md)  
 ##### 20180620_03.md   [《线下PG迁移到阿里云RDS PG - 兼容性、性能评估、迁移》](20180620_03.md)  
-##### 20180620_02.md   [《阿里云HybridDB for PG 使用空间紧张问题的建议处理流程与方法》](20180620_02.md)  
+##### 20180620_02.md   [《阿里云HybridDB for PG 空间紧张的解法 - 冷热分离、空间锁定、分区、压缩》](20180620_02.md)  
 ##### 20180620_01.md   [《Greenplum segment级问题的排查 - gp_session_role=utility  (含csvlog日志格式解读)》](20180620_01.md)  
 ##### 20180619_01.md   [《[未完待续] PostgreSQL pglogical 逻辑复制实现跨版本升级》](20180619_01.md)  
 ##### 20180616_01.md   [《PostgreSQL 开启“审计日志、时间记录”带来的性能影响有多少？》](20180616_01.md)  

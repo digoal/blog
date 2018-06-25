@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180625_02.md   [《PostgreSQL 自定义函数表达式选择性评估算法 - Statistics, Cardinality, Selectivity, Estimate》](20180625_02.md)  
 ##### 20180625_01.md   [《PostgreSQL 多值列的选择性 - Statistics, Cardinality, Selectivity, Estimate》](20180625_01.md)  
 ##### 20180624_02.md   [《Greenplum支持人为多阶段聚合的方法 - 直连segment(PGOPTIONS='-c gp_session_role=utility') Or gp_dist_random('gp_id') Or 多阶段聚合 prefunc》](20180624_02.md)  
 ##### 20180624_01.md   [《Greenplum 与 PostgreSQL 修改元数据(catalog)的方法 allow_system_table_mods》](20180624_01.md)  

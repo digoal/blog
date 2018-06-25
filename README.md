@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180625_01.md   [《PostgreSQL 多值列的选择性 - Statistics, Cardinality, Selectivity, Estimate》](201806/20180625_01.md)  
 ##### 201806/20180624_02.md   [《Greenplum支持人为多阶段聚合的方法 - 直连segment(PGOPTIONS='-c gp_session_role=utility') Or gp_dist_random('gp_id') Or 多阶段聚合 prefunc》](201806/20180624_02.md)  
 ##### 201806/20180624_01.md   [《Greenplum 与 PostgreSQL 修改元数据(catalog)的方法 allow_system_table_mods》](201806/20180624_01.md)  
 ##### 201806/20180623_01.md   [《[未完待续] 数据库相关岗位面试题目》](201806/20180623_01.md)  
@@ -1237,7 +1238,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201602/20160229_02.md   [《PostgreSQL 列存储引擎 susql (志铭奉献)》](201602/20160229_02.md)  
 ##### 201602/20160229_01.md   [《PostgreSQL 将字段加入指定位置 - 表字段位置的 "虚拟修改" 实现》](201602/20160229_01.md)  
 ##### 201602/20160225_01.md   [《PostgreSQL 优化器逻辑推理能力 源码解析》](201602/20160225_01.md)  
-##### 201602/20160224_01.md   [《PostgreSQL 操作符与优化器详解》](201602/20160224_01.md)  
+##### 201602/20160224_01.md   [《PostgreSQL 操作符与优化器详解 - 包含(选择性、JOIN方法、等效)等内容》](201602/20160224_01.md)  
 ##### 201602/20160215_01.md   [《cgroup 术语和规则》](201602/20160215_01.md)  
 ##### 201602/20160205_01.md   [《PostgreSQL wal receiver 统计信息 patch》](201602/20160205_01.md)  
 ##### 201602/20160204_01.md   [《PostgreSQL Oracle 兼容性之 - WM_SYS.WM_CONCAT》](201602/20160204_01.md)  

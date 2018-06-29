@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180629_01.md   [《PostgreSQL vacuum 的页内tuple move收缩空间》](201806/20180629_01.md)  
 ##### 201806/20180625_02.md   [《PostgreSQL 自定义函数表达式选择性评估算法 - Statistics, Cardinality, Selectivity, Estimate》](201806/20180625_02.md)  
 ##### 201806/20180625_01.md   [《PostgreSQL 多值列的选择性 - Statistics, Cardinality, Selectivity, Estimate》](201806/20180625_01.md)  
 ##### 201806/20180624_02.md   [《Greenplum支持人为多阶段聚合的方法 - 直连segment(PGOPTIONS='-c gp_session_role=utility') Or gp_dist_random('gp_id') Or 多阶段聚合 prefunc》](201806/20180624_02.md)  
@@ -96,7 +97,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201805/20180519_02.md   [《PostgreSQL 11 preview - 并行计算 增强 汇总》](201805/20180519_02.md)  
 ##### 201805/20180519_01.md   [《PostgreSQL 11 preview - 分区表 增强 汇总》](201805/20180519_01.md)  
 ##### 201805/20180518_02.md   [《PostgreSQL ADHoc(任意字段组合)查询(rums索引加速) - 非字典化，普通、数组等组合字段生成新数组》](201805/20180518_02.md)  
-##### 201805/20180518_01.md   [《PostgreSQL 11 preview - 添加非空默认值不需要 rewrite table》](201805/20180518_01.md)  
+##### 201805/20180518_01.md   [《PostgreSQL 11 preview - 添加非空默认值不需要 rewrite table - online add column with default value》](201805/20180518_01.md)  
 ##### 201805/20180517_04.md   [《PostgreSQL Oracle兼容性之 - text - text隐式转换》](201805/20180517_04.md)  
 ##### 201805/20180517_03.md   [《PostgreSQL Oracle兼容性之 - '' 空字符》](201805/20180517_03.md)  
 ##### 201805/20180517_02.md   [《PostgreSQL Oracle兼容性之 时间相减得到NUMBER - timestamp-timestamp=numeric not interval》](201805/20180517_02.md)  

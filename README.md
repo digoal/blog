@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201806/20180629_02.md   [《PostgreSQL stable 函数调用次数》](201806/20180629_02.md)  
 ##### 201806/20180629_01.md   [《PostgreSQL vacuum 的页内tuple move收缩空间》](201806/20180629_01.md)  
 ##### 201806/20180625_02.md   [《PostgreSQL 自定义函数表达式选择性评估算法 - Statistics, Cardinality, Selectivity, Estimate》](201806/20180625_02.md)  
 ##### 201806/20180625_01.md   [《PostgreSQL 多值列的选择性 - Statistics, Cardinality, Selectivity, Estimate》](201806/20180625_01.md)  

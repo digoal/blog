@@ -9,6 +9,8 @@
 ##### 20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](20150419_01.md)  
 ##### 20150414_01.md   [《PivotalR between R & PostgreSQL-like Databases(for exp : Greenplum, hadoop access by hawq)》](20150414_01.md)  
 ##### 20150410_01.md   [《如何比较PostgreSQL表的定义(compare table ddl)》](20150410_01.md)  
+##### 20150409_04.md   [《PostgreSQL 9.5 new feature - log replication commands》](20150409_04.md)  
+##### 20150409_03.md   [《PostgreSQL 9.5 new feature - record transaction commit timestamp》](20150409_03.md)  
 ##### 20150409_02.md   [《PostgreSQL 9.5 使用 import foreign schema 语法一键创建外部表》](20150409_02.md)  
 ##### 20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](20150409_01.md)  
 ##### 20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](20150407_02.md)  

@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201807/20180704_01.md   [《PostgreSQL 模拟两个update语句死锁 - 利用扫描方法》](201807/20180704_01.md)  
 ##### 201807/20180703_02.md   [《PostgreSQL 电商业务(任意维度商品圈选应用) - json包range数组的命中优化 - 展开+索引优化》](201807/20180703_02.md)  
 ##### 201807/20180703_01.md   [《PostgreSQL 函数式索引使用注意 - 暨非immutable函数不适合索引的原因》](201807/20180703_01.md)  
 ##### 201807/20180702_02.md   [《如何让json里面的value支持索引范围检索》](201807/20180702_02.md)  
@@ -1452,6 +1453,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201504/20150419_01.md   [《PostgreSQL 9.5 new feature - BRIN (block range index) index》](201504/20150419_01.md)  
 ##### 201504/20150414_01.md   [《PivotalR between R & PostgreSQL-like Databases(for exp : Greenplum, hadoop access by hawq)》](201504/20150414_01.md)  
 ##### 201504/20150410_01.md   [《如何比较PostgreSQL表的定义(compare table ddl)》](201504/20150410_01.md)  
+##### 201504/20150409_04.md   [《PostgreSQL 9.5 new feature - log replication commands》](201504/20150409_04.md)  
+##### 201504/20150409_03.md   [《PostgreSQL 9.5 new feature - record transaction commit timestamp》](201504/20150409_03.md)  
 ##### 201504/20150409_02.md   [《PostgreSQL 9.5 使用 import foreign schema 语法一键创建外部表》](201504/20150409_02.md)  
 ##### 201504/20150409_01.md   [《PostgreSQL 行安全策略 - PostgreSQL 9.5 new feature - can define row security policy for table》](201504/20150409_01.md)  
 ##### 201504/20150407_02.md   [《PostgreSQL aggregate function 4 : Hypothetical-Set Aggregate Functions》](201504/20150407_02.md)  

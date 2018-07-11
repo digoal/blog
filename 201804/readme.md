@@ -10,7 +10,7 @@
 ##### 20180424_04.md   [《PostgreSQL 实践 - 实时广告位推荐 2 (任意字段组合、任意维度组合搜索、输出TOP-K)》](20180424_04.md)  
 ##### 20180424_03.md   [《Greenplum 海量数据，大宽表 行存 VS 列存》](20180424_03.md)  
 ##### 20180424_02.md   [《PostgreSQL 11 preview - 分区过滤控制参数 - enable_partition_pruning》](20180424_02.md)  
-##### 20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote》](20180424_01.md)  
+##### 20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote 逃脱符号》](20180424_01.md)  
 ##### 20180423_03.md   [《[转载] Oracle record、varray、table和%type、%rowtype的使用详解》](20180423_03.md)  
 ##### 20180423_02.md   [《Oracle migration to Greenplum - (含 Ora2pg)》](20180423_02.md)  
 ##### 20180423_01.md   [《[未完待续] PostgreSQL SQL Parser》](20180423_01.md)  

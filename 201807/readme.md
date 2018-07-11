@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180711_01.md   [《PostgreSQL jdbc 错误代码映射(SQLSTATE)》](20180711_01.md)  
 ##### 20180704_04.md   [《PostgreSQL quorum based同步复制模式在极端情况下的0丢失破坏问题》](20180704_04.md)  
 ##### 20180704_02.md   [《PostgreSQL 如何检测分布式死锁 - postgrespro pg_shardman》](20180704_02.md)  
 ##### 20180704_01.md   [《PostgreSQL 模拟两个update语句死锁 - 利用扫描方法》](20180704_01.md)  

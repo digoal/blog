@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201807/20180711_01.md   [《PostgreSQL jdbc 错误代码映射(SQLSTATE)》](201807/20180711_01.md)  
 ##### 201807/20180704_04.md   [《PostgreSQL quorum based同步复制模式在极端情况下的0丢失破坏问题》](201807/20180704_04.md)  
 ##### 201807/20180704_02.md   [《PostgreSQL 如何检测分布式死锁 - postgrespro pg_shardman》](201807/20180704_02.md)  
 ##### 201807/20180704_01.md   [《PostgreSQL 模拟两个update语句死锁 - 利用扫描方法》](201807/20180704_01.md)  
@@ -145,7 +146,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201804/20180424_04.md   [《PostgreSQL 实践 - 实时广告位推荐 2 (任意字段组合、任意维度组合搜索、输出TOP-K)》](201804/20180424_04.md)  
 ##### 201804/20180424_03.md   [《Greenplum 海量数据，大宽表 行存 VS 列存》](201804/20180424_03.md)  
 ##### 201804/20180424_02.md   [《PostgreSQL 11 preview - 分区过滤控制参数 - enable_partition_pruning》](201804/20180424_02.md)  
-##### 201804/20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote》](201804/20180424_01.md)  
+##### 201804/20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote 逃脱符号》](201804/20180424_01.md)  
 ##### 201804/20180423_03.md   [《[转载] Oracle record、varray、table和%type、%rowtype的使用详解》](201804/20180423_03.md)  
 ##### 201804/20180423_02.md   [《Oracle migration to Greenplum - (含 Ora2pg)》](201804/20180423_02.md)  
 ##### 201804/20180423_01.md   [《[未完待续] PostgreSQL SQL Parser》](201804/20180423_01.md)  

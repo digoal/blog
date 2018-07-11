@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180711_02.md   [《PostgreSQL 空间类型统计信息不准确导致SQL执行计划不准(包含、相交查询)的优化实践》](20180711_02.md)  
 ##### 20180711_01.md   [《PostgreSQL jdbc 错误代码映射(SQLSTATE)》](20180711_01.md)  
 ##### 20180704_04.md   [《PostgreSQL quorum based同步复制模式在极端情况下的0丢失破坏问题》](20180704_04.md)  
 ##### 20180704_02.md   [《PostgreSQL 如何检测分布式死锁 - postgrespro pg_shardman》](20180704_02.md)  

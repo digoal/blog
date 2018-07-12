@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180712_01.md   [《PostgreSQL 优化器案例之 - order by limit 索引选择问题》](20180712_01.md)  
 ##### 20180711_03.md   [《PostgreSQL WAL replay 加速(datapage preload) - 恢复加速, 备库延迟优化》](20180711_03.md)  
 ##### 20180711_02.md   [《PostgreSQL 空间类型统计信息不准确导致SQL执行计划不准(包含、相交查询)的优化实践》](20180711_02.md)  
 ##### 20180711_01.md   [《PostgreSQL jdbc 错误代码映射(SQLSTATE)》](20180711_01.md)  

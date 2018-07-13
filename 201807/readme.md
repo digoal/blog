@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20180713_02.md   [《PostgreSQL Oracle 兼容性之 - insert all into ... 多表写入》](20180713_02.md)  
+##### 20180713_01.md   [《PostgreSQL oracle 兼容性 - 字符串内嵌 NULL字符（空字符）chr(0) 转换为 chr(32)》](20180713_01.md)  
 ##### 20180712_01.md   [《PostgreSQL 优化器案例之 - order by limit 索引选择问题》](20180712_01.md)  
 ##### 20180711_03.md   [《PostgreSQL WAL replay 加速(datapage preload) - 恢复加速, 备库延迟优化》](20180711_03.md)  
 ##### 20180711_02.md   [《PostgreSQL 空间类型统计信息不准确导致SQL执行计划不准(包含、相交查询)的优化实践》](20180711_02.md)  

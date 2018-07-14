@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201807/20180714_01.md   [《PostgreSQL 随机数据生成(tablefunc.normal_rand 指定mean stddev)》](201807/20180714_01.md)  
 ##### 201807/20180713_03.md   [《PostgreSQL 流式处理应用实践 - 二手商品实时归类》](201807/20180713_03.md)  
 ##### 201807/20180713_02.md   [《PostgreSQL Oracle 兼容性之 - insert all into ... 多表写入》](201807/20180713_02.md)  
 ##### 201807/20180713_01.md   [《PostgreSQL oracle 兼容性 - 字符串内嵌 NULL字符（空字符）chr(0) 转换为 chr(32)》](201807/20180713_01.md)  

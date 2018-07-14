@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180714_04.md   [《PostgreSQL Indexes don't mean slow inserts - 索引改进PPT（写优化, lsm, Fractal, index buffer, COLA）》](20180714_04.md)  
 ##### 20180714_03.md   [《PostgreSQL Oracle 兼容性 - connect by 2》](20180714_03.md)  
 ##### 20180714_02.md   [《PostgreSQL Oracle 兼容性 - 行列变换(pivot unpivot) (tablefunc, crosstab)》](20180714_02.md)  
 ##### 20180714_01.md   [《PostgreSQL 随机数据生成(tablefunc.normal_rand 指定mean stddev)》](20180714_01.md)  

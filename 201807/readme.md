@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180715_01.md   [《PostgreSQL 全局临时表 global temp table》](20180715_01.md)  
 ##### 20180714_04.md   [《PostgreSQL Indexes don't mean slow inserts - 索引改进PPT（写优化, lsm, Fractal, index buffer, COLA）》](20180714_04.md)  
 ##### 20180714_03.md   [《PostgreSQL Oracle 兼容性 - connect by 2》](20180714_03.md)  
 ##### 20180714_02.md   [《PostgreSQL Oracle 兼容性 - 行列变换(pivot unpivot) (tablefunc, crosstab)》](20180714_02.md)  

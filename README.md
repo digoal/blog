@@ -1898,6 +1898,6 @@ digoal's|PostgreSQL|文章|归类
 ##### 201006/20100603_01.md   [《Using "GET DIAGNOSTICS integer_var = ROW_COUNT;" capture rows effect by the last SQL》](201006/20100603_01.md)  
 ----  
 ##### 201005/20100511_04.md   [《PostgreSQL 优化器行评估算法》](201005/20100511_04.md)  
-##### 201005/20100511_03.md   [《PostgreSQL数据库开源连接池pgbouncer的使用》](201005/20100511_03.md)  
+##### 201005/20100511_03.md   [《PostgreSQL 连接池 pgbouncer 使用》](201005/20100511_03.md)  
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  

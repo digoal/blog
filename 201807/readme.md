@@ -9,7 +9,7 @@
 ##### 20180714_03.md   [《PostgreSQL Oracle 兼容性 - connect by 2》](20180714_03.md)  
 ##### 20180714_02.md   [《PostgreSQL Oracle 兼容性 - 行列变换(pivot unpivot) (tablefunc, crosstab)》](20180714_02.md)  
 ##### 20180714_01.md   [《PostgreSQL 随机数据生成(tablefunc.normal_rand 指定mean stddev)》](20180714_01.md)  
-##### 20180713_03.md   [《PostgreSQL 流式处理应用实践 - 二手商品实时归类》](20180713_03.md)  
+##### 20180713_03.md   [《PostgreSQL 流式处理应用实践 - 二手商品实时归类(异步消息notify/listen)》](20180713_03.md)  
 ##### 20180713_02.md   [《PostgreSQL Oracle 兼容性之 - insert all into ... 多表写入》](20180713_02.md)  
 ##### 20180713_01.md   [《PostgreSQL oracle 兼容性 - 字符串内嵌 NULL字符（空字符）chr(0) 转换为 chr(32)》](20180713_01.md)  
 ##### 20180712_01.md   [《PostgreSQL 优化器案例之 - order by limit 索引选择问题》](20180712_01.md)  

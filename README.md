@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 未归类文档如下  
 ----  
+##### 201807/20180718_01.md   [《PostgreSQL merge insert(insert into on conflict) ERRCODE_CARDINALITY_VIOLATION （Ensure that no rows proposed for insertion within the same command have duplicate constrained values）》](201807/20180718_01.md)  
 ##### 201807/20180716_01.md   [《PostgreSQL 异步消息(LISTEN/NOTIFY)缓存多大？》](201807/20180716_01.md)  
 ##### 201807/20180715_01.md   [《PostgreSQL Oracle 兼容性之 - 全局临时表 global temp table》](201807/20180715_01.md)  
 ##### 201807/20180714_04.md   [《PostgreSQL Indexes don't mean slow inserts - 索引改进PPT（写优化, lsm, Fractal, index buffer, COLA）》](201807/20180714_04.md)  

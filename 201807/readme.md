@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180720_01.md   [《PostgreSQL 批量、单步 写入 - row, statement 触发器(中间表)、CTE 几种用法性能对比》](20180720_01.md)  
 ##### 20180718_01.md   [《PostgreSQL merge insert(insert into on conflict) ERRCODE_CARDINALITY_VIOLATION （Ensure that no rows proposed for insertion within the same command have duplicate constrained values）》](20180718_01.md)  
 ##### 20180716_01.md   [《PostgreSQL 异步消息(LISTEN/NOTIFY)缓存多大？》](20180716_01.md)  
 ##### 20180715_01.md   [《PostgreSQL Oracle 兼容性之 - 全局临时表 global temp table》](20180715_01.md)  

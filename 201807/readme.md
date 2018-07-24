@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180724_01.md   [《[转载] 环境变量的继承，fork、source、exec区别差异》](20180724_01.md)  
 ##### 20180721_01.md   [《PostgreSQL 批量SQL before/after for each row trigger的触发时机、性能差异分析、建议 - 含9.4 , 10版本》](20180721_01.md)  
 ##### 20180720_02.md   [《PostgreSQL 无法kill(pg_terminate_backend, pg_cancel_backend)的情况分析 - 进程hang strace,pstack》](20180720_02.md)  
 ##### 20180720_01.md   [《PostgreSQL 批量、单步 写入 - row, statement 触发器(中间表)、CTE 几种用法性能对比》](20180720_01.md)  

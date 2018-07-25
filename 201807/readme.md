@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180725_01.md   [《PostgreSQL 空间位置(geometry 经纬、点、线、面...)、行政地址(门牌、商圈、行政区...) 相互转换方法》](20180725_01.md)  
 ##### 20180724_01.md   [《[转载] 环境变量的继承，fork、source、exec区别差异》](20180724_01.md)  
 ##### 20180721_01.md   [《PostgreSQL 批量SQL before/after for each row trigger的触发时机、性能差异分析、建议 - 含9.4 , 10版本》](20180721_01.md)  
 ##### 20180720_02.md   [《PostgreSQL 无法kill(pg_terminate_backend, pg_cancel_backend)的情况分析 - 进程hang strace,pstack》](20180720_02.md)  

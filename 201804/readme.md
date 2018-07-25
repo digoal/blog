@@ -5,7 +5,7 @@
 ##### 20180427_03.md   [《PostgreSQL 批量导入性能 (采用dblink 异步调用)》](20180427_03.md)  
 ##### 20180427_02.md   [《PostgreSQL 改元信息 invalid index》](20180427_02.md)  
 ##### 20180427_01.md   [《阿里云RDS PostgreSQL OSS 外部表实践 - (dblink异步调用封装并行) 从OSS并行导入数据》](20180427_01.md)  
-##### 20180425_01.md   [《Oracle DBA 增值 PostgreSQL,Greenplum 学习计划》](20180425_01.md)  
+##### 20180425_01.md   [《Oracle DBA 增值 PostgreSQL,Greenplum 学习计划 - 珍藏级》](20180425_01.md)  
 ##### 20180424_05.md   [《PostgreSQL CREATE INDEX CONCURRENTLY 的原理以及哪些操作可能堵塞索引的创建》](20180424_05.md)  
 ##### 20180424_04.md   [《PostgreSQL 实践 - 实时广告位推荐 2 (任意字段组合、任意维度组合搜索、输出TOP-K)》](20180424_04.md)  
 ##### 20180424_03.md   [《Greenplum 海量数据，大宽表 行存 VS 列存》](20180424_03.md)  

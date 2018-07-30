@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180730_01.md   [《PostgreSQL SRF (set-returning functions) 函数where, index实现》](20180730_01.md)  
 ##### 20180725_04.md   [《PostgreSQL AB表切换最佳实践 - 提高切换成功率，杜绝雪崩 - 珍藏级》](20180725_04.md)  
 ##### 20180725_03.md   [《PostgreSQL 基于PG内置流复制的，靠谱的PostgreSQL高可用方案 - 珍藏级》](20180725_03.md)  
 ##### 20180725_02.md   [《PostgreSQL 生成空间热力图》](20180725_02.md)  

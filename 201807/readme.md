@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180731_01.md   [《PostgreSQL json 索引实践 - 检索(存在、包含、等值、范围等)加速》](20180731_01.md)  
 ##### 20180730_01.md   [《PostgreSQL SRF (set-returning functions) 函数where, index实现》](20180730_01.md)  
 ##### 20180725_04.md   [《PostgreSQL AB表切换最佳实践 - 提高切换成功率，杜绝雪崩 - 珍藏级》](20180725_04.md)  
 ##### 20180725_03.md   [《PostgreSQL 基于PG内置流复制的，靠谱的PostgreSQL高可用方案 - 珍藏级》](20180725_03.md)  

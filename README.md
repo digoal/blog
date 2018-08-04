@@ -74,7 +74,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201806/20180625_01.md   [《PostgreSQL 多值列的选择性 - Statistics, Cardinality, Selectivity, Estimate》](201806/20180625_01.md)  
 ##### 201806/20180624_02.md   [《Greenplum支持人为多阶段聚合的方法 - 直连segment(PGOPTIONS='-c gp_session_role=utility') Or gp_dist_random('gp_id') Or 多阶段聚合 prefunc》](201806/20180624_02.md)  
 ##### 201806/20180624_01.md   [《Greenplum 与 PostgreSQL 修改元数据(catalog)的方法 allow_system_table_mods》](201806/20180624_01.md)  
-##### 201806/20180623_01.md   [《[未完待续] 数据库相关岗位面试准备建议》](201806/20180623_01.md)  
+##### 201806/20180623_01.md   [《[未完待续] 数据库相关岗位面试准备建议 - 珍藏级》](201806/20180623_01.md)  
 ##### 201806/20180622_02.md   [《PostgreSQL 锁等待排查实践 - 珍藏级 - process xxx1 acquired RowExclusiveLock on relation xxx2 of database xxx3 after xxx4 ms at xxx》](201806/20180622_02.md)  
 ##### 201806/20180622_01.md   [《PostgreSQL 空间包含 OR 组合查询 、 IN 大量重复值 CASE 优化 - 消重、消bitmapOr、消filter》](201806/20180622_01.md)  
 ##### 201806/20180621_03.md   [《在PostgreSQL中跑后台长任务的方法 - 使用dblink异步接口》](201806/20180621_03.md)  

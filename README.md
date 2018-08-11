@@ -1,10 +1,10 @@
 ### PostgreSQL, Greenplum 培训视频下载  
   
-http://pan.baidu.com/s/1pKVCgHX  ,  链接失效请通知我, 谢谢  
+下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
   
 ![pic](./pic/pg_china_digoal_video.jpg)  
   
-[《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、学习资料、学习视频 - 珍藏级》](201801/20180121_01.md) 
+[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](201801/20180121_01.md) 
   
 ### 社区、个人微信二维码  
 ![pic](./pic/pg_weixin.jpg)  
@@ -1922,7 +1922,6 @@ digoal's|PostgreSQL|文章|归类
 ##### 201005/20100511_03.md   [《PostgreSQL 连接池 pgbouncer 使用》](201005/20100511_03.md)  
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  
-### digoal,德哥的PostgreSQL私房菜  
-#### 老文章 : [进入](old_blogs_from_163/README.md) 
+### digoal,德哥的PostgreSQL私房菜, 老文章 : [进入](old_blogs_from_163/README.md)  
 <a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
   

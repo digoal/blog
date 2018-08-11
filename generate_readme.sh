@@ -11,11 +11,11 @@
 > ./README.md
 echo "### PostgreSQL, Greenplum 培训视频下载  " >> ./README.md
 echo "  "  >> ./README.md
-echo "http://pan.baidu.com/s/1pKVCgHX  ,  链接失效请通知我, 谢谢  " >> ./README.md
+echo "下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "![pic](./pic/pg_china_digoal_video.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
-echo "[《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、学习资料、学习视频 - 珍藏级》](201801/20180121_01.md) " >> ./README.md 
+echo "[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](201801/20180121_01.md) " >> ./README.md 
 echo "  "  >> ./README.md
 echo "### 社区、个人微信二维码  " >> ./README.md
 echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
@@ -52,8 +52,7 @@ do
   cd ..
 done
 
-echo "### digoal,德哥的PostgreSQL私房菜  " >> ./README.md
-echo "#### 老文章 : [进入](old_blogs_from_163/README.md) " >> ./README.md
+echo "### digoal,德哥的PostgreSQL私房菜, 老文章 : [进入](old_blogs_from_163/README.md)  " >> ./README.md
 
 echo "<a rel=\"nofollow\" href=\"http://info.flagcounter.com/h9V1\"  ><img src=\"http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/\"  alt=\"Flag Counter\"  border=\"0\"  ></a>  " >> ./README.md
 echo "  " >> ./README.md

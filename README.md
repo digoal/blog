@@ -1867,6 +1867,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201201/20120113_01.md   [《PostgreSQL 跟踪谁动了你的记录 - Use insert_username Tracking Who Changed a Table》](201201/20120113_01.md)  
 ##### 201201/20120105_01.md   [《TOAST table with pgfincore》](201201/20120105_01.md)  
 ----  
+##### 201112/20111212_01.md   [《create mysql table in PostgreSQL with mysql_fdw》](201112/20111212_01.md)  
+----  
 ##### 201111/20111130_01.md   [《whether pg_start_backup() force keep xlog in pg_xlog directory before execute pg_stop_backup() ?》](201111/20111130_01.md)  
 ##### 201111/20111122_01.md   [《PostgreSQL Notify/Listen Like ESB》](201111/20111122_01.md)  
 ----  

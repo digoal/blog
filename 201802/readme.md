@@ -18,7 +18,7 @@
 ##### 20180227_02.md   [《PostgreSQL 全局ID分配(数据字典化)服务 设计实践》](20180227_02.md)  
 ##### 20180227_01.md   [《PostgreSQL 覆盖 Oracle 18c 重大新特性》](20180227_01.md)  
 ##### 20180226_06.md   [《PostgreSQL raster(栅格数据) st_value 优化举例》](20180226_06.md)  
-##### 20180226_05.md   [《PostgreSQL SELECT 的高级用法(CTE, LATERAL, ORDINALITY, WINDOW, SKIP LOCKED, DISTINCT, GROUPING SETS, ...)》](20180226_05.md)  
+##### 20180226_05.md   [《PostgreSQL SELECT 的高级用法(CTE, LATERAL, ORDINALITY, WINDOW, SKIP LOCKED, DISTINCT, GROUPING SETS, ...) - 珍藏级》](20180226_05.md)  
 ##### 20180226_04.md   [《PostgreSQL 11 preview - 支持 数组外键约束》](20180226_04.md)  
 ##### 20180226_03.md   [《PostgreSQL 对称加密、非对称加密用法介绍》](20180226_03.md)  
 ##### 20180226_02.md   [《[转载] 白话解释 非对称加密，电子签名，电子证书，根证书，HTTPS，PKI 到底是什么》](20180226_02.md)  

@@ -4,7 +4,7 @@
 ----  
 ##### 20170927_03.md   [《PostgreSQL 在铁老大订单系统中的schemaless设计和性能压测》](20170927_03.md)  
 ##### 20170927_02.md   [《PostgreSQL 10 PostGIS 兼容性 FIX》](20170927_02.md)  
-##### 20170927_01.md   [《PostgreSQL Oracle 兼容性 之 TABLE、PIPELINED函数》](20170927_01.md)  
+##### 20170927_01.md   [《PostgreSQL Oracle 兼容性 之 TABLE、PIPELINED、put_line函数(流式返回、返回多行、返回表、返回任意结构)》](20170927_01.md)  
 ##### 20170926_02.md   [《PostgreSQL Oracle 兼容性 之 USERENV》](20170926_02.md)  
 ##### 20170926_01.md   [《PostgreSQL Oracle 兼容性 之 NUMTODSINTERVAL》](20170926_01.md)  
 ##### 20170925_03.md   [《PostgreSQL 空间、多维 序列 生成方法》](20170925_03.md)  

@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201808/20180818_02.md   [《PostgreSQL Oracle/sql server/SYBASE 兼容性之 - nchar , nvarchar , ntext (unicode character)》](201808/20180818_02.md)  
 ##### 201808/20180818_01.md   [《PostgreSQL Oracle 兼容性之 - DBMS_OUTPUT.PUT_LINE》](201808/20180818_01.md)  
 ##### 201808/20180816_01.md   [《PostgreSQL 同名 index operator search_path优先级引入的一个问题 - 为啥突然不走索引了？ - intarray示例》](201808/20180816_01.md)  
 ##### 201808/20180815_02.md   [《PostgreSQL 无会话、有会话模式 - 客服平均响应速度（RT）实时计算实践(窗口查询\流计算)》](201808/20180815_02.md)  

@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201808/20180819_01.md   [《MSSQL(SQL Server) on Linux 简明部署与使用》](201808/20180819_01.md)  
 ##### 201808/20180818_03.md   [《PostgreSQL 与 MS SQL(SQL Server) 类型映射关系》](201808/20180818_03.md)  
 ##### 201808/20180818_02.md   [《PostgreSQL Oracle/sql server/SYBASE 兼容性之 - nchar , nvarchar , ntext (unicode character)》](201808/20180818_02.md)  
 ##### 201808/20180818_01.md   [《PostgreSQL Oracle 兼容性之 - DBMS_OUTPUT.PUT_LINE》](201808/20180818_01.md)  

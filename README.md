@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201808/20180822_04.md   [《PostgreSQL 快速返回表上某列的唯一值(枚举值) - pg_stats.most_common_vals》](201808/20180822_04.md)  
 ##### 201808/20180822_03.md   [《PostgreSQL 12 preview - plan_cache_mode参数控制强制使用plan cache或强制custom plan (force_custom_plan and force_generic_plan)》](201808/20180822_03.md)  
 ##### 201808/20180822_02.md   [《PostgreSQL json内容特殊字符使用unicode代替》](201808/20180822_02.md)  
 ##### 201808/20180822_01.md   [《PostgreSQL 快速给指定表每个字段创建索引》](201808/20180822_01.md)  
@@ -103,6 +104,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201806/20180614_03.md   [《PostgreSQL 流复制协议交互式调试 - replication=true》](201806/20180614_03.md)  
 ##### 201806/20180614_02.md   [《PostgreSQL jdbc multi-host 配置与简单HA、Load Balance实现》](201806/20180614_02.md)  
 ##### 201806/20180614_01.md   [《PostgreSQL libpq multi-host 配置与简单HA实现》](201806/20180614_01.md)  
+##### 201806/20180613_05.md   [《[未完待续] PostgreSQL 一键诊断项 - 珍藏级》](201806/20180613_05.md)  
 ##### 201806/20180613_04.md   [《PostgreSQL 实时健康监控 大屏 - 低频指标 - 珍藏级》](201806/20180613_04.md)  
 ##### 201806/20180613_03.md   [《PostgreSQL 实时健康监控 大屏 - 高频指标(服务器) - 珍藏级》](201806/20180613_03.md)  
 ##### 201806/20180613_02.md   [《PostgreSQL 实时健康监控 大屏 - 高频指标 - 珍藏级》](201806/20180613_02.md)  

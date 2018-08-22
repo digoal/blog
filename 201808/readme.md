@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180822_01.md   [《PostgreSQL 快速给指定表每个字段创建索引》](20180822_01.md)  
 ##### 20180819_02.md   [《PostgreSQL 与 MSSQL(SQL Server) 之间 数据相互迁移、导入、导出测试》](20180819_02.md)  
 ##### 20180819_01.md   [《MSSQL(SQL Server) on Linux 简明部署与使用》](20180819_01.md)  
 ##### 20180818_03.md   [《PostgreSQL 与 MS SQL(SQL Server) 类型映射关系》](20180818_03.md)  

@@ -24,7 +24,7 @@
 ##### 20180713_01.md   [《PostgreSQL oracle 兼容性 - 字符串内嵌 NULL字符（空字符）chr(0) 转换为 chr(32)》](20180713_01.md)  
 ##### 20180712_01.md   [《PostgreSQL 优化器案例之 - order by limit 索引选择问题》](20180712_01.md)  
 ##### 20180711_03.md   [《PostgreSQL WAL replay 加速(datapage preload) - 恢复加速, 备库延迟优化》](20180711_03.md)  
-##### 20180711_02.md   [《PostgreSQL 空间类型统计信息不准确导致SQL执行计划不准(包含、相交查询)的优化实践》](20180711_02.md)  
+##### 20180711_02.md   [《PostgreSQL 空间类型统计信息(Statistics, Cardinality, Selectivity, Estimate)不准确导致SQL执行计划不准(包含、相交查询)的优化实践》](20180711_02.md)  
 ##### 20180711_01.md   [《PostgreSQL jdbc 错误代码映射(SQLSTATE)》](20180711_01.md)  
 ##### 20180704_04.md   [《PostgreSQL quorum based同步复制模式在极端情况下的0丢失破坏问题》](20180704_04.md)  
 ##### 20180704_02.md   [《PostgreSQL 如何检测分布式死锁 - postgrespro pg_shardman》](20180704_02.md)  

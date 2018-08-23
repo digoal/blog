@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180823_01.md   [《(TPC-H测试 SF=10) PostgreSQL 11 vs 10 vs Deepgreen》](20180823_01.md)  
 ##### 20180822_04.md   [《PostgreSQL 快速返回表上某列的唯一值(枚举值) - pg_stats.most_common_vals》](20180822_04.md)  
 ##### 20180822_03.md   [《PostgreSQL 12 preview - plan_cache_mode参数控制强制使用plan cache或强制custom plan (force_custom_plan and force_generic_plan)》](20180822_03.md)  
 ##### 20180822_02.md   [《PostgreSQL json内容特殊字符使用unicode代替》](20180822_02.md)  

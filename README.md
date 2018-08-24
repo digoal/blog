@@ -29,6 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201808/20180824_02.md   [《PostgreSQL citus系列1 - 多机部署（含OLTP(TPC-B)测试）》](201808/20180824_02.md)  
+##### 201808/20180824_01.md   [《Greenplum csvlog(日志数据)检索、释义(gp_toolkit.gp_log*)》](201808/20180824_01.md)  
 ##### 201808/20180823_01.md   [《(TPC-H测试 SF=10) PostgreSQL 11 vs 10 vs Deepgreen》](201808/20180823_01.md)  
 ##### 201808/20180822_04.md   [《PostgreSQL 快速返回表上某列的唯一值(枚举值) - pg_stats.most_common_vals》](201808/20180822_04.md)  
 ##### 201808/20180822_03.md   [《PostgreSQL 12 preview - plan_cache_mode参数控制强制使用plan cache或强制custom plan (force_custom_plan and force_generic_plan)》](201808/20180822_03.md)  

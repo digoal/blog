@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180825_01.md   [《PostgreSQL 开启with-llvm(JIT)后，新增插件异常(clang: Command not found)处理》](20180825_01.md)  
 ##### 20180824_02.md   [《PostgreSQL citus系列1 - 多机部署（含OLTP(TPC-B)测试）》](20180824_02.md)  
 ##### 20180824_01.md   [《Greenplum csvlog(日志数据)检索、释义(gp_toolkit.gp_log*)》](20180824_01.md)  
 ##### 20180823_01.md   [《(TPC-H测试 SF=10) PostgreSQL 11 vs 10 vs Deepgreen》](20180823_01.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180829_01.md   [《PostgreSQL sharding : citus 系列2 - TPC-H》](20180829_01.md)  
 ##### 20180828_01.md   [《PostgreSQL citus, Greenplum  分布式执行计划 DEBUG》](20180828_01.md)  
 ##### 20180826_01.md   [《[转载] TPCH 22条SQL语句分析》](20180826_01.md)  
 ##### 20180825_01.md   [《PostgreSQL 开启with-llvm(JIT)后，新增插件异常(clang: Command not found)处理》](20180825_01.md)  

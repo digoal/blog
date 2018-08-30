@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180830_01.md   [《PostgreSQL pg_resetwal pg_resetxlog 强制使用某些值（例如system id）》](20180830_01.md)  
 ##### 20180829_01.md   [《PostgreSQL sharding : citus 系列2 - TPC-H》](20180829_01.md)  
 ##### 20180828_01.md   [《PostgreSQL citus, Greenplum  分布式执行计划 DEBUG》](20180828_01.md)  
 ##### 20180826_01.md   [《[转载] TPCH 22条SQL语句分析》](20180826_01.md)  

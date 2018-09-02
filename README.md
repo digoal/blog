@@ -29,7 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 201809/20180902_01.md   [《PostgreSQL sharding : citus 系列3 - 窗口函数调用限制》](201809/20180902_01.md)  
+##### 201809/20180902_01.md   [《PostgreSQL sharding : citus 系列3 - 窗口函数调用限制 与 破解之法》](201809/20180902_01.md)  
 ----  
 ##### 201808/20180830_01.md   [《PostgreSQL pg_resetwal pg_resetxlog 强制使用某些值（例如system id）》](201808/20180830_01.md)  
 ##### 201808/20180829_01.md   [《PostgreSQL sharding : citus 系列2 - TPC-H》](201808/20180829_01.md)  

@@ -29,6 +29,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201809/20180903_01.md   [《PostgreSQL dblink异步调用实践,跑并行多任务 - 例如开N个并行后台任务创建索引, 开N个后台任务跑若干SQL》](201809/20180903_01.md)  
 ##### 201809/20180902_01.md   [《PostgreSQL sharding : citus 系列3 - 窗口函数调用限制 与 破解之法》](201809/20180902_01.md)  
 ----  
 ##### 201808/20180830_01.md   [《PostgreSQL pg_resetwal pg_resetxlog 强制使用某些值（例如system id）》](201808/20180830_01.md)  

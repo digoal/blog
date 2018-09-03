@@ -29,6 +29,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201809/20180903_03.md   [《PostgreSQL 快速给指定表每个字段创建索引 - 2 (近乎完美)》](201809/20180903_03.md)  
+##### 201809/20180903_02.md   [《Deepgreen(Greenplum) 多机部署测试 , TPC-H VS citus》](201809/20180903_02.md)  
 ##### 201809/20180903_01.md   [《PostgreSQL dblink异步调用实践,跑并行多任务 - 例如开N个并行后台任务创建索引, 开N个后台任务跑若干SQL》](201809/20180903_01.md)  
 ##### 201809/20180902_01.md   [《PostgreSQL sharding : citus 系列3 - 窗口函数调用限制 与 破解之法》](201809/20180902_01.md)  
 ----  
@@ -43,7 +45,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201808/20180822_04.md   [《PostgreSQL 快速返回表上某列的唯一值(枚举值) - pg_stats.most_common_vals》](201808/20180822_04.md)  
 ##### 201808/20180822_03.md   [《PostgreSQL 12 preview - plan_cache_mode参数控制强制使用plan cache或强制custom plan (force_custom_plan and force_generic_plan)》](201808/20180822_03.md)  
 ##### 201808/20180822_02.md   [《PostgreSQL json内容特殊字符使用unicode代替》](201808/20180822_02.md)  
-##### 201808/20180822_01.md   [《PostgreSQL 快速给指定表每个字段创建索引》](201808/20180822_01.md)  
+##### 201808/20180822_01.md   [《PostgreSQL 快速给指定表每个字段创建索引 - 1 (不够完美)》](201808/20180822_01.md)  
 ##### 201808/20180819_02.md   [《PostgreSQL 与 MSSQL(SQL Server) 之间 数据相互迁移、导入、导出测试》](201808/20180819_02.md)  
 ##### 201808/20180819_01.md   [《MSSQL(SQL Server) on Linux 简明部署与使用》](201808/20180819_01.md)  
 ##### 201808/20180818_03.md   [《PostgreSQL 与 MS SQL(SQL Server) 类型映射关系》](201808/20180818_03.md)  

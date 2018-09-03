@@ -13,7 +13,7 @@
 ##### 20180822_04.md   [《PostgreSQL 快速返回表上某列的唯一值(枚举值) - pg_stats.most_common_vals》](20180822_04.md)  
 ##### 20180822_03.md   [《PostgreSQL 12 preview - plan_cache_mode参数控制强制使用plan cache或强制custom plan (force_custom_plan and force_generic_plan)》](20180822_03.md)  
 ##### 20180822_02.md   [《PostgreSQL json内容特殊字符使用unicode代替》](20180822_02.md)  
-##### 20180822_01.md   [《PostgreSQL 快速给指定表每个字段创建索引》](20180822_01.md)  
+##### 20180822_01.md   [《PostgreSQL 快速给指定表每个字段创建索引 - 1 (不够完美)》](20180822_01.md)  
 ##### 20180819_02.md   [《PostgreSQL 与 MSSQL(SQL Server) 之间 数据相互迁移、导入、导出测试》](20180819_02.md)  
 ##### 20180819_01.md   [《MSSQL(SQL Server) on Linux 简明部署与使用》](20180819_01.md)  
 ##### 20180818_03.md   [《PostgreSQL 与 MS SQL(SQL Server) 类型映射关系》](20180818_03.md)  

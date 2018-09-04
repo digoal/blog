@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20180904_05.md   [《Greenplum 优化CASE - 对齐JOIN字段类型，使用数组代替字符串，降低字符串处理开销，列存降低扫描开销》](20180904_05.md)  
+##### 20180904_04.md   [《PostgreSQL 11 相似图像搜索插件 imgsmlr 性能测试与优化 3 - citus 8机128shard (4亿图像)》](20180904_04.md)  
+##### 20180904_03.md   [《PostgreSQL 11 相似图像搜索插件 imgsmlr 性能测试与优化 2 - 单机分区表 (dblink 异步调用并行) (4亿图像)》](20180904_03.md)  
+##### 20180904_02.md   [《PostgreSQL 11 相似图像搜索插件 imgsmlr 性能测试与优化 1 - 单机单表 (4亿图像)》](20180904_02.md)  
 ##### 20180904_01.md   [《PostgreSQL 相似搜索插件介绍大汇总 (rum,pg_trgm,smlar,imgsmlr,pg_similarity) (rum,gin,gist)》](20180904_01.md)  
 ##### 20180903_03.md   [《PostgreSQL 快速给指定表每个字段创建索引 - 2 (近乎完美)》](20180903_03.md)  
 ##### 20180903_02.md   [《Deepgreen(Greenplum) 多机部署测试 , TPC-H VS citus》](20180903_02.md)  

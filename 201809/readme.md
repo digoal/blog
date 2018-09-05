@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180905_02.md   [《PostgreSQL sharding : citus 系列5 - worker节点网络优化》](20180905_02.md)  
 ##### 20180905_01.md   [《PostgreSQL sharding : citus 系列4 - DDL 操作规范 (新增DB，TABLE，SCHEMA，UDF，OP，用户等)》](20180905_01.md)  
 ##### 20180904_05.md   [《Greenplum 优化CASE - 对齐JOIN字段类型，使用数组代替字符串，降低字符串处理开销，列存降低扫描开销》](20180904_05.md)  
 ##### 20180904_04.md   [《PostgreSQL 11 相似图像搜索插件 imgsmlr 性能测试与优化 3 - citus 8机128shard (4亿图像)》](20180904_04.md)  

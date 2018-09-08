@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201809/20180908_01.md   [《PostgreSQL cheat functions - (内存上下文\planner内容等常用函数)》](201809/20180908_01.md)  
 ##### 201809/20180905_03.md   [《PostgreSQL 任意字段数组合 AND\OR 条件，指定返回结果条数，构造测试数据算法举例》](201809/20180905_03.md)  
 ##### 201809/20180905_02.md   [《PostgreSQL sharding : citus 系列5 - worker节点网络优化》](201809/20180905_02.md)  
 ##### 201809/20180905_01.md   [《PostgreSQL sharding : citus 系列4 - DDL 操作规范 (新增DB，TABLE，SCHEMA，UDF，OP，用户等)》](201809/20180905_01.md)  

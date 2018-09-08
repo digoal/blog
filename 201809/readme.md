@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180908_01.md   [《PostgreSQL cheat functions - (内存上下文\planner内容等常用函数)》](20180908_01.md)  
 ##### 20180905_03.md   [《PostgreSQL 任意字段数组合 AND\OR 条件，指定返回结果条数，构造测试数据算法举例》](20180905_03.md)  
 ##### 20180905_02.md   [《PostgreSQL sharding : citus 系列5 - worker节点网络优化》](20180905_02.md)  
 ##### 20180905_01.md   [《PostgreSQL sharding : citus 系列4 - DDL 操作规范 (新增DB，TABLE，SCHEMA，UDF，OP，用户等)》](20180905_01.md)  

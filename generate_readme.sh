@@ -50,6 +50,13 @@ do
       echo "  " >> ./$file
     fi
 # #######################    sed -i '/Count].http:\/\/info.flagcounter.com\/h9V1/d' $file
+    LINK=`grep "22709685feb7cab07d30f30387f0a9ae" $file|grep -c "22709685feb7cab07d30f30387f0a9ae"`
+    if [ $LINK -ne 1 ]; then
+      echo "  " >> ./$file
+      echo "## [digoal's PostgreSQL文章入口](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
+      echo "  " >> ./$file
+    fi
+# ######################     sed -i '/22709685feb7cab07d30f30387f0a9ae/d' $file
   done
   cd ..
 done

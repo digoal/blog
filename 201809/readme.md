@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180911_01.md   [《PostgreSQL 大版本升级方法之一 - 不落地并行导出导入》](20180911_01.md)  
 ##### 20180909_01.md   [《PostgreSQL 块级 snapshot (flash back) - postgrespro improvement》](20180909_01.md)  
 ##### 20180908_01.md   [《PostgreSQL cheat functions - (内存上下文\planner内容等常用函数)》](20180908_01.md)  
 ##### 20180905_03.md   [《PostgreSQL 任意字段数组合 AND\OR 条件，指定返回结果条数，构造测试数据算法举例》](20180905_03.md)  

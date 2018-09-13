@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201809/20180913_02.md   [《PostgreSQL GUI pgadmin4 v3.3 支持 gis geometry 数据编辑、显示》](201809/20180913_02.md)  
 ##### 201809/20180913_01.md   [《PostgreSQL 11 tpcc 测试 - use sysbench-tpcc by Percona-Lab》](201809/20180913_01.md)  
 ##### 201809/20180911_01.md   [《PostgreSQL 大版本升级方法之一 - 不落地并行导出导入》](201809/20180911_01.md)  
 ##### 201809/20180909_01.md   [《PostgreSQL 块级 snapshot (flash back) - postgrespro improvement》](201809/20180909_01.md)  

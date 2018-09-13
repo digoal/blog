@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201809/20180913_01.md   [《PostgreSQL 11 tpcc 测试 - use sysbench-tpcc by Percona-Lab》](201809/20180913_01.md)  
 ##### 201809/20180911_01.md   [《PostgreSQL 大版本升级方法之一 - 不落地并行导出导入》](201809/20180911_01.md)  
 ##### 201809/20180909_01.md   [《PostgreSQL 块级 snapshot (flash back) - postgrespro improvement》](201809/20180909_01.md)  
 ##### 201809/20180908_01.md   [《PostgreSQL cheat functions - (内存上下文\planner内容等常用函数)》](201809/20180908_01.md)  
@@ -396,7 +397,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201801/20180122_03.md   [《PostgreSQL 商用版本EPAS(阿里云ppas(Oracle 兼容版)) - 分区表性能优化 (堪比pg_pathman)》](201801/20180122_03.md)  
 ##### 201801/20180122_02.md   [《PostgreSQL 范围过滤 + 其他字段排序OFFSET LIMIT(多字段区间过滤)的优化与加速》](201801/20180122_02.md)  
 ##### 201801/20180122_01.md   [《学习 PostgreSQL Frontend/Backend protocol (通信协议)》](201801/20180122_01.md)  
-##### 201801/20180121_01.md   [《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、学习资料、学习视频 - 珍藏级》](201801/20180121_01.md)  
+##### 201801/20180121_01.md   [《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、数据库原理、学习资料、学习视频 - 珍藏级》](201801/20180121_01.md)  
 ##### 201801/20180119_04.md   [《PostgreSQL 10 自定义并行计算聚合函数的原理与实践 - (含array_agg合并多个数组为单个一元数组的例子)》](201801/20180119_04.md)  
 ##### 201801/20180119_03.md   [《PostgreSQL bitmap scan的IO放大的原理解释和优化》](201801/20180119_03.md)  
 ##### 201801/20180119_02.md   [《用PostgreSQL 处理 指纹 数据》](201801/20180119_02.md)  
@@ -1054,7 +1055,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201611/20161104_01.md   [《PostgreSQL Oracle 兼容性之 - plpgsql 自治事务(autonomous_transaction)补丁》](201611/20161104_01.md)  
 ##### 201611/20161101_01.md   [《致DBA , 开发者 , 内核开发者 , 架构师 - PostgreSQL 爱好者参考资料》](201611/20161101_01.md)  
 ----  
-##### 201610/20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case》](201610/20161031_02.md)  
+##### 201610/20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case - pg_oltp_bench》](201610/20161031_02.md)  
 ##### 201610/20161031_01.md   [《PostgreSQL 透明加密(TDE,FDE) - 块级加密》](201610/20161031_01.md)  
 ##### 201610/20161030_02.md   [《PostgreSQL 收缩膨胀表或索引 - pg_squeeze or pg_repack》](201610/20161030_02.md)  
 ##### 201610/20161030_01.md   [《PostgreSQL 流行 HA 方案》](201610/20161030_01.md)  

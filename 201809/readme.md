@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20180914_01.md   [《PostgreSQL sharding : citus 系列7 - topn 加速(count(*) group by order by count(*) desc limit x) (use 估值插件 topn)》](20180914_01.md)  
+##### 20180914_01.md   [《PostgreSQL sharding : citus 系列7 - topn 加速(```count(*) group by order by count(*) desc limit x```) (use 估值插件 topn)》](20180914_01.md)  
 ##### 20180913_04.md   [《PostgreSQL sharding : citus 系列6 - count(distinct xx) 加速 (use 估值插件 hll|hyperloglog)》](20180913_04.md)  
 ##### 20180913_03.md   [《PostgreSQL pgsocket: Extension for Simple TCP/IP Socket Client》](20180913_03.md)  
 ##### 20180913_02.md   [《PostgreSQL GUI pgadmin4 v3.3 支持 gis geometry 数据编辑、显示》](20180913_02.md)  

@@ -2,11 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20180915_01.md   [《[未完待续] PostgreSQL 生态 - 运营、市场、产品、架构师视角》](20180915_01.md)  
 ##### 20180914_01.md   [《PostgreSQL sharding : citus 系列7 - topn 加速(```count(*) group by order by count(*) desc limit x```) (use 估值插件 topn)》](20180914_01.md)  
 ##### 20180913_04.md   [《PostgreSQL sharding : citus 系列6 - count(distinct xx) 加速 (use 估值插件 hll|hyperloglog)》](20180913_04.md)  
 ##### 20180913_03.md   [《PostgreSQL pgsocket: Extension for Simple TCP/IP Socket Client》](20180913_03.md)  
 ##### 20180913_02.md   [《PostgreSQL GUI pgadmin4 v3.3 支持 gis geometry 数据编辑、显示》](20180913_02.md)  
-##### 20180913_01.md   [《PostgreSQL 11 tpcc 测试 - use sysbench-tpcc by Percona-Lab》](20180913_01.md)  
+##### 20180913_01.md   [《PostgreSQL 11 tpcc 测试(103万tpmC on ECS) - use sysbench-tpcc by Percona-Lab》](20180913_01.md)  
 ##### 20180911_01.md   [《PostgreSQL 大版本升级方法之一 - 不落地并行导出导入》](20180911_01.md)  
 ##### 20180909_01.md   [《PostgreSQL 块级 snapshot (flash back) - postgrespro improvement》](20180909_01.md)  
 ##### 20180908_01.md   [《PostgreSQL cheat functions - (内存上下文\planner内容等常用函数)》](20180908_01.md)  

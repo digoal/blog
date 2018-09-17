@@ -18,7 +18,7 @@
 ##### 20160823_09.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)验证 - recovery test script for zfs snapshot clone + postgresql stream replication + archive》](20160823_09.md)  
 ##### 20160823_08.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)双机HA与块级备份部署》](20160823_08.md)  
 ##### 20160823_07.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)单个数据库采用多个zfs卷(如表空间)时如何一致性备份》](20160823_07.md)  
-##### 20160823_06.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)备份集自动校验》](20160823_06.md)  
+##### 20160823_06.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)备份集有效性自动校验》](20160823_06.md)  
 ##### 20160823_05.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)方案与实战》](20160823_05.md)  
 ##### 20160823_04.md   [《PostgreSQL 最佳实践 - 任意时间点恢复源码分析》](20160823_04.md)  
 ##### 20160823_03.md   [《PostgreSQL 最佳实践 - 在线增量备份与任意时间点恢复》](20160823_03.md)  

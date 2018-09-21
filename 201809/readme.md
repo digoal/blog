@@ -7,7 +7,7 @@
 ##### 20180919_03.md   [《PostgreSQL pgbench tpcb 数据生成与SQL部分源码解读》](20180919_03.md)  
 ##### 20180919_02.md   [《PostgreSQL pageinspect 诊断与优化GIN (倒排) 索引合并延迟导致的查询性能下降问题》](20180919_02.md)  
 ##### 20180919_01.md   [《PostgreSQL 11 1万亿 tpcb 性能测试 on 阿里云ECS + ESSD + zfs/lvm2条带》](20180919_01.md)  
-##### 20180917_01.md   [《[未完待续] PostgreSQL 11 1000亿 tpcb、1000W tpcc 性能测试 - on 阿里云ECS + ESSD (含)》](20180917_01.md)  
+##### 20180917_01.md   [《PostgreSQL 11 1000亿 tpcb、1000W tpcc 性能测试 - on 阿里云ECS + ESSD (含quorum based 0丢失多副本配置)》](20180917_01.md)  
 ##### 20180916_01.md   [《PostgreSQL 11 100亿 tpcb 性能测试 on ECS》](20180916_01.md)  
 ##### 20180915_02.md   [《[未完待续] 当单库突破100TB》](20180915_02.md)  
 ##### 20180915_01.md   [《[未完待续] PostgreSQL 生态 - 运营、市场、产品、架构师视角》](20180915_01.md)  

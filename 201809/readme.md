@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20180926_01.md   [《Greenplum 6已合并到PostgreSQL 9.3版本 - 比上一代GP提升：8倍读，195倍更新、删除 - 另有大量PG新特性》](20180926_01.md)  
 ##### 20180925_02.md   [《PostgreSQL Heap Only Tuple - HOT (降低UPDATE引入的索引写IO放大)》](20180925_02.md)  
 ##### 20180925_01.md   [《PostgreSQL 内存表可选项 - unlogged table》](20180925_01.md)  
 ##### 20180922_01.md   [《PostgreSQL undo多版本存储引擎 zheap测试》](20180922_01.md)  

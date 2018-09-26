@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201809/20180926_01.md   [《Greenplum 6已合并到PostgreSQL 9.3版本 - 比上一代GP提升：8倍读，195倍更新、删除 - 另有大量PG新特性》](201809/20180926_01.md)  
 ##### 201809/20180925_02.md   [《PostgreSQL Heap Only Tuple - HOT (降低UPDATE引入的索引写IO放大)》](201809/20180925_02.md)  
 ##### 201809/20180925_01.md   [《PostgreSQL 内存表可选项 - unlogged table》](201809/20180925_01.md)  
 ##### 201809/20180922_01.md   [《PostgreSQL undo多版本存储引擎 zheap测试》](201809/20180922_01.md)  
@@ -164,7 +165,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201806/20180602_01.md   [《CentOS 7 动态调节CPU频率 - 给CPU升降频》](201806/20180602_01.md)  
 ##### 201806/20180601_03.md   [《为什么PostgreSQL流复制备库在启动时不会立即启动wal receiver - startup慢导致需要的WAL在上游已删除》](201806/20180601_03.md)  
 ##### 201806/20180601_02.md   [《PostgreSQL standby会不会做检查点? 以及做检查点的用处》](201806/20180601_02.md)  
-##### 201806/20180601_01.md   [《PostgreSQL pg_recvlogical 与 test_decoding 自定义，支持source table filter, 对接kafka,es等》](201806/20180601_01.md)  
+##### 201806/20180601_01.md   [《PostgreSQL pg_recvlogical 与 test_decoding 自定义，支持source table filter, 对接kafka,es等 - PostgreSQL CDC - (wal2json + Debezium)》](201806/20180601_01.md)  
 ----  
 ##### 201805/20180530_02.md   [《PostgreSQL 如何确定某个opclass支持哪些操作符(支持索引)，JOIN方法，排序》](201805/20180530_02.md)  
 ##### 201805/20180530_01.md   [《PostgreSQL 推荐 TPC-C 测试工具 sqlbench》](201805/20180530_01.md)  

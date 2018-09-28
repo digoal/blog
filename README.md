@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201809/20180928_01.md   [《PostgreSQL 自定义复合类型(composite type) deform引入的额外开销》](201809/20180928_01.md)  
 ##### 201809/20180926_01.md   [《Greenplum 6已合并到PostgreSQL 9.3版本 - 比上一代GP提升：8倍读，195倍更新、删除 - 另有大量PG新特性》](201809/20180926_01.md)  
 ##### 201809/20180925_02.md   [《PostgreSQL Heap Only Tuple - HOT (降低UPDATE引入的索引写IO放大)》](201809/20180925_02.md)  
 ##### 201809/20180925_01.md   [《PostgreSQL 内存表可选项 - unlogged table》](201809/20180925_01.md)  

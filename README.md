@@ -31,6 +31,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201810/20181001_02.md   [《PostgreSQL PostGIS point join polygon (by ST_xxxx) - pglz_decompress 性能优化》](201810/20181001_02.md)  
 ##### 201810/20181001_01.md   [《PostgreSQL tuple alignment padding (行，字段对齐) - 对齐规则，以及如何选择字段顺序》](201810/20181001_01.md)  
 ----  
 ##### 201809/20180928_01.md   [《PostgreSQL 自定义复合类型(composite type) deform引入的额外开销》](201809/20180928_01.md)  
@@ -889,9 +890,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201703/20170313_02.md   [《PostgreSQL 10.0 preview 功能增强 - 分区表(hash,range,list)》](201703/20170313_02.md)  
 ##### 201703/20170313_01.md   [《PostgreSQL 10.0 preview 功能增强 - 支持EUI-64格式MAC地址类型》](201703/20170313_01.md)  
 ##### 201703/20170312_24.md   [《PostgreSQL 10.0 preview 功能增强 - JSON 内容全文检索》](201703/20170312_24.md)  
-##### 201703/20170312_23.md   [《PostgreSQL 10.0 preview 功能增强 - 唯一约束+附加字段组合功能索引》](201703/20170312_23.md)  
+##### 201703/20170312_23.md   [《PostgreSQL 10.0 preview 功能增强 - 唯一约束+附加字段组合功能索引 - 覆盖索引 - covering index》](201703/20170312_23.md)  
 ##### 201703/20170312_22.md   [《PostgreSQL 10.0 preview 功能增强 - 匿名、自治事务(Oracle 兼容性)(background session)》](201703/20170312_22.md)  
-##### 201703/20170312_21.md   [《PostgreSQL 10.0 preview 性能增强 - 间接索引(secondary index)》](201703/20170312_21.md)  
+##### 201703/20170312_21.md   [《PostgreSQL 10.0 preview 性能增强 - 间接索引(secondary index)、二级索引》](201703/20170312_21.md)  
 ##### 201703/20170312_20.md   [《PostgreSQL 10.0 preview sharding增强 - pushdown 增强》](201703/20170312_20.md)  
 ##### 201703/20170312_19.md   [《PostgreSQL 10.0 preview 功能增强 - slave提前苏醒》](201703/20170312_19.md)  
 ##### 201703/20170312_18.md   [《PostgreSQL 10.0 preview 功能增强 - slave支持WAITLSN 'lsn', time;用于设置安全replay栅栏》](201703/20170312_18.md)  
@@ -1957,7 +1958,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201104/20110427_01.md   [《PostgreSQL : WITH Queries use case》](201104/20110427_01.md)  
 ##### 201104/20110408_01.md   [《Compare PostgreSQL and Oracle dead lock detect and transaction》](201104/20110408_01.md)  
 ----  
-##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique》](201103/20110329_01.md)  
+##### 201103/20110329_01.md   [《TOAST,The Oversized-Attribute Storage Technique - 暨存储格式main, extended, external, plain介绍》](201103/20110329_01.md)  
 ##### 201103/20110301_01.md   [《一个事务最多能锁多少对象? how many objects can be locked per transaction》](201103/20110301_01.md)  
 ----  
 ##### 201102/20110222_01.md   [《Recover droped column from PostgreSQL》](201102/20110222_01.md)  

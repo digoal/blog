@@ -1,3 +1,5 @@
+#### [个人介绍](../me/readme.md) 
+  
 ### PostgreSQL, Greenplum 培训视频下载1  
   
 下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
@@ -44,7 +46,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201809/20180919_04.md   [《PostgreSQL pgbench tpcb 海量数据库测试 - 分区表测试优化》](201809/20180919_04.md)  
 ##### 201809/20180919_03.md   [《PostgreSQL pgbench tpcb 数据生成与SQL部分源码解读》](201809/20180919_03.md)  
 ##### 201809/20180919_02.md   [《PostgreSQL pageinspect 诊断与优化GIN (倒排) 索引合并延迟导致的查询性能下降问题》](201809/20180919_02.md)  
-##### 201809/20180919_01.md   [《PostgreSQL 11 1万亿 tpcb 性能测试 on 阿里云ECS + ESSD + zfs/lvm2条带》](201809/20180919_01.md)  
+##### 201809/20180919_01.md   [《PostgreSQL 11 1万亿 tpcb 性能测试 on 阿里云ECS + ESSD + zfs/lvm2条带 + block_size=32K》](201809/20180919_01.md)  
 ##### 201809/20180917_01.md   [《PostgreSQL 11 1000亿 tpcb、1000W tpcc 性能测试 - on 阿里云ECS + ESSD (含quorum based 0丢失多副本配置与性能测试)》](201809/20180917_01.md)  
 ##### 201809/20180916_01.md   [《PostgreSQL 11 100亿 tpcb 性能测试 on ECS》](201809/20180916_01.md)  
 ##### 201809/20180915_02.md   [《[未完待续] 当单库突破100TB》](201809/20180915_02.md)  

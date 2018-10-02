@@ -9,6 +9,8 @@
 # 迁移从163 blog 63页 <数据挖掘学习站点收集>开始算新文章迁移到本级目录,之前的算老文章迁移到old_blogs_from_163
 
 > ./README.md
+echo "#### [个人介绍](../me/readme.md) " >> ./README.md
+echo "  "  >> ./README.md
 echo "### PostgreSQL, Greenplum 培训视频下载1  " >> ./README.md
 echo "  "  >> ./README.md
 echo "下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  " >> ./README.md

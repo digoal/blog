@@ -15,7 +15,11 @@ echo "### PostgreSQL, Greenplum 学习视频1  " >> ./README.md
 echo "  "  >> ./README.md
 echo "下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  " >> ./README.md
 echo "  "  >> ./README.md
-echo "![pic](./pic/pg_china_digoal_video.jpg)  " >> ./README.md
+echo "1、PostgreSQL 9.3 数据库管理与优化 视频4天 现场  " >> ./README.md
+echo "2、PostgreSQL 9.3 数据库管理与优化 视频5天 录制  " >> ./README.md
+echo "3、PostgreSQL 9.1 数据库管理与开发 视频1天 现场  " >> ./README.md
+echo "4、PostgreSQL 9.3 数据库优化 视频3天 录制  " >> ./README.md
+echo "5、PostgreSQL 专题讲座 视频 录制  " >> ./README.md
 echo "  "  >> ./README.md
 echo "### PostgreSQL, Greenplum 学习视频2  " >> ./README.md
 echo "  "  >> ./README.md

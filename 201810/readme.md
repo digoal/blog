@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181004_03.md   [《PostgreSQL JOIN limit 优化器 成本计算 改进 - mergejoin startup cost 优化》](20181004_03.md)  
 ##### 20181004_02.md   [《职业规划、转型思考》](20181004_02.md)  
 ##### 20181004_01.md   [《PostgreSQL Mastering book 序》](20181004_01.md)  
 ##### 20181003_02.md   [《PostgreSQL bloom filter index 扩展 for bigint》](20181003_02.md)  

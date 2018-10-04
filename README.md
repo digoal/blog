@@ -1,4 +1,4 @@
-#### [个人介绍](me/readme.md) 
+#### [About me](me/readme.md) 
   
 ### PostgreSQL, Greenplum 学习视频1  
   
@@ -37,6 +37,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201810/20181004_02.md   [《职业规划、转型思考》](201810/20181004_02.md)  
+##### 201810/20181004_01.md   [《PostgreSQL Mastering book 序》](201810/20181004_01.md)  
 ##### 201810/20181003_02.md   [《PostgreSQL bloom filter index 扩展 for bigint》](201810/20181003_02.md)  
 ##### 201810/20181003_01.md   [《PostgreSQL pg_top pgcenter - 实时top类工具》](201810/20181003_01.md)  
 ##### 201810/20181001_03.md   [《PostgreSQL pgmetrics - 多版本、健康监控指标采集、报告》](201810/20181001_03.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20181004_02.md   [《职业规划、转型思考》](20181004_02.md)  
+##### 20181004_01.md   [《PostgreSQL Mastering book 序》](20181004_01.md)  
 ##### 20181003_02.md   [《PostgreSQL bloom filter index 扩展 for bigint》](20181003_02.md)  
 ##### 20181003_01.md   [《PostgreSQL pg_top pgcenter - 实时top类工具》](20181003_01.md)  
 ##### 20181001_03.md   [《PostgreSQL pgmetrics - 多版本、健康监控指标采集、报告》](20181001_03.md)  

@@ -8,7 +8,6 @@ PostgreSQL 中国社区发起人之一、常委、兼任社区大学校长。负
 PostgreSQL 中国社区杭州历届分会会长之一。      
 [中国信息通信研究院主办、中国通信标准化协会支持的"OSCAR云计算开源产业大会"评选：2018届OSCAR开源尖峰人物之一](../201803/20180322_12.md)  
 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。  
-[通信标准化协会支持的"OSCAR云计算开源产业大会"评选：2018届OSCAR开源尖峰人物之一](../201803/20180322_12.md)  
 CockRoackDB中国社区发起人之一。   
 DBA+社群 联合发起人之一。      
 DBGeeK联盟 专家团成员。      

@@ -17,6 +17,9 @@
 ### 社区、个人微信二维码  
 ![pic](./pic/pg_weixin.jpg)  
   
+### 钉钉PostgreSQL专家群、直播群二维码  
+![pic](./pic/dingding_pg_chat.png)  
+  
 如有错误, 万望指正, 非常感谢.  
   
 欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我联系, 定抽空尽快回复  

@@ -28,6 +28,9 @@ echo "  "  >> ./README.md
 echo "### 社区、个人微信二维码  " >> ./README.md
 echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
+echo "### 钉钉PostgreSQL专家群、直播群二维码  " >> ./README.md
+echo "![pic](./pic/dingding_pg_chat.png)  " >> ./README.md
+echo "  "  >> ./README.md
 echo "如有错误, 万望指正, 非常感谢.  "  >> ./README.md
 echo "  "  >> ./README.md
 echo "欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我联系, 定抽空尽快回复  " >> ./README.md

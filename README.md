@@ -40,6 +40,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201810/20181017_05.md   [《产品设计思考》](201810/20181017_05.md)  
+##### 201810/20181017_04.md   [《AWS redshift->hdb pg(Greenplum)， plpython, pljava UDF 以及upload library》](201810/20181017_04.md)  
+##### 201810/20181017_03.md   [《AWS redshift->hdb pg(Greenplum)，数据库-S3导入导出(unload, external table) - hdb pg external table》](201810/20181017_03.md)  
 ##### 201810/20181017_02.md   [《AWS redshift->hdb pg(Greenplum)，DDL语法转换规则》](201810/20181017_02.md)  
 ##### 201810/20181017_01.md   [《PostgreSQL merge insert(upsert/insert into on conflict) 如何区分数据是INSERT还是UPDATE》](201810/20181017_01.md)  
 ##### 201810/20181015_01.md   [《PostgreSQL 多维空间几何对象 相交、包含 高效率检索实践 - cube》](201810/20181015_01.md)  

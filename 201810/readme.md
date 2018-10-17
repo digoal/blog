@@ -2,7 +2,6 @@
   
 ### 文章列表  
 ----  
-##### 20181017_05.md   [《产品设计思考》](20181017_05.md)  
 ##### 20181017_04.md   [《AWS redshift->hdb pg(Greenplum)， plpython, pljava UDF 以及upload library》](20181017_04.md)  
 ##### 20181017_03.md   [《AWS redshift->hdb pg(Greenplum)，数据库-S3导入导出(unload, external table) - hdb pg external table》](20181017_03.md)  
 ##### 20181017_02.md   [《AWS redshift->hdb pg(Greenplum)，DDL语法转换规则》](20181017_02.md)  

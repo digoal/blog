@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181018_03.md   [《Locking issue with concurrent DELETE / INSERT in PostgreSQL - 解法 advisory lock》](20181018_03.md)  
 ##### 20181018_02.md   [《AWS redshift->hdb pg(Greenplum)， CONVERT_TIMEZONE 时区转换函数兼容》](20181018_02.md)  
 ##### 20181018_01.md   [《AWS redshift->hdb pg(Greenplum)， 内置函数、数据类型、字符集》](20181018_01.md)  
 ##### 20181017_04.md   [《AWS redshift->hdb pg(Greenplum)， plpython, pljava UDF 以及upload library》](20181017_04.md)  

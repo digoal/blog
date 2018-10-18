@@ -40,6 +40,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201810/20181018_01.md   [《AWS redshift->hdb pg(Greenplum)， 内置函数、数据类型、字符集》](201810/20181018_01.md)  
 ##### 201810/20181017_04.md   [《AWS redshift->hdb pg(Greenplum)， plpython, pljava UDF 以及upload library》](201810/20181017_04.md)  
 ##### 201810/20181017_03.md   [《AWS redshift->hdb pg(Greenplum)，数据库-S3导入导出(unload, external table) - hdb pg external table》](201810/20181017_03.md)  
 ##### 201810/20181017_02.md   [《AWS redshift->hdb pg(Greenplum)，DDL语法转换规则》](201810/20181017_02.md)  

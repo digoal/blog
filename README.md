@@ -40,6 +40,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201810/20181021_01.md   [《PostgreSQL 11 培训与认证设计 - 基础 , 管理 , 应用 , 内核 , 阿里云RDS PPAS(Oracle 兼容性) , 认证》](201810/20181021_01.md)  
 ##### 201810/20181018_04.md   [《Locking issue with concurrent DELETE / INSERT in PostgreSQL - 解法 advisory lock》](201810/20181018_04.md)  
 ##### 201810/20181018_03.md   [《阿里云ppas 逻辑备份(导出)、还原 - 导出到本地、从本地导入》](201810/20181018_03.md)  
 ##### 201810/20181018_02.md   [《AWS redshift->hdb pg(Greenplum)， CONVERT_TIMEZONE 时区转换函数兼容》](201810/20181018_02.md)  

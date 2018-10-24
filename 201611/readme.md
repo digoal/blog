@@ -1,8 +1,10 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
 ##### 20161129_03.md   [《[转载]Perf - Linux下的系统性能调优工具，第 2 部分》](20161129_03.md)  
 ##### 20161129_02.md   [《[转载]Perf - Linux下的系统性能调优工具，第 1 部分》](20161129_02.md)  
-##### 20161129_01.md   [《PostgreSQL 源码性能诊断(perf profiling)指南》](20161129_01.md)  
+##### 20161129_01.md   [《PostgreSQL 源码性能诊断(perf profiling)指南 - 珍藏级》](20161129_01.md)  
 ##### 20161128_02.md   [《distinct xx和count(distinct xx)的变态递归优化方法 - 索引收敛(skip scan)扫描》](20161128_02.md)  
 ##### 20161128_01.md   [《时序数据合并场景加速分析和实现 - 复合索引，窗口分组查询加速，变态递归加速》](20161128_01.md)  
 ##### 20161127_01.md   [《Linux 性能诊断 perf使用指南》](20161127_01.md)  
@@ -13,9 +15,9 @@
 ##### 20161124_01.md   [《门禁广告销售系统需求剖析 与 PostgreSQL数据库实现》](20161124_01.md)  
 ##### 20161123_01_pdf_002.md   [《报告时间段: ```2016-11-24 10:57:04.081798``` ~ ```2016-11-24 11:10:13.201455```》](20161123_01_pdf_002.md)  
 ##### 20161123_01_pdf_001.md   [《报告时间段: ```2016-11-24 10:51:14.744512``` ~ ```2016-11-24 10:57:04.081798```》](20161123_01_pdf_001.md)  
-##### 20161123_01.md   [《PostgreSQL AWR报告》](20161123_01.md)  
-##### 20161121_02.md   [《PostgreSQL 函数调试、诊断、优化 & auto_explain  》](20161121_02.md)  
-##### 20161121_01.md   [《PostgreSQL on Linux 最佳部署手册》](20161121_01.md)  
+##### 20161123_01.md   [《PostgreSQL AWR报告(for 阿里云ApsaraDB PgSQL)》](20161123_01.md)  
+##### 20161121_02.md   [《PostgreSQL 函数调试、诊断、优化 & auto_explain》](20161121_02.md)  
+##### 20161121_01.md   [《PostgreSQL on Linux 最佳部署手册 - 珍藏级》](20161121_01.md)  
 ##### 20161120_06.md   [《转载 - Linux软中断不均的调优》](20161120_06.md)  
 ##### 20161120_05.md   [《转载 - Linux用户态和内核态》](20161120_05.md)  
 ##### 20161120_04.md   [《转载 - Linux 多核下绑定硬件中断到不同 CPU（IRQ Affinity）》](20161120_04.md)  
@@ -46,4 +48,4 @@
 ##### 20161107_01.md   [《PostgreSQL 流复制xlog异步send》](20161107_01.md)  
 ##### 20161106_01.md   [《PostgreSQL clang vs gcc 编译》](20161106_01.md)  
 ##### 20161104_01.md   [《PostgreSQL Oracle 兼容性之 - plpgsql 自治事务(autonomous_transaction)补丁》](20161104_01.md)  
-##### 20161101_01.md   [《给PostgreSQL爱好者的参考资料》](20161101_01.md)  
+##### 20161101_01.md   [《致DBA , 开发者 , 内核开发者 , 架构师 - PostgreSQL 爱好者参考资料》](20161101_01.md)  

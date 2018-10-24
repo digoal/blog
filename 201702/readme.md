@@ -1,8 +1,10 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
 ##### 20170228_01.md   [《PostgreSQL Oracle 兼容性之 - SQL OUTLINE插件sr_plan (保存、篡改、固定 执行计划)》](20170228_01.md)  
-##### 20170227_01.md   [《PostgreSQL 10.0 - 逻辑复制原理与最佳实践》](20170227_01.md)  
-##### 20170225_01.md   [《PostgreSQL 向量化执行插件(瓦片式实现) 10x提速OLAP》](20170225_01.md)  
+##### 20170227_01.md   [《PostgreSQL 10.0 preview 逻辑订阅 - 原理与最佳实践》](20170227_01.md)  
+##### 20170225_01.md   [《PostgreSQL 向量化执行插件(瓦片式实现-vops) 10x提速OLAP》](20170225_01.md)  
 ##### 20170221_03.md   [《PostgreSQL merge join 评估成本时可能会查询索引 - 硬解析务必引起注意 - 批量删除数据后, 未释放empty索引页导致mergejoin执行计划变慢 case》](20170221_03.md)  
 ##### 20170221_02.md   [《PostgreSQL bitmapAnd, bitmapOr, bitmap index scan, bitmap heap scan》](20170221_02.md)  
 ##### 20170221_01.md   [《PostgreSQL GIN 单列聚集索引 应用》](20170221_01.md)  
@@ -18,12 +20,12 @@
 ##### 20170213_01.md   [《数据库common安全自动渗透测试与防范 - sqlmap》](20170213_01.md)  
 ##### 20170209_02.md   [《HOW PostgreSQL deal NULL-Values follow Three|ternary valued logic RULE》](20170209_02.md)  
 ##### 20170209_01.md   [《数据库选型之 - 大象十八摸 - 致 架构师、开发者》](20170209_01.md)  
-##### 20170208_03.md   [《数据库选型思考》](20170208_03.md)  
+##### 20170208_03.md   [《数据库选型思考(PostgreSQL,MySQL,Oracle)》](20170208_03.md)  
 ##### 20170208_02.md   [《PostgreSQL MySQL 数据类型映射》](20170208_02.md)  
 ##### 20170208_01.md   [《PostgreSQL 表和列权限(ACL)解读》](20170208_01.md)  
 ##### 20170207_02.md   [《[转自叶大师博文] tpcc-mysql安装、使用、结果解读》](20170207_02.md)  
 ##### 20170207_01.md   [《PostgreSQL Oracle 兼容性之 - 内核自带的兼容函数》](20170207_01.md)  
-##### 20170205_02.md   [《PostgreSQL 10 新特性, 流式接收端在线压缩redo》](20170205_02.md)  
+##### 20170205_02.md   [《PostgreSQL 10.0 preview 流复制增强 - 流式接收端在线压缩redo》](20170205_02.md)  
 ##### 20170205_01.md   [《宝剑赠英雄 - 任意组合字段等效查询, 探探PostgreSQL多列展开式B树 (GIN)》](20170205_01.md)  
 ##### 20170204_01.md   [《PostgreSQL GIN索引实现原理》](20170204_01.md)  
 ##### 20170203_01.md   [《PostgreSQL GIN multi-key search 优化》](20170203_01.md)  

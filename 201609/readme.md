@@ -1,3 +1,5 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
 ##### 20160930_01.md   [《PostgreSQL 单机多实例on XFS 润滑性测试》](20160930_01.md)  
@@ -22,7 +24,7 @@
 ##### 20160916_01.md   [《HAWQ 集群部署 on ECS》](20160916_01.md)  
 ##### 20160911_01.md   [《facebook linkbench 测试PostgreSQL社交关系图谱场景性能》](20160911_01.md)  
 ##### 20160910_01.md   [《如何从PostgreSQL json中提取数组》](20160910_01.md)  
-##### 20160909_01.md   [《如何防止数据库雪崩》](20160909_01.md)  
+##### 20160909_01.md   [《如何防止数据库雪崩(泛洪 flood)》](20160909_01.md)  
 ##### 20160906_01.md   [《如何建立GIS测试环境 - 将openstreetmap的样本数据导入PostgreSQL PostGIS库》](20160906_01.md)  
 ##### 20160905_01.md   [《Greenplum , HAWQ outer join与motion问题讲解》](20160905_01.md)  
 ##### 20160903_01.md   [《CentOS 7.x x64 部署 HAWQ》](20160903_01.md)  

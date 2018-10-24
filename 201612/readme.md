@@ -1,10 +1,15 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
 ##### 20161231_01.md   [《从难缠的模糊查询聊开 - PostgreSQL独门绝招之一 GIN , GiST , SP-GiST , RUM 索引原理与技术背景》](20161231_01.md)  
 ##### 20161230_01.md   [《PostgreSQL 重复 数据清洗 优化教程》](20161230_01.md)  
+##### 20161229_05.md   [《轻松打爆netfilter conntrack table的Greenplum SQL》](20161229_05.md)  
+##### 20161229_04.md   [《netfilter内核模块知识 - 解决nf_conntrack: table full, dropping packet》](20161229_04.md)  
+##### 20161229_03.md   [《[转载]解决 nf_conntrack: table full, dropping packet 的几种思路》](20161229_03.md)  
 ##### 20161229_02.md   [《转载 - nf_conntrack: table full, dropping packet. 终结篇》](20161229_02.md)  
 ##### 20161229_01.md   [《PostgreSQL standby recover的源码分析 (walreceiver唤醒时机？ 为什么standby crash后walreceiver不会立即被唤醒?)》](20161229_01.md)  
-##### 20161228_02.md   [《Linux 时钟精度 与 PostgreSQL auto_explain (explain timing 时钟开销估算)》](20161228_02.md)  
+##### 20161228_02.md   [《Linux 时钟精度 与 PostgreSQL auto_explain (explain timing on Linux时钟开销估算)》](20161228_02.md)  
 ##### 20161228_01.md   [《从天津滨海新区大爆炸、危化品监管聊聊 IT人背负的社会责任感》](20161228_01.md)  
 ##### 20161227_01.md   [《从真假美猴王谈起 - 让套牌车、克隆x 无处遁形的技术手段思考》](20161227_01.md)  
 ##### 20161225_01.md   [《恭迎万亿级营销(圈人)潇洒的迈入毫秒时代 - 万亿user_tags级实时推荐系统数据库设计》](20161225_01.md)  
@@ -16,7 +21,7 @@
 ##### 20161220_01.md   [《流计算风云再起 - PostgreSQL携PipelineDB力挺IoT》](20161220_01.md)  
 ##### 20161219_01.md   [《Oracle log file parallel write 等待事件分析 - PostgreSQL的WAL异曲同工》](20161219_01.md)  
 ##### 20161216_01.md   [《分析加速引擎黑科技 - LLVM、列存、多核并行、算子复用 大联姻 - 一起来开启PostgreSQL的百宝箱》](20161216_01.md)  
-##### 20161215_01.md   [《PostgreSQL 10.0 内置分区表》](20161215_01.md)  
+##### 20161215_01.md   [《PostgreSQL 10.0 preview 功能增强 - 内置分区表》](20161215_01.md)  
 ##### 20161213_01.md   [《金融风控、公安刑侦、社会关系、人脉分析等需求分析与数据库实现 - PostgreSQL图数据库场景应用》](20161213_01.md)  
 ##### 20161208_01.md   [《官人要杯咖啡吗? - PostgreSQL实时监测PLAN tree的执行进度 - pg_query_state》](20161208_01.md)  
 ##### 20161207_01.md   [《PostgreSQL 从源码找出哪些操作需要超级用户权限》](20161207_01.md)  

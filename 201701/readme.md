@@ -1,3 +1,5 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
 ##### 20170126_02.md   [《聊聊between and的坑 和 神奇的解法》](20170126_02.md)  
@@ -14,7 +16,7 @@
 ##### 20170113_03.md   [《从微信小程序 到 数据库"小程序" , 鬼知道我经历了什么》](20170113_03.md)  
 ##### 20170113_02.md   [《[转载]postgres+socket.io+nodejs实时地图应用实践》](20170113_02.md)  
 ##### 20170113_01.md   [《(AR虚拟现实)红包 技术思考 - GIS与图像识别的完美结合》](20170113_01.md)  
-##### 20170112_02.md   [《电商内容去重\内容筛选应用(实时识别转载\盗图\侵权?) - 文本、图片集、商品集、数组相似判定的优化和索引技术》](20170112_02.md)  
+##### 20170112_02.md   [《导购系统 - 电商内容去重\内容筛选应用(实时识别转载\盗图\侵权?) - 文本、图片集、商品集、数组相似判定的优化和索引技术》](20170112_02.md)  
 ##### 20170112_01.md   [《PostgreSQL psql 安全设置数据库用户密码的方法之一》](20170112_01.md)  
 ##### 20170111_02.md   [《Linux cgroup - memory子系统讲解》](20170111_02.md)  
 ##### 20170111_01.md   [《PostgreSQL 如何只监听unix socket?》](20170111_01.md)  
@@ -41,4 +43,4 @@
 ##### 20170103_01.md   [《在OOM现场 谈一谈数据库内存分配, 以及审计的重要性》](20170103_01.md)  
 ##### 20170102_01.md   [《Leap second , 闰秒 , 数据库 , PostgreSQL , Solar time , UNIX time , UTC , UT1》](20170102_01.md)  
 ##### 20170101_02.md   [《ApsaraDB的左右互搏(PgSQL+HybridDB+OSS) - 解决OLTP+OLAP混合需求》](20170101_02.md)  
-##### 20170101_01.md   [《PostgreSQL 10.0 - 已装备了哪些核武器? 2017金秋》](20170101_01.md)  
+##### 20170101_01.md   [《PostgreSQL 10.0 preview - 截至2017元旦装备了哪些核武器》](20170101_01.md)  

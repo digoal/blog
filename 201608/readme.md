@@ -1,3 +1,5 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
 ##### 20160831_01.md   [《CentOS 6.x x64 部署HAWQ》](20160831_01.md)  
@@ -6,9 +8,9 @@
 ##### 20160829_03.md   [《PostgreSQL 最佳实践 - pg_rman 数据库恢复示例 与 软件限制解说》](20160829_03.md)  
 ##### 20160829_02.md   [《PostgreSQL 最佳实践 - pg_rman 以standby为源的备份浅析》](20160829_02.md)  
 ##### 20160829_01.md   [《pg_dump一致性备份以及cache lookup failed错误的原因分析》](20160829_01.md)  
-##### 20160827_01.md   [《在PostgreSQL中实现update | delete limit》](20160827_01.md)  
+##### 20160827_01.md   [《在PostgreSQL中实现update | delete limit - CTID扫描实践  (高效阅后即焚)》](20160827_01.md)  
 ##### 20160826_01.md   [《PostgreSQL 最佳实践 - 块级别增量备份(pg_rman baseon LSN)源码浅析与使用》](20160826_01.md)  
-##### 20160825_02.md   [《hll插件在Greenplum中的使用 以及 分布式聚合函数优化思路》](20160825_02.md)  
+##### 20160825_02.md   [《Greenplum 最佳实践 - 估值插件hll的使用(以及hll分式聚合函数优化)》](20160825_02.md)  
 ##### 20160825_01.md   [《PostgreSQL延迟hot standby使用问题及源码浅析》](20160825_01.md)  
 ##### 20160824_03.md   [《PostgreSQL 最佳实践 - 读写分离》](20160824_03.md)  
 ##### 20160824_02.md   [《PostgreSQL 最佳实践 - 水平分库(基于plproxy)》](20160824_02.md)  
@@ -16,7 +18,7 @@
 ##### 20160823_09.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)验证 - recovery test script for zfs snapshot clone + postgresql stream replication + archive》](20160823_09.md)  
 ##### 20160823_08.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)双机HA与块级备份部署》](20160823_08.md)  
 ##### 20160823_07.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)单个数据库采用多个zfs卷(如表空间)时如何一致性备份》](20160823_07.md)  
-##### 20160823_06.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)备份集自动校验》](20160823_06.md)  
+##### 20160823_06.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)备份集有效性自动校验》](20160823_06.md)  
 ##### 20160823_05.md   [《PostgreSQL 最佳实践 - 块级增量备份(ZFS篇)方案与实战》](20160823_05.md)  
 ##### 20160823_04.md   [《PostgreSQL 最佳实践 - 任意时间点恢复源码分析》](20160823_04.md)  
 ##### 20160823_03.md   [《PostgreSQL 最佳实践 - 在线增量备份与任意时间点恢复》](20160823_03.md)  
@@ -28,10 +30,12 @@
 ##### 20160817_02.md   [《如何评估QUERY的响应时间？》](20160817_02.md)  
 ##### 20160817_01.md   [《PostgreSQL 文本数据分析实践之 - 相似度分析》](20160817_01.md)  
 ##### 20160816_02.md   [《PostgreSQL 9.6 并行计算 优化器算法浅析》](20160816_02.md)  
-##### 20160816_01.md   [《PostgreSQL 三角函数的用法举例 - 已知3点求夹角（旋转门续）》](20160816_01.md)  
+##### 20160816_01.md   [《PostgreSQL 三角函数的用法举例 - 已知3点求任意夹角（旋转门续）》](20160816_01.md)  
+##### 20160815_05.md   [《PostgreSQL 多路并行 xlog 设计》](20160815_05.md)  
+##### 20160815_04.md   [《PostgreSQL雕虫小技，分组TOP性能提升44倍》](20160815_04.md)  
 ##### 20160815_03.md   [《PostgreSQL源码分析 备库查询冲突 - User was holding shared buffer pin for too long》](20160815_03.md)  
 ##### 20160815_02.md   [《Linux LVM,如何指定或修改逻辑卷的major, minor号》](20160815_02.md)  
-##### 20160815_01.md   [《Greenplum行存与列存的选择以及转换方法》](20160815_01.md)  
+##### 20160815_01.md   [《Greenplum 最佳实践 - 行存与列存的选择以及转换方法》](20160815_01.md)  
 ##### 20160814_02.md   [《使用pg_resetxlog修复PostgreSQL控制文件的方法》](20160814_02.md)  
 ##### 20160814_01.md   [《异版本pg_resetxlog后导致的控制文件差异问题处理》](20160814_01.md)  
 ##### 20160813_01.md   [《旋转门数据压缩算法在PostgreSQL中的实现 - 流式压缩在物联网、监控、传感器等场景的应用》](20160813_01.md)  
@@ -42,4 +46,4 @@
 ##### 20160805_01.md   [《从PostgreSQL支持100万个连接聊起》](20160805_01.md)  
 ##### 20160803_02.md   [《PostgreSQL 表达式索引 - 语法注意事项》](20160803_02.md)  
 ##### 20160803_01.md   [《DBA不可不知的操作系统内核参数》](20160803_01.md)  
-##### 20160802_01.md   [《Greenplum 函数内嵌套查询在query中调用的替代方案》](20160802_01.md)  
+##### 20160802_01.md   [《Greenplum 最佳实践 - 函数内嵌套查询在query中调用的替代方案》](20160802_01.md)  

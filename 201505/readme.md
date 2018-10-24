@@ -1,12 +1,20 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
 ##### 20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](20150526_02.md)  
 ##### 20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](20150526_01.md)  
+##### 20150525_04.md   [《use PostgreSQL async Notification as a chat group》](20150525_04.md)  
+##### 20150525_03.md   [《PostgreSQL 9.5 new feature - Writing A Custom Scan Provider》](20150525_03.md)  
+##### 20150525_02.md   [《PostgreSQL 9.5 new feature - pg_receivexlog run as synchronous standby》](20150525_02.md)  
 ##### 20150525_01.md   [《PostgreSQL 9.5 new feature - table | mview data sample》](20150525_01.md)  
+##### 20150515_02.md   [《PostgreSQL 9.5 new feature - use FSM fast evaluate bloat and other table level statics(pgstattuple_approx)》](20150515_02.md)  
 ##### 20150515_01.md   [《PostgreSQL 审计 - pg_audit module》](20150515_01.md)  
+##### 20150514_01.md   [《PostgreSQL Oracle 兼容性 自治事务 - partial/sub commit within function》](20150514_01.md)  
 ##### 20150511_01.md   [《parallel blocking|waiting by slow BLOCK extend relation , ExclusiveLock on extension of relation》](20150511_01.md)  
 ##### 20150510_01.md   [《PostgreSQL find out session's current query blocked by which transaction use pg_locks & pg_stat_activity》](20150510_01.md)  
 ##### 20150509_01.md   [《PostgreSQL 代码性能诊断之 - OProfile & Systemtap》](20150509_01.md)  
+##### 20150507_01.md   [《Roaring Bitmap - A better compressed bitset》](20150507_01.md)  
 ##### 20150506_07.md   [《PostgreSQL 检查点性能影响及源码分析 - 7》](20150506_07.md)  
 ##### 20150506_06.md   [《PostgreSQL 检查点性能影响及源码分析 - 6》](20150506_06.md)  
 ##### 20150506_05.md   [《PostgreSQL 检查点性能影响及源码分析 - 5》](20150506_05.md)  
@@ -14,4 +22,5 @@
 ##### 20150506_03.md   [《PostgreSQL 检查点性能影响及源码分析 - 3》](20150506_03.md)  
 ##### 20150506_02.md   [《PostgreSQL 检查点性能影响及源码分析 - 2》](20150506_02.md)  
 ##### 20150506_01.md   [《PostgreSQL 检查点性能影响及源码分析 - 1》](20150506_01.md)  
+##### 20150503_02.md   [《Customize Dictionary or Filter dictionary by Synonym & Thesaurus, customize zhparser's xdb》](20150503_02.md)  
 ##### 20150503_01.md   [《PostgreSQL垃圾回收代码分析 - why postgresql cann't reclaim tuple is HEAPTUPLE_RECENTLY_DEAD》](20150503_01.md)  

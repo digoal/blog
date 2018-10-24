@@ -1,12 +1,14 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
 ### 文章列表  
 ----  
-##### 20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case》](20161031_02.md)  
+##### 20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case - pg_oltp_bench》](20161031_02.md)  
 ##### 20161031_01.md   [《PostgreSQL 透明加密(TDE,FDE) - 块级加密》](20161031_01.md)  
 ##### 20161030_02.md   [《PostgreSQL 收缩膨胀表或索引 - pg_squeeze or pg_repack》](20161030_02.md)  
 ##### 20161030_01.md   [《PostgreSQL 流行 HA 方案》](20161030_01.md)  
 ##### 20161027_01.md   [《PostgreSQL 9.6 sharding based on FDW & pg_pathman》](20161027_01.md)  
 ##### 20161024_01.md   [《PostgreSQL 9.5+ 高效分区表实现 - pg_pathman》](20161024_01.md)  
-##### 20161021_01.md   [《基于 阿里云 RDS PostgreSQL 打造实时用户画像推荐系统》](20161021_01.md)  
+##### 20161021_01.md   [《基于 阿里云 RDS PostgreSQL 打造实时用户画像推荐系统(varbitx)》](20161021_01.md)  
 ##### 20161020_02.md   [《PostgreSQL 无缝自增ID的实现 - by advisory lock》](20161020_02.md)  
 ##### 20161020_01.md   [《MySQL 增量同步到 PostgreSQL》](20161020_01.md)  
 ##### 20161019_01.md   [《PostgreSQL 全文检索加速 快到没有朋友 - RUM索引接口(潘多拉魔盒)》](20161019_01.md)  
@@ -23,12 +25,12 @@
 ##### 20161008_01.md   [《PostgreSQL 9.6 内核优化之 聚合代码优化OP复用浅析》](20161008_01.md)  
 ##### 20161006_03.md   [《PostgreSQL 9.6 平滑fsync, write原理浅析》](20161006_03.md)  
 ##### 20161006_02.md   [《PostgreSQL 9.6 同步多副本 与 remote_apply事务同步级别》](20161006_02.md)  
-##### 20161006_01.md   [《PostgreSQL 9.6 新增69个等待事件》](20161006_01.md)  
+##### 20161006_01.md   [《PostgreSQL 等待事件 及 等待采样统计(pg_wait_sampling)》](20161006_01.md)  
 ##### 20161005_02.md   [《PostgreSQL 9.6 快照过旧 - 源码浅析》](20161005_02.md)  
 ##### 20161005_01.md   [《PostgreSQL 9.6 sharding + 单元化 (based on postgres_fdw) 最佳实践 - 通用水平分库场景设计与实践》](20161005_01.md)  
 ##### 20161004_01.md   [《PostgreSQL 9.6 单元化,sharding (based on postgres_fdw) - 内核层支持前传》](20161004_01.md)  
 ##### 20161002_04.md   [《PostgreSQL 9.6 scale-up高并发增强 VS 9.5》](20161002_04.md)  
 ##### 20161002_03.md   [《PostgreSQL 9.6 vacuum freeze大幅性能提升 代码浅析》](20161002_03.md)  
 ##### 20161002_02.md   [《PostgreSQL 9.6 并行计算 在 xfs, ext4 下的表现对比》](20161002_02.md)  
-##### 20161002_01.md   [《PostgreSQL 9.6 并行计算 优化器算法浅析》](20161002_01.md)  
+##### 20161002_01.md   [《PostgreSQL 9.6 并行计算 优化器算法浅析 - 以及如何强制并行度》](20161002_01.md)  
 ##### 20161001_01.md   [《PostgreSQL 9.6 引领开源数据库攻克多核并行计算难题》](20161001_01.md)  

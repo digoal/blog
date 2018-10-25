@@ -40,6 +40,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201810/20181025_01.md   [《[转载] systemtap 跟踪分析 PostgreSQL》](201810/20181025_01.md)  
 ##### 201810/20181022_01.md   [《PostgreSQL 分区表、继承表 记录去重方法》](201810/20181022_01.md)  
 ##### 201810/20181021_01.md   [《PostgreSQL 11 培训与认证设计 - 基础 , 管理 , 应用 , 内核 , 阿里云RDS PPAS(Oracle 兼容性) , 认证》](201810/20181021_01.md)  
 ##### 201810/20181018_04.md   [《Locking issue with concurrent DELETE / INSERT in PostgreSQL - 解法 advisory lock》](201810/20181018_04.md)  

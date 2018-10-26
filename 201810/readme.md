@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181027_01.md   [《PostgreSQL DNS 解析功能 - get ip, get host name》](20181027_01.md)  
 ##### 20181025_01.md   [《[转载] systemtap 跟踪分析 PostgreSQL》](20181025_01.md)  
 ##### 20181022_01.md   [《PostgreSQL 分区表、继承表 记录去重方法》](20181022_01.md)  
 ##### 20181021_01.md   [《PostgreSQL 11 培训与认证设计 - 基础 , 管理 , 应用 , 内核 , 阿里云RDS PPAS(Oracle 兼容性) , 认证》](20181021_01.md)  

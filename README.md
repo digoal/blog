@@ -40,6 +40,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201810/20181029_03.md   [《PostgreSQL plpgsql 存储过程、函数 - 状态、异常变量打印、异常捕获... - GET [STACKED] DIAGNOSTICS》](201810/20181029_03.md)  
+##### 201810/20181029_02.md   [《PostgreSQL datediff 日期间隔（单位转换）兼容SQL用法》](201810/20181029_02.md)  
+##### 201810/20181029_01.md   [《PostgreSQL listagg within group (order by) 聚合兼容用法 string_agg ( order by) - 行列变换，CSV构造...》](201810/20181029_01.md)  
 ##### 201810/20181027_01.md   [《PostgreSQL DNS 解析功能 - get ip, get host name》](201810/20181027_01.md)  
 ##### 201810/20181025_01.md   [《[转载] systemtap 跟踪分析 PostgreSQL》](201810/20181025_01.md)  
 ##### 201810/20181022_01.md   [《PostgreSQL 分区表、继承表 记录去重方法》](201810/20181022_01.md)  

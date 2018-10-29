@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20181029_03.md   [《PostgreSQL plpgsql 存储过程、函数 - 状态、异常变量打印、异常捕获... - GET [STACKED] DIAGNOSTICS》](20181029_03.md)  
+##### 20181029_02.md   [《PostgreSQL datediff 日期间隔（单位转换）兼容SQL用法》](20181029_02.md)  
+##### 20181029_01.md   [《PostgreSQL listagg within group (order by) 聚合兼容用法 string_agg ( order by) - 行列变换，CSV构造...》](20181029_01.md)  
 ##### 20181027_01.md   [《PostgreSQL DNS 解析功能 - get ip, get host name》](20181027_01.md)  
 ##### 20181025_01.md   [《[转载] systemtap 跟踪分析 PostgreSQL》](20181025_01.md)  
 ##### 20181022_01.md   [《PostgreSQL 分区表、继承表 记录去重方法》](20181022_01.md)  

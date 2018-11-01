@@ -40,6 +40,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201811/20181101_02.md   [《PostgreSQL pipelinedb 流计算插件 - IoT应用 - 实时轨迹聚合》](201811/20181101_02.md)  
+----  
 ##### 201810/20181029_03.md   [《PostgreSQL plpgsql 存储过程、函数 - 状态、异常变量打印、异常捕获... - GET [STACKED] DIAGNOSTICS》](201810/20181029_03.md)  
 ##### 201810/20181029_02.md   [《PostgreSQL datediff 日期间隔（单位转换）兼容SQL用法》](201810/20181029_02.md)  
 ##### 201810/20181029_01.md   [《PostgreSQL listagg within group (order by) 聚合兼容用法 string_agg ( order by) - 行列变换，CSV构造...》](201810/20181029_01.md)  
@@ -56,16 +58,11 @@ digoal's|PostgreSQL|文章|归类
 ##### 201810/20181017_02.md   [《AWS redshift->hdb pg(Greenplum)，DDL语法转换规则》](201810/20181017_02.md)  
 ##### 201810/20181017_01.md   [《PostgreSQL merge insert(upsert/insert into on conflict) 如何区分数据是INSERT还是UPDATE》](201810/20181017_01.md)  
 ##### 201810/20181015_01.md   [《PostgreSQL 多维空间几何对象 相交、包含 高效率检索实践 - cube》](201810/20181015_01.md)  
-##### 201810/20181012_02.md   [《社区峰会组织探讨》](201810/20181012_02.md)  
-##### 201810/20181012_01.md   [《小团队自研开源项目成长之路思考》](201810/20181012_01.md)  
 ##### 201810/20181011_01.md   [《PostgreSQL 相似人群圈选，人群扩选，向量相似 使用实践 - cube》](201810/20181011_01.md)  
 ##### 201810/20181009_01.md   [《PostgreSQL 随机记录返回 - 300倍提速实践 (随机数组下标代替order by random())》](201810/20181009_01.md)  
 ##### 201810/20181008_01.md   [《PostgreSQL sql文件编码引起的数据导入乱码或查询字符集异常报错(invalid byte sequence)》](201810/20181008_01.md)  
-##### 201810/20181006_01.md   [《思考小记 - 小米生态》](201810/20181006_01.md)  
-##### 201810/20181005_02.md   [《行业分析札记 - 游戏生态，充值渠道》](201810/20181005_02.md)  
 ##### 201810/20181005_01.md   [《关于ECS 无法使用VIP的问题 - SDN , openflow》](201810/20181005_01.md)  
 ##### 201810/20181004_03.md   [《PostgreSQL JOIN limit 优化器 成本计算 改进 - mergejoin startup cost 优化》](201810/20181004_03.md)  
-##### 201810/20181004_02.md   [《思考小记 - 职业规划、转型思考》](201810/20181004_02.md)  
 ##### 201810/20181004_01.md   [《PostgreSQL Mastering book 序》](201810/20181004_01.md)  
 ##### 201810/20181003_02.md   [《PostgreSQL bloom filter index 扩展 for bigint》](201810/20181003_02.md)  
 ##### 201810/20181003_01.md   [《PostgreSQL pg_top pgcenter - 实时top类工具》](201810/20181003_01.md)  
@@ -2024,6 +2021,13 @@ digoal's|PostgreSQL|文章|归类
 ##### 201005/20100511_03.md   [《PostgreSQL 连接池 pgbouncer 使用》](201005/20100511_03.md)  
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  
+----  
+##### 197001/20181017_05.md   [《产品设计思考》](197001/20181017_05.md)  
+##### 197001/20181012_02.md   [《社区峰会组织探讨》](197001/20181012_02.md)  
+##### 197001/20181012_01.md   [《小团队自研开源项目成长之路思考》](197001/20181012_01.md)  
+##### 197001/20181006_01.md   [《思考小记 - 小米生态》](197001/20181006_01.md)  
+##### 197001/20181005_02.md   [《行业分析札记 - 游戏生态，充值渠道》](197001/20181005_02.md)  
+##### 197001/20181004_02.md   [《思考小记 - 职业规划、转型思考》](197001/20181004_02.md)  
 ### digoal,德哥的PostgreSQL私房菜, 老文章 : [进入](old_blogs_from_163/README.md)  
 <a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
   

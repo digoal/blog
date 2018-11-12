@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181112_01.md   [《Greenplum 垃圾回收、收集统计信息调度 - vacuum analyze 所有表 - 注意锁问题》](20181112_01.md)  
 ##### 20181110_02.md   [《Greenplum 6 + ORCA 在CentOS 7下面的部署》](20181110_02.md)  
 ##### 20181110_01.md   [《Greenplum 6 加 oracle兼容插件 orafce》](20181110_01.md)  
 ##### 20181108_01.md   [《PostgreSQL 在线修改数据类型 - online ddl 方法之一》](20181108_01.md)  

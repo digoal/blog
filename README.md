@@ -14,8 +14,10 @@
   
 [《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](201801/20180121_01.md) 
   
-### 社区、个人微信二维码  
+### PG社区微信、微博、个人微信二维码  
 ![pic](./pic/pg_weixin.jpg)  
+![pic](./pic/pg_weibo.jpg)  
+![pic](./pic/digoal_weixin.jpg)  
   
 ### 钉钉PostgreSQL专家群、直播群二维码  
 ![pic](./pic/dingding_pg_chat.png)  

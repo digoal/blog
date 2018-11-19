@@ -59,4 +59,5 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
       
 愿景 -- 公益是一辈子的事，I'm digoal, just do it。      
       
-GIT: https://github.com/digoal/   
+[个人GIT](https://github.com/digoal/blog/blob/master/README.md)  
+  

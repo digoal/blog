@@ -61,3 +61,8 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
       
 [个人GIT](https://github.com/digoal/blog/blob/master/README.md)  
   
+个人微信，欢迎交流    
+  
+![pic](../pic/digoal_weixin.jpg)  
+  
+  

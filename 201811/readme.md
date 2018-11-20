@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181120_01.md   [《PostgreSQL 粗心设错session_preload_libraries的补救方法》](20181120_01.md)  
 ##### 20181119_01.md   [《multi-master - 多主 - 多写 - 如何在多写中避免数据复制打环》](20181119_01.md)  
 ##### 20181112_01.md   [《Greenplum 垃圾回收、收集统计信息调度 - vacuum analyze 所有表 - 注意锁问题》](20181112_01.md)  
 ##### 20181110_02.md   [《Greenplum 6 + ORCA 在CentOS 7下面的部署》](20181110_02.md)  

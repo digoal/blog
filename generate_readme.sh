@@ -68,6 +68,13 @@ do
       echo "  " >> ./$file
     fi
 # #######################    sed -i '/22709685feb7cab07d30f30387f0a9ae/d' $file
+    FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" $file|grep -c "57258f76c37864c6e6d23383d05714ea"`
+    if [ $FREEURL -ne 1 ]; then
+      echo "  " >> ./$file
+      echo "## [免费领取阿里云RDS PostgreSQL实例、ECS虚拟机](https://free.aliyun.com/ \"57258f76c37864c6e6d23383d05714ea\")" >> ./$file
+      echo "  " >> ./$file
+    fi
+# #######################    sed -i '/57258f76c37864c6e6d23383d05714ea/d' $file
   done
   cd ..
 done

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181122_01.md   [《Oracle On the PL/SQL Function Result Cache》](20181122_01.md)  
 ##### 20181120_02.md   [《PostgreSQL 流计算插件 - pipelinedb 1.x 参数配置介绍》](20181120_02.md)  
 ##### 20181120_01.md   [《PostgreSQL 粗心设错session_preload_libraries的补救方法》](20181120_01.md)  
 ##### 20181119_01.md   [《multi-master - 多主 - 多写 - 如何在多写中避免数据复制打环》](20181119_01.md)  

@@ -42,6 +42,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201811/20181122_02.md   [《PostgreSQL 空间聚合性能 - 行政区、电子围栏 空间聚合 - 时间、空间热力图》](201811/20181122_02.md)  
 ##### 201811/20181122_01.md   [《Oracle On the PL/SQL Function Result Cache》](201811/20181122_01.md)  
 ##### 201811/20181120_02.md   [《PostgreSQL 流计算插件 - pipelinedb 1.x 参数配置介绍》](201811/20181120_02.md)  
 ##### 201811/20181120_01.md   [《PostgreSQL 粗心设错session_preload_libraries的补救方法》](201811/20181120_01.md)  

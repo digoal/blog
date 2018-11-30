@@ -238,19 +238,20 @@ create table snap_pg_unlogged_table as select 1::int8 snap_id, now() snap_ts, cu
 create table snap_pg_hash_idx as select 1::int8 snap_id, now() snap_ts, current_database(),pg_get_indexdef(oid) from pg_class where relkind=$$i$$ and pg_get_indexdef(oid) ~ $$USING hash$$;
 
 -- 库级, 剩余可使用次数不足1000万次的序列检查
--- create or replace function sequence_stats(OUT v_datname name, OUT v_role name, OUT v_nspname name, OUT v_relname name, OUT v_times_remain int8) returns setof record as $$
--- declare
--- begin
---  v_datname := current_database();
+ create or replace function sequence_stats(OUT v_datname name, OUT v_role name, OUT v_nspname name, OUT v_relname name, OUT v_times_remain int8) returns setof record as $$
+ declare
+ begin
+  v_datname := current_database();
 --  for v_role,v_nspname,v_relname in select rolname,nspname,relname from pg_roles t1 , pg_class t2 , pg_namespace t3 where t1.oid=t2.relowner and t2.relnamespace=t3.oid and t2.relkind='S' 
+  select (seqmax-seqmin)/seqincrement from pg_catalog.pg_sequence into v_times_remain; 
 --  LOOP
 --    execute 'select (9223372036854775807-last_value)/increment_by from "'||v_nspname||'"."'||v_relname||'" where not is_cycled' into v_times_remain;
 --    return next;
 --  end loop;
--- end;
--- $$ language plpgsql;
---
--- create table snap_pg_seq_deadline as select 1::int8 snap_id, now() snap_ts, * from sequence_stats() where v_times_remain is not null and v_times_remain < 10240000 order by v_times_remain limit 10;
+ end;
+ $$ language plpgsql;
+
+ create table snap_pg_seq_deadline as select 1::int8 snap_id, now() snap_ts, * from sequence_stats() where v_times_remain is not null and v_times_remain < 10240000 order by v_times_remain limit 10;
 
 -- 库级, 清理未引用的大对象 
 create table snap_pg_vacuumlo as select 1::int8 snap_id, now() snap_ts, current_database(), 1::int8 as lo_bloat;
@@ -1076,7 +1077,6 @@ for tmp in select '```'||snap_ts||'``` | ```'||coalesce(datname,'-')||'``` | ```
 loop 
   res := array_append(res, tmp); 
 end loop; 
-｀｀｀
 res := array_append(res, '  '); 
 res := array_append(res, 'snap_ts | name | statement | prepare_time | duration | parameter_types | from_sql'); 
 res := array_append(res, '---|---|---|---|---|---|---|---|---'); 

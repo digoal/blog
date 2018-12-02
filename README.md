@@ -19,7 +19,7 @@
 ![pic](./pic/pg_weibo.jpg)  
 ![pic](./pic/digoal_weixin.jpg)  
   
-### 钉钉PostgreSQL专家群、直播群二维码  
+### 钉钉PostgreSQL群(专家坐诊、每周直播教学)  
 ![pic](./pic/dingding_pg_chat.png)  
   
 如有错误, 万望指正, 非常感谢.  

@@ -30,7 +30,7 @@ echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
 echo "![pic](./pic/pg_weibo.jpg)  " >> ./README.md
 echo "![pic](./pic/digoal_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
-echo "### 钉钉PostgreSQL专家群、直播群二维码  " >> ./README.md
+echo "### 钉钉PostgreSQL群(专家坐诊、每周直播教学)  " >> ./README.md
 echo "![pic](./pic/dingding_pg_chat.png)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "如有错误, 万望指正, 非常感谢.  "  >> ./README.md

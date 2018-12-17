@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181217_01.md   [《PostgreSQL 物化视图(Oracle同步到PG，PG同步到PG) - by pgsnapshot (plperlu trigger) （支持类似Oracle的mvlog fast complete force刷新）》](20181217_01.md)  
 ##### 20181215_02.md   [《关于资源使用水位问题 - 硬件资源评估》](20181215_02.md)  
 ##### 20181211_01.md   [《PostgreSQL 2018 全国峰会报名 - 有机会获得老婆大人贡献的 BeoPlay A1 , BOSE SoundLink , SONY SRS-X99》](20181211_01.md)  
 ##### 20181210_01.md   [《PostgreSQL vs PPAS 差异 - Oracle评估、迁移、验证、性能调优》](20181210_01.md)  

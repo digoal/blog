@@ -42,6 +42,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201812/20181218_01.md   [《PostgreSQL 11 并行计算算法，参数，强制并行度设置》](201812/20181218_01.md)  
 ##### 201812/20181217_01.md   [《PostgreSQL 物化视图(Oracle同步到PG，PG同步到PG) - by pgsnapshot (plperlu trigger) （支持类似Oracle的mvlog fast complete force刷新）》](201812/20181217_01.md)  
 ##### 201812/20181215_02.md   [《关于资源使用水位问题 - 硬件资源评估》](201812/20181215_02.md)  
 ##### 201812/20181211_01.md   [《PostgreSQL 2018 全国峰会报名 - 有机会获得老婆大人贡献的 BeoPlay A1 , BOSE SoundLink , SONY SRS-X99》](201812/20181211_01.md)  

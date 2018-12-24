@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20181224_01.md   [《PostgreSQL 如何知道临时表是当前会话还是其他会话创建的》](20181224_01.md)  
 ##### 20181218_01.md   [《PostgreSQL 11 并行计算算法，参数，强制并行度设置》](20181218_01.md)  
 ##### 20181217_01.md   [《PostgreSQL 物化视图(Oracle同步到PG，PG同步到PG) - by pgsnapshot (plperlu trigger) （支持类似Oracle的mvlog fast complete force刷新）》](20181217_01.md)  
 ##### 20181215_02.md   [《关于资源使用水位问题 - 硬件资源评估》](20181215_02.md)  

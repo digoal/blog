@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case》](20161031_02.md)  
+##### 20161031_02.md   [《PostgreSQL 使用 pgbench 测试 sysbench 相关case - pg_oltp_bench》](20161031_02.md)  
 ##### 20161031_01.md   [《PostgreSQL 透明加密(TDE,FDE) - 块级加密》](20161031_01.md)  
 ##### 20161030_02.md   [《PostgreSQL 收缩膨胀表或索引 - pg_squeeze or pg_repack》](20161030_02.md)  
 ##### 20161030_01.md   [《PostgreSQL 流行 HA 方案》](20161030_01.md)  

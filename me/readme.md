@@ -3,14 +3,17 @@
       
 ![pic](digoal.png)      
         
-中国开源软件推进联盟PostgreSQL分会，特聘资深领域专家。       
-PostgreSQL 中国社区发起人之一、常委、兼任社区大学校长。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。        
-PostgreSQL 中国社区杭州历届分会会长之一。      
-DBA+社群 联合发起人之一。      
-DBGeeK联盟 专家团成员。      
-30项数据库专利。（截至2018-01）      
+- 中国开源软件推进联盟PostgreSQL分会，特聘资深领域专家。       
+- PostgreSQL 中国社区发起人之一、常委、兼任社区大学校长。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。        
+- PostgreSQL 中国社区杭州历届分会会长之一。      
+- [中国信息通信研究院主办、中国通信标准化协会支持的"OSCAR云计算开源产业大会"评选：2018届OSCAR开源尖峰人物之一](../201803/20180322_12.md)  
+- 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。  
+- [CockroachDB](https://github.com/cockroachdb/cockroach) 中国社区发起人之一。   
+- DBA+社群 联合发起人之一。      
+- DBGeeK联盟 专家团成员。      
+- 30项数据库专利。（截至2018-01）      
       
-现任职于阿里云数据库团队，主要负责阿里云PostgreSQL产品线（包括RDS PG，PPAS，HDB PG，PolarDB for PG）的产品推广、应用落地与生态构建。  
+现任职于阿里云数据库团队，主要负责阿里云PostgreSQL产品线（包括[RDS PG](https://www.aliyun.com/product/rds/postgresql) ， [PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [HDB PG（Greenplum）](https://www.aliyun.com/product/gpdb) ， POLARDB PG(研发中) ， [ADAM+PPAS（平滑去O）](https://promotion.aliyun.com/ntms/act/ppasadam.html)）的产品推广、应用落地与生态构建。     
   
 为阿里巴巴内部、专有云、公有云等客户提供架构、方案设计、优化、POC、用户与行业需求挖掘与提炼、行业方案沉淀与推广支持。为产品的前线销售、架构师、后端研发团队提供支持。   
   
@@ -34,11 +37,15 @@ DBGeeK联盟 专家团成员。
     
 - 积极与社区互动，帮助开源社区提交安全风险建议，BUG，改进建议，性能测试，功能测试，案例适配等。    
     
-- 坚持撰写技术文章，涵盖“开源产品使用、案例、应用开发实践、内核开发实践、管理实践、调优实践”等数据库生命周期相关文档，已超过3000篇。    
+- 长期坚持撰写技术文章，涵盖“开源产品使用、案例、应用开发实践、内核开发实践、管理实践、调优实践”等数据库生命周期相关文档，已超过3000篇。    
     
 - 拥抱开源，公开联系方式，微信好友已接近3000，接收微信、邮件等来自五湖四海技术圈朋友发来的技术咨询。涉及行业（物联网、电商、生物、游戏、企业CRM、传统行业、ZF、物流、音视频、BI、证券、金融、通讯）等。涉及技术点（搜索（ADHoc, 全文检索、模糊、数组）、相似搜索（图片、文本、数组）、用户画像、空间、时空、挖掘、图式搜索、流计算、秒杀、树结构、非结构化、单元化部署、sharding）等。    
            
 [《PostgreSQL、Greenplum 《如来神掌》》](../201706/20170601_02.md)一文集案例、管理、优化于一身，是CTO、架构师、开发者、DBA不可多得的口袋书。         
+  
+[《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、数据库原理 - 含学习资料、学习视频》](../201801/20180121_01.md)    
+  
+[《Oracle DBA 转型 PostgreSQL,Greenplum 学习规划》](../201804/20180425_01.md)  
       
 拜谢来自五湖四海的朋友、公司领导和同事、各大技术社区和平台对PostgreSQL给予的支持和帮助，PostgreSQL的发展离不开社会各界的支持。         
       
@@ -52,4 +59,10 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
       
 愿景 -- 公益是一辈子的事，I'm digoal, just do it。      
       
-GIT: https://github.com/digoal/   
+[个人GIT](https://github.com/digoal/blog/blob/master/README.md)  
+  
+个人微信，欢迎交流    
+  
+![pic](../pic/digoal_weixin.jpg)  
+  
+  

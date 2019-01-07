@@ -42,6 +42,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201901/20190107_02.md   [《为什么pg_basebackup或pg_start_backup好像hang住确没有开始拷贝文件 - checkpoint 的几种调度(checkpoint_completion_target)》](201901/20190107_02.md)  
+##### 201901/20190107_01.md   [《为什么高并发小事务, unlogged table不比logged table快多少? - commit wal log》](201901/20190107_01.md)  
 ##### 201901/20190105_02.md   [《[转载] PostgreSQL HA patroni》](201901/20190105_02.md)  
 ##### 201901/20190105_01.md   [《PostgreSQL 2天培训大纲》](201901/20190105_01.md)  
 ----  
@@ -596,8 +598,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201711/20171107_43.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 42 - (OLTP+OLAP) unlogged table 不含索引多表批量写入》](201711/20171107_43.md)  
 ##### 201711/20171107_42.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 41 - (OLTP+OLAP) 含索引多表批量写入》](201711/20171107_42.md)  
 ##### 201711/20171107_41.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 40 - (OLTP+OLAP) 不含索引多表批量写入》](201711/20171107_41.md)  
-##### 201711/20171107_40.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 39 - (OLTP+OLAP) 含索引多表单点写入》](201711/20171107_40.md)  
-##### 201711/20171107_39.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 38 - (OLTP+OLAP) 不含索引多表单点写入》](201711/20171107_39.md)  
+##### 201711/20171107_40.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 39 - (OLTP+OLAP) logged & unlogged table 含索引多表单点写入》](201711/20171107_40.md)  
+##### 201711/20171107_39.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 38 - (OLTP+OLAP) logged & unlogged table 不含索引多表单点写入》](201711/20171107_39.md)  
 ##### 201711/20171107_38.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 37 - (OLTP+OLAP) 含索引单表批量写入》](201711/20171107_38.md)  
 ##### 201711/20171107_37.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 36 - (OLTP+OLAP) 不含索引单表批量写入》](201711/20171107_37.md)  
 ##### 201711/20171107_36.md   [《HTAP数据库 PostgreSQL 场景与性能测试之 35 - (OLTP+OLAP) 含索引单表单点写入》](201711/20171107_36.md)  

@@ -42,6 +42,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201901/20190109_01.md   [《PostgreSQL native partition 分区表性能优化之 - 动态SQL+服务端绑定变量》](201901/20190109_01.md)  
 ##### 201901/20190107_02.md   [《为什么pg_basebackup或pg_start_backup好像hang住确没有开始拷贝文件 - checkpoint 的几种调度(checkpoint_completion_target)》](201901/20190107_02.md)  
 ##### 201901/20190107_01.md   [《为什么高并发小事务, unlogged table不比logged table快多少? - commit wal log》](201901/20190107_01.md)  
 ##### 201901/20190105_02.md   [《[转载] PostgreSQL HA patroni》](201901/20190105_02.md)  

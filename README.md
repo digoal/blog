@@ -42,8 +42,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201901/20190112_01.md   [《PostgreSQL 大宽表，全列索引，高并发合并写入(insert into on conflict, upsert, merge insert) - 实时adhoc query》](201901/20190112_01.md)  
 ##### 201901/20190111_02.md   [《阿里云rds PG, PPAS PostgreSQL 同实例，跨库数据传输、访问(postgres_fdw 外部表)》](201901/20190111_02.md)  
-##### 201901/20190111_01.md   [《PostgreSQL 分区表如何支持多列唯一 - 枚举、hash哈希 分区, 多列唯一, insert into on conflict, update, merge insert》](201901/20190111_01.md)  
+##### 201901/20190111_01.md   [《PostgreSQL 分区表如何支持多列唯一 - 枚举、hash哈希 分区, 多列唯一, insert into on conflict, update, upsert, merge insert》](201901/20190111_01.md)  
 ##### 201901/20190109_01.md   [《PostgreSQL native partition 分区表性能优化之 - 动态SQL+服务端绑定变量》](201901/20190109_01.md)  
 ##### 201901/20190107_02.md   [《为什么pg_basebackup或pg_start_backup好像hang住确没有开始拷贝文件 - checkpoint 的几种调度(checkpoint_completion_target)》](201901/20190107_02.md)  
 ##### 201901/20190107_01.md   [《为什么高并发小事务, unlogged table不比logged table快多少? - commit wal log》](201901/20190107_01.md)  

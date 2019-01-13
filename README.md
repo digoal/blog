@@ -42,9 +42,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201901/20190113_01.md   [《PostgreSQL Oracle 兼容性之 - nested table》](201901/20190113_01.md)  
 ##### 201901/20190112_01.md   [《PostgreSQL 大宽表，全列索引，高并发合并写入(insert into on conflict, upsert, merge insert) - 实时adhoc query》](201901/20190112_01.md)  
 ##### 201901/20190111_02.md   [《阿里云rds PG, PPAS PostgreSQL 同实例，跨库数据传输、访问(postgres_fdw 外部表)》](201901/20190111_02.md)  
-##### 201901/20190111_01.md   [《PostgreSQL 分区表如何支持多列唯一 - 枚举、hash哈希 分区, 多列唯一, insert into on conflict, update, upsert, merge insert》](201901/20190111_01.md)  
+##### 201901/20190111_01.md   [《PostgreSQL 分区表如何支持多列唯一约束 - 枚举、hash哈希 分区, 多列唯一, insert into on conflict, update, upsert, merge insert》](201901/20190111_01.md)  
 ##### 201901/20190109_01.md   [《PostgreSQL native partition 分区表性能优化之 - 动态SQL+服务端绑定变量》](201901/20190109_01.md)  
 ##### 201901/20190107_02.md   [《为什么pg_basebackup或pg_start_backup好像hang住确没有开始拷贝文件 - checkpoint 的几种调度(checkpoint_completion_target)》](201901/20190107_02.md)  
 ##### 201901/20190107_01.md   [《为什么高并发小事务, unlogged table不比logged table快多少? - commit wal log》](201901/20190107_01.md)  
@@ -500,7 +501,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201801/20180122_03.md   [《PostgreSQL 商用版本EPAS(阿里云ppas(Oracle 兼容版)) - 分区表性能优化 (堪比pg_pathman)》](201801/20180122_03.md)  
 ##### 201801/20180122_02.md   [《PostgreSQL 范围过滤 + 其他字段排序OFFSET LIMIT(多字段区间过滤)的优化与加速》](201801/20180122_02.md)  
 ##### 201801/20180122_01.md   [《学习 PostgreSQL Frontend/Backend protocol (通信协议)》](201801/20180122_01.md)  
-##### 201801/20180121_01.md   [《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、数据库原理、学习资料、学习视频 - 珍藏级》](201801/20180121_01.md)  
+##### 201801/20180121_01.md   [《阿里云 PostgreSQL生态；PG 案例、开发管理实践、原理、学习资料、视频；PG天天象上沙龙全程记录 - 珍藏级》](201801/20180121_01.md)  
 ##### 201801/20180119_04.md   [《PostgreSQL 10 自定义并行计算聚合函数的原理与实践 - (含array_agg合并多个数组为单个一元数组的例子)》](201801/20180119_04.md)  
 ##### 201801/20180119_03.md   [《PostgreSQL bitmap scan的IO放大的原理解释和优化》](201801/20180119_03.md)  
 ##### 201801/20180119_02.md   [《用PostgreSQL 处理 指纹 数据》](201801/20180119_02.md)  

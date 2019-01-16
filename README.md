@@ -42,6 +42,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201901/20190116_01.md   [《地理位置画像、连锁店圈人、地理围栏圈人、多地圈选、multi-polygon圈选、多点圈选》](201901/20190116_01.md)  
 ##### 201901/20190113_01.md   [《PostgreSQL Oracle 兼容性之 - nested table》](201901/20190113_01.md)  
 ##### 201901/20190112_01.md   [《PostgreSQL 大宽表，全列索引，高并发合并写入(insert into on conflict, upsert, merge insert) - 实时adhoc query》](201901/20190112_01.md)  
 ##### 201901/20190111_02.md   [《阿里云rds PG, PPAS PostgreSQL 同实例，跨库数据传输、访问(postgres_fdw 外部表)》](201901/20190111_02.md)  

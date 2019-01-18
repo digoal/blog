@@ -42,6 +42,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201901/20190118_02.md   [《PostgreSQL rc,rr,ssi 隔离级别与性能对比 - 高隔离级别损耗性测试》](201901/20190118_02.md)  
+##### 201901/20190118_01.md   [《转 PostgreSQL 认证考试(商业版本EDB enterpriseDB认证考试) 指南》](201901/20190118_01.md)  
 ##### 201901/20190116_01.md   [《地理位置画像、连锁店圈人、地理围栏圈人、多地圈选、multi-polygon圈选、多点圈选》](201901/20190116_01.md)  
 ##### 201901/20190113_01.md   [《PostgreSQL Oracle 兼容性之 - nested table》](201901/20190113_01.md)  
 ##### 201901/20190112_01.md   [《PostgreSQL 大宽表，全列索引，高并发合并写入(insert into on conflict, upsert, merge insert) - 实时adhoc query》](201901/20190112_01.md)  

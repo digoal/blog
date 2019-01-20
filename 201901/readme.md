@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190120_03.md   [《PostgreSQL 时间点恢复（PITR）在异步流复制主从模式下，如何避免主备切换后PITR恢复走错时间线(timeline , history , partial , restore_command , recovery.conf)》](20190120_03.md)  
 ##### 20190120_01.md   [《PostgreSQL 高并发应用数据库设计与优化实践 PPT》](20190120_01.md)  
 ##### 20190118_02.md   [《PostgreSQL rc,rr,ssi 隔离级别与性能对比 - 高隔离级别损耗性测试》](20190118_02.md)  
 ##### 20190118_01.md   [《转 PostgreSQL 认证考试(商业版本EDB enterpriseDB认证考试) 指南》](20190118_01.md)  

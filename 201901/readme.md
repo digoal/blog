@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190123_02.md   [《PPAS(enterprisedb)(PG Oracle兼容版) 10以及以前版本分区表的使用，分区表索引的创建》](20190123_02.md)  
 ##### 20190123_01.md   [《PostgreSQL 权限 list 插件 pg_permissions》](20190123_01.md)  
 ##### 20190122_01.md   [《PostgreSQL 逻辑复制、增量复制、逻辑订阅、增量订阅中间件 amazonriver - HelloBike开源》](20190122_01.md)  
 ##### 20190120_03.md   [《PostgreSQL 时间点恢复（PITR）在异步流复制主从模式下，如何避免主备切换后PITR恢复走错时间线(timeline , history , partial , restore_command , recovery.conf)》](20190120_03.md)  

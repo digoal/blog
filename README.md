@@ -42,6 +42,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201901/20190128_01.md   [《[转载] HACKING POSTGRESQL 内核》](201901/20190128_01.md)  
 ##### 201901/20190127_01.md   [《PostgreSQL 双节点流复制如何同时保证可用性、可靠性(rpo,rto) - （半同步，自动降级方法实践）》](201901/20190127_01.md)  
 ##### 201901/20190125_02.md   [《PostgreSQL Oracle 兼容性之 - performance insight - AWS performance insight 理念与实现解读 - 珍藏级》](201901/20190125_02.md)  
 ##### 201901/20190125_01.md   [《阿里云RDS PG 10 HA版 - 使用postgres_fdw外部表插件 - 实例内跨库访问其他库的表》](201901/20190125_01.md)  

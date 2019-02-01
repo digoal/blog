@@ -42,6 +42,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201902/20190201_03.md   [《PostgreSQL 11 内核优化 - 降低vacuum cleanup阶段index scan概率 ( vacuum_cleanup_index_scale_factor , skip index vacuum cleanup stage)》](201902/20190201_03.md)  
+##### 201902/20190201_02.md   [《PostgreSQL 谁堵塞了谁（锁等待检测）- pg_blocking_pids, pg_safe_snapshot_blocking_pids》](201902/20190201_02.md)  
 ##### 201902/20190201_01.md   [《PostgreSQL 通过SQL接口关闭、重启数据库》](201902/20190201_01.md)  
 ----  
 ##### 201901/20190131_01.md   [《PostgreSQL 普通表在线转换为分区表 - online exchange to partition table》](201901/20190131_01.md)  

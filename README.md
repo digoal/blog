@@ -42,6 +42,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201902/20190211_02.md   [《[转] PostgreSQL 轻量级周边工具 pg_lightool》](201902/20190211_02.md)  
+##### 201902/20190211_01.md   [《[转] PG wal日志解析工具功能增强并更名为WalMiner》](201902/20190211_01.md)  
 ##### 201902/20190205_01.md   [《KEY 管理 - kms (Key management services) , hsm (hardware security modules) , hsm aas》](201902/20190205_01.md)  
 ##### 201902/20190203_02.md   [《Linux vnc server, vnc viewer(远程图形桌面)使用》](201902/20190203_02.md)  
 ##### 201902/20190203_01.md   [《xDB Replication Server - PostgreSQL, MySQL, Oracle, SQL Server, PPAS 全量、增量(redo log based, or trigger based)同步（支持single-master, mult-master同步, 支持DDL）》](201902/20190203_01.md)  

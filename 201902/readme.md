@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190213_02.md   [《PostgreSQL 数据库数据文件BLOCK一致性校验、备份集恢复后的有效性快速校验 - pg_verify_checksums》](20190213_02.md)  
 ##### 20190213_01.md   [《PostgreSQL Oracle 兼容性 - Oracle 19c 新特性在PostgreSQL中的使用》](20190213_01.md)  
 ##### 20190211_03.md   [《linux 内存文件系统使用 - tmpfs, ramfs, shmfs》](20190211_03.md)  
 ##### 20190211_02.md   [《[转] PostgreSQL 轻量级周边工具 pg_lightool》](20190211_02.md)  

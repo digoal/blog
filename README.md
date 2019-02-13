@@ -42,6 +42,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201902/20190213_02.md   [《PostgreSQL 数据库数据文件BLOCK一致性校验、备份集恢复后的有效性快速校验 - pg_verify_checksums》](201902/20190213_02.md)  
 ##### 201902/20190213_01.md   [《PostgreSQL Oracle 兼容性 - Oracle 19c 新特性在PostgreSQL中的使用》](201902/20190213_01.md)  
 ##### 201902/20190211_03.md   [《linux 内存文件系统使用 - tmpfs, ramfs, shmfs》](201902/20190211_03.md)  
 ##### 201902/20190211_02.md   [《[转] PostgreSQL 轻量级周边工具 pg_lightool》](201902/20190211_02.md)  

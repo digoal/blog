@@ -2,7 +2,8 @@
   
 ### 文章列表  
 ----  
-##### 20190219_02.md   [《PostgreSQL 持续稳定使用的小技巧》](20190219_02.md)  
+##### 20190226_01.md   [《PostgreSQL 垃圾回收参数优化之 - maintenance_work_mem , autovacuum_work_mem》](20190226_01.md)  
+##### 20190219_02.md   [《PostgreSQL 持续稳定使用的小技巧 - 最佳实践、规约、规范》](20190219_02.md)  
 ##### 20190216_02.md   [《PostgreSQL 打印详细错误调用栈 - pg_backtrace》](20190216_02.md)  
 ##### 20190216_01.md   [《PostgreSQL 列存, 混合存储, 列存索引, 向量化存储, 混合索引 - OLTP OLAP OLXP HTAP 混合负载应用》](20190216_01.md)  
 ##### 20190213_02.md   [《PostgreSQL 数据库数据文件BLOCK一致性校验、备份集恢复后的有效性快速校验 - pg_verify_checksums》](20190213_02.md)  

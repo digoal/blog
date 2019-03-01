@@ -2,4 +2,4 @@
   
 ### 文章列表  
 ----  
-##### 20190301.md   [《PostgreSQL , EDB EPAS PPAS(兼容Oracle) , Oracle 对比（兼容性、特性优劣势）》](20190301.md)  
+##### 20190301.md   [《PostgreSQL , EDB EPAS PPAS(兼容Oracle) , Oracle 对比（兼容性、特性优劣势） - 企业去O,去IOE》](20190301.md)  

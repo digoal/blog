@@ -2,5 +2,6 @@
   
 ### 文章列表  
 ----  
+##### 20190304_01.md   [《PostgreSQL 谁堵塞了谁（锁等待检测）- pg_blocking_pids》](20190304_01.md)  
 ##### 20190303_01.md   [《PostgreSQL 知识图谱 (xmind, png格式)》](20190303_01.md)  
 ##### 20190301_01.md   [《PostgreSQL , EDB EPAS PPAS(兼容Oracle) , Oracle 对比（兼容性、特性优劣势） - 企业去O,去IOE》](20190301_01.md)  

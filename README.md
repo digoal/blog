@@ -42,6 +42,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190305_01.md   [《PostgreSQL PITR 任意时间点恢复过程中如何手工得到recovery需要的下一个WAL文件名 - 默认情况下restore_command自动获取》](201903/20190305_01.md)  
 ##### 201903/20190304_01.md   [《PostgreSQL 谁堵塞了谁（锁等待检测）- pg_blocking_pids》](201903/20190304_01.md)  
 ##### 201903/20190303_01.md   [《PostgreSQL 知识图谱 (xmind, png格式)》](201903/20190303_01.md)  
 ##### 201903/20190301_01.md   [《PostgreSQL , EDB EPAS PPAS(兼容Oracle) , Oracle 对比（兼容性、特性优劣势） - 企业去O,去IOE》](201903/20190301_01.md)  
@@ -67,8 +68,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201901/20190130_03.md   [《PostgreSQL 参数优先级讲解》](201901/20190130_03.md)  
 ##### 201901/20190130_02.md   [《PostgreSQL 数据库实例只读锁定（readonly） - 硬锁定，软锁定，解锁》](201901/20190130_02.md)  
 ##### 201901/20190130_01.md   [《PostgreSQL 如何让心跳永远不死，支持半同步自动同步、异步升降级 - udf 心跳》](201901/20190130_01.md)  
-##### 201901/20190129_01.md   [《PostgreSQL 使用逻辑decode实现异步主从切换后，时间线分歧变化量补齐》](201901/20190129_01.md)  
-##### 201901/20190128_02.md   [《PostgreSQL pg_rewind，时间线修复，脑裂修复 - 从库开启读写后，回退为只读从库。异步主从发生角色切换后，主库rewind为新主库的从库》](201901/20190128_02.md)  
+##### 201901/20190129_01.md   [《PostgreSQL 使用逻辑decode实现异步主从切换后，时间线分歧变化量补齐、修复》](201901/20190129_01.md)  
+##### 201901/20190128_02.md   [《PostgreSQL pg_rewind，时间线修复，脑裂修复，flashback - 从库开启读写后，回退为只读从库。异步主从发生角色切换后，主库rewind为新主库的从库》](201901/20190128_02.md)  
 ##### 201901/20190128_01.md   [《[转载] HACKING POSTGRESQL 内核》](201901/20190128_01.md)  
 ##### 201901/20190127_01.md   [《PostgreSQL 双节点流复制如何同时保证可用性、可靠性(rpo,rto) - （半同步，自动降级方法实践）》](201901/20190127_01.md)  
 ##### 201901/20190125_02.md   [《PostgreSQL Oracle 兼容性之 - performance insight - AWS performance insight 理念与实现解读 - 珍藏级》](201901/20190125_02.md)  
@@ -76,7 +77,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201901/20190123_02.md   [《PPAS(enterprisedb)(PG Oracle兼容版) 10以及以前版本分区表的使用，分区表索引的创建》](201901/20190123_02.md)  
 ##### 201901/20190123_01.md   [《PostgreSQL 权限 list 插件 pg_permissions》](201901/20190123_01.md)  
 ##### 201901/20190122_01.md   [《PostgreSQL 逻辑复制、增量复制、逻辑订阅、增量订阅中间件 amazonriver - HelloBike开源》](201901/20190122_01.md)  
-##### 201901/20190120_03.md   [《PostgreSQL 时间点恢复（PITR）在异步流复制主从模式下，如何避免主备切换后PITR恢复走错时间线(timeline , history , partial , restore_command , recovery.conf)》](201901/20190120_03.md)  
+##### 201901/20190120_03.md   [《PostgreSQL 时间点恢复（PITR）在异步流复制主从模式下，如何避免主备切换后PITR恢复(备库、容灾节点、只读节点)走错时间线(timeline , history , partial , restore_command , recovery.conf)》](201901/20190120_03.md)  
 ##### 201901/20190120_01.md   [《PostgreSQL 高并发应用数据库设计与优化实践 PPT》](201901/20190120_01.md)  
 ##### 201901/20190118_02.md   [《PostgreSQL rc,rr,ssi 隔离级别与性能对比 - 高隔离级别损耗性测试》](201901/20190118_02.md)  
 ##### 201901/20190118_01.md   [《转 PostgreSQL 认证考试(商业版本EDB enterpriseDB认证考试) 指南》](201901/20190118_01.md)  

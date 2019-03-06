@@ -14,6 +14,10 @@
   
 [《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](201801/20180121_01.md) 
   
+以上活动视频:  
+https://edu.aliyun.com/course/836/lesson/list
+https://yq.aliyun.com/live/582
+  
 ### PG社区微信、微博、个人微信二维码  
 ![pic](./pic/pg_weixin.jpg)  
 ![pic](./pic/pg_weibo.jpg)  

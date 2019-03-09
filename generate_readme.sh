@@ -27,6 +27,7 @@ echo "[《PostgreSQL 生态、案例、开发实践、管理实践、原理、�
 echo "  "  >> ./README.md
 echo "以上活动视频:  "   >> ./README.md
 echo "https://edu.aliyun.com/course/836/lesson/list"  >> ./README.md
+echo "  "  >> ./README.md
 echo "https://yq.aliyun.com/live/582"  >> ./README.md   
 echo "  "  >> ./README.md
 echo "### PG社区微信、微博、个人微信二维码  " >> ./README.md

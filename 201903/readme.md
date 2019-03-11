@@ -3,7 +3,7 @@
 ### 文章列表  
 ----  
 ##### 20190311_01.md   [《使用 ora_migrator + oracle_fdw 迁移Oracle 到 PostgreSQL》](20190311_01.md)  
-##### 20190310_02.md   [《这可能是目前Oracle兼容性最好的数据库 - 十五年Oracle兼容性淬炼》](20190310_02.md)  
+##### 20190310_02.md   [《这可能是目前Oracle兼容性最好的数据库 - 十四年Oracle兼容性淬炼》](20190310_02.md)  
 ##### 20190310_01.md   [《PostgreSQL PostGIS 性能提升 - by new GEOS代码》](20190310_01.md)  
 ##### 20190309_04.md   [《PostgreSQL 12 preview - CTE 增强，支持用户语法层控制 materialized 优化》](20190309_04.md)  
 ##### 20190309_03.md   [《PostgreSQL 12 preview - 可靠性提升 - data_sync_retry 消除os层write back failed status不可靠的问题》](20190309_03.md)  

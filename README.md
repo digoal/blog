@@ -4,6 +4,7 @@
   
 下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
   
+  [两天培训](master/201901/20190105_01.md)
 1、PostgreSQL 9.3 数据库管理与优化 视频4天  
 2、PostgreSQL 9.3 数据库管理与优化 视频5天  
 3、PostgreSQL 9.1 数据库管理与开发 视频1天  

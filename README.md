@@ -47,6 +47,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190316_01.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Subquery/CTE Push-Pull Execution》](201903/20190316_01.md)  
 ##### 201903/20190311_01.md   [《使用 ora_migrator + oracle_fdw 迁移Oracle 到 PostgreSQL》](201903/20190311_01.md)  
 ##### 201903/20190310_02.md   [《这可能是目前Oracle兼容性最好的数据库 - 十四年Oracle兼容性淬炼》](201903/20190310_02.md)  
 ##### 201903/20190310_01.md   [《PostgreSQL PostGIS 性能提升 - by new GEOS代码》](201903/20190310_01.md)  

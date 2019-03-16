@@ -2,6 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20190316_10.md   [《PostgreSQL 并行计算解说 之8 - parallel sort》](20190316_10.md)  
+##### 20190316_09.md   [《PostgreSQL 并行计算解说 之7 - parallel create index》](20190316_09.md)  
+##### 20190316_08.md   [《PostgreSQL 并行计算解说 之6 - parallel CREATE MATERIALIZED VIEW》](20190316_08.md)  
+##### 20190316_07.md   [《PostgreSQL 并行计算解说 之5 - parallel create table as》](20190316_07.md)  
+##### 20190316_06.md   [《PostgreSQL 并行计算解说 之4 - parallel select into》](20190316_06.md)  
+##### 20190316_05.md   [《PostgreSQL 并行计算解说 之3 - parallel agg》](20190316_05.md)  
+##### 20190316_04.md   [《PostgreSQL 并行计算解说 之2 - parallel filter》](20190316_04.md)  
 ##### 20190316_03.md   [《PostgreSQL 并行计算解说 之1 - parallel seq scan》](20190316_03.md)  
 ##### 20190316_02.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Distributed Query Planner、Executor (Real-time Executor, Router Executor, Task Tracker Executor)》](20190316_02.md)  
 ##### 20190316_01.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Subquery/CTE Push-Pull Execution》](20190316_01.md)  

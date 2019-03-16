@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190316_02.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Distributed Query Planner、Executor (Real-time Executor, Router Executor, Task Tracker Executor)》](20190316_02.md)  
 ##### 20190316_01.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Subquery/CTE Push-Pull Execution》](20190316_01.md)  
 ##### 20190311_01.md   [《使用 ora_migrator + oracle_fdw 迁移Oracle 到 PostgreSQL》](20190311_01.md)  
 ##### 20190310_02.md   [《这可能是目前Oracle兼容性最好的数据库 - 十四年Oracle兼容性淬炼》](20190310_02.md)  

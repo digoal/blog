@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190317_04.md   [《PostgreSQL 并行计算解说 之12 - parallel in rc,rr 隔离级别》](20190317_04.md)  
 ##### 20190317_03.md   [《PostgreSQL 并行计算解说 之11 - parallel gather, gather merge》](20190317_03.md)  
 ##### 20190317_02.md   [《PostgreSQL 并行计算解说 之10 - parallel 自定义并行函数(UDF)》](20190317_02.md)  
 ##### 20190317_01.md   [《PostgreSQL 并行计算解说 之9 - parallel 自定义并行聚合》](20190317_01.md)  

@@ -47,6 +47,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190317_13.md   [《PostgreSQL 并行计算解说 之21 - parallel partition table wise agg》](201903/20190317_13.md)  
+##### 201903/20190317_12.md   [《PostgreSQL 并行计算解说 之20 - parallel partition table wise join》](201903/20190317_12.md)  
 ##### 201903/20190317_11.md   [《PostgreSQL 并行计算解说 之19 - parallel hash join》](201903/20190317_11.md)  
 ##### 201903/20190317_10.md   [《PostgreSQL 并行计算解说 之18 - parallel merge join》](201903/20190317_10.md)  
 ##### 201903/20190317_09.md   [《PostgreSQL 并行计算解说 之17 - parallel nestloop join》](201903/20190317_09.md)  
@@ -66,7 +68,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201903/20190316_05.md   [《PostgreSQL 并行计算解说 之3 - parallel agg》](201903/20190316_05.md)  
 ##### 201903/20190316_04.md   [《PostgreSQL 并行计算解说 之2 - parallel filter》](201903/20190316_04.md)  
 ##### 201903/20190316_03.md   [《PostgreSQL 并行计算解说 之1 - parallel seq scan》](201903/20190316_03.md)  
-##### 201903/20190316_02.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Distributed Query Planner、Executor (Real-time Executor, Router Executor, Task Tracker Executor)》](201903/20190316_02.md)  
+##### 201903/20190316_02.md   [《PostgreSQL sharding extension citus 优化器 Query Processing 之 - Distributed Query Planner、Executor (Real-time Executor, Router Executor, Task Tracker Executor)》](201903/20190316_02.md)  
 ##### 201903/20190316_01.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Subquery/CTE Push-Pull Execution》](201903/20190316_01.md)  
 ##### 201903/20190311_01.md   [《使用 ora_migrator + oracle_fdw 迁移Oracle 到 PostgreSQL》](201903/20190311_01.md)  
 ##### 201903/20190310_02.md   [《这可能是目前Oracle兼容性最好的数据库 - 十四年Oracle兼容性淬炼》](201903/20190310_02.md)  

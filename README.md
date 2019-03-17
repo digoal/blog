@@ -47,6 +47,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190317_11.md   [《PostgreSQL 并行计算解说 之19 - parallel hash join》](201903/20190317_11.md)  
+##### 201903/20190317_10.md   [《PostgreSQL 并行计算解说 之18 - parallel merge join》](201903/20190317_10.md)  
+##### 201903/20190317_09.md   [《PostgreSQL 并行计算解说 之17 - parallel nestloop join》](201903/20190317_09.md)  
 ##### 201903/20190317_08.md   [《PostgreSQL 并行计算解说 之16 - parallel index only scan》](201903/20190317_08.md)  
 ##### 201903/20190317_07.md   [《PostgreSQL 并行计算解说 之15 - parallel bitmap scan》](201903/20190317_07.md)  
 ##### 201903/20190317_06.md   [《PostgreSQL 并行计算解说 之14 - parallel index scan》](201903/20190317_06.md)  

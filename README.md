@@ -47,6 +47,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190317_05.md   [《PostgreSQL 并行计算解说 之13 - parallel OLAP : 中间结果 parallel with unlogged table》](201903/20190317_05.md)  
 ##### 201903/20190317_04.md   [《PostgreSQL 并行计算解说 之12 - parallel in rc,rr 隔离级别》](201903/20190317_04.md)  
 ##### 201903/20190317_03.md   [《PostgreSQL 并行计算解说 之11 - parallel gather, gather merge》](201903/20190317_03.md)  
 ##### 201903/20190317_02.md   [《PostgreSQL 并行计算解说 之10 - parallel 自定义并行函数(UDF)》](201903/20190317_02.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190317_16.md   [《PostgreSQL 并行计算解说 之23 - parallel union all》](20190317_16.md)  
 ##### 20190317_15.md   [《PostgreSQL 并行计算解说 之23 - parallel append merge》](20190317_15.md)  
 ##### 20190317_14.md   [《PostgreSQL 并行计算解说 之22 - parallel append》](20190317_14.md)  
 ##### 20190317_13.md   [《PostgreSQL 并行计算解说 之21 - parallel partition table wise agg》](20190317_13.md)  

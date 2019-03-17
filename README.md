@@ -47,6 +47,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190317_02.md   [《PostgreSQL 并行计算解说 之10 - parallel 自定义并行函数(UDF)》](201903/20190317_02.md)  
+##### 201903/20190317_01.md   [《PostgreSQL 并行计算解说 之9 - parallel 自定义并行聚合》](201903/20190317_01.md)  
 ##### 201903/20190316_10.md   [《PostgreSQL 并行计算解说 之8 - parallel sort》](201903/20190316_10.md)  
 ##### 201903/20190316_09.md   [《PostgreSQL 并行计算解说 之7 - parallel create index》](201903/20190316_09.md)  
 ##### 201903/20190316_08.md   [《PostgreSQL 并行计算解说 之6 - parallel CREATE MATERIALIZED VIEW》](201903/20190316_08.md)  

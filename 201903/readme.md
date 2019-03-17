@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190317_18.md   [《PostgreSQL 并行计算解说 之25 - parallel FDW scan (并行访问多个外部表) with parallel append (FDW must with IsForeignScanParallelSafe)》](20190317_18.md)  
 ##### 20190317_17.md   [《PostgreSQL 并行计算解说 之24 - parallel CTE (Common Table Express)》](20190317_17.md)  
 ##### 20190317_16.md   [《PostgreSQL 并行计算解说 之23 - parallel union all》](20190317_16.md)  
 ##### 20190317_15.md   [《PostgreSQL 并行计算解说 之23 - parallel append merge》](20190317_15.md)  

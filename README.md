@@ -47,6 +47,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190317_15.md   [《PostgreSQL 并行计算解说 之23 - parallel append merge [waiting PG 12 or later]》](201903/20190317_15.md)  
+##### 201903/20190317_14.md   [《PostgreSQL 并行计算解说 之22 - parallel append》](201903/20190317_14.md)  
 ##### 201903/20190317_13.md   [《PostgreSQL 并行计算解说 之21 - parallel partition table wise agg》](201903/20190317_13.md)  
 ##### 201903/20190317_12.md   [《PostgreSQL 并行计算解说 之20 - parallel partition table wise join》](201903/20190317_12.md)  
 ##### 201903/20190317_11.md   [《PostgreSQL 并行计算解说 之19 - parallel hash join》](201903/20190317_11.md)  

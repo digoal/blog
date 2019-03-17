@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20190317_08.md   [《PostgreSQL 并行计算解说 之16 - parallel index only scan》](20190317_08.md)  
+##### 20190317_07.md   [《PostgreSQL 并行计算解说 之15 - parallel bitmap scan》](20190317_07.md)  
 ##### 20190317_06.md   [《PostgreSQL 并行计算解说 之14 - parallel index scan》](20190317_06.md)  
 ##### 20190317_05.md   [《PostgreSQL 并行计算解说 之13 - parallel OLAP : 中间结果 parallel with unlogged table》](20190317_05.md)  
 ##### 20190317_04.md   [《PostgreSQL 并行计算解说 之12 - parallel in rc,rr 隔离级别》](20190317_04.md)  

@@ -47,6 +47,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190318_02.md   [《PostgreSQL 并行计算解说 之27 - parallel subquery》](201903/20190318_02.md)  
+##### 201903/20190318_01.md   [《PostgreSQL 并行计算解说 之26 - parallel gather | gathermerge - enable leader worker process》](201903/20190318_01.md)  
 ##### 201903/20190317_18.md   [《PostgreSQL 并行计算解说 之25 - parallel FDW scan (并行访问多个外部表) with parallel append (FDW must with IsForeignScanParallelSafe)》](201903/20190317_18.md)  
 ##### 201903/20190317_17.md   [《PostgreSQL 并行计算解说 之24 - parallel CTE (Common Table Express)》](201903/20190317_17.md)  
 ##### 201903/20190317_16.md   [《PostgreSQL 并行计算解说 之23 - parallel union all》](201903/20190317_16.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190318_03.md   [《PostgreSQL 统计信息(dbms_stats)导出，导入，锁定，替换》](20190318_03.md)  
 ##### 20190318_02.md   [《PostgreSQL 并行计算解说 之27 - parallel subquery》](20190318_02.md)  
 ##### 20190318_01.md   [《PostgreSQL 并行计算解说 之26 - parallel gather | gathermerge - enable leader worker process》](20190318_01.md)  
 ##### 20190317_18.md   [《PostgreSQL 并行计算解说 之25 - parallel FDW scan (并行访问多个外部表) with parallel append (FDW must with IsForeignScanParallelSafe)》](20190317_18.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20190319_01.md   [《PostgreSQL 并行计算解说 汇总》](20190319_01.md)  
+##### 20190318_04.md   [《PostgreSQL 复杂SQL优化器优化建议 - pg_plan_advsr》](20190318_04.md)  
 ##### 20190318_03.md   [《PostgreSQL 统计信息(dbms_stats)导出，导入，锁定，替换》](20190318_03.md)  
 ##### 20190318_02.md   [《PostgreSQL 并行计算解说 之27 - parallel subquery》](20190318_02.md)  
 ##### 20190318_01.md   [《PostgreSQL 并行计算解说 之26 - parallel gather | gathermerge - enable leader worker process》](20190318_01.md)  

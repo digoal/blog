@@ -47,6 +47,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190319_01.md   [《PostgreSQL 并行计算解说 汇总》](201903/20190319_01.md)  
+##### 201903/20190318_04.md   [《PostgreSQL 复杂SQL优化器优化建议 - pg_plan_advsr》](201903/20190318_04.md)  
 ##### 201903/20190318_03.md   [《PostgreSQL 统计信息(dbms_stats)导出，导入，锁定，替换》](201903/20190318_03.md)  
 ##### 201903/20190318_02.md   [《PostgreSQL 并行计算解说 之27 - parallel subquery》](201903/20190318_02.md)  
 ##### 201903/20190318_01.md   [《PostgreSQL 并行计算解说 之26 - parallel gather | gathermerge - enable leader worker process》](201903/20190318_01.md)  

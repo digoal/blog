@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190319_02.md   [《PostgreSQL 10 CLogControlLock 等待事件分析与优化 - hint bit, freeze, autovacuum, 风暴》](20190319_02.md)  
 ##### 20190319_01.md   [《PostgreSQL 并行计算解说 汇总》](20190319_01.md)  
 ##### 20190318_04.md   [《PostgreSQL 复杂SQL优化器优化建议 - pg_plan_advsr》](20190318_04.md)  
 ##### 20190318_03.md   [《PostgreSQL 统计信息(dbms_stats)导出，导入，锁定，替换》](20190318_03.md)  

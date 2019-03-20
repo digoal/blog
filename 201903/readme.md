@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190320_01.md   [《PostgreSQL 数组里面的元素，模糊搜索，模糊查询，like，前后百分号，正则查询，倒排索引》](20190320_01.md)  
 ##### 20190319_02.md   [《PostgreSQL 10 CLogControlLock 等待事件分析与优化 - hint bit, freeze, autovacuum, 风暴》](20190319_02.md)  
 ##### 20190319_01.md   [《PostgreSQL 并行计算解说 汇总》](20190319_01.md)  
 ##### 20190318_04.md   [《PostgreSQL 复杂SQL优化器优化建议 - pg_plan_advsr》](20190318_04.md)  

@@ -9,16 +9,12 @@
 3、PostgreSQL 9.1 数据库管理与开发 视频1天  
 4、PostgreSQL 9.3 数据库优化 视频3天  
 5、PostgreSQL 专题讲座 视频  
-6、[《PostgreSQL 多应用场景实践 - 含视频讲解》](201805/20180524_02.md) 
-7、[《PostgreSQL 2天培训大纲(包含Oracle迁移到PG的知识点) - 含视频讲解》](201901/20190105_01.md) 
-  
-### PostgreSQL, Greenplum 学习视频2  
-  
-[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](201801/20180121_01.md) 
-  
-PG天天象上活动视频:  
-https://edu.aliyun.com/course/836/lesson/list
-https://yq.aliyun.com/live/582
+6、[《PostgreSQL 多应用场景实践 - 含视频讲解》](201805/20180524_02.md)  
+7、[《PostgreSQL 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频讲解》](201901/20190105_01.md)  
+8、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频讲解》](201801/20180121_01.md)  
+9、PG天天象上活动视频:  
+https://edu.aliyun.com/course/836/lesson/list  
+https://yq.aliyun.com/live/582  
   
 ### PG社区微信、微博、个人微信二维码  
 ![pic](./pic/pg_weixin.jpg)  

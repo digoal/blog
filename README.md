@@ -1,6 +1,6 @@
 #### [About me](me/readme.md) 
   
-### PostgreSQL, Greenplum 学习视频1  
+### PostgreSQL, Greenplum 学习视频  
   
 下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
   
@@ -2154,6 +2154,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  
 ----  
+##### 197001/20190328_01.md   [《EDB EPAS, 社区PG, 某商业PG发行版 Oracle兼容性对比》](197001/20190328_01.md)  
 ##### 197001/20190311_03.md   [《2019，某开发者会议数据库市场调研统计》](197001/20190311_03.md)  
 ##### 197001/20190311_02.md   [《PostgreSQL hosted in cloud》](197001/20190311_02.md)  
 ##### 197001/20190302_01.md   [《[未完待续] 产品经理, 市场分析, 资源网站》](197001/20190302_01.md)  

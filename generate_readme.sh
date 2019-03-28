@@ -11,7 +11,7 @@
 > ./README.md
 echo "#### [About me](me/readme.md) " >> ./README.md
 echo "  "  >> ./README.md
-echo "### PostgreSQL, Greenplum 学习视频1  " >> ./README.md
+echo "### PostgreSQL, Greenplum 学习视频  " >> ./README.md
 echo "  "  >> ./README.md
 echo "下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  " >> ./README.md
 echo "  "  >> ./README.md

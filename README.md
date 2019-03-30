@@ -44,6 +44,13 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190330_09.md   [《PostgreSQL 12 preview - DROP OWNED BY xxx 删除xxx的所有对象》](201903/20190330_09.md)  
+##### 201903/20190330_08.md   [《PostgreSQL 12 preview - Delete empty pages during GiST VACUUM - 降低GiST索引膨胀概率》](201903/20190330_08.md)  
+##### 201903/20190330_07.md   [《PostgreSQL 12 preview - 事务特征继承 - commit | rollback and CHAIN》](201903/20190330_07.md)  
+##### 201903/20190330_06.md   [《PostgreSQL 12 preview - 支持列出 vacuum full, cluster 过程详情  pg_stat_progress_cluster》](201903/20190330_06.md)  
+##### 201903/20190330_05.md   [《PostgreSQL 12 preview - 自定义统计信息 - 支持mcv 多列高频词》](201903/20190330_05.md)  
+##### 201903/20190330_04.md   [《PostgreSQL 12 preview - 64bit xid, 规避freeze - FullTransactionId GetTopFullTransactionId GetCurrentFullTransactionId》](201903/20190330_04.md)  
+##### 201903/20190330_03.md   [《PostgreSQL 12 preview - Generated columns - 虚拟列（写时计算、读时计算）》](201903/20190330_03.md)  
 ##### 201903/20190330_02.md   [《PostgreSQL 12 preview - REINDEX CONCURRENTLY》](201903/20190330_02.md)  
 ##### 201903/20190330_01.md   [《PostgreSQL 12 preview - psql增强, \\dA 列出当前系统中的access method (table am, index am)》](201903/20190330_01.md)  
 ##### 201903/20190320_02.md   [《PostgreSQL 任意字段组合查询 - 含128字段，1亿记录，任意组合查询，性能》](201903/20190320_02.md)  

@@ -44,6 +44,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190330_01.md   [《PostgreSQL 12 preview - psql增强, \\dA 列出当前系统中的access method (table am, index am)》](201903/20190330_01.md)  
 ##### 201903/20190320_02.md   [《PostgreSQL 任意字段组合查询 - 含128字段，1亿记录，任意组合查询，性能》](201903/20190320_02.md)  
 ##### 201903/20190320_01.md   [《PostgreSQL 数组里面的元素，模糊搜索，模糊查询，like，前后百分号，正则查询，倒排索引》](201903/20190320_01.md)  
 ##### 201903/20190319_02.md   [《PostgreSQL 10 CLogControlLock 等待事件分析与优化 - hint bit, freeze, autovacuum, 风暴》](201903/20190319_02.md)  

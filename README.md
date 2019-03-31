@@ -44,6 +44,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190331_03.md   [《PostgreSQL 12 preview - 意义重大改进：增加一层access manager API - 支持 TABLE、INDEX AM(access method) - 为storage  pluggable 开路》](201903/20190331_03.md)  
 ##### 201903/20190331_02.md   [《PostgreSQL 12 preview - schema与database的抉择续 - standby drop schema,drop database加速 - standby 延迟优化 - batch to 9.4》](201903/20190331_02.md)  
 ##### 201903/20190331_01.md   [《PostgreSQL 12 preview - partitions pruned at plan time. 原生分区表性能提升23.5倍，已与pg_pathman持平。》](201903/20190331_01.md)  
 ##### 201903/20190330_09.md   [《PostgreSQL 12 preview - DROP OWNED BY xxx 删除xxx的所有对象》](201903/20190330_09.md)  

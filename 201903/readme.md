@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190331_08.md   [《PostgreSQL 12 preview - GiST 索引支持INCLUDE columns - 覆盖索引 - 类聚簇索引》](20190331_08.md)  
 ##### 20190331_07.md   [《PostgreSQL 12 preview - pgbench 自定义压测script支持一条SQL最多绑定256个变量》](20190331_07.md)  
 ##### 20190331_06.md   [《PostgreSQL 12 preview - SQL 2016 standards SQL/JSON features 支持》](20190331_06.md)  
 ##### 20190331_05.md   [《PostgreSQL 12 preview - pgbench 压测工具编程能力增强 - gset 支持SQL结果返回并存入变量使用》](20190331_05.md)  

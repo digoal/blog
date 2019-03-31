@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190331_15.md   [《PostgreSQL 12 preview - plan_cache_mode GUC，用户可设置plan cache模式. (每次生成plan OR 使用重复plan OR 自动选择plan cache mode)》](20190331_15.md)  
 ##### 20190331_14.md   [《PostgreSQL 12 preview - query rewrite API 增强 - Allow extensions to generate lossy index conditions - SupportRequestIndexCondition》](20190331_14.md)  
 ##### 20190331_13.md   [《PostgreSQL 12 preview - 支持 ctid nestloop join - 表自关联加速》](20190331_13.md)  
 ##### 20190331_12.md   [《PostgreSQL 12 preview - 自由设置 shared_memory_type (mmap, sysv, windows)》](20190331_12.md)  

@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20190331_14.md   [《PostgreSQL 12 preview - query rewrite API 增强 - Allow extensions to generate lossy index conditions - SupportRequestIndexCondition》](20190331_14.md)  
+##### 20190331_13.md   [《PostgreSQL 12 preview - 支持 ctid nestloop join - 表自关联加速》](20190331_13.md)  
+##### 20190331_12.md   [《PostgreSQL 12 preview - 自由设置 shared_memory_type (mmap, sysv, windows)》](20190331_12.md)  
+##### 20190331_11.md   [《PostgreSQL 12 preview - copy from 支持filter (WHERE)》](20190331_11.md)  
+##### 20190331_10.md   [《PostgreSQL 12 preview - vacuum analyze skip_locked》](20190331_10.md)  
+##### 20190331_09.md   [《PostgreSQL 12 preview - psql \\help 支持manual url 显示》](20190331_09.md)  
 ##### 20190331_08.md   [《PostgreSQL 12 preview - GiST 索引支持INCLUDE columns - 覆盖索引 - 类聚簇索引》](20190331_08.md)  
 ##### 20190331_07.md   [《PostgreSQL 12 preview - pgbench 自定义压测script支持一条SQL最多绑定256个变量》](20190331_07.md)  
 ##### 20190331_06.md   [《PostgreSQL 12 preview - SQL 2016 standards SQL/JSON features 支持》](20190331_06.md)  

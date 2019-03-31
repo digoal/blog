@@ -44,6 +44,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201903/20190331_01.md   [《PostgreSQL 12 preview - partitions pruned at plan time. 原生分区表性能提升23.5倍，已与pg_pathman持平。》](201903/20190331_01.md)  
 ##### 201903/20190330_09.md   [《PostgreSQL 12 preview - DROP OWNED BY xxx 删除xxx的所有对象》](201903/20190330_09.md)  
 ##### 201903/20190330_08.md   [《PostgreSQL 12 preview - Delete empty pages during GiST VACUUM - 降低GiST索引膨胀概率》](201903/20190330_08.md)  
 ##### 201903/20190330_07.md   [《PostgreSQL 12 preview - 事务特征继承 - commit | rollback and CHAIN》](201903/20190330_07.md)  

@@ -44,6 +44,14 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201904/20190405_07.md   [《PostgreSQL 12 preview - Add progress reporting for CLUSTER and VACUUM FULL》](201904/20190405_07.md)  
+##### 201904/20190405_06.md   [《PostgreSQL 12 preview - Add progress reporting to pg_checksums》](201904/20190405_06.md)  
+##### 201904/20190405_05.md   [《PostgreSQL 12 preview - Add wal_recycle and wal_init_zero GUCs 适配COW文件系统如ZFS》](201904/20190405_05.md)  
+##### 201904/20190405_04.md   [《PostgreSQL 12 preview - 分区表PK作为其他表的FK》](201904/20190405_04.md)  
+##### 201904/20190405_03.md   [《PostgreSQL 12 preview - pg_stat_database新增 block checksum 错误统计技术》](201904/20190405_03.md)  
+##### 201904/20190405_02.md   [《PostgreSQL 12 preview - SSL 连接新增功能 - Add new clientcert hba option verify-full》](201904/20190405_02.md)  
+##### 201904/20190405_01.md   [《PostgreSQL 12 preview - 调大默认autovacuum sleep间隔, 加速vacuum》](201904/20190405_01.md)  
+----  
 ##### 201903/20190331_15.md   [《PostgreSQL 12 preview - plan_cache_mode GUC，用户可设置plan cache模式. (每次生成plan OR 使用重复plan OR 自动选择plan cache mode)》](201903/20190331_15.md)  
 ##### 201903/20190331_14.md   [《PostgreSQL 12 preview - query rewrite API 增强 - Allow extensions to generate lossy index conditions - SupportRequestIndexCondition》](201903/20190331_14.md)  
 ##### 201903/20190331_13.md   [《PostgreSQL 12 preview - 支持 ctid nestloop join - 表自关联加速》](201903/20190331_13.md)  

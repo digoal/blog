@@ -11,7 +11,7 @@
 > ./README.md
 echo "#### [About me](me/readme.md) " >> ./README.md
 echo "  "  >> ./README.md
-echo "### PostgreSQL, Greenplum 学习视频1  " >> ./README.md
+echo "### PostgreSQL, Greenplum 学习视频  " >> ./README.md
 echo "  "  >> ./README.md
 echo "下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  " >> ./README.md
 echo "  "  >> ./README.md
@@ -20,15 +20,12 @@ echo "2、PostgreSQL 9.3 数据库管理与优化 视频5天  " >> ./README.md
 echo "3、PostgreSQL 9.1 数据库管理与开发 视频1天  " >> ./README.md
 echo "4、PostgreSQL 9.3 数据库优化 视频3天  " >> ./README.md
 echo "5、PostgreSQL 专题讲座 视频  " >> ./README.md
-echo "  "  >> ./README.md
-echo "### PostgreSQL, Greenplum 学习视频2  " >> ./README.md
-echo "  "  >> ./README.md
-echo "[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](201801/20180121_01.md) " >> ./README.md 
-echo "  "  >> ./README.md
-echo "以上活动视频:  "   >> ./README.md
-echo "https://edu.aliyun.com/course/836/lesson/list"  >> ./README.md
-echo "  "  >> ./README.md
-echo "https://yq.aliyun.com/live/582"  >> ./README.md   
+echo "6、[《PostgreSQL 多应用场景实践 - 含视频讲解》](201805/20180524_02.md)  " >> ./README.md 
+echo "7、[《PostgreSQL 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频讲解》](201901/20190105_01.md)  " >> ./README.md 
+echo "8、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频讲解》](201801/20180121_01.md)  " >> ./README.md 
+echo "9、PG天天象上活动视频:  "   >> ./README.md
+echo "https://edu.aliyun.com/course/836/lesson/list  "  >> ./README.md
+echo "https://yq.aliyun.com/live/582  "  >> ./README.md   
 echo "  "  >> ./README.md
 echo "### PG社区微信、微博、个人微信二维码  " >> ./README.md
 echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md

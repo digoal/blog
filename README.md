@@ -1,6 +1,6 @@
 #### [About me](me/readme.md) 
   
-### PostgreSQL, Greenplum 学习视频1  
+### PostgreSQL, Greenplum 学习视频  
   
 下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
   
@@ -11,15 +11,12 @@
 3、PostgreSQL 9.1 数据库管理与开发 视频1天  
 4、PostgreSQL 9.3 数据库优化 视频3天  
 5、PostgreSQL 专题讲座 视频  
-  
-### PostgreSQL, Greenplum 学习视频2  
-  
-[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](201801/20180121_01.md) 
-  
-以上活动视频:  
-https://edu.aliyun.com/course/836/lesson/list
-  
-https://yq.aliyun.com/live/582
+6、[《PostgreSQL 多应用场景实践 - 含视频讲解》](201805/20180524_02.md)  
+7、[《PostgreSQL 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频讲解》](201901/20190105_01.md)  
+8、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频讲解》](201801/20180121_01.md)  
+9、PG天天象上活动视频:  
+https://edu.aliyun.com/course/836/lesson/list  
+https://yq.aliyun.com/live/582  
   
 ### PG社区微信、微博、个人微信二维码  
 ![pic](./pic/pg_weixin.jpg)  
@@ -49,6 +46,84 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201904/20190409_05.md   [《PostgreSQL 12 preview - heap table末端垃圾page是否在vacuum时被回收可控 - vacuum_truncate》](201904/20190409_05.md)  
+##### 201904/20190409_04.md   [《PostgreSQL 12 preview - 支持replica slot复制(copy slot)》](201904/20190409_04.md)  
+##### 201904/20190409_03.md   [《PostgreSQL 12 preview - 分区表order by 分区键支持append(ordered scan partition, 避免merge sort)》](201904/20190409_03.md)  
+##### 201904/20190409_02.md   [《PostgreSQL 12 preview - libpq 增加参数 tcp_user_timeout ，连接异常关闭时会话占用时间可控（TCP_USER_TIMEOUT）》](201904/20190409_02.md)  
+##### 201904/20190409_01.md   [《PostgreSQL 12 preview - psql 快捷命令 \\dP 列出分区表》](201904/20190409_01.md)  
+##### 201904/20190405_10.md   [《PostgreSQL ssl - Where and when you need a root.crt file》](201904/20190405_10.md)  
+##### 201904/20190405_09.md   [《PostgreSQL 12 preview - 支持SQL采样比例设置 - Log all statements from a sample of transactions》](201904/20190405_09.md)  
+##### 201904/20190405_08.md   [《PostgreSQL 12 preview - EXPLAIN支持输出settings（优化器相关设置）》](201904/20190405_08.md)  
+##### 201904/20190405_07.md   [《PostgreSQL 12 preview - Add progress reporting for CLUSTER and VACUUM FULL》](201904/20190405_07.md)  
+##### 201904/20190405_06.md   [《PostgreSQL 12 preview - Add progress reporting to pg_checksums》](201904/20190405_06.md)  
+##### 201904/20190405_05.md   [《PostgreSQL 12 preview - Add wal_recycle and wal_init_zero GUCs 适配COW文件系统如ZFS》](201904/20190405_05.md)  
+##### 201904/20190405_04.md   [《PostgreSQL 12 preview - 分区表PK作为其他表的FK》](201904/20190405_04.md)  
+##### 201904/20190405_03.md   [《PostgreSQL 12 preview - pg_stat_database新增 block checksum 错误统计技术》](201904/20190405_03.md)  
+##### 201904/20190405_02.md   [《PostgreSQL 12 preview - SSL 连接新增功能 - Add new clientcert hba option verify-full》](201904/20190405_02.md)  
+##### 201904/20190405_01.md   [《PostgreSQL 12 preview - 调大默认autovacuum sleep间隔, 加速vacuum》](201904/20190405_01.md)  
+----  
+##### 201903/20190331_15.md   [《PostgreSQL 12 preview - plan_cache_mode GUC，用户可设置plan cache模式. (每次生成plan OR 使用重复plan OR 自动选择plan cache mode)》](201903/20190331_15.md)  
+##### 201903/20190331_14.md   [《PostgreSQL 12 preview - query rewrite API 增强 - Allow extensions to generate lossy index conditions - SupportRequestIndexCondition》](201903/20190331_14.md)  
+##### 201903/20190331_13.md   [《PostgreSQL 12 preview - 支持 ctid nestloop join - 表自关联加速》](201903/20190331_13.md)  
+##### 201903/20190331_12.md   [《PostgreSQL 12 preview - 自由设置 shared_memory_type (mmap, sysv, windows)》](201903/20190331_12.md)  
+##### 201903/20190331_11.md   [《PostgreSQL 12 preview - copy from 支持filter (WHERE)》](201903/20190331_11.md)  
+##### 201903/20190331_10.md   [《PostgreSQL 12 preview - vacuum analyze skip_locked》](201903/20190331_10.md)  
+##### 201903/20190331_09.md   [《PostgreSQL 12 preview - psql \\help 支持manual url 显示》](201903/20190331_09.md)  
+##### 201903/20190331_08.md   [《PostgreSQL 12 preview - GiST 索引支持INCLUDE columns - 覆盖索引 - 类聚簇索引》](201903/20190331_08.md)  
+##### 201903/20190331_07.md   [《PostgreSQL 12 preview - pgbench 自定义压测script支持一条SQL最多绑定256个变量》](201903/20190331_07.md)  
+##### 201903/20190331_06.md   [《PostgreSQL 12 preview - SQL 2016 standards SQL/JSON features 支持》](201903/20190331_06.md)  
+##### 201903/20190331_05.md   [《PostgreSQL 12 preview - pgbench 压测工具编程能力增强 - gset 支持SQL结果返回并存入变量使用》](201903/20190331_05.md)  
+##### 201903/20190331_04.md   [《PostgreSQL 12 preview - 新增integerset数据结构，高效64-bit ints存储 - 内部算法 Simple-8b》](201903/20190331_04.md)  
+##### 201903/20190331_03.md   [《PostgreSQL 12 preview - 意义重大改进：增加一层access manager API - 支持 TABLE、INDEX AM(access method) - 为storage  pluggable 开路》](201903/20190331_03.md)  
+##### 201903/20190331_02.md   [《PostgreSQL 12 preview - schema与database的抉择续 - standby drop schema,drop database加速 - standby 延迟优化 - batch to 9.4》](201903/20190331_02.md)  
+##### 201903/20190331_01.md   [《PostgreSQL 12 preview - partitions pruned at plan time. 原生分区表性能提升23.5倍，已与pg_pathman持平。》](201903/20190331_01.md)  
+##### 201903/20190330_09.md   [《PostgreSQL 12 preview - DROP OWNED BY xxx 删除xxx的所有对象》](201903/20190330_09.md)  
+##### 201903/20190330_08.md   [《PostgreSQL 12 preview - Delete empty pages during GiST VACUUM - 降低GiST索引膨胀概率》](201903/20190330_08.md)  
+##### 201903/20190330_07.md   [《PostgreSQL 12 preview - 事务特征继承 - commit | rollback and CHAIN》](201903/20190330_07.md)  
+##### 201903/20190330_06.md   [《PostgreSQL 12 preview - 支持列出 vacuum full, cluster 过程详情  pg_stat_progress_cluster》](201903/20190330_06.md)  
+##### 201903/20190330_05.md   [《PostgreSQL 12 preview - 自定义统计信息 - 支持mcv 多列高频词》](201903/20190330_05.md)  
+##### 201903/20190330_04.md   [《PostgreSQL 12 preview - 64bit xid, 规避freeze - FullTransactionId GetTopFullTransactionId GetCurrentFullTransactionId》](201903/20190330_04.md)  
+##### 201903/20190330_03.md   [《PostgreSQL 12 preview - Generated columns - 虚拟列（写时计算、读时计算）》](201903/20190330_03.md)  
+##### 201903/20190330_02.md   [《PostgreSQL 12 preview - REINDEX CONCURRENTLY》](201903/20190330_02.md)  
+##### 201903/20190330_01.md   [《PostgreSQL 12 preview - psql增强, \\dA 列出当前系统中的access method (table am, index am)》](201903/20190330_01.md)  
+##### 201903/20190320_02.md   [《PostgreSQL 任意字段组合查询 - 含128字段，1亿记录，任意组合查询，性能》](201903/20190320_02.md)  
+##### 201903/20190320_01.md   [《PostgreSQL 数组里面的元素，模糊搜索，模糊查询，like，前后百分号，正则查询，倒排索引》](201903/20190320_01.md)  
+##### 201903/20190319_02.md   [《PostgreSQL 10 CLogControlLock 等待事件分析与优化 - hint bit, freeze, autovacuum, 风暴》](201903/20190319_02.md)  
+##### 201903/20190318_07.md   [《PostgreSQL 复杂SQL优化器优化建议 - pg_plan_advsr》](201903/20190318_07.md)  
+##### 201903/20190318_06.md   [《PostgreSQL 统计信息(dbms_stats)导出，导入，锁定，替换》](201903/20190318_06.md)  
+##### 201903/20190318_05.md   [《PostgreSQL 并行计算解说 汇总》](201903/20190318_05.md)  
+##### 201903/20190318_04.md   [《PostgreSQL 并行计算解说 之29 - parallel 递归查询, 树状查询, 异构查询, CTE, recursive CTE, connect by》](201903/20190318_04.md)  
+##### 201903/20190318_03.md   [《PostgreSQL 并行计算解说 之28 - parallel CREATE INDEX CONCURRENTLY - 不堵塞读写》](201903/20190318_03.md)  
+##### 201903/20190318_02.md   [《PostgreSQL 并行计算解说 之27 - parallel subquery》](201903/20190318_02.md)  
+##### 201903/20190318_01.md   [《PostgreSQL 并行计算解说 之26 - parallel gather | gathermerge - enable leader worker process》](201903/20190318_01.md)  
+##### 201903/20190317_18.md   [《PostgreSQL 并行计算解说 之25 - parallel FDW scan (并行访问多个外部表) with parallel append (FDW must with IsForeignScanParallelSafe)》](201903/20190317_18.md)  
+##### 201903/20190317_17.md   [《PostgreSQL 并行计算解说 之24 - parallel CTE (Common Table Express)》](201903/20190317_17.md)  
+##### 201903/20190317_16.md   [《PostgreSQL 并行计算解说 之23 - parallel union all》](201903/20190317_16.md)  
+##### 201903/20190317_15.md   [《PostgreSQL 并行计算解说 之23 - parallel append merge》](201903/20190317_15.md)  
+##### 201903/20190317_14.md   [《PostgreSQL 并行计算解说 之22 - parallel append》](201903/20190317_14.md)  
+##### 201903/20190317_13.md   [《PostgreSQL 并行计算解说 之21 - parallel partition table wise agg》](201903/20190317_13.md)  
+##### 201903/20190317_12.md   [《PostgreSQL 并行计算解说 之20 - parallel partition table wise join》](201903/20190317_12.md)  
+##### 201903/20190317_11.md   [《PostgreSQL 并行计算解说 之19 - parallel hash join》](201903/20190317_11.md)  
+##### 201903/20190317_10.md   [《PostgreSQL 并行计算解说 之18 - parallel merge join》](201903/20190317_10.md)  
+##### 201903/20190317_09.md   [《PostgreSQL 并行计算解说 之17 - parallel nestloop join》](201903/20190317_09.md)  
+##### 201903/20190317_08.md   [《PostgreSQL 并行计算解说 之16 - parallel index only scan》](201903/20190317_08.md)  
+##### 201903/20190317_07.md   [《PostgreSQL 并行计算解说 之15 - parallel bitmap scan》](201903/20190317_07.md)  
+##### 201903/20190317_06.md   [《PostgreSQL 并行计算解说 之14 - parallel index scan》](201903/20190317_06.md)  
+##### 201903/20190317_05.md   [《PostgreSQL 并行计算解说 之13 - parallel OLAP : 中间结果 parallel with unlogged table》](201903/20190317_05.md)  
+##### 201903/20190317_04.md   [《PostgreSQL 并行计算解说 之12 - parallel in rc,rr 隔离级别》](201903/20190317_04.md)  
+##### 201903/20190317_03.md   [《PostgreSQL 并行计算解说 之11 - parallel gather, gather merge》](201903/20190317_03.md)  
+##### 201903/20190317_02.md   [《PostgreSQL 并行计算解说 之10 - parallel 自定义并行函数(UDF)》](201903/20190317_02.md)  
+##### 201903/20190317_01.md   [《PostgreSQL 并行计算解说 之9 - parallel 自定义并行聚合》](201903/20190317_01.md)  
+##### 201903/20190316_10.md   [《PostgreSQL 并行计算解说 之8 - parallel sort》](201903/20190316_10.md)  
+##### 201903/20190316_09.md   [《PostgreSQL 并行计算解说 之7 - parallel create index》](201903/20190316_09.md)  
+##### 201903/20190316_08.md   [《PostgreSQL 并行计算解说 之6 - parallel CREATE MATERIALIZED VIEW》](201903/20190316_08.md)  
+##### 201903/20190316_07.md   [《PostgreSQL 并行计算解说 之5 - parallel create table as》](201903/20190316_07.md)  
+##### 201903/20190316_06.md   [《PostgreSQL 并行计算解说 之4 - parallel select into》](201903/20190316_06.md)  
+##### 201903/20190316_05.md   [《PostgreSQL 并行计算解说 之3 - parallel agg》](201903/20190316_05.md)  
+##### 201903/20190316_04.md   [《PostgreSQL 并行计算解说 之2 - parallel filter》](201903/20190316_04.md)  
+##### 201903/20190316_03.md   [《PostgreSQL 并行计算解说 之1 - parallel seq scan》](201903/20190316_03.md)  
+##### 201903/20190316_02.md   [《PostgreSQL sharding extension citus 优化器 Query Processing 之 - Distributed Query Planner、Executor (Real-time Executor, Router Executor, Task Tracker Executor)》](201903/20190316_02.md)  
+##### 201903/20190316_01.md   [《PostgreSQL sharding extensino citus 优化器 Query Processing 之 - Subquery/CTE Push-Pull Execution》](201903/20190316_01.md)  
 ##### 201903/20190311_01.md   [《使用 ora_migrator + oracle_fdw 迁移Oracle 到 PostgreSQL》](201903/20190311_01.md)  
 ##### 201903/20190310_02.md   [《这可能是目前Oracle兼容性最好的数据库 - 十四年Oracle兼容性淬炼》](201903/20190310_02.md)  
 ##### 201903/20190310_01.md   [《PostgreSQL PostGIS 性能提升 - by new GEOS代码》](201903/20190310_01.md)  
@@ -70,7 +145,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201902/20190213_01.md   [《PostgreSQL Oracle 兼容性 - Oracle 19c 新特性在PostgreSQL中的使用》](201902/20190213_01.md)  
 ##### 201902/20190211_03.md   [《linux 内存文件系统使用 - tmpfs, ramfs, shmfs》](201902/20190211_03.md)  
 ##### 201902/20190211_02.md   [《[转] PostgreSQL 轻量级周边工具 pg_lightool》](201902/20190211_02.md)  
-##### 201902/20190211_01.md   [《[转] PG wal日志解析工具功能增强并更名为WalMiner》](201902/20190211_01.md)  
+##### 201902/20190211_01.md   [《[转] PG wal/xlog/redo日志解析工具功能增强并更名为WalMiner / logminer / xlogminer》](201902/20190211_01.md)  
 ##### 201902/20190205_01.md   [《KEY 管理 - kms (Key management services) , hsm (hardware security modules) , hsm aas》](201902/20190205_01.md)  
 ##### 201902/20190203_02.md   [《Linux vnc server, vnc viewer(远程图形桌面)使用》](201902/20190203_02.md)  
 ##### 201902/20190203_01.md   [《xDB Replication Server - PostgreSQL, Oracle, SQL Server, PPAS 全量、增量(redo log based, or trigger based)同步（支持single-master, mult-master同步, 支持DDL）》](201902/20190203_01.md)  
@@ -104,7 +179,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201901/20190107_02.md   [《为什么pg_basebackup或pg_start_backup好像hang住确没有开始拷贝文件 - checkpoint 的几种调度(checkpoint_completion_target)》](201901/20190107_02.md)  
 ##### 201901/20190107_01.md   [《为什么高并发小事务, unlogged table不比logged table快多少? - commit wal log》](201901/20190107_01.md)  
 ##### 201901/20190105_02.md   [《[转载] PostgreSQL HA patroni》](201901/20190105_02.md)  
-##### 201901/20190105_01.md   [《PostgreSQL 2天培训大纲》](201901/20190105_01.md)  
+##### 201901/20190105_01.md   [《PostgreSQL 2天培训大纲(包含Oracle迁移到PG的知识点) - 含视频讲解》](201901/20190105_01.md)  
 ----  
 ##### 201812/20181230_01.md   [《一些灾难恢复术语 - Disaster recovery》](201812/20181230_01.md)  
 ##### 201812/20181226_01.md   [《MTK使用 - PG,PPAS,oracle,mysql,ms sql,sybase 迁移到 PG, PPAS (支持跨版本升级)》](201812/20181226_01.md)  
@@ -211,7 +286,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201808/20180828_01.md   [《PostgreSQL citus, Greenplum  分布式执行计划 DEBUG》](201808/20180828_01.md)  
 ##### 201808/20180826_01.md   [《[转载] TPCH 22条SQL语句分析》](201808/20180826_01.md)  
 ##### 201808/20180825_01.md   [《PostgreSQL 开启with-llvm(JIT)后，新增插件异常(clang: Command not found)处理》](201808/20180825_01.md)  
-##### 201808/20180824_02.md   [《PostgreSQL sharding : citus 系列1 - 多机部署（含OLTP(TPC-B)测试）》](201808/20180824_02.md)  
+##### 201808/20180824_02.md   [《PostgreSQL sharding : citus 系列1 - 多机部署（含OLTP(TPC-B)测试）- 含Citus MX模式》](201808/20180824_02.md)  
 ##### 201808/20180824_01.md   [《Greenplum csvlog(日志数据)检索、释义(gp_toolkit.gp_log*)》](201808/20180824_01.md)  
 ##### 201808/20180823_01.md   [《(TPC-H测试 SF=10,SF=200) PostgreSQL 11 vs 10 vs Deepgreen》](201808/20180823_01.md)  
 ##### 201808/20180822_04.md   [《PostgreSQL 快速返回表上某列的唯一值(枚举值) - pg_stats.most_common_vals》](201808/20180822_04.md)  
@@ -239,7 +314,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201807/20180731_01.md   [《PostgreSQL json 索引实践 - 检索(存在、包含、等值、范围等)加速》](201807/20180731_01.md)  
 ##### 201807/20180730_01.md   [《PostgreSQL SRF (set-returning functions) 函数where, index实现》](201807/20180730_01.md)  
 ##### 201807/20180725_04.md   [《PostgreSQL AB表切换最佳实践 - 提高切换成功率，杜绝雪崩 - 珍藏级》](201807/20180725_04.md)  
-##### 201807/20180725_03.md   [《PostgreSQL 基于PG内置流复制的，靠谱的PostgreSQL高可用方案(Patroni) - 珍藏级》](201807/20180725_03.md)  
+##### 201807/20180725_03.md   [《PostgreSQL 基于PG内置流复制的，靠谱的PostgreSQL高可用方案(Patroni \ stolon) - 珍藏级》](201807/20180725_03.md)  
 ##### 201807/20180725_02.md   [《PostgreSQL 生成空间热力图》](201807/20180725_02.md)  
 ##### 201807/20180725_01.md   [《PostgreSQL 空间位置(geometry 经纬、点、线、面...)、行政地址(门牌、商圈、行政区...) 相互转换方法》](201807/20180725_01.md)  
 ##### 201807/20180724_01.md   [《[转载] 环境变量的继承，fork、source、exec区别差异》](201807/20180724_01.md)  
@@ -315,7 +390,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201805/20180524_05.md   [《PostgreSQL 9.x, 10, 11 hash分区表 用法举例》](201805/20180524_05.md)  
 ##### 201805/20180524_04.md   [《[招聘] [杭州米雅] PostgreSQL 开发 DBA》](201805/20180524_04.md)  
 ##### 201805/20180524_03.md   [《[招聘] [招商仁和人寿] PostgreSQL 开发 DBA》](201805/20180524_03.md)  
-##### 201805/20180524_02.md   [《PostgreSQL 多场景 沙箱实验》](201805/20180524_02.md)  
+##### 201805/20180524_02.md   [《PostgreSQL 多应用场景实践 - 沙箱实验》](201805/20180524_02.md)  
 ##### 201805/20180524_01.md   [《[未完待续] NVMe on CentOS\RHEL 7》](201805/20180524_01.md)  
 ##### 201805/20180522_04.md   [《EDB PPAS (PostgreSQL plus advanced server) 10 参数模板 - 珍藏级》](201805/20180522_04.md)  
 ##### 201805/20180522_03.md   [《PostgreSQL 10 参数模板 - 珍藏级》](201805/20180522_03.md)  
@@ -1476,7 +1551,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201603/20160302_01.md   [《PostgreSQL 百亿数据 秒级响应 正则及模糊查询》](201603/20160302_01.md)  
 ##### 201603/20160301_03.md   [《[转载]linux 时间戳转换, dmesg 时间转换》](201603/20160301_03.md)  
 ##### 201603/20160301_02.md   [《如何搭建阿里云RDS PostgreSQL数据库的逻辑备库》](201603/20160301_02.md)  
-##### 201603/20160301_01.md   [《如何搭建阿里云RDS PostgreSQL数据库的物理备库》](201603/20160301_01.md)  
+##### 201603/20160301_01.md   [《如何搭建阿里云RDS PostgreSQL数据库的物理备库,从库》](201603/20160301_01.md)  
 ----  
 ##### 201602/20160229_02.md   [《PostgreSQL 列存储引擎 susql (志铭奉献)》](201602/20160229_02.md)  
 ##### 201602/20160229_01.md   [《PostgreSQL 将字段加入指定位置 - 表字段位置的 "虚拟修改" 实现》](201602/20160229_01.md)  
@@ -2123,6 +2198,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201005/20100511_02.md   [《PostgreSQL Free Space Map Principle》](201005/20100511_02.md)  
 ##### 201005/20100511_01.md   [《使用Plproxy设计PostgreSQL分布式数据库》](201005/20100511_01.md)  
 ----  
+##### 197001/20190409_01.md   [《PostgreSQL 深入浅出 - 十万个为什么》](197001/20190409_01.md)  
+##### 197001/20190328_01.md   [《EDB EPAS, 社区PG, 某商业PG发行版 Oracle兼容性对比》](197001/20190328_01.md)  
 ##### 197001/20190311_03.md   [《2019，某开发者会议数据库市场调研统计》](197001/20190311_03.md)  
 ##### 197001/20190311_02.md   [《PostgreSQL hosted in cloud》](197001/20190311_02.md)  
 ##### 197001/20190302_01.md   [《[未完待续] 产品经理, 市场分析, 资源网站》](197001/20190302_01.md)  

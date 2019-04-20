@@ -44,6 +44,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201904/20190421_01.md   [《在PostgreSQL中生成和查看泰森多边形 - Voronoi diagram》](201904/20190421_01.md)  
 ##### 201904/20190418_01.md   [《使用SQL查询数据库日志 - file_fdw , csvlog , program , find》](201904/20190418_01.md)  
 ##### 201904/20190417_03.md   [《pg_dump 并行备份failed 的原因分析 - This usually means that someone requested an ACCESS EXCLUSIVE lock on the table after the pg_dump parent process had gotten the initial ACCESS SHARE lock on the table》](201904/20190417_03.md)  
 ##### 201904/20190417_02.md   [《复合条件c1=xx and (c2=xx or c2=xx)写法的优化》](201904/20190417_02.md)  

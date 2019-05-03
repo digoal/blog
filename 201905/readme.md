@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190503_05.md   [《PostgreSQL 12 preview - recovery.conf 合并入 postgresql.conf后的HOT STANDBY配置(standby.signal , recovery.signal)》](20190503_05.md)  
 ##### 20190503_04.md   [《PostgreSQL 三种心跳(keepalive)指标的应用 - 时间戳、redo(wal)位点、事务号》](20190503_04.md)  
 ##### 20190503_03.md   [《PostgreSQL index include - 类聚簇表与应用(append only, IoT时空轨迹, 离散多行扫描与返回)》](20190503_03.md)  
 ##### 20190503_02.md   [《PostgreSQL 与getrusage - 统计会话、语句资源使用情况, 同时也被用于资源隔离(EPAS,Greenplum) - log_parser_stats log_planner_stats log_executor_stats log_statement_stats》](20190503_02.md)  

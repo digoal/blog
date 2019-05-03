@@ -44,6 +44,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201905/20190503_01.md   [《PostgreSQL 12 preview - vacuum 新增开关: index_cleanup , 是否同时回收索引》](201905/20190503_01.md)  
+----  
 ##### 201904/20190430_01.md   [《KPI分解，目标设定之 - 等比数列》](201904/20190430_01.md)  
 ##### 201904/20190426_01.md   [《PostgreSQL KPI 预测例子 - 线性回归, 斜率, 截距, 相关性, regr_slope, regr_intercept, regr_r2》](201904/20190426_01.md)  
 ##### 201904/20190422_01.md   [《PostgreSQL 深入浅出 - 十万个为什么 - 1 为什么数据库也有DOS攻击》](201904/20190422_01.md)  
@@ -201,7 +203,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201812/20181204_01.md   [《PostgreSQL DBA 日常管理 SQL》](201812/20181204_01.md)  
 ##### 201812/20181203_01.md   [《PostgreSQL 11 参数模板 - 珍藏级》](201812/20181203_01.md)  
 ##### 201812/20181202_03.md   [《PostgreSQL 拒绝服务DDOS攻击与防范》](201812/20181202_03.md)  
-##### 201812/20181202_02.md   [《PostgreSQL recovery.conf 配置文件整合到 postgresql.conf》](201812/20181202_02.md)  
+##### 201812/20181202_02.md   [《PostgreSQL 12 preview - PostgreSQL recovery.conf 配置文件整合到 postgresql.conf》](201812/20181202_02.md)  
 ##### 201812/20181202_01.md   [《PostgreSQL 优化CASE - 有序UUID插件》](201812/20181202_01.md)  
 ----  
 ##### 201811/20181129_01.md   [《PostgreSQL 多维、图像 欧式距离、向量距离、向量相似 查询优化 - cube,imgsmlr - 压缩、分段、异步并行》](201811/20181129_01.md)  

@@ -44,6 +44,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201905/20190503_03.md   [《PostgreSQL index include - 类聚簇表与应用(append only, IoT时空轨迹, 离散多行扫描与返回)》](201905/20190503_03.md)  
 ##### 201905/20190503_02.md   [《PostgreSQL 与getrusage - 统计会话、语句资源使用情况, 同时也被用于资源隔离(EPAS,Greenplum) - log_parser_stats log_planner_stats log_executor_stats log_statement_stats》](201905/20190503_02.md)  
 ##### 201905/20190503_01.md   [《PostgreSQL 12 preview - vacuum 新增开关: index_cleanup , 是否同时回收索引》](201905/20190503_01.md)  
 ----  

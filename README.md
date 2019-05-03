@@ -44,6 +44,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201905/20190503_06.md   [《PostgreSQL 暂时不支持replication slot信息的主从同步》](201905/20190503_06.md)  
 ##### 201905/20190503_05.md   [《PostgreSQL 12 preview - recovery.conf 合并入 postgresql.conf后的HOT STANDBY配置(standby.signal , recovery.signal)》](201905/20190503_05.md)  
 ##### 201905/20190503_04.md   [《PostgreSQL 三种心跳(keepalive)指标的应用 - 时间戳、redo(wal)位点、事务号》](201905/20190503_04.md)  
 ##### 201905/20190503_03.md   [《PostgreSQL index include - 类聚簇表与应用(append only, IoT时空轨迹, 离散多行扫描与返回)》](201905/20190503_03.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190505_01.md   [《PostgreSQL 权限查询与统计 - has ... privilege (例 用户、数据库维度 OWNER、connect,create,temp权限统计) , 默认权限列表查询，解读ACL》](20190505_01.md)  
 ##### 20190503_06.md   [《PostgreSQL 暂时不支持replication slot信息的主从同步》](20190503_06.md)  
 ##### 20190503_05.md   [《PostgreSQL 12 preview - recovery.conf 合并入 postgresql.conf后的HOT STANDBY配置(standby.signal , recovery.signal)》](20190503_05.md)  
 ##### 20190503_04.md   [《PostgreSQL 三种心跳(keepalive)指标的应用 - 时间戳、redo(wal)位点、事务号》](20190503_04.md)  

@@ -44,6 +44,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201905/20190508_01.md   [《删除用户风险大，试试锁定用户》](201905/20190508_01.md)  
 ##### 201905/20190505_01.md   [《PostgreSQL 权限查询与统计 - has ... privilege (例 用户、数据库维度 OWNER、connect,create,temp权限统计) , 默认权限列表查询，解读ACL》](201905/20190505_01.md)  
 ##### 201905/20190503_06.md   [《PostgreSQL 暂时不支持replication slot信息的主从同步》](201905/20190503_06.md)  
 ##### 201905/20190503_05.md   [《PostgreSQL 12 preview - recovery.conf 合并入 postgresql.conf后的HOT STANDBY配置(standby.signal , recovery.signal)》](201905/20190503_05.md)  

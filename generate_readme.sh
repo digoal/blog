@@ -20,20 +20,16 @@ echo "2、PostgreSQL 9.3 数据库管理与优化 视频5天  " >> ./README.md
 echo "3、PostgreSQL 9.1 数据库管理与开发 视频1天  " >> ./README.md
 echo "4、PostgreSQL 9.3 数据库优化 视频3天  " >> ./README.md
 echo "5、PostgreSQL 专题讲座 视频  " >> ./README.md
-echo "6、[《PostgreSQL 多应用场景实践 - 含视频讲解》](201805/20180524_02.md)  " >> ./README.md 
-echo "7、[《PostgreSQL 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频讲解》](201901/20190105_01.md)  " >> ./README.md 
-echo "8、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频讲解》](201801/20180121_01.md)  " >> ./README.md 
+echo "6、[《PostgreSQL 多应用场景实践 - 含视频》](201805/20180524_02.md)  " >> ./README.md 
+echo "7、[《PostgreSQL 11 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频》](201901/20190105_01.md)  " >> ./README.md 
+echo "8、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频》](201801/20180121_01.md)  " >> ./README.md 
 echo "9、PG天天象上活动视频:  "   >> ./README.md
 echo "https://edu.aliyun.com/course/836/lesson/list  "  >> ./README.md
 echo "https://yq.aliyun.com/live/582  "  >> ./README.md   
 echo "  "  >> ./README.md
-echo "### PG社区微信、微博、个人微信二维码  " >> ./README.md
-echo "![pic](./pic/pg_weixin.jpg)  " >> ./README.md
-echo "![pic](./pic/pg_weibo.jpg)  " >> ./README.md
-echo "![pic](./pic/digoal_weixin.jpg)  " >> ./README.md
-echo "  "  >> ./README.md
-echo "### 钉钉PostgreSQL群(专家坐诊、每周直播教学)  " >> ./README.md
-echo "![pic](./pic/dingding_pg_chat.png)  " >> ./README.md
+echo "PG官方微信 | PG官方微博 | PG技术进阶钉钉群 | 个人微信  " >> ./README.md
+echo "---|---|---|---  " >> ./README.md
+echo "![pic](./pic/pg_weixin.jpg) | ![pic](./pic/pg_weibo.jpg) | ![pic](./pic/dingding_pg_chat.png) | ![pic](./pic/digoal_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "如有错误, 万望指正, 非常感谢.  "  >> ./README.md
 echo "  "  >> ./README.md

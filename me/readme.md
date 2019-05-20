@@ -13,7 +13,7 @@
 - DBGeeK联盟 专家团成员。      
 - 30项数据库专利。（截至2018-01）      
       
-现任职于阿里云数据库团队，主要负责阿里云PostgreSQL产品线（包括[RDS PG](https://www.aliyun.com/product/rds/postgresql) ， [PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [HDB PG（Greenplum）](https://www.aliyun.com/product/gpdb) ， POLARDB PG， POLARDB Oracle兼容版(研发中) ， [ADAM+PPAS（平滑去O）](https://promotion.aliyun.com/ntms/act/ppasadam.html)）的产品设计、推广、应用落地与生态构建。     
+现任职于阿里云数据库团队，主要负责阿里云PostgreSQL产品线（包括[RDS PG](https://www.aliyun.com/product/rds/postgresql) ， [PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， POLARDB for PG， POLARDB for Oracle(公测中)）的产品设计、推广、应用落地与生态构建。 使用[ADAM+PPAS（平滑去O）](https://promotion.aliyun.com/ntms/act/ppasadam.html)）。  
   
 为阿里巴巴内部、专有云、公有云等客户提供架构、方案设计、优化、POC、用户与行业需求挖掘与提炼、行业方案沉淀与推广支持。为产品的前线销售、架构师、后端研发团队提供支持。   
   

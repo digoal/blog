@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190521_01.md   [《PostgreSQL 12 preview - 分区表性能提升百倍》](20190521_01.md)  
 ##### 20190520_01.md   [《powa4 PostreSQL Workload Analyzer - PostgreSQL监控工具、带WEB展示》](20190520_01.md)  
 ##### 20190517_03.md   [《[招聘] [国家电网旗下 - 许继] 招聘PostgreSQL 数据库DBA》](20190517_03.md)  
 ##### 20190517_02.md   [《[招聘] [阿里巴巴] 招聘PostgreSQL 数据库DBA》](20190517_02.md)  

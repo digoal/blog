@@ -20,25 +20,25 @@ echo "1\.2、PostgreSQL 9.3 数据库管理与优化 视频5天  " >> ./README.m
 echo "1\.3、PostgreSQL 9.1 数据库管理与开发 视频1天  " >> ./README.md
 echo "1\.4、PostgreSQL 9.3 数据库优化 视频3天  " >> ./README.md
 echo "1\.5、PostgreSQL 专题讲座 视频  " >> ./README.md
-echo "1\.6、[《PostgreSQL 多应用场景实践 - 含视频》](201805/20180524_02.md)  " >> ./README.md 
-echo "1\.7、[《PostgreSQL 11 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频》](201901/20190105_01.md)  " >> ./README.md 
-echo "1\.8、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频》](201801/20180121_01.md)  " >> ./README.md 
-echo "1\.9、PG天天象上活动视频:  "   >> ./README.md
+echo "2、[《PostgreSQL 多应用场景实践 - 含视频》](201805/20180524_02.md)  " >> ./README.md 
+echo "3、[《PostgreSQL 11 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频》](201901/20190105_01.md)  " >> ./README.md 
+echo "4、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频》](201801/20180121_01.md)  " >> ./README.md 
+echo "5、PG天天象上活动视频:  "   >> ./README.md
 echo "https://edu.aliyun.com/course/836/lesson/list  "  >> ./README.md
 echo "https://yq.aliyun.com/live/582  "  >> ./README.md   
 echo "  "  >> ./README.md
 echo "### 学习资料  " >> ./README.md
 echo "  "  >> ./README.md
-echo "2\.1、[《Oracle DBA 增值 PostgreSQL 学习路径》](201804/20180425_01.md)   " >> ./README.md 
-echo "2\.2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    " >> ./README.md
-echo "2\.3、[《快速入门PostgreSQL应用开发与管理 - 1 如何搭建一套学习、开发PostgreSQL的环境》](201704/20170411_01.md)    " >> ./README.md
-echo "2\.4、[《快速入门PostgreSQL应用开发与管理 - 2 Linux基本操作》](201704/20170411_02.md)    " >> ./README.md
-echo "2\.5、[《快速入门PostgreSQL应用开发与管理 - 3 访问数据》](201704/20170411_03.md)    " >> ./README.md
-echo "2\.6、[《快速入门PostgreSQL应用开发与管理 - 4 高级SQL用法》](201704/20170411_04.md)    " >> ./README.md
-echo "2\.7、[《快速入门PostgreSQL应用开发与管理 - 5 数据定义》](201704/20170411_05.md)    " >> ./README.md
-echo "2\.8、[《快速入门PostgreSQL应用开发与管理 - 6 事务和锁》](201704/20170412_01.md)    " >> ./README.md
-echo "2\.9、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    " >> ./README.md
-echo "2\.10、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    " >> ./README.md
+echo "1、[《Oracle DBA 增值 PostgreSQL 学习路径》](201804/20180425_01.md)   " >> ./README.md 
+echo "2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    " >> ./README.md
+echo "3、[《快速入门PostgreSQL应用开发与管理 - 1 如何搭建一套学习、开发PostgreSQL的环境》](201704/20170411_01.md)    " >> ./README.md
+echo "4、[《快速入门PostgreSQL应用开发与管理 - 2 Linux基本操作》](201704/20170411_02.md)    " >> ./README.md
+echo "5、[《快速入门PostgreSQL应用开发与管理 - 3 访问数据》](201704/20170411_03.md)    " >> ./README.md
+echo "6、[《快速入门PostgreSQL应用开发与管理 - 4 高级SQL用法》](201704/20170411_04.md)    " >> ./README.md
+echo "7、[《快速入门PostgreSQL应用开发与管理 - 5 数据定义》](201704/20170411_05.md)    " >> ./README.md
+echo "8、[《快速入门PostgreSQL应用开发与管理 - 6 事务和锁》](201704/20170412_01.md)    " >> ./README.md
+echo "9、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    " >> ./README.md
+echo "10、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    " >> ./README.md
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG官方微博 | PG技术进阶钉钉群 | 个人微信  " >> ./README.md
 echo "---|---|---|---  " >> ./README.md

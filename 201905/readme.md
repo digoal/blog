@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190523_02.md   [《PostgreSQL 窗口函数 - 帧、窗口的应用例子》](20190523_02.md)  
 ##### 20190523_01.md   [《PostgreSQL case when 表达式索引解决连续性数据的阶梯分段搜索性能问题》](20190523_01.md)  
 ##### 20190521_01.md   [《PostgreSQL 12 preview - 分区表性能提升百倍》](20190521_01.md)  
 ##### 20190520_01.md   [《powa4 PostreSQL Workload Analyzer - PostgreSQL监控工具、带WEB展示》](20190520_01.md)  

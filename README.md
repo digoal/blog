@@ -3,12 +3,12 @@
 ### PostgreSQL, Greenplum 学习视频  
   
 1、下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
-  
 1\.1、PostgreSQL 9.3 数据库管理与优化 视频4天  
 1\.2、PostgreSQL 9.3 数据库管理与优化 视频5天  
 1\.3、PostgreSQL 9.1 数据库管理与开发 视频1天  
 1\.4、PostgreSQL 9.3 数据库优化 视频3天  
 1\.5、PostgreSQL 专题讲座 视频  
+  
 2、[《PostgreSQL 多应用场景实践 - 含视频》](201805/20180524_02.md)  
 3、[《PostgreSQL 11 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频》](201901/20190105_01.md)  
 4、[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料 - 含视频》](201801/20180121_01.md)  

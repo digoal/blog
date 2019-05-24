@@ -11,7 +11,7 @@
 > ./README.md
 echo "#### [About me](me/readme.md) " >> ./README.md
 echo "  "  >> ./README.md
-echo "### PostgreSQL, Greenplum 学习视频  " >> ./README.md
+echo "### 一、PostgreSQL, Greenplum 学习视频  " >> ./README.md
 echo "  "  >> ./README.md
 echo "1、下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  " >> ./README.md
 echo "1\.1、PostgreSQL 9.3 数据库管理与优化 视频4天  " >> ./README.md
@@ -27,7 +27,7 @@ echo "5、PG天天象上活动视频:  "   >> ./README.md
 echo "https://edu.aliyun.com/course/836/lesson/list  "  >> ./README.md
 echo "https://yq.aliyun.com/live/582  "  >> ./README.md   
 echo "  "  >> ./README.md
-echo "### 学习资料  " >> ./README.md
+echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md
 echo "1、[《Oracle DBA 增值 PostgreSQL 学习路径》](201804/20180425_01.md)   " >> ./README.md 
 echo "2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    " >> ./README.md
@@ -48,7 +48,7 @@ echo "如有错误, 万望指正, 非常感谢.  "  >> ./README.md
 echo "  "  >> ./README.md
 echo "欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我联系, 定抽空尽快回复  " >> ./README.md
 echo "  "  >> ./README.md
-echo "### 已归类文档如下(归档进行中... ...)  " >> ./README.md
+echo "### 三、已归类文档如下(归档进行中... ...)  " >> ./README.md
 sed 's/](/](class\//g' class/README.md >> ./README.md
 echo "### 所有文档如下  " >> ./README.md
 

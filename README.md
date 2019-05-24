@@ -1,6 +1,6 @@
 #### [About me](me/readme.md) 
   
-### PostgreSQL, Greenplum 学习视频  
+### 一、PostgreSQL, Greenplum 学习视频  
   
 1、下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
 1\.1、PostgreSQL 9.3 数据库管理与优化 视频4天  
@@ -16,7 +16,7 @@
 https://edu.aliyun.com/course/836/lesson/list  
 https://yq.aliyun.com/live/582  
   
-### 学习资料  
+### 二、学习资料  
   
 1、[《Oracle DBA 增值 PostgreSQL 学习路径》](201804/20180425_01.md)   
 2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    
@@ -37,7 +37,7 @@ PG官方微信 | PG官方微博 | PG技术进阶钉钉群 | 个人微信
   
 欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我联系, 定抽空尽快回复  
   
-### 已归类文档如下(归档进行中... ...)  
+### 三、已归类文档如下(归档进行中... ...)  
   
 digoal's|PostgreSQL|文章|归类
 ---|---|---|---

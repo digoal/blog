@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190531_01.md   [《PostgreSQL Oracle 兼容性之 - plpgsql, pl/sql 存储过程、函数内事务处理 , block , exception》](20190531_01.md)  
 ##### 20190528_01.md   [《PostgreSQL 字符集,encoding,character sets,collate,ctype,本土化 - libc,icu》](20190528_01.md)  
 ##### 20190527_01.md   [《PostgreSQL exclude 约束之 - 绑定一对一的关系》](20190527_01.md)  
 ##### 20190523_03.md   [《PostgreSQL 逻辑复制开始时还未结束的事务是否会丢失？》](20190523_03.md)  

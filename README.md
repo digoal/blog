@@ -427,7 +427,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201806/20180601_02.md   [《PostgreSQL standby会不会做检查点? 以及做检查点的用处》](201806/20180601_02.md)  
 ##### 201806/20180601_01.md   [《PostgreSQL pg_recvlogical 与 test_decoding 自定义，支持source table filter, 对接kafka,es等 - PostgreSQL CDC - (wal2json + Debezium)》](201806/20180601_01.md)  
 ----  
-##### 201805/20180530_02.md   [《PostgreSQL 如何确定某个opclass支持哪些操作符(支持索引)，JOIN方法，排序》](201805/20180530_02.md)  
+##### 201805/20180530_02.md   [《PostgreSQL 如何确定某个opclass支持哪些操作符(支持索引)，JOIN方法，排序 - 了解opclass,am,opfamily,amop》](201805/20180530_02.md)  
 ##### 201805/20180530_01.md   [《PostgreSQL 推荐 TPC-C 测试工具 sqlbench》](201805/20180530_01.md)  
 ##### 201805/20180529_01.md   [《PostgreSQL wal_buffers 自动计算算法》](201805/20180529_01.md)  
 ##### 201805/20180528_01.md   [《PostgreSQL Oracle checksum 配置与性能》](201805/20180528_01.md)  

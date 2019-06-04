@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20180530_02.md   [《PostgreSQL 如何确定某个opclass支持哪些操作符(支持索引)，JOIN方法，排序》](20180530_02.md)  
+##### 20180530_02.md   [《PostgreSQL 如何确定某个opclass支持哪些操作符(支持索引)，JOIN方法，排序 - 了解opclass,am,opfamily,amop》](20180530_02.md)  
 ##### 20180530_01.md   [《PostgreSQL 推荐 TPC-C 测试工具 sqlbench》](20180530_01.md)  
 ##### 20180529_01.md   [《PostgreSQL wal_buffers 自动计算算法》](20180529_01.md)  
 ##### 20180528_01.md   [《PostgreSQL Oracle checksum 配置与性能》](20180528_01.md)  

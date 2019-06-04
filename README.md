@@ -53,6 +53,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201906/20190604_01.md   [《PostgreSQL 11 公益培训 - 杭州阿里巴巴西溪园区(2019.6.15)》](201906/20190604_01.md)  
+----  
 ##### 201905/20190531_03.md   [《PostgreSQL 基于access method api的列存zedstore》](201905/20190531_03.md)  
 ##### 201905/20190531_02.md   [《balance, iptables 端口代理，访问不可直达的内网服务》](201905/20190531_02.md)  
 ##### 201905/20190531_01.md   [《PostgreSQL Oracle 兼容性之 - plpgsql, pl/sql 存储过程、函数内事务处理 , block , exception》](201905/20190531_01.md)  

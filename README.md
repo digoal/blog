@@ -53,6 +53,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201906/20190605_02.md   [《[未完待续]PostgreSQL 集群HA管理软件 - pg_auto_failover》](201906/20190605_02.md)  
+##### 201906/20190605_01.md   [《PostgreSQL 12 + PostGIS 3 实现FULL PARALLEL - GIS计算智能并行》](201906/20190605_01.md)  
 ##### 201906/20190604_03.md   [《PostgreSQL gist, spgist索引的原理、差别、应用场景》](201906/20190604_03.md)  
 ##### 201906/20190604_02.md   [《[招聘] [沃趣] 招聘PostgreSQL全栈工程师》](201906/20190604_02.md)  
 ##### 201906/20190604_01.md   [《PostgreSQL 11 公益培训 - 杭州阿里巴巴西溪园区(2019.6.15)》](201906/20190604_01.md)  
@@ -2139,7 +2141,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201208/20120831_01.md   [《表级复制(base on trigger) -- one(rw) to many(ro|rw)》](201208/20120831_01.md)  
 ##### 201208/20120814_01.md   [《variable number of arguments function》](201208/20120814_01.md)  
 ----  
-##### 201206/20120628_01.md   [《PostgreSQL plpgsql_check_function 插件 - plpgsql函数体内容CHECK》](201206/20120628_01.md)  
+##### 201206/20120628_01.md   [《PostgreSQL plpgsql_check_function 插件 - plpgsql函数体内容CHECK, 依赖关系, plpgsql profiler》](201206/20120628_01.md)  
 ##### 201206/20120626_03.md   [《USE GDB debug postgres》](201206/20120626_03.md)  
 ##### 201206/20120626_02.md   [《函数稳定性讲解 - 函数索引思考, pay attention to function index used in PostgreSQL》](201206/20120626_02.md)  
 ##### 201206/20120626_01.md   [《PostgreSQL 跟踪DDL时间 - cann't use pg_class's trigger trace user_table's create,modify,delete Time》](201206/20120626_01.md)  

@@ -53,6 +53,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201906/20190607_01.md   [《PostgreSQL 12 AM 之 - blackhole 黑洞存储引擎》](201906/20190607_01.md)  
 ##### 201906/20190605_02.md   [《[未完待续]PostgreSQL 集群HA管理软件 - pg_auto_failover》](201906/20190605_02.md)  
 ##### 201906/20190605_01.md   [《PostgreSQL 12 + PostGIS 3 实现FULL PARALLEL - GIS计算智能并行》](201906/20190605_01.md)  
 ##### 201906/20190604_03.md   [《PostgreSQL gist, spgist索引的原理、差别、应用场景》](201906/20190604_03.md)  

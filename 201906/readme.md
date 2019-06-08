@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190607_04.md   [《PostgreSQL psql的元素周期表》](20190607_04.md)  
 ##### 20190607_03.md   [《PostgreSQL 12 内置 sharding 进展(fdw)》](20190607_03.md)  
 ##### 20190607_02.md   [《PostgreSQL weekly 新闻》](20190607_02.md)  
 ##### 20190607_01.md   [《PostgreSQL 12 AM 之 - blackhole 黑洞存储引擎》](20190607_01.md)  

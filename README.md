@@ -53,6 +53,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201906/20190608_01.md   [《PostgreSQL synchronous_commit|fsync|full_page_write|data_sync_retry|分组提交 的使用与注意 - 写性能、业务RPO指标》](201906/20190608_01.md)  
 ##### 201906/20190607_04.md   [《PostgreSQL psql的元素周期表》](201906/20190607_04.md)  
 ##### 201906/20190607_03.md   [《PostgreSQL 12 内置 sharding 进展(fdw)》](201906/20190607_03.md)  
 ##### 201906/20190607_02.md   [《PostgreSQL weekly 新闻》](201906/20190607_02.md)  

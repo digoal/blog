@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190608_01.md   [《PostgreSQL synchronous_commit|fsync|full_page_write|data_sync_retry|分组提交 的使用与注意 - 写性能、业务RPO指标》](20190608_01.md)  
 ##### 20190607_04.md   [《PostgreSQL psql的元素周期表》](20190607_04.md)  
 ##### 20190607_03.md   [《PostgreSQL 12 内置 sharding 进展(fdw)》](20190607_03.md)  
 ##### 20190607_02.md   [《PostgreSQL weekly 新闻》](20190607_02.md)  

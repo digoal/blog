@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190608_04.md   [《[转载] PostgreSQL and patents - PostgreSQL与专利》](20190608_04.md)  
 ##### 20190608_03.md   [《[转载] 开源与闭源的斗争，GPLv3协议的发布》](20190608_03.md)  
 ##### 20190608_02.md   [《PostgreSQL 社区分析 - 为什么PostgreSQL社区几乎不可能被任何一个商业公司、国家所控制？》](20190608_02.md)  
 ##### 20190608_01.md   [《PostgreSQL synchronous_commit|fsync|full_page_write|data_sync_retry|分组提交 的使用与注意 - 写性能、业务RPO指标》](20190608_01.md)  

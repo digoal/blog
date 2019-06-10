@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190610_02.md   [《PostgreSQL 如果最后一个WAL文件中没有事务结束record或target_name point时，可以正常恢复到指定时间点吗》](20190610_02.md)  
 ##### 20190610_01.md   [《PostgreSQL 生成对象DDL语句 - ddlx 插件》](20190610_01.md)  
 ##### 20190608_04.md   [《[转载] PostgreSQL and patents - PostgreSQL与专利》](20190608_04.md)  
 ##### 20190608_03.md   [《[转载] 开源与闭源的斗争，GPLv3协议的发布》](20190608_03.md)  

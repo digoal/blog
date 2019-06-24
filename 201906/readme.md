@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20190624_02.md   [《PostgreSQL 12 feature 解读  汇总》](20190624_02.md)  
+##### 20190624_01.md   [《PostgreSQL 多线程连接池 - Scalable PostgreSQL connection pooler odyssey》](20190624_01.md)  
 ##### 20190621_02.md   [《如何修改PostgreSQL分区表分区范围 - detach attach - 拆分、合并、非平衡分区表、深度不一致分区表》](20190621_02.md)  
 ##### 20190621_01.md   [《解读用户最常问的PostgreSQL垃圾回收、膨胀、多版本管理、存储引擎等疑惑 - 经典》](20190621_01.md)  
 ##### 20190617_01.md   [《PostgreSQL 自动vacuum(垃圾回收)与手动vacuum的参数详解》](20190617_01.md)  

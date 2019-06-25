@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190626_01.md   [《》](20190626_01.md)  
 ##### 20190624_02.md   [《PostgreSQL 12 feature 解读  汇总》](20190624_02.md)  
 ##### 20190624_01.md   [《PostgreSQL 多线程连接池 - Scalable PostgreSQL connection pooler odyssey》](20190624_01.md)  
 ##### 20190621_02.md   [《如何修改PostgreSQL分区表分区范围 - detach attach - 拆分、合并、非平衡分区表、深度不一致分区表》](20190621_02.md)  

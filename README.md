@@ -54,6 +54,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201907/20190701_01.md   [《膨胀点解释 - 全局catalog,库级catalog,普通表,wal文件 - 哪些垃圾(dead tuple), wal文件不能被回收reuse - 什么情况下可能膨胀》](201907/20190701_01.md)  
+----  
 ##### 201906/20190626_01.md   [《站在浪潮之巅 - 学生为什么应该学PG, PG与其他数据库有哪些差别》](201906/20190626_01.md)  
 ##### 201906/20190624_02.md   [《PostgreSQL 12 feature 解读  汇总》](201906/20190624_02.md)  
 ##### 201906/20190624_01.md   [《PostgreSQL 多线程连接池 - Scalable PostgreSQL connection pooler odyssey》](201906/20190624_01.md)  

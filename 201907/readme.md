@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190707_01.md   [《PostgreSQL fast、smart停库时，如果有walsender、归档时，如何处理? 什么情况会导致停库超级慢》](20190707_01.md)  
 ##### 20190706_01.md   [《PostgreSQL rum 索引结构 - 比gin posting list|tree 的ctid(行号)多了addition info》](20190706_01.md)  
 ##### 20190702_02.md   [《PostgreSQL 无序UUID的问题和优化》](20190702_02.md)  
 ##### 20190702_01.md   [《阿里云RDS PG 11，因你而来，值得拥有》](20190702_01.md)  

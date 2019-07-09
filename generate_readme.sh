@@ -23,7 +23,7 @@ echo "  "  >> ./README.md
 echo "2、[《PostgreSQL 多应用场景实践 - 含视频》](201805/20180524_02.md)  " >> ./README.md 
 echo "3、[《PostgreSQL 11 2天体系化培训(包含Oracle迁移到PG的知识点) - 含视频》](201901/20190105_01.md)  " >> ./README.md 
 echo "4、[《阿里巴巴 PostgreSQL、社区生态；PG开发者指南、原理、案例、管理优化实践《学习资料、视频》；《PG天天象上》沙龙纪录》](201801/20180121_01.md)  " >> ./README.md 
-echo "5、[《《PG干O,仁心所象 - 去O实战培训》 公益活动纪录 - 《PG开发者指南、去O、管理与优化实践》》](201906/20190615_03.md)    " >> ./README.md 
+echo "5、[《Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    " >> ./README.md 
 echo "6、PG天天象上活动视频:  "   >> ./README.md
 echo "https://edu.aliyun.com/course/836/lesson/list  "  >> ./README.md
 echo "https://yq.aliyun.com/live/582  "  >> ./README.md   

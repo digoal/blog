@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190712_01.md   [《PostgreSQL pg_stat_activity query显示的是当前最外层调用 - 应用：获取当前执行的SQL》](20190712_01.md)  
 ##### 20190707_01.md   [《PostgreSQL fast、smart停库时，如果有walsender、归档时，如何处理? 什么情况会导致停库超级慢》](20190707_01.md)  
 ##### 20190706_01.md   [《PostgreSQL rum 索引结构 - 比gin posting list|tree 的ctid(行号)多了addition info》](20190706_01.md)  
 ##### 20190702_02.md   [《PostgreSQL 无序UUID的问题和优化》](20190702_02.md)  

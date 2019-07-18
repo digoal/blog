@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201907/20190718_01.md   [《PostgreSQL Oracle 兼容性之 psql sqlplus 变量 & set variable》](201907/20190718_01.md)  
 ##### 201907/20190713_01.md   [《PostgreSQL merge join 扫描方法实例细说，以及SQL写法注意 或 内核优化建议》](201907/20190713_01.md)  
 ##### 201907/20190712_01.md   [《PostgreSQL pg_stat_activity query显示的是当前最外层调用 - 应用：获取当前执行的SQL》](201907/20190712_01.md)  
 ##### 201907/20190707_01.md   [《PostgreSQL fast、smart停库时，如果有walsender、归档时，如何处理? 什么情况会导致停库超级慢》](201907/20190707_01.md)  

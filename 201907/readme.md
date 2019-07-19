@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190719_02.md   [《使用SQL查询数据库日志 - file_fdw , csvlog , program , find - 2》](20190719_02.md)  
 ##### 20190719_01.md   [《PostgreSQL 主从切换脑裂之后如何处理与预防》](20190719_01.md)  
 ##### 20190718_01.md   [《PostgreSQL Oracle 兼容性之 psql sqlplus 变量 & set variable》](20190718_01.md)  
 ##### 20190713_01.md   [《PostgreSQL merge join 扫描方法实例细说，以及SQL写法注意 或 内核优化建议》](20190713_01.md)  

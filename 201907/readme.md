@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190720_01.md   [《空闲事务、慢2pc - 膨胀点内核优化思路、参数优化 - GetOldestXmin优化》](20190720_01.md)  
 ##### 20190719_02.md   [《使用SQL查询数据库日志 - file_fdw , csvlog , program , find - 2》](20190719_02.md)  
 ##### 20190719_01.md   [《PostgreSQL 主从切换脑裂之后如何处理与预防》](20190719_01.md)  
 ##### 20190718_01.md   [《PostgreSQL Oracle 兼容性之 psql sqlplus 变量 & set variable》](20190718_01.md)  

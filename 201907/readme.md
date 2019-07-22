@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190722_01.md   [《PostgreSQL Oracle 兼容性之 - binary_float binary_double》](20190722_01.md)  
 ##### 20190721_01.md   [《postgresql 控制文件 pg_control 原子写,crc》](20190721_01.md)  
 ##### 20190720_02.md   [《postgresql 慢、错误、审计日志文件（csvlog） rotate 配置 (非redo、wal日志)》](20190720_02.md)  
 ##### 20190720_01.md   [《空闲事务、慢2pc - 膨胀点内核优化思路、参数优化 - GetOldestXmin优化》](20190720_01.md)  

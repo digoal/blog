@@ -54,6 +54,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201908/20190803_01.md   [《PostgreSQL PostGIS ST_AsMVT Performance 提升 - SQL提取地图矢量瓦片(Mapbox Vector Tile)》](201908/20190803_01.md)  
+----  
 ##### 201907/20190722_01.md   [《PostgreSQL Oracle 兼容性之 - binary_float binary_double》](201907/20190722_01.md)  
 ##### 201907/20190721_01.md   [《postgresql 控制文件 pg_control 原子写,crc》](201907/20190721_01.md)  
 ##### 201907/20190720_02.md   [《postgresql 慢、错误、审计日志文件（csvlog） rotate 配置 (非redo、wal日志)》](201907/20190720_02.md)  

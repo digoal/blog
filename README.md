@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201908/20190803_03.md   [《PostgreSQL PostGIS 3 Hilbert Geometry Sorting - 空间排序算法优化》](201908/20190803_03.md)  
 ##### 201908/20190803_02.md   [《PostgreSQL PostGIS overlap》](201908/20190803_02.md)  
 ##### 201908/20190803_01.md   [《PostgreSQL PostGIS ST_AsMVT Performance 提升 - SQL提取地图矢量瓦片(Mapbox Vector Tile)》](201908/20190803_01.md)  
 ----  

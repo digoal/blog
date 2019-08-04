@@ -57,7 +57,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201908/20190804_02.md   [《PostgreSQL 索引推荐 - HypoPG , pg_qualstats》](201908/20190804_02.md)  
 ##### 201908/20190804_01.md   [《PostgreSQL pgpool-ii 4.x 支持从standby读relcache - relcache_query_target = load_balance_node》](201908/20190804_01.md)  
 ##### 201908/20190803_04.md   [《PostgreSQL PostGIS 3 ST_AsGeoJSON(record) - early only ST_AsGeoJSON(geo)》](201908/20190803_04.md)  
-##### 201908/20190803_03.md   [《PostgreSQL PostGIS 3 Hilbert Geometry Sorting - 空间排序算法优化》](201908/20190803_03.md)  
+##### 201908/20190803_03.md   [《PostgreSQL PostGIS 3 - 从min(x) 到 z-order 到 Hilbert Geometry Sorting - PostGIS空间排序算法优化》](201908/20190803_03.md)  
 ##### 201908/20190803_02.md   [《PostgreSQL PostGIS overlap》](201908/20190803_02.md)  
 ##### 201908/20190803_01.md   [《PostgreSQL PostGIS ST_AsMVT Performance 提升 - SQL提取地图矢量瓦片(Mapbox Vector Tile)》](201908/20190803_01.md)  
 ----  

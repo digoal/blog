@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201908/20190804_02.md   [《PostgreSQL 索引推荐 - HypoPG , pg_qualstats》](201908/20190804_02.md)  
 ##### 201908/20190804_01.md   [《PostgreSQL pgpool-ii 4.x 支持从standby读relcache - relcache_query_target = load_balance_node》](201908/20190804_01.md)  
 ##### 201908/20190803_04.md   [《PostgreSQL PostGIS 3 ST_AsGeoJSON(record) - early only ST_AsGeoJSON(geo)》](201908/20190803_04.md)  
 ##### 201908/20190803_03.md   [《PostgreSQL PostGIS 3 Hilbert Geometry Sorting - 空间排序算法优化》](201908/20190803_03.md)  
@@ -112,7 +113,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201905/20190523_02.md   [《PostgreSQL 窗口函数 - 帧、窗口的应用例子》](201905/20190523_02.md)  
 ##### 201905/20190523_01.md   [《PostgreSQL case when 表达式索引解决连续性数据的阶梯分段搜索性能问题》](201905/20190523_01.md)  
 ##### 201905/20190521_01.md   [《PostgreSQL 12 preview - 分区表性能提升百倍》](201905/20190521_01.md)  
-##### 201905/20190520_01.md   [《powa4 PostreSQL Workload Analyzer - PostgreSQL监控工具、带WEB展示》](201905/20190520_01.md)  
+##### 201905/20190520_01.md   [《powa4 PostreSQL Workload Analyzer - PostgreSQL监控工具、带WEB展示 - 索引推荐,等待事件分析,命中率,配置变更跟踪等》](201905/20190520_01.md)  
 ##### 201905/20190517_03.md   [《[招聘] [国家电网旗下 - 许继] 招聘PostgreSQL 数据库DBA》](201905/20190517_03.md)  
 ##### 201905/20190517_02.md   [《[招聘] [阿里巴巴] 招聘PostgreSQL 数据库DBA》](201905/20190517_02.md)  
 ##### 201905/20190517_01.md   [《[招聘] [上海光源-国家级应用物理研究所] 招聘PostgreSQL 数据库DBA》](201905/20190517_01.md)  

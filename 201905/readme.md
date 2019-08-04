@@ -11,7 +11,7 @@
 ##### 20190523_02.md   [《PostgreSQL 窗口函数 - 帧、窗口的应用例子》](20190523_02.md)  
 ##### 20190523_01.md   [《PostgreSQL case when 表达式索引解决连续性数据的阶梯分段搜索性能问题》](20190523_01.md)  
 ##### 20190521_01.md   [《PostgreSQL 12 preview - 分区表性能提升百倍》](20190521_01.md)  
-##### 20190520_01.md   [《powa4 PostreSQL Workload Analyzer - PostgreSQL监控工具、带WEB展示》](20190520_01.md)  
+##### 20190520_01.md   [《powa4 PostreSQL Workload Analyzer - PostgreSQL监控工具、带WEB展示 - 索引推荐,等待事件分析,命中率,配置变更跟踪等》](20190520_01.md)  
 ##### 20190517_03.md   [《[招聘] [国家电网旗下 - 许继] 招聘PostgreSQL 数据库DBA》](20190517_03.md)  
 ##### 20190517_02.md   [《[招聘] [阿里巴巴] 招聘PostgreSQL 数据库DBA》](20190517_02.md)  
 ##### 20190517_01.md   [《[招聘] [上海光源-国家级应用物理研究所] 招聘PostgreSQL 数据库DBA》](20190517_01.md)  

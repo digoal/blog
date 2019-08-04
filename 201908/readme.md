@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20190804_04.md   [《PostgreSQL 无主键表的逻辑复制 - 隐藏列(oids,inherit,invisible column)》](20190804_04.md)  
+##### 20190804_03.md   [《PostgreSQL 全库一致性逻辑备份，大表逻辑备份问题以及推荐解决方案 - 锁等待隐患，膨胀隐患》](20190804_03.md)  
 ##### 20190804_02.md   [《PostgreSQL 索引推荐 - HypoPG , pg_qualstats》](20190804_02.md)  
 ##### 20190804_01.md   [《PostgreSQL pgpool-ii 4.x 支持从standby读relcache - relcache_query_target = load_balance_node》](20190804_01.md)  
 ##### 20190803_04.md   [《PostgreSQL PostGIS 3 ST_AsGeoJSON(record) - early only ST_AsGeoJSON(geo)》](20190803_04.md)  

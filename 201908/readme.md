@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190806_01.md   [《mysql binlog 同步到 es, postgresql - go-mysql-elasticsearch》](20190806_01.md)  
 ##### 20190804_04.md   [《PostgreSQL 无主键表的逻辑复制 - 隐藏列(oids,inherit,invisible column)》](20190804_04.md)  
 ##### 20190804_03.md   [《PostgreSQL 全库一致性逻辑备份，大表逻辑备份问题以及推荐解决方案 - 锁等待隐患，膨胀隐患》](20190804_03.md)  
 ##### 20190804_02.md   [《PostgreSQL 索引推荐 - HypoPG , pg_qualstats》](20190804_02.md)  

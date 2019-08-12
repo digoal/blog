@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201908/20190812_01.md   [《chrome清理缓存socket, dns》](201908/20190812_01.md)  
 ##### 201908/20190807_01.md   [《freeze 事务号将保留到实例中的最老事务, 年龄降不下来快看最老事务(2pc,long query,long xact)》](201908/20190807_01.md)  
 ##### 201908/20190806_01.md   [《mysql binlog 同步到 es, postgresql - go-mysql-elasticsearch》](201908/20190806_01.md)  
 ##### 201908/20190804_04.md   [《PostgreSQL 无主键表的逻辑复制 - 隐藏列(oids,inherit,invisible column)》](201908/20190804_04.md)  

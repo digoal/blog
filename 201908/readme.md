@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190812_01.md   [《chrome清理缓存socket, dns》](20190812_01.md)  
 ##### 20190807_01.md   [《freeze 事务号将保留到实例中的最老事务, 年龄降不下来快看最老事务(2pc,long query,long xact)》](20190807_01.md)  
 ##### 20190806_01.md   [《mysql binlog 同步到 es, postgresql - go-mysql-elasticsearch》](20190806_01.md)  
 ##### 20190804_04.md   [《PostgreSQL 无主键表的逻辑复制 - 隐藏列(oids,inherit,invisible column)》](20190804_04.md)  

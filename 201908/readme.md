@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190815_01.md   [《阿里云PostgreSQL 向量搜索、相似搜索、图像搜索 插件 palaemon - ivfflat , hnsw , nsg , ssg》](20190815_01.md)  
 ##### 20190814_01.md   [《PostgreSQL PostGIS 坐标转换项目 - 百度坐标（BD09）、国测局坐标（火星坐标，GCJ02）、和WGS84坐标系之间的转换》](20190814_01.md)  
 ##### 20190813_01.md   [《PostgreSQL Oracle 兼容性之 dump chars's byte stream - decode》](20190813_01.md)  
 ##### 20190812_02.md   [《PostgreSQL 数据库资源限制 + HOOK(limit guc) - 降低攻击伤害、自动SQL优化等》](20190812_02.md)  

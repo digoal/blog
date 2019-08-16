@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20190817_02.md   [《PostgreSQL 跟踪记录是谁写入的，谁更新的》](20190817_02.md)  
+##### 20190817_01.md   [《PostgreSQL 跟踪记录被更新了多少次》](20190817_01.md)  
+##### 20190816_02.md   [《PostgreSQL 跟踪记录（row,tuple）的插入、更新时间 - spi,moddatetime trigger》](20190816_02.md)  
 ##### 20190816_01.md   [《如何扩展、新增PostgreSQL索引接口 - index access method》](20190816_01.md)  
 ##### 20190815_01.md   [《阿里云PostgreSQL 向量搜索、相似搜索、图像搜索 插件 palaemon - ivfflat , hnsw , nsg , ssg》](20190815_01.md)  
 ##### 20190814_01.md   [《PostgreSQL PostGIS 坐标转换项目 - 百度坐标（BD09）、国测局坐标（火星坐标，GCJ02）、和WGS84坐标系之间的转换》](20190814_01.md)  

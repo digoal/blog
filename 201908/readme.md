@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190817_03.md   [《Anonymization & Data Masking for PostgreSQL - 自动脱敏控制 - oracle data vault》](20190817_03.md)  
 ##### 20190817_02.md   [《PostgreSQL 跟踪记录是谁写入的，谁更新的》](20190817_02.md)  
 ##### 20190817_01.md   [《PostgreSQL 跟踪记录被更新了多少次》](20190817_01.md)  
 ##### 20190816_02.md   [《PostgreSQL 跟踪记录（row,tuple）的插入、更新时间 - spi,moddatetime trigger》](20190816_02.md)  

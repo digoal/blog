@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201908/20190825_01.md   [《》](201908/20190825_01.md)  
 ##### 201908/20190821_01.md   [《PostgreSQL 克隆schema - clone schema》](201908/20190821_01.md)  
 ##### 201908/20190819_02.md   [《PostGIS 3 瓦片提取函数 ST_TileEnvelope》](201908/20190819_02.md)  
 ##### 201908/20190819_01.md   [《PostgreSQL 窗口函数内部distinct的支持与用法 - count(distinct x) over (partition by ...)》](201908/20190819_01.md)  

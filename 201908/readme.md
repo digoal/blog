@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190827_01.md   [《PostGIS 3 - postgis_raster 拆离 - Separate Raster Extension》](20190827_01.md)  
 ##### 20190826_01.md   [《PostgreSQL 12 + PostGIS 3 - 让空间并行计算更加智能》](20190826_01.md)  
 ##### 20190825_01.md   [《PostgreSQL 动态inline code - 动态存储过程代码调用 - 客户端存储过程版本管理》](20190825_01.md)  
 ##### 20190821_01.md   [《PostgreSQL 克隆schema - clone schema》](20190821_01.md)  

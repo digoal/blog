@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201908/20190827_01.md   [《PostGIS 3 - postgis_raster 拆离 - Separate Raster Extension》](201908/20190827_01.md)  
 ##### 201908/20190826_01.md   [《PostgreSQL 12 + PostGIS 3 - 让空间并行计算更加智能》](201908/20190826_01.md)  
 ##### 201908/20190825_01.md   [《PostgreSQL 动态inline code - 动态存储过程代码调用 - 客户端存储过程版本管理》](201908/20190825_01.md)  
 ##### 201908/20190821_01.md   [《PostgreSQL 克隆schema - clone schema》](201908/20190821_01.md)  

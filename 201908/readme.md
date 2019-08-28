@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190828_02.md   [《PostgreSQL pgbench client_id 变量用途 - 压测时防止线程间锁冲突(未来，代替动态表名,分区表)》](20190828_02.md)  
 ##### 20190828_01.md   [《PostgreSQL partial|selectivity standby|slave - walbouncer , wal filter》](20190828_01.md)  
 ##### 20190827_01.md   [《PostGIS 3 - postgis_raster 拆离 - Separate Raster Extension》](20190827_01.md)  
 ##### 20190826_01.md   [《PostgreSQL 12 + PostGIS 3 - 让空间并行计算更加智能》](20190826_01.md)  

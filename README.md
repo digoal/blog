@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201908/20190828_02.md   [《PostgreSQL pgbench client_id 变量用途 - 压测时防止线程间锁冲突(未来，代替动态表名,分区表)》](201908/20190828_02.md)  
 ##### 201908/20190828_01.md   [《PostgreSQL partial|selectivity standby|slave - walbouncer , wal filter》](201908/20190828_01.md)  
 ##### 201908/20190827_01.md   [《PostGIS 3 - postgis_raster 拆离 - Separate Raster Extension》](201908/20190827_01.md)  
 ##### 201908/20190826_01.md   [《PostgreSQL 12 + PostGIS 3 - 让空间并行计算更加智能》](201908/20190826_01.md)  

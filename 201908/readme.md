@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190831_01.md   [《PostgreSQL plpgsql_check - 函数、存储过程内容runtime前校验，性能profiler，性能问题检测，sql注入检测》](20190831_01.md)  
 ##### 20190828_02.md   [《PostgreSQL pgbench client_id 变量用途 - 压测时防止线程间锁冲突(未来，代替动态表名,分区表)》](20190828_02.md)  
 ##### 20190828_01.md   [《PostgreSQL partial|selectivity standby|slave - walbouncer , wal filter》](20190828_01.md)  
 ##### 20190827_01.md   [《PostGIS 3 - postgis_raster 拆离 - Separate Raster Extension》](20190827_01.md)  

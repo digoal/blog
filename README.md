@@ -54,6 +54,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190901_05.md   [《PostgreSQL tid range scan - 行号范围扫描》](201909/20190901_05.md)  
+##### 201909/20190901_04.md   [《fault injection 测试框架》](201909/20190901_04.md)  
+##### 201909/20190901_03.md   [《PostgreSQL pg_stat_statements支持 plan 统计 - plans,plan_time,优化器开销》](201909/20190901_03.md)  
+##### 201909/20190901_02.md   [《pgbench 内置tpcb支持 pgbench_account 分区表》](201909/20190901_02.md)  
 ##### 201909/20190901_01.md   [《PostgreSQL 安全, 日志敏感信息遮掩 - Redacting information from logs》](201909/20190901_01.md)  
 ----  
 ##### 201908/20190831_01.md   [《PostgreSQL plpgsql_check - 函数、存储过程内容runtime前校验，性能profiler，性能问题检测，sql注入检测》](201908/20190831_01.md)  

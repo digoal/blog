@@ -54,6 +54,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190901_01.md   [《PostgreSQL 安全, 日志敏感信息遮掩 - Redacting information from logs》](201909/20190901_01.md)  
+----  
 ##### 201908/20190831_01.md   [《PostgreSQL plpgsql_check - 函数、存储过程内容runtime前校验，性能profiler，性能问题检测，sql注入检测》](201908/20190831_01.md)  
 ##### 201908/20190828_02.md   [《PostgreSQL pgbench client_id 变量用途 - 压测时防止线程间锁冲突(未来，代替动态表名,分区表)》](201908/20190828_02.md)  
 ##### 201908/20190828_01.md   [《PostgreSQL partial|selectivity standby|slave - walbouncer , wal filter》](201908/20190828_01.md)  

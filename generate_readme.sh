@@ -20,7 +20,7 @@ echo "1\.3、PostgreSQL 9.1 数据库管理与开发 视频1天  " >> ./README.m
 echo "1\.4、PostgreSQL 9.3 数据库优化 视频3天  " >> ./README.md
 echo "1\.5、PostgreSQL 专题讲座 视频  " >> ./README.md
 echo "  "  >> ./README.md
-echo "2、[《2019-PostgreSQL 11 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  " >> ./README.md 
+echo "2、[《2019-PostgreSQL 11 , 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  " >> ./README.md 
 echo "3、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  " >> ./README.md 
 echo "4、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  " >> ./README.md 
 echo "5、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    " >> ./README.md 
@@ -29,7 +29,7 @@ echo "7、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](htt
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md
-echo "1、[《Oracle DBA 增值 PostgreSQL 学习路径》](201804/20180425_01.md)   " >> ./README.md 
+echo "1、[《Oracle DBA 增值 转型 PostgreSQL 学习方法、路径》](201804/20180425_01.md)   " >> ./README.md 
 echo "2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    " >> ./README.md
 echo "3、[《快速入门PostgreSQL应用开发与管理 - 1 如何搭建一套学习、开发PostgreSQL的环境》](201704/20170411_01.md)    " >> ./README.md
 echo "4、[《快速入门PostgreSQL应用开发与管理 - 2 Linux基本操作》](201704/20170411_02.md)    " >> ./README.md

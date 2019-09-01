@@ -9,13 +9,12 @@
 1\.4、PostgreSQL 9.3 数据库优化 视频3天  
 1\.5、PostgreSQL 专题讲座 视频  
   
-2、[《PostgreSQL 多种应用场景实践 - 含视频》](201805/20180524_02.md)  
-3、[《PostgreSQL 11 2天体系化培训(包含Oracle迁移到PG知识点) - 视频讲解每周更新》](201901/20190105_01.md)  
-4、[《阿里巴巴 PostgreSQL、社区生态；PG开发者指南、原理、案例、管理优化实践《学习资料、视频》；《PG天天象上》沙龙纪录》](201801/20180121_01.md)  
-5、[《Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
-6、PG天天象上活动视频:  
-https://edu.aliyun.com/course/836/lesson/list  
-https://yq.aliyun.com/live/582  
+2、[《2019-PostgreSQL 11 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  
+3、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  
+4、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  
+5、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
+6、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  
+7、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  
   
 ### 二、学习资料  
   

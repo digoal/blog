@@ -53,6 +53,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190908_03.md   [《PostgreSQL ssl 协议版本范围控制参数 ssl_min_protocol_version , ssl_max_protocol_version》](201909/20190908_03.md)  
+##### 201909/20190908_02.md   [《PostgreSQL 会话ssl状态查询 - pg_stat_ssl , sslinfo》](201909/20190908_02.md)  
+##### 201909/20190908_01.md   [《PostgreSQL 12 preview - pg_ls_archive_statusdir , pg_ls_tmpdir》](201909/20190908_01.md)  
 ##### 201909/20190901_07.md   [《PostgreSQL libpq 多后端连接倾向配置支持 - readonly , perfer-read , perfer-write , write》](201909/20190901_07.md)  
 ##### 201909/20190901_06.md   [《PostgreSQL 任意类型、任意数组 - 隐式类型转换 - anyelement anytype anydata anyarray commontype commonarray》](201909/20190901_06.md)  
 ##### 201909/20190901_05.md   [《PostgreSQL tid range scan - 行号范围扫描》](201909/20190901_05.md)  
@@ -176,7 +179,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201904/20190405_10.md   [《PostgreSQL ssl - Where and when you need a root.crt file》](201904/20190405_10.md)  
 ##### 201904/20190405_09.md   [《PostgreSQL 12 preview - 支持SQL采样比例设置 - Log all statements from a sample of transactions》](201904/20190405_09.md)  
 ##### 201904/20190405_08.md   [《PostgreSQL 12 preview - EXPLAIN支持输出settings（优化器相关设置）》](201904/20190405_08.md)  
-##### 201904/20190405_07.md   [《PostgreSQL 12 preview - Add progress reporting for CLUSTER and VACUUM FULL》](201904/20190405_07.md)  
+##### 201904/20190405_07.md   [《PostgreSQL 12 preview - Add progress reporting for CREATE INDEX | CLUSTER and VACUUM FULL》](201904/20190405_07.md)  
 ##### 201904/20190405_06.md   [《PostgreSQL 12 preview - Add progress reporting to pg_checksums》](201904/20190405_06.md)  
 ##### 201904/20190405_05.md   [《PostgreSQL 12 preview - Add wal_recycle and wal_init_zero GUCs 适配COW文件系统如ZFS》](201904/20190405_05.md)  
 ##### 201904/20190405_04.md   [《PostgreSQL 12 preview - 分区表PK作为其他表的FK》](201904/20190405_04.md)  

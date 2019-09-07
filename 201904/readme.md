@@ -19,7 +19,7 @@
 ##### 20190405_10.md   [《PostgreSQL ssl - Where and when you need a root.crt file》](20190405_10.md)  
 ##### 20190405_09.md   [《PostgreSQL 12 preview - 支持SQL采样比例设置 - Log all statements from a sample of transactions》](20190405_09.md)  
 ##### 20190405_08.md   [《PostgreSQL 12 preview - EXPLAIN支持输出settings（优化器相关设置）》](20190405_08.md)  
-##### 20190405_07.md   [《PostgreSQL 12 preview - Add progress reporting for CLUSTER and VACUUM FULL》](20190405_07.md)  
+##### 20190405_07.md   [《PostgreSQL 12 preview - Add progress reporting for CREATE INDEX | CLUSTER and VACUUM FULL》](20190405_07.md)  
 ##### 20190405_06.md   [《PostgreSQL 12 preview - Add progress reporting to pg_checksums》](20190405_06.md)  
 ##### 20190405_05.md   [《PostgreSQL 12 preview - Add wal_recycle and wal_init_zero GUCs 适配COW文件系统如ZFS》](20190405_05.md)  
 ##### 20190405_04.md   [《PostgreSQL 12 preview - 分区表PK作为其他表的FK》](20190405_04.md)  

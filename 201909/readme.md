@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20190908_03.md   [《PostgreSQL ssl 协议版本范围控制参数 ssl_min_protocol_version , ssl_max_protocol_version》](20190908_03.md)  
+##### 20190908_02.md   [《PostgreSQL 会话ssl状态查询 - pg_stat_ssl , sslinfo》](20190908_02.md)  
+##### 20190908_01.md   [《PostgreSQL 12 preview - pg_ls_archive_statusdir , pg_ls_tmpdir》](20190908_01.md)  
 ##### 20190901_07.md   [《PostgreSQL libpq 多后端连接倾向配置支持 - readonly , perfer-read , perfer-write , write》](20190901_07.md)  
 ##### 20190901_06.md   [《PostgreSQL 任意类型、任意数组 - 隐式类型转换 - anyelement anytype anydata anyarray commontype commonarray》](20190901_06.md)  
 ##### 20190901_05.md   [《PostgreSQL tid range scan - 行号范围扫描》](20190901_05.md)  

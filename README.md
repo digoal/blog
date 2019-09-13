@@ -53,6 +53,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190914_01.md   [《PostgreSQL standby 防主从切换后下游（standby）时间线错乱问题 - recovery_min_apply_delay + 内核改进》](201909/20190914_01.md)  
 ##### 201909/20190908_03.md   [《PostgreSQL 12 preview ssl 协议版本范围控制参数 ssl_min_protocol_version , ssl_max_protocol_version》](201909/20190908_03.md)  
 ##### 201909/20190908_02.md   [《PostgreSQL 会话ssl状态查询 - pg_stat_ssl , sslinfo》](201909/20190908_02.md)  
 ##### 201909/20190908_01.md   [《PostgreSQL 12 preview - pg_ls_archive_statusdir , pg_ls_tmpdir》](201909/20190908_01.md)  

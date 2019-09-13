@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190914_01.md   [《PostgreSQL standby 防主从切换后下游（standby）时间线错乱问题 - recovery_min_apply_delay + 内核改进》](20190914_01.md)  
 ##### 20190908_03.md   [《PostgreSQL 12 preview ssl 协议版本范围控制参数 ssl_min_protocol_version , ssl_max_protocol_version》](20190908_03.md)  
 ##### 20190908_02.md   [《PostgreSQL 会话ssl状态查询 - pg_stat_ssl , sslinfo》](20190908_02.md)  
 ##### 20190908_01.md   [《PostgreSQL 12 preview - pg_ls_archive_statusdir , pg_ls_tmpdir》](20190908_01.md)  

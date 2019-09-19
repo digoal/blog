@@ -53,6 +53,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190919_01.md   [《PostgreSQL 内置Logical Replication output plugin pgoutput》](201909/20190919_01.md)  
 ##### 201909/20190915_02.md   [《PostgreSQL pgstattuple - 检查表的膨胀情况、dead tuples、live tuples、freespace》](201909/20190915_02.md)  
 ##### 201909/20190915_01.md   [《PostgreSQL shared buffer 统计信息 - pg_buffercache - bufferid 被pin次数、backend数、是否脏、属于谁》](201909/20190915_01.md)  
 ##### 201909/20190914_01.md   [《PostgreSQL standby 防主从切换后下游（standby）时间线错乱问题 - recovery_min_apply_delay + 内核改进》](201909/20190914_01.md)  

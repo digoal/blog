@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190922_01.md   [《PostgreSQL EDB EPAS 兼容Oracle sqlplus客户端edb\*plus》](20190922_01.md)  
 ##### 20190919_01.md   [《PostgreSQL 内置Logical Replication output plugin pgoutput》](20190919_01.md)  
 ##### 20190915_02.md   [《PostgreSQL pgstattuple - 检查表的膨胀情况、dead tuples、live tuples、freespace》](20190915_02.md)  
 ##### 20190915_01.md   [《PostgreSQL shared buffer 统计信息 - pg_buffercache - bufferid 被pin次数、backend数、是否脏、属于谁》](20190915_01.md)  

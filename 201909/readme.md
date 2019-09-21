@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190922_02.md   [《》](20190922_02.md)  
 ##### 20190922_01.md   [《PostgreSQL EDB EPAS 兼容Oracle sqlplus客户端edb\*plus》](20190922_01.md)  
 ##### 20190919_01.md   [《PostgreSQL 内置Logical Replication output plugin pgoutput》](20190919_01.md)  
 ##### 20190915_02.md   [《PostgreSQL pgstattuple - 检查表的膨胀情况、dead tuples、live tuples、freespace》](20190915_02.md)  

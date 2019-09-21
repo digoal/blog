@@ -53,6 +53,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190922_02.md   [《》](201909/20190922_02.md)  
 ##### 201909/20190922_01.md   [《PostgreSQL EDB EPAS 兼容Oracle sqlplus客户端edb\*plus》](201909/20190922_01.md)  
 ##### 201909/20190919_01.md   [《PostgreSQL 内置Logical Replication output plugin pgoutput》](201909/20190919_01.md)  
 ##### 201909/20190915_02.md   [《PostgreSQL pgstattuple - 检查表的膨胀情况、dead tuples、live tuples、freespace》](201909/20190915_02.md)  

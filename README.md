@@ -53,6 +53,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190922_04.md   [《PostgreSQL Incremental View Maintenance - ivm (增量物化视图MATERIALIZED VIEW)进化》](201909/20190922_04.md)  
 ##### 201909/20190922_03.md   [《PostgreSQL PRO 特性 - rdma 协议使用 - libpq - rsocket API》](201909/20190922_03.md)  
 ##### 201909/20190922_02.md   [《PostgreSQL PRO 特性 - 内置连接池 - build-in pool 相关参数》](201909/20190922_02.md)  
 ##### 201909/20190922_01.md   [《PostgreSQL EDB EPAS 兼容Oracle sqlplus客户端edb\*plus》](201909/20190922_01.md)  

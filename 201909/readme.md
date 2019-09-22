@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20190922_04.md   [《PostgreSQL Incremental View Maintenance - ivm (增量物化视图MATERIALIZED VIEW)进化》](20190922_04.md)  
 ##### 20190922_03.md   [《PostgreSQL PRO 特性 - rdma 协议使用 - libpq - rsocket API》](20190922_03.md)  
 ##### 20190922_02.md   [《PostgreSQL PRO 特性 - 内置连接池 - build-in pool 相关参数》](20190922_02.md)  
 ##### 20190922_01.md   [《PostgreSQL EDB EPAS 兼容Oracle sqlplus客户端edb\*plus》](20190922_01.md)  

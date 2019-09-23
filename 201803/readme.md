@@ -45,7 +45,7 @@
 ##### 20180314_02.md   [《PostgreSQL 数据库多列复合索引的字段顺序选择原理》](20180314_02.md)  
 ##### 20180314_01.md   [《PostgreSQL 那些使用临时文件的操作与跟踪》](20180314_01.md)  
 ##### 20180312_06.md   [《[未完待续] PostgreSQL Oracle 兼容性之 - sys.anydata》](20180312_06.md)  
-##### 20180312_05.md   [《[未完待续] PostgreSQL 区块链 插件 pg_blkchain》](20180312_05.md)  
+##### 20180312_05.md   [《[未完待续] PostgreSQL 区块链(blockchain) 插件 pg_blkchain , pg_credereum》](20180312_05.md)  
 ##### 20180312_04.md   [《[转载] [嵌入式开发]Linux性能分析——上下文切换》](20180312_04.md)  
 ##### 20180312_03.md   [《PostgreSQL Oracle 兼容性之 - 自定义并行聚合函数 PARALLEL_ENABLE AGGREGATE》](20180312_03.md)  
 ##### 20180312_02.md   [《[未完待续] [翻译] PostgreSQL 常见HA方案》](20180312_02.md)  

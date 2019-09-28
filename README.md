@@ -57,6 +57,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190928_02.md   [《PostgreSQL pl/proxy Function-based sharding for PostgreSQL - 2.9 发布 支持PG 12》](201909/20190928_02.md)  
+##### 201909/20190928_01.md   [《PostgreSQL TDE 透明加密 - wait PG 13》](201909/20190928_01.md)  
 ##### 201909/20190922_04.md   [《PostgreSQL Incremental View Maintenance - ivm (增量物化视图MATERIALIZED VIEW)进化》](201909/20190922_04.md)  
 ##### 201909/20190922_03.md   [《PostgreSQL PRO 特性 - rdma 协议使用 - libpq - rsocket API》](201909/20190922_03.md)  
 ##### 201909/20190922_02.md   [《PostgreSQL PRO 特性 - 内置连接池 - build-in pool 相关参数》](201909/20190922_02.md)  
@@ -163,7 +165,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201905/20190517_02.md   [《[招聘] [阿里巴巴] 招聘PostgreSQL 数据库DBA》](201905/20190517_02.md)  
 ##### 201905/20190517_01.md   [《[招聘] [上海光源-国家级应用物理研究所] 招聘PostgreSQL 数据库DBA》](201905/20190517_01.md)  
 ##### 201905/20190515_01.md   [《PostgreSQL 12 preview - 优化器接口 - 自定义函数成本估算优化接口》](201905/20190515_01.md)  
-##### 201905/20190514_01.md   [《PostgreSQL 用户、会话、业务级 资源隔离(cgroup, 进程组) - resource manage》](201905/20190514_01.md)  
+##### 201905/20190514_01.md   [《PostgreSQL 用户、会话、业务级 资源隔离(cgroup, 进程组, pg_cgroups) - resource manage》](201905/20190514_01.md)  
 ##### 201905/20190509_01.md   [《pipelinedb 团队加入Confluent，TimescaleDB时序插件支持准实时聚合（类流式计算）》](201905/20190509_01.md)  
 ##### 201905/20190508_01.md   [《删除用户风险大，试试锁定用户》](201905/20190508_01.md)  
 ##### 201905/20190505_01.md   [《PostgreSQL 权限查询与统计 - has ... privilege (例 用户、数据库维度 OWNER、connect,create,temp权限统计) , 默认权限列表查询，解读ACL》](201905/20190505_01.md)  
@@ -1547,7 +1549,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201607/20160725_04.md   [《PostgreSQL Oracle 兼容性之 - 锁定执行计划(Outline system)》](201607/20160725_04.md)  
 ##### 201607/20160725_03.md   [《mongoDB BI 分析利器 - PostgreSQL FDW (MongoDB Connector for BI)》](201607/20160725_03.md)  
 ##### 201607/20160725_02.md   [《如何加快PostgreSQL结巴分词pg_jieba加载速度》](201607/20160725_02.md)  
-##### 201607/20160725_01.md   [《PostgreSQL 使用递归SQL 找出数据库对象之间的依赖关系》](201607/20160725_01.md)  
+##### 201607/20160725_01.md   [《PostgreSQL 使用递归SQL 找出数据库对象之间的依赖关系 - 例如视图依赖》](201607/20160725_01.md)  
 ##### 201607/20160723_03.md   [《一致性哈希在分布式数据库中的应用探索》](201607/20160723_03.md)  
 ##### 201607/20160723_02.md   [《关键时刻HINT出彩 - PG优化器的参数优化、执行计划固化CASE》](201607/20160723_02.md)  
 ##### 201607/20160723_01.md   [《PostgreSQL 递归死循环案例及解法》](201607/20160723_01.md)  

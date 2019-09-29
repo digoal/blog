@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201909/20190929_01.md   [《PostgreSQL PostGIS 3 - ST_Transform() and Proj6 动态修正地球形变引起的精度不准》](201909/20190929_01.md)  
 ##### 201909/20190928_02.md   [《PostgreSQL pl/proxy Function-based sharding for PostgreSQL - 2.9 发布 支持PG 12》](201909/20190928_02.md)  
 ##### 201909/20190928_01.md   [《PostgreSQL TDE 透明加密 - wait PG 13》](201909/20190928_01.md)  
 ##### 201909/20190922_04.md   [《PostgreSQL Incremental View Maintenance - ivm (增量物化视图MATERIALIZED VIEW)进化》](201909/20190922_04.md)  

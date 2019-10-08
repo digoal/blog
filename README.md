@@ -57,6 +57,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201910/20191008_01.md   [《Oracle 20c 新特性 - 开源是商业数据库的影子 - 翻出了PG十年前的特性》](201910/20191008_01.md)  
+----  
 ##### 201909/20190929_01.md   [《PostgreSQL PostGIS 3 - ST_Transform() and Proj6 动态修正地球形变引起的精度不准》](201909/20190929_01.md)  
 ##### 201909/20190928_02.md   [《PostgreSQL pl/proxy Function-based sharding for PostgreSQL - 2.9 发布 支持PG 12》](201909/20190928_02.md)  
 ##### 201909/20190928_01.md   [《PostgreSQL TDE 透明加密 - wait PG 13》](201909/20190928_01.md)  

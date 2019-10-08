@@ -79,7 +79,14 @@ do
     LINK=`grep "22709685feb7cab07d30f30387f0a9ae" $file|grep -c "22709685feb7cab07d30f30387f0a9ae"`
     if [ $LINK -ne 1 ]; then
       echo "  " >> ./$file
-      echo "## [digoal's 大量PostgreSQL文章入口](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
+      echo "## [digoal's 所有PostgreSQL文章入口](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
+      echo "  " >> ./$file
+    fi
+# #######################    sed -i '/f7ad92eeba24523fd47a6e1a0e691b59/d' $file
+    LINK=`grep "f7ad92eeba24523fd47a6e1a0e691b59" $file|grep -c "f7ad92eeba24523fd47a6e1a0e691b59"`
+    if [ $LINK -ne 1 ]; then
+      echo "  " >> ./$file
+      echo "![digoal's weixin](../pic/digoal_weixin.jpg \"f7ad92eeba24523fd47a6e1a0e691b59\")" >> ./$file
       echo "  " >> ./$file
     fi
 # #######################    sed -i '/22709685feb7cab07d30f30387f0a9ae/d' $file

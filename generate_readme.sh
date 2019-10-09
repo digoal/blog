@@ -69,34 +69,43 @@ do
     title=`head -n 1 $file|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`
     echo "##### $file   [《$title》]($file)  " >> ./readme.md
     echo "##### $dir/$file   [《$title》]($dir/$file)  " >> ../README.md
-    FLAG=`grep "flagcounter" $file|grep -c "href"`
-    if [ $FLAG -ne 1 ]; then
+# ######################  go go go
+    FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" $file|grep -c "57258f76c37864c6e6d23383d05714ea"`
+    if [ $FREEURL -ne 1 ]; then
       echo "  " >> ./$file
-      echo "<a rel=\"nofollow\" href=\"http://info.flagcounter.com/h9V1\"  ><img src=\"http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/\"  alt=\"Flag Counter\"  border=\"0\"  ></a>  " >> ./$file
+      echo "#### [免费领取阿里云RDS PostgreSQL实例、ECS虚拟机](https://free.aliyun.com/ \"57258f76c37864c6e6d23383d05714ea\")" >> ./$file
       echo "  " >> ./$file
     fi
-# #######################    sed -i '/Count].http:\/\/info.flagcounter.com\/h9V1/d' $file
+# ######   sed -i '/57258f76c37864c6e6d23383d05714ea/d' $file
     LINK=`grep "22709685feb7cab07d30f30387f0a9ae" $file|grep -c "22709685feb7cab07d30f30387f0a9ae"`
     if [ $LINK -ne 1 ]; then
       echo "  " >> ./$file
-      echo "## [digoal's 所有PostgreSQL文章入口](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
+      echo "#### [digoal's PostgreSQL文章入口](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
       echo "  " >> ./$file
     fi
-# #######################    sed -i '/f7ad92eeba24523fd47a6e1a0e691b59/d' $file
-    LINK=`grep "f7ad92eeba24523fd47a6e1a0e691b59" $file|grep -c "f7ad92eeba24523fd47a6e1a0e691b59"`
-    if [ $LINK -ne 1 ]; then
+# ######   sed -i '/22709685feb7cab07d30f30387f0a9ae/d' $file
+    WXLINK=`grep "f7ad92eeba24523fd47a6e1a0e691b59" $file|grep -c "f7ad92eeba24523fd47a6e1a0e691b59"`
+    if [ $WXLINK -ne 1 ]; then
       echo "  " >> ./$file
       echo "![digoal's weixin](../pic/digoal_weixin.jpg \"f7ad92eeba24523fd47a6e1a0e691b59\")" >> ./$file
       echo "  " >> ./$file
     fi
-# #######################    sed -i '/22709685feb7cab07d30f30387f0a9ae/d' $file
-    FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" $file|grep -c "57258f76c37864c6e6d23383d05714ea"`
-    if [ $FREEURL -ne 1 ]; then
+# ######   sed -i '/f7ad92eeba24523fd47a6e1a0e691b59/d' $file
+    DSLINK=`grep "acd5cce1a143ef1d6931b1956457bc9f" $file|grep -c "acd5cce1a143ef1d6931b1956457bc9f"`
+    if [ $DSLINK -ne 1 ]; then
       echo "  " >> ./$file
-      echo "## [免费领取阿里云RDS PostgreSQL实例、ECS虚拟机](https://free.aliyun.com/ \"57258f76c37864c6e6d23383d05714ea\")" >> ./$file
+      echo "#### 老婆的钱袋子：可以打赏哦^_^  " >> ./$file
+      echo "![wife's weixin ds](../pic/wife_weixin_ds.jpg \"acd5cce1a143ef1d6931b1956457bc9f\")" >> ./$file
       echo "  " >> ./$file
     fi
-# #######################    sed -i '/57258f76c37864c6e6d23383d05714ea/d' $file
+# ######   sed -i '/acd5cce1a143ef1d6931b1956457bc9f/d' $file
+#    FLAG=`grep "flagcounter" $file|grep -c "href"`
+#    if [ $FLAG -ne 1 ]; then
+#      echo "  " >> ./$file
+#      echo "<a rel=\"nofollow\" href=\"http://info.flagcounter.com/h9V1\"  ><img src=\"http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/\"  alt=\"Flag Counter\"  border=\"0\"  ></a>  " >> ./$file
+#      echo "  " >> ./$file
+#    fi
+# ######   sed -i '/href=\"http:\/\/info.flagcounter.com\/h9V1/d' $file
   done
   cd ..
 done

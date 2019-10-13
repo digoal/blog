@@ -1874,7 +1874,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201506/20150616_02.md   [《PostgreSQL 9.5 new feature - pg_dump use --snapshot taken by another session (exp. slot, pg_export_snapshot())》](201506/20150616_02.md)  
 ##### 201506/20150616_01.md   [《PostgreSQL 9.5 new feature - width_bucket return the bucket number》](201506/20150616_01.md)  
 ##### 201506/20150615_01.md   [《PostgreSQL trigger/rule based replication configure, DISABLE/ENABLE [ REPLICA | ALWAYS ] TRIGGER | RULE》](201506/20150615_01.md)  
-##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南》](201506/20150601_01.md)  
+##### 201506/20150601_01.md   [《PostgreSQL 数据库安全指南 - 以及安全合规》](201506/20150601_01.md)  
 ----  
 ##### 201505/20150526_02.md   [《PostgreSQL 9.5 new feature - Support GROUPING SETS, CUBE and ROLLUP.》](201505/20150526_02.md)  
 ##### 201505/20150526_01.md   [《PostgreSQL 9.5 new feature - lets BRIN be used with R-Tree-like indexing strategies For "inclusion" opclasses》](201505/20150526_01.md)  

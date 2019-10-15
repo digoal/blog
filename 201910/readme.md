@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191015_01.md   [《PostgreSQL 12 tpcc 测试 - use sysbench-tpcc by Percona-Lab》](20191015_01.md)  
 ##### 20191012_01.md   [《PostgreSQL 表传输功能 - pg_transport pgtransfer》](20191012_01.md)  
 ##### 20191011_01.md   [《云栖开发者社区分享 - postgres_fdw PG 外部表》](20191011_01.md)  
 ##### 20191009_01.md   [《苹果 MAXOS 限制进程cpu使用率》](20191009_01.md)  

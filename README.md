@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201910/20191017_01.md   [《hash join|agg 这样测 - PG 12性能要上天》](201910/20191017_01.md)  
 ##### 201910/20191015_01.md   [《PostgreSQL 12 tpcc 测试 - use sysbench-tpcc by Percona-Lab》](201910/20191015_01.md)  
 ##### 201910/20191012_01.md   [《PostgreSQL 表传输功能 - pg_transport pgtransfer》](201910/20191012_01.md)  
 ##### 201910/20191011_01.md   [《云栖开发者社区分享 - postgres_fdw PG 外部表》](201910/20191011_01.md)  

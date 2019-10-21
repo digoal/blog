@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191021_01.md   [《PostgreSQL 如何配置归档，并自动删除7天前归档的redo(wal) - mtime 时间戳复制，find》](20191021_01.md)  
 ##### 20191017_01.md   [《hash join|agg 这样测 - PG 12性能要上天》](20191017_01.md)  
 ##### 20191015_01.md   [《PostgreSQL 12 tpcc 测试 - use sysbench-tpcc by Percona-Lab》](20191015_01.md)  
 ##### 20191012_01.md   [《PostgreSQL 表传输功能 - pg_transport pgtransfer》](20191012_01.md)  

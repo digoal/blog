@@ -91,15 +91,17 @@ do
       echo "  " >> ./$file
     fi
 # ######   sed -i '/f7ad92eeba24523fd47a6e1a0e691b59/d' $file
-    DSLINK=`grep "acd5cce1a143ef1d6931b1956457bc9f" $file|grep -c "acd5cce1a143ef1d6931b1956457bc9f"`
-    if [ $DSLINK -ne 1 ]; then
-      echo "  " >> ./$file
-      echo "#### 打赏都逃不过老婆的五指山 －_－b  " >> ./$file
-      echo "![wife's weixin ds](../pic/wife_weixin_ds.jpg \"acd5cce1a143ef1d6931b1956457bc9f\")" >> ./$file
-      echo "  " >> ./$file
-    fi
-# ######   sed -i '/打赏都逃不过老婆的五指山/d' $file
-# ######   sed -i '/acd5cce1a143ef1d6931b1956457bc9f/d' $file
+#
+#    DSLINK=`grep "acd5cce1a143ef1d6931b1956457bc9f" $file|grep -c "acd5cce1a143ef1d6931b1956457bc9f"`
+#    if [ $DSLINK -ne 1 ]; then
+#      echo "  " >> ./$file
+#      echo "#### 打赏都逃不过老婆的五指山 －_－b  " >> ./$file
+#      echo "![wife's weixin ds](../pic/wife_weixin_ds.jpg \"acd5cce1a143ef1d6931b1956457bc9f\")" >> ./$file
+#      echo "  " >> ./$file
+#    fi
+# ######  sed -i '/打赏都逃不过老婆的五指山/d' $file
+# ######  sed -i '/acd5cce1a143ef1d6931b1956457bc9f/d' $file
+#
 #    FLAG=`grep "flagcounter" $file|grep -c "href"`
 #    if [ $FLAG -ne 1 ]; then
 #      echo "  " >> ./$file

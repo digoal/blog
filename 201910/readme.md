@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191027_03.md   [《PostgreSQL WAL|redo mirror|multi mirror方法（wal 0丢失） - pg_receivewal+sync replication》](20191027_03.md)  
 ##### 20191027_02.md   [《pg_checksums 1.0 支持在线校验block checksum，限速，兼容9.3以上所有pg版本》](20191027_02.md)  
 ##### 20191027_01.md   [《》](20191027_01.md)  
 ##### 20191023_01.md   [《阿里云RDS PG 11开放dblink, postgres_fdw权限》](20191023_01.md)  

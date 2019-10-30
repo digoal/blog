@@ -61,7 +61,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201910/20191027_04.md   [《PostgreSQL timescaledb插件 pg_prometheus - PostgreSQL作为prometheus的时序数据库必备插件》](201910/20191027_04.md)  
 ##### 201910/20191027_03.md   [《PostgreSQL WAL|redo mirror|multi mirror方法（wal 0丢失） - pg_receivewal+sync replication》](201910/20191027_03.md)  
 ##### 201910/20191027_02.md   [《pg_checksums 1.0 支持在线校验block checksum，限速，兼容9.3以上所有pg版本》](201910/20191027_02.md)  
-##### 201910/20191027_01.md   [《》](201910/20191027_01.md)  
+##### 201910/20191027_01.md   [《PostgreSQL libpq|jdbc 驱动层 load balance 与 failover》](201910/20191027_01.md)  
 ##### 201910/20191023_01.md   [《阿里云RDS PG 11开放dblink, postgres_fdw权限》](201910/20191023_01.md)  
 ##### 201910/20191021_01.md   [《PostgreSQL 如何配置归档，并自动删除7天前归档的redo(wal) - mtime 时间戳复制，find》](201910/20191021_01.md)  
 ##### 201910/20191017_01.md   [《hash join|agg 这样测 - PG 12性能要上天》](201910/20191017_01.md)  

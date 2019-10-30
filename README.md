@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201910/20191030_01.md   [《PostgreSQL batch insert - jdbc reWriteBatchedInserts 批量写入 (copy,insert,begin commit,group commit)》](201910/20191030_01.md)  
 ##### 201910/20191027_04.md   [《PostgreSQL timescaledb插件 pg_prometheus - PostgreSQL作为prometheus的时序数据库必备插件》](201910/20191027_04.md)  
 ##### 201910/20191027_03.md   [《PostgreSQL WAL|redo mirror|multi mirror方法（wal 0丢失） - pg_receivewal+sync replication》](201910/20191027_03.md)  
 ##### 201910/20191027_02.md   [《pg_checksums 1.0 支持在线校验block checksum，限速，兼容9.3以上所有pg版本》](201910/20191027_02.md)  

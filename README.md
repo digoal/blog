@@ -57,6 +57,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201911/20191101_01.md   [《PostgreSQL HAProxy ha & load balance 代理》](201911/20191101_01.md)  
+----  
 ##### 201910/20191030_01.md   [《PostgreSQL batch insert - jdbc reWriteBatchedInserts 批量写入 (copy,insert,begin commit,group commit)》](201910/20191030_01.md)  
 ##### 201910/20191027_04.md   [《PostgreSQL timescaledb插件 pg_prometheus - PostgreSQL作为prometheus的时序数据库必备插件》](201910/20191027_04.md)  
 ##### 201910/20191027_03.md   [《PostgreSQL WAL|redo mirror|multi mirror方法（wal 0丢失） - pg_receivewal+sync replication》](201910/20191027_03.md)  

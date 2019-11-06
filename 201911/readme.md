@@ -2,4 +2,5 @@
   
 ### 文章列表  
 ----  
+##### 20191104_01.md   [《PostgreSQL "Ask digoal@德哥" 第一期》](20191104_01.md)  
 ##### 20191101_01.md   [《PostgreSQL HAProxy ha & load balance 代理》](20191101_01.md)  

@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201911/20191104_01.md   [《PostgreSQL "Ask digoal@德哥" 第一期》](201911/20191104_01.md)  
 ##### 201911/20191101_01.md   [《PostgreSQL HAProxy ha & load balance 代理》](201911/20191101_01.md)  
 ----  
 ##### 201910/20191030_01.md   [《PostgreSQL batch insert - jdbc reWriteBatchedInserts 批量写入 (copy,insert,begin commit,group commit)》](201910/20191030_01.md)  

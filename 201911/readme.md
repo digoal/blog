@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20191112_02.md   [《PostgreSQL 兼容SQL Server 忽略大小写、大小写不敏感 - citext、operator覆盖》](20191112_02.md)  
+##### 20191112_01.md   [《阿里云 RDS PostgreSQL 11 自建异地从库（standby） - pg_basebackup》](20191112_01.md)  
 ##### 20191110_01.md   [《PostgreSQL 福州 象行中国 活动回顾》](20191110_01.md)  
 ##### 20191108_02.md   [《PostgreSQL gzip 插件 - 函数接口：压缩、解压 text, bytea 类型》](20191108_02.md)  
 ##### 20191108_01.md   [《PostgreSQL md5hash插件 - 128bit 存储，压缩空间、提升效率》](20191108_01.md)  

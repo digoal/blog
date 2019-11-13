@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201911/20191113_03.md   [《SQL Server to PostgreSQL - 康恩贝、乘数分享ppt》](201911/20191113_03.md)  
 ##### 201911/20191113_02.md   [《PostgreSQL 物理从库 切换为 逻辑从库》](201911/20191113_02.md)  
 ##### 201911/20191113_01.md   [《PostgreSQL pg_pathman 分区表转换为原生分区表 - attach,detach, get_hash_part_idx》](201911/20191113_01.md)  
 ##### 201911/20191112_03.md   [《阿里云 RDS PostgreSQL 云盘版支持 mysql_fdw - 直接读写mysql数据，作为小型实时数据仓库》](201911/20191112_03.md)  

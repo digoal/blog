@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201911/20191115_03.md   [《PostgreSQL 敏感信息遮掩插件 anon - security label provider - anon》](201911/20191115_03.md)  
 ##### 201911/20191115_02.md   [《PostgreSQL 12 - GENERATED column stored - 自动生成列》](201911/20191115_02.md)  
 ##### 201911/20191115_01.md   [《PostgreSQL 查询 依赖extension (type)的table》](201911/20191115_01.md)  
 ##### 201911/20191113_03.md   [《SQL Server to PostgreSQL - 康恩贝、乘数分享ppt》](201911/20191113_03.md)  

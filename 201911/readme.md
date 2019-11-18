@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191118_01.md   [《PostgreSQL pg_roaringbitmap - 用户画像、标签、高效检索》](20191118_01.md)  
 ##### 20191115_03.md   [《PostgreSQL 敏感信息遮掩插件 anon - security label provider - anon》](20191115_03.md)  
 ##### 20191115_02.md   [《PostgreSQL 12 - GENERATED column stored - 自动生成列》](20191115_02.md)  
 ##### 20191115_01.md   [《PostgreSQL 查询 依赖extension (type)的table》](20191115_01.md)  

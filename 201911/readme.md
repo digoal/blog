@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191125_01.md   [《PostgreSQL 化学分析 - RDKit Cartridge 1 - 环境部署》](20191125_01.md)  
 ##### 20191122_01.md   [《阿里云RDS PG postgres_fdw sharding 分库分表 (not drds)》](20191122_01.md)  
 ##### 20191121_01.md   [《阿里云RDS PG 11支持ESSD pl3 存储，满足企业超高性能数据库要求》](20191121_01.md)  
 ##### 20191120_01.md   [《Linux 网卡队列、combined、irqbalance对网络性能的影响和优化》](20191120_01.md)  

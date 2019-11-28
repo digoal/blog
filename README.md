@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201911/20191128_01.md   [《PostgreSQL 约束延判(unique, primary key, foreign key, exclude) - deferrable》](201911/20191128_01.md)  
 ##### 201911/20191125_01.md   [《PostgreSQL 化学分析 - RDKit Cartridge 1 - 环境部署》](201911/20191125_01.md)  
 ##### 201911/20191122_01.md   [《阿里云RDS PG postgres_fdw sharding 分库分表 (not drds)》](201911/20191122_01.md)  
 ##### 201911/20191121_01.md   [《阿里云RDS PG 11支持ESSD pl3 存储，满足企业超高性能数据库要求 - 含tpcc测试结果》](201911/20191121_01.md)  

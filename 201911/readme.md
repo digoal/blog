@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191128_02.md   [《画像系统标准化设计 - PostgreSQL roaringbitmap, varbitx , 正向关系, 反向关系, 圈选, 相似扩选(向量相似扩选)》](20191128_02.md)  
 ##### 20191128_01.md   [《PostgreSQL 约束延判(unique, primary key, foreign key, exclude) - deferrable》](20191128_01.md)  
 ##### 20191125_01.md   [《PostgreSQL 化学分析 - RDKit Cartridge 1 - 环境部署》](20191125_01.md)  
 ##### 20191122_01.md   [《阿里云RDS PG postgres_fdw sharding 分库分表 (not drds)》](20191122_01.md)  

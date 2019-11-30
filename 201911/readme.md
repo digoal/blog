@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191130_01.md   [《UID编码优化 - 用户画像前置规则 (bloom, 固定算法等)》](20191130_01.md)  
 ##### 20191128_03.md   [《PostgreSQL 12 - btree index 增强(duplicate key sort by ctid)》](20191128_03.md)  
 ##### 20191128_02.md   [《画像系统标准化设计 - PostgreSQL roaringbitmap, varbitx , 正向关系, 反向关系, 圈选, 相似扩选(向量相似扩选)》](20191128_02.md)  
 ##### 20191128_01.md   [《PostgreSQL 约束延判(unique, primary key, foreign key, exclude) - deferrable》](20191128_01.md)  

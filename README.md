@@ -57,6 +57,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201912/20191204_06.md   [《PostgreSQL 13 preview - logical decoding io优化 logical_decoding_work_mem》](201912/20191204_06.md)  
+##### 201912/20191204_05.md   [《PostgreSQL 13 preview - pgbench server-side产生tpc-b测试数据(使用generate_series产生大量测试数据)》](201912/20191204_05.md)  
+##### 201912/20191204_04.md   [《PostgreSQL 13 preview - SQL采样比例设置 log_min_duration_sample log_min_duration_sample》](201912/20191204_04.md)  
 ##### 201912/20191204_03.md   [《PostgreSQL 13 preview - drop database force 自动kill DATABASE 连接》](201912/20191204_03.md)  
 ##### 201912/20191204_02.md   [《PostgreSQL 的深度学习实践直播回放 - Python社区大佬刘鑫老师奉献》](201912/20191204_02.md)  
 ##### 201912/20191204_01.md   [《PostgreSQL 2019 全国峰会现场采访实录》](201912/20191204_01.md)  

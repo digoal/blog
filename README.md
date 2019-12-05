@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201912/20191205_01.md   [《PostgreSQL 12 preview - icu collate，支持大小写不敏感、口音不敏感排序》](201912/20191205_01.md)  
 ##### 201912/20191204_06.md   [《PostgreSQL 13 preview - logical decoding io优化 logical_decoding_work_mem》](201912/20191204_06.md)  
 ##### 201912/20191204_05.md   [《PostgreSQL 13 preview - pgbench server-side产生tpc-b测试数据(使用generate_series产生大量测试数据)》](201912/20191204_05.md)  
 ##### 201912/20191204_04.md   [《PostgreSQL 13 preview - SQL采样比例设置 log_min_duration_sample log_min_duration_sample》](201912/20191204_04.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20191206_03.md   [《PostgreSQL ORG fdw 支持pushdown》](20191206_03.md)  
+##### 20191206_02.md   [《PostgreSQL preview - 全局索引 global index》](20191206_02.md)  
+##### 20191206_01.md   [《PostgreSQL 12 减少日志量 - 监控探测: incomplete startup packet》](20191206_01.md)  
 ##### 20191205_01.md   [《PostgreSQL 12 preview - icu collate，支持大小写不敏感、口音不敏感排序》](20191205_01.md)  
 ##### 20191204_06.md   [《PostgreSQL 13 preview - logical decoding io优化 logical_decoding_work_mem》](20191204_06.md)  
 ##### 20191204_05.md   [《PostgreSQL 13 preview - pgbench server-side产生tpc-b测试数据(使用generate_series产生大量测试数据)》](20191204_05.md)  

@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20191206_03.md   [《PostgreSQL ORG fdw 支持pushdown》](20191206_03.md)  
+##### 20191206_03.md   [《PostgreSQL ORG GIS fdw 外部表支持pushdown - 支持多数据源（file,jdbc,odbc,oci,ms sql,pg,mongo等等）》](20191206_03.md)  
 ##### 20191206_02.md   [《PostgreSQL preview - 全局索引 global index》](20191206_02.md)  
 ##### 20191206_01.md   [《PostgreSQL 12 减少日志量 - 监控探测: incomplete startup packet》](20191206_01.md)  
 ##### 20191205_01.md   [《PostgreSQL 12 preview - icu collate，支持大小写不敏感、口音不敏感排序》](20191205_01.md)  

@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201912/20191218_01.md   [《PostgreSQL 时序数据库timescaledb支持compress调度》](201912/20191218_01.md)  
 ##### 201912/20191210_02.md   [《PostgreSQL hook 钩子介绍 - 过滤器、空壳、无中生有》](201912/20191210_02.md)  
 ##### 201912/20191210_01.md   [《PostgreSQL Tutorial for Oracle, MySQL DBAs and Beginners》](201912/20191210_01.md)  
 ##### 201912/20191208_01.md   [《PostgreSQL 12 nbtree index v4 - 内核改进点分析》](201912/20191208_01.md)  

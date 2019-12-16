@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191218_01.md   [《PostgreSQL 时序数据库timescaledb支持compress调度》](20191218_01.md)  
 ##### 20191210_02.md   [《PostgreSQL hook 钩子介绍 - 过滤器、空壳、无中生有》](20191210_02.md)  
 ##### 20191210_01.md   [《PostgreSQL Tutorial for Oracle, MySQL DBAs and Beginners》](20191210_01.md)  
 ##### 20191208_01.md   [《PostgreSQL 12 nbtree index v4 - 内核改进点分析》](20191208_01.md)  

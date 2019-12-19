@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 201912/20191219_02.md   [《PostgreSQL 阿里云rds pg图像识别 - pase 插件》](201912/20191219_02.md)  
 ##### 201912/20191219_01.md   [《PostgreSQL log_fdw 阿里云rds pg如何查看、配置实时数据库日志》](201912/20191219_01.md)  
 ##### 201912/20191218_02.md   [《PostgreSQL GiST Order by 距离 + 距离范围判定 + limit 骤变优化与背景原因》](201912/20191218_02.md)  
 ##### 201912/20191218_01.md   [《PostgreSQL 时序数据库timescaledb支持compress调度》](201912/20191218_01.md)  

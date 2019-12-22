@@ -2,7 +2,7 @@
   
 ### 一、PostgreSQL, Greenplum 学习视频  
   
-1、下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)  
+1、视频下载链接： https://pan.baidu.com/s/1Q5u5NSrb0gL5-psA9DCBUQ   (提取码：5nox   如果链接失效请通知我, 谢谢)  
 1\.1、PostgreSQL 9.3 数据库管理与优化 视频4天  
 1\.2、PostgreSQL 9.3 数据库管理与优化 视频5天  
 1\.3、PostgreSQL 9.1 数据库管理与开发 视频1天  

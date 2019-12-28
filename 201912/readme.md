@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20191228_05.md   [《PostgreSQL 12新特性、数据库风向标 - 视频》](20191228_05.md)  
 ##### 20191228_04.md   [《PostgreSQL 12 on 阿里云ecs 本地ssd VS essd pl3性能 - 含fio,fsync test,pgbench test，优缺点、云盘PG内核优化建议》](20191228_04.md)  
 ##### 20191228_03.md   [《fio io测试阿里云ecs 本地ssd, essd性能 - 2》](20191228_03.md)  
 ##### 20191228_02.md   [《fio io测试阿里云ecs 本地ssd, essd性能 - 1》](20191228_02.md)  

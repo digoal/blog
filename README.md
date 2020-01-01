@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202001/20200101_05.md   [《PostgreSQL 13 preview - 逻辑订阅支持row filter》](202001/20200101_05.md)  
 ##### 202001/20200101_04.md   [《PostgreSQL 13 preview - Disk Quota 功能 - add smgr block hooks》](202001/20200101_04.md)  
 ##### 202001/20200101_03.md   [《PostgreSQL 13 preview - NOT IN -> anti join 性能优化》](202001/20200101_03.md)  
 ##### 202001/20200101_02.md   [《PostgreSQL 13 preview - analyze progress report》](202001/20200101_02.md)  

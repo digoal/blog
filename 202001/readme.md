@@ -2,4 +2,5 @@
   
 ### 文章列表  
 ----  
+##### 20200101_02.md   [《PostgreSQL 13 preview - analyze progress report》](20200101_02.md)  
 ##### 20200101_01.md   [《PostgreSQL 13 preview - wait event sample - 等待事件统计(插件,hook) - ASH - performance insight》](20200101_01.md)  

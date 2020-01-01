@@ -57,6 +57,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202001/20200101_01.md   [《PostgreSQL 13 preview - wait event sample - 等待事件统计(插件,hook) - ASH - performance insight》](202001/20200101_01.md)  
+----  
 ##### 201912/20191231_01.md   [《PostgreSQL + MySQL 联合解决方案 - 回顾视频 -  第2课》](201912/20191231_01.md)  
 ##### 201912/20191230_02.md   [《PostgreSQL pg_stat_statements 开启后引入slock导致高并发下的性能问题》](201912/20191230_02.md)  
 ##### 201912/20191230_01.md   [《PostgreSQL + MySQL 联合解决方案 - 回顾视频 -  第1课》](201912/20191230_01.md)  

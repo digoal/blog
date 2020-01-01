@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202001/20200101_07.md   [《PostgreSQL 13 preview - rangeagg(聚合) to range[]》](202001/20200101_07.md)  
 ##### 202001/20200101_06.md   [《PostgreSQL 13 preview - gin倒排索引性能优化 - 防止gin full scan(逻辑推理)》](202001/20200101_06.md)  
 ##### 202001/20200101_05.md   [《PostgreSQL 13 preview - 逻辑订阅支持row filter》](202001/20200101_05.md)  
 ##### 202001/20200101_04.md   [《PostgreSQL 13 preview - Disk Quota 功能 - add smgr block hooks》](202001/20200101_04.md)  

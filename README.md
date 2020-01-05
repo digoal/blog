@@ -57,6 +57,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202001/20200105_04.md   [《PostgreSQL 兼容 MySQL tinyint , unsigned int , zerofill 等 - domain , lpad》](202001/20200105_04.md)  
 ##### 202001/20200105_03.md   [《PostgreSQL 兼容 MySQL bit(n) 用法 - 超出范围填充1，不足范围填充0》](202001/20200105_03.md)  
 ##### 202001/20200105_02.md   [《PostgreSQL sql 审核功能》](202001/20200105_02.md)  
 ##### 202001/20200105_01.md   [《vmware on mac 耗电、风扇狂响问题 - 应用程序菜单,在菜单栏中显示》](202001/20200105_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20200105_02.md   [《PostgreSQL sql 审核功能》](20200105_02.md)  
+##### 20200105_01.md   [《vmware on mac 耗电、风扇狂响问题 - 应用程序菜单,在菜单栏中显示》](20200105_01.md)  
 ##### 20200103_01.md   [《PostgreSQL + MySQL 联合解决方案 - 回顾视频 -  第3课》](20200103_01.md)  
 ##### 20200101_07.md   [《PostgreSQL 13 preview - rangeagg(聚合) to range[]》](20200101_07.md)  
 ##### 20200101_06.md   [《PostgreSQL 13 preview - gin倒排索引性能优化 - 防止gin full scan(逻辑推理)》](20200101_06.md)  

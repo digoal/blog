@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200106_02.md   [《PostgreSQL 邮箱email 类型 - domain》](20200106_02.md)  
 ##### 20200106_01.md   [《PostgreSQL 兼容MySQL year类型方法 - domain》](20200106_01.md)  
 ##### 20200105_04.md   [《PostgreSQL 兼容 MySQL tinyint , unsigned int , zerofill 等 - domain , lpad》](20200105_04.md)  
 ##### 20200105_03.md   [《PostgreSQL 兼容 MySQL bit(n) 用法 - 超出范围填充1，不足范围填充0》](20200105_03.md)  

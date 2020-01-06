@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200107_01.md   [《PostgreSQL + MySQL 联合解决方案 - 回顾视频 -  第5课》](20200107_01.md)  
 ##### 20200106_03.md   [《PostgreSQL + MySQL 联合解决方案 - 回顾视频 -  第4课》](20200106_03.md)  
 ##### 20200106_02.md   [《PostgreSQL 邮箱email 类型 - domain》](20200106_02.md)  
 ##### 20200106_01.md   [《PostgreSQL 兼容MySQL year类型方法 - domain》](20200106_01.md)  

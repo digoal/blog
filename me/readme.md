@@ -13,7 +13,7 @@
 - [CockroachDB](https://github.com/cockroachdb/cockroach) 中国社区发起人之一。   
 - DBA+社群 联合发起人之一。      
 - DBGeeK联盟 专家团成员。      
-- 30项数据库专利。（截至2018-01）      
+- 36项数据库专利。（截至2020-01）      
       
 现任职于阿里云数据库团队，负责阿里云PostgreSQL系列产品线（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，曾负责的产品包括（HybridDB for PostgreSQL(分布式版PG的架构设计，现已更名为ADB for PG)，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品设计、推广、应用落地与生态构建。 欢迎使用[ADAM+RDS PG 或 POLARDB for Oracle（平滑去O）](https://www.aliyun.com/product/adam)）。  
   

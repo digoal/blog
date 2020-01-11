@@ -111,6 +111,8 @@ digoal's|PostgreSQL|文章|归类
 ##### 201911/20191128_03.md   [《PostgreSQL 12 - btree index 增强(duplicate key sort by ctid)》](201911/20191128_03.md)  
 ##### 201911/20191128_02.md   [《画像系统标准化设计 - PostgreSQL roaringbitmap, varbitx , 正向关系, 反向关系, 圈选, 相似扩选(向量相似扩选)》](201911/20191128_02.md)  
 ##### 201911/20191128_01.md   [《PostgreSQL 约束延判(unique, primary key, foreign key, exclude) - deferrable》](201911/20191128_01.md)  
+##### 201911/20191125_03.md   [《PG trouble shooting 排错和诊断 - 2019 PG 社区年度峰会回顾》](201911/20191125_03.md)  
+##### 201911/20191125_02.md   [《PG 12新特性 - 数据库风向标 - 2019 PG 社区年度峰会回顾》](201911/20191125_02.md)  
 ##### 201911/20191125_01.md   [《PostgreSQL 化学分析 - RDKit Cartridge 1 - 环境部署》](201911/20191125_01.md)  
 ##### 201911/20191122_01.md   [《阿里云RDS PG postgres_fdw sharding 分库分表 (not drds)》](201911/20191122_01.md)  
 ##### 201911/20191121_01.md   [《阿里云RDS PG 11支持ESSD pl3 存储，满足企业超高性能数据库要求 - 含tpcc测试结果》](201911/20191121_01.md)  

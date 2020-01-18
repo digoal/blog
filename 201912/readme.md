@@ -2,9 +2,9 @@
   
 ### 文章列表  
 ----  
-##### 20191231_01.md   [《PostgreSQL + MySQL 联合解决方案 - 回顾视频 -  第2课》](20191231_01.md)  
+##### 20191231_01.md   [《PostgreSQL+MySQL 联合解决方案 - 第2课视频 - 如何连接PG(图形界面、命令行)》](20191231_01.md)  
 ##### 20191230_02.md   [《PostgreSQL pg_stat_statements 开启后引入slock导致高并发下的性能问题》](20191230_02.md)  
-##### 20191230_01.md   [《PostgreSQL + MySQL 联合解决方案 - 回顾视频 -  第1课》](20191230_01.md)  
+##### 20191230_01.md   [《PostgreSQL+MySQL 联合解决方案 - 第1课视频 - RDS PG产品概览，如何与mysql结合使用提升生产效率》](20191230_01.md)  
 ##### 20191228_05.md   [《PostgreSQL 12新特性、数据库风向标 - 视频》](20191228_05.md)  
 ##### 20191228_04.md   [《PostgreSQL 12 on 阿里云ecs 本地ssd VS essd pl3性能 - 含fio,fsync test,pgbench test，优缺点、云盘PG内核优化建议》](20191228_04.md)  
 ##### 20191228_03.md   [《fio io测试阿里云ecs 本地ssd, essd性能 - 2》](20191228_03.md)  

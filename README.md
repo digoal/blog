@@ -3,18 +3,19 @@
 ### 一、PostgreSQL, Greenplum 学习视频  
   
 1、视频下载链接： https://pan.baidu.com/s/1Q5u5NSrb0gL5-psA9DCBUQ   (提取码：5nox   如果链接失效请通知我, 谢谢)  
-1\.1、PostgreSQL 9.3 数据库管理与优化 视频4天  
-1\.2、PostgreSQL 9.3 数据库管理与优化 视频5天  
-1\.3、PostgreSQL 9.1 数据库管理与开发 视频1天  
-1\.4、PostgreSQL 9.3 数据库优化 视频3天  
-1\.5、PostgreSQL 专题讲座 视频  
+- PostgreSQL 9.3 数据库管理与优化 4天  
+- PostgreSQL 9.3 数据库管理与优化 5天  
+- PostgreSQL 9.1 数据库管理与开发 1天  
+- PostgreSQL 9.3 数据库优化 3天  
+- PostgreSQL 专题讲座  
   
-2、[《2019-PostgreSQL 11 , 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  
-3、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  
-4、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  
-5、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
-6、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  
-7、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  
+2、[《2020-PostgreSQL+MySQL 联合解决方案课程 - 汇总视频、课件》](202001/20200118_02.md)  
+3、[《2019-PostgreSQL 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  
+4、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  
+5、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  
+6、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
+7、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  
+8、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  
   
 ### 二、学习资料  
   

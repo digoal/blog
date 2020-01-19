@@ -30,15 +30,11 @@
 9、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    
 10、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    
   
-PG官方微信 | PG官方微博 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  
----|---|---|---  
-![pic](./pic/pg_weixin.jpg) | ![pic](./pic/pg_weibo.jpg) | ![pic](./pic/dingding_pg_chat.png) | ![pic](./pic/digoal_weixin.jpg)  
+PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  
+---|---|---  
+![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.png) | ![pic](./pic/digoal_weixin.jpg)  
   
-PG社区认证 | PG社区认证</br>联系人微信 
----|---  
-![pic](./pic/pgcert.jpg) | ![pic](./pic/huhui.jpg)  
-  
-如有错误, 万望指正, 非常感谢.  
+如发现错误, 请万望指正, 非常感谢.  
   
 欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我联系, 定抽空尽快回复  
   

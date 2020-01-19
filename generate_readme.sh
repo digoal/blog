@@ -43,7 +43,7 @@ echo "10、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md
-echo "![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.png) | ![pic](./pic/digoal_weixin.jpg)  " >> ./README.md
+echo "![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.jpg) | ![pic](./pic/digoal_weixin.jpg)  " >> ./README.md
 echo "  "  >> ./README.md
 #echo "PG社区认证 | PG社区认证</br>联系人微信 " >> ./README.md
 #echo "---|---  " >> ./README.md

@@ -32,7 +32,7 @@
   
 PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  
 ---|---|---  
-![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.png) | ![pic](./pic/digoal_weixin.jpg)  
+![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.jpg) | ![pic](./pic/digoal_weixin.jpg)  
   
 如发现错误, 请万望指正, 非常感谢.  
   

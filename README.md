@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202002/20200209_01.md   [《ShardingSphere PostgreSQL proxy模式分库分表的使用》](202002/20200209_01.md)  
 ##### 202002/20200206_03.md   [《PostgreSQL 13 preview - parallel vacuum table for many indexs》](202002/20200206_03.md)  
 ##### 202002/20200206_02.md   [《PG 标语 - 大声喊出来》](202002/20200206_02.md)  
 ##### 202002/20200206_01.md   [《阿里云 RDS PostgreSQL 自定义告警》](202002/20200206_01.md)  

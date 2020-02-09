@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200209_01.md   [《ShardingSphere PostgreSQL proxy模式分库分表的使用》](20200209_01.md)  
 ##### 20200206_03.md   [《PostgreSQL 13 preview - parallel vacuum table for many indexs》](20200206_03.md)  
 ##### 20200206_02.md   [《PG 标语 - 大声喊出来》](20200206_02.md)  
 ##### 20200206_01.md   [《阿里云 RDS PostgreSQL 自定义告警》](20200206_01.md)  

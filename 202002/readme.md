@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200213_02.md   [《PostgreSQL 多副本的等待行为和事务快照, 以及数据可见性》](20200213_02.md)  
 ##### 20200213_01.md   [《sql server(mssql)迁移到PostgreSQL timestamp相关 - 跟踪存储记录insert、update时间戳,或表达式当时的value - 虚拟列、trigger等》](20200213_01.md)  
 ##### 20200209_01.md   [《ShardingSphere PostgreSQL proxy模式分库分表的使用》](20200209_01.md)  
 ##### 20200206_03.md   [《PostgreSQL 13 preview - parallel vacuum table for many indexs》](20200206_03.md)  

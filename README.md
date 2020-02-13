@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202002/20200213_01.md   [《sql server(mssql)迁移到PostgreSQL timestamp相关 - 跟踪存储记录insert、update时间戳,或表达式当时的value - 虚拟列、trigger等》](202002/20200213_01.md)  
 ##### 202002/20200209_01.md   [《ShardingSphere PostgreSQL proxy模式分库分表的使用》](202002/20200209_01.md)  
 ##### 202002/20200206_03.md   [《PostgreSQL 13 preview - parallel vacuum table for many indexs》](202002/20200206_03.md)  
 ##### 202002/20200206_02.md   [《PG 标语 - 大声喊出来》](202002/20200206_02.md)  

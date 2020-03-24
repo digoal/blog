@@ -54,6 +54,19 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202003/20200324_14.md   [《PostgreSQL Unsigned integer types for PostgreSQL》](202003/20200324_14.md)  
+##### 202003/20200324_13.md   [《PostgreSQL cache drop 插件 -   pg_dropcache》](202003/20200324_13.md)  
+##### 202003/20200324_12.md   [《PostgreSQL long query progress 进度评估》](202003/20200324_12.md)  
+##### 202003/20200324_11.md   [《PostgreSQL z-order , morton 排序插件 - GIS常用》](202003/20200324_11.md)  
+##### 202003/20200324_10.md   [《PostgreSQL appendonly 压缩 存储引擎 - pg_cryogen》](202003/20200324_10.md)  
+##### 202003/20200324_09.md   [《PostgreSQL 随机、唯一、有取值范围的序列生成器》](202003/20200324_09.md)  
+##### 202003/20200324_08.md   [《PostgreSQL mongodb query 语法兼容插件 - monq》](202003/20200324_08.md)  
+##### 202003/20200324_07.md   [《PostgreSQL oracle, mysql, sqlite DBLINK - dblink_plus》](202003/20200324_07.md)  
+##### 202003/20200324_06.md   [《PostgreSQL 芬兰语 分词插件 - dict_voikko》](202003/20200324_06.md)  
+##### 202003/20200324_05.md   [《PostgreSQL 用户进程优先级调度插件 - task schedule - pg_prioritize》](202003/20200324_05.md)  
+##### 202003/20200324_04.md   [《PostgreSQL 磁盘配额功能插件 - diskquota》](202003/20200324_04.md)  
+##### 202003/20200324_03.md   [《PostgreSQL LSM-tree 引擎 - VidarDB (baseon rocksdb)》](202003/20200324_03.md)  
+##### 202003/20200324_02.md   [《PostgreSQL pgloader - 一键迁移 MySQL SQLite MS SQL Redshift, csv dbf ixf archive》](202003/20200324_02.md)  
 ##### 202003/20200324_01.md   [《PostgreSQL 图数据库agenstraph 插件化了》](202003/20200324_01.md)  
 ##### 202003/20200322_02.md   [《思考: PG会改开源协议吗? 不会》](202003/20200322_02.md)  
 ##### 202003/20200322_01.md   [《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)  

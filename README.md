@@ -54,6 +54,15 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202003/20200326_11.md   [《PostgreSQL kdb+ 接口函数》](202003/20200326_11.md)  
+##### 202003/20200326_10.md   [《PostgreSQL 绘图插件 - plotpg》](202003/20200326_10.md)  
+##### 202003/20200326_09.md   [《PostgreSQL redis api 函数接口 - 在PG中使用函数直接操作redis》](202003/20200326_09.md)  
+##### 202003/20200326_08.md   [《PostgreSQL ghtree实现的海明距离排序索引, 性能不错 - pg-knn_hamming》](202003/20200326_08.md)  
+##### 202003/20200326_07.md   [《PostgreSQL shell命令插件 - pg_remote_exec》](202003/20200326_07.md)  
+##### 202003/20200326_06.md   [《PostgreSQL 化学插件 - pgchem_tigress molecules rdkit》](202003/20200326_06.md)  
+##### 202003/20200326_05.md   [《PostgreSQL 全局临时表插件 - global temp table》](202003/20200326_05.md)  
+##### 202003/20200326_04.md   [《PostgreSQL ctid scan 扫描方法插件 - 限定访问blocks》](202003/20200326_04.md)  
+##### 202003/20200326_03.md   [《PostgreSQL 一款logical decoder - pg-deltaflood》](202003/20200326_03.md)  
 ##### 202003/20200326_02.md   [《PostgreSQL VagueGeometry vague spatial data - VASA (Vague Spatial Algebra) for PG - 模糊空间数据》](202003/20200326_02.md)  
 ##### 202003/20200326_01.md   [《PostgreSQL 把GSL库植入数据库 - GNU Scientific Library (GSL)》](202003/20200326_01.md)  
 ##### 202003/20200325_01.md   [《[转载] Oracle的购买价格研究》](202003/20200325_01.md)  

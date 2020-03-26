@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200326_26.md   [《IoT 数据库选型》](20200326_26.md)  
 ##### 20200326_25.md   [《PostgreSQL 部分数据库复制、wal代理、wal过滤器 插件 walbouncer》](20200326_25.md)  
 ##### 20200326_24.md   [《PostgreSQL wal 外挂 walker》](20200326_24.md)  
 ##### 20200326_23.md   [《PostgreSQL On-disk Bitmap Index in PostgreSQL》](20200326_23.md)  

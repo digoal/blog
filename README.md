@@ -54,7 +54,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202003/20200326_01.md   [《》](202003/20200326_01.md)  
+##### 202003/20200326_02.md   [《PostgreSQL VagueGeometry vague spatial data - VASA (Vague Spatial Algebra) for PG - 模糊空间数据》](202003/20200326_02.md)  
+##### 202003/20200326_01.md   [《PostgreSQL 把GSL库植入数据库 - GNU Scientific Library (GSL)》](202003/20200326_01.md)  
 ##### 202003/20200325_01.md   [《[转载] Oracle的购买价格研究》](202003/20200325_01.md)  
 ##### 202003/20200324_43.md   [《PostgreSQL SQL 结果图表化插件 - pgcharts》](202003/20200324_43.md)  
 ##### 202003/20200324_42.md   [《PostgreSQL 性能数据采集插件 - pgsampler》](202003/20200324_42.md)  

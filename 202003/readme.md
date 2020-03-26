@@ -2,7 +2,8 @@
   
 ### 文章列表  
 ----  
-##### 20200326_01.md   [《》](20200326_01.md)  
+##### 20200326_02.md   [《PostgreSQL VagueGeometry vague spatial data - VASA (Vague Spatial Algebra) for PG - 模糊空间数据》](20200326_02.md)  
+##### 20200326_01.md   [《PostgreSQL 把GSL库植入数据库 - GNU Scientific Library (GSL)》](20200326_01.md)  
 ##### 20200325_01.md   [《[转载] Oracle的购买价格研究》](20200325_01.md)  
 ##### 20200324_43.md   [《PostgreSQL SQL 结果图表化插件 - pgcharts》](20200324_43.md)  
 ##### 20200324_42.md   [《PostgreSQL 性能数据采集插件 - pgsampler》](20200324_42.md)  

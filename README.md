@@ -54,6 +54,20 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202003/20200326_25.md   [《PostgreSQL 部分数据库复制、wal代理、wal过滤器 插件 walbouncer》](202003/20200326_25.md)  
+##### 202003/20200326_24.md   [《PostgreSQL wal 外挂 walker》](202003/20200326_24.md)  
+##### 202003/20200326_23.md   [《PostgreSQL On-disk Bitmap Index in PostgreSQL》](202003/20200326_23.md)  
+##### 202003/20200326_22.md   [《PostgreSQL shared buffer 新增管理算法 - lru mru fifo》](202003/20200326_22.md)  
+##### 202003/20200326_21.md   [《PostgreSQL 自动化索引 - auto-indexing-PostgreSQL》](202003/20200326_21.md)  
+##### 202003/20200326_20.md   [《PostgreSQL 生成优化器debug输出 图像》](202003/20200326_20.md)  
+##### 202003/20200326_19.md   [《PostgreSQL 非易失内存 改进版本 - nvm logging 改进》](202003/20200326_19.md)  
+##### 202003/20200326_18.md   [《PostgreSQL directio 版本》](202003/20200326_18.md)  
+##### 202003/20200326_17.md   [《PostgreSQL oracle pl/sql 存储过程language handler - 在pg中支持pl/sql》](202003/20200326_17.md)  
+##### 202003/20200326_16.md   [《PostgreSQL pgloggingfilter csvlog log 日志过滤器》](202003/20200326_16.md)  
+##### 202003/20200326_15.md   [《PostgreSQL plpgsql 代码覆盖测试插件 pg_linegazer》](202003/20200326_15.md)  
+##### 202003/20200326_14.md   [《PostgreSQL ptrack , pg_rman , 块级增量备份》](202003/20200326_14.md)  
+##### 202003/20200326_13.md   [《PostgreSQL login钩子, 例如审计、发送邮件、profile》](202003/20200326_13.md)  
+##### 202003/20200326_12.md   [《PostgreSQL readonly standby 只读库如何写数据? - DDL DML 操作透明传输到主库》](202003/20200326_12.md)  
 ##### 202003/20200326_11.md   [《PostgreSQL kdb+ 接口函数》](202003/20200326_11.md)  
 ##### 202003/20200326_10.md   [《PostgreSQL 绘图插件 - plotpg》](202003/20200326_10.md)  
 ##### 202003/20200326_09.md   [《PostgreSQL redis api 函数接口 - 在PG中使用函数直接操作redis》](202003/20200326_09.md)  

@@ -54,6 +54,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202004/20200403_04.md   [《PostgreSQL 查询当前执行中sql的执行计划 - pg_show_plans》](202004/20200403_04.md)  
+##### 202004/20200403_03.md   [《PostgreSQL 自动化后台并行创建 多索引, 加速导入速度 - pg_parallizator》](202004/20200403_03.md)  
+##### 202004/20200403_02.md   [《PostgreSQL 日志 ring buffer 功能 - pg_logging》](202004/20200403_02.md)  
 ##### 202004/20200403_01.md   [《PostgreSQL Undo storage implementation - undam , zheap的另一轻量化选择》](202004/20200403_01.md)  
 ----  
 ##### 202003/20200331_01.md   [《为什么谁给皇帝侍寝皇帝说了不算》](202003/20200331_01.md)  

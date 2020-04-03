@@ -2,4 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200403_04.md   [《PostgreSQL 查询当前执行中sql的执行计划 - pg_show_plans》](20200403_04.md)  
+##### 20200403_03.md   [《PostgreSQL 自动化后台并行创建 多索引, 加速导入速度 - pg_parallizator》](20200403_03.md)  
+##### 20200403_02.md   [《PostgreSQL 日志 ring buffer 功能 - pg_logging》](20200403_02.md)  
 ##### 20200403_01.md   [《PostgreSQL Undo storage implementation - undam , zheap的另一轻量化选择》](20200403_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20200412_04.md   [《什么时候可以不用PostGIS插件, 直接使用PG内置的GEO类型和地球插件 - Why you (probably) don't need PostGIS》](20200412_04.md)  
+##### 20200412_03.md   [《一款兼容PostgreSQL协议的时序数据库 - QuestDB》](20200412_03.md)  
 ##### 20200412_02.md   [《PostgreSQL 机器学习可视化数据分析管理 orange3 例子》](20200412_02.md)  
 ##### 20200412_01.md   [《PostgreSQL Polygon Averaging in PostGIS - 多边形叠加统计》](20200412_01.md)  
 ##### 20200410_02.md   [《PostgreSQL 13 pg_stat_statements支持跟踪plan统计信息》](20200410_02.md)  

@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202004/20200412_02.md   [《PostgreSQL 机器学习可视化数据分析管理 orange3 例子》](202004/20200412_02.md)  
 ##### 202004/20200412_01.md   [《PostgreSQL Polygon Averaging in PostGIS - 多边形叠加统计》](202004/20200412_01.md)  
 ##### 202004/20200410_02.md   [《PostgreSQL 13 pg_stat_statements支持跟踪plan统计信息》](202004/20200410_02.md)  
 ##### 202004/20200410_01.md   [《PostgreSQL 13 支持wal insert统计框架 - wal activity monitor》](202004/20200410_01.md)  

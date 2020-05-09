@@ -1,18 +1,19 @@
 ## 个人简介    
-网名: digoal(德哥)        
+digoal(德哥)        
       
 ![pic](digoal.png)      
         
+- PostgreSQL 中国社区发起人之一、常委、兼PG社区大学校长。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。        
+- PostgreSQL 中国社区杭州历届分会会长之一。     
 - 中国开源软件推进联盟PostgreSQL分会，特聘资深领域专家。       
 - PGCONF china，PG认证组主委。       
-- PGCONF china，2019届行业杰出贡献奖获得者。       
-- PostgreSQL 中国社区发起人之一、常委、兼任社区大学校长。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。        
-- PostgreSQL 中国社区杭州历届分会会长之一。      
+- PGCONF china，2019届行业杰出贡献奖获得者。        
 - [中国信息通信研究院主办、中国通信标准化协会支持的"OSCAR云计算开源产业大会"评选：2018届OSCAR开源尖峰人物之一](../201803/20180322_12.md)  
 - 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。  
 - [CockroachDB](https://github.com/cockroachdb/cockroach) 中国社区发起人之一。   
 - DBA+社群 联合发起人之一。      
 - DBGeeK联盟 专家团成员。      
+- 阿里巴巴布道师计划-钻石布道师, 排名第一(截至2020-05)  
 - 36项数据库专利。（截至2020-01）      
       
 现任职于阿里云数据库团队，负责阿里云PostgreSQL系列产品线（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，曾负责的产品包括（HybridDB for PostgreSQL(分布式版PG的架构设计，现已更名为ADB for PG)，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品设计、推广、应用落地与生态构建。 欢迎使用[ADAM+RDS PG 或 POLARDB for Oracle（平滑去O）](https://www.aliyun.com/product/adam)）。  
@@ -28,28 +29,41 @@
 社区贡献：    
     
 - 自2008年开始，坚持开源PostgreSQL数据库的布道，负责PostgreSQL数据库在中国的技术落地与推广、人才培养。    
-    
 - 积极组织线上、线下技术分享活动    
-    
 - 积极参与各大社区举办的线上、线下技术交流峰会、在线问答平台等。分享，传播开源技术。    
-    
 - 常年不定期输出线下PostgreSQL公益培训。      
-    
 - 常年不定期输出PostgreSQL公益培训视频。    
-    
 - 积极与社区互动，帮助开源社区提交安全风险建议，BUG，改进建议，性能测试，功能测试，案例适配等。    
-    
 - 长期坚持撰写技术文章，涵盖“开源产品使用、案例、应用开发实践、内核开发实践、管理实践、调优实践”等数据库生命周期相关文档，已超过3000篇。    
-    
-- 拥抱开源，公开联系方式，微信好友已接近3000，接收微信、邮件等来自五湖四海技术圈朋友发来的技术咨询。涉及行业（物联网、电商、生物、游戏、企业CRM、传统行业、ZF、物流、音视频、BI、证券、金融、通讯）等。涉及技术点（搜索（ADHoc, 全文检索、模糊、数组）、相似搜索（图片、文本、数组）、用户画像、空间、时空、挖掘、图式搜索、流计算、秒杀、树结构、非结构化、单元化部署、sharding）等。    
-           
-[《PostgreSQL、Greenplum 《如来神掌》》](../201706/20170601_02.md)一文集案例、管理、优化于一身，是CTO、架构师、开发者、DBA不可多得的口袋书。         
+- 拥抱开源，公开联系方式，微信好友已接近4000，接收微信、邮件等来自五湖四海技术圈朋友发来的技术咨询。涉及行业（物联网、电商、生物、游戏、企业CRM、传统行业、ZF、物流、音视频、BI、证券、金融、通讯）等。涉及技术点（搜索（ADHoc, 全文检索、模糊、数组）、相似搜索（图片、文本、数组）、用户画像、空间、时空、挖掘、图式搜索、流计算、秒杀、树结构、非结构化、单元化部署、sharding）等。    
+    - [《PostgreSQL、Greenplum 《如来神掌》》](../201706/20170601_02.md)一文集案例、管理、优化于一身，是CTO、架构师、开发者、DBA不可多得的口袋书。         
+    - [《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、数据库原理 - 含学习资料、学习视频》](../201801/20180121_01.md)    
+    - [《Oracle DBA 转型 PostgreSQL,Greenplum 学习规划》](../201804/20180425_01.md)  
+    - 1、视频下载链接： https://pan.baidu.com/s/1Q5u5NSrb0gL5-psA9DCBUQ   (提取码：5nox   如果链接失效请通知我, 谢谢)  
+        - PostgreSQL 9.3 数据库管理与优化 4天  
+        - PostgreSQL 9.3 数据库管理与优化 5天  
+        - PostgreSQL 9.1 数据库管理与开发 1天  
+        - PostgreSQL 9.3 数据库优化 3天  
+        - PostgreSQL 专题讲座  
+    - 2、[《2020-PostgreSQL+MySQL 联合解决方案课程 - 汇总视频、课件》](202001/20200118_02.md)  
+    - 3、[《2019-PostgreSQL 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  
+    - 4、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  
+    - 5、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  
+    - 6、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
+    - 7、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  
+    - 8、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  
+    -   1、[《Oracle DBA 增值 转型 PostgreSQL 学习方法、路径》](201804/20180425_01.md)   
+    -   2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    
+    -   3、[《快速入门PostgreSQL应用开发与管理 - 1 如何搭建一套学习、开发PostgreSQL的环境》](201704/20170411_01.md)    
+    -   4、[《快速入门PostgreSQL应用开发与管理 - 2 Linux基本操作》](201704/20170411_02.md)    
+    -   5、[《快速入门PostgreSQL应用开发与管理 - 3 访问数据》](201704/20170411_03.md)    
+    -   6、[《快速入门PostgreSQL应用开发与管理 - 4 高级SQL用法》](201704/20170411_04.md)    
+    -   7、[《快速入门PostgreSQL应用开发与管理 - 5 数据定义》](201704/20170411_05.md)    
+    -   8、[《快速入门PostgreSQL应用开发与管理 - 6 事务和锁》](201704/20170412_01.md)    
+    -   9、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    
+    -   10、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    
   
-[《阿里云 PostgreSQL 产品生态；案例、开发实践、管理实践、数据库原理 - 含学习资料、学习视频》](../201801/20180121_01.md)    
-  
-[《Oracle DBA 转型 PostgreSQL,Greenplum 学习规划》](../201804/20180425_01.md)  
-  
-截止2019.6   
+截止2019.6:     
   
 PG技术类文章数：   
 - 2000+ ，浏览量：200万+ (ata, yq, yq_internal, weixin, github, postgres.cn, 163blog, 他人转发 ... 等渠道)      
@@ -58,8 +72,8 @@ PG天天象上沙龙：
 - 14场（北京、上海、广州、深圳、杭州、郑州、长沙、成都、武汉、南京、合肥等地）   
 - 线上线下影响人次： 2万+     
   
-PG技术圈钉钉群：   
-- 人数2500+     
+组建PG技术钉钉交流群：   
+- 人数4000+  (截至202005)   
   
 PG线上直播：       
 - 42 场       
@@ -76,7 +90,7 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
       
 如果您的企业对数据库选型感到迷茫，需要构建数据库管理/开发/安全标准化体系，需要PostgreSQL培训、分享，或一些数据库类的问题，总之一切与数据库有关的问题，随时欢迎与我交流。      
       
-把PostgreSQL的种子播至四海八荒，加油。       
+把PostgreSQL种子播至四海八荒，加油。       
       
 愿景 -- 公益是一辈子的事，I'm digoal, just do it。      
       

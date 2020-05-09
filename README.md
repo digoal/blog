@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202005/20200509_02.md   [《PostgreSQL DBA最常用SQL》](202005/20200509_02.md)  
 ##### 202005/20200509_01.md   [《PostgreSQL 随机采样应用 - table sample, tsm_system_rows, tsm_system_time》](202005/20200509_01.md)  
 ----  
 ##### 202004/20200430_01.md   [《PostgreSQL 如何将空间数据导入PostGIS》](202004/20200430_01.md)  

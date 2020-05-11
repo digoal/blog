@@ -2,10 +2,10 @@
   
 ### æ–‡ç« åˆ—è¡¨  
 ----  
-##### 20140731_01.md   [ã€Š€‹](20140731_01.md)  
-##### 20140725_02.md   [ã€Š€‹](20140725_02.md)  
-##### 20140725_01.md   [ã€Š€‹](20140725_01.md)  
-##### 20140722_01.md   [ã€Š€‹](20140722_01.md)  
-##### 20140710_01.md   [ã€Š€‹](20140710_01.md)  
-##### 20140704_01.md   [ã€Š€‹](20140704_01.md)  
-##### 20140701_01.md   [ã€Š€‹](20140701_01.md)  
+##### 20140731_01.md   [ã€Šreplace offline or FAULTED device in ZPOOLã€‹](20140731_01.md)  
+##### 20140725_02.md   [ã€ŠGreenPlum 4.3.2.0 installed in CentOS 6.x x64ã€‹](20140725_02.md)  
+##### 20140725_01.md   [ã€ŠPostgres-XL you can only see databases with CREATE privilegeã€‹](20140725_01.md)  
+##### 20140722_01.md   [ã€ŠZFS on Linux performance tuning when zfs_iput_taskq take near 100% CPUã€‹](20140722_01.md)  
+##### 20140710_01.md   [ã€ŠWhy Large synchronous writes are slow when a slog is present?ã€‹](20140710_01.md)  
+##### 20140704_01.md   [ã€Šflashcache usage guideã€‹](20140704_01.md)  
+##### 20140701_01.md   [ã€ŠPostgreSQL xlog $PGDATA and zfs snapshot based central backup & PITR caseã€‹](20140701_01.md)  

@@ -68,14 +68,14 @@ do
   for file in `ls -lr *.md|awk '{print $9}'|grep -E '^[0-9]{8}'` 
   do 
     title=`head -n 1 $file|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`
-    echo "##### $file   [《$title》]($file)  " >> ./readme.md
-    echo "##### $dir/$file   [《$title》]($dir/$file)  " >> ../README.md
+    echo "##### ${file}   [《${title}》](${file})  " >> ./readme.md
+    echo "##### ${dir}/${file}   [《${title}》](${dir}/${file})  " >> ../README.md
 # ######################  go go go
-    FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" $file|grep -c "57258f76c37864c6e6d23383d05714ea"`
+    FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" ${file}|grep -c "57258f76c37864c6e6d23383d05714ea"`
     if [ $FREEURL -ne 1 ]; then
-      echo "  " >> ./$file
-      echo "#### [免费领取阿里云RDS PostgreSQL实例、ECS虚拟机](https://www.aliyun.com/database/postgresqlactivity \"57258f76c37864c6e6d23383d05714ea\")" >> ./$file
-      echo "  " >> ./$file
+      echo "  " >> ./${file}
+      echo "#### [免费领取阿里云RDS PostgreSQL实例、ECS虚拟机](https://www.aliyun.com/database/postgresqlactivity \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
+      echo "  " >> ./${file}
     fi
 # ######   sed -i '/57258f76c37864c6e6d23383d05714ea/d' $file
     LINK=`grep "22709685feb7cab07d30f30387f0a9ae" $file|grep -c "22709685feb7cab07d30f30387f0a9ae"`

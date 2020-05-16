@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200516_01.md   [《PostgreSQL 采用create concurrently index创建索引失败导致的invalid index监控和清理》](20200516_01.md)  
 ##### 20200515_02.md   [《PostgreSQL 懒人快速(无堵塞、或短暂堵塞DML)创建一大堆分区索引》](20200515_02.md)  
 ##### 20200515_01.md   [《PostgreSQL 排序去重limit查询优化 - 递归 vs group分组 (loop降到极限, block scan降到极限)》](20200515_01.md)  
 ##### 20200514_01.md   [《PostgreSQL 序列迁移同步》](20200514_01.md)  

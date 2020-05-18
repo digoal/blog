@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200518_01.md   [《PostgreSQL standby conflict replay分析和解决方案》](20200518_01.md)  
 ##### 20200517_01.md   [《PostgreSQL 变态需求实现 - 堵塞式读, 不堵塞写 - 串行读,并行写 - advisory lock》](20200517_01.md)  
 ##### 20200516_01.md   [《PostgreSQL 采用create concurrently index创建索引失败导致的invalid index监控和清理》](20200516_01.md)  
 ##### 20200515_02.md   [《PostgreSQL 懒人快速(无堵塞、或短暂堵塞DML)创建一大堆分区索引 - procedure（存储过程）commit,rollback子事务应用场景》](20200515_02.md)  

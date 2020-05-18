@@ -22,7 +22,7 @@
 ##### 20170913_03.md   [《Greenplum vacuum ao表和heap表的区别》](20170913_03.md)  
 ##### 20170913_02.md   [《透过postgrespro看PostgreSQL的附加功能》](20170913_02.md)  
 ##### 20170913_01.md   [《PostgreSQL、Greenplum 日常监控 和 维护任务 - 最佳实践》](20170913_01.md)  
-##### 20170912_01.md   [《PostgreSQL 连接串URI配置(libpq兼容配置)》](20170912_01.md)  
+##### 20170912_01.md   [《PostgreSQL 连接串URI配置(libpq兼容配置) - 含客户端参数options配置》](20170912_01.md)  
 ##### 20170911_02.md   [《秒级任意维度分析1TB级大表 - 通过采样估值满足高效TOP N等统计分析需求》](20170911_02.md)  
 ##### 20170911_01.md   [《地理坐标系（球面坐标系）和投影坐标系（平面坐标系）》](20170911_01.md)  
 ##### 20170906_03.md   [《PostgreSQL vs Greenplum Hash outer join hash表的选择》](20170906_03.md)  

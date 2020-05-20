@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202005/20200520_01.md   [《中文基因学习、易理、中医、哲学》](202005/20200520_01.md)  
 ##### 202005/20200518_01.md   [《PostgreSQL standby conflict replay分析和解决方案》](202005/20200518_01.md)  
 ##### 202005/20200517_01.md   [《PostgreSQL 变态需求实现 - 堵塞式读, 不堵塞写 - 串行读,并行写 - advisory lock》](202005/20200517_01.md)  
 ##### 202005/20200516_01.md   [《PostgreSQL 采用create concurrently index创建索引失败导致的invalid index监控和清理》](202005/20200516_01.md)  

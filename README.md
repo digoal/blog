@@ -54,6 +54,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202005/20200520_03.md   [《PostgreSQL 在standby节点也能监控主从延迟 pg_stat_wal_receiver latest_end_lsn 源码解读》](202005/20200520_03.md)  
 ##### 202005/20200520_02.md   [《PostgreSQL 任意字段组合搜索 - rum 或 多字段 bitmapscan 对比》](202005/20200520_02.md)  
 ##### 202005/20200520_01.md   [《中文基因学习、易理、中医、哲学》](202005/20200520_01.md)  
 ##### 202005/20200518_01.md   [《PostgreSQL standby conflict replay分析和解决方案》](202005/20200518_01.md)  

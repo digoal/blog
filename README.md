@@ -55,7 +55,7 @@ digoal's|PostgreSQL|文章|归类
 ### 所有文档如下  
 ----  
 ##### 202005/20200522_01.md   [《PostgreSQL 用条件索引(部分索引, partial index), 旁路某些索引的使用, 例如sort》](202005/20200522_01.md)  
-##### 202005/20200521_02.md   [《预计算在OLTP中降低RT的应用》](202005/20200521_02.md)  
+##### 202005/20200521_02.md   [《预计算在OLTP中降低RT的应用 - 业务设计中的算力打散思路》](202005/20200521_02.md)  
 ##### 202005/20200521_01.md   [《PostgreSQL install error by rpm - llvm-toolset-7-clang - need centos-release-scl》](202005/20200521_01.md)  
 ##### 202005/20200520_03.md   [《PostgreSQL 在standby节点也能监控主从延迟 pg_stat_wal_receiver latest_end_lsn 源码解读》](202005/20200520_03.md)  
 ##### 202005/20200520_02.md   [《PostgreSQL 任意字段组合搜索 - rum 或 多字段 bitmapscan 对比》](202005/20200520_02.md)  

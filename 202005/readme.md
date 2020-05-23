@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200523_01.md   [《企业为什么纷纷选择阿里云AliPG》](20200523_01.md)  
 ##### 20200522_01.md   [《PostgreSQL 用条件索引(部分索引, partial index), 旁路某些索引的使用, 例如sort》](20200522_01.md)  
 ##### 20200521_02.md   [《预计算在OLTP中降低RT的应用 - 业务设计中的算力打散思路》](20200521_02.md)  
 ##### 20200521_01.md   [《PostgreSQL install error by rpm - llvm-toolset-7-clang - need centos-release-scl》](20200521_01.md)  

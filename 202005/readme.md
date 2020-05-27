@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20200527_04.md   [《PostgreSQL parquet fdw》](20200527_04.md)  
+##### 20200527_03.md   [《PostgreSQL uber h3 数据转换, 索引》](20200527_03.md)  
+##### 20200527_02.md   [《PostgreSQL 监控插件 bg_mon - 内置 WEB 服务》](20200527_02.md)  
+##### 20200527_01.md   [《zabbix postgresql 监控模块 libzbxpgsql》](20200527_01.md)  
 ##### 20200525_03.md   [《PostgreSQL MADlib 图(Graph)相关机器学习算法介绍》](20200525_03.md)  
 ##### 20200525_02.md   [《PostgreSQL 多租户使用 - set search_path 的性能影响测试》](20200525_02.md)  
 ##### 20200525_01.md   [《PostgreSQL 多租户使用 - 多schema 批量ddl》](20200525_01.md)  

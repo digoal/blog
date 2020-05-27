@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200527_05.md   [《PostgreSQL ACL 访问控制权限 精细化配置 pg_restrict》](20200527_05.md)  
 ##### 20200527_04.md   [《PostgreSQL parquet fdw》](20200527_04.md)  
 ##### 20200527_03.md   [《PostgreSQL uber h3 数据转换, 索引》](20200527_03.md)  
 ##### 20200527_02.md   [《PostgreSQL 监控插件 bg_mon - 内置 WEB 服务》](20200527_02.md)  

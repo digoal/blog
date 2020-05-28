@@ -28,6 +28,8 @@ digoal(德哥)
   
 2001~2005, 南昌大学, 通信工程.    
   
+对未来数据库的发展展望, [《未来数据库方向 - PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](../202005/20200527_06.md)  
+  
   
 专利（截至2020-01）:   
 ```
@@ -146,7 +148,7 @@ digoal(德哥)
         - PostgreSQL 9.3 数据库优化 3天    
         - PostgreSQL 专题讲座    
     - 2、[《2020-PostgreSQL+MySQL 联合解决方案课程 - 汇总视频、课件》](../202001/20200118_02.md)    
-    - 3、[《2019-PostgreSQL 2天体系化培训 - 视频每周更新》](../201901/20190105_01.md)    
+    - 3、[《2019-PostgreSQL 体系化培训 - 视频每周更新》](../201901/20190105_01.md)    
     - 4、[《2017-PostgreSQL 应用场景实践 - 含视频》](../201805/20180524_02.md)    
     - 5、[《2019-PG天天象上沙龙纪录- 含视频》](../201801/20180121_01.md)    
     - 6、[《2019-Oracle迁移到PostgreSQL - 实战培训》](../201906/20190615_03.md)      
@@ -189,13 +191,13 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
         
 如果您的企业对数据库选型感到迷茫，需要构建数据库管理/开发/安全标准化体系，需要PostgreSQL培训、分享，或一些数据库类的问题，总之一切与数据库有关的问题，随时欢迎与我交流。        
         
-把PostgreSQL种子播至四海八荒，以技术驱动为社会创造价值。          
+愿景 -- 把PostgreSQL种子播至四海八荒，以技术驱动为社会创造价值。          
         
-愿景 -- 公益是一辈子的事，I'm digoal, just do it。        
+公益是一辈子的事，I'm digoal, just do it。        
         
-[个人GIT](https://github.com/digoal/blog/blob/master/README.md)    
+[My Github](https://github.com/digoal/blog/blob/master/README.md)    
     
-个人微信，欢迎交流      
+个人微信:        
     
 ![pic](../pic/digoal_weixin.jpg)    
     

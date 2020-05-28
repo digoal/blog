@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200528_02.md   [《PGcon 2020 PG开发者全球峰会看点》](20200528_02.md)  
 ##### 20200528_01.md   [《PostgreSQL 13 offset fetch first with ties - 返回ordered peer行S》](20200528_01.md)  
 ##### 20200527_07.md   [《PostgreSQL ICU 扩展 icu_ext》](20200527_07.md)  
 ##### 20200527_06.md   [《未来数据库方向 - PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](20200527_06.md)  

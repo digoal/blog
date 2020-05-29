@@ -3,6 +3,7 @@
 ### 文章列表  
 ----  
 ##### 20181230_01.md   [《一些灾难恢复术语 - Disaster recovery》](20181230_01.md)  
+##### 20181227_01.md   [《Greenplum gp_segments_for_planner 的使用, 影响广播 or distribute决策》](20181227_01.md)  
 ##### 20181226_01.md   [《MTK使用 - PG,PPAS,oracle,mysql,ms sql,sybase 迁移到 PG, PPAS (支持跨版本升级)》](20181226_01.md)  
 ##### 20181224_01.md   [《PostgreSQL 如何知道临时表是当前会话还是其他会话创建的》](20181224_01.md)  
 ##### 20181218_01.md   [《PostgreSQL 11 并行计算算法，参数，强制并行度设置》](20181218_01.md)  

@@ -21,10 +21,41 @@ digoal(德哥)
 现任职于阿里云数据库团队，负责阿里云PostgreSQL系列产品线（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，曾负责的产品包括（HybridDB for PostgreSQL(分布式版PG的架构设计，现已更名为ADB for PG)，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品设计、推广、应用落地与生态构建。构建认证体系、维护产品官网文档、跟踪社区动态、为客户与合作伙伴提供附能、对接公开媒体（如阿里云大学、云栖社区）提供必要的产品相关输入、对接云生态产品、对接社区。    
     
 长期占据阿里巴巴ATA社区、云栖社区 TOP 1。已将PostgreSQL产品线系列推广到“阿里云、高德、淘宝、天猫、优酷、阿里妈妈、IOT、未来酒店、B2B、AE、新零售、菜鸟、公共平台、飞猪、YUNOS、智慧城市。。。”等各个BU或业务线，并在各类丰富TP\AP场景中落地。    
+  
+```
+初心: 把PG推广到更多企业, 为企业创造价值.    
+研发: x人 -> xxxxxxxxx,     
+dba: 0 -> xxxxxxxxx,    
+产品系列: rds pg -> polardb pg,o, adb pg,     
+形态: 公共云 中国站 -> 专有云、国际化、专属集群、全托管、虚商、纯软 ... ...,   
+用户数: xxxxxxxxxxxxxxx,     
+客户覆盖: xxxxxxxxxxxxxxx,     
+交叉率: xxxxxxxxxxxxxxx,     
+营收规模: xxxxxxxxxxxxxxx,     
+社区(5w+),   
+线上生态: (RDS PG钉钉群4K+),    
+内容物: 2000+ (云栖, ATA 常年 top 1),    
+布道: xxxx+   
+内部应用: 各业务线应用落地, 从0推广到自然流量,   
+pluggable 内部能力输送: 达摩院、蚂蚁  pluggable extension 形态整合, 以数据库功能形式对外输送集团技术能力, ... ... ,   
+机制: KA、ISV、社区、伙伴、... ...    
+```
     
 2008.5加入SKYMOBI, 加入SKYMOBI时正是公司创业增长期, 负责SKYMOBI的数据库整体系统、存储、主机、操作系统、多IDC的架构设计和建设；经过若干年, 完成了对数据库HA、容灾、备份、恢复、分布式、数据仓库架构设计和建设；建立了数据库管理和开发的标准化体系。公司于2009年在纳斯达克上市. (经历了一家互联网公司的从0到1, 支撑了十亿用户级业务, 百TB级别数仓, 数百套PG数据库集群.)        
+  
+```
+从0到1. 搞硬件, 存储, os, filesystem(zfs, flashcache); 从oracle到PG,GP,mongo(公司上市前, 核心系统O数据库全部替换为pg. ); 从1到300+实例、百万并发、百tb级仓库; 从1机房到全国10+机房; 从创业公司到nasdq上市; 从0到1搞标准化(建流程, 建系统. 监控, ha, 备份, 容灾, 校验, 审计, 巡检).      
+
+搬过服务器、插过光纤、搞过操作系统、搞过存储、睡过IDC、救过火, 真火灾-xx机房火灾. 第一次搞PG、第一次带团队、第一次建开源社区、第一次上市.  
+```
     
 2005.7~2008.5, 快威, 售前工程师, 参与杭州市民卡项目、杭州智慧城市管理项目.    
+  
+```
+自学Oracle数据库, 并在booboke在线教育平台讲课分享.   
+
+第一次搞数据库.  
+```
   
 2001~2005, 南昌大学, 通信工程.    
   

@@ -23,11 +23,14 @@ digoal(德哥)
 长期占据阿里巴巴ATA社区、云栖社区 TOP 1。已将PostgreSQL产品线系列推广到“阿里云、高德、淘宝、天猫、优酷、阿里妈妈、IOT、未来酒店、B2B、AE、新零售、菜鸟、公共平台、飞猪、YUNOS、智慧城市。。。”等各个BU或业务线，并在各类丰富TP\AP场景中落地。    
   
 ```
-初心: 把PG推广到更多企业, 为企业创造价值.    
+加入阿里巴巴初心: 把PG推广到更多企业, 为企业创造价值.    
+  
+截止202005:
+
 研发: x人 -> xxxxxxxxx,     
 dba: 0 -> xxxxxxxxx,    
-产品系列: rds pg -> polardb pg,o, adb pg,     
-形态: 公共云 中国站 -> 专有云、国际化、专属集群、全托管、虚商、纯软 ... ...,   
+产品系列: rds pg -> polardb pg,o, adb pg, AliPG      
+形态: 公共云 中国站 -> 专有云、国际化、专属集群、全托管、虚商、AliPG纯软 ... ...,   
 用户数: xxxxxxxxxxxxxxx,     
 客户覆盖: xxxxxxxxxxxxxxx,     
 交叉率: xxxxxxxxxxxxxxx,     
@@ -227,9 +230,10 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
 公益是一辈子的事，I'm digoal, just do it。        
         
 [My Github](https://github.com/digoal/blog/blob/master/README.md)    
+  
+email: digoal@126.com  
     
 个人微信:        
-    
 ![pic](../pic/digoal_weixin.jpg)    
     
     

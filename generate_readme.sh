@@ -72,7 +72,7 @@ echo "如发现错误, 请万望指正, 非常感谢.  "  >> ./README.md
 echo "  "  >> ./README.md
 echo "欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我联系, 定抽空尽快回复  " >> ./README.md
 echo "  "  >> ./README.md
-echo "### 三、已归类文档如下(归档进行中... ...)  " >> ./README.md
+echo "### 四、已归类文档如下(归档进行中... ...)  " >> ./README.md
 sed 's/](/](class\//g' class/README.md >> ./README.md
 echo "### 所有文档如下  " >> ./README.md
 

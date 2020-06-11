@@ -32,14 +32,33 @@ echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md
 echo "1、[《Oracle DBA 增值 转型 PostgreSQL 学习方法、路径》](201804/20180425_01.md)   " >> ./README.md 
 echo "2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    " >> ./README.md
-echo "3、[《快速入门PostgreSQL应用开发与管理 - 1 如何搭建一套学习、开发PostgreSQL的环境》](201704/20170411_01.md)    " >> ./README.md
-echo "4、[《快速入门PostgreSQL应用开发与管理 - 2 Linux基本操作》](201704/20170411_02.md)    " >> ./README.md
-echo "5、[《快速入门PostgreSQL应用开发与管理 - 3 访问数据》](201704/20170411_03.md)    " >> ./README.md
-echo "6、[《快速入门PostgreSQL应用开发与管理 - 4 高级SQL用法》](201704/20170411_04.md)    " >> ./README.md
-echo "7、[《快速入门PostgreSQL应用开发与管理 - 5 数据定义》](201704/20170411_05.md)    " >> ./README.md
-echo "8、[《快速入门PostgreSQL应用开发与管理 - 6 事务和锁》](201704/20170412_01.md)    " >> ./README.md
-echo "9、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    " >> ./README.md
-echo "10、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    " >> ./README.md
+echo "3、[《PostgreSQL 数据库安全指南 - 以及安全合规》](201506/20150601_01.md)    " >> ./README.md
+echo "4、[《PostgreSQL 持续稳定使用的小技巧 - 最佳实践、规约、规范》](201902/20190219_02.md)    " >> ./README.md
+echo "5、[《PostgreSQL DBA最常用SQL》](202005/20200509_02.md)    " >> ./README.md
+echo "6、[《PostgreSQL 数据库开发规范》](201609/20160926_01.md)    " >> ./README.md
+echo "7、[《企业数据库选型规则》](197001/20190214_01.md)    " >> ./README.md
+echo "8、[《PostgreSQL 规格评估 - 微观、宏观、精准 多视角估算数据库性能(选型、做预算不求人)》](201709/20170921_01.md)    " >> ./README.md
+echo "9、[《数据库选型之 - 大象十八摸 - 致 架构师、开发者》](201702/20170209_01.md)    " >> ./README.md
+echo "10、[《数据库选型思考(PostgreSQL,MySQL,Oracle)》](201702/20170208_03.md)    " >> ./README.md
+echo "11、[《快速入门PostgreSQL应用开发与管理 - 1 如何搭建一套学习、开发PostgreSQL的环境》](201704/20170411_01.md)    " >> ./README.md
+echo "12、[《快速入门PostgreSQL应用开发与管理 - 2 Linux基本操作》](201704/20170411_02.md)    " >> ./README.md
+echo "13、[《快速入门PostgreSQL应用开发与管理 - 3 访问数据》](201704/20170411_03.md)    " >> ./README.md
+echo "14、[《快速入门PostgreSQL应用开发与管理 - 4 高级SQL用法》](201704/20170411_04.md)    " >> ./README.md
+echo "15、[《快速入门PostgreSQL应用开发与管理 - 5 数据定义》](201704/20170411_05.md)    " >> ./README.md
+echo "16、[《快速入门PostgreSQL应用开发与管理 - 6 事务和锁》](201704/20170412_01.md)    " >> ./README.md
+echo "17、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    " >> ./README.md
+echo "18、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    " >> ./README.md
+echo "  "  >> ./README.md
+echo "### 三、思想  " >> ./README.md
+echo "  "  >> ./README.md
+echo "1、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   " >> ./README.md 
+echo "2、[《未来数据库方向》](202005/20200527_06.md)    " >> ./README.md
+echo "3、[《企业为什么纷纷选择阿里云AliPG》](202005/20200523_01.md)    " >> ./README.md
+echo "4、[《为什么企业应该参与PG社区建设?》](202003/20200321_01.md)    " >> ./README.md
+echo "5、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md
+echo "6、[《[未完待续] PostgreSQL\Greenplum Customer 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
+echo "7、[《[未完待续] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
+echo "8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    " >> ./README.md
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md

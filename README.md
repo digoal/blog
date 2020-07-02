@@ -73,6 +73,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202007/20200702_01.md   [《PostgreSQL zedstore 行 列 混合存储使用》](202007/20200702_01.md)  
+----  
 ##### 202006/20200625_04.md   [《PostgreSQL Linux 较为方便的OS动态参数配置方法 tuned》](202006/20200625_04.md)  
 ##### 202006/20200625_03.md   [《PostgreSQL select 字段 顺序对优化器的影响例子》](202006/20200625_03.md)  
 ##### 202006/20200625_02.md   [《PostgreSQL 假设聚合 Hypothetical-Set Aggregate Functions》](202006/20200625_02.md)  

@@ -2,5 +2,6 @@
   
 ### 文章列表  
 ----  
+##### 20200709_02.md   [《PostgreSQL 操作系统监控插件 - system_stats》](20200709_02.md)  
 ##### 20200709_01.md   [《vacuum的backend xmin不会导致其他vacuum无法回收新的垃圾版本.》](20200709_01.md)  
 ##### 20200702_01.md   [《PostgreSQL zedstore 行 列 混合存储使用》](20200702_01.md)  

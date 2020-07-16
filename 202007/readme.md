@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200716_01.md   [《PostgreSQL plpgsql debug - 黑屏|text|文本 模式调试存储过程》](20200716_01.md)  
 ##### 20200710_02.md   [《PostgreSQL x分组, y排序, 每组各取(N动态)条 - 子查询+子查询聚合使用》](20200710_02.md)  
 ##### 20200710_01.md   [《PostgreSQL 优化case - where A字段范围 order by B字段排序 limit x》](20200710_01.md)  
 ##### 20200709_02.md   [《PostgreSQL 操作系统监控插件 - system_stats》](20200709_02.md)  

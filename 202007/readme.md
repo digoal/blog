@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20200720_04.md   [《PostgreSQL 14 支持显示指定hugepage 单页大小 huge_page_size》](20200720_04.md)  
+##### 20200720_03.md   [《PostgreSQL 13 增加流复制slot保留wal上限参数 - max_slot_wal_keep_size》](20200720_03.md)  
+##### 20200720_02.md   [《PostgreSQL 14 内置逻辑订阅支持binary传输格式》](20200720_02.md)  
+##### 20200720_01.md   [《PostgreSQL 14 支持绑定变量 custom_plans 与 generic_plans 次数统计》](20200720_01.md)  
 ##### 20200716_01.md   [《PostgreSQL plpgsql debug - 黑屏|text|文本 模式调试存储过程》](20200716_01.md)  
 ##### 20200710_02.md   [《PostgreSQL x分组, y排序, 每组各取(N动态)条 - 子查询+子查询聚合使用》](20200710_02.md)  
 ##### 20200710_01.md   [《PostgreSQL 优化case - where A字段范围 order by B字段排序 limit x》](20200710_01.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200723_01.md   [《PostgreSQL 14 preview - 只读barrier模式 - alter system read only|write》](20200723_01.md)  
 ##### 20200720_04.md   [《PostgreSQL 14 支持显示指定hugepage 单页大小 huge_page_size》](20200720_04.md)  
 ##### 20200720_03.md   [《PostgreSQL 13 增加流复制slot保留wal上限参数 - max_slot_wal_keep_size》](20200720_03.md)  
 ##### 20200720_02.md   [《PostgreSQL 14 内置逻辑订阅支持binary传输格式》](20200720_02.md)  

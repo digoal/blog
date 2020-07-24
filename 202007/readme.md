@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200724_01.md   [《PostgreSQL 空闲会话超时插件 - pg_timeout (idle session timeout)》](20200724_01.md)  
 ##### 20200723_01.md   [《PostgreSQL 14 preview - 只读barrier模式 - alter system read only|write》](20200723_01.md)  
 ##### 20200720_04.md   [《PostgreSQL 14 支持显示指定hugepage 单页大小 huge_page_size》](20200720_04.md)  
 ##### 20200720_03.md   [《PostgreSQL 13 增加流复制slot保留wal上限参数 - max_slot_wal_keep_size》](20200720_03.md)  

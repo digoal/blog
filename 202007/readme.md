@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200727_04.md   [《PostgreSQL 商业角度解读 - openapi 、 扩展能力 以及 插件开源协议》](20200727_04.md)  
 ##### 20200727_03.md   [《PostgreSQL 14 并行优化 - seqscan io chunk优化, 避免离散IO》](20200727_03.md)  
 ##### 20200727_02.md   [《PostgreSQL 登录(新建会话)hook插件》](20200727_02.md)  
 ##### 20200727_01.md   [《PostgreSQL COPY SQL命令支持binary格式》](20200727_01.md)  

@@ -59,6 +59,7 @@ echo "5、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> .
 echo "6、[《[未完待续] PostgreSQL\Greenplum Customer 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
 echo "7、[《[未完待续] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
 echo "8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    " >> ./README.md
+echo "9、[《PostgreSQL 商业角度解读 - openapi 、 扩展能力 以及 插件开源协议》](202007/20200727_04.md)    " >> ./README.md
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md

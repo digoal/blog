@@ -48,6 +48,7 @@
 6、[《[未完待续] PostgreSQL\Greenplum Customer 社区管理 TODO》](201710/20171017_05.md)    
 7、[《[未完待续] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    
 8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    
+9、[《PostgreSQL 商业角度解读 - openapi 、 扩展能力 以及 插件开源协议》](202007/20200727_04.md)    
   
 PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  
 ---|---|---  

@@ -60,6 +60,7 @@ echo "6、[《[未完待续] PostgreSQL\Greenplum Customer 社区管理 TODO》]
 echo "7、[《[未完待续] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
 echo "8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    " >> ./README.md
 echo "9、[《云、商业、开源数据库终局之战 - 商业角度解读PG如何破局 - openapi 、 扩展能力、插件开源协议》](202007/20200727_04.md)    " >> ./README.md
+echo "10、[《《引爆点》原理, 如何影响PG发展》](197001/20200804_01.md)      " >> ./README.md
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md

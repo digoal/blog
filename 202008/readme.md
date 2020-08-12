@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20200812_01.md   [《PostgreSQL 14 GetSnapshotData 高并发优化, 64位xid避免xid wrap优化》](20200812_01.md)  
+##### 20200807_01.md   [《PostgreSQL lsm3 index access method》](20200807_01.md)  
 ##### 20200803_11.md   [《PostgreSQL 14 扩展逻辑decoding API 应对长事务逻辑复制优化 - Extend the logical decoding output plugin API with stream methods.》](20200803_11.md)  
 ##### 20200803_10.md   [《PostgreSQL 13 & 14 对齐hashagg和hash join的explain analyze输出内容》](20200803_10.md)  
 ##### 20200803_09.md   [《PostgreSQL 14 仅保留fast promtoe》](20200803_09.md)  

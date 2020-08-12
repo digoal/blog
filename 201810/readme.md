@@ -20,7 +20,7 @@
 ##### 20181015_01.md   [《PostgreSQL 多维空间几何对象 相交、包含 高效率检索实践 - cube》](20181015_01.md)  
 ##### 20181011_01.md   [《PostgreSQL 相似人群圈选，人群扩选，向量相似 使用实践 - cube》](20181011_01.md)  
 ##### 20181009_01.md   [《PostgreSQL 随机记录返回 - 300倍提速实践 (随机数组下标代替order by random())》](20181009_01.md)  
-##### 20181008_01.md   [《PostgreSQL sql文件编码引起的数据导入乱码或查询字符集异常报错(invalid byte sequence)》](20181008_01.md)  
+##### 20181008_01.md   [《PostgreSQL sql文件编码引起的数据导入乱码或查询字符集异常报错(invalid byte sequence)  - 字符集转换》](20181008_01.md)  
 ##### 20181005_01.md   [《关于ECS 无法使用VIP的问题 - SDN , openflow》](20181005_01.md)  
 ##### 20181004_03.md   [《PostgreSQL JOIN limit 优化器 成本计算 改进 - mergejoin startup cost 优化》](20181004_03.md)  
 ##### 20181004_01.md   [《PostgreSQL Mastering book 序》](20181004_01.md)  

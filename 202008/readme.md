@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20200814_05.md   [《PostgreSQL sslutils插件 - 通过SQL接口管理ssl key,crt,crl》](20200814_05.md)  
+##### 20200814_04.md   [《PostgreSQL catalog (元数据) corruption 问题检测》](20200814_04.md)  
+##### 20200814_03.md   [《通过file_fdw读取 Linux proc文件系统, 解析系统状态, 实现PostgreSQL 操作系统监控 - cpu,memory,network,filesystem,block dev等监控》](20200814_03.md)  
 ##### 20200814_02.md   [《PostgreSQL plpgsql 函数 trace - plpgsql_check》](20200814_02.md)  
 ##### 20200814_01.md   [《交互式学习 PostgreSQL - 纯PG小白的进阶指南》](20200814_01.md)  
 ##### 20200812_02.md   [《PostgreSQL 时间间隔如何转化为数值 - interval to numeirc OR (timestamp to numeric then mins)》](20200812_02.md)  

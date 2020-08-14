@@ -75,6 +75,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202008/20200814_01.md   [《交互式学习 PostgreSQL - 纯PG小白的进阶指南》](202008/20200814_01.md)  
 ##### 202008/20200812_02.md   [《PostgreSQL 时间间隔如何转化为数值 - interval to numeirc OR (timestamp to numeric then mins)》](202008/20200812_02.md)  
 ##### 202008/20200812_01.md   [《PostgreSQL 14 GetSnapshotData 高并发优化, 64位xid避免xid wrap优化》](202008/20200812_01.md)  
 ##### 202008/20200807_01.md   [《PostgreSQL lsm3 index access method》](202008/20200807_01.md)  

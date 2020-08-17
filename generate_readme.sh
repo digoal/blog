@@ -111,7 +111,7 @@ do
     fi
 ##
     ALIPGURL=`grep "40cff096e9ed7122c512b35d8561d9c8" ${file}|grep -c "40cff096e9ed7122c512b35d8561d9c8"`
-    if [ $ALIPGURL -ne 1 ]; then
+    if [ $ALIPGURL -lt 1 ]; then
       echo "  " >> ./${file}
       echo "#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
       echo "- [1 任意维度实时圈人](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}

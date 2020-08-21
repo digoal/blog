@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200821_01.md   [《PostgreSQL 许愿墙来了, 永久开放, 开来许愿》](20200821_01.md)  
 ##### 20200817_01.md   [《PostgreSQL 20200819当天代码 - 14 对比 13 高并发性能优化 数据对比 - get snapshot improve》](20200817_01.md)  
 ##### 20200814_05.md   [《PostgreSQL sslutils插件 - 通过SQL接口管理ssl key,crt,crl》](20200814_05.md)  
 ##### 20200814_04.md   [《PostgreSQL catalog (元数据) corruption 问题检测》](20200814_04.md)  

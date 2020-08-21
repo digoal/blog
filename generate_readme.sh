@@ -95,21 +95,21 @@ do
 # macos 例子 sed -i "" '/57258f76c37864c6e6d23383d05714ea/d' ${file}
 # linux 例子 sed -i '/57258f76c37864c6e6d23383d05714ea/d' ${file}
 # ###XYQ###
-sed -i "" '/269ac3d1c492e938c0191101c7238216/d' ${file}
+#sed -i "" '/269ac3d1c492e938c0191101c7238216/d' ${file}
 # ###FREEURL###   
-sed -i "" '/57258f76c37864c6e6d23383d05714ea/d' ${file}
+#sed -i "" '/57258f76c37864c6e6d23383d05714ea/d' ${file}
 # ###ALIPGURL###   
-sed -i "" '/40cff096e9ed7122c512b35d8561d9c8/d' ${file}
+#sed -i "" '/40cff096e9ed7122c512b35d8561d9c8/d' ${file}
 # ###LINK###   
-sed -i "" '/22709685feb7cab07d30f30387f0a9ae/d' ${file}
+#sed -i "" '/22709685feb7cab07d30f30387f0a9ae/d' ${file}
 # ###WXLINK###   
-sed -i "" '/f7ad92eeba24523fd47a6e1a0e691b59/d' ${file}
+#sed -i "" '/f7ad92eeba24523fd47a6e1a0e691b59/d' ${file}
 ## 
     XYQ=`grep "269ac3d1c492e938c0191101c7238216" ${file}|grep -c "269ac3d1c492e938c0191101c7238216"`
     if [ $XYQ -lt 1 ]; then
       echo "  " >> ./${file}
       echo "#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\")" >> ./${file}
-      echo "您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. [开不开森](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\").  " >> ./${file}
+      echo "您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\").  " >> ./${file}
       echo "  " >> ./${file}
     fi
 ##

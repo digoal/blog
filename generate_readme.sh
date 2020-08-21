@@ -94,15 +94,25 @@ do
 # ######################  go go go
 # macos 例子 sed -i "" '/57258f76c37864c6e6d23383d05714ea/d' ${file}
 # linux 例子 sed -i '/57258f76c37864c6e6d23383d05714ea/d' ${file}
+# ###XYQ###
+sed -i "" '/269ac3d1c492e938c0191101c7238216/d' ${file}
 # ###FREEURL###   
-#sed -i "" '/57258f76c37864c6e6d23383d05714ea/d' ${file}
+sed -i "" '/57258f76c37864c6e6d23383d05714ea/d' ${file}
 # ###ALIPGURL###   
-#sed -i "" '/40cff096e9ed7122c512b35d8561d9c8/d' ${file}
+sed -i "" '/40cff096e9ed7122c512b35d8561d9c8/d' ${file}
 # ###LINK###   
-#sed -i "" '/22709685feb7cab07d30f30387f0a9ae/d' ${file}
+sed -i "" '/22709685feb7cab07d30f30387f0a9ae/d' ${file}
 # ###WXLINK###   
-#sed -i "" '/f7ad92eeba24523fd47a6e1a0e691b59/d' ${file}
+sed -i "" '/f7ad92eeba24523fd47a6e1a0e691b59/d' ${file}
 ## 
+    XYQ=`grep "269ac3d1c492e938c0191101c7238216" ${file}|grep -c "269ac3d1c492e938c0191101c7238216"`
+    if [ $XYQ -lt 1 ]; then
+      echo "  " >> ./${file}
+      echo "#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\")" >> ./${file}
+      echo "您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. [开不开森](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\").  " >> ./${file}
+      echo "  " >> ./${file}
+    fi
+##
     FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" ${file}|grep -c "57258f76c37864c6e6d23383d05714ea"`
     if [ $FREEURL -ne 1 ]; then
       echo "  " >> ./${file}
@@ -111,42 +121,23 @@ do
     fi
 ##
     ALIPGURL=`grep "40cff096e9ed7122c512b35d8561d9c8" ${file}|grep -c "40cff096e9ed7122c512b35d8561d9c8"`
-    if [ $ALIPGURL -lt 1 ]; then
+    if [ $ALIPGURL -ne 1 ]; then
       echo "  " >> ./${file}
       echo "#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [1 任意维度实时圈人](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [2 时序数据实时处理](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [3 时间、空间、业务 多维数据实时透视](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [4 独立事件相关性分析](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [5 海量关系实时图式搜索](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [6 社交业务案例](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [7 流式数据实时处理案例](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [8 IoT 物联网, 时序](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [9 全文检索](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [10 模糊、正则 查询案例](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [11 图像识别](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [12 向量相似检索](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [13 数据清洗、采样、脱敏、批处理、合并](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [14 GIS 地理信息空间数据应用](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [15 金融业务](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [16 异步消息应用案例](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [17 海量数据 冷热分离](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [18 倒排索引案例](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
-      echo "- [19 海量数据OLAP处理应用](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
       echo "  " >> ./${file}
     fi
 ## 
     LINK=`grep "22709685feb7cab07d30f30387f0a9ae" $file|grep -c "22709685feb7cab07d30f30387f0a9ae"`
     if [ $LINK -ne 1 ]; then
       echo "  " >> ./$file
-      echo "#### [德哥 / digoal's 趣味入口 - 努力成为灯塔, 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
+      echo "#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
       echo "  " >> ./$file
     fi
 ## 
     WXLINK=`grep "f7ad92eeba24523fd47a6e1a0e691b59" $file|grep -c "f7ad92eeba24523fd47a6e1a0e691b59"`
     if [ $WXLINK -ne 1 ]; then
       echo "  " >> ./$file
-      echo "![德哥的微信 / digoal's wechat](../pic/digoal_weixin.jpg \"f7ad92eeba24523fd47a6e1a0e691b59\")" >> ./$file
+      echo "![digoal's wechat](../pic/digoal_weixin.jpg \"f7ad92eeba24523fd47a6e1a0e691b59\")" >> ./$file
       echo "  " >> ./$file
     fi
 ##

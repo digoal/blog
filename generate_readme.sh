@@ -49,7 +49,8 @@ echo "16、[《快速入门PostgreSQL应用开发与管理 - 6 事务和锁》](
 echo "17、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    " >> ./README.md
 echo "18、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    " >> ./README.md
 echo "  "  >> ./README.md
-echo "### 三、思想  " >> ./README.md
+echo "### 三、[感恩](201803/20180322_12.md)  " >> ./README.md
+echo "### 四、思想  " >> ./README.md
 echo "  "  >> ./README.md
 echo "1、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   " >> ./README.md 
 echo "2、[《未来数据库方向》](202005/20200527_06.md)    " >> ./README.md
@@ -74,7 +75,7 @@ echo "如发现错误, 请万望指正, 非常感谢.  "  >> ./README.md
 echo "  "  >> ./README.md
 echo "欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我联系, 定抽空尽快回复  " >> ./README.md
 echo "  "  >> ./README.md
-echo "### 四、已归类文档如下(归档进行中... ...)  " >> ./README.md
+echo "### 五、已归类文档如下(归档进行中... ...)  " >> ./README.md
 sed 's/](/](class\//g' class/README.md >> ./README.md
 echo "### 所有文档如下  " >> ./README.md
 

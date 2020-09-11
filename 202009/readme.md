@@ -2,6 +2,21 @@
   
 ### 文章列表  
 ----  
+##### 20200911_16.md   [《PostgreSQL 人物采访 - Oleksii Kliukin》](20200911_16.md)  
+##### 20200911_15.md   [《PostgreSQL 人物采访 - 托马斯·冯德拉》](20200911_15.md)  
+##### 20200911_14.md   [《PostgreSQL 人物采访 - 西蒙·里格斯》](20200911_14.md)  
+##### 20200911_13.md   [《PostgreSQL 人物采访 - 安德鲁·邓斯坦》](20200911_13.md)  
+##### 20200911_12.md   [《PostgreSQL 人物采访 - Kohei Kaigai》](20200911_12.md)  
+##### 20200911_11.md   [《PostgreSQL 人物采访 - 乌迈尔·沙希德（Umair Shahid）》](20200911_11.md)  
+##### 20200911_10.md   [《PostgreSQL 人物采访 - 吉尔伯托·卡斯蒂略（Gilberto Castillo）》](20200911_10.md)  
+##### 20200911_09.md   [《PostgreSQL 人物采访 - 石井达夫》](20200911_09.md)  
+##### 20200911_08.md   [《PostgreSQL 人物采访 - 迈克尔·布鲁尔》](20200911_08.md)  
+##### 20200911_07.md   [《PostgreSQL 人物采访 - 查尔斯·克拉瓦代切（Charles Clavadetscher）》](20200911_07.md)  
+##### 20200911_06.md   [《PostgreSQL 人物采访 - 蕾妮·菲利普斯》](20200911_06.md)  
+##### 20200911_05.md   [《PostgreSQL 人物采访 - 马可·斯洛特》](20200911_05.md)  
+##### 20200911_04.md   [《PostgreSQL 人物采访 - Regina Obe》](20200911_04.md)  
+##### 20200911_03.md   [《PostgreSQL crunchy 开源 - Linux cgroup 以及 /proc SQL 访问接口插件 - pgnodemx》](20200911_03.md)  
+##### 20200911_02.md   [《PostgreSQL crunnchy 数据库图形化 可定制 监控工具 pgMonitor》](20200911_02.md)  
 ##### 20200911_01.md   [《PostgreSQL corrupted tuple 修复功能 - pg_surgery》](20200911_01.md)  
 ##### 20200910_02.md   [《[视频直播]亿级用户量的实时推荐数据库到底要几毛钱?》](20200910_02.md)  
 ##### 20200910_01.md   [《ZFS PostgreSQL 调优》](20200910_01.md)  

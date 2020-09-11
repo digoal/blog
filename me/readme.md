@@ -256,5 +256,9 @@ email: digoal@126.com
     
 个人微信:        
 ![pic](../pic/digoal_weixin.jpg)    
-    
+  
+卡通版照片:   
+      
+![pic](digoal_1.png)  
+![pic](digoal_2.png)  
     

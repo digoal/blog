@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200912_01.md   [《PostgreSQL 模糊查询、相似查询 (like '%xxx%') pg_bigm 比 pg_trgm 优势在哪?》](20200912_01.md)  
 ##### 20200911_31.md   [《PostgreSQL 人物采访 - LætitiaAvrot》](20200911_31.md)  
 ##### 20200911_30.md   [《PostgreSQL 人物采访 - 乔·康威》](20200911_30.md)  
 ##### 20200911_29.md   [《PostgreSQL 人物采访 - 克里斯托夫·佩特斯（Christophe Pettus）》](20200911_29.md)  

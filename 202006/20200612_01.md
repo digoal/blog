@@ -1,0 +1,213 @@
+ ## PostgreSQL 推荐系统优化总计 - 空间、时间、标量等混合多模查询场景, 大量已读过滤导致CPU IO剧增(类挖矿概率下降优化)   
+  
+### 作者  
+digoal  
+  
+### 日期  
+2020-06-12  
+  
+### 标签  
+PostgreSQL , 挖矿 , 概率 , 推荐系统 , IO , CPU , 混合 , 多模 , 优化   
+  
+----  
+  
+## 背景  
+[视频讲解](https://yq.aliyun.com/live/43251)   
+  
+```sql  
+select * from a where  
+    ST_DWithin(location::geography, 'SRID=4326;POINT(121.xxxx 31.xxxx)'::geography, 50000)  
+    and gender = 2 and status = 1  
+    and age >= 18 and age <= 99  
+    and lastActive >= 1585462938 and score_type=1  
+    and score_level=2 and city_code = 310100000000  
+    and intent = 103 and score_updatetime > 1586586138  
+    and score >= 0   
+    and uid NOT in[]     
+```  
+  
+根据空间、时间、性别、年龄、状态、活跃情况、活跃度等条件推荐用户, 需要过滤已推荐.   
+  
+问题:   
+1、空间+普通字段结合, 过滤性差.  
+2、多个范围类型的查询条件结合, 过滤性差.   
+3、UID NOT in列表极大, 过滤性差.   
+  
+  
+优化方法:   
+尽量精准索引命中, 避免filter、recheck 浪费IO和cpu.   
+对于不可避免的filter, 通过hash打散, 降低每次请求的filter数目, 减少cpu和io的浪费.   
+  
+1、将范围条件变成可枚举条件.   
+增加两个状态字段, 0不活跃,1活跃. 更新lastActive, score_updatetime 时同时将另外2个字段设置为1, 同时增加后台任务, 将超过时间不活跃的记录设置为0.   
+查询条件变成 ```lastact=1 and score_upd=1```  
+  
+2、固定的查询条件, 放在索引的where条件里面.   
+```  
+create index xxx on tab (col,...) where lastact=1 and score_upd=1 and score>=0;   
+```  
+  
+3、可枚举且值非常少的查询条件, 也可以放在索引where里面. 新的索引如下  
+```  
+create extension btree_gist;  
+create extension postgis;  
+  
+create index xxx1 on tab using gist (location::geography, age, score_type, score_level, city_code, intent)   
+where lastact=1 and score_upd=1 and score>=0 and status=1 and gender=1;  
+  
+create index xxx2 on tab using gist (location::geography, age, score_type, score_level, city_code, intent)   
+where lastact=1 and score_upd=1 and score>=0 and status=1 and gender=2;  
+```  
+  
+4、未来优化(调结构, 使索引100%过滤)  
+位置geohash化, 方圆5公里一个box, 大box套小box(hash串可以区分). 使用suffix标示表, 索引从gist转成btree索引.  
+  
+```  
+create table a_$geohash串 (  -- 大box, 每个box一张表, 例如方圆100公里, 建议方圆多少和数据量挂钩, 5000万左右记录(如果大频繁的更新)  
+  geohashid text, -- 小box, 精确到多少业务可以自行决定  
+  ....  
+);  
+```  
+  
+例子:   
+```  
+大box, a_abcdexz    
+小box, a_abcdexz[....]    
+```  
+  
+查询时, 根据where位点找到对应的大box的表, 然后到小box里面查询.   
+  
+```  
+select xxx from a_$geohash串   
+where geohashid = ?  
+and ...  
+```  
+  
+索引转成btree索引:  
+所有的等值条件都可以放到索引里面, 保留最后一个字段为范围字段即可. 做到索引100%过滤  
+```  
+create index xx on xx using btree(geohashid, ...., age);   
+```  
+  
+5、已读优化1:  
+由于已读会越来越多, 所以UID no in这里的id也会越来越多, 可能数十万甚至百万. 一条sql就很大, 而且存储量也很大.  
+使用hll或bloom或者roaringbitmap存储已读列表大幅度压缩空间, 提高过滤效率. 例如hll:   
+  
+使用hll存储已读列表, 后台更新合并到hll val(不要实时更新, 因为hll也有几十KB, 更新量大容易造成IO瓶颈, 建议通过消费任务, 消费已读消息, 按user分组批量更新, 减少更新次数)    
+已读table t: ``` uid, hll ```   
+查询条件: ```where a.uid || t.hll <> t.hll ```    
+  
+6、已读优化2:    
+类似于bitcorn挖矿, 越到后面概率越来越低, 投入产出比就会越来越低.  
+  
+已读的情况和挖矿类似, 把用户看成一种资源, 当满足推荐条件的记录概率越来越低的话, 那么可以从两方面入手提高效率:   
+1\. 提高概率, 增加资源, 资源越多概率越高, 对于离散随机搜索有效.   
+[《PostgreSQL 随机采样应用 - table sample, tsm_system_rows, tsm_system_time》](../202005/20200509_01.md)    
+  
+2\. 提高触达先机, 这个和数据搜索方法有关, 对于思维定势搜索有效, 例如本例的索引扫描就是一种思维定势下的搜索方法.   
+提高触达先机可以通过hash分散已读列表来达到.    
+[《推荐系统, 已阅读过滤, 大量CPU和IO浪费的优化思路2》](../202006/20200610_02.md)    
+  
+先机优化例子, 例如20万已读, 拆成10片, 每次请求的已读就可以降低到2万. 例子:   
+  
+已读table t: ``` uid, hashid, hll ```   
+查询条件: ```where (a.uid || t.hll <> t.hll)  and a.uid_hashid = ?   -- 查询时uid_hashid随机输入, 在多次请求后, 可以覆盖均匀到所有数据范围.  ```  
+使用函数转换得到hashid: ``` 例如 abs(mod(hashint8(uid),20) ```   
+  
+7、业务, 位点漂移优化, 与滴滴打车热点优化类似, 减少每次都从一个点捞取导致的前段已读列表巨大. 但是漂移有限, 如果未来都被用户已读了, 那么问题还会暴露出来.   
+[《PostgreSQL 滴滴派单 高峰区域集中打车冲突优化1 - 宇宙大爆炸理论与PostgreSQL实践》](../201804/20180416_02.md)    
+  
+增加一个漂移范围字段(后台维护), 针对hll用户数特别大的, 可以考虑漂移范围扩大.  
+  
+已读table t: ``` uid, hashid, offset_box_range, hll ```  
+offset_box_range 表示这个id的漂移范围, hll的已读越多, 漂移范围可以设置为越大. 例如超过20万已读的用户, 在方圆200公里那漂移.   
+  
+  
+  
+日常建议:   
+1、长连接, 总连接数 <= ```3*cpu核心数```  
+2、防雪崩 ``` idle transaction timeout ```  
+3、防雪崩 ``` statement timeout```  
+4、防雪崩 ```lock timeout```   
+5、低峰期定期vacuum freeze。防xid耗尽或不可控的freeze带来的性能抖动（特别是高峰期触发freeze对性能影响较大）   
+  
+  
+日常查询db状态文档:    
+https://github.com/digoal/blog/blob/master/202005/20200509_02.md  
+推荐文档:    
+https://github.com/digoal/blog/blob/master/202006/20200610_02.md  
+hll文档:    
+https://github.com/digoal/blog/blob/master/202004/20200424_01.md  
+  
+与本文类似的case优化:   
+  
+[《HTAP数据库 PostgreSQL 场景与性能测试之 47 - (OLTP多模优化) 空间应用 - 高并发空间位置更新、多属性KNN搜索并测（含空间索引）末端配送、新零售类项目》](../201711/20171107_48.md)  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

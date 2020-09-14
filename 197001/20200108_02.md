@@ -1,0 +1,101 @@
+## PostgreSQL + MySQL 如何互补    
+                                                                                                                 
+### 作者                                                                        
+digoal                                                                                                                 
+                                                                                                                 
+### 日期                                                                                                                 
+2020-01-08                                                                                                              
+                                                                                                                 
+### 标签                                                                                                                 
+PostgreSQL , MySQL , 联合解决方案 , 互补       
+                                                                                                                 
+----                                                                                                                 
+                                                                                                                 
+## 背景       
+     
+## PG好在哪里？  
+- License友好，无商业化公司控制，允许用户分发、修改、商用  
+- 功能更丰富，各种插件  
+- 和Oracle兼容性更好  
+- 支持并行计算，LLVM，GPU加速，向量计算，MPP(citus插件)，行列混合存储(zedstore)等功能，分析能力更强。  
+- 优化器更强，应对复杂SQL处理效率更高，适合更复杂的业务场景。  
+- 服务端编程能力更强，更适合金融、政府、企业ERP等对数据库存储过程强需求的传统行业或领域。  
+- 内核扩展能力更强，可以根据垂直领域的需求定制化数据库，提升行业生产力。  
+- GIS功能更强更专业，支持平面、球面几何，栅格，时空轨迹，点云，拓扑网络模型。  
+- 多模能力更强，其表现在索引更丰富，除了btree,hash还支持gin,gist,spgist,brin,bloom,rum等索引接口，适合更加丰富的数据处理模型，例如模糊搜索，全文检索，多维任意搜索，时空搜索，高维向量（广泛应用于图像识别、相似特征扩选，阿里云rds pg增加pase支持512维，PG社区内置最高100维cube，开源imgsmlr最高16维），时序搜索，用户画像，化学分析，DNA检索等。  
+- 类型更加丰富，同时支持扩展类型，除了基本类型以外，支持网络、全文检索、数组、xml、JSON、范围、域、树、多维、分子、GIS等类型。支持更丰富的应用场景。  
+- 更加严谨，支持强制约束。  
+- 适合场景更广泛，例如oltp和olap，时序，多模类混合场景。  
+  
+## MySQL好在哪？  
+- 简单，学习成本低，会MySQL的人多  
+- 虽然数据库功能偏弱无法处理复杂业务，但是分布式框架多，可以很容易的拆分，开发生态完善  
+  
+      
+      
+      
+      
+      
+      
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

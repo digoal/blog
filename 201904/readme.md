@@ -1,0 +1,28 @@
+<a rel="nofollow" href="http://info.flagcounter.com/h9V1"  ><img src="http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/"  alt="Flag Counter"  border="0"  ></a>  
+  
+### 文章列表  
+----  
+##### 20190430_01.md   [《KPI分解，目标设定之 - 等比数列》](20190430_01.md)  
+##### 20190426_01.md   [《PostgreSQL KPI 预测例子 - 线性回归, 斜率, 截距, 相关性, regr_slope, regr_intercept, regr_r2》](20190426_01.md)  
+##### 20190422_01.md   [《PostgreSQL 深入浅出 - 十万个为什么 - 1 为什么数据库也有DOS攻击》](20190422_01.md)  
+##### 20190421_02.md   [《PostgreSQL中的四色猜想(Four color theorem) - 最强大脑题目》](20190421_02.md)  
+##### 20190421_01.md   [《在PostgreSQL中生成和查看泰森多边形 - Voronoi diagram - 最强大脑题目》](20190421_01.md)  
+##### 20190418_01.md   [《使用SQL查询数据库日志 - file_fdw , csvlog , program , find - 1》](20190418_01.md)  
+##### 20190417_03.md   [《pg_dump 并行备份failed 的原因分析 - This usually means that someone requested an ACCESS EXCLUSIVE lock on the table after the pg_dump parent process had gotten the initial ACCESS SHARE lock on the table》](20190417_03.md)  
+##### 20190417_02.md   [《复合条件c1=xx and (c2=xx or c2=xx)写法的优化》](20190417_02.md)  
+##### 20190417_01.md   [《cached plan must not change result type 原因和解法》](20190417_01.md)  
+##### 20190409_05.md   [《PostgreSQL 12 preview - heap table末端垃圾page是否在vacuum时被回收可控 - vacuum_truncate》](20190409_05.md)  
+##### 20190409_04.md   [《PostgreSQL 12 preview - 支持replica slot复制(copy slot)》](20190409_04.md)  
+##### 20190409_03.md   [《PostgreSQL 12 preview - 分区表order by 分区键支持append(ordered scan partition, 避免merge sort)》](20190409_03.md)  
+##### 20190409_02.md   [《PostgreSQL 12 preview - libpq 增加参数 tcp_user_timeout ，连接异常关闭时会话占用时间可控（TCP_USER_TIMEOUT）》](20190409_02.md)  
+##### 20190409_01.md   [《PostgreSQL 12 preview - psql 快捷命令 \\dP 列出分区表》](20190409_01.md)  
+##### 20190405_10.md   [《PostgreSQL ssl - Where and when you need a root.crt file》](20190405_10.md)  
+##### 20190405_09.md   [《PostgreSQL 12 preview - 支持SQL采样比例设置 - Log all statements from a sample of transactions》](20190405_09.md)  
+##### 20190405_08.md   [《PostgreSQL 12 preview - EXPLAIN支持输出settings（优化器相关设置）》](20190405_08.md)  
+##### 20190405_07.md   [《PostgreSQL 12 preview - Add progress reporting for CREATE INDEX | CLUSTER and VACUUM FULL》](20190405_07.md)  
+##### 20190405_06.md   [《PostgreSQL 12 preview - Add progress reporting to pg_checksums》](20190405_06.md)  
+##### 20190405_05.md   [《PostgreSQL 12 preview - Add wal_recycle and wal_init_zero GUCs 适配COW文件系统如ZFS》](20190405_05.md)  
+##### 20190405_04.md   [《PostgreSQL 12 preview - 分区表PK作为其他表的FK》](20190405_04.md)  
+##### 20190405_03.md   [《PostgreSQL 12 preview - pg_stat_database新增 block checksum 错误统计技术》](20190405_03.md)  
+##### 20190405_02.md   [《PostgreSQL 12 preview - SSL 连接新增功能 - Add new clientcert hba option verify-full》](20190405_02.md)  
+##### 20190405_01.md   [《PostgreSQL 12 preview - 调大默认autovacuum sleep间隔, 加速vacuum》](20190405_01.md)  

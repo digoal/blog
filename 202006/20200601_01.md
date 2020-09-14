@@ -1,0 +1,209 @@
+## PostgreSQL 大量IO扫描、计算浪费的优化 - 推荐模块, 过滤已推荐. (热点用户、已推荐列表超大)  
+  
+### 作者  
+digoal  
+  
+### 日期  
+2020-06-01  
+  
+### 标签  
+PostgreSQL , 优化 , 大量io扫描浪费    
+  
+----  
+  
+## 背景  
+video pool  
+users  
+多对多  
+  
+  
+video 不断变化, 新增, 下架, weight变化   
+users 不断消费video  
+  
+消费规则  
+1、不重复消费N天哪已消费的video  
+2、按video的weight 倒序消费  
+3、用户跳过的video 如果是播放过，下次不应该查出来，如果是上次拉过去没点播，下次应该继续拉取到.   
+  
+```
+select * from video where (not 已读) order by weight desc;  
+-- weight 索引.  
+-- hll 存储已读video.    
+-- 问题: 已读越来越多, 大量的IO浪费.   
+```
+  
+两种优化思路:  
+  
+```  
+\\x  
+  
+copy (select   
+pgp_sym_decrypt('\xc30d04090302c9119bce11df8d9b72d2c30e01c1c2ff3ecd543eb246c02049c92c520ac625d878068adfe1116337a92eff3841f09c40a710cbb181f520870e5b860462faaaf3d7235d06ce37370ea5b93326b93aa5781f9788e3a914013088784383d44ffd3e4afc933acb99d7e6f78691e14b9b9d83da336c3e12ebbd104b72ce37b55127a0577686048e7954f48897f0d0d631bc697f0709fa439f1317e75348d37b5ac831ad4b97619dc32c16b98b57405458cae0fddd593905b7e3a9620b388901244bfacbaf92e66c847720d03aac911f435d4b3f676e506bf39059073aba67d9bd5981e0b34b934b53cc58b3fe0e8f52634c39a39a9906193d7247ca0d4c89883e1eaf27cc471da3d7b1f19d0495620ad70c7bff9d320a9bdbe4b1796784941073ec90d415ae211627e8c72fce27096cb138f8f73a7f77a6017595fb8b14f34f752ffe0c5b4410cc633f42810af88645948560eff40a38a341017ecf5480f767134226546846da200c7760d5d7ec20a9315f470ba8b9615e9d33d71fa3a3be6082e6a17955ecfcf12d9be89cff5ec9a42634c38b502f28b44c146561ea75cee8c7fd40340daabd53ac328cbcc94e44bddfd92b2830f49761cb8545b37feb9c72dc5103552ff6f394f9eabb057fb40f3f782b800a0ceea2f0780c2893bac8a67eca44a112b8e3e48a887bfa55287b70083d098527235a0194ac7cfa1837c83e983c8a8e60264295221350453ef390b0d70f742e75b08216e5b6d0652b46ff00072d7ac362aae0d15882b2649bf60cb35b2d4070f341e07e23341755fba8eb7cc29d7e0c1e18b643fc6e6ab0fcd04bdbfe6a616c1eea07ff038a30bd869b716f78559bdf14800d3466d51975a74dc85208d90b6570725b62a1573e21eec8507efb3004ad1acac54dee6cdcc933c59a992b2131c20a7776e5c88254464c7a801d574d2c5a25719b6e04819c060e9d87de29372173421f074b65addcd215a7d6dd2ba3cd11c4e200f998fb14d246c623adc0be9fa410bde93950f15b660b87a08bbea37e557fdfbab49a08e64640f9f3da6d6537e0663df0f0ae0fbfce9e3429464f8d5911b292934a56155878e6111d4978ec089bd47eac900ab6a7346d7add7ff7c8b1fe440a2cec1ccc07594cf14134661a88d640e5e03abded238fb6617b0338d9c9ae07633c420bb31e93dd4344edfc30f4f9caeb75ffc8fa3dda19c9320ffb9a8baeee9a09c6414818408f35f3c5fac30891ccd7b90e44f22aa8e90ad6768be595fe9d0cb37590b55b78b7e4dcff01e0d608ec29531714f02be424acfb8d25d4a8cd6b8b185a289078ff7f1fd05d7f8360f0a9d0686374f9e79047a77fb03337094bb2336e6b1b299d3b056e5d4d54baf64d67fd8ae1910e05b0100e'::bytea,   
+'z........e1.....j')) to stdout with csv;  
+```  
+  
+  
+问题:  
+1、活跃视频基本上都排在前面, 很容易又被查询到账weight增加而切ts增加, 使得查询2的逐条过滤中依旧有大量已读video.   
+查询2无法做到ts和weight排序同时过滤, 效率也比较低, 只能在ts单一维度查询(如果第二次查询的ts大雨上一次查询的记录较多, sort还是很费时间)依旧有大量sort.   
+  
+2、roaringbitmap是否比hll效率更高, 20万量级vid时?   
+  
+```  
+create extension roaringbitmap;  
+create extension hll;  
+  
+create table t_v (vid int, info text, w float4);   
+insert into t_v select generate_series(1,200000), md5(random()::text), random()*10;  
+insert into t_v select generate_series(200001,200100), md5(random()::text), 0.000000001;  
+create index idx_w on t_v (w desc);  
+  
+  
+create table t_hll_rb (uid int primary key, hll hll, rb roaringbitmap);  
+insert into t_hll_rb select 1, hll_add_agg(hll_hash_integer(vid)), rb_build_agg(vid) from generate_series(1,200000) vid;  
+  
+  
+postgres=> select pg_column_size(hll) hll, pg_column_size(rb) rb from t_hll_rb ;  
+ hll            |             rb   
+----------------+----------------  
+           1287 |          31402  
+(1 row)  
+  
+  
+  
+postgres=> select * from t_v order by w desc limit 10;  
+  vid   |               info               |    w      
+--------+----------------------------------+---------  
+  95836 | 55df09569248209a1cc3511b71f2f90f | 9.99998  
+   2102 | adb95981428ec13dbeeef74dc6b72036 | 9.99996  
+  47729 | 3326a428e1fa9cad5aa661b6e90368e9 | 9.99985  
+  14025 | b1c73268eaf82b81ae86f954f4d313db | 9.99983  
+  45140 | 64ac8f0692f1f75a0ca1adf08d501184 |  9.9998  
+ 187117 | 3e13698e57306b41cd35988ef1102cfe | 9.99979  
+ 132618 | 5adc4440b5c15950832efb5860fd4338 | 9.99971  
+  88898 | 0d48d2bf7075ca40c0bdb5fd5711d259 | 9.99963  
+ 117452 | 7b4db849d70db427fb6e48ffbc3461e5 | 9.99951  
+   2519 | 567dd854d29504f2123d35e4cb959141 |  9.9995  
+(10 rows)  
+  
+  
+  
+select t_v.* from t_v,t_hll_rb where uid=1 and hll||hll_hash_integer(vid) <> hll order by w desc limit 50;  
+  
+select t_v.* from t_v,t_hll_rb where uid=1 and rb|vid <> rb order by w desc limit 50;  
+  
+  
+do language plpgsql $$  
+declare  
+  vhll hll;  
+  sql text;  
+begin  
+  select hll into vhll from t_hll_rb where uid=1;  
+  sql := format($_$  
+  select t_v.* from t_v where %L::hll || hll_hash_integer(vid) <> %L::hll   
+  order by w desc limit 50;   
+  $_$, vhll, vhll   
+  );  
+  -- raise notice '%', sql;   
+  execute sql;  
+end;  
+$$;  
+  
+DO  
+Time: 2476.355 ms (00:02.476)  
+  
+  
+  
+do language plpgsql $$  
+declare  
+  vrb roaringbitmap;  
+  sql text;  
+begin  
+  select rb into vrb from t_hll_rb where uid=1;  
+  sql := format($_$  
+  select t_v.* from t_v where %L::roaringbitmap | vid <> %L::roaringbitmap   
+  order by w desc limit 50;   
+  $_$, vrb, vrb   
+  );  
+  -- raise notice '%', sql;   
+  execute sql;  
+end;  
+$$;  
+  
+DO  
+Time: 1348.163 ms (00:01.348)  
+```  
+  
+如果有垃圾版本, 垃圾版本判断在前, 还是where 条件的计算在前?     
+  
+hll的性能比rb差一倍, hll的空间占用比rb小一个数量级, hll的算法有很大优化空间?   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

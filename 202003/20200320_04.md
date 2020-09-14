@@ -1,0 +1,114 @@
+## GIS 完整开源解决方案 - Crunchy Spatial - API, Web, GIS, database, 动态矢量瓦片  
+              
+### 作者                                                                              
+digoal                                                                                                                       
+                                
+### 日期                                                                                                                       
+2020-03-20                                                                                                                   
+                                                                                                                       
+### 标签                                                                                                                       
+PostgreSQL , API , Web , GIS , database , 动态矢量瓦片    
+                           
+----                     
+                                
+## 背景       
+GIS 完整开源解决方案 - Crunchy Spatial - API, Web, GIS, database, 动态矢量瓦片  
+  
+全套解决, 如果你需要部署GIS类应用, 这是一个不二之选.    
+  
+Crunchy Spatial extends Crunchy Certified PostgreSQL with a collection of standard open source tools for enterprises that need standard spatial analysis, mapping, and location-based functionality in their applications. This includes:  
+  
+- Web vector maps delivered through simple REST API  
+- Interface with spatial features in your database  
+- Dynamic vector tiles and features direct from the database with no caching or long refresh times  
+- Micro-service architecture, for easy deployment in the cloud  
+- No-code middleware to link web apps to spatial SQL smarts  
+- Low overhead to maximize data serving performance  
+  
+Crunchy Spatial implements the Open Geospatial Consortium (OGC) standards for Simple Feature Access Through SQL and OGC API - Features.  
+  
+同时crunchy也支持了一些通用的矢量瓦片管理套件  
+  
+pg_tileserv is one component in “PostGIS for the Web” (aka “PostGIS FTW”), a growing family of Go spatial microservices. Database-centric applications naturally have a central source of coordinating state, the database, which allows otherwise independent microservices to coordinate and provide HTTP-level access to the database with less middleware software complexity.  
+  
+- pg_tileserv provides MVT tiles for interactive clients and smooth rendering  
+- pg_featureserv provides GeoJSON feature services for reading and writing vector and attribute data from tables  
+  
+PostGIS for the Web makes it possible to stand up a spatial services architecture of stateless microservices surrounding a PostgreSQL/PostGIS database cluster, in a standard container environment, on any cloud platform or internal datacenter.  
+  
+https://www.crunchydata.com/products/crunchy-spatial/  
+  
+https://access.crunchydata.com/documentation/pg_tileserv/1.0.1/introduction/  
+  
+https://www.ogc.org/resource/products  
+  
+https://info.crunchydata.com/blog/crunchy-spatial-tile-serving-with-postgresql-functions  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

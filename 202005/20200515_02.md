@@ -1,0 +1,168 @@
+## PostgreSQL 懒人快速(无堵塞、或短暂堵塞DML)创建一大堆分区索引 - procedure（存储过程）commit,rollback子事务应用场景  
+  
+### 作者  
+digoal  
+  
+### 日期  
+2020-05-15  
+  
+### 标签  
+PostgreSQL , 分区索引 , concurrently , procedure , 存储过程 , 事务    
+  
+----  
+  
+## 背景  
+我有一个分区表, 有几万分区, 要在几万分区上创建索引. 怎么办?  
+  
+1、我是懒人  
+  
+2、我怕创建索引会影响业务(创建索引如果不加concurrently会堵塞dml) , 我怕滚蛋.   
+  
+3、我不想写一堆sql   
+  
+4、我想快速完成, 据我所知concurrently 在PG 12后有改进, 12以前的版本如果有大量DML, concurrently加索引会变慢.  
+  
+5、分区很多, 如果放在一个do中, 从开始到结束这个过程中都会堵塞相关dml, 如果时间漫长, 我怕影响业务, 然后被滚蛋.   
+  
+6、每个分区比较小, 加一个分区几秒可以搞定(几秒对业务影响较小)    
+  
+综上所述, 如何快速创建所有分区表的索引, 又不堵塞dml(或者短暂堵塞dml) ?     
+  
+有, procedure (PG 11为例)   
+  
+```  
+set lock_timeout=xx;  -- 避免长时间等锁导致雪崩.  
+loop xx..xxxx   
+  create index [if not exists] [concurrently] ?;  -- 仅仅在这个过程中堵塞dml  
+  commit or rollback;  -- 每创建一个索引后都结束事务, 释放这个索引相关的锁.   
+end loop;  
+reset lock_timeout;  
+```  
+  
+## 例子  
+在一个表上创建若干索引, 和在若干表上创建索引, 效果一样, 改存储过程内容即可.    
+  
+```  
+create table tab2(uid int, info text);  
+insert into tab2 select generate_series(1,100), random()::text;  
+```  
+  
+创建一个函数, 用来执行sql, 并且支持设置锁超时:   
+  
+```  
+create or replace function exec_sql(text,text) returns boolean as $$  
+declare  
+begin  
+  execute format('set lock_timeout=%L', $1);  
+  execute $2;  
+  reset lock_timeout;  
+  return true;  
+exception when others then  
+  reset lock_timeout;  
+  return false;  
+end;  
+$$ language plpgsql strict;  
+```  
+  
+创建一个存储过程, 在tab2上创建一堆索引  
+  
+```  
+create or replace procedure do_sqls() as $$  
+declare  
+begin  
+for i in 1..65 loop  
+  if exec_sql('1s', format('create index IF NOT EXISTS idx_%s on tab2 (uid)', i)) then  
+    raise notice 'success index: %', 'idx_'||i;   
+    commit;  -- 每个分区索引创建后, 结束事务, 自动释放锁  
+  else  
+    rollback;  -- 每个分区索引创建后, 结束事务, 自动释放锁  
+    raise notice 'not success, lock_timeout index: %', 'idx_'||i;   
+  end if;  
+  -- perform pg_sleep(5);  -- 加一个sleep可以拉长整个时间, 从而有时间窗口可以模拟dml不堵塞的情况.    
+end loop;  
+  -- reset lock_timeout;    
+end;  
+$$ language plpgsql;  
+```  
+  
+查看notice, 如果有没有加成功的分区(例如因为lock_timeout没有加成功), 重新再跑.  直到全部成功.    
+  
+  
+好处:   
+  
+1、操作过程中, 只有在创建索引中的分区才会堵塞这个分区相关的dml.   
+  
+2、每个分区的索引创建完后, 立马可见.    
+  
+  
+注意如果你使用的是PG12 以前的版本, 并且你直接访问主表进行写入, 可能还是会有堵塞. 直接访问未在创建索引中的分区不会有堵塞, 或者使用PG 12或以后的版本.   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

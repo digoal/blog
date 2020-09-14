@@ -15,7 +15,7 @@
 ##### 20160113_01.md   [《PostgreSQL pg_stat_replication sent_location, write_location, flush_location, replay_location的差别》](20160113_01.md)  
 ##### 20160112_01.md   [《Oracle 12c NB特性 多LGWR进程SCALABLE LGWR _use_single_log_writer》](20160112_01.md)  
 ##### 20160111_02.md   [《BenchmarkSQL 测试Oracle 12c TPC-C 性能 (含个人测试结果)》](20160111_02.md)  
-##### 20160111_01.md   [《PostgreSQL hugepage 支持》](20160111_01.md)  
+##### 20160111_01.md   [《PostgreSQL hugepage 支持与配置》](20160111_01.md)  
 ##### 20160110_01.md   [《BenchmarkSQL 支持多个 schema》](20160110_01.md)  
 ##### 20160109_01.md   [《BenchmarkSQL 测试PostgreSQL 9.5.0 TPC-C 性能》](20160109_01.md)  
 ##### 20160107_04.md   [《EXT4 vs XFS us iozone》](20160107_04.md)  

@@ -1,0 +1,235 @@
+## PostgreSQL PostGIS 3 ST_AsGeoJSON(record) - early only ST_AsGeoJSON(geo)    
+                                                                                                                                                                
+### 作者                                                                                                                                                                
+digoal                                                                                                                                                                
+                                                                                                                                                                
+### 日期                                                                                                                                                                
+2019-08-03                                                                                                                                                                 
+                                                                                                                                                                
+### 标签                                                                                                                                                                
+PostgreSQL , PostGIS , geojson , record , feature , geometry           
+                                                                               
+----                                                                                                                                                          
+                                                                                                                                                            
+## 背景         
+原文  
+  
+https://info.crunchydata.com/blog/postgis-3-geojson-st-asgeojson  
+  
+geojson是服务端与客户端geo数据传输等一种格式，格式参考RFC定义  
+  
+https://tools.ietf.org/html/rfc7946  
+  
+```  
+   2.  GeoJSON Text  . . . . . . . . . . . . . . . . . . . . . . . .   6  
+   3.  GeoJSON Object  . . . . . . . . . . . . . . . . . . . . . . .   6  
+     3.1.  Geometry Object . . . . . . . . . . . . . . . . . . . . .   7  
+       3.1.1.  Position  . . . . . . . . . . . . . . . . . . . . . .   7  
+       3.1.2.  Point . . . . . . . . . . . . . . . . . . . . . . . .   8  
+       3.1.3.  MultiPoint  . . . . . . . . . . . . . . . . . . . . .   8  
+       3.1.4.  LineString  . . . . . . . . . . . . . . . . . . . . .   8  
+       3.1.5.  MultiLineString . . . . . . . . . . . . . . . . . . .   8  
+       3.1.6.  Polygon . . . . . . . . . . . . . . . . . . . . . . .   9  
+       3.1.7.  MultiPolygon  . . . . . . . . . . . . . . . . . . . .   9  
+       3.1.8.  GeometryCollection  . . . . . . . . . . . . . . . . .   9  
+       3.1.9.  Antimeridian Cutting  . . . . . . . . . . . . . . . .  10  
+       3.1.10. Uncertainty and Precision . . . . . . . . . . . . . .  11  
+     3.2.  Feature Object  . . . . . . . . . . . . . . . . . . . . .  11  
+     3.3.  FeatureCollection Object  . . . . . . . . . . . . . . . .   
+```  
+  
+PostGIS 3以前，st_asgeojson仅支持geometry输入，构造geojson格式比较麻烦  
+  
+http://postgis.net/docs/manual-2.5/ST_AsGeoJSON.html  
+  
+```  
+text ST_AsGeoJSON(geometry geom, integer maxdecimaldigits=15, integer options=0);  
+  
+text ST_AsGeoJSON(geography geog, integer maxdecimaldigits=15, integer options=0);  
+  
+select row_to_json(fc)  
+from (  
+    select  
+        'FeatureCollection' as "type",  
+        array_to_json(array_agg(f)) as "features"  
+    from (  
+        select  
+            'Feature' as "type",  
+            ST_AsGeoJSON(ST_Transform(way, 4326), 6) :: json as "geometry",  
+            (  
+                select json_strip_nulls(row_to_json(t))  
+                from (  
+                    select  
+                        osm_id,  
+                        "natural",  
+                        place  
+                ) t  
+            ) as "properties"  
+        from planet_osm_point  
+        where  
+            "natural" is not null  
+            or place is not null  
+        limit 10  
+    ) as f  
+) as fc;  
+					   st_asgeojson  
+-----------------------------------------------------------------------------------------------------------  
+{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[23.569251,51.541599]},"properties":{"osm_id":3424148658,"place":"locality"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.625174,51.511718]},"properties":{"osm_id":4322036818,"place":"locality"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.613928,51.5417]},"properties":{"osm_id":242979330,"place":"hamlet"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.586361,51.563272]},"properties":{"osm_id":3424148656,"place":"locality"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.605488,51.553886]},"properties":{"osm_id":242979323,"place":"village"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.6067,51.57609]},"properties":{"osm_id":242979327,"place":"village"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.636533,51.575683]},"properties":{"osm_id":5737800420,"place":"locality"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.656733,51.518733]},"properties":{"osm_id":5737802397,"place":"locality"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.672542,51.504584]},"properties":{"osm_id":242979320,"place":"hamlet"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.574094,51.63389]},"properties":{"osm_id":242979333,"place":"village"}}]}  
+		  
+SELECT ST_AsGeoJSON(geom) from fe_edges limit 1;  
+					   st_asgeojson  
+-----------------------------------------------------------------------------------------------------------  
+  
+{"type":"MultiLineString","coordinates":[[[-89.734634999999997,31.492072000000000],  
+[-89.734955999999997,31.492237999999997]]]}  
+(1 row)  
+```  
+  
+3以后，st_asgeojson支持record输入，默认第一列为geo类型，其他列的内容合并到properties中。  
+  
+http://postgis.net/docs/manual-dev/ST_AsGeoJSON.html  
+  
+text ST_AsGeoJSON(record feature, text geomcolumnname, integer maxdecimaldigits=15, boolean pretty_bool=false);  
+  
+  
+The ST_AsGeoJSON(record) function looks at the input tuple, and takes the first column of type geometry to convert into a GeoJSON geometry. The rest of the columns are added to the GeoJSON features in the properties member.  
+  
+例子  
+  
+```  
+SELECT ST_AsGeoJSON(subq.*) AS geojson   
+FROM (   
+  SELECT ST_Centroid(geom), type, admin   
+  FROM countries   
+  WHERE name = 'Canada'   
+) AS subq  
+{"type": "Feature",   
+ "geometry": {   
+    "type":"Point",   
+    "coordinates":[-98.2939042718784,61.3764628013483]   
+  },   
+  "properties": {   
+    "type": "Sovereign country",   
+    "admin": "Canada"   
+  }   
+}  
+```  
+  
+http://postgis.net/docs/manual-dev/ST_AsGeoJSON.html  
+  
+```  
+To build FeatureCollection:  
+  
+select json_build_object(  
+    'type', 'FeatureCollection',  
+    'features', json_agg(ST_AsGeoJSON(t.*)::json)  
+    )  
+from ( values (1, 'one', 'POINT(1 1)'::geometry),  
+              (2, 'two', 'POINT(2 2)'),  
+              (3, 'three', 'POINT(3 3)')  
+     ) as t(id, name, geom);  
+{"type" : "FeatureCollection", "features" : [{"type": "Feature", "geometry": {"type":"Point","coordinates":[1,1]}, "properties": {"id": 1, "name": "one"}}, {"type": "Feature", "geometry": {"type":"Point","coordinates":[2,2]}, "properties": {"id": 2, "name": "two"}}, {"type": "Feature", "geometry": {"type":"Point","coordinates":[3,3]}, "properties": {"id": 3, "name": "three"}}]}  
+To get Features as records:  
+  
+SELECT ST_AsGeoJSON(t.*)  
+FROM (VALUES  
+  (1, 'one', 'POINT(1 1)'::geometry),  
+  (2, 'two', 'POINT(2 2)'),  
+  (3, 'three', 'POINT(3 3)'))  
+AS t(id, name, geom);  
+                                                  st_asgeojson  
+-----------------------------------------------------------------------------------------------------------------  
+ {"type": "Feature", "geometry": {"type":"Point","coordinates":[1,1]}, "properties": {"id": 1, "name": "one"}}  
+ {"type": "Feature", "geometry": {"type":"Point","coordinates":[2,2]}, "properties": {"id": 2, "name": "two"}}  
+ {"type": "Feature", "geometry": {"type":"Point","coordinates":[3,3]}, "properties": {"id": 3, "name": "three"}}  
+```  
+    
+  
+## 参考    
+https://info.crunchydata.com/blog/postgis-3-geojson-st-asgeojson  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

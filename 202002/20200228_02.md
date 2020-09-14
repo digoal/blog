@@ -1,0 +1,524 @@
+## 用户喜好推荐系统 - PostgreSQL 近似计算应用    
+          
+### 作者                                                                          
+digoal                                                                                                                   
+                            
+### 日期                                                                                                                   
+2020-02-28                                                                                                               
+                                                                                                                   
+### 标签                                                                                                                   
+PostgreSQL , 近似计算 , hll , hyperloglog , hash     
+                       
+----                 
+                            
+## 背景      
+推荐系统在互联网化的应用中是一个提升用户粘性、提高转化率的通用需求.    
+    
+例如电商, 根据用户喜好, 推荐打折商品.    
+    
+音乐网站, 根据用户听音习惯, 推荐音乐.    
+    
+新闻网站, 根据用户浏览习惯, 推荐喜好的内容.    
+    
+appstore网站, 根据用户下载和使用app习惯, 推荐app    
+    
+... ...    
+    
+下面以音乐网站为例子介绍如何设计推荐系统数据库, 以及不同设计方法的差异.    
+    
+## 设计背景    
+歌曲有对应的标签    
+    
+一个歌曲可以有多个标签    
+    
+用户听过什么歌曲(听完的)    
+    
+形成一个一堆多的映射关系    
+    
+```    
+uid ->> tags ->> musics    
+```    
+    
+根据用户每个tag下的music数排行, 得到tag热度    
+    
+```    
+tag(count distinct music)    
+...    
+```    
+    
+前5个tag, 以及权重    
+    
+    
+```    
+tag1:40%    
+tag2:20%    
+tag3:15%    
+tag4:15%    
+tag5:10%    
+```    
+    
+从打了这些tag标签的歌曲库, 排除用户听过的, 以及这些歌曲的推荐权重(例如播放次数倒排), 按比例再推荐新的歌曲给你.    
+    
+## 普通设计    
+适合所有数据库    
+    
+```    
+create table t_like(     
+uid int,  -- 用户id    
+tagid int,  -- 歌曲标签id    
+vid int,   -- 歌曲id    
+mod_time timestamp,  -- 最后一次更新时间, 仅与上次时间超过1天时更新    
+primary key (uid,tagid,vid)     
+);    
+    
+insert into t_like values (:uid, :tagid, :vid, :mod_time)     
+ on conflict (uid,tagid,vid) do update    
+set mod_time=excluded.mod_time    
+where    
+excluded.mod_time - t_like.mod_time > interval '1 day'    
+;    
+    
+-- 根据tag里面歌曲id的歌手, 统计最近1天的top 10的tag    
+select tagid, count(*) from t_like     
+where uid=:uid     
+and now()-mod_time < interval '1 day'  
+group by tagid     
+order by count(*) desc limit 10;    
+```    
+  
+压测:  
+  
+```  
+vi test.sql  
+\set uid random(1,50000)    
+\set tagid random(1,5000)    
+\set vid random(1,10000000)    
+insert into t_like values (:uid, :tagid, :vid, now())     
+ on conflict (uid,tagid,vid) do update    
+set mod_time=excluded.mod_time    
+where    
+excluded.mod_time - t_like.mod_time > interval '1 day';    
+  
+pgbench -M prepared -n -r -P 1 -f ./test.sql -c 32 -j 32 -T 240  
+  
+transaction type: ./test.sql  
+scaling factor: 1  
+query mode: prepared  
+number of clients: 32  
+number of threads: 32  
+duration: 240 s  
+number of transactions actually processed: 80975327  
+latency average = 0.095 ms  
+latency stddev = 0.340 ms  
+tps = 337396.279382 (including connections establishing)  
+tps = 337406.018908 (excluding connections establishing)  
+statement latencies in milliseconds:  
+         0.000  \set uid random(1,50000)    
+         0.000  \set tagid random(1,5000)    
+         0.000  \set vid random(1,10000000)    
+         0.094  insert into t_like values (:uid, :tagid, :vid, now())    
+  
+db1=# select tagid, count(*) from t_like     
+where uid=1        
+and now()-mod_time < interval '1 day'  
+group by tagid     
+order by count(*) desc limit 10;    
+ tagid | count   
+-------+-------  
+  2519 |     4  
+  3049 |     4  
+  3648 |     4  
+  1777 |     3  
+  1352 |     3  
+  1491 |     3  
+  1064 |     3  
+   572 |     3  
+   692 |     3  
+   301 |     3  
+(10 rows)  
+  
+Time: 3.947 ms  
+```  
+    
+缺陷:    
+    
+- 数据量庞大    
+- 查询涉及聚合, 效率低    
+    
+    
+## 基于hll近似计算的设计    
+使用hll来存储uid听完的vid: (标签(hll), 标签n(hll)), 相比普通设计的优势很多    
+    
+优势:    
+    
+- 数据量小, 使用近似hll hash聚集代替真实值(一档顶很多行)    
+- 查询效率高, 支持索引, 不需要计算, 毫秒响应    
+- 支持hash union, add等操作, 适合滑窗计算, 满足更多需求    
+    
+涉及PostgreSQL hll插件:    
+    
+https://github.com/citusdata/postgresql-hll    
+    
+每个标签存储一个hll, 这个hll里面存储的是在这个标签里面, 用户听完的歌曲的vid hashvalue.     
+    
+```    
+create table t_like (    
+uid int,     
+tagid int, -- 标签    
+w1 hll, w1_mod_time timestamp, -- 周一听完的歌曲对应的vid 构成的hash, 周一    
+w2 hll, w2_mod_time timestamp, -- 周二 ...    
+w3 hll, w3_mod_time timestamp,     
+w4 hll, w4_mod_time timestamp,     
+w5 hll, w5_mod_time timestamp,     
+w6 hll, w6_mod_time timestamp,     
+w7 hll, w7_mod_time timestamp,     
+whole hll,                   -- 所有    
+primary key (uid,tagid)    
+);    
+```    
+    
+这么设计主要是根据业务来, 业务如果只关心1天的, 那就不用搞这么多字段.    
+    
+    
+当用户听完一首歌, 把这个写入当前日期对应字段, 当对应字段已经有value, 并且最后修改时间不是今天时, 则覆盖, 否则追加hash     
+    
+采用了insert into on conflict语法, 例如    
+    
+```    
+-- 设置观看历史行为 hash    
+insert into t_like (    
+uid,    
+tagid,    
+w5,     
+w5_mod_time,    
+whole    
+)    
+values (    
+1,  -- uid    
+200,  -- 标签id    
+hll_hash_integer(12346)||hll_empty(),  -- 观看过的vid, 多个则继续||    
+now(),     
+hll_hash_integer(12346)||hll_empty()   -- 观看过的vid    
+)    
+on conflict (uid,tagid)     
+do update    
+set w5=    
+case     
+when date(t_like.w5_mod_time) <> current_date     
+then excluded.w5     
+else hll_union(coalesce(t_like.w5,hll_empty()), excluded.w5)    
+end,    
+w5_mod_time = excluded.w5_mod_time,    
+whole = hll_union(coalesce(t_like.whole,hll_empty()), excluded.whole)    
+where    
+hll_union(coalesce(t_like.w5,hll_empty()), excluded.w5) <> coalesce(t_like.w5,hll_empty())    
+or    
+hll_union(coalesce(t_like.whole,hll_empty()), excluded.whole) <> coalesce(t_like.whole,hll_empty())    
+;    
+```    
+    
+实际也可以批量合并更新, 针对单个用户的单个标签聚合更新. 采用hll union即可. 降低更新率     
+    
+查询uid 1最近2天的top 10标签, 例如    
+    
+```    
+select tagid,     
+hll_cardinality( hll_union(coalesce(w4,hll_empty()), coalesce(w5,hll_empty())) ) as vids     
+from t_like    
+where uid = 1    
+order by 2 desc limit 10;    
+    
+    
+    
+ tagid | vids     
+-------+------    
+   200 |    2    
+(1 row)    
+```    
+    
+支持索引    
+    
+```    
+create index idx_t_like_1 on t_like (uid, hll_cardinality( hll_union(coalesce(w4,hll_empty()), coalesce(w5,hll_empty())) ));    
+```    
+    
+索引扫描    
+    
+```    
+postgres=# explain select tagid,     
+hll_cardinality( hll_union(coalesce(w4,hll_empty()), coalesce(w5,hll_empty())) ) as vids    
+from t_like    
+where uid = 1    
+order by 2 desc limit 10;    
+                                        QUERY PLAN                                             
+-------------------------------------------------------------------------------------------    
+ Limit  (cost=0.11..0.15 rows=1 width=12)    
+   ->  Index Scan Backward using idx_t_like_1 on t_like  (cost=0.11..0.15 rows=1 width=12)    
+         Index Cond: (uid = 1)    
+(3 rows)    
+```    
+    
+    
+写入几千万数据, 压力测试性能    
+    
+```    
+vi test.sql    
+\set uid random(1,50000)    
+\set tagid random(1,5000)    
+\set vid random(1,10000000)    
+insert into t_like (    
+uid,    
+tagid,    
+w5,     
+w5_mod_time,    
+whole    
+)    
+values (    
+:uid,    
+:tagid,    
+hll_hash_integer(:vid)||hll_empty(),    
+now(),    
+hll_hash_integer(:vid)||hll_empty()    
+)    
+on conflict (uid,tagid)     
+do update    
+set w5=    
+case     
+when date(t_like.w5_mod_time) <> current_date     
+then excluded.w5     
+else hll_union(coalesce(t_like.w5,hll_empty()), excluded.w5)    
+end,    
+w5_mod_time = excluded.w5_mod_time,    
+whole = hll_union(coalesce(t_like.whole,hll_empty()), excluded.whole)    
+where    
+hll_union(coalesce(t_like.w5,hll_empty()), excluded.w5) <> coalesce(t_like.w5,hll_empty())    
+or    
+hll_union(coalesce(t_like.whole,hll_empty()), excluded.whole) <> coalesce(t_like.whole,hll_empty())    
+;    
+    
+    
+pgbench -M prepared -n -r -P 1 -c 32 -j 32 -T 120 -f ./test.sql    
+```    
+    
+```    
+transaction type: ./test.sql    
+scaling factor: 1    
+query mode: prepared    
+number of clients: 32    
+number of threads: 32    
+duration: 120 s    
+number of transactions actually processed: 24636321    
+latency average = 0.156 ms    
+latency stddev = 0.339 ms    
+tps = 205301.110313 (including connections establishing)    
+tps = 205354.851711 (excluding connections establishing)    
+statement latencies in milliseconds:    
+         0.001  \set uid random(1,5000000)    
+         0.001  \set tagid random(1,5000)    
+         0.000  \set vid random(1,10000000)    
+         0.154  insert into t_like (    
+```    
+    
+    
+多跑几轮    
+    
+    
+```    
+transaction type: ./test.sql    
+scaling factor: 1    
+query mode: prepared    
+number of clients: 32    
+number of threads: 32    
+duration: 120 s    
+number of transactions actually processed: 23988181    
+latency average = 0.160 ms    
+latency stddev = 0.335 ms    
+tps = 199900.214256 (including connections establishing)    
+tps = 199956.049571 (excluding connections establishing)    
+statement latencies in milliseconds:    
+         0.001  \set uid random(1,50000)    
+         0.000  \set tagid random(1,5000)    
+         0.000  \set vid random(1,10000000)    
+         0.158  insert into t_like (    
+```    
+    
+    
+当前记录数4747万条.    
+    
+    
+```    
+postgres=# select count(*) from t_like ;    
+  count       
+----------    
+ 47473788    
+(1 row)    
+```    
+    
+    
+查询某个uid的标签热度排序, 0.688毫秒响应    
+    
+```    
+postgres=# select tagid,     
+hll_cardinality( hll_union(coalesce(w4,hll_empty()), coalesce(w5,hll_empty())) ) as vids    
+from t_like    
+where uid = 1    
+order by 2 desc limit 10;    
+ tagid | vids     
+-------+------    
+   200 |    2    
+  1413 |    1    
+  1996 |    1    
+  2642 |    1    
+  3664 |    1    
+  4340 |    1    
+(6 rows)    
+    
+Time: 0.688 ms    
+```    
+    
+    
+其他需求:  判断一个vid是否在这个hash里面, 不精确操作. (用于过滤用户已经听过的歌曲)    
+    
+    
+```    
+select whole || hll_hash_integer(:vid) = whole     
+from     
+t_like     
+where uid=:uid and tagid=:tagid;    
+```    
+    
+例如    
+    
+```    
+postgres=# select whole || hll_hash_integer(1) = whole        
+from     
+t_like     
+where uid=1 and tagid=200;  -- 返回false表示不包含vid:1    
+ ?column?     
+----------    
+ f    
+(1 row)    
+    
+postgres=# select whole || hll_hash_integer(12345) = whole     
+from     
+t_like     
+where uid=1 and tagid=200;   -- 返回true表示包含vid:12345    
+ ?column?     
+----------    
+ t    
+(1 row)    
+```    
+    
+如果希望精确建议另外存一份精准值    
+    
+```    
+create table t_like_lossless (    
+uid int,    
+vid int,    
+primary key (uid,vid)    
+);    
+```    
+    
+这个是pk查询, 速度也是非常快的    
+    
+阿里云即将支持hll插件. 欢迎试用, 现在可以9块9购买PG试用:     
+    
+https://www.aliyun.com/database/postgresqlactivity    
+    
+## 小结    
+    
+采用PostgreSQL hll近似hash功能, 实现了亿级别关系数据量下, 毫秒级别的推荐查询.     
+    
+相比之下节省了存储空间, 同时响应速度从3.947毫秒 提升 到0.688毫秒.     
+    
+## 参考    
+https://github.com/citusdata/postgresql-hll    
+    
+[《PostgreSQL sharding : citus 系列6 - count(distinct xx) 加速 (use 估值插件 hll|hyperloglog)》](../201809/20180913_04.md)      
+    
+[《PostgreSQL hll (HyperLogLog) extension for "State of The Art Cardinality Estimation Algorithm" - 3》](../201302/20130228_01.md)      
+    
+[《PostgreSQL hll (HyperLogLog) extension for "State of The Art Cardinality Estimation Algorithm" - 2》](../201302/20130227_01.md)      
+    
+[《PostgreSQL hll (HyperLogLog) extension for "State of The Art Cardinality Estimation Algorithm" - 1》](../201302/20130226_01.md)      
+    
+[《Greenplum 最佳实践 - 估值插件hll的使用(以及hll分式聚合函数优化)》](../201608/20160825_02.md)      
+    
+专业推荐数据库 - recdb    
+    
+https://github.com/DataSystemsLab/recdb-postgresql    
+    
+专业图数据库    
+    
+https://edgedb.com/    
+    
+https://github.com/bitnine-oss/agensgraph    
+    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

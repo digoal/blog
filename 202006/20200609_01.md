@@ -1,0 +1,256 @@
+## PostgreSQL 生成随机数据方法大汇总  
+  
+### 作者  
+digoal  
+  
+### 日期  
+2020-06-09  
+  
+### 标签  
+PostgreSQL , 随机    
+  
+----  
+  
+## 背景  
+  
+```  
+select arr[ceil(random()*6)] from (values (array['hello','digoal','test','good','china','123'])) as t(arr);  
+select (array['hello','digoal','test','good','china','123'])[ceil(random()*6)];  
+  
+postgres=> select arr[ceil(random()*6)] from (values (array['hello','digoal','test','good','china','123'])) as t(arr);  
+ arr    
+------  
+ good  
+(1 row)  
+  
+postgres=> select arr[ceil(random()*6)] from (values (array['hello','digoal','test','good','china','123'])) as t(arr);  
+  arr    
+-------  
+ china  
+(1 row)  
+  
+postgres=> select arr[ceil(random()*6)] from (values (array['hello','digoal','test','good','china','123'])) as t(arr);  
+ arr    
+------  
+ good  
+(1 row)  
+  
+postgres=> select arr[ceil(random()*6)] from (values (array['hello','digoal','test','good','china','123'])) as t(arr);  
+ arr    
+------  
+ good  
+(1 row)  
+```  
+  
+```  
+postgres=> select (array['hello','digoal','test','good','china','123'])[ceil(random()*6)];  
+ array    
+--------  
+ digoal  
+(1 row)  
+  
+postgres=> select (array['hello','digoal','test','good','china','123'])[ceil(random()*6)];  
+ array   
+-------  
+ 123  
+(1 row)  
+  
+postgres=> select (array['hello','digoal','test','good','china','123'])[ceil(random()*6)];  
+ array   
+-------  
+ hello  
+(1 row)  
+```  
+  
+```  
+create table t_arr (id int, t text);  
+insert into t_arr select generate_series(1,100), (array['hello','digoal','test','good','china','123'])[ceil(random()*6)];  
+  
+postgres=> select * from t_arr limit 10;  
+ id |   t      
+----+--------  
+  1 | hello  
+  2 | hello  
+  3 | test  
+  4 | test  
+  5 | test  
+  6 | 123  
+  7 | digoal  
+  8 | good  
+  9 | good  
+ 10 | china  
+(10 rows)  
+```  
+  
+```  
+create table t_src (id int, info text);  
+insert into t_src select generate_series(1,10000), md5(random()::text);  
+```  
+  
+```  
+db1=> create table t_src (id int, info text);  
+CREATE TABLE  
+db1=> insert into t_src select generate_series(1,10000), md5(random()::text);  
+INSERT 0 10000  
+db1=> select (select info from t_src order by random() limit 1);  
+               info                 
+----------------------------------  
+ 5a6d1f9219ad45cf756b689a43e56b27  
+(1 row)  
+  
+db1=> select (select info from t_src order by random() limit 1);  
+               info                 
+----------------------------------  
+ 8f7427793480b7c1dc7f7adfdf542d20  
+(1 row)  
+```  
+  
+```  
+db1=> select (select info from t_src order by random() limit 1) from generate_series(1,10);  
+               info                 
+----------------------------------  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+ 1efe676e8a512589f494c2252fbc6aae  
+(10 rows)  
+  
+db1=> explain select (select info from t_src order by random() limit 1) from generate_series(1,10);  
+                                   QUERY PLAN                                     
+--------------------------------------------------------------------------------  
+ Function Scan on generate_series  (cost=270.70..270.80 rows=10 width=32)  
+   InitPlan 1 (returns $0)  
+     ->  Limit  (cost=270.69..270.69 rows=1 width=40)  
+           ->  Sort  (cost=270.69..297.36 rows=10668 width=40)  
+                 Sort Key: (random())  
+                 ->  Seq Scan on t_src  (cost=0.00..217.35 rows=10668 width=40)  
+(6 rows)  
+```  
+  
+  
+```  
+db1=> create or replace function get_rand(int) returns text as $$  
+db1$>   select info from t_src where id=$1;  
+db1$> $$ language sql strict volatile;  
+CREATE FUNCTION  
+db1=> select get_rand((ceil(random()*10000))::int) from generate_series(1,10);  
+             get_rand               
+----------------------------------  
+ 33adad6262be827196f3c41f6adf7c51  
+ 726cb76cc448a9e81f7c22bbe6051541  
+ f3d4083b60f8094353b8b8e9b3b64359  
+ 1c6064bbaa0b6f51fe3c62bbb23359b1  
+ 97ceac7dd6bc2faef1baf0198d68001d  
+ e261d387e5b7fb294029f04a8d22bc17  
+ 32b50b0a73a9b13bac16858b9e74a923  
+ 4804fb74c3fb637063c620c292de2ceb  
+ 7c3a6bced10b005c6806b8e77d86e745  
+ 281ce9fbb33e33be1c0cc3f8d75498c7  
+(10 rows)  
+```  
+  
+  
+  
+如果没有连续ID, 可以使用随机采样, 千万不要order by random(), 这种太慢太慢了.  参考:  
+  
+[《PostgreSQL 随机采样应用 - table sample, tsm_system_rows, tsm_system_time》](../202005/20200509_01.md)    
+  
+[《PostgreSQL 随机、唯一、有取值范围的序列生成器》](../202003/20200324_09.md)    
+  
+[《PostgreSQL 索引算子下推扩展 - 索引内offset - 索引内过滤 - include index - 随机偏移》](../202004/20200429_01.md)    
+  
+[《PostgreSQL 随机记录返回 - 300倍提速实践 (随机数组下标代替order by random())》](../201810/20181009_01.md)    
+  
+[《PostgreSQL 内容随机推荐系统开发实践 - 文章随机推荐》](../201808/20180810_01.md)    
+  
+[《PostgreSQL 随机数据生成(tablefunc.normal_rand 指定mean stddev)》](../201807/20180714_01.md)    
+  
+[《PostgreSQL 生成随机身份证ID》](../201710/20171016_02.md)    
+  
+[《大规模数据存储集群数据存放的设计，分布式shardid的生成 - 如何指定范围随机数, 分组随机数》](../201707/20170706_02.md)    
+  
+[《PostgreSQL 中生成随机汉字》](../201704/20170425_01.md)    
+  
+[《生成泊松、高斯、指数、随机分布数据 - PostgreSQL 9.5 new feature - pgbench improve, gaussian (standard normal) & exponential distribution》](../201506/20150618_01.md)    
+  
+[《随机记录并发查询与更新(转移、删除)的"无耻"优化方法》](../201501/20150129_01.md)    
+  
+[《PostgreSQL 随机查询优化》](../201102/20110212_01.md)    
+  
+[《PostgreSQL 12 preview - pgbench 压测工具编程能力增强 - gset 支持SQL结果返回并存入变量使用》](../201903/20190331_05.md)    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

@@ -1,0 +1,135 @@
+## PostgreSQL 知识图谱 (xmind, png格式)  
+                                                                     
+### 作者                                                                     
+digoal                                                                     
+                                                                     
+### 日期                                                                     
+2019-03-03                                                                   
+                                                                     
+### 标签                                                                     
+PostgreSQL , 知识图谱 , xmind , png    
+                                                                     
+----                                                                     
+                                                                     
+## 背景      
+周末整理的PostgreSQL知识图谱。  
+  
+## 1 对应的培训文档(培训PDF文件后续上传)，参见  
+  
+[《PostgreSQL 2天培训大纲》](../201901/20190105_01.md)    
+  
+## 2 对应培训视频参见  
+  
+### PostgreSQL, Greenplum 学习视频1    
+    
+下载链接： http://pan.baidu.com/s/1pKVCgHX   (如果链接失效请通知我, 谢谢)    
+    
+1、PostgreSQL 9.3 数据库管理与优化 视频4天    
+2、PostgreSQL 9.3 数据库管理与优化 视频5天    
+3、PostgreSQL 9.1 数据库管理与开发 视频1天    
+4、PostgreSQL 9.3 数据库优化 视频3天    
+5、PostgreSQL 专题讲座 视频    
+    
+### PostgreSQL, Greenplum 学习视频2    
+    
+[《PostgreSQL 生态、案例、开发实践、管理实践、原理、日常维护、诊断、排错、优化、资料。  含学习视频》](../201801/20180121_01.md)   
+  
+## 3 其他参考文档见  
+[《PostgreSQL、Greenplum 《如来神掌》》](../201706/20170601_02.md)       
+    
+[《Oracle DBA 转型 PostgreSQL,Greenplum 学习规划》](../201804/20180425_01.md)    
+  
+[《PostgreSQL 多场景 沙箱实验》](../201805/20180524_02.md)    
+  
+## 4 知识图谱
+![pic](20190303_01_pic_001.png)  
+  
+[PostgreSQL 知识图谱 xmind](20190303_01_doc_001.xmind)  
+  
+其他详见我GIT。  
+    
+    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

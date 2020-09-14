@@ -1,0 +1,146 @@
+## PostgreSQL 如何将空间数据导入PostGIS    
+    
+### 作者    
+digoal    
+    
+### 日期    
+2020-04-30    
+    
+### 标签    
+PostgreSQL , postgis , 空间数据 , 导入    
+    
+----    
+    
+## 背景    
+https://techcommunity.microsoft.com/t5/azure-database-for-postgresql/importing-spatial-data-to-postgis/ba-p/1255421#  
+  
+Importing spatial data to PostGIS  
+  
+Introduction  
+If you’ve worked with other data types before, then most of the process for importing spatial data will be self-explanatory. However, for someone working with spatial data, acronyms like CRS and SRID might be confusing.  
+    
+  
+For data import, you should know the coordinate reference system (CRS) your data is in and which spatial reference identifier (SRID) number is used to reference that specific CRS. The SRID defines all the parameters of a data set’s geographic coordinate system and projection. Using an SRID is convenient because it packs all the information about a map projection into a single number. When creating spatial objects for insertion into the database, the SRID is required.  
+    
+哪里找gis数据  
+  
+https://www.openstreetmap.org/  
+  
+OpenStreetMap (OSM) is a collaborative project to create a free editable map of the world. Many people refer to OSM as the Wikipedia of maps. If you seek easy ways to get an extract of the data, you can check for GeoFabrik for Shapefiles or osmdata.xyz for GeoPackages.  
+  
+https://www.geofabrik.de/data/download.html  
+  
+https://download.osmdata.xyz/  
+  
+https://www.naturalearthdata.com/  
+  
+Natural Earth is a public domain map dataset available at 1:10m, 1:50m, and 1:110 million scales. Featuring tightly integrated vector and raster data, with Natural Earth you can make a variety of visually pleasing, well-crafted maps with cartography or GIS software. So, if you need country boundaries, states or railroads in the world on a very general level, this is your data of choice.  
+  
+https://freegisdata.rtwilson.com/  
+  
+The page contains a categorised list of links to over 500 sites providing freely available geographic datasets.  
+  
+gis数据导入方法  
+  
+https://postgis.net/docs/using_postgis_dbmanagement.html#loading_geometry_data  
+  
+http://postgis.net/workshops/postgis-intro/geometries.html  
+  
+```  
+INSERT INTO data.islands(geom, the_name )  
+  VALUES ( ST_GeomFromText('POINT(0 0)', 4326), 'NULL ISLAND');  
+```  
+  
+shp2pgsql 工具导入  
+  
+The most common data format for spatial data has traditionally been the ESRI shapefile. shp2pgsql is a command line tool to import ESRI shapefiles to the database. Under Unix, you can use the following command for importing a new PostGIS table:  
+  
+   
+```  
+shp2pgsql -s <SRID> -c -D -I <path to shapefile> <schema>.<table> | \  
+  psql -d <databasename> -h <hostname> -U <username>  
+```  
+  
+其他导入工具  
+  
+  
+ogr2ogr   
+  
+qgis  
+  
+raster2pgsql  
+  
+osm2pgsql  
+  
+ogr_fdw  
+  
+  
+    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

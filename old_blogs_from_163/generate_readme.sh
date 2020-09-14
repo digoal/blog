@@ -19,8 +19,8 @@ do
   for file in `ls -lr *.md|awk '{print $9}'|grep -E '^[0-9]{8}'` 
   do 
     title=`head -n 1 $file|awk -F "##" '{print $2}'|sed 's/^[ ]*//; s/[ ]*$//'`
-    echo "##### $file   [《$title》]($file)  " >> ./readme.md
-    echo "##### $dir/$file   [《$title》]($dir/$file)  " >> ../README.md
+    echo "##### ${file}   [《${title}》](${file})  " >> ./readme.md
+    echo "##### ${dir}/${file}   [《${title}》](${dir}/${file})  " >> ../README.md
   done
   cd ..
 done

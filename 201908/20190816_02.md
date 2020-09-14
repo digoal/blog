@@ -1,0 +1,234 @@
+## PostgreSQL 跟踪记录（row,tuple）的插入、更新时间 - spi,moddatetime trigger       
+                      
+### 作者                      
+digoal                      
+                      
+### 日期                      
+2019-08-16                     
+                      
+### 标签                      
+PostgreSQL , spi , moddatetime , trigger , 跟踪时间      
+                      
+----                      
+                      
+## 背景             
+跟踪记录的写入时间，最后一次更新时间。    
+    
+方法:    
+    
+1、在数据写入时，使用默认值填充当前时间。default value    
+    
+2、在数据更新时，自动使用当前时间替换被跟踪表时间字段的NEW值，before trigger    
+    
+### C触发器函数例子    
+PostgreSQL内置的跟踪触发器函数moddatetime. 可以在 代码的contrib  里面看到对应的代码。    
+    
+```    
+create extension moddatetime;    
+    
+DROP TABLE mdt;    
+    
+CREATE TABLE mdt (    
+        id              int4,    
+        idesc           text,    
+        moddate timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL    
+);    
+    
+CREATE TRIGGER mdt_moddatetime    
+        BEFORE UPDATE ON mdt    
+        FOR EACH ROW    
+        EXECUTE PROCEDURE moddatetime (moddate); -- 自动将moddate字段更新为最新时间    
+    
+INSERT INTO mdt VALUES (1, 'first');    
+INSERT INTO mdt VALUES (2, 'second');    
+INSERT INTO mdt VALUES (3, 'third');    
+    
+SELECT * FROM mdt;    
+ id | idesc  |          moddate               
+----+--------+----------------------------    
+  1 | first  | 2019-08-17 00:13:19.799583    
+  2 | second | 2019-08-17 00:13:19.861108    
+  3 | third  | 2019-08-17 00:13:19.894494    
+(3 rows)    
+    
+    
+UPDATE mdt SET id = 4    
+        WHERE id = 1;    
+UPDATE mdt SET id = 5    
+        WHERE id = 2;    
+UPDATE mdt SET id = 6    
+        WHERE id = 3;    
+    
+SELECT * FROM mdt;    
+    
+postgres=# SELECT * FROM mdt;    
+ id | idesc  |          moddate               
+----+--------+----------------------------    
+  4 | first  | 2019-08-17 00:13:32.494098    
+  5 | second | 2019-08-17 00:13:32.566837    
+  6 | third  | 2019-08-17 00:13:32.614302    
+(3 rows)    
+```    
+    
+代码    
+    
+```  
+/*  
+moddatetime.c  
+  
+contrib/spi/moddatetime.c  
+  
+What is this?  
+It is a function to be called from a trigger for the purpose of updating  
+a modification datetime stamp in a record when that record is UPDATEd.  
+  
+Credits  
+This is 95%+ based on autoinc.c, which I used as a starting point as I do  
+not really know what I am doing.  I also had help from  
+Jan Wieck <jwieck@debis.com> who told me about the timestamp_in("now") function.  
+OH, me, I'm Terry Mackintosh <terry@terrym.com>  
+*/  
+  
+...  
+```  
+    
+F.36.4. moddatetime — Functions for Tracking Last Modification Time  
+moddatetime() is a trigger that stores the current time into a timestamp field. This can be useful for tracking the last modification time of a particular row within a table.  
+  
+To use, create a BEFORE UPDATE trigger using this function. Specify a single trigger argument: the name of the column to be modified. The column must be of type timestamp or timestamp with time zone.  
+  
+There is an example in moddatetime.example.  
+    
+### plpgsql触发器函数例子  
+    
+```    
+create or replace function tg() returns trigger as $$    
+declare     
+begin    
+  NEW.ts = clock_timestamp();    
+  return new;    
+end;    
+$$ language plpgsql strict;    
+    
+create table t (id int, ts timestamp default now());    
+    
+CREATE TRIGGER ts    
+        BEFORE UPDATE ON t    
+        FOR EACH ROW    
+        EXECUTE PROCEDURE tg();    
+    
+postgres=# insert into t values (1);    
+INSERT 0 1    
+postgres=# select * from t;    
+ id |             ts                 
+----+----------------------------    
+  1 | 2019-08-17 00:12:45.246882    
+(1 row)    
+    
+postgres=# update t set id=2;    
+UPDATE 1    
+postgres=# select * from t;    
+ id |             ts                 
+----+----------------------------    
+  2 | 2019-08-17 00:12:50.963019    
+(1 row)    
+```    
+    
+## 参考    
+https://www.postgresql.org/docs/devel/contrib-spi.html    
+    
+contrib/spi/moddatetime.example    
+      
+https://www.percona.com/blog/2019/08/15/faster-lightweight-trigger-function-in-c-for-postgresql/    
+    
+https://www.percona.com/blog/2019/07/31/postgresql-simple-c-extension-development-for-a-novice-user/    
+    
+https://www.percona.com/blog/2019/04/05/writing-postgresql-extensions-is-fun-c-language/    
+    
+https://www.postgresql.org/docs/12/plpgsql-trigger.html#PLPGSQL-DML-TRIGGER    
+      
+    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

@@ -1,0 +1,206 @@
+## PostgreSQL PostGIS ST_AsMVT Performance 提升 - SQL提取地图矢量瓦片(Mapbox Vector Tile)     
+                                                                                                                                                          
+### 作者                                                                                                                                                          
+digoal                                                                                                                                                          
+                                                                                                                                                          
+### 日期                                                                                                                                                          
+2019-08-03                                                                                                                                                           
+                                                                                                                                                          
+### 标签                                                                                                                                                          
+PostgreSQL , PostGIS , 图层 , 矢量 , 瓦片 , wagyu clipping algorithm        
+                                                                         
+----                                                                                                                                                    
+                                                                                                                                                      
+## 背景     
+原文  
+  
+https://info.crunchydata.com/blog/waiting-for-postgis-3-st_asmvt-performance  
+  
+https://info.crunchydata.com/blog/dynamic-vector-tiles-from-postgis  
+  
+传统地图，由图片瓦片组成，例如：  
+  
+![pic](20190803_01_pic_001.png)  
+  
+Mapbox Vector Tile是矢量瓦片，矢量瓦片的好处  
+  
+- Styling: as vectors, tiles can be styled when requested, allowing for many map styles on global data  
+- Size: vector tiles are really small, enabling global high resolution maps, fast map loads, and efficient caching  
+  
+空间数据存储在数据库中，使用PostGIS提供的内置函数st_asmvt可以提取矢量瓦片。  
+  
+![pic](20190803_01_pic_002.png)  
+  
+瓦片举例:  
+  
+![pic](20190803_01_pic_003.jpg)  
+  
+瓦片坐标:  
+  
+![pic](20190803_01_pic_004.png)  
+  
+客户端请求地图数据时，server转化为SQL在数据库中请求矢量瓦片数据。（st_asmvt函数）  
+  
+```  
+WITH   
+bounds AS (   
+    SELECT {env} AS geom,   
+           {env}::box2d AS b2d   
+),   
+mvtgeom AS (   
+    SELECT ST_AsMVTGeom(ST_Transform(t.{geomColumn}, 3857), bounds.b2d) AS geom,   
+           {attrColumns}   
+    FROM {table} t, bounds   
+    WHERE ST_Intersects(t.{geomColumn}, ST_Transform(bounds.geom, {srid}))   
+)   
+SELECT ST_AsMVT(mvtgeom.*) FROM mvtgeom  
+```  
+  
+![pic](20190803_01_pic_005.gif)  
+  
+Vector tiles are a transport format for efficiently sending map data from a server to a client for rendering. The vector tile specification describes how raw data are quantized to a grid and then compressed using delta-encoding to make a very small package.  
+  
+## PostGIS 3 st_asmvt优化  
+  
+For PostGIS 3.0, performance of tile generation has been vastly improved.  
+  
+- First, the clipping process has been sped up and made more reliable by integrating the wagyu clipping algorithm directly into PostGIS. This has sped up clipping of polygons in particular, and reduced instances of invalid output geometries.  
+- Second, the simplification and precision reduction steps have been streamlined to avoid unnecessary copying and work on simple cases like points and short lines. This has sped up handling of simple points and lines.  
+- Finally, ST_AsMVT() aggregate itself has been made parallelizable, so that all the work above can be parceled out to multiple CPUs, dramatically speeding up generation of tiles with lots of input geometry.  
+  
+```  
+bytea ST_AsMVT(anyelement row, text name, integer extent, text geom_name);  
+```  
+  
+Description  
+  
+Return a Mapbox Vector Tile representation of a set of rows corresponding to a Layer. Multiple calls can be concatenated to a tile with multiple Layers. Geometry is assumed to be in tile coordinate space and valid as per specification. Typically ST_AsMVTGeom can be used to transform geometry into tile coordinate space. Other row data will be encoded as attributes.  
+  
+The Mapbox Vector Tile format can store features with a different set of attributes per feature. To make use of this feature supply a JSONB column in the row data containing Json objects one level deep. The keys and values in the object will be parsed into feature attributes.  
+  
+Do not call with a GEOMETRYCOLLECTION as an element in the row. However you can use ST_AsMVTGeom to prep a geometry collection for inclusion.  
+  
+- row row data with at least a geometry column.  
+- name is the name of the Layer. If NULL it will use the string "default".  
+- extent is the tile extent in screen space as defined by the specification. If NULL it will default to 4096.  
+- geom_name is the name of the geometry column in the row data. If NULL it will default to the first found geometry column.  
+  
+Enhanced: 2.5.0 - added support parallel query.  
+  
+  
+OpenMapTile项目后台用的就是PostGIS  
+  
+https://openmaptiles.org/  
+  
+  
+![pic](20190803_01_pic_006.gif)  
+  
+## 参考  
+st_asmvt  
+  
+st_asmvtgeom  
+  
+https://info.crunchydata.com/blog/waiting-for-postgis-3-st_asmvt-performance  
+  
+wagyu 裁剪算法  
+  
+https://github.com/mapbox/wagyu  
+  
+https://openmaptiles.org/  
+  
+https://postgis.net/docs/ST_AsMVT.html  
+  
+https://postgis.net/docs/ST_AsMVTGeom.html  
+  
+https://docs.mapbox.com/vector-tiles/reference/  
+  
+https://github.com/jingsam/vector-tile-spec/blob/master/2.1/README_zh.md  
+  
+https://docs.mapbox.com/vector-tiles/specification/  
+  
+https://info.crunchydata.com/blog/dynamic-vector-tiles-from-postgis  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+#### [PostgreSQL 许愿链接](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216")
+您的愿望将传达给PG kernel hacker、数据库厂商等, 帮助提高数据库产品质量和功能, 说不定下一个PG版本就有您提出的功能点. 针对非常好的提议，奖励限量版PG文化衫、纪念品、贴纸、PG热门书籍等，奖品丰富，快来许愿。[开不开森](https://github.com/digoal/blog/issues/76 "269ac3d1c492e938c0191101c7238216").  
+  
+  
+#### [9.9元购买3个月阿里云RDS PostgreSQL实例](https://www.aliyun.com/database/postgresqlactivity "57258f76c37864c6e6d23383d05714ea")
+  
+  
+#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 "40cff096e9ed7122c512b35d8561d9c8")
+  
+  
+#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md "22709685feb7cab07d30f30387f0a9ae")
+  
+  
+![digoal's wechat](../pic/digoal_weixin.jpg "f7ad92eeba24523fd47a6e1a0e691b59")
+  

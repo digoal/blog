@@ -41,5 +41,5 @@
 ##### 20150906_03.md   [《pg_clog的一致性 & 异步事务提交》](20150906_03.md)  
 ##### 20150906_02.md   [《pg_clog的原子操作与pg_subtrans(子事务)》](20150906_02.md)  
 ##### 20150906_01.md   [《PostgreSQL pg_clog fsync 频率分析》](20150906_01.md)  
-##### 20150905_01.md   [《为什么PostgreSQL查询语句也可能产生 xlog， 并且可能对buffer有write操作 ? hint bits》](20150905_01.md)  
+##### 20150905_01.md   [《为什么PostgreSQL查询语句可能产生 xlog， 并且可能对buffer有write操作? - hint bits》](20150905_01.md)  
 ##### 20150904_01.md   [《除了xlog，哪些操作可能还需要fsync ?》](20150904_01.md)  

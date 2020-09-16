@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200916_01.md   [《PostgreSQL 14 preview - 支持window function的incremental sort》](20200916_01.md)  
 ##### 20200915_01.md   [《PostgreSQL 最常用的插件》](20200915_01.md)  
 ##### 20200913_01.md   [《[直播]在数据库中跑全文检索、模糊查询SQL会不会被开除?》](20200913_01.md)  
 ##### 20200912_01.md   [《PostgreSQL 模糊查询、相似查询 (like '%xxx%') pg_bigm 比 pg_trgm 优势在哪?》](20200912_01.md)  

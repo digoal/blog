@@ -76,6 +76,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202009/20200920_03.md   [《PostgreSQL 14 preview - pg_stat_activity 显示 walsender 进程流复制command》](202009/20200920_03.md)  
+##### 202009/20200920_02.md   [《PostgreSQL 14 preview  GiST 索引新增openapi: sortsupport - 加速gist索引创建, 紧凑组织gist index page.》](202009/20200920_02.md)  
 ##### 202009/20200920_01.md   [《概念画板 - ipad pro 绘画教学 bilibili》](202009/20200920_01.md)  
 ##### 202009/20200919_01.md   [《[直播]刷脸支付会不会刷到别人的钱包?》](202009/20200919_01.md)  
 ##### 202009/20200917_01.md   [《开学第一课》](202009/20200917_01.md)  

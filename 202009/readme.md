@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20200920_03.md   [《PostgreSQL 14 preview - pg_stat_activity 显示 walsender 进程流复制command》](20200920_03.md)  
+##### 20200920_02.md   [《PostgreSQL 14 preview  GiST 索引新增openapi: sortsupport - 加速gist索引创建, 紧凑组织gist index page.》](20200920_02.md)  
 ##### 20200920_01.md   [《概念画板 - ipad pro 绘画教学 bilibili》](20200920_01.md)  
 ##### 20200919_01.md   [《[直播]刷脸支付会不会刷到别人的钱包?》](20200919_01.md)  
 ##### 20200917_01.md   [《开学第一课》](20200917_01.md)  

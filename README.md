@@ -76,6 +76,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202009/20200921_01.md   [《数据库发展历程 图》](202009/20200921_01.md)  
+##### 202009/20200920_04.md   [《PostgreSQL pro - pg_stat_statements 扩展插件 pgpro_stats - 等待事件统计、采样配置、自动化监控metric配置等》](202009/20200920_04.md)  
 ##### 202009/20200920_03.md   [《PostgreSQL 14 preview - pg_stat_activity 显示 walsender 进程流复制command》](202009/20200920_03.md)  
 ##### 202009/20200920_02.md   [《PostgreSQL 14 preview  GiST 索引新增openapi: sortsupport - 加速gist索引创建, 紧凑组织gist index page.》](202009/20200920_02.md)  
 ##### 202009/20200920_01.md   [《概念画板 - ipad pro 绘画教学 bilibili》](202009/20200920_01.md)  
@@ -440,7 +442,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201911/20191113_02.md   [《PostgreSQL 物理从库 切换为 逻辑从库》](201911/20191113_02.md)  
 ##### 201911/20191113_01.md   [《PostgreSQL pg_pathman 分区表转换为原生分区表 - attach,detach, get_hash_part_idx》](201911/20191113_01.md)  
 ##### 201911/20191112_03.md   [《阿里云 RDS PostgreSQL 云盘版支持 mysql_fdw - 直接读写mysql数据，作为小型实时数据仓库》](201911/20191112_03.md)  
-##### 201911/20191112_02.md   [《PostgreSQL 兼容SQL Server 忽略大小写、大小写不敏感 - citext、operator覆盖》](201911/20191112_02.md)  
+##### 201911/20191112_02.md   [《PostgreSQL 兼容SQL Server 忽略大小写、大小写不敏感 - citext、operator覆盖、postgrespro mchar mvarchar》](201911/20191112_02.md)  
 ##### 201911/20191112_01.md   [《阿里云 RDS PostgreSQL 11 自建异地从库（standby） - pg_basebackup》](201911/20191112_01.md)  
 ##### 201911/20191111_01.md   [《PostgreSQL "Ask digoal@德哥" 第三期》](201911/20191111_01.md)  
 ##### 201911/20191110_01.md   [《PostgreSQL 福州 象行中国 活动回顾》](201911/20191110_01.md)  
@@ -1069,7 +1071,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201803/20180322_06.md   [《[未完待续] PostgreSQL PRO 特性 - json扩展 jsquery》](201803/20180322_06.md)  
 ##### 201803/20180322_05.md   [《[未完待续] PostgreSQL PRO 特性 - pgpro_scheduler(类似Oracle dbms_jobs)》](201803/20180322_05.md)  
 ##### 201803/20180322_04.md   [《[未完待续] PostgreSQL PRO 特性 - AQO(机器学习执行计划优化器)》](201803/20180322_04.md)  
-##### 201803/20180322_03.md   [《PostgreSQL PRO 特性 - 内存表(in_memory) - 索引组织》](201803/20180322_03.md)  
+##### 201803/20180322_03.md   [《PostgreSQL PRO 特性 - 内存表(in_memory) - 索引组织 - standby 可写》](201803/20180322_03.md)  
 ##### 201803/20180322_02.md   [《[未完待续] PostgreSQL PRO 特性 - sharding(pg_shardman)》](201803/20180322_02.md)  
 ##### 201803/20180322_01.md   [《[未完待续] PostgreSQL PRO 特性 - multimaster》](201803/20180322_01.md)  
 ##### 201803/20180321_01.md   [《PostgreSQL 生成任意基数数独 - 4》](201803/20180321_01.md)  

@@ -21,7 +21,7 @@
 ##### 20191113_02.md   [《PostgreSQL 物理从库 切换为 逻辑从库》](20191113_02.md)  
 ##### 20191113_01.md   [《PostgreSQL pg_pathman 分区表转换为原生分区表 - attach,detach, get_hash_part_idx》](20191113_01.md)  
 ##### 20191112_03.md   [《阿里云 RDS PostgreSQL 云盘版支持 mysql_fdw - 直接读写mysql数据，作为小型实时数据仓库》](20191112_03.md)  
-##### 20191112_02.md   [《PostgreSQL 兼容SQL Server 忽略大小写、大小写不敏感 - citext、operator覆盖》](20191112_02.md)  
+##### 20191112_02.md   [《PostgreSQL 兼容SQL Server 忽略大小写、大小写不敏感 - citext、operator覆盖、postgrespro mchar mvarchar》](20191112_02.md)  
 ##### 20191112_01.md   [《阿里云 RDS PostgreSQL 11 自建异地从库（standby） - pg_basebackup》](20191112_01.md)  
 ##### 20191111_01.md   [《PostgreSQL "Ask digoal@德哥" 第三期》](20191111_01.md)  
 ##### 20191110_01.md   [《PostgreSQL 福州 象行中国 活动回顾》](20191110_01.md)  

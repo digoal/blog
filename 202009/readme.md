@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200923_01.md   [《常用centos 扩展包 - epel , centos-release-scl》](20200923_01.md)  
 ##### 20200921_01.md   [《数据库发展历程 图》](20200921_01.md)  
 ##### 20200920_04.md   [《PostgreSQL pro - pg_stat_statements 扩展插件 pgpro_stats - 等待事件统计、采样配置、自动化监控metric配置等》](20200920_04.md)  
 ##### 20200920_03.md   [《PostgreSQL 14 preview - pg_stat_activity 显示 walsender 进程流复制command》](20200920_03.md)  

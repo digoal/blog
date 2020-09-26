@@ -12,7 +12,7 @@ digoal(德哥)
         
 2015.7加入阿里云数据库内核组, 负责RDS PG, hybriddb for PG的架构设计, 为阿里巴巴内(阿里云、高德、淘宝、天猫、优酷、阿里妈妈、IOT、未来酒店、B2B、AE、新零售、菜鸟、公共平台、飞猪、YUNOS、智慧城市)、外部客户提供架构、方案设计、POC支持. 形成行业方案沉淀并推广。  
   
-2018.10转入阿里云数据库产品团队，负责阿里云PostgreSQL系列产品（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品规划、设计、生态构建。目前全力负责PG.      
+2018.10转入阿里云数据库产品团队，负责阿里云PostgreSQL系列产品（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品规划、设计、生态构建。2019.10开始全力负责PG.      
     
 ```
 加入阿里巴巴初心: 把PG推广到更多企业, 为企业创造价值.    
@@ -80,7 +80,7 @@ pluggable 内部能力输送: 达摩院、蚂蚁、安全(堡垒，可信融合�
   
 2001~2005, 南昌大学, 通信工程.    
   
-对未来数据库的发展展望, [《未来数据库方向 - PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](../202005/20200527_06.md)  
+## 其他
   
   
 专利（截至2020-01）:   
@@ -188,6 +188,9 @@ pluggable 内部能力输送: 达摩院、蚂蚁、安全(堡垒，可信融合�
     - 2000+ ，浏览量：200万+ (ata, yq, yq_internal, weixin, github, postgres.cn, 163blog, PG社区公众号 ... 等渠道) 
 - 组建PG技术钉钉交流群：     
     - 人数4000+  (截至202005)     
+      
+   
+对未来数据库的发展展望, [《未来数据库方向 - PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](../202005/20200527_06.md)  
     
 拜谢来自五湖四海的朋友、公司领导和同事、各大技术社区和平台对PostgreSQL给予的支持和帮助，PostgreSQL的发展离不开社会各界的支持。           
         

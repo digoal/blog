@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200929_01.md   [《PostgreSQL 语法或将成为未来企业数据库市场唯一 SQL语法》](20200929_01.md)  
 ##### 20200928_03.md   [《多个引擎一份存储 - cockroachDB , sequoiaDB》](20200928_03.md)  
 ##### 20200928_02.md   [《PostgreSQL json 矩阵数据搜索优化 - partial index , recheck》](20200928_02.md)  
 ##### 20200928_01.md   [《PostgreSQL select x from tbl where c1 in () order by c2; 优化 - merge sort , top-N heapsort , quick sort》](20200928_01.md)  

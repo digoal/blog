@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20200930_01.md   [《PostgreSQL 在资源搜索中的设计 - pase, smlar, pg_trgm - 标签+权重相似排序 - 标签的命中率排序》](20200930_01.md)  
 ##### 20200929_01.md   [《PostgreSQL 语法或将成为未来企业数据库市场唯一 SQL语法》](20200929_01.md)  
 ##### 20200928_03.md   [《多个引擎一份存储 - cockroachDB , sequoiaDB》](20200928_03.md)  
 ##### 20200928_02.md   [《PostgreSQL json 矩阵数据搜索优化 - partial index , recheck》](20200928_02.md)  

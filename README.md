@@ -76,6 +76,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202010/20201006_01.md   [《PostgreSQL postgresql.conf 配置变更跟踪 - pg_track_settings》](202010/20201006_01.md)  
 ##### 202010/20201004_04.md   [《PostgreSQL GiST 索引原理 - 4》](202010/20201004_04.md)  
 ##### 202010/20201004_03.md   [《PostgreSQL GiST 索引原理 - 3》](202010/20201004_03.md)  
 ##### 202010/20201004_02.md   [《PostgreSQL GiST 索引原理 - 2》](202010/20201004_02.md)  

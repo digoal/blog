@@ -76,7 +76,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202010/20201010_06.md   [《PostgreSQL 14 preview - System Versioned Temporal Table》](202010/20201010_06.md)  
+##### 202010/20201010_07.md   [《PostgreSQL 14 preview - wal接收优化,无需等待startup process replay结束. Unnecessary delay in streaming replication due to replay lag》](202010/20201010_07.md)  
+##### 202010/20201010_06.md   [《PostgreSQL 14 preview - System Versioned Temporal Table - flashback闪回、跟踪、审计 record/row/tuple历史版本》](202010/20201010_06.md)  
 ##### 202010/20201010_05.md   [《PostgreSQL 14 preview - postgres_fdw 异步append - sharding 性能增强》](202010/20201010_05.md)  
 ##### 202010/20201010_04.md   [《PostgreSQL 14 preview - 逻辑订阅报错信息增强 - Display the names of missing columns in error during logical replication.》](202010/20201010_04.md)  
 ##### 202010/20201010_03.md   [《PostgreSQL 14 preview - postgres_fdw 自动重建链接 - when broken when starting new remote transaction.》](202010/20201010_03.md)  

@@ -76,6 +76,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202010/20201010_04.md   [《PostgreSQL 14 preview - 逻辑订阅报错信息增强 - Display the names of missing columns in error during logical replication.》](202010/20201010_04.md)  
+##### 202010/20201010_03.md   [《PostgreSQL 14 preview - postgres_fdw 自动重建链接 - when broken when starting new remote transaction.》](202010/20201010_03.md)  
+##### 202010/20201010_02.md   [《PostgreSQL 14 preview - hash 函数生成代码增强 - src/tools/PerfectHash.pm》](202010/20201010_02.md)  
 ##### 202010/20201010_01.md   [《PostgreSQL 14 preview 新增 replication slot 监控 - pg_stat_replication_slots》](202010/20201010_01.md)  
 ##### 202010/20201006_01.md   [《PostgreSQL postgresql.conf 配置变更跟踪 - pg_track_settings》](202010/20201006_01.md)  
 ##### 202010/20201004_04.md   [《PostgreSQL GiST 索引原理 - 4》](202010/20201004_04.md)  

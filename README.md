@@ -76,6 +76,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202010/20201010_09.md   [《PostgreSQL zheap 引擎动向》](202010/20201010_09.md)  
+##### 202010/20201010_08.md   [《PostgreSQL 社区 2nd与EDB合并带来的影响》](202010/20201010_08.md)  
 ##### 202010/20201010_07.md   [《PostgreSQL 14 preview - wal接收优化,无需等待startup process replay结束. Unnecessary delay in streaming replication due to replay lag》](202010/20201010_07.md)  
 ##### 202010/20201010_06.md   [《PostgreSQL 14 preview - System Versioned Temporal Table - flashback闪回、跟踪、审计 record/row/tuple历史版本》](202010/20201010_06.md)  
 ##### 202010/20201010_05.md   [《PostgreSQL 14 preview - postgres_fdw 异步append - sharding 性能增强》](202010/20201010_05.md)  
@@ -571,7 +573,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201906/20190611_02.md   [《PostgreSQL Oracle 兼容之 pljson》](201906/20190611_02.md)  
 ##### 201906/20190611_01.md   [《PostgreSQL 求一个字符串里面某个字符或字符串出现了多少次？》](201906/20190611_01.md)  
 ##### 201906/20190610_02.md   [《PostgreSQL 如果最后一个WAL文件中没有事务结束record或target_name point时，可以正常恢复到指定时间点吗》](201906/20190610_02.md)  
-##### 201906/20190610_01.md   [《PostgreSQL 生成对象DDL语句 - ddlx 插件》](201906/20190610_01.md)  
+##### 201906/20190610_01.md   [《PostgreSQL 生成对象DDL语句 - ddlx 插件 - "show create"》](201906/20190610_01.md)  
 ##### 201906/20190608_04.md   [《[转载] PostgreSQL and patents - PostgreSQL与专利》](201906/20190608_04.md)  
 ##### 201906/20190608_03.md   [《[转载] 开源与闭源的斗争，GPLv3协议的发布》](201906/20190608_03.md)  
 ##### 201906/20190608_02.md   [《PostgreSQL 社区分析 - 为什么PostgreSQL社区几乎不可能被任何一个商业公司、国家所控制？》](201906/20190608_02.md)  

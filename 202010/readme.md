@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20201010_09.md   [《PostgreSQL zheap 引擎动向》](20201010_09.md)  
+##### 20201010_08.md   [《PostgreSQL 社区 2nd与EDB合并带来的影响》](20201010_08.md)  
 ##### 20201010_07.md   [《PostgreSQL 14 preview - wal接收优化,无需等待startup process replay结束. Unnecessary delay in streaming replication due to replay lag》](20201010_07.md)  
 ##### 20201010_06.md   [《PostgreSQL 14 preview - System Versioned Temporal Table - flashback闪回、跟踪、审计 record/row/tuple历史版本》](20201010_06.md)  
 ##### 20201010_05.md   [《PostgreSQL 14 preview - postgres_fdw 异步append - sharding 性能增强》](20201010_05.md)  

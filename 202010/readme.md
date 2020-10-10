@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201010_01.md   [《PostgreSQL 14 preview 新增 replication slot 监控 - pg_stat_replication_slots》](20201010_01.md)  
 ##### 20201006_01.md   [《PostgreSQL postgresql.conf 配置变更跟踪 - pg_track_settings》](20201006_01.md)  
 ##### 20201004_04.md   [《PostgreSQL GiST 索引原理 - 4》](20201004_04.md)  
 ##### 20201004_03.md   [《PostgreSQL GiST 索引原理 - 3》](20201004_03.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20201011_02.md   [《PostgreSQL HLL 近似计算算法要点》](20201011_02.md)  
+##### 20201011_01.md   [《PostgreSQL HA 套件 pg_auto_failover 发布1.4版本, 支持quorum based multi-standbys》](20201011_01.md)  
 ##### 20201010_09.md   [《PostgreSQL zheap 引擎动向》](20201010_09.md)  
 ##### 20201010_08.md   [《PostgreSQL 社区 2nd与EDB合并带来的影响》](20201010_08.md)  
 ##### 20201010_07.md   [《PostgreSQL 14 preview - wal接收优化,无需等待startup process replay结束. Unnecessary delay in streaming replication due to replay lag》](20201010_07.md)  

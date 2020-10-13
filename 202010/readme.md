@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201013_01.md   [《PostgreSQL 史上最强JSON功能 - PG 12 jsonpath 完全超越oracle, mysql, sql server的sql json标准覆盖率》](20201013_01.md)  
 ##### 20201011_02.md   [《PostgreSQL HLL 近似计算算法要点》](20201011_02.md)  
 ##### 20201011_01.md   [《PostgreSQL HA 套件 pg_auto_failover 发布1.4版本, 支持quorum based multi-standbys》](20201011_01.md)  
 ##### 20201010_09.md   [《PostgreSQL zheap 引擎动向》](20201010_09.md)  

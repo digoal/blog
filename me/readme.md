@@ -10,13 +10,15 @@ digoal(德哥)
 - 阿里巴巴钻石布道师
 - 42项数据库专利
 - 对未来数据库的发展展望, [《未来数据库方向 - PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](../202005/20200527_06.md)  
-- [《[直播]大话数据库终局之战》](../202009/20200926_03.md)  
+- [《大话数据库终局之战》](../202009/20200926_03.md)  
   
 ## 工作经历
 ### 2015.7 ~ 现在 阿里云        
-2015.7加入阿里云数据库内核组, 负责RDS PG, hybriddb for PG的架构设计, 为阿里巴巴内(阿里云、高德、淘宝、天猫、优酷、阿里妈妈、IOT、未来酒店、B2B、AE、新零售、菜鸟、公共平台、飞猪、YUNOS、智慧城市)、外部客户提供架构、方案设计、POC支持. 形成行业方案沉淀并推广。  
+2015.7加入阿里云数据库内核组, 负责RDS PG, HybridDB for PG的架构设计, 为阿里巴巴内(阿里云、高德、淘宝、天猫、优酷、阿里妈妈、IOT、未来酒店、B2B、AE、新零售、菜鸟、公共平台、飞猪、YUNOS、智慧城市)、外部客户提供架构、方案设计、POC支持. 形成行业方案沉淀并推广。  
   
-2018.10转入阿里云数据库产品团队，负责阿里云PostgreSQL系列产品（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品规划、设计、生态构建。2019.10开始全力负责PG.      
+2018.10转入阿里云数据库产品团队，负责阿里云PostgreSQL系列产品（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品规划、设计、生态构建。   
+  
+PG保持多年高速增长后，在数据库行业份额越来越高，2019.10开始全力负责PG垂直产品.      
     
 ```
 加入阿里巴巴初心: 把PG推广到更多企业, 为企业创造价值.    
@@ -190,7 +192,7 @@ pluggable 内部能力输送: 达摩院、蚂蚁、安全(堡垒，可信融合�
 2019-11-16 数据库嘉年华-PG为什么这么火       
 2019-11-23 第十八届全国软件与应用学术会议(NASAC 2019)-PostgreSQL的社会价值   
 2019-11-29 PG12 新特性与路标    
-2019-11-30 PG峰会-PG 诊断方法（代替王健分享）        
+2019-11-30 PG峰会-PG 诊断方法
 2019-12-07 PG社区走进中兴企业交流-分享《PG的社会价值&企业如何融入PG社区》    
 2020-01-04 pg+mongo助力企业去O       
 2020-01-11 PG天天象上2020.1.11杭州站-实时精准营销系统设计

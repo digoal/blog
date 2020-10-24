@@ -76,6 +76,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202010/20201024_02.md   [《PostgreSQL 14 preview - amcheck插件增加heap table数据页格式错误、逻辑错误检测功能》](202010/20201024_02.md)  
+##### 202010/20201024_01.md   [《PostgreSQL 14 preview - Improve performance of Unicode {de,re}composition in the backend》](202010/20201024_01.md)  
 ##### 202010/20201022_01.md   [《PostgreSQL 牛逼的分析型功能 - 列存储、向量计算 FDW - DuckDB_fdw - 无数据库服务式本地lib库+本地存储》](202010/20201022_01.md)  
 ##### 202010/20201018_01.md   [《[直播]为什么饿了么网上订餐不会凉凉 & 牛顿发现万有引力有关?》](202010/20201018_01.md)  
 ##### 202010/20201015_01.md   [《第十八届全国软件与应用学术会议(NASAC 2019) - 学术研讨 - PostgreSQL 的社会价值》](202010/20201015_01.md)  

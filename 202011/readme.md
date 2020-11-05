@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201105_05.md   [《PostgreSQL 中文社区核心组 如何加入》](20201105_05.md)  
 ##### 20201105_04.md   [《PostgreSQL explain, parser, execute 过程资源使用统计分析 - perf , debug , log_planner_stats , log_xxx_stats》](20201105_04.md)  
 ##### 20201105_03.md   [《PostgreSQL 社区+企业龙头 联合沙龙的意义》](20201105_03.md)  
 ##### 20201105_02.md   [《PostgreSQL 全球开发组新增2名 core member》](20201105_02.md)  

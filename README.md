@@ -76,6 +76,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201105_01.md   [《PostgreSQL fuction、online code 动态table rowtype的bug》](202011/20201105_01.md)  
 ##### 202011/20201103_01.md   [《MySQL 大表DROP ... 等DDL操作的问题以及阿里云alisql的改进原理》](202011/20201103_01.md)  
 ----  
 ##### 202010/20201031_10.md   [《PostgreSQL MySQL 兼容性之 - 指定位置加列、修改列位置 alter table》](202010/20201031_10.md)  

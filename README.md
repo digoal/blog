@@ -78,6 +78,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201107_03.md   [《使用 sudoedit 配置 - 允许普通用户a以另一个用户b或组g执行某些特定命令》](202011/20201107_03.md)  
+##### 202011/20201107_02.md   [《PostgreSQL 11 pg_prewarm 缓存快照、缓存预热 , 支持自动导出 shared buffer pageid, 启动时自动加载到shared buffer》](202011/20201107_02.md)  
+##### 202011/20201107_01.md   [《PostgreSQL 新增pseudo-types : anycompatible, anycompatiblearray, anycompatiblenonarray, anycompatiblerange 类型.》](202011/20201107_01.md)  
 ##### 202011/20201105_05.md   [《PostgreSQL 中文社区核心组 如何加入》](202011/20201105_05.md)  
 ##### 202011/20201105_04.md   [《PostgreSQL explain, parser, execute 过程资源使用统计分析 - perf , debug , log_planner_stats , log_xxx_stats》](202011/20201105_04.md)  
 ##### 202011/20201105_03.md   [《PostgreSQL 社区+企业龙头 联合沙龙的意义》](202011/20201105_03.md)  

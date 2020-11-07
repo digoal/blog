@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201107_05.md   [《PostgreSQL shared buffer 的刷脏配置 - bgwriter_delay bgwriter_flush_after bgwriter_lru_maxpages bgwriter_lru_multiplier》](20201107_05.md)  
 ##### 20201107_04.md   [《PostgreSQL 14 preview - 一些SQL标准函数调用parser 增强 - OVERLAPS , OVERLAY , SUBSTRING , SIMILAR , NORMALIZE , AT TIME ZONE , POSITION ...》](20201107_04.md)  
 ##### 20201107_03.md   [《Linux : 使用 sudoedit 配置 - 允许普通用户a以另一个用户b或组g执行某些特定命令》](20201107_03.md)  
 ##### 20201107_02.md   [《PostgreSQL 11 pg_prewarm 缓存快照、缓存预热 , 支持自动导出 shared buffer pageid, 启动时自动加载到shared buffer》](20201107_02.md)  

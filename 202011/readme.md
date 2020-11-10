@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20201110_05.md   [《PostgreSQL 14 preview - Hybrid Hash/Nested Loop joins and caching results from subplans  - cache用于join的innter table中间结果》](20201110_05.md)  
+##### 20201110_04.md   [《PostgreSQL 14 preview - 支持 lwlock blocking 诊断 - 增加 pg_lwlock_blocking_pid》](20201110_04.md)  
+##### 20201110_03.md   [《PostgreSQL 14 preview - automatic analyze: readahead - add "IO read time" log message》](20201110_03.md)  
 ##### 20201110_02.md   [《PostgreSQL 14 preview - 统计 generic/custom plan in pg_stat_statements - 硬解析、软解析统计》](20201110_02.md)  
 ##### 20201110_01.md   [《PostgreSQL 14 preview - 查看backend process的memory context》](20201110_01.md)  
 ##### 20201107_05.md   [《PostgreSQL shared buffer 的刷脏配置 - bgwriter_delay bgwriter_flush_after bgwriter_lru_maxpages bgwriter_lru_multiplier》](20201107_05.md)  

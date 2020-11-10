@@ -78,6 +78,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201110_05.md   [《PostgreSQL 14 preview - Hybrid Hash/Nested Loop joins and caching results from subplans  - cache用于join的innter table中间结果》](202011/20201110_05.md)  
+##### 202011/20201110_04.md   [《PostgreSQL 14 preview - 支持 lwlock blocking 诊断 - 增加 pg_lwlock_blocking_pid》](202011/20201110_04.md)  
+##### 202011/20201110_03.md   [《PostgreSQL 14 preview - automatic analyze: readahead - add "IO read time" log message》](202011/20201110_03.md)  
 ##### 202011/20201110_02.md   [《PostgreSQL 14 preview - 统计 generic/custom plan in pg_stat_statements - 硬解析、软解析统计》](202011/20201110_02.md)  
 ##### 202011/20201110_01.md   [《PostgreSQL 14 preview - 查看backend process的memory context》](202011/20201110_01.md)  
 ##### 202011/20201107_05.md   [《PostgreSQL shared buffer 的刷脏配置 - bgwriter_delay bgwriter_flush_after bgwriter_lru_maxpages bgwriter_lru_multiplier》](202011/20201107_05.md)  

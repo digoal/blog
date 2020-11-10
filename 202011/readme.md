@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20201110_02.md   [《PostgreSQL 14 preview - 统计 generic/custom plan in pg_stat_statements - 硬解析、软解析统计》](20201110_02.md)  
+##### 20201110_01.md   [《PostgreSQL 14 preview - 查看backend process的memory context》](20201110_01.md)  
 ##### 20201107_05.md   [《PostgreSQL shared buffer 的刷脏配置 - bgwriter_delay bgwriter_flush_after bgwriter_lru_maxpages bgwriter_lru_multiplier》](20201107_05.md)  
 ##### 20201107_04.md   [《PostgreSQL 14 preview - 一些SQL标准函数调用parser 增强 - OVERLAPS , OVERLAY , SUBSTRING , SIMILAR , NORMALIZE , AT TIME ZONE , POSITION ...》](20201107_04.md)  
 ##### 20201107_03.md   [《Linux : 使用 sudoedit 配置 - 允许普通用户a以另一个用户b或组g执行某些特定命令》](20201107_03.md)  

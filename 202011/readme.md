@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20201114_01.md   [《一次删除隶属于某个用户的所有对象 - DROP OWNED BY 语法》](20201114_01.md)  
+##### 20201112_01.md   [《PostgreSQL 14 preivew - [PATCH] Add `truncate` option to subscription commands - 支持逻辑订阅truncate本地表语法》](20201112_01.md)  
 ##### 20201110_05.md   [《PostgreSQL 14 preview - Hybrid Hash/Nested Loop joins and caching results from subplans  - cache用于join的innter table中间结果》](20201110_05.md)  
 ##### 20201110_04.md   [《PostgreSQL 14 preview - 支持 lwlock blocking 诊断 - 增加 pg_lwlock_blocking_pid》](20201110_04.md)  
 ##### 20201110_03.md   [《PostgreSQL 14 preview - automatic analyze: readahead - add "IO read time" log message》](20201110_03.md)  

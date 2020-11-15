@@ -78,6 +78,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201115_03.md   [《PostgreSQL 访问 SQL Server 数据 - 外部表 3 - multicorn  - sql_alchemy》](202011/20201115_03.md)  
+##### 202011/20201115_02.md   [《PostgreSQL 访问 SQL Server 数据 - 外部表 2 - odbc_fdw》](202011/20201115_02.md)  
+##### 202011/20201115_01.md   [《PostgreSQL 访问 SQL Server 数据 - 外部表 1 - ogr_fdw》](202011/20201115_01.md)  
 ##### 202011/20201114_01.md   [《一次删除隶属于某个用户的所有对象 - DROP OWNED BY 语法》](202011/20201114_01.md)  
 ##### 202011/20201112_01.md   [《PostgreSQL 14 preivew - [PATCH] Add `truncate` option to subscription commands - 支持逻辑订阅truncate本地表语法》](202011/20201112_01.md)  
 ##### 202011/20201110_05.md   [《PostgreSQL 14 preview - Hybrid Hash/Nested Loop joins and caching results from subplans  - cache用于join的innter table中间结果》](202011/20201110_05.md)  

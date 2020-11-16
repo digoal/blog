@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20201116_01.md   [《PostgreSQL sharding 插件 citus 9.5发布 - 特性众多》](20201116_01.md)  
+##### 20201115_05.md   [《PostgreSQL 等待事件 及 等待采样统计 (pg_wait_sampling) 发布新版本 1.1.2》](20201115_05.md)  
+##### 20201115_04.md   [《PostgreSQL 14 preview - Support negative indexes in split_part()》](20201115_04.md)  
 ##### 20201115_03.md   [《PostgreSQL 访问 SQL Server 数据 - 外部表 3 - multicorn  - sql_alchemy》](20201115_03.md)  
 ##### 20201115_02.md   [《PostgreSQL 访问 SQL Server 数据 - 外部表 2 - odbc_fdw》](20201115_02.md)  
 ##### 20201115_01.md   [《PostgreSQL 访问 SQL Server 数据 - 外部表 1 - ogr_fdw》](20201115_01.md)  

@@ -78,6 +78,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
+##### 202011/20201117_02.md   [《DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL》](202011/20201117_02.md)  
+##### 202011/20201117_01.md   [《使用Postgres，MobilityDB和Citus大规模(百亿级)实时分析GPS轨迹》](202011/20201117_01.md)  
 ##### 202011/20201116_01.md   [《PostgreSQL sharding 插件 citus 9.5发布 - 特性众多》](202011/20201116_01.md)  
 ##### 202011/20201115_05.md   [《PostgreSQL 等待事件 及 等待采样统计 (pg_wait_sampling) 发布新版本 1.1.2》](202011/20201115_05.md)  
 ##### 202011/20201115_04.md   [《PostgreSQL 14 preview - Support negative indexes in split_part()》](202011/20201115_04.md)  

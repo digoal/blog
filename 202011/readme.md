@@ -4,7 +4,7 @@
 ----  
 ##### 20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](20201120_01.md)  
 ##### 20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](20201117_03.md)  
-##### 20201117_02.md   [《DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL》](20201117_02.md)  
+##### 20201117_02.md   [《PostgreSQL 流复制冲突解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL》](20201117_02.md)  
 ##### 20201117_01.md   [《使用Postgres，MobilityDB和Citus大规模(百亿级)实时分析GPS轨迹》](20201117_01.md)  
 ##### 20201116_01.md   [《PostgreSQL sharding 插件 citus 9.5发布 - 特性众多》](20201116_01.md)  
 ##### 20201115_05.md   [《PostgreSQL 等待事件 及 等待采样统计 (pg_wait_sampling) 发布新版本 1.1.2》](20201115_05.md)  

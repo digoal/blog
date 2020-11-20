@@ -67,7 +67,7 @@ echo "10、[《《引爆点》原理, 如何影响PG发展》](197001/20200804_0
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md
-echo "![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.jpg) | ![pic](./pic/digoal_weixin.jpg)  " >> ./README.md
+echo "![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.jpg) | ![image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  " >> ./README.md
 echo "  "  >> ./README.md
 #echo "PG社区认证 | PG社区认证</br>联系人微信 " >> ./README.md
 #echo "---|---  " >> ./README.md

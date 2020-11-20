@@ -56,7 +56,7 @@
   
 PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  
 ---|---|---  
-![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.jpg) | ![pic](./pic/digoal_weixin.jpg)  
+![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.jpg) | ![image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  
   
 如发现错误, 请万望指正, 非常感谢.  
   
@@ -80,7 +80,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
 ##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
-##### 202011/20201117_02.md   [《DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL》](202011/20201117_02.md)  
+##### 202011/20201117_02.md   [《PostgreSQL 流复制冲突解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL》](202011/20201117_02.md)  
 ##### 202011/20201117_01.md   [《使用Postgres，MobilityDB和Citus大规模(百亿级)实时分析GPS轨迹》](202011/20201117_01.md)  
 ##### 202011/20201116_01.md   [《PostgreSQL sharding 插件 citus 9.5发布 - 特性众多》](202011/20201116_01.md)  
 ##### 202011/20201115_05.md   [《PostgreSQL 等待事件 及 等待采样统计 (pg_wait_sampling) 发布新版本 1.1.2》](202011/20201115_05.md)  

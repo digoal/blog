@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
 ##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
 ##### 202011/20201117_02.md   [《DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL》](202011/20201117_02.md)  
 ##### 202011/20201117_01.md   [《使用Postgres，MobilityDB和Citus大规模(百亿级)实时分析GPS轨迹》](202011/20201117_01.md)  

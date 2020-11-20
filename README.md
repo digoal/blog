@@ -56,7 +56,7 @@
   
 PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  
 ---|---|---  
-![pic](./pic/pg_weixin.jpg) | ![pic](./pic/dingding_pg_chat.jpg) | ![image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  
+[pic](./pic/pg_weixin.jpg) | [pic](./pic/dingding_pg_chat.jpg) | [image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  
   
 如发现错误, 请万望指正, 非常感谢.  
   

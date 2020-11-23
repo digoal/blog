@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201123_01.md   [《用golang选什么pg驱动? pgx is a pure Go driver and toolkit for PostgreSQL.》](202011/20201123_01.md)  
 ##### 202011/20201122_01.md   [《PostgreSQL 中国 内核研发 环境、人才发展》](202011/20201122_01.md)  
 ##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
 ##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
@@ -350,7 +351,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202003/20200326_08.md   [《PostgreSQL ghtree实现的海明距离排序索引, 性能不错(模糊图像) - pg-knn_hamming》](202003/20200326_08.md)  
 ##### 202003/20200326_07.md   [《PostgreSQL shell命令插件 - pg_remote_exec》](202003/20200326_07.md)  
 ##### 202003/20200326_06.md   [《PostgreSQL 化学插件 - pgchem_tigress molecules rdkit》](202003/20200326_06.md)  
-##### 202003/20200326_05.md   [《PostgreSQL 全局临时表插件 - global temp table》](202003/20200326_05.md)  
+##### 202003/20200326_05.md   [《PostgreSQL 全局临时表插件 - pgtt - global temp table》](202003/20200326_05.md)  
 ##### 202003/20200326_04.md   [《PostgreSQL ctid scan 扫描方法插件 - 限定访问blocks》](202003/20200326_04.md)  
 ##### 202003/20200326_03.md   [《PostgreSQL 一款logical decoder - pg-deltaflood》](202003/20200326_03.md)  
 ##### 202003/20200326_02.md   [《PostgreSQL VagueGeometry vague spatial data - VASA (Vague Spatial Algebra) for PG - 模糊空间数据》](202003/20200326_02.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201124_01.md   [《PostgreSQL jdbc prepared statement 问号?占位符 如何转义》](20201124_01.md)  
 ##### 20201123_01.md   [《用golang选什么pg驱动? pgx is a pure Go driver and toolkit for PostgreSQL.》](20201123_01.md)  
 ##### 20201122_01.md   [《PostgreSQL 中国 内核研发 环境、人才发展》](20201122_01.md)  
 ##### 20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](20201120_01.md)  

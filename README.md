@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201125_01.md   [《PostgreSQL 递归查询在分组合并中的用法》](202011/20201125_01.md)  
 ##### 202011/20201124_01.md   [《PostgreSQL jdbc prepared statement 问号?占位符 如何转义》](202011/20201124_01.md)  
 ##### 202011/20201123_01.md   [《用golang选什么pg驱动? pgx is a pure Go driver and toolkit for PostgreSQL.》](202011/20201123_01.md)  
 ##### 202011/20201122_01.md   [《PostgreSQL 中国 内核研发 环境、人才发展》](202011/20201122_01.md)  

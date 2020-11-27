@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201127_02.md   [《正确的配置和使用 Debezium CDC 捕获、同步 PG 逻辑增量数据》](20201127_02.md)  
 ##### 20201127_01.md   [《PostgreSQL 14 preview - pg_stat_statements: Track number of times pgss entries were deallocated. - 跟踪是否需要调大 pg_stat_statements.max》](20201127_01.md)  
 ##### 20201126_01.md   [《PostgreSQL 14 preview - Add support for abstract Unix-domain sockets》](20201126_01.md)  
 ##### 20201125_01.md   [《PostgreSQL 递归查询在分组合并中的用法》](20201125_01.md)  

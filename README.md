@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201127_05.md   [《创建完slot, 是否立即就开始保留wal?》](202011/20201127_05.md)  
 ##### 202011/20201127_04.md   [《什么角色最适合担任社区主席》](202011/20201127_04.md)  
 ##### 202011/20201127_03.md   [《半小时快速搭建PostgreSQL简易监控》](202011/20201127_03.md)  
 ##### 202011/20201127_02.md   [《正确的配置和使用 Debezium CDC 捕获、同步 PG 逻辑增量数据》](202011/20201127_02.md)  
@@ -89,7 +90,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202011/20201122_01.md   [《PostgreSQL 中国 内核研发 环境、人才发展》](202011/20201122_01.md)  
 ##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
 ##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
-##### 202011/20201117_02.md   [《PostgreSQL 流复制冲突解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL》](202011/20201117_02.md)  
+##### 202011/20201117_02.md   [《PostgreSQL 流复制冲突分类讲解以及对应解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL  - 特别是lock confict(vacuum truncate suffix free page引起的）》](202011/20201117_02.md)  
 ##### 202011/20201117_01.md   [《使用Postgres，MobilityDB和Citus大规模(百亿级)实时分析GPS轨迹》](202011/20201117_01.md)  
 ##### 202011/20201116_01.md   [《PostgreSQL sharding 插件 citus 9.5发布 - 特性众多》](202011/20201116_01.md)  
 ##### 202011/20201115_05.md   [《PostgreSQL 等待事件 及 等待采样统计 (pg_wait_sampling) 发布新版本 1.1.2》](202011/20201115_05.md)  

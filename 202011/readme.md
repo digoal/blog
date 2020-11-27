@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201127_01.md   [《PostgreSQL 14 preview - pg_stat_statements: Track number of times pgss entries were deallocated. - 跟踪是否需要调大 pg_stat_statements.max》](20201127_01.md)  
 ##### 20201126_01.md   [《PostgreSQL 14 preview - Add support for abstract Unix-domain sockets》](20201126_01.md)  
 ##### 20201125_01.md   [《PostgreSQL 递归查询在分组合并中的用法》](20201125_01.md)  
 ##### 20201124_01.md   [《PostgreSQL jdbc prepared statement 问号?占位符 如何转义》](20201124_01.md)  

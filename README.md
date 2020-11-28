@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202011/20201128_01.md   [《PostgreSQL SP-GiST 索引原理》](202011/20201128_01.md)  
 ##### 202011/20201127_05.md   [《创建完slot, 是否立即就开始保留wal?》](202011/20201127_05.md)  
 ##### 202011/20201127_04.md   [《什么角色最适合担任社区主席》](202011/20201127_04.md)  
 ##### 202011/20201127_03.md   [《半小时快速搭建PostgreSQL简易监控》](202011/20201127_03.md)  
@@ -87,7 +88,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202011/20201125_01.md   [《PostgreSQL 递归查询在分组合并中的用法》](202011/20201125_01.md)  
 ##### 202011/20201124_01.md   [《PostgreSQL jdbc prepared statement 问号?占位符 如何转义》](202011/20201124_01.md)  
 ##### 202011/20201123_01.md   [《用golang选什么pg驱动? pgx is a pure Go driver and toolkit for PostgreSQL.》](202011/20201123_01.md)  
-##### 202011/20201122_01.md   [《PostgreSQL 中国 内核研发 环境、人才发展》](202011/20201122_01.md)  
+##### 202011/20201122_01.md   [《PostgreSQL 中国 数据库内核研发 环境、人才现状与刺激方法》](202011/20201122_01.md)  
 ##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
 ##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
 ##### 202011/20201117_02.md   [《PostgreSQL 流复制冲突分类讲解以及对应解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL  - 特别是lock confict(vacuum truncate suffix free page引起的）》](202011/20201117_02.md)  

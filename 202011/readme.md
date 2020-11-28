@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20201128_04.md   [《PostgreSQL bloom 索引原理》](20201128_04.md)  
+##### 20201128_03.md   [《PostgreSQL 13 preview - index - Opclass parameters》](20201128_03.md)  
 ##### 20201128_02.md   [《PostgreSQL RUM 索引原理》](20201128_02.md)  
 ##### 20201128_01.md   [《PostgreSQL SP-GiST 索引原理》](20201128_01.md)  
 ##### 20201127_05.md   [《创建完slot, 是否立即就开始保留wal?》](20201127_05.md)  

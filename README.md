@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202012/20201204_01.md   [《PostgreSQL 兼容 SQL Server - Babelfish - SQL Server 业务 无感使用PostgreSQL - 一份数据, 同时兼容SQL Server和PostgreSQL》](202012/20201204_01.md)  
 ##### 202012/20201203_01.md   [《DNS TTL》](202012/20201203_01.md)  
 ##### 202012/20201202_03.md   [《PostgreSQL 14 preview - 支持 restore_command 参数修改 reload生效, 无需重启实例》](202012/20201202_03.md)  
 ##### 202012/20201202_02.md   [《PostgreSQL 14 preview - pg_stat_wal 支持实例级wal统计wal_records, wal_fpi and wal_bytes》](202012/20201202_02.md)  

@@ -9,4 +9,4 @@
 ##### 20201203_01.md   [《DNS TTL》](20201203_01.md)  
 ##### 20201202_03.md   [《PostgreSQL 14 preview - 支持 restore_command 参数修改 reload生效, 无需重启实例》](20201202_03.md)  
 ##### 20201202_02.md   [《PostgreSQL 14 preview - pg_stat_wal 支持实例级wal统计wal_records, wal_fpi and wal_bytes》](20201202_02.md)  
-##### 20201202_01.md   [《如何成功的搞一场线下沙龙》](20201202_01.md)  
+##### 20201202_01.md   [《搞一场沙龙的心得》](20201202_01.md)  

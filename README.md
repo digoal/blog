@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202012/20201205_02.md   [《PostgreSQL 十进制、十六进制、二进制、八进制转换》](202012/20201205_02.md)  
 ##### 202012/20201205_01.md   [《PostgreSQL 大对象使用》](202012/20201205_01.md)  
 ##### 202012/20201204_02.md   [《10亿级云资源TAG管理, 实时写入和搜索数据库设计 - gin+btree_gin 倒排搜索》](202012/20201204_02.md)  
 ##### 202012/20201204_01.md   [《PostgreSQL 兼容 SQL Server - Babelfish - SQL Server 业务 无感使用PostgreSQL - 一份数据, 同时兼容SQL Server和PostgreSQL》](202012/20201204_01.md)  

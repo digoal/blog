@@ -12,5 +12,5 @@
 ##### 20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](20130311_02.md)  
 ##### 20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](20130311_01.md)  
 ##### 20130306_02.md   [《PostgreSQL 事务快照功能 - Parallel Export consistent data or Parallel Query use snapshot transaction feature》](20130306_02.md)  
-##### 20130306_01.md   [《Use PostgreSQL server program import binary data into database bytea type》](20130306_01.md)  
+##### 20130306_01.md   [《大对象 - Use PostgreSQL server program import binary data into database bytea type》](20130306_01.md)  
 ##### 20130305_01.md   [《PostgreSQL convert integer to bit》](20130305_01.md)  

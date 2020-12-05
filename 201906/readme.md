@@ -20,7 +20,7 @@
 ##### 20190608_03.md   [《[转载] 开源与闭源的斗争，GPLv3协议的发布》](20190608_03.md)  
 ##### 20190608_02.md   [《PostgreSQL 社区分析 - 为什么PostgreSQL社区几乎不可能被任何一个商业公司、国家所控制？》](20190608_02.md)  
 ##### 20190608_01.md   [《PostgreSQL synchronous_commit|fsync|full_page_write|data_sync_retry|分组提交 的使用与注意 - 写性能、业务RPO指标》](20190608_01.md)  
-##### 20190607_04.md   [《PostgreSQL psql的元素周期表》](20190607_04.md)  
+##### 20190607_04.md   [《PostgreSQL psql的元素周期表 - 包括大对象操作》](20190607_04.md)  
 ##### 20190607_03.md   [《PostgreSQL 12 内置 sharding 进展(fdw)》](20190607_03.md)  
 ##### 20190607_02.md   [《PostgreSQL weekly 新闻》](20190607_02.md)  
 ##### 20190607_01.md   [《PostgreSQL 12 AM 之 - blackhole 黑洞存储引擎》](20190607_01.md)  

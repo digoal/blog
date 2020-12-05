@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202012/20201205_01.md   [《PostgreSQL 大对象使用》](202012/20201205_01.md)  
 ##### 202012/20201204_02.md   [《10亿级云资源TAG管理, 实时写入和搜索数据库设计 - gin+btree_gin 倒排搜索》](202012/20201204_02.md)  
 ##### 202012/20201204_01.md   [《PostgreSQL 兼容 SQL Server - Babelfish - SQL Server 业务 无感使用PostgreSQL - 一份数据, 同时兼容SQL Server和PostgreSQL》](202012/20201204_01.md)  
 ##### 202012/20201203_01.md   [《DNS TTL》](202012/20201203_01.md)  
@@ -652,7 +653,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201906/20190608_03.md   [《[转载] 开源与闭源的斗争，GPLv3协议的发布》](201906/20190608_03.md)  
 ##### 201906/20190608_02.md   [《PostgreSQL 社区分析 - 为什么PostgreSQL社区几乎不可能被任何一个商业公司、国家所控制？》](201906/20190608_02.md)  
 ##### 201906/20190608_01.md   [《PostgreSQL synchronous_commit|fsync|full_page_write|data_sync_retry|分组提交 的使用与注意 - 写性能、业务RPO指标》](201906/20190608_01.md)  
-##### 201906/20190607_04.md   [《PostgreSQL psql的元素周期表》](201906/20190607_04.md)  
+##### 201906/20190607_04.md   [《PostgreSQL psql的元素周期表 - 包括大对象操作》](201906/20190607_04.md)  
 ##### 201906/20190607_03.md   [《PostgreSQL 12 内置 sharding 进展(fdw)》](201906/20190607_03.md)  
 ##### 201906/20190607_02.md   [《PostgreSQL weekly 新闻》](201906/20190607_02.md)  
 ##### 201906/20190607_01.md   [《PostgreSQL 12 AM 之 - blackhole 黑洞存储引擎》](201906/20190607_01.md)  
@@ -1263,7 +1264,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201802/20180204_01.md   [《PostgreSQL 11 preview - 并行排序、并行索引 (性能线性暴增) 单实例100亿TOP-K仅40秒》](201802/20180204_01.md)  
 ##### 201802/20180202_02.md   [《PostgreSQL 11 preview - 分区表智能并行JOIN (已类似MPP架构，性能暴增)》](201802/20180202_02.md)  
 ##### 201802/20180202_01.md   [《PostgreSQL 相似搜索设计与性能 - 地址、QA、POI等文本 毫秒级相似搜索实践》](201802/20180202_01.md)  
-##### 201802/20180201_03.md   [《[转] 关于入侵PostgreSQL的那些事儿（文件读取写入、命令执行的办法）》](201802/20180201_03.md)  
+##### 201802/20180201_03.md   [《[转] 关于入侵PostgreSQL的那些事儿（文件读取写入、命令执行的办法）  -大对象》](201802/20180201_03.md)  
 ##### 201802/20180201_02.md   [《PostgreSQL dblink异步调用实现 并行hash分片JOIN - 含数据交、并、差 提速案例 - 含dblink VS pg 11 parallel hash join VS pg 11 智能分区JOIN》](201802/20180201_02.md)  
 ##### 201802/20180201_01.md   [《PostgreSQL 11 preview - parallel hash (含hash JOIN , hash agg等) 性能极大提升》](201802/20180201_01.md)  
 ----  
@@ -1807,7 +1808,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201702/20170215_01.md   [《PostgreSQL 打开文件句柄优化 - 百万以上实体对象初始化优化》](201702/20170215_01.md)  
 ##### 201702/20170214_02.md   [《PostgreSQL 2017 2月份 相关新闻》](201702/20170214_02.md)  
 ##### 201702/20170214_01.md   [《PostgreSQL、Greenplum DML合并操作 最佳实践》](201702/20170214_01.md)  
-##### 201702/20170213_01.md   [《数据库common安全自动渗透测试与防范 - sqlmap》](201702/20170213_01.md)  
+##### 201702/20170213_01.md   [《大对象 - 数据库common安全自动渗透测试与防范 - sqlmap》](201702/20170213_01.md)  
 ##### 201702/20170209_02.md   [《HOW PostgreSQL deal NULL-Values follow Three|ternary valued logic RULE》](201702/20170209_02.md)  
 ##### 201702/20170209_01.md   [《数据库选型之 - 大象十八摸 - 致 架构师、开发者》](201702/20170209_01.md)  
 ##### 201702/20170208_03.md   [《数据库选型思考(PostgreSQL,MySQL,Oracle)》](201702/20170208_03.md)  
@@ -1953,7 +1954,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201610/20161019_01.md   [《PostgreSQL 全文检索加速 快到没有朋友 - RUM索引接口(潘多拉魔盒)》](201610/20161019_01.md)  
 ##### 201610/20161018_04.md   [《PostgreSQL Oracle 兼容性之 - PL/SQL FORALL, BULK COLLECT》](201610/20161018_04.md)  
 ##### 201610/20161018_03.md   [《PostgreSQL pg_stat_ pg_statio_ 统计信息(scan,read,fetch,hit)源码解读》](201610/20161018_03.md)  
-##### 201610/20161018_02.md   [《Hacking PostgreSQL》](201610/20161018_02.md)  
+##### 201610/20161018_02.md   [《大对象攻击 - Hacking PostgreSQL》](201610/20161018_02.md)  
 ##### 201610/20161018_01.md   [《PostgreSQL 使用advisory lock或skip locked消除行锁冲突, 提高几十倍并发更新效率》](201610/20161018_01.md)  
 ##### 201610/20161012_01.md   [《PostgreSQL DaaS设计注意 - schema与database的抉择》](201610/20161012_01.md)  
 ##### 201610/20161011_02.md   [《Greenplum,HAWQ interval parser带来的问题 - TPCH 测试注意啦》](201610/20161011_02.md)  
@@ -2671,7 +2672,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201305/20130516_02.md   [《PostgreSQL 9.3 improve pgstattuple》](201305/20130516_02.md)  
 ##### 201305/20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](201305/20130516_01.md)  
 ##### 201305/20130510_03.md   [《PostgreSQL 9.3 Allow PL/pgSQL to access the number of rows processed by COPY》](201305/20130510_03.md)  
-##### 201305/20130510_02.md   [《PostgreSQL 9.3 Add API for 64-bit large object access》](201305/20130510_02.md)  
+##### 201305/20130510_02.md   [《大对象 - PostgreSQL 9.3 Add API for 64-bit large object access》](201305/20130510_02.md)  
 ##### 201305/20130510_01.md   [《PostgreSQL SQL_ASCII encoding introduce》](201305/20130510_01.md)  
 ##### 201305/20130509_02.md   [《PostgreSQL 9.3 Change the WAL record format to allow splitting the record header across pages》](201305/20130509_02.md)  
 ##### 201305/20130509_01.md   [《PostgreSQL 审计 - PostgreSQL 9.3 Allow OLD and NEW in multi-row VALUES within rules》](201305/20130509_01.md)  
@@ -2690,7 +2691,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201303/20130311_02.md   [《PostgreSQL 触发器 用法详解 2》](201303/20130311_02.md)  
 ##### 201303/20130311_01.md   [《PostgreSQL 触发器 用法详解 1》](201303/20130311_01.md)  
 ##### 201303/20130306_02.md   [《PostgreSQL 事务快照功能 - Parallel Export consistent data or Parallel Query use snapshot transaction feature》](201303/20130306_02.md)  
-##### 201303/20130306_01.md   [《Use PostgreSQL server program import binary data into database bytea type》](201303/20130306_01.md)  
+##### 201303/20130306_01.md   [《大对象 - Use PostgreSQL server program import binary data into database bytea type》](201303/20130306_01.md)  
 ##### 201303/20130305_01.md   [《PostgreSQL convert integer to bit》](201303/20130305_01.md)  
 ----  
 ##### 201302/20130228_01.md   [《PostgreSQL hll (HyperLogLog) extension for "State of The Art Cardinality Estimation Algorithm" - 3》](201302/20130228_01.md)  
@@ -2715,7 +2716,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201301/20130122_01.md   [《PostgreSQL sharding有序UUID最佳实践 - serial global uuid stored in 64bit int8》](201301/20130122_01.md)  
 ##### 201301/20130121_01.md   [《extend PostgreSQL set_bit() set one bit to serial bits.》](201301/20130121_01.md)  
 ##### 201301/20130110_01.md   [《HOW to Change PostgreSQL's TOAST_TUPLE_THRESHOLD》](201301/20130110_01.md)  
-##### 201301/20130109_01.md   [《PostgreSQL large row|column performance tuning case》](201301/20130109_01.md)  
+##### 201301/20130109_01.md   [《PostgreSQL large row|column performance tuning case - 包括大对象》](201301/20130109_01.md)  
 ##### 201301/20130105_01.md   [《PostgreSQL partition table name convert to data type》](201301/20130105_01.md)  
 ##### 201301/20130104_01.md   [《PostgreSQL partition table or inherits table predict count and gap and privilege monitor》](201301/20130104_01.md)  
 ----  

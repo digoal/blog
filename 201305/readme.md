@@ -15,7 +15,7 @@
 ##### 20130516_02.md   [《PostgreSQL 9.3 improve pgstattuple》](20130516_02.md)  
 ##### 20130516_01.md   [《PostgreSQL 9.3 pg_trgm imporve support multi-bytes char and gist,gin index for reg-exp search》](20130516_01.md)  
 ##### 20130510_03.md   [《PostgreSQL 9.3 Allow PL/pgSQL to access the number of rows processed by COPY》](20130510_03.md)  
-##### 20130510_02.md   [《PostgreSQL 9.3 Add API for 64-bit large object access》](20130510_02.md)  
+##### 20130510_02.md   [《大对象 - PostgreSQL 9.3 Add API for 64-bit large object access》](20130510_02.md)  
 ##### 20130510_01.md   [《PostgreSQL SQL_ASCII encoding introduce》](20130510_01.md)  
 ##### 20130509_02.md   [《PostgreSQL 9.3 Change the WAL record format to allow splitting the record header across pages》](20130509_02.md)  
 ##### 20130509_01.md   [《PostgreSQL 审计 - PostgreSQL 9.3 Allow OLD and NEW in multi-row VALUES within rules》](20130509_01.md)  

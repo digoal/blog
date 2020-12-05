@@ -78,7 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202012/20201205_03.md   [《大型企业数据库 & 应用实践 - 2020.12.18 - 杭州》](202012/20201205_03.md)  
+##### 202012/20201205_03.md   [《<大型企业数据库 & 应用实践> 沙龙活动 - 2020.12.18 - 杭州》](202012/20201205_03.md)  
 ##### 202012/20201205_02.md   [《PostgreSQL 十进制、十六进制、二进制、八进制转换》](202012/20201205_02.md)  
 ##### 202012/20201205_01.md   [《PostgreSQL 大对象使用》](202012/20201205_01.md)  
 ##### 202012/20201204_02.md   [《10亿级云资源TAG管理, 实时写入和搜索数据库设计 - gin+btree_gin 倒排搜索》](202012/20201204_02.md)  
@@ -1081,7 +1081,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201805/20180512_01.md   [《PostgreSQL, SQL Server 逻辑增量 (通过逻辑标记update,delete) 同步到 Greenplum, PostgreSQL》](201805/20180512_01.md)  
 ##### 201805/20180511_01.md   [《PostgreSQL Oracle PL/SQL 兼容性之 - AGGREGATE USING Clause 聚合函数》](201805/20180511_01.md)  
 ##### 201805/20180510_02.md   [《PostgreSQL Oracle 兼容性 - Analysis函数之keep》](201805/20180510_02.md)  
-##### 201805/20180510_01.md   [《PostgreSQL copy (quote,DELIMITER,...) single byte char 的输入》](201805/20180510_01.md)  
+##### 201805/20180510_01.md   [《PostgreSQL copy (指定 QUOTE,ESCAPE,DELIMITER, 分隔符等, 支持ascii单字节字符...) single byte char 的输入》](201805/20180510_01.md)  
 ##### 201805/20180509_02.md   [《Greenplum Oracle 兼容性之 - LOG ERRORS INTO》](201805/20180509_02.md)  
 ##### 201805/20180509_01.md   [《PostgreSQL Oracle 兼容性之 - select for update of column_name (change to table_name or table_alias)》](201805/20180509_01.md)  
 ##### 201805/20180507_01.md   [《PostgreSQL 自动创建分区实践 - 写入触发器》](201805/20180507_01.md)  

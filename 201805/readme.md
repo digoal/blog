@@ -46,7 +46,7 @@
 ##### 20180512_01.md   [《PostgreSQL, SQL Server 逻辑增量 (通过逻辑标记update,delete) 同步到 Greenplum, PostgreSQL》](20180512_01.md)  
 ##### 20180511_01.md   [《PostgreSQL Oracle PL/SQL 兼容性之 - AGGREGATE USING Clause 聚合函数》](20180511_01.md)  
 ##### 20180510_02.md   [《PostgreSQL Oracle 兼容性 - Analysis函数之keep》](20180510_02.md)  
-##### 20180510_01.md   [《PostgreSQL copy (quote,DELIMITER,...) single byte char 的输入》](20180510_01.md)  
+##### 20180510_01.md   [《PostgreSQL copy (指定 QUOTE,ESCAPE,DELIMITER, 分隔符等, 支持ascii单字节字符...) single byte char 的输入》](20180510_01.md)  
 ##### 20180509_02.md   [《Greenplum Oracle 兼容性之 - LOG ERRORS INTO》](20180509_02.md)  
 ##### 20180509_01.md   [《PostgreSQL Oracle 兼容性之 - select for update of column_name (change to table_name or table_alias)》](20180509_01.md)  
 ##### 20180507_01.md   [《PostgreSQL 自动创建分区实践 - 写入触发器》](20180507_01.md)  

@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202012/20201210_02.md   [《为什么Oracle 21c的新特性不值得一提? 因为它已经老了!》](202012/20201210_02.md)  
 ##### 202012/20201210_01.md   [《12道题, 深度了解 阿里云下一代数据库形态 : MyBase》](202012/20201210_01.md)  
 ##### 202012/20201209_02.md   [《PostgreSQL 14 preview - 增强or, and多条件选择性评估 - 使用multiple extended statistics》](202012/20201209_02.md)  
 ##### 202012/20201209_01.md   [《PostgreSQL 14 preview - Speed up rechecking if relation needs to be vacuumed or analyze in autovacuum.》](202012/20201209_01.md)  

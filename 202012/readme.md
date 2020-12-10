@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20201210_01.md   [《12道题, 深度了解 阿里云下一代数据库形态 : MyBase》](20201210_01.md)  
+##### 20201209_02.md   [《PostgreSQL 14 preview - 增强or, and多条件选择性评估 - 使用multiple extended statistics》](20201209_02.md)  
+##### 20201209_01.md   [《PostgreSQL 14 preview - Speed up rechecking if relation needs to be vacuumed or analyze in autovacuum.》](20201209_01.md)  
 ##### 20201205_03.md   [《<大型企业数据库 & 应用实践> 沙龙活动 - 2020.12.18 - 杭州》](20201205_03.md)  
 ##### 20201205_02.md   [《PostgreSQL 十进制、十六进制、二进制、八进制转换》](20201205_02.md)  
 ##### 20201205_01.md   [《PostgreSQL 大对象使用》](20201205_01.md)  

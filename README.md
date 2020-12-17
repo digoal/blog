@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202012/20201217_03.md   [《PostgreSQL 图形化建模工具 pgmodeler》](202012/20201217_03.md)  
 ##### 202012/20201217_02.md   [《PostgreSQL explain analyze 火山图 图形化软件 pg_flame》](202012/20201217_02.md)  
 ##### 202012/20201217_01.md   [《PostgreSQL 性能 dashboard 产品 - PgHero》](202012/20201217_01.md)  
 ##### 202012/20201216_02.md   [《PostgreSQL 13 新增开发者GUC参数backtrace_functions, 配置跟踪C函数列表. 源码开发调试增强.》](202012/20201216_02.md)  

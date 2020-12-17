@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20201217_02.md   [《PostgreSQL explain analyze 火山图 图形化软件 pg_flame》](20201217_02.md)  
+##### 20201217_01.md   [《PostgreSQL 性能 dashboard 产品 - PgHero》](20201217_01.md)  
 ##### 20201216_02.md   [《PostgreSQL 13 新增开发者GUC参数backtrace_functions, 配置跟踪C函数列表. 源码开发调试增强.》](20201216_02.md)  
 ##### 20201216_01.md   [《PostgreSQL 收费列存储插件 - Swarm64》](20201216_01.md)  
 ##### 20201215_03.md   [《企业级SaaS行业投资人视角》](20201215_03.md)  

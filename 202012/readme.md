@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201224_01.md   [《PostgreSQL 14 preivew - multirange type》](20201224_01.md)  
 ##### 20201217_03.md   [《PostgreSQL 图形化建模工具 pgmodeler》](20201217_03.md)  
 ##### 20201217_02.md   [《PostgreSQL explain analyze 火山图 图形化软件 pg_flame》](20201217_02.md)  
 ##### 20201217_01.md   [《PostgreSQL 性能 dashboard 产品 - PgHero》](20201217_01.md)  
@@ -14,7 +15,7 @@
 ##### 20201210_01.md   [《12道题, 深度了解 阿里云下一代数据库形态 : MyBase》](20201210_01.md)  
 ##### 20201209_02.md   [《PostgreSQL 14 preview - 增强or, and多条件选择性评估 - 使用multiple extended statistics》](20201209_02.md)  
 ##### 20201209_01.md   [《PostgreSQL 14 preview - Speed up rechecking if relation needs to be vacuumed or analyze in autovacuum.》](20201209_01.md)  
-##### 20201205_03.md   [《<大型企业数据库 & 应用实践> 沙龙活动 - 2020.12.18 - 杭州》](20201205_03.md)  
+##### 20201205_03.md   [《<大型企业 数据库 & 应用实践> 沙龙 - 2020.12.18 - 直播回放》](20201205_03.md)  
 ##### 20201205_02.md   [《PostgreSQL 十进制、十六进制、二进制、八进制转换》](20201205_02.md)  
 ##### 20201205_01.md   [《PostgreSQL 大对象使用》](20201205_01.md)  
 ##### 20201204_02.md   [《10亿级云资源TAG管理, 实时写入和搜索数据库设计 - gin+btree_gin 倒排搜索》](20201204_02.md)  

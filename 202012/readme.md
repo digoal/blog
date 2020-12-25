@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201225_01.md   [《你心目中的PostgreSQL MVP》](20201225_01.md)  
 ##### 20201224_01.md   [《PostgreSQL 14 preivew - multirange type》](20201224_01.md)  
 ##### 20201217_03.md   [《PostgreSQL 图形化建模工具 pgmodeler》](20201217_03.md)  
 ##### 20201217_02.md   [《PostgreSQL explain analyze 火山图 图形化软件 pg_flame》](20201217_02.md)  

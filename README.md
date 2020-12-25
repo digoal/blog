@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202012/20201225_01.md   [《你心目中的PostgreSQL MVP》](202012/20201225_01.md)  
 ##### 202012/20201224_01.md   [《PostgreSQL 14 preivew - multirange type》](202012/20201224_01.md)  
 ##### 202012/20201217_03.md   [《PostgreSQL 图形化建模工具 pgmodeler》](202012/20201217_03.md)  
 ##### 202012/20201217_02.md   [《PostgreSQL explain analyze 火山图 图形化软件 pg_flame》](202012/20201217_02.md)  

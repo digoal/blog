@@ -78,6 +78,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202012/20201226_01.md   [《PostgreSQL 如何返回动态列数 - 行列变换 - json, jsonb, record, temp table, tablefunc, pivot table, crosstab》](202012/20201226_01.md)  
 ##### 202012/20201225_02.md   [《规模化、可度量、周期性》](202012/20201225_02.md)  
 ##### 202012/20201225_01.md   [《你心目中的PostgreSQL MVP》](202012/20201225_01.md)  
 ##### 202012/20201224_01.md   [《PostgreSQL 14 preivew - multirange type》](202012/20201224_01.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20201226_01.md   [《PostgreSQL 如何返回动态列数 - 行列变换 - json, jsonb, record, temp table, tablefunc, pivot table, crosstab》](20201226_01.md)  
 ##### 20201225_02.md   [《规模化、可度量、周期性》](20201225_02.md)  
 ##### 20201225_01.md   [《你心目中的PostgreSQL MVP》](20201225_01.md)  
 ##### 20201224_01.md   [《PostgreSQL 14 preivew - multirange type》](20201224_01.md)  

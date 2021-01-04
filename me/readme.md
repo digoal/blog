@@ -213,7 +213,7 @@ pluggable 内部能力输送: 达摩院、蚂蚁、安全(堡垒，可信融合�
 ```
 - 常年不定期输出PostgreSQL公益培训。        
 - 长期坚持撰写技术文章，涵盖“开源产品使用、案例、应用开发实践、内核开发实践、管理实践、调优实践”等数据库生命周期相关文档. 截止2019.6 发表PG技术类文章数：    
-    - 2000+ ，浏览量：200万+ (ata, yq, yq_internal, weixin, github, postgres.cn, 163blog, PG社区公众号 ... 等渠道) 
+    - 2000+ ，外部引用+github浏览量：2000万+ (ata, yq, yq_internal, weixin, github, postgres.cn, 163blog, PG社区公众号 ... 等渠道) 
 - 组建PG技术钉钉交流群：     
     - 人数4000+  (截至202005)     
 - 对接数据库newsletter， 负责PG新闻和趋势分析报道。  

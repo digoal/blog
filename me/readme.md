@@ -35,7 +35,7 @@ dba: 0 -> xxxxxxxxx,
 营收规模: xxxxxxxxxxxxxxx,     
 社区(5w+),   
 线上生态: (RDS PG钉钉群4K+),    
-内容物: 2000+ (云栖, ATA 常年 top 1),    
+内容物: 2000+ (云栖, 蝉联 2015年以来ATA每年 top 1),    
 布道: xxxx+   
 内部应用: 各业务线应用落地, 从0推广到自然流量,   
 pluggable 内部能力输送: 达摩院、蚂蚁、安全(堡垒，可信融合）  pluggable extension 形态整合, 以数据库功能形式对外输送集团技术能力, ... ... ,   

@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20210107_06.md   [《PostgreSQL 14 preview - 支持会话超时参数 - idle_session_timeout》](20210107_06.md)  
+##### 20210107_05.md   [《PostgreSQL 14 preview - 支持copy命令进度查询 - pg_stat_progress_copy》](20210107_05.md)  
+##### 20210107_04.md   [《PostgreSQL 14 preview - 支持debug参数 - 强制不使用system catalog cache - debug_invalidate_system_caches_always》](20210107_04.md)  
+##### 20210107_03.md   [《PostgreSQL 14 preview - 支持startup(恢复)进程与backend(用户)进程死锁检测 - backpatch到9.6版本》](20210107_03.md)  
+##### 20210107_02.md   [《PostgreSQL 14 preview - psql客户端增强, 支持desc toast表和索引》](20210107_02.md)  
+##### 20210107_01.md   [《PostgreSQL 14 preview - 参数 in_hot_standby 获取当前实例是否是standby角色》](20210107_01.md)  
 ##### 20210105_01.md   [《庆祝PostgreSQL 3次夺得DB-engine年度数据库桂冠, 阿里云PG创新营开课》](20210105_01.md)  
 ##### 20210104_01.md   [《PostgreSQL 单用户模式修复 系统索引损坏 - single user mode, reindex system》](20210104_01.md)  
 ##### 20210103_01.md   [《PostgreSQL 文本相似搜索 - pg_trgm_pro - 包含则1, 不包含则计算token相似百分比》](20210103_01.md)  

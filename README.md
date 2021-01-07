@@ -79,6 +79,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202101/20210107_06.md   [《PostgreSQL 14 preview - 支持会话超时参数 - idle_session_timeout》](202101/20210107_06.md)  
+##### 202101/20210107_05.md   [《PostgreSQL 14 preview - 支持copy命令进度查询 - pg_stat_progress_copy》](202101/20210107_05.md)  
+##### 202101/20210107_04.md   [《PostgreSQL 14 preview - 支持debug参数 - 强制不使用system catalog cache - debug_invalidate_system_caches_always》](202101/20210107_04.md)  
+##### 202101/20210107_03.md   [《PostgreSQL 14 preview - 支持startup(恢复)进程与backend(用户)进程死锁检测 - backpatch到9.6版本》](202101/20210107_03.md)  
+##### 202101/20210107_02.md   [《PostgreSQL 14 preview - psql客户端增强, 支持desc toast表和索引》](202101/20210107_02.md)  
+##### 202101/20210107_01.md   [《PostgreSQL 14 preview - 参数 in_hot_standby 获取当前实例是否是standby角色》](202101/20210107_01.md)  
 ##### 202101/20210105_01.md   [《庆祝PostgreSQL 3次夺得DB-engine年度数据库桂冠, 阿里云PG创新营开课》](202101/20210105_01.md)  
 ##### 202101/20210104_01.md   [《PostgreSQL 单用户模式修复 系统索引损坏 - single user mode, reindex system》](202101/20210104_01.md)  
 ##### 202101/20210103_01.md   [《PostgreSQL 文本相似搜索 - pg_trgm_pro - 包含则1, 不包含则计算token相似百分比》](202101/20210103_01.md)  
@@ -90,7 +96,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202012/20201227_01.md   [《小白读财经: 如何判断一只股票是否有潜力?  净资产, 净资产收益率, 净利润率, 资产周转率, 杠杆率》](202012/20201227_01.md)  
 ##### 202012/20201226_02.md   [《关于 mvp 与社区 关系维系的想法》](202012/20201226_02.md)  
 ##### 202012/20201226_01.md   [《PostgreSQL 如何返回动态列数 - 行列变换 - json, jsonb, record, temp table, tablefunc, pivot table, crosstab》](202012/20201226_01.md)  
-##### 202012/20201225_02.md   [《规模化、可度量、周期性》](202012/20201225_02.md)  
+##### 202012/20201225_02.md   [《产品经理：规模化、可度量、周期性》](202012/20201225_02.md)  
 ##### 202012/20201225_01.md   [《你心目中的PostgreSQL MVP》](202012/20201225_01.md)  
 ##### 202012/20201224_01.md   [《PostgreSQL 14 preivew - multirange type》](202012/20201224_01.md)  
 ##### 202012/20201217_03.md   [《PostgreSQL 图形化建模工具 pgmodeler》](202012/20201217_03.md)  

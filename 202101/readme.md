@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210108_02.md   [《PostgreSQL 14 preivew - standby query&startup process conflict 恢复冲突日志打印》](20210108_02.md)  
+##### 20210108_01.md   [《PostgreSQL 14 preivew - 增强语法解析器 例如复杂类型数组的底层结构赋值 - Add the ability for the core grammar to have more than one parse target.》](20210108_01.md)  
 ##### 20210107_06.md   [《PostgreSQL 14 preview - 支持会话超时参数 - idle_session_timeout》](20210107_06.md)  
 ##### 20210107_05.md   [《PostgreSQL 14 preview - 支持copy命令进度查询 - pg_stat_progress_copy》](20210107_05.md)  
 ##### 20210107_04.md   [《PostgreSQL 14 preview - 支持debug参数 - 强制不使用system catalog cache - debug_invalidate_system_caches_always》](20210107_04.md)  

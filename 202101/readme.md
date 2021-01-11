@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210111_01.md   [《PostgreSQL 14 preview - 向量化IO功能 (pwritev, preadv) , IO性能增强》](20210111_01.md)  
 ##### 20210110_01.md   [《[转]徐奇渊：如何理解中国经济所处的经济周期 - 名义GDP , 实际GDP》](20210110_01.md)  
 ##### 20210108_02.md   [《PostgreSQL 14 preivew - standby query&startup process conflict 恢复冲突日志打印》](20210108_02.md)  
 ##### 20210108_01.md   [《PostgreSQL 14 preivew - 增强语法解析器 例如复杂类型数组的底层结构赋值 - Add the ability for the core grammar to have more than one parse target.》](20210108_01.md)  

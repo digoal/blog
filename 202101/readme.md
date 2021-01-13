@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210113_02.md   [《PostgreSQL 14 preivew - pageinspect 内窥heap,index存储结构 , 新增对gist索引的支持》](20210113_02.md)  
 ##### 20210113_01.md   [《PostgreSQL 14 preview - drop大量对象, recovery时需要遍历shared buffer导致的性能问题patch(崩溃恢复慢、standby延迟等问题) - DropRelFileNodeBuffers 增强》](20210113_01.md)  
 ##### 20210111_01.md   [《PostgreSQL 14 preview - 向量化IO功能 (pwritev, preadv) , IO性能增强》](20210111_01.md)  
 ##### 20210110_01.md   [《[转]徐奇渊：如何理解中国经济所处的经济周期 - 名义GDP , 实际GDP》](20210110_01.md)  

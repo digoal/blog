@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210117_04.md   [《理性派 - 企业数据库选型应该回答清楚的 15 个问题》](20210117_04.md)  
 ##### 20210117_01.md   [《PostgreSQL 14 preview - psql客户端支持dX快捷命令, 查看自定义统计信息》](20210117_01.md)  
 ##### 20210116_02.md   [《PostgreSQL 14 preview - pgbench 支持冒号常量, 例如时间,timestamp常量》](20210116_02.md)  
 ##### 20210116_01.md   [《PostgreSQL 14 preview - Enhance nbtree index tuple deletion - bottom-up index deletion》](20210116_01.md)  

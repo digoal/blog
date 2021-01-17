@@ -30,7 +30,7 @@
 ##### 20171018_03.md   [《[未完待续] PGQ 异步消息队列的使用》](20171018_03.md)  
 ##### 20171018_02.md   [《PostGIS 距离计算建议 - 投影 与 球 坐标系, geometry 与 geography 类型》](20171018_02.md)  
 ##### 20171018_01.md   [《PostgreSQL 10 + PostGIS + Sharding(pg_pathman) + MySQL(fdw外部表) on ECS 部署指南(适合新用户) - 珍藏级》](20171018_01.md)  
-##### 20171017_05.md   [《[未完待续] PostgreSQL\Greenplum Customer 社区管理 TODO》](20171017_05.md)  
+##### 20171017_05.md   [《[未完待续] PostgreSQL\Greenplum 社区管理 TODO》](20171017_05.md)  
 ##### 20171017_04.md   [《Greenplum 类型一致性使用注意 - 索引条件、JOIN的类型一致性限制》](20171017_04.md)  
 ##### 20171017_03.md   [《Greenplum 点查询的优化(分布键)》](20171017_03.md)  
 ##### 20171017_02.md   [《PostgreSQL DISTINCT 和 DISTINCT ON 语法的使用》](20171017_02.md)  

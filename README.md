@@ -79,11 +79,14 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202101/20210117_01.md   [《PostgreSQL 14 preview - psql客户端支持dX快捷命令, 查看自定义统计信息》](202101/20210117_01.md)  
+##### 202101/20210116_02.md   [《PostgreSQL 14 preview - pgbench 支持冒号常量, 例如时间,timestamp常量》](202101/20210116_02.md)  
+##### 202101/20210116_01.md   [《PostgreSQL 14 preview - Enhance nbtree index tuple deletion - bottom-up index deletion》](202101/20210116_01.md)  
 ##### 202101/20210113_02.md   [《PostgreSQL 14 preivew - pageinspect 内窥heap,index存储结构 , 新增对gist索引的支持》](202101/20210113_02.md)  
 ##### 202101/20210113_01.md   [《PostgreSQL 14 preview - drop大量对象, recovery时需要遍历shared buffer导致的性能问题patch(崩溃恢复慢、standby延迟等问题) - DropRelFileNodeBuffers 增强》](202101/20210113_01.md)  
 ##### 202101/20210111_01.md   [《PostgreSQL 14 preview - 向量化IO功能 (pwritev, preadv) , IO性能增强》](202101/20210111_01.md)  
 ##### 202101/20210110_01.md   [《[转]徐奇渊：如何理解中国经济所处的经济周期 - 名义GDP , 实际GDP》](202101/20210110_01.md)  
-##### 202101/20210108_02.md   [《PostgreSQL 14 preivew - standby query&startup process conflict 恢复冲突日志打印》](202101/20210108_02.md)  
+##### 202101/20210108_02.md   [《PostgreSQL 14 preivew - standby query&startup process conflict 恢复冲突 超时(timeout)配置,日志打印》](202101/20210108_02.md)  
 ##### 202101/20210108_01.md   [《PostgreSQL 14 preivew - 增强语法解析器 例如复杂类型数组的底层结构赋值 - Add the ability for the core grammar to have more than one parse target.》](202101/20210108_01.md)  
 ##### 202101/20210107_06.md   [《PostgreSQL 14 preview - 支持会话超时参数 - idle_session_timeout》](202101/20210107_06.md)  
 ##### 202101/20210107_05.md   [《PostgreSQL 14 preview - 支持copy命令进度查询 - pg_stat_progress_copy》](202101/20210107_05.md)  
@@ -1367,7 +1370,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201712/20171223_02.md   [《会议室预定系统实践(解放开发) - PostgreSQL tsrange(时间范围类型) + 排他约束》](201712/20171223_02.md)  
 ##### 201712/20171223_01.md   [《惊天性能！单RDS PostgreSQL实例 支撑 2000亿 - 实时标签透视案例 (含dblink异步并行调用)》](201712/20171223_01.md)  
 ##### 201712/20171222_02.md   [《超时流式处理 - 没有消息流入的数据异常监控》](201712/20171222_02.md)  
-##### 201712/20171222_01.md   [《PostgreSQL pgbench : 冒号处理》](201712/20171222_01.md)  
+##### 201712/20171222_01.md   [《PostgreSQL pgbench : 冒号处理 常量包含冒号。》](201712/20171222_01.md)  
 ##### 201712/20171221_01.md   [《PostgreSQL OUTER JOIN 优化的几个知识点 - 语义转换、内存带宽、JOIN算法、FILTER亲和力、TSP、HINT、命中率、存储顺序、扫描顺序、索引深度》](201712/20171221_01.md)  
 ##### 201712/20171217_01.md   [《PostgreSQL Oracle 兼容性之 - Partition By Outer Join实现稠化报表》](201712/20171217_01.md)  
 ##### 201712/20171216_01.md   [《PostgreSQL 高并发任务分配系统 实践》](201712/20171216_01.md)  
@@ -1505,7 +1508,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201710/20171018_03.md   [《[未完待续] PGQ 异步消息队列的使用》](201710/20171018_03.md)  
 ##### 201710/20171018_02.md   [《PostGIS 距离计算建议 - 投影 与 球 坐标系, geometry 与 geography 类型》](201710/20171018_02.md)  
 ##### 201710/20171018_01.md   [《PostgreSQL 10 + PostGIS + Sharding(pg_pathman) + MySQL(fdw外部表) on ECS 部署指南(适合新用户) - 珍藏级》](201710/20171018_01.md)  
-##### 201710/20171017_05.md   [《[未完待续] PostgreSQL\Greenplum Customer 社区管理 TODO》](201710/20171017_05.md)  
+##### 201710/20171017_05.md   [《[未完待续] PostgreSQL\Greenplum 社区管理 TODO》](201710/20171017_05.md)  
 ##### 201710/20171017_04.md   [《Greenplum 类型一致性使用注意 - 索引条件、JOIN的类型一致性限制》](201710/20171017_04.md)  
 ##### 201710/20171017_03.md   [《Greenplum 点查询的优化(分布键)》](201710/20171017_03.md)  
 ##### 201710/20171017_02.md   [《PostgreSQL DISTINCT 和 DISTINCT ON 语法的使用》](201710/20171017_02.md)  

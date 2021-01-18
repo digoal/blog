@@ -79,6 +79,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202101/20210118_04.md   [《新冠，为什么rmb会升值 - 国家需要什么，全球需要什么，我们做什么? 为什么? - GDP , 外汇 之间有什么关系?  - 乱弹》](202101/20210118_04.md)  
 ##### 202101/20210118_03.md   [《PostgreSQL 14 preview - COPY 支持visibility map及时更新》](202101/20210118_03.md)  
 ##### 202101/20210118_02.md   [《PostgreSQL 14 preview - data page checksum 文档增强》](202101/20210118_02.md)  
 ##### 202101/20210118_01.md   [《PostgreSQL 14 preview - SaaS特性 - 会话建立、资源消耗时间片 统计 - pg_stat_database 指标增加》](202101/20210118_01.md)  

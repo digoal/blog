@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210118_03.md   [《PostgreSQL 14 preview - COPY 支持visibility map及时更新》](20210118_03.md)  
+##### 20210118_02.md   [《PostgreSQL 14 preview - data page checksum 文档增强》](20210118_02.md)  
+##### 20210118_01.md   [《PostgreSQL 14 preview - SaaS特性 - 会话建立、资源消耗时间片 统计 - pg_stat_database 指标增加》](20210118_01.md)  
 ##### 20210117_07.md   [《阿里云MyBase PG - 部署PoWA》](20210117_07.md)  
 ##### 20210117_06.md   [《新商业升级方法论 - <人 货 场> 论》](20210117_06.md)  
 ##### 20210117_05.md   [《GDP (国内生产总值) 知识》](20210117_05.md)  

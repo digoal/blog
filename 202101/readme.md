@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210119_04.md   [《唐僧又要去取经了, 这次只能带3个徒弟, 到底谁会被干掉呢?》](20210119_04.md)  
 ##### 20210119_03.md   [《PostgreSQL SQL 技巧例子 - 网站数据解析和copy LOAD, json处理, 字符串处理, 数组处理, CTE与法, 函数, inline code , 数据ETL (generated from原始数据)》](20210119_03.md)  
 ##### 20210119_02.md   [《PostgreSQL 14 preivew - 注意行为变化 - 当primary修改了某些standby 必须更小的参数时, 不会导致standby shutdown 了, 改成暂停恢复》](20210119_02.md)  
 ##### 20210119_01.md   [《PostgreSQL 14 preivew - postgres_fdw 新增 postgres_fdw_get_connections 函数, 获取当前外部表连接》](20210119_01.md)  

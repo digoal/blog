@@ -59,7 +59,7 @@ echo "3、[《企业为什么纷纷选择阿里云AliPG》](202005/20200523_01.m
 echo "4、[《为什么企业应该参与PG社区建设?》](202003/20200321_01.md)    " >> ./README.md
 echo "5、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md
 echo "5\.1、[《PostgreSQL 社区建设商业策划 {未完}》](202008/20200828_01.md)      " >> ./README.md
-echo "6、[《[未完待续] PostgreSQL\Greenplum Customer 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
+echo "6、[《[未完待续] PostgreSQL\Greenplum 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
 echo "7、[《[未完待续] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
 echo "8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    " >> ./README.md
 echo "9、[《云、商业、开源数据库终局之战 - 商业角度解读PG如何破局 - openapi 、 扩展能力、插件开源协议》](202007/20200727_04.md)    " >> ./README.md

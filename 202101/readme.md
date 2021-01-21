@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210121_04.md   [《PostgreSQL 用advisory lock 限制每一个分组中最多有多少条记录》](20210121_04.md)  
+##### 20210121_03.md   [《PostgreSQL JOB 插件 pg_timetable》](20210121_03.md)  
+##### 20210121_02.md   [《PostgreSQL psql 客户端一些妙用 - gexec 执行 SQL返回的结果》](20210121_02.md)  
+##### 20210121_01.md   [《PostgreSQL 14 preivew - FDW 支持bulk insert API(GetForeignModifyBatchSize,ExecForeignBatchInsert) - postgres_fdw 外部表实现bulk insert接口》](20210121_01.md)  
 ##### 20210120_02.md   [《开源数据库全球化协作浪潮 思考 - 24问》](20210120_02.md)  
 ##### 20210120_01.md   [《PostgreSQL sharding 分库分表 插件 citus - 开源企业版功能 - cigration citus+migration - 扩容、缩容、替换节点》](20210120_01.md)  
 ##### 20210119_05.md   [《终于说清楚了 - 常用字符集编码详解：ASCII 、GB2312、GBK、EUC-CN、GB18030、UTF-8、unicode》](20210119_05.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210122_03.md   [《PostgreSQL 内置sharding 进展 - 基于postgres_fdw》](20210122_03.md)  
+##### 20210122_02.md   [《PostgreSQL SQL动态优化器 aqo 背景论文》](20210122_02.md)  
+##### 20210122_01.md   [《PostgreSQL BzTree 索引接口 - 非易失内存定制开发》](20210122_01.md)  
 ##### 20210121_04.md   [《PostgreSQL 用advisory lock 限制每一个分组中最多有多少条记录》](20210121_04.md)  
 ##### 20210121_03.md   [《PostgreSQL JOB 插件 pg_timetable》](20210121_03.md)  
 ##### 20210121_02.md   [《PostgreSQL psql 客户端一些妙用 - gexec 执行 SQL返回的结果》](20210121_02.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210127_01.md   [《阿里云 PostgreSQL 7 Day 训练营 - 问答PPT》](20210127_01.md)  
+##### 20210126_02.md   [《PostgreSQL 14 preview - postgres_fdw 新增discard cached foreign server连接的接口函数》](20210126_02.md)  
+##### 20210126_01.md   [《PostgreSQL 题库》](20210126_01.md)  
 ##### 20210125_01.md   [《用dbengine 数据 评估 PostgreSQL 全球占有率》](20210125_01.md)  
 ##### 20210123_06.md   [《回溯中国PG社区发展历史 - 社区 该 商业化 还是 非商业化 运作, 有没有第三种选择》](20210123_06.md)  
 ##### 20210123_05.md   [《PostgreSQL ARM 对比 x86 - 转载测试数据》](20210123_05.md)  

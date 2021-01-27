@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210127_02.md   [《如何向小白解释什么是 SaaS？》](20210127_02.md)  
 ##### 20210127_01.md   [《阿里云 PostgreSQL 7 Day 训练营 - 问答PPT》](20210127_01.md)  
 ##### 20210126_02.md   [《PostgreSQL 14 preview - postgres_fdw 新增discard cached foreign server连接的接口函数》](20210126_02.md)  
 ##### 20210126_01.md   [《PostgreSQL 题库》](20210126_01.md)  

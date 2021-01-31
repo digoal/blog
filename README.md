@@ -81,6 +81,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202101/20210131_02.md   [《Github 项目太久远,commit太多,项目太大 clone不下来, 经常failed怎么办? - 可以使用depth指定层数》](202101/20210131_02.md)  
+##### 202101/20210131_01.md   [《转 解决Github网页上图片显示失败的问题》](202101/20210131_01.md)  
 ##### 202101/20210130_07.md   [《github clone 的一般错误(timeout 超时, RPC failed 等)处理方法, 以及加速方法》](202101/20210130_07.md)  
 ##### 202101/20210130_06.md   [《Linux Mac ssh 客户端长连接防断连 - tcp心跳 TCPKeepAlive,ServerAliveInterval,ServerAliveCountMax》](202101/20210130_06.md)  
 ##### 202101/20210130_05.md   [《PostgreSQL 命令行 top 工具 - pg_activity》](202101/20210130_05.md)  

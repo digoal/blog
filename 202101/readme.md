@@ -3,7 +3,7 @@
 ### 文章列表  
 ----  
 ##### 20210131_03.md   [《Github Mac 操作系统提交的中文乱码  怎么办》](20210131_03.md)  
-##### 20210131_02.md   [《Github 项目太久远,commit太多,项目太大 clone不下来, 经常failed怎么办? - 可以使用depth指定层数》](20210131_02.md)  
+##### 20210131_02.md   [《Github 项目太久远,commit太多,项目太大 clone不下来, 经常failed (fatal: early EOF fatal: index-pack failed)怎么办? - 可以使用depth指定层数》](20210131_02.md)  
 ##### 20210131_01.md   [《转 解决Github网页上图片显示失败的问题》](20210131_01.md)  
 ##### 20210130_07.md   [《github clone 的一般错误(timeout 超时, RPC failed 等)处理方法, 以及加速方法》](20210130_07.md)  
 ##### 20210130_06.md   [《Linux Mac ssh 客户端长连接防断连 - tcp心跳 TCPKeepAlive,ServerAliveInterval,ServerAliveCountMax》](20210130_06.md)  

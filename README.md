@@ -81,6 +81,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202102/20210201_04.md   [《PostgreSQL 14 preview - 支持扩展ssl库》](202102/20210201_04.md)  
+##### 202102/20210201_03.md   [《PostgreSQL 14 preview - SQL标准增强, 图式搜索增加广度优先、深度优先语法, 循环语法 - breadth- or depth-first search orders and detect cycles》](202102/20210201_03.md)  
 ##### 202102/20210201_02.md   [《PostgreSQL 14 preview - 支持 jsonb 下标语法, 支持set原子操作, 类似array下标》](202102/20210201_02.md)  
 ##### 202102/20210201_01.md   [《Mac 执行后台程序, 防止系统盒盖进入睡眠 - caffeinate》](202102/20210201_01.md)  
 ----  

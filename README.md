@@ -81,6 +81,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202102/20210202_01.md   [《PostgreSQL 插入或更新(upsert, insert on conflict)后如果某些 指定字段 已为特定值(如空), 则自动删除该记录 - returning 或 trigger实现》](202102/20210202_01.md)  
 ##### 202102/20210201_04.md   [《PostgreSQL 14 preview - 支持扩展ssl库》](202102/20210201_04.md)  
 ##### 202102/20210201_03.md   [《PostgreSQL 14 preview - SQL标准增强, 图式搜索增加广度优先、深度优先语法, 循环语法 - breadth- or depth-first search orders and detect cycles》](202102/20210201_03.md)  
 ##### 202102/20210201_02.md   [《PostgreSQL 14 preview - 支持 jsonb 下标语法, 支持set原子操作, 类似array下标》](202102/20210201_02.md)  
@@ -1993,7 +1994,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201612/20161216_01.md   [《分析加速引擎黑科技 - LLVM、列存、多核并行、算子复用 大联姻 - 一起来开启PostgreSQL的百宝箱》](201612/20161216_01.md)  
 ##### 201612/20161215_01.md   [《PostgreSQL 10.0 preview 功能增强 - 内置分区表》](201612/20161215_01.md)  
 ##### 201612/20161213_01.md   [《金融风控、公安刑侦、社会关系、人脉分析等需求分析与数据库实现 - PostgreSQL图数据库场景应用》](201612/20161213_01.md)  
-##### 201612/20161208_01.md   [《官人要杯咖啡吗? - PostgreSQL实时监测PLAN tree的执行进度 - pg_query_state》](201612/20161208_01.md)  
+##### 201612/20161208_01.md   [《官人要杯咖啡吗? - PostgreSQL实时监测PLAN tree的执行进度 - pg_query_state - Oracle 兼容10046 - progress》](201612/20161208_01.md)  
 ##### 201612/20161207_01.md   [《PostgreSQL 从源码找出哪些操作需要超级用户权限》](201612/20161207_01.md)  
 ##### 201612/20161206_01.md   [《如何解决数据库分词的拼写纠正问题 - PostgreSQL Hunspell 字典 复数形容词动词等变异还原》](201612/20161206_01.md)  
 ##### 201612/20161205_02.md   [《实时数据交换平台 - BottledWater-pg with confluent》](201612/20161205_02.md)  

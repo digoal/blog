@@ -70,7 +70,7 @@ echo "12、[《企业CxO数据库选型应该回答清楚的 15 个问题》](20
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md
-echo "[pic](./pic/pg_weixin.jpg) | [pic](./pic/dingding_pg_chat.jpg) | [image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  " >> ./README.md
+echo "[pic](./pic/pg_weixin.jpg) | [pic](./pic/dingding_pg_chat.png) | [image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  " >> ./README.md
 echo "  "  >> ./README.md
 #echo "PG社区认证 | PG社区认证</br>联系人微信 " >> ./README.md
 #echo "---|---  " >> ./README.md

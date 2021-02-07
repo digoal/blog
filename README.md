@@ -59,7 +59,7 @@
   
 PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  
 ---|---|---  
-[pic](./pic/pg_weixin.jpg) | [pic](./pic/dingding_pg_chat.jpg) | [image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  
+[pic](./pic/pg_weixin.jpg) | [pic](./pic/dingding_pg_chat.png) | [image.png](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)  
   
 如发现错误, 请万望指正, 非常感谢.  
   
@@ -81,6 +81,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202102/20210207_02.md   [《会员制变现 - CP , 平台 , 付费内容 , 付费会员 , 免费会员》](202102/20210207_02.md)  
+##### 202102/20210207_01.md   [《PostgreSQL 14 preivew - pg_locks 增加 wait_start 字段, 跟踪锁等待开始时间》](202102/20210207_01.md)  
 ##### 202102/20210206_02.md   [《第四次浪潮》](202102/20210206_02.md)  
 ##### 202102/20210206_01.md   [《数据库竞争力分析模板》](202102/20210206_01.md)  
 ##### 202102/20210205_01.md   [《PostgreSQL 14 preview - reindex 增加 tablespace 选项, 支持重建索引到指定表空间》](202102/20210205_01.md)  
@@ -212,6 +214,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202011/20201124_01.md   [《PostgreSQL jdbc prepared statement 问号?占位符 如何转义》](202011/20201124_01.md)  
 ##### 202011/20201123_01.md   [《用golang选什么pg驱动? pgx is a pure Go driver and toolkit for PostgreSQL.》](202011/20201123_01.md)  
 ##### 202011/20201122_01.md   [《PostgreSQL 中国 数据库内核研发 环境、人才现状与刺激方法》](202011/20201122_01.md)  
+##### 202011/20201120_02.md   [《全面揭秘云数据库新形态MyBase - 2020数据库嘉年华回顾》](202011/20201120_02.md)  
 ##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
 ##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
 ##### 202011/20201117_02.md   [《PostgreSQL 流复制冲突分类讲解以及对应解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL  - 特别是lock confict(vacuum truncate suffix free page引起的）》](202011/20201117_02.md)  

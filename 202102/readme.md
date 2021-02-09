@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210209_02.md   [《PostgreSQL 14 preview - vacuum PROCESS_TOAST 开关 (是否vacuum 相关 toast)》](20210209_02.md)  
 ##### 20210209_01.md   [《PostgreSQL exclude 排他约束 实现 - group ID结伴功能》](20210209_01.md)  
 ##### 20210208_03.md   [《用 PostgreSQL 的排他约束(exclude)实现 - 行政区不可跨界 约束, 会议室预定时间不交叉 约束 等.》](20210208_03.md)  
 ##### 20210208_02.md   [《会员制之外, 还有什么?》](20210208_02.md)  

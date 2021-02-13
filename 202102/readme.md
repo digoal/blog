@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210213_01.md   [《PostgreSQL 14 preview - 内置逻辑复制功能增强 , Allow multiple xacts during table sync in logical replication.》](20210213_01.md)  
 ##### 20210212_01.md   [《SMART理论 - 科学设定绩效目标 - 目标管理》](20210212_01.md)  
 ##### 20210211_01.md   [《企业竞争战略分析 - SWOT 优势 劣势 机会 威胁》](20210211_01.md)  
 ##### 20210210_03.md   [《喜马拉雅的奶牛》](20210210_03.md)  

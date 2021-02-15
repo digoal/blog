@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210215_03.md   [《PostgreSQL 14 preview - pageinspect 新增gist索引inspect, 同时支持 lp_dead 展示》](20210215_03.md)  
+##### 20210215_02.md   [《PostgreSQL 14 preview - 新增 old_snapshot 插件, 打印快照跟踪条目(每分钟一条, OldSnapshotTimeMapping结构)的内容 , old_snapshot_threshold 相关》](20210215_02.md)  
 ##### 20210215_01.md   [《从1978到2020，中国是如何崛起的？ - 激荡三十年 视频版》](20210215_01.md)  
 ##### 20210214_01.md   [《哲科思维 与 思维模型》](20210214_01.md)  
 ##### 20210213_01.md   [《PostgreSQL 14 preview - 内置逻辑复制功能增强 , Allow multiple xacts during table sync in logical replication.》](20210213_01.md)  

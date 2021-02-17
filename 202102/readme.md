@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210217_02.md   [《[转载] 对话吴军：轮回的科技史，我们身处何处？该做什么事？》](20210217_02.md)  
 ##### 20210217_01.md   [《[转载] 科技是唯一可叠加式进步的动力 - 吴军: 全球科技通史》](20210217_01.md)  
 ##### 20210215_03.md   [《PostgreSQL 14 preview - pageinspect 新增gist索引inspect, 同时支持 lp_dead 展示》](20210215_03.md)  
 ##### 20210215_02.md   [《PostgreSQL 14 preview - 新增 old_snapshot 插件, 打印快照跟踪条目(每分钟一条, OldSnapshotTimeMapping结构)的内容 , old_snapshot_threshold 相关》](20210215_02.md)  

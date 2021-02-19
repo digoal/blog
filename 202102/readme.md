@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210219_03.md   [《PostgreSQL 异步提交的一些风险点 和 使用建议》](20210219_03.md)  
+##### 20210219_02.md   [《PostgreSQL 14 preivew - Exploring SQL command changes in PG-14》](20210219_02.md)  
+##### 20210219_01.md   [《PostgreSQL 14 preview - ssl相关 : 支持配置 ”SSL吊销证书列表文件 - crl“ 指定目录. 相关参数: ssl_crl_dir , 相关libpq配置: sslcrldir》](20210219_01.md)  
 ##### 20210218_01.md   [《PostgreSQL 14 preview - 新增sql feature支持 - 函数,存储过程 对象依赖跟踪 - Routine usage information schema tables》](20210218_01.md)  
 ##### 20210217_02.md   [《[转载] 对话吴军：轮回的科技史，我们身处何处？该做什么事？》](20210217_02.md)  
 ##### 20210217_01.md   [《[转载] 科技是唯一可叠加式进步的动力 - 吴军: 全球科技通史》](20210217_01.md)  

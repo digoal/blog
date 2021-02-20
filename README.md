@@ -82,6 +82,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202102/20210220_01.md   [《从搜索引擎指数分析mysql, oracle, postgresql的全球热度和市场机遇》](202102/20210220_01.md)  
 ##### 202102/20210219_03.md   [《PostgreSQL 异步提交的一些风险点 和 使用建议》](202102/20210219_03.md)  
 ##### 202102/20210219_02.md   [《PostgreSQL 14 preivew - Exploring SQL command changes in PG-14》](202102/20210219_02.md)  
 ##### 202102/20210219_01.md   [《PostgreSQL 14 preview - ssl相关 : 支持配置 ”SSL吊销证书列表文件 - crl“ 指定目录. 相关参数: ssl_crl_dir , 相关libpq配置: sslcrldir》](202102/20210219_01.md)  

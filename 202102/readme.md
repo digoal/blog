@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210224_02.md   [《数据库异步提交, 业务通过查询 wal flush lsn 控制最终一致》](20210224_02.md)  
 ##### 20210224_01.md   [《PostgreSQL 14 preivew - VACUUM: ignore indexing operations with CONCURRENTLY  (getoldestxmin优化, 更多垃圾可以被回收, 防止long create index导致膨胀)》](20210224_01.md)  
 ##### 20210222_01.md   [《PostgreSQL 用户最喜爱的扩展插件功能》](20210222_01.md)  
 ##### 20210220_01.md   [《从搜索引擎指数分析mysql, oracle, postgresql的全球热度和市场机遇》](20210220_01.md)  

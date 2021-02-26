@@ -2,11 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20210226_01.md   [《元宵节 灯谜》](20210226_01.md)  
 ##### 20210225_03.md   [《PostgreSQL 14 preview - Use full 64-bit XIDs in deleted nbtree pages. 像蜗牛一样迭代64-bit xid》](20210225_03.md)  
 ##### 20210225_02.md   [《如何得到事务commit或abort时的wal日志lsn位置》](20210225_02.md)  
 ##### 20210225_01.md   [《PostgreSQL OpenStreeMap PBF 地理数据文件外部表 , 支持 NODE, WAY, RELATION 类型, GIS地理信息,地图类数据应用》](20210225_01.md)  
 ##### 20210224_05.md   [《PostgreSQL parser hook, Extensibility of the PostgreSQL wire protocol 还远吗? - 用户可以自己开发插件, mysql, oracle, sql server, sybase wire protocol可以兼容, 语法也可以兼容》](20210224_05.md)  
-##### 20210224_04.md   [《PostgreSQL uncommitted xmin %u from before xid cutoff %u needs to be frozen 怎么办?》](20210224_04.md)  
+##### 20210224_04.md   [《PostgreSQL 遇到错误: uncommitted xmin %u from before xid cutoff %u needs to be frozen 怎么办?》](20210224_04.md)  
 ##### 20210224_03.md   [《AIO (asynchronous IO) and DIO (direct IO) support for PostgreSQL》](20210224_03.md)  
 ##### 20210224_02.md   [《数据库异步提交, 业务通过查询 wal flush lsn 控制最终一致》](20210224_02.md)  
 ##### 20210224_01.md   [《PostgreSQL 14 preivew - VACUUM: ignore indexing operations with CONCURRENTLY  (getoldestxmin优化, 更多垃圾可以被回收, 防止long create index导致膨胀)》](20210224_01.md)  

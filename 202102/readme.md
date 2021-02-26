@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210226_02.md   [《PostgreSQL 虚拟索引 HypoPG 升级了 1.2.0发布》](20210226_02.md)  
 ##### 20210226_01.md   [《元宵节 灯谜》](20210226_01.md)  
 ##### 20210225_03.md   [《PostgreSQL 14 preview - Use full 64-bit XIDs in deleted nbtree pages. 像蜗牛一样迭代64-bit xid》](20210225_03.md)  
 ##### 20210225_02.md   [《如何得到事务commit或abort时的wal日志lsn位置》](20210225_02.md)  

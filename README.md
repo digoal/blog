@@ -82,6 +82,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202102/20210226_02.md   [《PostgreSQL 虚拟索引 HypoPG 升级了 1.2.0发布》](202102/20210226_02.md)  
 ##### 202102/20210226_01.md   [《元宵节 灯谜》](202102/20210226_01.md)  
 ##### 202102/20210225_03.md   [《PostgreSQL 14 preview - Use full 64-bit XIDs in deleted nbtree pages. 像蜗牛一样迭代64-bit xid》](202102/20210225_03.md)  
 ##### 202102/20210225_02.md   [《如何得到事务commit或abort时的wal日志lsn位置》](202102/20210225_02.md)  

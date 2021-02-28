@@ -82,6 +82,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202102/20210228_03.md   [《PostgreSQL 俄罗斯 2021 conference 议题 看当下热点和企业生态》](202102/20210228_03.md)  
 ##### 202102/20210228_02.md   [《PostgreSQL devel preview - logical replication row filter》](202102/20210228_02.md)  
 ##### 202102/20210228_01.md   [《PostgreSQL 14 preview - tid range scan方法, 一种page级别应用可自控的并行扫描、处理方法, 结合RR snapshot export功能》](202102/20210228_01.md)  
 ##### 202102/20210226_02.md   [《PostgreSQL 虚拟索引 HypoPG 升级了 1.2.0发布》](202102/20210226_02.md)  

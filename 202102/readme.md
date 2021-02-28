@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210228_02.md   [《PostgreSQL devel preview - logical replication row filter》](20210228_02.md)  
+##### 20210228_01.md   [《PostgreSQL 14 preview - tid range scan方法, 一种page级别应用可自控的并行扫描、处理方法, 结合RR snapshot export功能》](20210228_01.md)  
 ##### 20210226_02.md   [《PostgreSQL 虚拟索引 HypoPG 升级了 1.2.0发布》](20210226_02.md)  
 ##### 20210226_01.md   [《元宵节 灯谜》](20210226_01.md)  
 ##### 20210225_03.md   [《PostgreSQL 14 preview - Use full 64-bit XIDs in deleted nbtree pages. 像蜗牛一样迭代64-bit xid》](20210225_03.md)  

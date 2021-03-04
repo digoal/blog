@@ -82,6 +82,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202103/20210304_09.md   [《[招聘] PG DBA 班牛招人，寻找未被发现的数智化先行者》](202103/20210304_09.md)  
 ##### 202103/20210304_08.md   [《深度|中国SaaS蜕变：从管理工具到商业化工具》](202103/20210304_08.md)  
 ##### 202103/20210304_06.md   [《max_replication_slots 这个参数我们可能一直有误解 , 在订阅端设置它有什么意义》](202103/20210304_06.md)  
 ##### 202103/20210304_05.md   [《PostgreSQL 14 preview - Add option to enable two_phase commits via pg_create_logical_replication_slot》](202103/20210304_05.md)  

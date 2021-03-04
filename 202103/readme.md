@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210304_08.md   [《深度|中国SaaS蜕变：从管理工具到商业化工具》](20210304_08.md)  
 ##### 20210304_06.md   [《max_replication_slots 这个参数我们可能一直有误解 , 在订阅端设置它有什么意义》](20210304_06.md)  
 ##### 20210304_05.md   [《PostgreSQL 14 preview - Add option to enable two_phase commits via pg_create_logical_replication_slot》](20210304_05.md)  
 ##### 20210304_04.md   [《PostgreSQL 14 preview - reindexdb 客户端支持指定tablespace》](20210304_04.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210307_03.md   [《PostgreSQL citus 发布 10版本 - 支持columner 列存储, 开放rebalance源码, 支持reference,分布式,本地表JOIN 等》](20210307_03.md)  
+##### 20210307_02.md   [《PostgreSQL 14 preview - cube 支持 binary IO 接口函数 cube_recv cube_send》](20210307_02.md)  
+##### 20210307_01.md   [《PostgreSQL 14 preview - 新增 bit_xor 聚合函数》](20210307_01.md)  
 ##### 20210305_10.md   [《书单 十》](20210305_10.md)  
 ##### 20210305_09.md   [《书单 九》](20210305_09.md)  
 ##### 20210305_08.md   [《书单 八》](20210305_08.md)  

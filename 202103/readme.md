@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210310_04.md   [《PostgreSQL 14 preivew - 新增track_wal_io_timing参数, 支持wal日志buffer write, fsync IO等待时长统计 , pg_stat_wal》](20210310_04.md)  
+##### 20210310_03.md   [《PostgreSQL 14 preivew - 并行计算场景增强 - Enable parallel SELECT for "INSERT INTO ... SELECT ..."》](20210310_03.md)  
+##### 20210310_02.md   [《PostgreSQL 14 preivew - pg_stat_progress_copy增强 , COPY 导入数据支持进度监控 , 导入多少行, 排除多少行(where filter)》](20210310_02.md)  
+##### 20210310_01.md   [《马斯洛需求层次理论 - 五层需求 八层需求 - 社区、经济学、心理学、营销、GTM相关》](20210310_01.md)  
 ##### 20210307_03.md   [《PostgreSQL citus 发布 10版本 - 支持columner 列存储, 开放rebalance源码, 支持reference,分布式,本地表JOIN 等》](20210307_03.md)  
 ##### 20210307_02.md   [《PostgreSQL 14 preview - cube 支持 binary IO 接口函数 cube_recv cube_send》](20210307_02.md)  
 ##### 20210307_01.md   [《PostgreSQL 14 preview - 新增 bit_xor 聚合函数》](20210307_01.md)  

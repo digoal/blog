@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210310_05.md   [《品牌/产品slogan该怎么写？你要的灵感在这里》](20210310_05.md)  
 ##### 20210310_04.md   [《PostgreSQL 14 preivew - 新增track_wal_io_timing参数, 支持wal日志buffer write, fsync IO等待时长统计 , pg_stat_wal》](20210310_04.md)  
 ##### 20210310_03.md   [《PostgreSQL 14 preivew - 并行计算场景增强 - Enable parallel SELECT for "INSERT INTO ... SELECT ..."》](20210310_03.md)  
 ##### 20210310_02.md   [《PostgreSQL 14 preivew - pg_stat_progress_copy增强 , COPY 导入数据支持进度监控 , 导入多少行, 排除多少行(where filter)》](20210310_02.md)  

@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210311_04.md   [《PostgreSQL 14 preview - copy freeze 增强, pgbench 支持copy freeze 大幅提升导入性能》](20210311_04.md)  
+##### 20210311_03.md   [《Postgres Notify for Real Time Dashboards》](20210311_03.md)  
+##### 20210311_02.md   [《使用PostgreSQL plpythonu实现一个推荐引擎 - Building a recommendation engine inside Postgres with Python and Pandas》](20210311_02.md)  
+##### 20210311_01.md   [《PostgreSQL 14 preview - 分区表性能增强, Avoid creating duplicate cached plans for inherited FK constraints. 节约cache》](20210311_01.md)  
 ##### 20210310_05.md   [《品牌/产品slogan该怎么写？你要的灵感在这里》](20210310_05.md)  
 ##### 20210310_04.md   [《PostgreSQL 14 preivew - 新增track_wal_io_timing参数, 支持wal日志buffer write, fsync IO等待时长统计 , pg_stat_wal》](20210310_04.md)  
 ##### 20210310_03.md   [《PostgreSQL 14 preivew - 并行计算场景增强 - Enable parallel SELECT for "INSERT INTO ... SELECT ..."》](20210310_03.md)  

@@ -82,6 +82,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202103/20210312_05.md   [《如何推销一个新的产品功能 - 宣传》](202103/20210312_05.md)  
+##### 202103/20210312_04.md   [《该如何衡量产品营销的成功 How to Measure the Success of Product Marketing (GTM Go-To-Market)》](202103/20210312_04.md)  
+##### 202103/20210312_03.md   [《关于进入市场策略（Go-to-Market Strategy）的一切 - 市场营销, 把握用户痛点、产品规划、产品变现闭环》](202103/20210312_03.md)  
 ##### 202103/20210312_02.md   [《如何看待PG分会?》](202103/20210312_02.md)  
 ##### 202103/20210312_01.md   [《联盟、加盟 - 平台化, 轻资产, 分担风险, 扩大规模 - 加盟店、滴滴平台等》](202103/20210312_01.md)  
 ##### 202103/20210311_04.md   [《PostgreSQL 14 preview - copy freeze 增强, pgbench 支持copy freeze 大幅提升导入性能》](202103/20210311_04.md)  
@@ -92,7 +95,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202103/20210310_04.md   [《PostgreSQL 14 preivew - 新增track_wal_io_timing参数, 支持wal日志buffer write, fsync IO等待时长统计 , pg_stat_wal》](202103/20210310_04.md)  
 ##### 202103/20210310_03.md   [《PostgreSQL 14 preivew - 并行计算场景增强 - Enable parallel SELECT for "INSERT INTO ... SELECT ..."》](202103/20210310_03.md)  
 ##### 202103/20210310_02.md   [《PostgreSQL 14 preivew - pg_stat_progress_copy增强 , COPY 导入数据支持进度监控 , 导入多少行, 排除多少行(where filter)》](202103/20210310_02.md)  
-##### 202103/20210310_01.md   [《马斯洛需求层次理论 - 五层需求 八层需求 - 社区、经济学、心理学、营销、GTM相关》](202103/20210310_01.md)  
+##### 202103/20210310_01.md   [《马斯洛需求层次理论 - 五层需求 八层需求 - 社区、经济学、心理学、营销、GTM(Go-To-Market)相关》](202103/20210310_01.md)  
 ##### 202103/20210307_03.md   [《PostgreSQL citus 发布 10版本 - 支持columner 列存储, 开放rebalance源码, 支持reference,分布式,本地表JOIN 等》](202103/20210307_03.md)  
 ##### 202103/20210307_02.md   [《PostgreSQL 14 preview - cube 支持 binary IO 接口函数 cube_recv cube_send》](202103/20210307_02.md)  
 ##### 202103/20210307_01.md   [《PostgreSQL 14 preview - 新增 bit_xor 聚合函数》](202103/20210307_01.md)  

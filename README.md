@@ -82,6 +82,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202103/20210312_02.md   [《如何看待PG分会?》](202103/20210312_02.md)  
+##### 202103/20210312_01.md   [《联盟、加盟 - 平台化, 轻资产, 分担风险, 扩大规模 - 加盟店、滴滴平台等》](202103/20210312_01.md)  
 ##### 202103/20210311_04.md   [《PostgreSQL 14 preview - copy freeze 增强, pgbench 支持copy freeze 大幅提升导入性能》](202103/20210311_04.md)  
 ##### 202103/20210311_03.md   [《Postgres Notify for Real Time Dashboards》](202103/20210311_03.md)  
 ##### 202103/20210311_02.md   [《使用PostgreSQL plpythonu实现一个推荐引擎 - Building a recommendation engine inside Postgres with Python and Pandas》](202103/20210311_02.md)  

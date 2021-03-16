@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210316_03.md   [《PostgreSQL 14 preview - libpq驱动 支持pipeline 模式, SQL请求支持异步化通信, 大幅度提升性能, 降低RT》](20210316_03.md)  
+##### 20210316_02.md   [《PostgreSQL 14 preview - 基于共享内存的进程间通信、进程统计信息系列Patch即将来临, archiver进程已加入.》](20210316_02.md)  
+##### 20210316_01.md   [《基于pub sub logical replication 创建一个云上 逻辑从库 - 建立自建PG库的 阿里云RDS PG 逻辑从库》](20210316_01.md)  
 ##### 20210312_05.md   [《如何推销一个新的产品功能 - 宣传》](20210312_05.md)  
 ##### 20210312_04.md   [《该如何衡量产品营销的成功 How to Measure the Success of Product Marketing (GTM Go-To-Market)》](20210312_04.md)  
 ##### 20210312_03.md   [《关于进入市场策略（Go-to-Market Strategy）的一切 - 市场营销, 把握用户痛点、产品规划、产品变现闭环》](20210312_03.md)  

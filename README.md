@@ -82,7 +82,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202103/20210316_04.md   [《月光社 - 推动英美两国发展的社团 - 圈子的力量》](202103/20210316_04.md)  
+##### 202103/20210317_04.md   [《行程规划 , 商旅问题 , 旅游问题 , postgis , pgrouting , postgresql , Traveling Salesman Problem (or TSP)》](202103/20210317_04.md)  
+##### 202103/20210317_03.md   [《PostgreSQL Oracle 兼容性包 orafce 发布新版本, 增加regexp支持》](202103/20210317_03.md)  
+##### 202103/20210317_02.md   [《PostgreSQL 14 preview - log增强 : auto-vacuum and auto-analyze 记录IO timing以及analyze read|dirty rate》](202103/20210317_02.md)  
+##### 202103/20210317_01.md   [《PostgreSQL 14 preview - analyze 支持prefetch 加速IO》](202103/20210317_01.md)  
+##### 202103/20210316_04.md   [《月光社 - 推动英美两国发展的社团 - 圈子的力量 - 产、研、融 结合》](202103/20210316_04.md)  
 ##### 202103/20210316_03.md   [《PostgreSQL 14 preview - libpq驱动 支持pipeline 模式, SQL请求支持异步化通信, 大幅度提升性能, 降低RT》](202103/20210316_03.md)  
 ##### 202103/20210316_02.md   [《PostgreSQL 14 preview - 基于共享内存的进程间通信、进程统计信息系列Patch即将来临, archiver进程已加入.》](202103/20210316_02.md)  
 ##### 202103/20210316_01.md   [《基于pub sub logical replication 创建一个云上 逻辑从库 - 建立自建PG库的 阿里云RDS PG 逻辑从库》](202103/20210316_01.md)  

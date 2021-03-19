@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20210319_03.md   [《悉达多 , 释迦摩尼 , 黑塞作品 , 关键词 - 斋戒 , 思考 , 等待 , 倾听 , 尝试 , 减法》](20210319_03.md)  
+##### 20210319_02.md   [《PostgreSQL openssl - multi cn 给SSL证书绑定多个CN hostname - 公网 HOSTNAME + 私网 HSOTNAME》](20210319_02.md)  
+##### 20210319_01.md   [《PostgreSQL 14 preview - 支持 GROUP BY DISTINCT》](20210319_01.md)  
+##### 20210318_02.md   [《PostgreSQL 14 preivew - 新增GUC参数enable_parallel_insert, 支持insert并行计算优化开关》](20210318_02.md)  
+##### 20210318_01.md   [《PostgreSQL 14 preivew - Enable parallelism in REFRESH MATERIALIZED VIEW》](20210318_01.md)  
 ##### 20210317_04.md   [《行程规划 , 商旅问题 , 旅游问题 , postgis , pgrouting , postgresql , Traveling Salesman Problem (or TSP)》](20210317_04.md)  
 ##### 20210317_03.md   [《PostgreSQL Oracle 兼容性包 orafce 发布新版本, 增加regexp支持》](20210317_03.md)  
 ##### 20210317_02.md   [《PostgreSQL 14 preview - log增强 : auto-vacuum and auto-analyze 记录IO timing以及analyze read|dirty rate》](20210317_02.md)  

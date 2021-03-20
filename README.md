@@ -82,6 +82,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202103/20210320_03.md   [《SQL 审查基础插件 pg_query , 识别风险SQL等, Introducing pg_query 2.0: The easiest way to parse Postgres queries》](202103/20210320_03.md)  
 ##### 202103/20210320_02.md   [《PostgreSQL 14 preview - recovery 性能增强 - recovery_init_sync_method=syncfs - 解决表很多时, crash recovery 递归open所有file的性能问题 - 需Linux新内核支持》](202103/20210320_02.md)  
 ##### 202103/20210320_01.md   [《PostgreSQL 14 preview - TOAST 支持 lz4 压缩算法 - --with-lz4 , 新增GUC default_toast_compression》](202103/20210320_01.md)  
 ##### 202103/20210319_05.md   [《如何训练成为优秀的产品经理 - 优秀产品经理的3种元能力》](202103/20210319_05.md)  

@@ -2,8 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210320_02.md   [《PostgreSQL 14 preview - recovery 性能增强 - recovery_init_sync_method=syncfs - 解决表很多时, crash recovery 递归open所有file的性能问题 - 需Linux新内核支持》](20210320_02.md)  
+##### 20210320_01.md   [《PostgreSQL 14 preview - TOAST 支持 lz4 压缩算法 - --with-lz4 , 新增GUC default_toast_compression》](20210320_01.md)  
 ##### 20210319_05.md   [《如何训练成为优秀的产品经理 - 优秀产品经理的3种元能力》](20210319_05.md)  
-##### 20210319_04.md   [《为什么我要在阿里云搞PG数据库》](20210319_04.md)  
+##### 20210319_04.md   [《为什么我要在阿里云搞PG数据库?》](20210319_04.md)  
 ##### 20210319_03.md   [《悉达多 , 释迦摩尼 , 黑塞作品 , 关键词 - 斋戒 , 思考 , 等待 , 倾听 , 尝试 , 减法》](20210319_03.md)  
 ##### 20210319_02.md   [《PostgreSQL openssl - multi cn 给SSL证书绑定多个CN hostname - 公网 HOSTNAME + 私网 HSOTNAME》](20210319_02.md)  
 ##### 20210319_01.md   [《PostgreSQL 14 preview - 支持 GROUP BY DISTINCT》](20210319_01.md)  

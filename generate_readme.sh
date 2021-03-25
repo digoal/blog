@@ -32,8 +32,8 @@ echo "10、[《PostgreSQL 15 大 惊奇应用场景实践 - 视频回放》](202
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md
-echo "1、[《Oracle DBA 增值 转型 PostgreSQL 学习方法、路径》](201804/20180425_01.md)   " >> ./README.md 
-echo "2、[《PostgreSQL、Greenplum 《如来神掌》》](201706/20170601_02.md)    " >> ./README.md
+echo "1、[《Oracle DBA 增值+转型 PostgreSQL 学习方法、路径》](201804/20180425_01.md)   " >> ./README.md 
+echo "2、[《PostgreSQL、Greenplum 技术+108个场景结合最佳实践《如来神掌》》](201706/20170601_02.md)    " >> ./README.md
 echo "3、[《PostgreSQL 数据库安全指南 - 以及安全合规》](201506/20150601_01.md)    " >> ./README.md
 echo "4、[《PostgreSQL 持续稳定使用的小技巧 - 最佳实践、规约、规范》](201902/20190219_02.md)    " >> ./README.md
 echo "5、[《PostgreSQL DBA最常用SQL》](202005/20200509_02.md)    " >> ./README.md

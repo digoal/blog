@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210325_01.md   [《PostgreSQL 14 preview - date_bin 任意起点, 任意bucket(interval) split bucket align 统计》](20210325_01.md)  
+##### 20210324_03.md   [《PostgreSQL 14 preview - bit_count 计算比特位1的个数》](20210324_03.md)  
+##### 20210324_02.md   [《PostgreSQL 14 preview - autovacuum 打印更多信息, 每个索引的stats被打印》](20210324_02.md)  
+##### 20210324_01.md   [《PostgreSQL 14 preview - brin 索引内存优化》](20210324_01.md)  
 ##### 20210320_03.md   [《SQL 审查基础插件 pg_query , 识别风险SQL等, Introducing pg_query 2.0: The easiest way to parse Postgres queries》](20210320_03.md)  
 ##### 20210320_02.md   [《PostgreSQL 14 preview - recovery 性能增强 - recovery_init_sync_method=syncfs - 解决表很多时, crash recovery 递归open所有file的性能问题 - 需Linux新内核支持》](20210320_02.md)  
 ##### 20210320_01.md   [《PostgreSQL 14 preview - TOAST 支持 lz4 压缩算法 - --with-lz4 , 新增GUC default_toast_compression》](20210320_01.md)  

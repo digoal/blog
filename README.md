@@ -82,6 +82,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202103/20210326_04.md   [《PostgreSQL 14 preview - 分区表attach, detach分区支持无锁(短暂锁) - 基于2阶段routines管理》](202103/20210326_04.md)  
+##### 202103/20210326_03.md   [《PostgreSQL 14 preview - alter table 支持两阶段 routine 管理, 未来将基于此支持 无(短暂)锁 rewrite table(例如vacuum full, alter table rewrite table)》](202103/20210326_03.md)  
+##### 202103/20210326_02.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 bloom filter - 随机,大量distinct value, 等值查询》](202103/20210326_02.md)  
+##### 202103/20210326_01.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 multi-range min-max [s] - 分段范围索引》](202103/20210326_01.md)  
 ##### 202103/20210325_02.md   [《怎么看待PostgreSQL sharding插件 citus》](202103/20210325_02.md)  
 ##### 202103/20210325_01.md   [《PostgreSQL 14 preview - date_bin 任意起点, 任意bucket(interval) split bucket align 统计》](202103/20210325_01.md)  
 ##### 202103/20210324_03.md   [《PostgreSQL 14 preview - bit_count 计算比特位1的个数》](202103/20210324_03.md)  

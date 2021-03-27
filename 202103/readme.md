@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210327_03.md   [《PostgreSQL hint pg_hint_plan 的详细用法》](20210327_03.md)  
 ##### 20210327_02.md   [《PostgreSQL 14 preview - Extended statistics on expressions 优化器增强: 自定义扩展统计信息支持 指定 表达式 - 按 表达式 收集统计信息组合》](20210327_02.md)  
 ##### 20210327_01.md   [《PostgreSQL 14 preview - Add "pg_database_owner" default role. 表示数据库owner》](20210327_01.md)  
 ##### 20210326_04.md   [《PostgreSQL 14 preview - 分区表attach, detach分区支持无锁(短暂锁) - 基于2阶段routines管理》](20210326_04.md)  

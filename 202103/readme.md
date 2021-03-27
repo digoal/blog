@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210327_02.md   [《PostgreSQL 14 preview - Extended statistics on expressions 优化器增强: 自定义扩展统计信息支持 指定 表达式 - 按 表达式 收集统计信息组合》](20210327_02.md)  
+##### 20210327_01.md   [《PostgreSQL 14 preview - Add "pg_database_owner" default role. 表示数据库owner》](20210327_01.md)  
 ##### 20210326_04.md   [《PostgreSQL 14 preview - 分区表attach, detach分区支持无锁(短暂锁) - 基于2阶段routines管理》](20210326_04.md)  
 ##### 20210326_03.md   [《PostgreSQL 14 preview - alter table 支持两阶段 routine 管理, 未来将基于此支持 无(短暂)锁 rewrite table(例如vacuum full, alter table rewrite table)》](20210326_03.md)  
 ##### 20210326_02.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 bloom filter - 随机,大量distinct value, 等值查询》](20210326_02.md)  

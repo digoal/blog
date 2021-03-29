@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210329_02.md   [《没有方法论的技能 无法 稳定发挥 它的应有价值》](20210329_02.md)  
+##### 20210329_01.md   [《从 产品经理角度 思考 社区建设的方法 - 五看三定》](20210329_01.md)  
 ##### 20210327_06.md   [《上云后, 如果不使用数据库服务, 应该怎么管理你的数据库团队?》](20210327_06.md)  
 ##### 20210327_05.md   [《发展国产化、云数据库、PostgreSQL 与 ”藏富于民“》](20210327_05.md)  
 ##### 20210327_04.md   [《《PostgreSQL 高可用》推荐序》](20210327_04.md)  
@@ -12,7 +14,7 @@
 ##### 20210326_03.md   [《PostgreSQL 14 preview - alter table 支持两阶段 routine 管理, 未来将基于此支持 无(短暂)锁 rewrite table(例如vacuum full, alter table rewrite table)》](20210326_03.md)  
 ##### 20210326_02.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 bloom filter - 随机,大量distinct value, 等值查询》](20210326_02.md)  
 ##### 20210326_01.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 multi-range min-max [s] - 分段范围索引》](20210326_01.md)  
-##### 20210325_02.md   [《怎么看待PostgreSQL sharding插件 citus》](20210325_02.md)  
+##### 20210325_02.md   [《怎么看待PostgreSQL sharding插件: citus - 对比PG 社区基于 postgres_fdw 的sharding》](20210325_02.md)  
 ##### 20210325_01.md   [《PostgreSQL 14 preview - date_bin 任意起点, 任意bucket(interval) split bucket align 统计》](20210325_01.md)  
 ##### 20210324_03.md   [《PostgreSQL 14 preview - bit_count 计算比特位1的个数》](20210324_03.md)  
 ##### 20210324_02.md   [《PostgreSQL 14 preview - autovacuum 打印更多信息, 每个索引的stats被打印》](20210324_02.md)  

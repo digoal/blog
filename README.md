@@ -82,6 +82,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202103/20210331_01.md   [《TiDB 品牌和运营 用户社区建设 开发者(TiDB内核开发)社区建设 研究》](202103/20210331_01.md)  
+##### 202103/20210330_03.md   [《PostgreSQL 14 preview - Add a xid argument to the filter_prepare callback for output plugins - logical decoding》](202103/20210330_03.md)  
 ##### 202103/20210330_02.md   [《PostgreSQL 14 preview - unistr 函数, 支持Unicode escapes字符串》](202103/20210330_02.md)  
 ##### 202103/20210330_01.md   [《PostgreSQL 14 preview - SSL 客户端证书校验增加clientname CN DN 提取选项, 遵循 RFC2253》](202103/20210330_01.md)  
 ##### 202103/20210329_02.md   [《没有方法论的技能 无法 稳定发挥 它的应有价值》](202103/20210329_02.md)  

@@ -2,11 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20210331_02.md   [《PostgreSQL 14 preview - FDW 支持异步执行接口, postgres_fdw 支持异步append - sharding 性能增强 - 未来将支持更多异步操作》](20210331_02.md)  
 ##### 20210331_01.md   [《TiDB 品牌和运营 用户社区建设 开发者(TiDB内核开发)社区建设 研究》](20210331_01.md)  
 ##### 20210330_03.md   [《PostgreSQL 14 preview - Add a xid argument to the filter_prepare callback for output plugins - logical decoding》](20210330_03.md)  
 ##### 20210330_02.md   [《PostgreSQL 14 preview - unistr 函数, 支持Unicode escapes字符串》](20210330_02.md)  
 ##### 20210330_01.md   [《PostgreSQL 14 preview - SSL 客户端证书校验增加clientname CN DN 提取选项, 遵循 RFC2253》](20210330_01.md)  
-##### 20210329_02.md   [《没有方法论的技能 无法 稳定发挥 它的应有价值》](20210329_02.md)  
+##### 20210329_02.md   [《没有方法论的技能 无法 稳定发挥 它的应有价值 - 第一性原理 和 大数据思维 哲科思维 5 why》](20210329_02.md)  
 ##### 20210329_01.md   [《从 产品经理角度 思考 社区建设的方法 - 五看三定》](20210329_01.md)  
 ##### 20210327_06.md   [《上云后, 如果不使用数据库服务, 应该怎么管理你的数据库团队?》](20210327_06.md)  
 ##### 20210327_05.md   [《发展国产化、云数据库、PostgreSQL 与 ”藏富于民“》](20210327_05.md)  

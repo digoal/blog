@@ -82,6 +82,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210401_04.md   [《PostgreSQL 14 preview - 优化器增强 Rework planning and execution of UPDATE and DELETE.》](202104/20210401_04.md)  
+##### 202104/20210401_03.md   [《产品套路: 打一枪(攻坚行业TOP客户), 放一炮(产品推广覆盖整个行业)》](202104/20210401_03.md)  
+##### 202104/20210401_02.md   [《PostgreSQL 14 preview - 支持 SQL:2016 feature F404 "Range variable for common column names". - Allow an alias to be attached to a JOIN ... USING》](202104/20210401_02.md)  
+##### 202104/20210401_01.md   [《PostgreSQL 14 preview - 增加 结果缓存 exexutor node - GUC 开关 enable_resultcache - 提高join loop性能》](202104/20210401_01.md)  
+----  
 ##### 202103/20210331_02.md   [《PostgreSQL 14 preview - FDW 支持异步执行接口, postgres_fdw 支持异步append - sharding 性能增强 - 未来将支持更多异步操作》](202103/20210331_02.md)  
 ##### 202103/20210331_01.md   [《TiDB 品牌和运营 用户社区建设 开发者(TiDB内核开发)社区建设 研究》](202103/20210331_01.md)  
 ##### 202103/20210330_03.md   [《PostgreSQL 14 preview - Add a xid argument to the filter_prepare callback for output plugins - logical decoding》](202103/20210330_03.md)  

@@ -17,7 +17,6 @@
 7、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
 8、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  
 9、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  
-10、[《PostgreSQL 15 大 惊奇应用场景实践 - 视频回放》](202009/20200903_02.md)    
   
 ### 二、学习资料  
   
@@ -41,7 +40,7 @@
 18、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    
   
 ### 三、[感恩](201803/20180322_12.md)  
-### 四、思考  
+### 四、[思考](class/35.md)    
   
 1、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   
 2、[《未来数据库方向》](202005/20200527_06.md)    
@@ -82,6 +81,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210403_04.md   [《中国经济2021: 外贸出口: 由实转虚 , 双轮驱动 , 产业链上游》](202104/20210403_04.md)  
+##### 202104/20210403_03.md   [《幸福的三大要素》](202104/20210403_03.md)  
+##### 202104/20210403_02.md   [《PostgreSQL 14 preview - postgres_fdw 支持 hold foreign server 长连接, fdw sharding再进一步 - postgres_fdw: Add option to control whether to keep connections open》](202104/20210403_02.md)  
+##### 202104/20210403_01.md   [《PostgreSQL 14 preview - 协议层支持心跳包, 如果客户端已离线 可以 快速中断 运行中的长SQL - Detect POLLHUP/POLLRDHUP while running queries》](202104/20210403_01.md)  
 ##### 202104/20210402_02.md   [《PostgreSQL PostGIS raster 栅格数据存储与导出为GDAL tif图片 - encode bytea转换》](202104/20210402_02.md)  
 ##### 202104/20210402_01.md   [《PostgreSQL 14 preview - copy from 导入数据支持 batch, 大幅减少conversion/verification function calls, 支持并行处理》](202104/20210402_01.md)  
 ##### 202104/20210401_04.md   [《PostgreSQL 14 preview - 优化器增强 Rework planning and execution of UPDATE and DELETE. (减少传导不必要的列value、避免为每个分区生成subplan)》](202104/20210401_04.md)  

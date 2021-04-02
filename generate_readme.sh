@@ -28,7 +28,6 @@ echo "6、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.
 echo "7、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    " >> ./README.md 
 echo "8、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  "  >> ./README.md
 echo "9、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  "  >> ./README.md   
-echo "10、[《PostgreSQL 15 大 惊奇应用场景实践 - 视频回放》](202009/20200903_02.md)    " >> ./README.md
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md
@@ -52,7 +51,7 @@ echo "17、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储�
 echo "18、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    " >> ./README.md
 echo "  "  >> ./README.md
 echo "### 三、[感恩](201803/20180322_12.md)  " >> ./README.md
-echo "### 四、思考  " >> ./README.md
+echo "### 四、[思考](class/35.md)  " >> ./README.md
 echo "  "  >> ./README.md
 echo "1、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   " >> ./README.md 
 echo "2、[《未来数据库方向》](202005/20200527_06.md)    " >> ./README.md

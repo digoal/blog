@@ -82,7 +82,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202104/20210401_04.md   [《PostgreSQL 14 preview - 优化器增强 Rework planning and execution of UPDATE and DELETE.》](202104/20210401_04.md)  
+##### 202104/20210402_02.md   [《PostgreSQL PostGIS raster 栅格数据存储与导出为GDAL tif图片 - encode bytea转换》](202104/20210402_02.md)  
+##### 202104/20210402_01.md   [《PostgreSQL 14 preview - copy from 导入数据支持 batch, 大幅减少conversion/verification function calls, 支持并行处理》](202104/20210402_01.md)  
+##### 202104/20210401_04.md   [《PostgreSQL 14 preview - 优化器增强 Rework planning and execution of UPDATE and DELETE. (减少传导不必要的列value、避免为每个分区生成subplan)》](202104/20210401_04.md)  
 ##### 202104/20210401_03.md   [《产品套路: 打一枪(攻坚行业TOP客户), 放一炮(产品推广覆盖整个行业)》](202104/20210401_03.md)  
 ##### 202104/20210401_02.md   [《PostgreSQL 14 preview - 支持 SQL:2016 feature F404 "Range variable for common column names". - Allow an alias to be attached to a JOIN ... USING》](202104/20210401_02.md)  
 ##### 202104/20210401_01.md   [《PostgreSQL 14 preview - 增加 结果缓存 exexutor node - GUC 开关 enable_resultcache - 提高join loop性能》](202104/20210401_01.md)  
@@ -1902,7 +1904,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201704/20170427_01.md   [《radix tree在数据库PostgreSQL中的一些应用举例》](201704/20170427_01.md)  
 ##### 201704/20170426_01.md   [《PostgreSQL 模糊查询最佳实践 - (含单字、双字、多字模糊查询方法)》](201704/20170426_01.md)  
 ##### 201704/20170425_01.md   [《PostgreSQL 中生成随机汉字》](201704/20170425_01.md)  
-##### 201704/20170424_06.md   [《PostgreSQL 如何查找TOP SQL (例如IO消耗最高的SQL) (包含SQL优化内容) - 珍藏级》](201704/20170424_06.md)  
+##### 201704/20170424_06.md   [《PostgreSQL 如何查找TOP SQL (例如IO消耗最高的SQL) (包含SQL优化内容) - 珍藏级 - 数据库慢、卡死、连接爆增、慢查询多、OOM、crash、in recovery、崩溃等怎么办?怎么优化?怎么诊断?》](201704/20170424_06.md)  
 ##### 201704/20170424_05.md   [《PostgreSQL 如何实现批量更新、删除、插入》](201704/20170424_05.md)  
 ##### 201704/20170424_04.md   [《PostgreSQL upsert功能(insert on conflict do)的用法》](201704/20170424_04.md)  
 ##### 201704/20170424_03.md   [《如何按拼音排序 - 数据库本土化特性(collate, ctype, ...)》](201704/20170424_03.md)  

@@ -53,20 +53,21 @@ echo "  "  >> ./README.md
 echo "### 三、[感恩](201803/20180322_12.md)  " >> ./README.md
 echo "### 四、[思考](class/35.md)  " >> ./README.md
 echo "  "  >> ./README.md
-echo "1、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   " >> ./README.md 
-echo "2、[《未来数据库方向》](202005/20200527_06.md)    " >> ./README.md
-echo "3、[《企业为什么纷纷选择阿里云AliPG》](202005/20200523_01.md)    " >> ./README.md
-echo "4、[《为什么企业应该参与PG社区建设?》](202003/20200321_01.md)    " >> ./README.md
-echo "5、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md
-echo "5\.1、[《PostgreSQL 社区建设商业策划 {未完}》](202008/20200828_01.md)      " >> ./README.md
-echo "6、[《[未完待续] PostgreSQL\Greenplum 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
-echo "7、[《[未完待续] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
+echo "1、[《从 产品经理角度 思考 社区建设的方法 - 五看三定》](202103/20210329_01.md)     " >> ./README.md 
+echo "2、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md
+echo "3、[《PostgreSQL 社区建设商业策划 {未完}》](202008/20200828_01.md)      " >> ./README.md
+echo "4、[《[未完] PostgreSQL\Greenplum 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
+echo "5、[《[未完] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
+echo "6、[《为什么企业应该参与PG社区建设?》](202003/20200321_01.md)    " >> ./README.md
+echo "7、[《企业为什么纷纷选择阿里云AliPG》](202005/20200523_01.md)    " >> ./README.md
 echo "8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    " >> ./README.md
 echo "9、[《云、商业、开源数据库终局之战 - 商业角度解读PG如何破局 - openapi 、 扩展能力、插件开源协议》](202007/20200727_04.md)    " >> ./README.md
-echo "9\.1、[《[直播]大话数据库终局之战》](202009/20200926_03.md)      " >> ./README.md
-echo "10、[《《引爆点》原理, 如何影响PG发展》](197001/20200804_01.md)      " >> ./README.md
-echo "11、[《开源数据库全球化协作浪潮 思考 - 24问》](202101/20210120_02.md)       " >> ./README.md
-echo "12、[《企业CxO数据库选型应该回答清楚的 15 个问题》](202101/20210117_04.md)         " >> ./README.md
+echo "10、[《[直播]大话数据库终局之战》](202009/20200926_03.md)      " >> ./README.md
+echo "11、[《未来数据库方向》](202005/20200527_06.md)    " >> ./README.md
+echo "12、[《《引爆点》原理, 如何影响PG发展》](197001/20200804_01.md)      " >> ./README.md
+echo "13、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   " >> ./README.md 
+echo "14、[《开源数据库全球化协作浪潮 思考 - 24问》](202101/20210120_02.md)       " >> ./README.md
+echo "15、[《企业CxO数据库选型应该回答清楚的 15 个问题》](202101/20210117_04.md)         " >> ./README.md
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md

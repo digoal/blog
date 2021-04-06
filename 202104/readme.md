@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210406_04.md   [《PostgreSQL 14 preivew - SP-GiST 索引新增 index 叶子结点 include column value 功能 支持》](20210406_04.md)  
+##### 20210406_03.md   [《PostgreSQL 14 preivew - 新增角色 pg_read_all_data (MySQL 兼容性之 - 读写用户的只读影子用户 - 默认读权限  ) , pg_write_all_data (写权限)》](20210406_03.md)  
+##### 20210406_02.md   [《PostgreSQL 14 preivew - vacuum 状态跟踪代码简化和增强, Simplify state managed by VACUUM.》](20210406_02.md)  
+##### 20210406_01.md   [《PostgreSQL Oracle 兼容性之SQL OUTLINE插件 pg_hint_plan enable_hint_table》](20210406_01.md)  
 ##### 20210405_01.md   [《hash join, hash表选择问题: 小表一定是hash table吗?》](20210405_01.md)  
 ##### 20210404_04.md   [《如何与未知、未来、过去、无、跨时间线的生物进行交流?》](20210404_04.md)  
 ##### 20210404_03.md   [《阿里巴巴的使命、愿景、核心价值观》](20210404_03.md)  

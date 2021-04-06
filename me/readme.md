@@ -9,6 +9,7 @@ digoal(德哥)
 - 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。    
 - 阿里巴巴钻石布道师
 - 42项数据库专利
+- [最近的一些思考](../class/35.md)  
   
 ## 工作经历
 ### 2015.7 ~ 现在 阿里云        

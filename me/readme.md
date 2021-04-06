@@ -9,10 +9,6 @@ digoal(德哥)
 - 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。    
 - 阿里巴巴钻石布道师
 - 42项数据库专利
-- 对未来数据库的发展展望, [《未来数据库方向 - PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](../202005/20200527_06.md)  
-- [《大话数据库终局之战》](../202009/20200926_03.md)  
-- [《PostgreSQL|Greenplum 社区管理 TODO》](../201710/20171017_05.md)    
-- [《PostgreSQL|Greenplum Customer 视角TODO》](../201710/20171017_01.md)  
   
 ## 工作经历
 ### 2015.7 ~ 现在 阿里云        

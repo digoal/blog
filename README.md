@@ -82,6 +82,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210406_05.md   [《PostgreSQL 14 preview - pg_logical_emit_message 往WAL写的定制消息 , pgoutput 内置plugin可以decode这个消息了!》](202104/20210406_05.md)  
 ##### 202104/20210406_04.md   [《PostgreSQL 14 preivew - SP-GiST 索引新增 index 叶子结点 include column value 功能 支持》](202104/20210406_04.md)  
 ##### 202104/20210406_03.md   [《PostgreSQL 14 preivew - 新增角色 pg_read_all_data (MySQL 兼容性之 - 读写用户的只读影子用户 - 默认读权限  ) , pg_write_all_data (写权限)》](202104/20210406_03.md)  
 ##### 202104/20210406_02.md   [《PostgreSQL 14 preivew - vacuum 状态跟踪代码简化和增强, Simplify state managed by VACUUM.》](202104/20210406_02.md)  

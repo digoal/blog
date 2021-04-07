@@ -3,14 +3,14 @@
 ### 文章列表  
 ----  
 ##### 20201230_01.md   [《[转载]2020年中央经济工作会议》](20201230_01.md)  
-##### 20201229_01.md   [《PostgreSQL 14 preiview - TDE cluster_key_command 配置例子》](20201229_01.md)  
+##### 20201229_01.md   [《PostgreSQL 14 preview - TDE cluster_key_command 配置例子》](20201229_01.md)  
 ##### 20201228_01.md   [《PostgreSQL 14 preview - 支持TDE功能, 支持加密数据文件, 支持加密WAL日志文件》](20201228_01.md)  
 ##### 20201227_01.md   [《小白读财经: 如何判断一只股票是否有潜力?  净资产, 净资产收益率, 净利润率, 资产周转率, 杠杆率》](20201227_01.md)  
 ##### 20201226_02.md   [《关于 mvp 与社区 关系维系的想法》](20201226_02.md)  
 ##### 20201226_01.md   [《PostgreSQL 如何返回动态列数 - 行列变换 - json, jsonb, record, temp table, tablefunc, pivot table, crosstab》](20201226_01.md)  
 ##### 20201225_02.md   [《产品经理：规模化、可度量、周期性》](20201225_02.md)  
 ##### 20201225_01.md   [《你心目中的PostgreSQL MVP》](20201225_01.md)  
-##### 20201224_01.md   [《PostgreSQL 14 preivew - multirange type》](20201224_01.md)  
+##### 20201224_01.md   [《PostgreSQL 14 preview - multirange type》](20201224_01.md)  
 ##### 20201217_03.md   [《PostgreSQL 图形化建模工具 pgmodeler》](20201217_03.md)  
 ##### 20201217_02.md   [《PostgreSQL explain analyze 火山图 图形化软件 pg_flame》](20201217_02.md)  
 ##### 20201217_01.md   [《PostgreSQL 性能 dashboard 产品 - PgHero》](20201217_01.md)  

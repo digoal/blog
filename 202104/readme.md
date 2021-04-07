@@ -2,10 +2,17 @@
   
 ### 文章列表  
 ----  
-##### 20210406_05.md   [《PostgreSQL 14 preview - pg_logical_emit_message 往WAL写的定制消息 , pgoutput 内置plugin可以decode这个消息了!》](20210406_05.md)  
-##### 20210406_04.md   [《PostgreSQL 14 preivew - SP-GiST 索引新增 index 叶子结点 include column value 功能 支持》](20210406_04.md)  
-##### 20210406_03.md   [《PostgreSQL 14 preivew - 新增角色 pg_read_all_data (MySQL 兼容性之 - 读写用户的只读影子用户 - 默认读权限  ) , pg_write_all_data (写权限)》](20210406_03.md)  
-##### 20210406_02.md   [《PostgreSQL 14 preivew - vacuum 状态跟踪代码简化和增强, Simplify state managed by VACUUM.》](20210406_02.md)  
+##### 20210407_07.md   [《PostgreSQL 14 preview - log_connections 支持打印更多内容, pg_hba第几行, 使用什么认证方法等, 方便判断客户通过什么方式在与数据库进行登陆认证》](20210407_07.md)  
+##### 20210407_06.md   [《PostgreSQL 14 preview - 打印其他会话的memory context, 诊断内存消耗问题 - pg_log_backend_memory_contexts(pid)》](20210407_06.md)  
+##### 20210407_05.md   [《PostgreSQL 14 preview - 内置订阅功能alter subscription语法增强,支持add/drop publication》](20210407_05.md)  
+##### 20210407_04.md   [《PostgreSQL 14 preview - pgbench 压测工具新增 随机函数 permute(i, size, [seed]) 返回 i 经过重新(随机)映射后 在 [0,size) 范围内的一个值》](20210407_04.md)  
+##### 20210407_03.md   [《PostgreSQL 14 preview - psql CLI 更新, 执行多条SQL时, 默认返回所有语句的执行结果》](20210407_03.md)  
+##### 20210407_02.md   [《PostgreSQL 14 preview - 支持通过import foreign schema 导入指定远端分区表的子分区 - postgres_fdw , import foreign schema 支持 limit to (子分区)》](20210407_02.md)  
+##### 20210407_01.md   [《PostgreSQL 14 preview - 分区表性能再次增强 - ExecInitModifyTable 分区裁剪精细化》](20210407_01.md)  
+##### 20210406_05.md   [《PostgreSQL 14 preview - pg_logical_emit_message() 往WAL写定制消息 , pgoutput 内置decode plugin可以解析这个消息了!》](20210406_05.md)  
+##### 20210406_04.md   [《PostgreSQL 14 preview - SP-GiST 索引新增 index 叶子结点 include column value 功能 支持》](20210406_04.md)  
+##### 20210406_03.md   [《PostgreSQL 14 preview - 新增角色 pg_read_all_data (MySQL 兼容性之 - 读写用户的只读影子用户 - 默认读权限  ) , pg_write_all_data (写权限)》](20210406_03.md)  
+##### 20210406_02.md   [《PostgreSQL 14 preview - vacuum 状态跟踪代码简化和增强, Simplify state managed by VACUUM.》](20210406_02.md)  
 ##### 20210406_01.md   [《PostgreSQL Oracle 兼容性之SQL OUTLINE插件 pg_hint_plan enable_hint_table》](20210406_01.md)  
 ##### 20210405_01.md   [《hash join, hash表选择问题: 小表一定是hash table吗?》](20210405_01.md)  
 ##### 20210404_04.md   [《如何与未知、未来、过去、无、跨时间线的生物进行交流?》](20210404_04.md)  

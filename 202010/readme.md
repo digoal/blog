@@ -14,7 +14,7 @@
 ##### 20201031_01.md   [《数据库云服务化后时代 - DBA转型建议》](20201031_01.md)  
 ##### 20201030_02.md   [《处女座忍不了的 - 2》](20201030_02.md)  
 ##### 20201030_01.md   [《处女座忍不了的 - 1》](20201030_01.md)  
-##### 20201026_01.md   [《PostgreSQL 14 preivew - PageIsVerified() 接口扩展, 支持跳过shared buffer读数据》](20201026_01.md)  
+##### 20201026_01.md   [《PostgreSQL 14 preview - PageIsVerified() 接口扩展, 支持跳过shared buffer读数据》](20201026_01.md)  
 ##### 20201025_01.md   [《[直播]PostgreSQL 应用开发人员 TOP 18问》](20201025_01.md)  
 ##### 20201024_02.md   [《PostgreSQL 14 preview - amcheck插件增加heap table数据页格式错误、逻辑错误检测功能》](20201024_02.md)  
 ##### 20201024_01.md   [《PostgreSQL 14 preview - Improve performance of Unicode {de,re}composition in the backend》](20201024_01.md)  

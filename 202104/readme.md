@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210407_08.md   [《阿里云MyBase 专属数据库的自主可控 自主可运维 用法 - 登陆数据库主机、安装软件、查看实时日志、登陆superuser, 创建superuser, 修改任意参数》](20210407_08.md)  
 ##### 20210407_07.md   [《PostgreSQL 14 preview - log_connections 支持打印更多内容, pg_hba第几行, 使用什么认证方法等, 方便判断客户通过什么方式在与数据库进行登陆认证》](20210407_07.md)  
 ##### 20210407_06.md   [《PostgreSQL 14 preview - 打印其他会话的memory context, 诊断内存消耗问题 - pg_log_backend_memory_contexts(pid)》](20210407_06.md)  
 ##### 20210407_05.md   [《PostgreSQL 14 preview - 内置订阅功能alter subscription语法增强,支持add/drop publication》](20210407_05.md)  

@@ -5,7 +5,7 @@
 ##### 20210407_07.md   [《PostgreSQL 14 preview - log_connections 支持打印更多内容, pg_hba第几行, 使用什么认证方法等, 方便判断客户通过什么方式在与数据库进行登陆认证》](20210407_07.md)  
 ##### 20210407_06.md   [《PostgreSQL 14 preview - 打印其他会话的memory context, 诊断内存消耗问题 - pg_log_backend_memory_contexts(pid)》](20210407_06.md)  
 ##### 20210407_05.md   [《PostgreSQL 14 preview - 内置订阅功能alter subscription语法增强,支持add/drop publication》](20210407_05.md)  
-##### 20210407_04.md   [《PostgreSQL 14 preview - pgbench 压测工具新增 随机函数 permute(i, size, [seed]) 返回 i 经过重新(随机)映射后 在 [0,size) 范围内的一个值》](20210407_04.md)  
+##### 20210407_04.md   [《PostgreSQL 14 preview - pgbench 压测工具新增 随机函数 permute(i, size, \[seed\]) 返回 i 经过重新(随机)映射后 在 \[0,size) 范围内的一个值》](20210407_04.md)  
 ##### 20210407_03.md   [《PostgreSQL 14 preview - psql CLI 更新, 执行多条SQL时, 默认返回所有语句的执行结果》](20210407_03.md)  
 ##### 20210407_02.md   [《PostgreSQL 14 preview - 支持通过import foreign schema 导入指定远端分区表的子分区 - postgres_fdw , import foreign schema 支持 limit to (子分区)》](20210407_02.md)  
 ##### 20210407_01.md   [《PostgreSQL 14 preview - 分区表性能再次增强 - ExecInitModifyTable 分区裁剪精细化》](20210407_01.md)  

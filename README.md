@@ -82,6 +82,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210408_10.md   [《PostgreSQL 14 preview - kill 会话增加超时等待. pg_wait_for_backend_termination(pid, ms), 发送terminate信号给进程, 并等待若干ms, 如果PID未被kill, 则返回false和warning.》](202104/20210408_10.md)  
+##### 202104/20210408_09.md   [《PostgreSQL 14 preview - pg_stat_statements 增加 toplevel 字段, 表示这是一条嵌套SQL还是top sql. -  pg_stat_statements.track = all 时》](202104/20210408_09.md)  
 ##### 202104/20210408_08.md   [《PostgreSQL 14 preview - psql 快捷命令 df do 支持参数输入 , 按参数类型筛选 函数和操作符》](202104/20210408_08.md)  
 ##### 202104/20210408_07.md   [《PostgreSQL 14 preview - gist和sp-gist索引AM支持sort接口, 加速GiST和SP-GiST 索引build速度》](202104/20210408_07.md)  
 ##### 202104/20210408_06.md   [《PostgreSQL 14 preview - libpq: 支持 Set Server Name Indication (SNI) for SSL connections》](202104/20210408_06.md)  

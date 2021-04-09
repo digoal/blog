@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210409_03.md   [《PostgreSQL 14 preview - recovery 加速, 支持prefetch 预读接下来要恢复的wal record相关的data block到shared buffer, 加速wal record+data block的合并过程》](20210409_03.md)  
+##### 20210409_02.md   [《PostgreSQL 14 preview - FDW 外部表接口支持 truncate [only|cascade] , postgres_fdw已实现, 基于FDW的sharding 功能更进一步》](20210409_02.md)  
+##### 20210409_01.md   [《PostgreSQL 14 preview - 支持循环WAL decoding buffer , 优化逻辑decoding性能》](20210409_01.md)  
 ##### 20210408_10.md   [《PostgreSQL 14 preview - kill 会话增加超时等待. pg_wait_for_backend_termination(pid, ms), 发送terminate信号给进程, 并等待若干ms, 如果PID未被kill, 则返回false和warning.》](20210408_10.md)  
 ##### 20210408_09.md   [《PostgreSQL 14 preview - pg_stat_statements 增加 toplevel 字段, 表示这是一条嵌套SQL还是top sql. -  pg_stat_statements.track = all 时》](20210408_09.md)  
 ##### 20210408_08.md   [《PostgreSQL 14 preview - psql 快捷命令 df do 支持参数输入 , 按参数类型筛选 函数和操作符》](20210408_08.md)  

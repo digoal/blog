@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210414_04.md   [《做决定、决策, 表达观点、汇报时如何支撑你的观点?  - 数据,案例,逻辑,理想理念》](20210414_04.md)  
+##### 20210414_03.md   [《结构化写作 - 案例写作》](20210414_03.md)  
+##### 20210414_02.md   [《PostgreSQL 14 preview - 强制vacuum 加速patch, 避免heap truncate多余的动作》](20210414_02.md)  
+##### 20210414_01.md   [《PostgreSQL 14 preview - insert into  on conflict语句中支持表别名, Allow table-qualified variable names in ON CONFLICT ... WHERE.》](20210414_01.md)  
 ##### 20210411_01.md   [《打破惯性思维, 引导创新, 引爆流行, PG》](20210411_01.md)  
 ##### 20210409_03.md   [《PostgreSQL 14 preview - recovery 加速, 支持prefetch 预读接下来要恢复的wal record相关的data block到shared buffer, 加速wal record+data block的合并过程》](20210409_03.md)  
 ##### 20210409_02.md   [《PostgreSQL 14 preview - FDW 外部表接口支持 truncate [only|cascade] , postgres_fdw已实现, 基于FDW的sharding 功能更进一步》](20210409_02.md)  

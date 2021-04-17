@@ -253,7 +253,7 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
 email: digoal@126.com  
     
 个人微信:        
-![pic](../pic/digoal_weixin.jpg)    
+![pic](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)    
   
 卡通版照片:   
       

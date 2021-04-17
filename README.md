@@ -83,6 +83,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210417_01.md   [《PostgreSQL 14 preview - Add information of total data processed to replication slot stats - 逻辑复制槽统计信息增加处理事务数和数据量计数器 total_txns  total_bytes》](202104/20210417_01.md)  
+##### 202104/20210416_03.md   [《支持fdw外部表全局事务的postgres_fdw_plus - supports global transaction feature》](202104/20210416_03.md)  
 ##### 202104/20210416_02.md   [《非对称风险》](202104/20210416_02.md)  
 ##### 202104/20210416_01.md   [《从国家角度思考, 如何做到: 国强,民富,社会稳定,人民幸福 - 未来人民如何找幸福感?》](202104/20210416_01.md)  
 ##### 202104/20210415_04.md   [《PostgreSQL 减少 (内存耗尽) OOM 导致的数据库崩溃恢复问题最佳实践》](202104/20210415_04.md)  

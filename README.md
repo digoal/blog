@@ -83,6 +83,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210417_04.md   [《直播 SaaS行业需要什么样的数据库? - 案例: 智赢跨境电商ERP, 家庭主妇年薪百万的秘密》](202104/20210417_04.md)  
 ##### 202104/20210417_03.md   [《PostgreSQL 国内外信息获取渠道 - 新闻、研发、软件、用户组、FAQ、博客、会议、相关项目、开源代码、JOB、安全信息、技能评估、培训等》](202104/20210417_03.md)  
 ##### 202104/20210417_02.md   [《PostgreSQL 图计算插件 AGE(a graph extension)发布0.4版本 - agensgraph extension 0.4》](202104/20210417_02.md)  
 ##### 202104/20210417_01.md   [《PostgreSQL 14 preview - Add information of total data processed to replication slot stats - 逻辑复制槽统计信息增加处理事务数和数据量计数器 total_txns  total_bytes》](202104/20210417_01.md)  

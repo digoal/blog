@@ -83,6 +83,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210417_03.md   [《PostgreSQL 国内外信息获取渠道 - 新闻、研发、软件、用户组、FAQ、博客、会议、相关项目、开源代码、JOB、安全信息、技能评估、培训等》](202104/20210417_03.md)  
+##### 202104/20210417_02.md   [《PostgreSQL 图计算插件 AGE(a graph extension)发布0.4版本 - agensgraph extension 0.4》](202104/20210417_02.md)  
 ##### 202104/20210417_01.md   [《PostgreSQL 14 preview - Add information of total data processed to replication slot stats - 逻辑复制槽统计信息增加处理事务数和数据量计数器 total_txns  total_bytes》](202104/20210417_01.md)  
 ##### 202104/20210416_03.md   [《支持fdw外部表全局事务的postgres_fdw_plus - supports global transaction feature》](202104/20210416_03.md)  
 ##### 202104/20210416_02.md   [《非对称风险》](202104/20210416_02.md)  
@@ -666,7 +668,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202003/20200326_08.md   [《PostgreSQL ghtree实现的海明距离排序索引, 性能不错(模糊图像) - pg-knn_hamming》](202003/20200326_08.md)  
 ##### 202003/20200326_07.md   [《PostgreSQL shell命令插件 - pg_remote_exec》](202003/20200326_07.md)  
 ##### 202003/20200326_06.md   [《PostgreSQL 化学插件 - pgchem_tigress molecules rdkit》](202003/20200326_06.md)  
-##### 202003/20200326_05.md   [《PostgreSQL 全局临时表插件 - pgtt - global temp table》](202003/20200326_05.md)  
+##### 202003/20200326_05.md   [《PostgreSQL Oracle 兼容性之 - 全局临时表插件 - pgtt - global temp table [推荐]》](202003/20200326_05.md)  
 ##### 202003/20200326_04.md   [《PostgreSQL ctid scan 扫描方法插件 - 限定访问blocks》](202003/20200326_04.md)  
 ##### 202003/20200326_03.md   [《PostgreSQL 一款logical decoder - pg-deltaflood》](202003/20200326_03.md)  
 ##### 202003/20200326_02.md   [《PostgreSQL VagueGeometry vague spatial data - VASA (Vague Spatial Algebra) for PG - 模糊空间数据》](202003/20200326_02.md)  

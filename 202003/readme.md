@@ -28,7 +28,7 @@
 ##### 20200326_08.md   [《PostgreSQL ghtree实现的海明距离排序索引, 性能不错(模糊图像) - pg-knn_hamming》](20200326_08.md)  
 ##### 20200326_07.md   [《PostgreSQL shell命令插件 - pg_remote_exec》](20200326_07.md)  
 ##### 20200326_06.md   [《PostgreSQL 化学插件 - pgchem_tigress molecules rdkit》](20200326_06.md)  
-##### 20200326_05.md   [《PostgreSQL 全局临时表插件 - pgtt - global temp table》](20200326_05.md)  
+##### 20200326_05.md   [《PostgreSQL Oracle 兼容性之 - 全局临时表插件 - pgtt - global temp table [推荐]》](20200326_05.md)  
 ##### 20200326_04.md   [《PostgreSQL ctid scan 扫描方法插件 - 限定访问blocks》](20200326_04.md)  
 ##### 20200326_03.md   [《PostgreSQL 一款logical decoder - pg-deltaflood》](20200326_03.md)  
 ##### 20200326_02.md   [《PostgreSQL VagueGeometry vague spatial data - VASA (Vague Spatial Algebra) for PG - 模糊空间数据》](20200326_02.md)  

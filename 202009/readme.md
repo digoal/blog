@@ -9,7 +9,7 @@
 ##### 20200928_01.md   [《PostgreSQL select x from tbl where c1 in () order by c2; 优化 - merge sort , top-N heapsort , quick sort》](20200928_01.md)  
 ##### 20200926_03.md   [《[直播]大话数据库终局之战》](20200926_03.md)  
 ##### 20200926_02.md   [《[直播]为什么打车和宇宙大爆炸有关?》](20200926_02.md)  
-##### 20200926_01.md   [《PostgreSQL 13 正式发布, 大颗粒特性解读 (2020-09-24)》](20200926_01.md)  
+##### 20200926_01.md   [《PostgreSQL 13 正式发布, 大颗粒特性(feature)解读 (2020-09-24)》](20200926_01.md)  
 ##### 20200924_01.md   [《postgresweekly, dbweekly 各种weekly在哪》](20200924_01.md)  
 ##### 20200923_01.md   [《常用centos 扩展包 - epel , centos-release-scl》](20200923_01.md)  
 ##### 20200921_01.md   [《数据库发展历程 图》](20200921_01.md)  

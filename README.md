@@ -83,6 +83,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210419_01.md   [《BUG: vacuum freeze 报错 ERROR: found xmin ...... from before relfrozenxid .... 处理方法》](202104/20210419_01.md)  
 ##### 202104/20210418_01.md   [《喜马拉雅 和 B站 很多学习内容 值得推荐》](202104/20210418_01.md)  
 ##### 202104/20210417_04.md   [《直播 SaaS行业需要什么样的数据库? - 案例: 智赢跨境电商ERP, 家庭主妇年薪百万的秘密》](202104/20210417_04.md)  
 ##### 202104/20210417_03.md   [《PostgreSQL 国内外信息获取渠道 - 新闻、研发、软件、用户组、FAQ、博客、会议、相关项目、开源代码、JOB、安全信息、技能评估、培训等》](202104/20210417_03.md)  
@@ -3138,7 +3139,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201101/20110104_01.md   [《PostgreSQL HOT STANDBY using Stream replication》](201101/20110104_01.md)  
 ----  
 ##### 201012/20101230_01.md   [《PostgreSQL HOT STANDBY using log shipping》](201012/20101230_01.md)  
-##### 201012/20101210_01.md   [《PostgreSQL single-user mode usage,like Repair Database》](201012/20101210_01.md)  
+##### 201012/20101210_01.md   [《PostgreSQL single-user mode 单用户模式修复 database is not accepting commands to avoid wraparound data loss in database "...." 问题 - usage,like Repair Database》](201012/20101210_01.md)  
 ----  
 ##### 201011/20101129_01.md   [《PostgreSQL 不同版本的保留字不同引发的逻辑备份异常处理 - pg_dump ERROR: syntax error at or near "old"》](201011/20101129_01.md)  
 ----  

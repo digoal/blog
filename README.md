@@ -83,11 +83,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210419_03.md   [《使用 stackoverflow insights , trends 洞察年度技术报告、TAG相关问题占比和趋势》](202104/20210419_03.md)  
 ##### 202104/20210419_02.md   [《网站流量统计分析方法 - 例子: PostgreSQL 中文社区网站分析》](202104/20210419_02.md)  
 ##### 202104/20210419_01.md   [《BUG: vacuum freeze 报错 ERROR: found xmin ...... from before relfrozenxid .... 处理方法》](202104/20210419_01.md)  
 ##### 202104/20210418_01.md   [《喜马拉雅 和 B站 很多学习内容 值得推荐》](202104/20210418_01.md)  
 ##### 202104/20210417_04.md   [《直播 SaaS行业需要什么样的数据库? - 案例: 智赢跨境电商ERP, 家庭主妇年薪百万的秘密》](202104/20210417_04.md)  
-##### 202104/20210417_03.md   [《PostgreSQL 国内外信息获取渠道 - 新闻、研发、软件、用户组、FAQ、博客、会议、相关项目、开源代码、JOB、安全信息、技能评估、培训等》](202104/20210417_03.md)  
+##### 202104/20210417_03.md   [《PostgreSQL 国内外信息获取渠道网站 - 新闻、研发、软件、用户组、FAQ、博客、会议、相关项目、开源代码、JOB、安全信息、技能评估、培训等》](202104/20210417_03.md)  
 ##### 202104/20210417_02.md   [《PostgreSQL 图计算插件 AGE(a graph extension)发布0.4版本 - agensgraph extension 0.4》](202104/20210417_02.md)  
 ##### 202104/20210417_01.md   [《PostgreSQL 14 preview - Add information of total data processed to replication slot stats - 逻辑复制槽统计信息增加处理事务数和数据量计数器 total_txns  total_bytes》](202104/20210417_01.md)  
 ##### 202104/20210416_03.md   [《支持fdw外部表全局事务的postgres_fdw_plus - supports global transaction feature》](202104/20210416_03.md)  

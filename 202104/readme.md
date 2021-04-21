@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210421_01.md   [《PostgreSQL shared buffer 管理机制》](20210421_01.md)  
 ##### 20210420_02.md   [《游戏行业需要什么样的数据库》](20210420_02.md)  
 ##### 20210420_01.md   [《PostgreSQL 相关热门应用一键安装 : bitnami 打包 : gitlab , lapp , discourse , odoo 等》](20210420_01.md)  
 ##### 20210419_03.md   [《使用 stackoverflow insights , trends 洞察年度技术报告、TAG相关问题占比和趋势》](20210419_03.md)  

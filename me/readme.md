@@ -1,7 +1,7 @@
 ## 个人简介      
 digoal(德哥)          
         
-![pic](digoal.png)        
+[个人照片](digoal.png)        
           
 - PostgreSQL 中国社区发起人之一、常委、兼PG社区大学校长。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。          
 - 中国开源软件推进联盟PostgreSQL分会，特聘资深领域专家。         
@@ -252,11 +252,8 @@ PostgreSQL横跨各大行业，深入行业的业务核心，学习PostgreSQL可
   
 email: digoal@126.com  
     
-个人微信:        
-![pic](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)    
+[个人微信二维码](https://ucc.alicdn.com/pic/developer-ecology/24ff1d42e2cf4f3a8ae166a243f58cb3.png)    
   
-卡通版照片:   
-      
-![pic](digoal_1.png)  
-![pic](digoal_2.png)  
+[卡通版照片1](digoal_1.png)  
+[卡通版照片2](digoal_2.png)  
     

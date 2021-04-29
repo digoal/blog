@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210429_03.md   [《PostgreSQL - 时序、IoT类场景 - time_bucket 分析函数 - 内置 date_bin》](20210429_03.md)  
+##### 20210429_02.md   [《PostgreSQL - 时序、IoT类场景 - first_value , last_value , agg , cte , window , recursive》](20210429_02.md)  
+##### 20210429_01.md   [《PostgreSQL - 时序、IoT类场景 - 自定义histogram函数, 绘制数据分布柱状图 - cte window range width_bucket format plpgsql》](20210429_01.md)  
 ##### 20210428_04.md   [《边际效应, 边际效益递减》](20210428_04.md)  
 ##### 20210428_03.md   [《PostgreSQL 时序数据库设计最佳实践 - 关联 citus,columnar,partition,timescaledb,压缩,高速写,parallel append 多分区并行查询,分区》](20210428_03.md)  
 ##### 20210428_02.md   [《PostgreSQL 内部 动态视图、统计信息、管理函数等鸟瞰图 - pgstats.dev - 含外部插件和外部OS工具》](20210428_02.md)  
@@ -39,7 +42,7 @@
 ##### 20210414_06.md   [《使用PostgreSQL 暴力计算 亲和数》](20210414_06.md)  
 ##### 20210414_05.md   [《保持 数字\需求、目标、结果导向 敏感度》](20210414_05.md)  
 ##### 20210414_04.md   [《做决定、决策, 表达观点、汇报时如何支撑你的观点?  - 数据,案例,逻辑,理想理念》](20210414_04.md)  
-##### 20210414_03.md   [《结构化写作 - 案例写作》](20210414_03.md)  
+##### 20210414_03.md   [《结构化写作 - 案例写作 - 病药方效托》](20210414_03.md)  
 ##### 20210414_02.md   [《PostgreSQL 14 preview - 强制vacuum 加速patch, 避免heap truncate多余的动作》](20210414_02.md)  
 ##### 20210414_01.md   [《PostgreSQL 14 preview - insert into  on conflict语句中支持表别名, Allow table-qualified variable names in ON CONFLICT ... WHERE.》](20210414_01.md)  
 ##### 20210411_01.md   [《打破惯性思维, 引导创新, 引爆流行, PG》](20210411_01.md)  

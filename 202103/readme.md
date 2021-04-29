@@ -20,7 +20,7 @@
 ##### 20210326_02.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 bloom filter - 随机,大量distinct value, 等值查询》](20210326_02.md)  
 ##### 20210326_01.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 multi-range min-max [s] - 分段范围索引》](20210326_01.md)  
 ##### 20210325_02.md   [《怎么看待PostgreSQL sharding插件: citus - 对比PG 社区基于 postgres_fdw 的sharding》](20210325_02.md)  
-##### 20210325_01.md   [《PostgreSQL 14 preview - date_bin 任意起点, 任意bucket(interval) split bucket align 统计》](20210325_01.md)  
+##### 20210325_01.md   [《PostgreSQL 14 preview - date_bin 任意起点, 任意bucket(interval) split bucket align 统计 - 时序场景(iot, 金融等), 关联timescaledb》](20210325_01.md)  
 ##### 20210324_03.md   [《PostgreSQL 14 preview - bit_count 计算比特位1的个数》](20210324_03.md)  
 ##### 20210324_02.md   [《PostgreSQL 14 preview - autovacuum 打印更多信息, 每个索引的stats被打印》](20210324_02.md)  
 ##### 20210324_01.md   [《PostgreSQL 14 preview - brin 索引内存优化》](20210324_01.md)  

@@ -83,6 +83,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210429_03.md   [《PostgreSQL - 时序、IoT类场景 - time_bucket 分析函数 - 内置 date_bin》](202104/20210429_03.md)  
+##### 202104/20210429_02.md   [《PostgreSQL - 时序、IoT类场景 - first_value , last_value , agg , cte , window , recursive》](202104/20210429_02.md)  
+##### 202104/20210429_01.md   [《PostgreSQL - 时序、IoT类场景 - 自定义histogram函数, 绘制数据分布柱状图 - cte window range width_bucket format plpgsql》](202104/20210429_01.md)  
 ##### 202104/20210428_04.md   [《边际效应, 边际效益递减》](202104/20210428_04.md)  
 ##### 202104/20210428_03.md   [《PostgreSQL 时序数据库设计最佳实践 - 关联 citus,columnar,partition,timescaledb,压缩,高速写,parallel append 多分区并行查询,分区》](202104/20210428_03.md)  
 ##### 202104/20210428_02.md   [《PostgreSQL 内部 动态视图、统计信息、管理函数等鸟瞰图 - pgstats.dev - 含外部插件和外部OS工具》](202104/20210428_02.md)  
@@ -120,7 +123,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202104/20210414_06.md   [《使用PostgreSQL 暴力计算 亲和数》](202104/20210414_06.md)  
 ##### 202104/20210414_05.md   [《保持 数字\需求、目标、结果导向 敏感度》](202104/20210414_05.md)  
 ##### 202104/20210414_04.md   [《做决定、决策, 表达观点、汇报时如何支撑你的观点?  - 数据,案例,逻辑,理想理念》](202104/20210414_04.md)  
-##### 202104/20210414_03.md   [《结构化写作 - 案例写作》](202104/20210414_03.md)  
+##### 202104/20210414_03.md   [《结构化写作 - 案例写作 - 病药方效托》](202104/20210414_03.md)  
 ##### 202104/20210414_02.md   [《PostgreSQL 14 preview - 强制vacuum 加速patch, 避免heap truncate多余的动作》](202104/20210414_02.md)  
 ##### 202104/20210414_01.md   [《PostgreSQL 14 preview - insert into  on conflict语句中支持表别名, Allow table-qualified variable names in ON CONFLICT ... WHERE.》](202104/20210414_01.md)  
 ##### 202104/20210411_01.md   [《打破惯性思维, 引导创新, 引爆流行, PG》](202104/20210411_01.md)  
@@ -186,7 +189,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202103/20210326_02.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 bloom filter - 随机,大量distinct value, 等值查询》](202103/20210326_02.md)  
 ##### 202103/20210326_01.md   [《PostgreSQL 14 preview - BRIN (典型IoT 时序场景) 块级索引支持 multi-range min-max [s] - 分段范围索引》](202103/20210326_01.md)  
 ##### 202103/20210325_02.md   [《怎么看待PostgreSQL sharding插件: citus - 对比PG 社区基于 postgres_fdw 的sharding》](202103/20210325_02.md)  
-##### 202103/20210325_01.md   [《PostgreSQL 14 preview - date_bin 任意起点, 任意bucket(interval) split bucket align 统计》](202103/20210325_01.md)  
+##### 202103/20210325_01.md   [《PostgreSQL 14 preview - date_bin 任意起点, 任意bucket(interval) split bucket align 统计 - 时序场景(iot, 金融等), 关联timescaledb》](202103/20210325_01.md)  
 ##### 202103/20210324_03.md   [《PostgreSQL 14 preview - bit_count 计算比特位1的个数》](202103/20210324_03.md)  
 ##### 202103/20210324_02.md   [《PostgreSQL 14 preview - autovacuum 打印更多信息, 每个索引的stats被打印》](202103/20210324_02.md)  
 ##### 202103/20210324_01.md   [《PostgreSQL 14 preview - brin 索引内存优化》](202103/20210324_01.md)  

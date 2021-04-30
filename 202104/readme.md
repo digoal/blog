@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210430_02.md   [《dig 诊断域名解析, CNAME+智能DNS解析 在 CDN基于地理位置加速场景的应用》](20210430_02.md)  
 ##### 20210430_01.md   [《老外惊呼: 世界变化快! PostgreSQL 14 on ARM 8.1 加上LSE patch性能飙升到140万tps》](20210430_01.md)  
 ##### 20210429_03.md   [《PostgreSQL - 时序、IoT类场景 - time_bucket 分析函数 - 内置 date_bin》](20210429_03.md)  
 ##### 20210429_02.md   [《PostgreSQL - 时序、IoT类场景 - first_value , last_value , agg , cte , window , recursive》](20210429_02.md)  

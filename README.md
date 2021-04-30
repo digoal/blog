@@ -83,6 +83,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202104/20210430_01.md   [《老外惊呼: 世界变化快! PostgreSQL 14 on ARM 8.1 加上LSE patch性能飙升到140万tps》](202104/20210430_01.md)  
 ##### 202104/20210429_03.md   [《PostgreSQL - 时序、IoT类场景 - time_bucket 分析函数 - 内置 date_bin》](202104/20210429_03.md)  
 ##### 202104/20210429_02.md   [《PostgreSQL - 时序、IoT类场景 - first_value , last_value , agg , cte , window , recursive》](202104/20210429_02.md)  
 ##### 202104/20210429_01.md   [《PostgreSQL - 时序、IoT类场景 - 自定义histogram函数, 绘制数据分布柱状图 - cte window range width_bucket format plpgsql》](202104/20210429_01.md)  

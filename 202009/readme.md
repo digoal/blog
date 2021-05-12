@@ -53,7 +53,7 @@
 ##### 20200911_04.md   [《PostgreSQL 人物采访 - Regina Obe》](20200911_04.md)  
 ##### 20200911_03.md   [《PostgreSQL crunchy 开源 - Linux cgroup 以及 /proc SQL 访问接口插件 - pgnodemx》](20200911_03.md)  
 ##### 20200911_02.md   [《PostgreSQL crunnchy 数据库图形化 可定制 监控工具 pgMonitor》](20200911_02.md)  
-##### 20200911_01.md   [《PostgreSQL corrupted tuple 修复功能 - pg_surgery》](20200911_01.md)  
+##### 20200911_01.md   [《PostgreSQL 14 preview - corrupted tuple 修复功能 - pg_surgery》](20200911_01.md)  
 ##### 20200910_02.md   [《[视频直播]亿级用户量的实时推荐数据库到底要几毛钱?》](20200910_02.md)  
 ##### 20200910_01.md   [《ZFS PostgreSQL 调优》](20200910_01.md)  
 ##### 20200906_01.md   [《[商业智能-杭州正马软件 招聘]PostgreSQL DBA》](20200906_01.md)  

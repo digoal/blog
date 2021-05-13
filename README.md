@@ -83,6 +83,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202105/20210512_01.md   [《PostgreSQL 14 preview - 逻辑复制 支持长事务 流式发送接口, 已覆盖内置pub/sub logical replication - 规避长事务需要transaction end后才能往sub端发送解析结果》](202105/20210512_01.md)  
 ##### 202105/20210511_04.md   [《经济学 比较优势原理 解释 - 中美 贸易摩擦》](202105/20210511_04.md)  
 ##### 202105/20210511_03.md   [《如何评估产品的市场价值?》](202105/20210511_03.md)  
 ##### 202105/20210511_02.md   [《产品的GTM(go to marketing)，其实没有那么难》](202105/20210511_02.md)  
@@ -319,7 +320,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202102/20210202_02.md   [《人生中最值得看的100本书，你读过几本? - 10大分类 豆瓣高分好书》](202102/20210202_02.md)  
 ##### 202102/20210202_01.md   [《PostgreSQL 插入或更新(upsert, insert on conflict)后如果某些 指定字段 已为特定值(如空), 则自动删除该记录 - returning 或 trigger实现》](202102/20210202_01.md)  
 ##### 202102/20210201_04.md   [《PostgreSQL 14 preview - 支持扩展ssl库》](202102/20210201_04.md)  
-##### 202102/20210201_03.md   [《PostgreSQL 14 preview - SQL标准增强, 图式搜索增加广度优先、深度优先语法, 循环语法 - breadth- or depth-first search orders and detect cycles》](202102/20210201_03.md)  
+##### 202102/20210201_03.md   [《PostgreSQL 14 preview - SQL标准增强, 递归(CTE)图式搜索增加广度优先、深度优先语法, 循环语法 - breadth- or depth-first search orders and detect cycles》](202102/20210201_03.md)  
 ##### 202102/20210201_02.md   [《PostgreSQL 14 preview - 支持 jsonb 下标语法, 支持set原子操作, 类似array下标》](202102/20210201_02.md)  
 ##### 202102/20210201_01.md   [《Mac 执行后台程序, 防止系统盒盖进入睡眠 - caffeinate》](202102/20210201_01.md)  
 ----  
@@ -603,7 +604,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202008/20200801_01.md   [《PostgreSQL 砖家坐诊 - 集群、安全、去O、分区表、备份、sharding、性能优化、Oracle兼容性等问题》](202008/20200801_01.md)  
 ----  
 ##### 202007/20200727_04.md   [《PostgreSQL 商业角度解读 - openapi 、 扩展能力 以及 插件开源协议 - 云数据库、商业数据库、开源数据库终局之战》](202007/20200727_04.md)  
-##### 202007/20200727_03.md   [《PostgreSQL 14 并行优化 - seqscan io chunk优化, 避免离散IO》](202007/20200727_03.md)  
+##### 202007/20200727_03.md   [《PostgreSQL 14 preview - 并行优化 - seqscan io chunk优化, 避免离散IO , 大幅提升并行全表扫描性能》](202007/20200727_03.md)  
 ##### 202007/20200727_02.md   [《PostgreSQL 登录(新建会话)hook - login "trigger"插件》](202007/20200727_02.md)  
 ##### 202007/20200727_01.md   [《PostgreSQL COPY SQL命令支持binary格式》](202007/20200727_01.md)  
 ##### 202007/20200725_01.md   [《PostgreSQL prefix 插件 - 身份证、手机号、路由、区号等编码前缀搜索》](202007/20200725_01.md)  

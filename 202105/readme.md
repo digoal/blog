@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210513_02.md   [《PostgreSQL 14 release notes 新特性详解》](20210513_02.md)  
+##### 20210513_01.md   [《PostgreSQL 14 preview - 允许hot standby 作为pg_rewind的源库》](20210513_01.md)  
 ##### 20210512_01.md   [《PostgreSQL 14 preview - 逻辑复制 支持长事务 流式发送接口, 已覆盖内置pub/sub logical replication - 规避长事务需要transaction end后才能往sub端发送解析结果》](20210512_01.md)  
 ##### 20210511_04.md   [《经济学 比较优势原理 解释 - 中美 贸易摩擦》](20210511_04.md)  
 ##### 20210511_03.md   [《如何评估产品的市场价值?》](20210511_03.md)  

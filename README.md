@@ -83,6 +83,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202105/20210514_02.md   [《PGSync - PostgreSQL 逻辑订阅同步到 ElasticSearch》](202105/20210514_02.md)  
+##### 202105/20210514_01.md   [《PostgreSQL 时序数据库插件 timescaledb 2.2.1 通过custom plan provider接口实现index skip scan, 加速distinct, last_value, first_value等大表稀疏值快速搜索, 最快上万倍性能提升》](202105/20210514_01.md)  
 ##### 202105/20210513_02.md   [《PostgreSQL 14 release notes 新特性详解》](202105/20210513_02.md)  
 ##### 202105/20210513_01.md   [《PostgreSQL 14 preview - 允许hot standby 作为pg_rewind的源库》](202105/20210513_01.md)  
 ##### 202105/20210512_01.md   [《PostgreSQL 14 preview - 逻辑复制 支持长事务 流式发送接口, 已覆盖内置pub/sub logical replication - 规避长事务需要transaction end后才能往sub端发送解析结果》](202105/20210512_01.md)  
@@ -596,7 +598,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202008/20200803_10.md   [《PostgreSQL 13 & 14 对齐hashagg和hash join的explain analyze输出内容》](202008/20200803_10.md)  
 ##### 202008/20200803_09.md   [《PostgreSQL 14 仅保留fast promtoe》](202008/20200803_09.md)  
 ##### 202008/20200803_08.md   [《PostgreSQL 14 pg_stat_statements 支持 DDL语句 影响记录数跟踪统计》](202008/20200803_08.md)  
-##### 202008/20200803_07.md   [《PostgreSQL 13 新增 hash 内存参数, 提高hash操作性能 - hash_mem_multiplier - work_mem的倍数》](202008/20200803_07.md)  
+##### 202008/20200803_07.md   [《PostgreSQL 13 新增 hash 内存参数, 提高hash操作性能 - hash_mem_multiplier - work_mem的倍数 - 支持超越内存时采用disk 存储hash表, 支持更多场景使用hashagg, TPCH性能大幅提升》](202008/20200803_07.md)  
 ##### 202008/20200803_06.md   [《PostgreSQL 14 引入WaitLatch(), 避免每次等待时需要 epoll/kqueue 系统调用.》](202008/20200803_06.md)  
 ##### 202008/20200803_05.md   [《PostgreSQL 13 & 14 hashagg 性能增强(分组选择性精准度) - 使用hll评估hash字段的选择性, 而非使用记录数》](202008/20200803_05.md)  
 ##### 202008/20200803_04.md   [《PostgreSQL 14 Cache smgrnblocks() results in recovery - 提高恢复效率, 减少lseek调用》](202008/20200803_04.md)  

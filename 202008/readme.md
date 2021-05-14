@@ -21,7 +21,7 @@
 ##### 20200803_10.md   [《PostgreSQL 13 & 14 对齐hashagg和hash join的explain analyze输出内容》](20200803_10.md)  
 ##### 20200803_09.md   [《PostgreSQL 14 仅保留fast promtoe》](20200803_09.md)  
 ##### 20200803_08.md   [《PostgreSQL 14 pg_stat_statements 支持 DDL语句 影响记录数跟踪统计》](20200803_08.md)  
-##### 20200803_07.md   [《PostgreSQL 13 新增 hash 内存参数, 提高hash操作性能 - hash_mem_multiplier - work_mem的倍数》](20200803_07.md)  
+##### 20200803_07.md   [《PostgreSQL 13 新增 hash 内存参数, 提高hash操作性能 - hash_mem_multiplier - work_mem的倍数 - 支持超越内存时采用disk 存储hash表, 支持更多场景使用hashagg, TPCH性能大幅提升》](20200803_07.md)  
 ##### 20200803_06.md   [《PostgreSQL 14 引入WaitLatch(), 避免每次等待时需要 epoll/kqueue 系统调用.》](20200803_06.md)  
 ##### 20200803_05.md   [《PostgreSQL 13 & 14 hashagg 性能增强(分组选择性精准度) - 使用hll评估hash字段的选择性, 而非使用记录数》](20200803_05.md)  
 ##### 20200803_04.md   [《PostgreSQL 14 Cache smgrnblocks() results in recovery - 提高恢复效率, 减少lseek调用》](20200803_04.md)  

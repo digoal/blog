@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210514_02.md   [《PGSync - PostgreSQL 逻辑订阅同步到 ElasticSearch》](20210514_02.md)  
+##### 20210514_01.md   [《PostgreSQL 时序数据库插件 timescaledb 2.2.1 通过custom plan provider接口实现index skip scan, 加速distinct, last_value, first_value等大表稀疏值快速搜索, 最快上万倍性能提升》](20210514_01.md)  
 ##### 20210513_02.md   [《PostgreSQL 14 release notes 新特性详解》](20210513_02.md)  
 ##### 20210513_01.md   [《PostgreSQL 14 preview - 允许hot standby 作为pg_rewind的源库》](20210513_01.md)  
 ##### 20210512_01.md   [《PostgreSQL 14 preview - 逻辑复制 支持长事务 流式发送接口, 已覆盖内置pub/sub logical replication - 规避长事务需要transaction end后才能往sub端发送解析结果》](20210512_01.md)  

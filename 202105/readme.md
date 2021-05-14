@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210514_05.md   [《代替DBA的数据库工具类SaaS 有没有市场?》](20210514_05.md)  
+##### 20210514_04.md   [《PostgreSQL - 关于 like 'xxx%' 或 ~ '^xxx' 不走索引的现象 和 正确的索引用法》](20210514_04.md)  
+##### 20210514_03.md   [《PostgreSQL 开源 高维向量相似搜索插件 vector - 关联阿里云rds pg pase, cube, 人脸识别》](20210514_03.md)  
 ##### 20210514_02.md   [《PGSync - PostgreSQL 逻辑订阅同步到 ElasticSearch》](20210514_02.md)  
 ##### 20210514_01.md   [《PostgreSQL 时序数据库插件 timescaledb 2.2.1 通过custom plan provider接口实现index skip scan, 加速distinct, last_value, first_value等大表稀疏值快速搜索, 最快上万倍性能提升》](20210514_01.md)  
 ##### 20210513_02.md   [《PostgreSQL 14 release notes 新特性详解》](20210513_02.md)  

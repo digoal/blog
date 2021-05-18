@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210518_02.md   [《结合PostgreSQL, MADlib, Tensorflow 实现机器学习是时序分析. 使用本地数据, 不需要move data.》](20210518_02.md)  
+##### 20210518_01.md   [《近似查询处理(Approximate Query Processing) - DataSketches - 压缩、distinct、分位、rank、高频柱状图(count distinct, quantiles, most-frequent items, joins, matrix computations, and graph analysis) 等 实时 大数据 近似分析》](20210518_01.md)  
 ##### 20210517_01.md   [《跨云的K8S cloud native postgresql管理系统 谁在|会用?  PG SaaS或工具或插件类产品 谁在|会用?  (SQL规整、执行计划解读和优化建议、参数优化、AWR、索引推荐、错误日志解读和应对策略)》](20210517_01.md)  
 ##### 20210515_01.md   [《如何成为“大神"》](20210515_01.md)  
 ##### 20210514_05.md   [《代替DBA的数据库工具类SaaS 有没有市场?》](20210514_05.md)  

@@ -3,7 +3,7 @@ digoal(德哥)
         
 [个人照片](digoal.png)        
           
-- PostgreSQL 中国社区发起人之一、常委、兼PG社区大学校长。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。          
+- PostgreSQL 中国社区发起人之一。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。          
 - 中国开源软件推进联盟PostgreSQL分会，特聘资深领域专家。         
 - [中国信息通信研究院主办、中国通信标准化协会支持的"OSCAR云计算开源产业大会"评选：2018届OSCAR开源尖峰人物之一](../201803/20180322_12.md)    
 - 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。    

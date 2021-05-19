@@ -83,6 +83,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202105/20210519_03.md   [《PostgreSQL pgbnech 支持 长尾模型数据生成 - 离散幂律概率分布 - random_zipfian》](202105/20210519_03.md)  
+##### 202105/20210519_02.md   [《PostgreSQL 14 preview - 大表search IN ( consts ) - linear search TO hash table probe (consts 个数>= MIN_ARRAY_SIZE_FOR_HASHED_SAOP)》](202105/20210519_02.md)  
+##### 202105/20210519_01.md   [《PostgreSQL 14 preview - 自动清理临时文件 after backend crash restart - GUC remove_temp_files_after_crash》](202105/20210519_01.md)  
 ##### 202105/20210518_02.md   [《结合PostgreSQL, MADlib, Tensorflow 实现机器学习是时序分析. 使用本地数据, 不需要move data.》](202105/20210518_02.md)  
 ##### 202105/20210518_01.md   [《近似查询处理(Approximate Query Processing) - DataSketches - 压缩、distinct、分位、rank、高频柱状图(count distinct, quantiles, most-frequent items, joins, matrix computations, and graph analysis) 等 实时 大数据 近似分析》](202105/20210518_01.md)  
 ##### 202105/20210517_01.md   [《跨云的K8S cloud native postgresql管理系统 谁在|会用?  PG SaaS或工具或插件类产品 谁在|会用?  (SQL规整、执行计划解读和优化建议、参数优化、AWR、索引推荐、错误日志解读和应对策略)》](202105/20210517_01.md)  
@@ -94,7 +97,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202105/20210514_01.md   [《PostgreSQL 时序数据库插件 timescaledb 2.2.1 通过custom plan provider接口实现index skip scan, 加速distinct, last_value, first_value等大表稀疏值快速搜索, 最快上万倍性能提升》](202105/20210514_01.md)  
 ##### 202105/20210513_02.md   [《PostgreSQL 14 release notes 新特性详解》](202105/20210513_02.md)  
 ##### 202105/20210513_01.md   [《PostgreSQL 14 preview - 允许hot standby 作为pg_rewind的源库》](202105/20210513_01.md)  
-##### 202105/20210512_01.md   [《PostgreSQL 14 preview - 逻辑复制 支持长事务 流式发送接口, 已覆盖内置pub/sub logical replication - 规避长事务需要transaction end后才能往sub端发送解析结果》](202105/20210512_01.md)  
+##### 202105/20210512_01.md   [《PostgreSQL 14 preview - 逻辑复制 支持长事务 流式发送接口(logical streaming replication), 已覆盖内置pub/sub logical replication - 规避长事务需要transaction end后才能往sub端发送解析结果》](202105/20210512_01.md)  
 ##### 202105/20210511_04.md   [《经济学 比较优势原理 解释 - 中美 贸易摩擦》](202105/20210511_04.md)  
 ##### 202105/20210511_03.md   [《如何评估产品的市场价值?》](202105/20210511_03.md)  
 ##### 202105/20210511_02.md   [《产品的GTM(go to marketing)，其实没有那么难》](202105/20210511_02.md)  

@@ -58,7 +58,7 @@
 ##### 20210408_06.md   [《PostgreSQL 14 preview - libpq: 支持 Set Server Name Indication (SNI) for SSL connections》](20210408_06.md)  
 ##### 20210408_05.md   [《PostgreSQL 14 preview - 自定义GUC参数规范化》](20210408_05.md)  
 ##### 20210408_04.md   [《PostgreSQL 14 preview - 支持 SQL 指纹(规则化, 唯一ID): query id - GUC : compute_query_id》](20210408_04.md)  
-##### 20210408_03.md   [《PostgreSQL 14 preview - 支持 vacuum 强制加速参数 vacuum_failsafe_age , vacuum_multixact_failsafe_age.  防止 xid wraparound》](20210408_03.md)  
+##### 20210408_03.md   [《PostgreSQL 14 preview - 支持 vacuum 强制加速参数 vacuum_failsafe_age , vacuum_multixact_failsafe_age. (跳过vacuum index, 不受delay限制等) 防止 xid wraparound》](20210408_03.md)  
 ##### 20210408_02.md   [《PostgreSQL 14 preview - 支持 SQL-standard function body》](20210408_02.md)  
 ##### 20210408_01.md   [《PostgreSQL 14 preview - BYPASS_THRESHOLD_PAGES vacuum 优化, 避免每次都需要vacuum index, 当LP_DEAD覆盖的page较少时, 跳过index vacuum》](20210408_01.md)  
 ##### 20210407_09.md   [《先富起来的人如何带动后富起来的人? - 智赢模式》](20210407_09.md)  

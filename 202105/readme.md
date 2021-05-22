@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210522_02.md   [《PostgreSQL 14 preview - ECPG 语法增强 - 兼容Oracle PRO\*C declare statement 语法》](20210522_02.md)  
+##### 20210522_01.md   [《PostgreSQL pl/Julia 函数语言接口 - 广泛应用于机器学习、可视化、数据科学、并行计算、科学领域》](20210522_01.md)  
 ##### 20210521_02.md   [《PostgreSQL 多个范围条件的分段SQL 收敛过滤性优化 - 变换1个范围 TO x=any(array)》](20210521_02.md)  
 ##### 20210521_01.md   [《未来三十年，人口巨变！怎么应对?》](20210521_01.md)  
 ##### 20210519_03.md   [《PostgreSQL pgbnech 支持 长尾模型数据生成 - 离散幂律概率分布 - random_zipfian》](20210519_03.md)  

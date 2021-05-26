@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210526_01.md   [《元认知》](20210526_01.md)  
 ##### 20210525_02.md   [《PostgreSQL 实例启动时的HOOK, 自动加载预定义SQL或文件 - pg_start_sql 插件》](20210525_02.md)  
 ##### 20210525_01.md   [《PostgreSQL 执行计划篡改、SQL rule自动改写SQL(query rewrite)、自动触发额外动作 - 指鹿为马、垂帘听政、狸猫换太子 - sql outline》](20210525_01.md)  
 ##### 20210522_02.md   [《PostgreSQL 14 preview - ECPG 语法增强 - 兼容Oracle PRO\*C declare statement 语法》](20210522_02.md)  

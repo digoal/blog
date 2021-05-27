@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210527_04.md   [《通胀测算方法》](20210527_04.md)  
 ##### 20210527_03.md   [《数据科学家必须了解 - wolfram - wolfram alpha 科学计算 saas - 全球现代技术计算的终极系统》](20210527_03.md)  
 ##### 20210527_02.md   [《PostgreSQL PGSpider 插件 - sqlite_fdw, influxdb_fdw, griddb_fdw, mysql_fdw, parquet_s3_fdw》](20210527_02.md)  
 ##### 20210527_01.md   [《PostgreSQL 随机查询采样 - 既要真随机、又要高性能 - table sample方法》](20210527_01.md)  

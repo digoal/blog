@@ -2830,7 +2830,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201503/20150304_01.md   [《PostgreSQL 线性回归 - 股价预测 1》](201503/20150304_01.md)  
 ##### 201503/20150303_03.md   [《PostgreSQL aggregate function 2 : Aggregate Functions for Statistics》](201503/20150303_03.md)  
 ##### 201503/20150303_02.md   [《用PostgreSQL了解一些统计学术语以及计算方法和表示方法 - 1》](201503/20150303_02.md)  
-##### 201503/20150303_01.md   [《在PostgreSQL中用线性回归分析(linear regression) - 实现数据预测》](201503/20150303_01.md)  
+##### 201503/20150303_01.md   [《在PostgreSQL中用线性回归分析(linear regression) - 实现数据预测 - 股票预测例子》](201503/20150303_01.md)  
 ##### 201503/20150302_01.md   [《PostgreSQL aggregate function 1 : General-Purpose Aggregate Functions》](201503/20150302_01.md)  
 ----  
 ##### 201502/20150228_02.md   [《population & sample covariance, standard deviation Aggregate in PostgreSQL》](201502/20150228_02.md)  

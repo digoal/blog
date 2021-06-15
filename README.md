@@ -83,6 +83,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202106/20210615_09.md   [《重新发现PostgreSQL之美 - 26 这个推荐方案可能值1亿》](202106/20210615_09.md)  
+##### 202106/20210615_08.md   [《PostgreSQL 需求? 聚合语法 order_by_clause 支持 limit》](202106/20210615_08.md)  
 ##### 202106/20210615_07.md   [《PostgreSQL 15 期待 - PHOT - 降低索引更新量》](202106/20210615_07.md)  
 ##### 202106/20210615_06.md   [《PostgreSQL 15 期待 - 支持range merge join》](202106/20210615_06.md)  
 ##### 202106/20210615_05.md   [《PostgreSQL 15 期待 - wal_compression = pglz/zlib/lz4/zstd》](202106/20210615_05.md)  

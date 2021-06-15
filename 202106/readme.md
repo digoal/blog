@@ -2,6 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20210615_07.md   [《PostgreSQL 15 期待 - PHOT - 降低索引更新量》](20210615_07.md)  
+##### 20210615_06.md   [《PostgreSQL 15 期待 - 支持range merge join》](20210615_06.md)  
+##### 20210615_05.md   [《PostgreSQL 15 期待 - wal_compression = pglz/zlib/lz4/zstd》](20210615_05.md)  
+##### 20210615_04.md   [《PostgreSQL 15 期待 - 非对称分区表智能JOIN》](20210615_04.md)  
+##### 20210615_03.md   [《PostgreSQL 15 期待 - MERGE 语法》](20210615_03.md)  
+##### 20210615_02.md   [《PostgreSQL 15 期待 - 扩展 parser》](20210615_02.md)  
+##### 20210615_01.md   [《PostgreSQL 监控图表、报告、日志、建议、推荐 - pgSCV — metrics exporter for PostgreSQL (not only)》](20210615_01.md)  
 ##### 20210614_09.md   [《重新发现PostgreSQL之美 - 25 最强大脑题目 泰森多边形(空间战略布局问题)》](20210614_09.md)  
 ##### 20210614_08.md   [《MacOS markdown 编辑和阅读器 https://typora.io/》](20210614_08.md)  
 ##### 20210614_07.md   [《Github 加速镜像 fastgit》](20210614_07.md)  

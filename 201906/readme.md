@@ -15,7 +15,7 @@
 ##### 20190611_02.md   [《PostgreSQL Oracle 兼容之 pljson》](20190611_02.md)  
 ##### 20190611_01.md   [《PostgreSQL 求一个字符串里面某个字符或字符串出现了多少次？》](20190611_01.md)  
 ##### 20190610_02.md   [《PostgreSQL 如果最后一个WAL文件中没有事务结束record或target_name point时，可以正常恢复到指定时间点吗》](20190610_02.md)  
-##### 20190610_01.md   [《PostgreSQL 生成对象DDL语句 - ddlx 插件 - "show create"》](20190610_01.md)  
+##### 20190610_01.md   [《PostgreSQL 生成对象DDL语句 - ddlx 插件 - 类似"show create"》](20190610_01.md)  
 ##### 20190608_04.md   [《[转载] PostgreSQL and patents - PostgreSQL与专利》](20190608_04.md)  
 ##### 20190608_03.md   [《[转载] 开源与闭源的斗争，GPLv3协议的发布》](20190608_03.md)  
 ##### 20190608_02.md   [《PostgreSQL 社区分析 - 为什么PostgreSQL社区几乎不可能被任何一个商业公司、国家所控制？》](20190608_02.md)  

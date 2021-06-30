@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20210630_03.md   [《PostgreSQL 15 preview - libpq协议新增H消息, 通知DB server flush output buffer in pipeline mode.》](20210630_03.md)  
+##### 20210630_02.md   [《PostgreSQL 15 preview - 逻辑复制支持解析2PC command》](20210630_02.md)  
+##### 20210630_01.md   [《重新发现PostgreSQL之美 - 38 肝者,将军之官,谋虑出焉. 优化器》](20210630_01.md)  
+##### 20210629_01.md   [《PostgreSQL 15 preview - wal full page write支持lz4压缩》](20210629_01.md)  
 ##### 20210628_01.md   [《重新发现PostgreSQL之美 - 37 三焦者,决渎之官,水道出焉. FDW》](20210628_01.md)  
 ##### 20210627_01.md   [《《开慧社》第四期 《彩蛋, 谈谈阿里味》》](20210627_01.md)  
 ##### 20210626_02.md   [《《开慧社》第三期 - 萧少聪 (笑谈数据库行业)》](20210626_02.md)  

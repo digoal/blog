@@ -83,6 +83,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202107/20210702_01.md   [《PostgreSQL 15 preview - 支持make install-bin install-world-bin》](202107/20210702_01.md)  
+##### 202107/20210701_01.md   [《从开源产品 看 - 人民有信仰，民族有希望，国家有力量》](202107/20210701_01.md)  
+----  
 ##### 202106/20210630_03.md   [《PostgreSQL 15 preview - libpq协议新增H消息, 通知DB server flush output buffer in pipeline mode.》](202106/20210630_03.md)  
 ##### 202106/20210630_02.md   [《PostgreSQL 15 preview - 逻辑复制支持解析2PC command》](202106/20210630_02.md)  
 ##### 202106/20210630_01.md   [《重新发现PostgreSQL之美 - 38 肝者,将军之官,谋虑出焉. 优化器》](202106/20210630_01.md)  

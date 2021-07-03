@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210704_01.md   [《《开慧社》第五期 - 专访PG社区主席 - 揭开PG运作机制的神秘面纱!》](20210704_01.md)  
 ##### 20210702_03.md   [《PostgreSQL PGCon 2020 全视频》](20210702_03.md)  
 ##### 20210702_02.md   [《PostgreSQL 15 wait - 增量物化视图》](20210702_02.md)  
 ##### 20210702_01.md   [《PostgreSQL 15 preview - 支持make install-bin install-world-bin》](20210702_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210707_02.md   [《PostgreSQL 15 preview - Use a hash table to speed up NOT IN(values)》](20210707_02.md)  
+##### 20210707_01.md   [《PostgreSQL 15 preview - Allow CustomScan providers to say whether they support projections.》](20210707_01.md)  
 ##### 20210706_01.md   [《重新发现PostgreSQL之美 - 39 谁动了我的奶酪》](20210706_01.md)  
 ##### 20210704_01.md   [《《开慧社》第五期 - 专访PG社区主席 - 揭开PG运作机制的神秘面纱!》](20210704_01.md)  
 ##### 20210702_03.md   [《PostgreSQL PGCon 2020 全视频》](20210702_03.md)  

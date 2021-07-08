@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210708_03.md   [《PostgreSQL 触发器在逻辑复制节点会不会被执行?》](20210708_03.md)  
+##### 20210708_02.md   [《PostgreSQL 用户名与密码安全策略插件 credcheck》](20210708_02.md)  
+##### 20210708_01.md   [《delay standby和dblink或postgres_fdw 模拟时间旅行表 - TEMPORAL TABLES》](20210708_01.md)  
 ##### 20210707_02.md   [《PostgreSQL 15 preview - Use a hash table to speed up NOT IN(values)》](20210707_02.md)  
 ##### 20210707_01.md   [《PostgreSQL 15 preview - Allow CustomScan providers to say whether they support projections.》](20210707_01.md)  
 ##### 20210706_01.md   [《重新发现PostgreSQL之美 - 39 谁动了我的奶酪》](20210706_01.md)  

@@ -83,6 +83,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202107/20210708_04.md   [《PostgreSQL hook & callback》](202107/20210708_04.md)  
 ##### 202107/20210708_03.md   [《PostgreSQL 触发器在逻辑复制节点会不会被执行?》](202107/20210708_03.md)  
 ##### 202107/20210708_02.md   [《PostgreSQL 用户名与密码安全策略插件 credcheck》](202107/20210708_02.md)  
 ##### 202107/20210708_01.md   [《delay standby和dblink或postgres_fdw 模拟时间旅行表 - TEMPORAL TABLES》](202107/20210708_01.md)  

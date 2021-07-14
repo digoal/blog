@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210714_02.md   [《PostgreSQL pg_upgrade will destroy all replication slots》](20210714_02.md)  
+##### 20210714_01.md   [《PostgreSQL 15 preview - 内置逻辑复制sub pub支持prepared transactions》](20210714_01.md)  
 ##### 20210712_01.md   [《重新发现PostgreSQL之美 - 43 快速破镜重圆》](20210712_01.md)  
 ##### 20210709_02.md   [《PostgreSQL 正则表达式 短文本清洗, 去除重复字符》](20210709_02.md)  
 ##### 20210709_01.md   [《实时营销, 人群圈选推荐业务 性能优化 - memory copy+rb contains计算瓶颈 - rb hash分片》](20210709_01.md)  

@@ -83,6 +83,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202107/20210715_04.md   [《PostgreSQL timescaledb 时序数据库 Hyperfunctions 时序数据分析函数》](202107/20210715_04.md)  
+##### 202107/20210715_03.md   [《PostgreSQL 数据块恢复 - pg_filedump》](202107/20210715_03.md)  
+##### 202107/20210715_02.md   [《PostgreSQL JSON 构造器》](202107/20210715_02.md)  
+##### 202107/20210715_01.md   [《PostgreSQL 15 preview - psql 客户端copy支持larger chunk, 提高速度》](202107/20210715_01.md)  
+##### 202107/20210714_04.md   [《《开慧社》第五期 - 我的奶奶,《黄帝内经》的生活案例》](202107/20210714_04.md)  
+##### 202107/20210714_03.md   [《《开慧社》第六期 - 聊聊中医》](202107/20210714_03.md)  
 ##### 202107/20210714_02.md   [《PostgreSQL pg_upgrade will destroy all replication slots》](202107/20210714_02.md)  
 ##### 202107/20210714_01.md   [《PostgreSQL 15 preview - 内置逻辑复制sub pub支持prepared transactions》](202107/20210714_01.md)  
 ##### 202107/20210712_01.md   [《重新发现PostgreSQL之美 - 43 快速破镜重圆》](202107/20210712_01.md)  

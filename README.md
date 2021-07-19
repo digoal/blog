@@ -83,6 +83,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202107/20210719_04.md   [《PostgreSQL PQTrace 打印 frontend, backend 协议层交互内容》](202107/20210719_04.md)  
+##### 202107/20210719_03.md   [《PostgreSQL 逻辑复制支持in progress 事务, 大事务复制性能提升2倍以上.》](202107/20210719_03.md)  
+##### 202107/20210719_02.md   [《PostgreSQL 15 preview - MacOS 通过 fcntl 关闭data cache, 支持 direct I/O》](202107/20210719_02.md)  
+##### 202107/20210719_01.md   [《PostgreSQL 15 preview - unnest multirange》](202107/20210719_01.md)  
 ##### 202107/20210715_05.md   [《重新发现PostgreSQL之美 - 44 摩斯电码》](202107/20210715_05.md)  
 ##### 202107/20210715_04.md   [《PostgreSQL timescaledb 时序数据库 Hyperfunctions 时序数据分析函数》](202107/20210715_04.md)  
 ##### 202107/20210715_03.md   [《PostgreSQL 数据块恢复 - pg_filedump》](202107/20210715_03.md)  

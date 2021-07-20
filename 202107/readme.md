@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210720_03.md   [《用PostgreSQL或polardb pg开源版, 结合Scikit Learn与matplotlib进行可视化数据挖掘分析》](20210720_03.md)  
+##### 20210720_02.md   [《Ora2PG 迁移数据性能优化 - 使用oracle_fdw》](20210720_02.md)  
+##### 20210720_01.md   [《在线翻译SQL方言, 例如mysql to PostgreSQL》](20210720_01.md)  
 ##### 20210719_04.md   [《PostgreSQL PQTrace 打印 frontend, backend 协议层交互内容》](20210719_04.md)  
 ##### 20210719_03.md   [《PostgreSQL 逻辑复制支持in progress 事务, 大事务复制性能提升2倍以上.》](20210719_03.md)  
 ##### 20210719_02.md   [《PostgreSQL 15 preview - MacOS 通过 fcntl 关闭data cache, 支持 direct I/O》](20210719_02.md)  

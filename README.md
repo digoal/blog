@@ -11,12 +11,13 @@
   
 2、[《2020-PostgreSQL 15大应用场景实践 - 直播回放》](202009/20200903_02.md)  
 3、[《2020-PostgreSQL+MySQL 联合解决方案课程 - 汇总视频、课件》](202001/20200118_02.md)  
-4、[《2019-PostgreSQL 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  
-5、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  
-6、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  
-7、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
-8、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  
-9、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  
+4、[《2020-重新发现PG之美 - 系列视频》](202105/20210526_02.md)  
+5、[《2019-PostgreSQL 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  
+6、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  
+7、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  
+8、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    
+9、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  
+10、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  
   
 ### 二、学习资料  
   
@@ -83,6 +84,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202107/20210720_03.md   [《用PostgreSQL或polardb pg开源版, 结合Scikit Learn与matplotlib进行可视化数据挖掘分析》](202107/20210720_03.md)  
+##### 202107/20210720_02.md   [《Ora2PG 迁移数据性能优化 - 使用oracle_fdw》](202107/20210720_02.md)  
+##### 202107/20210720_01.md   [《在线翻译SQL方言, 例如mysql to PostgreSQL》](202107/20210720_01.md)  
 ##### 202107/20210719_04.md   [《PostgreSQL PQTrace 打印 frontend, backend 协议层交互内容》](202107/20210719_04.md)  
 ##### 202107/20210719_03.md   [《PostgreSQL 逻辑复制支持in progress 事务, 大事务复制性能提升2倍以上.》](202107/20210719_03.md)  
 ##### 202107/20210719_02.md   [《PostgreSQL 15 preview - MacOS 通过 fcntl 关闭data cache, 支持 direct I/O》](202107/20210719_02.md)  

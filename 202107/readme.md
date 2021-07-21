@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210721_03.md   [《重新发现PostgreSQL之美 - 45 个性化》](20210721_03.md)  
+##### 20210721_02.md   [《云原生计算基金会 CNCF Cloud Native Computing Foundation》](20210721_02.md)  
+##### 20210721_01.md   [《PostgreSQL zheap 引擎最新进展》](20210721_01.md)  
 ##### 20210720_04.md   [《PostGIS 3.2 支持 ST_MakeValid 新算法: structure , 修复invalid polygons and multipolygons》](20210720_04.md)  
 ##### 20210720_03.md   [《用PostgreSQL或polardb pg开源版, 结合Scikit Learn与matplotlib进行可视化数据挖掘分析》](20210720_03.md)  
 ##### 20210720_02.md   [《Ora2PG 迁移数据性能优化 - 使用oracle_fdw》](20210720_02.md)  

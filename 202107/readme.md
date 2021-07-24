@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210724_01.md   [《《开慧社》第七期 - 90后小水滴创始人谭登》](20210724_01.md)  
 ##### 20210723_01.md   [《为什么向量数据要归一化?》](20210723_01.md)  
 ##### 20210722_01.md   [《PostgreSQL 跨库数据交换的安全问题的解决》](20210722_01.md)  
 ##### 20210721_03.md   [《重新发现PostgreSQL之美 - 45 个性化》](20210721_03.md)  
@@ -35,7 +36,7 @@
 ##### 20210707_02.md   [《PostgreSQL 15 preview - Use a hash table to speed up NOT IN(values)》](20210707_02.md)  
 ##### 20210707_01.md   [《PostgreSQL 15 preview - Allow CustomScan providers to say whether they support projections.》](20210707_01.md)  
 ##### 20210706_01.md   [《重新发现PostgreSQL之美 - 39 谁动了我的奶酪》](20210706_01.md)  
-##### 20210704_01.md   [《《开慧社》第五期 - 专访PG社区主席 - 揭开PG运作机制的神秘面纱!》](20210704_01.md)  
+##### 20210704_01.md   [《《开慧社》第八期 - 专访PG社区主席 - 揭开PG运作机制的神秘面纱!》](20210704_01.md)  
 ##### 20210702_03.md   [《PostgreSQL PGCon 2020 全视频》](20210702_03.md)  
 ##### 20210702_02.md   [《PostgreSQL 15 wait - 增量物化视图》](20210702_02.md)  
 ##### 20210702_01.md   [《PostgreSQL 15 preview - 支持make install-bin install-world-bin》](20210702_01.md)  

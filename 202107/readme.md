@@ -2,7 +2,9 @@
   
 ### 文章列表  
 ----  
-##### 20210728_02.md   [《PolarDB PostgreSQL 开源训练营》](20210728_02.md)  
+##### 20210728_04.md   [《重新发现PostgreSQL之美 - 47 为什么脑容量更大的尼安德特人会被现代智人消灭?》](20210728_04.md)  
+##### 20210728_03.md   [《转 - 图数据库vesoft 创始人叶小萌的采访 - 我，大厂离职，拿着千万美元融资搞了个近乎全是程序员的公司》](20210728_03.md)  
+##### 20210728_02.md   [《PolarDB PostgreSQL 开源训练营回放》](20210728_02.md)  
 ##### 20210728_01.md   [《PostgreSQL 15 preview - 支持修改table access method (存储引擎)》](20210728_01.md)  
 ##### 20210727_03.md   [《PostgreSQL 15 preview - NUMERIC(precision, scale) , scale支持 -1000 到 1000》](20210727_03.md)  
 ##### 20210727_02.md   [《PostgreSQL patch: pg_resetxlog: add option -u to set oldest xid & use by pg_upgrade》](20210727_02.md)  

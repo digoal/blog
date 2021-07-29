@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210729_03.md   [《一种新的向量检索索引 DiskANN: Fast Accurate Billion-point Nearest Neighbor Search on a Single Node》](20210729_03.md)  
 ##### 20210729_02.md   [《PostgreSQL 恢复过程中 minimum recovery point 的推进》](20210729_02.md)  
 ##### 20210729_01.md   [《PostgreSQL bug? - 删除column时不清理pg_attribute, 并且增加到1600列后无法再新增列, 即时drop column, vacuum full》](20210729_01.md)  
 ##### 20210728_04.md   [《重新发现PostgreSQL之美 - 47 为什么脑容量更大的尼安德特人会被现代智人消灭?》](20210728_04.md)  

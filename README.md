@@ -53,7 +53,7 @@
 8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    
 9、[《云、商业、开源数据库终局之战 - 商业角度解读PG如何破局 - openapi 、 扩展能力、插件开源协议》](202007/20200727_04.md)    
 10、[《[直播]大话数据库终局之战》](202009/20200926_03.md)      
-11、[《未来数据库方向》](202005/20200527_06.md)    
+11、[《未来数据库方向 - 以及PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](202005/20200527_06.md)    
 12、[《《引爆点》原理, 如何影响PG发展》](197001/20200804_01.md)      
 13、[《打破惯性思维, 引导创新, 引爆流行, PG》](202104/20210411_01.md)        
 14、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   
@@ -83,6 +83,16 @@ digoal's|PostgreSQL|文章|归类
 **[33 招聘与求职信息](class/33.md)** | **[34 沙龙、会议、培训](class/34.md)** | **[35 思维精进](class/35.md)** | **[36 视频回放](class/36.md)**    
   
 ### 所有文档如下  
+----  
+##### 202108/20210801_09.md   [《PostgreSQL 增长 延升到 开源数据库增长思考》](202108/20210801_09.md)  
+##### 202108/20210801_08.md   [《PostgreSQL hacker Heikki Linnakangas 去 Zenith Labs 了?》](202108/20210801_08.md)  
+##### 202108/20210801_07.md   [《PostgreSQL 15 preivew - Move InRecovery and standbyState global vars to xlogutils.c》](202108/20210801_07.md)  
+##### 202108/20210801_06.md   [《PostgreSQL 15 preivew - getRecoveryStopReason 打印recovery停止的信息》](202108/20210801_06.md)  
+##### 202108/20210801_05.md   [《PostgreSQL 15 preivew - 逻辑复制请求: START_REPLICATION ... LOGICAL 文档修正》](202108/20210801_05.md)  
+##### 202108/20210801_04.md   [《PostgreSQL sharding extension citus 10.1 发布了哪些特性》](202108/20210801_04.md)  
+##### 202108/20210801_03.md   [《PostgreSQL 15 preview - postgres_fdw 支持case 语句pushdown》](202108/20210801_03.md)  
+##### 202108/20210801_02.md   [《时序数据库为什么增速第一》](202108/20210801_02.md)  
+##### 202108/20210801_01.md   [《开源社区成熟度研究报告》](202108/20210801_01.md)  
 ----  
 ##### 202107/20210729_03.md   [《一种新的向量检索索引 DiskANN: Fast Accurate Billion-point Nearest Neighbor Search on a Single Node》](202107/20210729_03.md)  
 ##### 202107/20210729_02.md   [《PostgreSQL 恢复过程中 minimum recovery point 的推进》](202107/20210729_02.md)  

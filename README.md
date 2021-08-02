@@ -84,7 +84,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202108/20210801_09.md   [《PostgreSQL 增长 延升到 开源数据库增长思考》](202108/20210801_09.md)  
+##### 202108/20210801_09.md   [《PostgreSQL 增长 -> 开源数据库增长思考》](202108/20210801_09.md)  
 ##### 202108/20210801_08.md   [《PostgreSQL hacker Heikki Linnakangas 去 Zenith Labs 了?》](202108/20210801_08.md)  
 ##### 202108/20210801_07.md   [《PostgreSQL 15 preivew - Move InRecovery and standbyState global vars to xlogutils.c》](202108/20210801_07.md)  
 ##### 202108/20210801_06.md   [《PostgreSQL 15 preivew - getRecoveryStopReason 打印recovery停止的信息》](202108/20210801_06.md)  

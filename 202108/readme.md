@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20210801_09.md   [《PostgreSQL 增长 延升到 开源数据库增长思考》](20210801_09.md)  
+##### 20210801_09.md   [《PostgreSQL 增长 -> 开源数据库增长思考》](20210801_09.md)  
 ##### 20210801_08.md   [《PostgreSQL hacker Heikki Linnakangas 去 Zenith Labs 了?》](20210801_08.md)  
 ##### 20210801_07.md   [《PostgreSQL 15 preivew - Move InRecovery and standbyState global vars to xlogutils.c》](20210801_07.md)  
 ##### 20210801_06.md   [《PostgreSQL 15 preivew - getRecoveryStopReason 打印recovery停止的信息》](20210801_06.md)  

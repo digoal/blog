@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210803_04.md   [《为什么高并发读写的性能会下降?  - tuple可见性判断, 事务快照损耗》](20210803_04.md)  
+##### 20210803_03.md   [《推杠赛, 挑战赛 设计》](20210803_03.md)  
 ##### 20210803_02.md   [《PostgreSQL 15 preview - 分区表append scan支持更多order by key场景 , 减少merge append(merge sort)的必要性》](20210803_02.md)  
 ##### 20210803_01.md   [《PostgreSQL 15 preview - 分区表裁剪优化, 未裁剪分区bitmapset - Track a Bitmapset of non-pruned partitions in RelOptInfo》](20210803_01.md)  
 ##### 20210801_09.md   [《PostgreSQL 增长 -> 开源数据库增长思考》](20210801_09.md)  

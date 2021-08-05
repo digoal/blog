@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210805_08.md   [《PostgreSQL 15 preview - pgbench pipeline压测代码优化, 提升性能》](20210805_08.md)  
+##### 20210805_07.md   [《PostgreSQL 15 preview - bgwriter , checkpointer stat代码分离》](20210805_07.md)  
+##### 20210805_06.md   [《PostgreSQL 递归一例, 问题、回答、留言, 1对多对多的结构》](20210805_06.md)  
 ##### 20210805_05.md   [《PostgreSQL 15 preview - 内置逻辑订阅sub/pub支持2PC, 内置pgoutput decoding plugin openapi支持2PC》](20210805_05.md)  
 ##### 20210805_04.md   [《PostgreSQL 15 preview - oracle 兼容性增强 regexp_xxx 系列函数对齐oracle》](20210805_04.md)  
 ##### 20210805_03.md   [《PostgreSQL interval 内部存储 - 月、日、微秒》](20210805_03.md)  

@@ -98,7 +98,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202108/20210803_03.md   [《推杠赛, 挑战赛 设计》](202108/20210803_03.md)  
 ##### 202108/20210803_02.md   [《PostgreSQL 15 preview - 分区表append scan支持更多order by key场景 , 减少merge append(merge sort)的必要性》](202108/20210803_02.md)  
 ##### 202108/20210803_01.md   [《PostgreSQL 15 preview - 分区表裁剪优化, 未裁剪分区bitmapset - Track a Bitmapset of non-pruned partitions in RelOptInfo》](202108/20210803_01.md)  
-##### 202108/20210801_09.md   [《PostgreSQL 增长 -> 开源数据库增长思考》](202108/20210801_09.md)  
+##### 202108/20210801_09.md   [《PostgreSQL 增长 -> 开源数据库增长思考 (推动开源产品发展的3驾马车 - 增长飞轮 : 用户、开发者、产品)》](202108/20210801_09.md)  
 ##### 202108/20210801_08.md   [《PostgreSQL hacker Heikki Linnakangas 去 Zenith Labs 了?》](202108/20210801_08.md)  
 ##### 202108/20210801_07.md   [《PostgreSQL 15 preivew - Move InRecovery and standbyState global vars to xlogutils.c》](202108/20210801_07.md)  
 ##### 202108/20210801_06.md   [《PostgreSQL 15 preivew - getRecoveryStopReason 打印recovery停止的信息》](202108/20210801_06.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20210806_03.md   [《[招聘] 阿里云开源数据库线招聘 全栈工程师》](20210806_03.md)  
+##### 20210806_02.md   [《PostgreSQL 15 preview - auxproc 代码独立》](20210806_02.md)  
+##### 20210806_01.md   [《PostgreSQL patch : 外部表支持 generated columns》](20210806_01.md)  
 ##### 20210805_08.md   [《PostgreSQL 15 preview - pgbench pipeline压测代码优化, 提升性能》](20210805_08.md)  
 ##### 20210805_07.md   [《PostgreSQL 15 preview - bgwriter , checkpointer stat代码分离》](20210805_07.md)  
 ##### 20210805_06.md   [《PostgreSQL 递归一例, 问题、回答、留言, 1对多对多的结构》](20210805_06.md)  

@@ -10,9 +10,13 @@ digoal(德哥)
 - 阿里巴巴钻石布道师
 - 42项数据库专利
 - [最近的一些思考](../class/35.md)  
+- 开设有[<开慧社>](https://space.bilibili.com/310191812/channel/detail?cid=191242&ctype=0)、[<德说>](https://space.bilibili.com/310191812/channel/detail?cid=198648&ctype=0)、[<重新发现PG之美>](https://space.bilibili.com/310191812/channel/detail?cid=188682&ctype=0)等专栏。
   
 ## 工作经历
-### 2015.7 ~ 现在 阿里云        
+### 2021.8 ~ 现在 阿里云  
+架构组, 负责数据库开源.  
+    
+### 2015.7 ~ 2021.8 阿里云        
 2015.7加入阿里云数据库内核组, 负责RDS PG, HybridDB for PG的架构设计, 为阿里巴巴内(阿里云、高德、淘宝、天猫、优酷、阿里妈妈、IOT、未来酒店、B2B、AE、新零售、菜鸟、公共平台、飞猪、YUNOS、智慧城市)、外部客户提供架构、方案设计、POC支持. 形成行业方案沉淀并推广。  
   
 2018.10转入阿里云数据库产品团队，负责阿里云PostgreSQL系列产品（[RDS PG](https://www.aliyun.com/product/rds/postgresql) ，[PPAS（兼容Oracle）](https://www.aliyun.com/product/rds/ppas) ， [POLARDB for PG， POLARDB for Oracle(已商用)](https://www.aliyun.com/product/polardb)）的产品规划、设计、生态构建。   
@@ -257,3 +261,4 @@ email: digoal@126.com
 [卡通版照片1](digoal_1.png)  
 [卡通版照片2](digoal_2.png)  
     
+  

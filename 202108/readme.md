@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210823_05.md   [《DB吐槽大会 开播》](20210823_05.md)  
+##### 20210823_04.md   [《面试官能力训练》](20210823_04.md)  
 ##### 20210823_03.md   [《云存储在GIS领域的raster存储应用 - Waiting for PostGIS 3.2: Secure Cloud Raster Access》](20210823_03.md)  
 ##### 20210823_02.md   [《PostgreSQL Oracle 兼容性 - utl_mail , dbms_mail 发邮件》](20210823_02.md)  
 ##### 20210823_01.md   [《PostgreSQL 15 preview - Allow parallel DISTINCT - 2阶段并行计算》](20210823_01.md)  

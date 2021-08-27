@@ -24,7 +24,7 @@
 ##### 20180416_02.md   [《PostgreSQL 网约车打车派单 高峰区域集中打车冲突优化1 - 宇宙大爆炸理论与PostgreSQL实践》](20180416_02.md)  
 ##### 20180416_01.md   [《PostgreSQL PostGIS so 预加载(preload) 性能提升 - 暨什么动态库建议预加载》](20180416_01.md)  
 ##### 20180414_03.md   [《网约车打车派单系统思考 数据库设计与实现 - 每月投入6140元, 1天最多可盈利117亿  -_-!》](20180414_03.md)  
-##### 20180414_02.md   [《PostgreSQL 大表扫描策略 - BAS_BULKREAD , synchronize_seqscans》](20180414_02.md)  
+##### 20180414_02.md   [《PostgreSQL 大表扫描策略 - BAS_BULKREAD , synchronize_seqscans , ring buffer 代替 buffer pool》](20180414_02.md)  
 ##### 20180414_01.md   [《[未完待续] pgloader - mysql , sqlserver 迁移到 PostgreSQL - (含DDL自动迁移)》](20180414_01.md)  
 ##### 20180413_01.md   [《PostgreSQL 从文件时间戳获悉一些信息(如数据库创建时间)》](20180413_01.md)  
 ##### 20180411_02.md   [《EDB PPAS(Oracle 兼容版) Oracle与PostgreSQL 兼容模式的参数配置切换 - 珍藏级》](20180411_02.md)  

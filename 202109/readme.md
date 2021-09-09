@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20210909_02.md   [《PostgreSQL tuples_returned , tuples_fetched 说明》](20210909_02.md)  
+##### 20210909_01.md   [《PostgreSQL 15 preview - Introduce GUC shared_memory_size》](20210909_01.md)  
 ##### 20210908_03.md   [《DB吐槽大会,第39期 - PG 物化视图不支持基于log的增量刷新》](20210908_03.md)  
 ##### 20210908_02.md   [《DB吐槽大会,第38期 - PG 不能自动创建(扩展)分区》](20210908_02.md)  
 ##### 20210908_01.md   [《PostgreSQL hash 分区表 分区ID 计算》](20210908_01.md)  

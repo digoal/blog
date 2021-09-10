@@ -84,6 +84,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202109/20210910_01.md   [《DB吐槽大会,第41期 - 无法预测大查询剩余执行时间》](202109/20210910_01.md)  
 ##### 202109/20210909_03.md   [《DB吐槽大会,第40期 - PG 缺少qps计数器》](202109/20210909_03.md)  
 ##### 202109/20210909_02.md   [《PostgreSQL tuples_returned , tuples_fetched 说明》](202109/20210909_02.md)  
 ##### 202109/20210909_01.md   [《PostgreSQL 15 preview - Introduce GUC shared_memory_size》](202109/20210909_01.md)  

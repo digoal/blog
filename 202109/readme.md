@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20210910_01.md   [《DB吐槽大会,第41期 - 无法预测大查询剩余执行时间》](20210910_01.md)  
 ##### 20210909_03.md   [《DB吐槽大会,第40期 - PG 缺少qps计数器》](20210909_03.md)  
 ##### 20210909_02.md   [《PostgreSQL tuples_returned , tuples_fetched 说明》](20210909_02.md)  
 ##### 20210909_01.md   [《PostgreSQL 15 preview - Introduce GUC shared_memory_size》](20210909_01.md)  

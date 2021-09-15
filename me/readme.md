@@ -217,6 +217,14 @@ pluggable 内部能力输送: 达摩院、蚂蚁、安全(堡垒，可信融合�
 2020-12-18 大型企业数据库与应用实践-dsg,阿里云,pg社区,上海开源信息技术协会 联合主办
 2021-01-15 PG中文社区2020年度峰会-2021,别让你的企业输在起跑线
 2021-01-18 阿里云PG创新训练营
+xxxx-xx-xx 阿里云PolarDB PG开源训练营
+xxxx-xx-xx 开源学堂
+xxxx-xx-xx 开源大咖说
+xxxx-xx-xx 开慧社
+xxxx-xx-xx 德说
+xxxx-xx-xx 发现PG之美
+xxxx-xx-xx 发现PolarDB之美
+xxxx-xx-xx DB吐槽大会
 ```
 - 企业培训
 ```

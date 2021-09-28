@@ -16,19 +16,21 @@ echo "  "  >> ./README.md
 echo "1、视频下载链接： https://pan.baidu.com/s/1Q5u5NSrb0gL5-psA9DCBUQ   (提取码：5nox   如果链接失效请通知我, 谢谢)  " >> ./README.md
 echo "- PostgreSQL 9.3 数据库管理与优化 4天  " >> ./README.md
 echo "- PostgreSQL 9.3 数据库管理与优化 5天  " >> ./README.md
-echo "- PostgreSQL 9.1 数据库管理与开发 1天  " >> ./README.md
 echo "- PostgreSQL 9.3 数据库优化 3天  " >> ./README.md
+echo "- PostgreSQL 9.1 数据库管理与开发 1天  " >> ./README.md
 echo "- PostgreSQL 专题讲座  " >> ./README.md
 echo "  "  >> ./README.md
-echo "2、[《2020-PostgreSQL 15大应用场景实践 - 直播回放》](202009/20200903_02.md)  " >> ./README.md
-echo "3、[《2020-PostgreSQL+MySQL 联合解决方案课程 - 汇总视频、课件》](202001/20200118_02.md)  " >> ./README.md
-echo "4、[《2020-重新发现PG之美 - 系列视频》](202105/20210526_02.md)  " >> ./README.md
-echo "5、[《2019-PostgreSQL 2天体系化培训 - 视频每周更新》](201901/20190105_01.md)  " >> ./README.md 
-echo "6、[《2017-PostgreSQL 应用场景实践 - 含视频》](201805/20180524_02.md)  " >> ./README.md 
-echo "7、[《2019-PG天天象上沙龙纪录- 含视频》](201801/20180121_01.md)  " >> ./README.md 
-echo "8、[《2019-Oracle迁移到PostgreSQL - 实战培训》](201906/20190615_03.md)    " >> ./README.md 
-echo "9、[《2018-PG生态、案例、开发实践系列 - 培训视频》](https://edu.aliyun.com/course/836/lesson/list)  "  >> ./README.md
-echo "10、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  "  >> ./README.md   
+echo "2、[《2021-重新发现PG之美 系列 - 适合架构师与业务开发者》](202105/20210526_02.md)  " >> ./README.md
+echo "3、[《2021-DB吐槽大会 系列 - 适合架构师与内核开发者》](202108/20210823_05.md)  " >> ./README.md
+echo "4、[《2020-PostgreSQL 应用场景最佳实践 - 适合架构师与业务开发者》](202009/20200903_02.md)  " >> ./README.md
+echo "5、[《2020-PostgreSQL+MySQL 联合解决方案课程 - 适合架构师与业务开发者》](202001/20200118_02.md)  " >> ./README.md
+echo "6、[《2019-PostgreSQL 2天体系化培训 - 适合DBA》](201901/20190105_01.md)  " >> ./README.md 
+echo "7、[《2017-PostgreSQL 应用场景实践 - 适合架构师与业务开发者》](201805/20180524_02.md)  " >> ./README.md 
+echo "8、[《2019-PG天天象上沙龙纪录 - 适合DBA》](201801/20180121_01.md)  " >> ./README.md 
+echo "9、[《2019-Oracle迁移到PostgreSQL - 适合DBA与业务开发者》](201906/20190615_03.md)    " >> ./README.md 
+echo "10、[《2021-Ask 德哥 系列 - 适合DBA与业务开发者》](202109/20210928_01.md)    " >> ./README.md 
+echo "11、[《2018-PG生态、案例、开发实践系列 - 适合架构师与业务开发者》](https://edu.aliyun.com/course/836/lesson/list)  "  >> ./README.md
+echo "12、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  "  >> ./README.md   
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md
@@ -54,22 +56,23 @@ echo "  "  >> ./README.md
 echo "### 三、[感恩](201803/20180322_12.md)  " >> ./README.md
 echo "### 四、[思考](class/35.md)  " >> ./README.md
 echo "  "  >> ./README.md
-echo "1、[《PG社区建设方法论 - 五看三定》](202103/20210329_01.md)     " >> ./README.md 
-echo "2、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md
-echo "3、[《PostgreSQL 社区建设商业策划 {未完}》](202008/20200828_01.md)      " >> ./README.md
-echo "4、[《[未完] PostgreSQL\Greenplum 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
-echo "5、[《[未完] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
-echo "6、[《为什么企业应该参与PG社区建设?》](202003/20200321_01.md)    " >> ./README.md
-echo "7、[《企业为什么纷纷选择阿里云AliPG》](202005/20200523_01.md)    " >> ./README.md
-echo "8、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    " >> ./README.md
-echo "9、[《云、商业、开源数据库终局之战 - 商业角度解读PG如何破局 - openapi 、 扩展能力、插件开源协议》](202007/20200727_04.md)    " >> ./README.md
-echo "10、[《[直播]大话数据库终局之战》](202009/20200926_03.md)      " >> ./README.md
-echo "11、[《未来数据库方向 - 以及PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](202005/20200527_06.md)    " >> ./README.md
-echo "12、[《《引爆点》原理, 如何影响PG发展》](197001/20200804_01.md)      " >> ./README.md
-echo "13、[《打破惯性思维, 引导创新, 引爆流行, PG》](202104/20210411_01.md)        " >> ./README.md
-echo "14、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   " >> ./README.md 
-echo "15、[《开源数据库全球化协作浪潮 思考 - 24问》](202101/20210120_02.md)       " >> ./README.md
-echo "16、[《企业CxO数据库选型应该回答清楚的 15 个问题》](202101/20210117_04.md)         " >> ./README.md
+echo "1、[《德说 系列》](202108/20210818_02.md)     " >> ./README.md 
+echo "2、[《PG社区建设方法论 - 五看三定》](202103/20210329_01.md)     " >> ./README.md 
+echo "3、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md
+echo "4、[《PostgreSQL 社区建设商业策划 {未完}》](202008/20200828_01.md)      " >> ./README.md
+echo "5、[《[未完] PostgreSQL\Greenplum 社区管理 TODO》](201710/20171017_05.md)    " >> ./README.md
+echo "6、[《[未完] PostgreSQL\Greenplum Customer视角TODO》](201710/20171017_01.md)    " >> ./README.md
+echo "7、[《为什么企业应该参与PG社区建设?》](202003/20200321_01.md)    " >> ./README.md
+echo "8、[《企业为什么纷纷选择阿里云AliPG》](202005/20200523_01.md)    " >> ./README.md
+echo "9、[《为什么数据库选型和找对象一样重要》](202003/20200322_01.md)    " >> ./README.md
+echo "10、[《云、商业、开源数据库终局之战 - 商业角度解读PG如何破局 - openapi 、 扩展能力、插件开源协议》](202007/20200727_04.md)    " >> ./README.md
+echo "11、[《[直播]大话数据库终局之战》](202009/20200926_03.md)      " >> ./README.md
+echo "12、[《未来数据库方向 - 以及PostgreSQL 有价值的插件、可改进功能、开放接口 (202005)》](202005/20200527_06.md)    " >> ./README.md
+echo "13、[《《引爆点》原理, 如何影响PG发展》](197001/20200804_01.md)      " >> ./README.md
+echo "14、[《打破惯性思维, 引导创新, 引爆流行, PG》](202104/20210411_01.md)        " >> ./README.md
+echo "15、[《PostgreSQL 核心卖点提取方法》](202006/20200609_02.md)   " >> ./README.md 
+echo "16、[《开源数据库全球化协作浪潮 思考 - 24问》](202101/20210120_02.md)       " >> ./README.md
+echo "17、[《企业CxO数据库选型应该回答清楚的 15 个问题》](202101/20210117_04.md)         " >> ./README.md
 echo "  "  >> ./README.md
 echo "PG官方微信 | PG技术进阶钉钉群</br>每周直播 | digoal </br>个人微信  " >> ./README.md
 echo "---|---|---  " >> ./README.md

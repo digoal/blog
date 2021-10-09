@@ -21,7 +21,7 @@ echo "- PostgreSQL 9.1 数据库管理与开发 1天  " >> ./README.md
 echo "- PostgreSQL 专题讲座  " >> ./README.md
 echo "  "  >> ./README.md
 echo "2、[《2021-重新发现PG之美 系列 - 适合架构师与业务开发者》](202105/20210526_02.md)  " >> ./README.md
-echo "3、[《2021-DB吐槽大会 系列 - 适合架构师与内核开发者》](202108/20210823_05.md)  " >> ./README.md
+echo "3、[《2021-DB吐槽大会 系列 - 适合产品经理、架构师与内核开发者》](202108/20210823_05.md)  " >> ./README.md
 echo "4、[《2020-PostgreSQL 应用场景最佳实践 - 适合架构师与业务开发者》](202009/20200903_02.md)  " >> ./README.md
 echo "5、[《2020-PostgreSQL+MySQL 联合解决方案课程 - 适合架构师与业务开发者》](202001/20200118_02.md)  " >> ./README.md
 echo "6、[《2019-PostgreSQL 2天体系化培训 - 适合DBA》](201901/20190105_01.md)  " >> ./README.md 

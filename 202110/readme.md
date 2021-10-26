@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20211026_06.md   [《德说-第51期, 巫,布道师,人货场,基督教》](20211026_06.md)  
+##### 20211026_05.md   [《DB吐槽大会,第81期 - PG 未针对 NUMA 优化》](20211026_05.md)  
 ##### 20211026_04.md   [《The Free and Open Source for GIS conference : FOSS4G 2021 Buenos Aires Videos are out》](20211026_04.md)  
 ##### 20211026_03.md   [《PostGIS 3.2 支持 PG 14 GiST index fast create特性》](20211026_03.md)  
 ##### 20211026_02.md   [《PostgreSQL 15 preview - 新增参数: log_startup_progress_interval , 支持打印startup进程长时间的恢复进度》](20211026_02.md)  

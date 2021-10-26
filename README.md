@@ -87,6 +87,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202110/20211026_04.md   [《The Free and Open Source for GIS conference : FOSS4G 2021 Buenos Aires Videos are out》](202110/20211026_04.md)  
+##### 202110/20211026_03.md   [《PostGIS 3.2 支持 PG 14 GiST index fast create特性》](202110/20211026_03.md)  
+##### 202110/20211026_02.md   [《PostgreSQL 15 preview - 新增参数: log_startup_progress_interval , 支持打印startup进程长时间的恢复进度》](202110/20211026_02.md)  
+##### 202110/20211026_01.md   [《PostgreSQL 15 preview - 流复制协议增强, READ_REPLICATION_SLOT 支持 physical slot, pg_receivewal支持slot位点了》](202110/20211026_01.md)  
 ##### 202110/20211025_02.md   [《德说-第50期, 从“隔离与物种的形成”谈“数据库新物种”》](202110/20211025_02.md)  
 ##### 202110/20211025_01.md   [《德说-第49期, 从“巫”到产品运营》](202110/20211025_01.md)  
 ##### 202110/20211023_02.md   [《德说-第48期, “权力真空”的深度思考》](202110/20211023_02.md)  

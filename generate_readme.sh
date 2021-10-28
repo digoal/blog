@@ -56,7 +56,7 @@ echo "  "  >> ./README.md
 echo "### 三、[感恩](201803/20180322_12.md)  " >> ./README.md
 echo "### 四、[思考](class/35.md)  " >> ./README.md
 echo "  "  >> ./README.md
-echo "1、[《德说 系列》](202108/20210818_02.md)     " >> ./README.md 
+echo "1、[《德说 系列. 啥都聊:35岁困境?想破圈?思维禁锢?知识与圈子茧房?害怕走出舒适区?害怕跨界?技术转管理?》](202108/20210818_02.md)     " >> ./README.md 
 echo "2、[《PG社区建设方法论 - 五看三定》](202103/20210329_01.md)     " >> ./README.md 
 echo "3、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md
 echo "4、[《PostgreSQL 社区建设商业策划 {未完}》](202008/20200828_01.md)      " >> ./README.md

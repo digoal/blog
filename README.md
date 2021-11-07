@@ -87,6 +87,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202111/20211107_03.md   [《德说-第60期, 世俗化了解基督教文化,第2期》](202111/20211107_03.md)  
+##### 202111/20211107_02.md   [《PostgreSQL 15 preview - pg_basebackup 代码模块化, 增加bbstreamer抽象模块, 增加bbsink抽象模块等》](202111/20211107_02.md)  
+##### 202111/20211107_01.md   [《PostgreSQL 15 preview - Add support for LZ4 compression in pg_receivewal --compression-method=lz4》](202111/20211107_01.md)  
 ##### 202111/20211106_01.md   [《德说-第59期, 职业选择与职业规划》](202111/20211106_01.md)  
 ##### 202111/20211105_02.md   [《mongodb 协议代理 MangoDB-io/MangoDB - 使用mongodb协议连接PostgreSQL》](202111/20211105_02.md)  
 ##### 202111/20211105_01.md   [《十四五相关文章》](202111/20211105_01.md)  

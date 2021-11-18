@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20211118_03.md   [《德说-第64期, 用还原论打开数据库创新边界》](20211118_03.md)  
+##### 20211118_03.md   [《德说-第64期, 用还原论打破数据库创新边界》](20211118_03.md)  
 ##### 20211118_02.md   [《PostgreSQL 通过old version tuple模拟update, delete闪回》](20211118_02.md)  
 ##### 20211118_01.md   [《PostgreSQL 15 preview - Add a planner support function for starts_with() 字符串prefix匹配支持btree,sp-gist索引. 当collation is C》](20211118_01.md)  
 ##### 20211116_01.md   [《德说-第63期, 钟摆同步-群体性物种》](20211116_01.md)  

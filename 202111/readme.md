@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20211123_01.md   [《PostgreSQL 15 preview - 新增等待事件 for archive_command,archive_cleanup_command,restore_command,recovery_end_command》](20211123_01.md)  
 ##### 20211122_02.md   [《PolarDB for PostgreSQL 开源版本 + 阿里云多机挂载共享ESSD云盘》](20211122_02.md)  
 ##### 20211122_01.md   [《德说-第65期, 解构画像》](20211122_01.md)  
 ##### 20211119_01.md   [《KuiBaDB rust 重写的 PostgreSQL, focus on OLAP》](20211119_01.md)  

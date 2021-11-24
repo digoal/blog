@@ -89,7 +89,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 202111/20211123_01.md   [《PostgreSQL 15 preview - 新增等待事件 for archive_command,archive_cleanup_command,restore_command,recovery_end_command》](202111/20211123_01.md)  
 ##### 202111/20211122_02.md   [《PolarDB for PostgreSQL 开源版本 + 阿里云多机挂载共享ESSD云盘》](202111/20211122_02.md)  
-##### 202111/20211122_01.md   [《德说-第65期, 解构画像》](202111/20211122_01.md)  
+##### 202111/20211122_01.md   [《德说-第65期, 解构画像提升合作效率》](202111/20211122_01.md)  
 ##### 202111/20211119_01.md   [《KuiBaDB rust 重写的 PostgreSQL, focus on OLAP》](202111/20211119_01.md)  
 ##### 202111/20211118_03.md   [《德说-第64期, 用还原论和哲学思想打破数据库创新边界》](202111/20211118_03.md)  
 ##### 202111/20211118_02.md   [《PostgreSQL 通过old version tuple模拟update, delete闪回》](202111/20211118_02.md)  

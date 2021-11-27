@@ -87,6 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202111/20211127_01.md   [《ToB 产品的价值评定核心指标》](202111/20211127_01.md)  
 ##### 202111/20211126_01.md   [《阿里云 德哥 + 头条 KOL 潘淳 连线直播 - 开源、低代码、成长等话题互动》](202111/20211126_01.md)  
 ##### 202111/20211123_01.md   [《PostgreSQL 15 preview - 新增等待事件 for archive_command,archive_cleanup_command,restore_command,recovery_end_command》](202111/20211123_01.md)  
 ##### 202111/20211122_02.md   [《PolarDB for PostgreSQL 开源版本 + 阿里云多机挂载共享ESSD云盘》](202111/20211122_02.md)  

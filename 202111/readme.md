@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20211128_01.md   [《德说-第66期, 觉性智慧》](20211128_01.md)  
 ##### 20211127_01.md   [《ToB 产品的价值评定核心指标》](20211127_01.md)  
 ##### 20211126_01.md   [《阿里云 德哥 + 头条 KOL 潘淳 连线直播 - 开源、低代码、成长等话题互动》](20211126_01.md)  
 ##### 20211123_01.md   [《PostgreSQL 15 preview - 新增等待事件 for archive_command,archive_cleanup_command,restore_command,recovery_end_command》](20211123_01.md)  

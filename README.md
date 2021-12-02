@@ -87,6 +87,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202112/20211202_03.md   [《PostgreSQL 高级SQL 艾伯哈特-卡尔斯-图宾根大学教材》](202112/20211202_03.md)  
+##### 202112/20211202_02.md   [《PostgreSQL 15 preview - PRNG API Pseudo-Random Number Generator 更好的随机数产生算法替代原有random API.》](202112/20211202_02.md)  
+##### 202112/20211202_01.md   [《PostgreSQL 15 preview - Increase size of shared memory for pg_commit_ts》](202112/20211202_01.md)  
+----  
 ##### 202111/20211130_01.md   [《PostgreSQL 15 preview - 增加逻辑订阅端worker统计信息视图 pg_stat_subscription_workers》](202111/20211130_01.md)  
 ##### 202111/20211129_03.md   [《德说-第68期, 集体的力量》](202111/20211129_03.md)  
 ##### 202111/20211129_02.md   [《重新发现PostgreSQL之美 - 54 绑定变量缓存控制》](202111/20211129_02.md)  

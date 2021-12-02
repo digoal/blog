@@ -87,6 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202112/20211202_04.md   [《PostgreSQL 递归CTE 模拟一维空间的元胞自动机 - 复杂系统研究 自组织,涌现》](202112/20211202_04.md)  
 ##### 202112/20211202_03.md   [《PostgreSQL 高级SQL 艾伯哈特-卡尔斯-图宾根大学教材》](202112/20211202_03.md)  
 ##### 202112/20211202_02.md   [《PostgreSQL 15 preview - PRNG API Pseudo-Random Number Generator 更好的随机数产生算法替代原有random API.》](202112/20211202_02.md)  
 ##### 202112/20211202_01.md   [《PostgreSQL 15 preview - Increase size of shared memory for pg_commit_ts》](202112/20211202_01.md)  

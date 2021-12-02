@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20211202_04.md   [《PostgreSQL 递归CTE 模拟一维空间的元胞自动机 - 复杂系统研究 自组织,涌现》](20211202_04.md)  
 ##### 20211202_03.md   [《PostgreSQL 高级SQL 艾伯哈特-卡尔斯-图宾根大学教材》](20211202_03.md)  
 ##### 20211202_02.md   [《PostgreSQL 15 preview - PRNG API Pseudo-Random Number Generator 更好的随机数产生算法替代原有random API.》](20211202_02.md)  
 ##### 20211202_01.md   [《PostgreSQL 15 preview - Increase size of shared memory for pg_commit_ts》](20211202_01.md)  

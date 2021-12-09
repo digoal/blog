@@ -127,7 +127,7 @@ do
     FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" ${file}|grep -c "57258f76c37864c6e6d23383d05714ea"`
     if [ $FREEURL -ne 1 ]; then
       echo "  " >> ./${file}
-      echo "#### [类似Oracle RAC架构的PostgreSQL已开源: 阿里云PolarDB for PostgreSQL云原生分布式开源数据库!](https://github.com/ApsaraDB/PolarDB-for-PostgreSQL \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
+      echo "#### [PolarDB for PostgreSQL云原生分布式开源数据库](https://github.com/ApsaraDB/PolarDB-for-PostgreSQL \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
       echo "  " >> ./${file}
     fi
 ##

@@ -87,6 +87,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202112/20211210_04.md   [《德说-第77期, 木桶效应的"误读"》](202112/20211210_04.md)  
+##### 202112/20211210_03.md   [《PostgreSQL 15 preview - postgres_fdw: Report warning when timeout expires while getting query result.》](202112/20211210_03.md)  
+##### 202112/20211210_02.md   [《PostgreSQL 15 preview - Allow specifying column list for foreign key ON DELETE SET null|default actions》](202112/20211210_02.md)  
+##### 202112/20211210_01.md   [《Rust 学习入门》](202112/20211210_01.md)  
 ##### 202112/20211209_03.md   [《德说-第76期, 为什么问题比答案重要》](202112/20211209_03.md)  
 ##### 202112/20211209_02.md   [《每天5分钟,PG聊通透 - 系列1 - 热门问题》](202112/20211209_02.md)  
 ##### 202112/20211209_01.md   [《PostgreSQL pg_rewrite 插件 - 在线将普通表转换为分区表》](202112/20211209_01.md)  

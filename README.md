@@ -87,7 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202112/20211212_01.md   [《德说-第78期, 生命之光》](202112/20211212_01.md)  
+##### 202112/20211212_01.md   [《德说-第78期, 眼里有光,生命之光》](202112/20211212_01.md)  
 ##### 202112/20211210_04.md   [《德说-第77期, 木桶效应的"误读"》](202112/20211210_04.md)  
 ##### 202112/20211210_03.md   [《PostgreSQL 15 preview - postgres_fdw: Report warning when timeout expires while getting query result.》](202112/20211210_03.md)  
 ##### 202112/20211210_02.md   [《PostgreSQL 15 preview - Allow specifying column list for foreign key ON DELETE SET null|default actions》](202112/20211210_02.md)  

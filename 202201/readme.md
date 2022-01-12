@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20220112_03.md   [《一起学PolarDB - 第16期 - 为什么只读实例不能共享一份数据?》](20220112_03.md)  
+##### 20220112_02.md   [《PostgreSQL 15 preview - log destination 即将支持JSON LOG 格式》](20220112_02.md)  
+##### 20220112_01.md   [《PostgreSQL 15 preview - pg_log_backend_memory_contexts 增强, 可打印辅助进程(vacuum, checkpointer等)的内存信息》](20220112_01.md)  
 ##### 20220111_02.md   [《一起学PolarDB - 第15期 - Coordinator也会有瓶颈?》](20220111_02.md)  
 ##### 20220111_01.md   [《一起学PolarDB - 第14期 - 为什么SQL不能动态分组计算?》](20220111_01.md)  
 ##### 20220110_04.md   [《德说-第85期, 逻辑与生命,因为相信所以"看见"》](20220110_04.md)  

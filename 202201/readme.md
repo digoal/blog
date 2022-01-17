@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220117_01.md   [《一起学PolarDB - 第17期 - 为什么只读实例延迟高?》](20220117_01.md)  
 ##### 20220112_03.md   [《一起学PolarDB - 第16期 - 为什么只读实例不能共享一份数据?》](20220112_03.md)  
 ##### 20220112_02.md   [《PostgreSQL 15 preview - log destination 即将支持JSON LOG 格式》](20220112_02.md)  
 ##### 20220112_01.md   [《PostgreSQL 15 preview - pg_log_backend_memory_contexts 增强, 可打印辅助进程(vacuum, checkpointer等)的内存信息》](20220112_01.md)  

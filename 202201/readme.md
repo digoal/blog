@@ -2,9 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20220118_04.md   [《开源项目的活跃度、用户、开发者贡献度 计算方法》](20220118_04.md)  
+##### 20220118_03.md   [《一个网页的 "流量能力、引流能力、权威性" 评判维度》](20220118_03.md)  
+##### 20220118_02.md   [《PostgreSQL 15 preview - pg_upgrade优化, 保留relfilenodes, tablespace oid, database oid (避免文件名变化导致未来rsync的带宽浪费)》](20220118_02.md)  
+##### 20220118_01.md   [《PostgreSQL 15 preview - heap pruning (碎片整理优化 Only call BufferGetBlockNumber() once)》](20220118_01.md)  
 ##### 20220117_01.md   [《一起学PolarDB - 第17期 - 为什么只读实例延迟高?》](20220117_01.md)  
 ##### 20220112_03.md   [《一起学PolarDB - 第16期 - 为什么只读实例不能共享一份数据?》](20220112_03.md)  
-##### 20220112_02.md   [《PostgreSQL 15 preview - log destination 即将支持JSON LOG 格式》](20220112_02.md)  
+##### 20220112_02.md   [《PostgreSQL 15 preview - log destination 即将支持jsonlog格式》](20220112_02.md)  
 ##### 20220112_01.md   [《PostgreSQL 15 preview - pg_log_backend_memory_contexts 增强, 可打印辅助进程(vacuum, checkpointer等)的内存信息》](20220112_01.md)  
 ##### 20220111_02.md   [《一起学PolarDB - 第15期 - Coordinator也会有瓶颈?》](20220111_02.md)  
 ##### 20220111_01.md   [《一起学PolarDB - 第14期 - 为什么SQL不能动态分组计算?》](20220111_01.md)  

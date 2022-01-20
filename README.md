@@ -3325,6 +3325,7 @@ digoal's|PostgreSQL|文章|归类
 ----  
 ##### 201410/20141024_01.md   [《PostgreSQL rows return by ProcessQuery queryDesc->estate->es_processed》](201410/20141024_01.md)  
 ##### 201410/20141017_01.md   [《数据库性能会随着对象增加而受影响吗？max_locks_per_transaction & pg_locks entrys limit》](201410/20141017_01.md)  
+##### 201410/20141016_01.md   [《PostgreSQL in (...|values()) , = any (values|array) SQL 优化》](201410/20141016_01.md)  
 ##### 201410/20141009_01.md   [《PostgreSQL 密码安全指南》](201410/20141009_01.md)  
 ----  
 ##### 201409/20140930_01.md   [《PostgreSQL数据库在上市公司重要应用中的SOX审计》](201409/20140930_01.md)  

@@ -87,6 +87,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202201/20220121_02.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持服务端备份目的地 target = server, blackhole》](202201/20220121_02.md)  
+##### 202201/20220121_01.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持客户端压缩和压缩比选项》](202201/20220121_01.md)  
 ##### 202201/20220120_01.md   [《一起学PolarDB - 第20期 - 为什么GIS时空查询即耗CPU又费IO?》](202201/20220120_01.md)  
 ##### 202201/20220119_02.md   [《一起学PolarDB - 第19期 - 为什么做检查点会导致性能抖动?》](202201/20220119_02.md)  
 ##### 202201/20220119_01.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持扩展COPY协议》](202201/20220119_01.md)  

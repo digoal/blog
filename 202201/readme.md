@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220121_03.md   [《PostgreSQL CSN 优化原理 - 高并发场景优化》](20220121_03.md)  
 ##### 20220121_02.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持服务端备份目的地 target = server, blackhole》](20220121_02.md)  
 ##### 20220121_01.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持客户端压缩和压缩比选项》](20220121_01.md)  
 ##### 20220120_01.md   [《一起学PolarDB - 第20期 - 为什么GIS时空查询即耗CPU又费IO?》](20220120_01.md)  
@@ -13,7 +14,7 @@
 ##### 20220118_02.md   [《PostgreSQL 15 preview - pg_upgrade优化, 保留relfilenodes, tablespace oid, database oid (避免文件名变化导致未来rsync的带宽浪费)》](20220118_02.md)  
 ##### 20220118_01.md   [《PostgreSQL 15 preview - heap pruning (碎片整理优化 Only call BufferGetBlockNumber() once)》](20220118_01.md)  
 ##### 20220117_01.md   [《一起学PolarDB - 第17期 - 为什么只读实例延迟高?》](20220117_01.md)  
-##### 20220112_03.md   [《一起学PolarDB - 第16期 - 为什么只读实例不能共享一份数据?》](20220112_03.md)  
+##### 20220112_03.md   [《一起学PolarDB - 第16期 - Oracle的RAC神话被打破了!虽然有点晚,但开源》](20220112_03.md)  
 ##### 20220112_02.md   [《PostgreSQL 15 preview - log destination 即将支持jsonlog格式》](20220112_02.md)  
 ##### 20220112_01.md   [《PostgreSQL 15 preview - pg_log_backend_memory_contexts 增强, 可打印辅助进程(vacuum, checkpointer等)的内存信息》](20220112_01.md)  
 ##### 20220111_02.md   [《一起学PolarDB - 第15期 - Coordinator也会有瓶颈?》](20220111_02.md)  

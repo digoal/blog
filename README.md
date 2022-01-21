@@ -87,6 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202201/20220121_03.md   [《PostgreSQL CSN 优化原理 - 高并发场景优化》](202201/20220121_03.md)  
 ##### 202201/20220121_02.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持服务端备份目的地 target = server, blackhole》](202201/20220121_02.md)  
 ##### 202201/20220121_01.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持客户端压缩和压缩比选项》](202201/20220121_01.md)  
 ##### 202201/20220120_01.md   [《一起学PolarDB - 第20期 - 为什么GIS时空查询即耗CPU又费IO?》](202201/20220120_01.md)  
@@ -98,7 +99,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202201/20220118_02.md   [《PostgreSQL 15 preview - pg_upgrade优化, 保留relfilenodes, tablespace oid, database oid (避免文件名变化导致未来rsync的带宽浪费)》](202201/20220118_02.md)  
 ##### 202201/20220118_01.md   [《PostgreSQL 15 preview - heap pruning (碎片整理优化 Only call BufferGetBlockNumber() once)》](202201/20220118_01.md)  
 ##### 202201/20220117_01.md   [《一起学PolarDB - 第17期 - 为什么只读实例延迟高?》](202201/20220117_01.md)  
-##### 202201/20220112_03.md   [《一起学PolarDB - 第16期 - 为什么只读实例不能共享一份数据?》](202201/20220112_03.md)  
+##### 202201/20220112_03.md   [《一起学PolarDB - 第16期 - Oracle的RAC神话被打破了!虽然有点晚,但开源》](202201/20220112_03.md)  
 ##### 202201/20220112_02.md   [《PostgreSQL 15 preview - log destination 即将支持jsonlog格式》](202201/20220112_02.md)  
 ##### 202201/20220112_01.md   [《PostgreSQL 15 preview - pg_log_backend_memory_contexts 增强, 可打印辅助进程(vacuum, checkpointer等)的内存信息》](202201/20220112_01.md)  
 ##### 202201/20220111_02.md   [《一起学PolarDB - 第15期 - Coordinator也会有瓶颈?》](202201/20220111_02.md)  
@@ -1109,7 +1110,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202008/20200814_02.md   [《PostgreSQL plpgsql 函数 trace - plpgsql_check》](202008/20200814_02.md)  
 ##### 202008/20200814_01.md   [《交互式学习 PostgreSQL - 纯PG小白的进阶指南》](202008/20200814_01.md)  
 ##### 202008/20200812_02.md   [《PostgreSQL 时间间隔如何转化为数值 - interval to numeirc OR (timestamp to numeric then mins)》](202008/20200812_02.md)  
-##### 202008/20200812_01.md   [《PostgreSQL 14 GetSnapshotData 高并发优化, 以及 64位xid避免xid wrap优化》](202008/20200812_01.md)  
+##### 202008/20200812_01.md   [《PostgreSQL 14 GetSnapshotData 高并发优化》](202008/20200812_01.md)  
 ##### 202008/20200807_01.md   [《PostgreSQL lsm3 index access method》](202008/20200807_01.md)  
 ##### 202008/20200803_11.md   [《PostgreSQL 14 扩展逻辑decoding API 应对长事务逻辑复制优化 - Extend the logical decoding output plugin API with stream methods.》](202008/20200803_11.md)  
 ##### 202008/20200803_10.md   [《PostgreSQL 13 & 14 对齐hashagg和hash join的explain analyze输出内容》](202008/20200803_10.md)  

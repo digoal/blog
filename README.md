@@ -87,6 +87,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202202/20220208_03.md   [《PostgreSQL 15 preview - GiST sorted build method 索引性能优化》](202202/20220208_03.md)  
+##### 202202/20220208_02.md   [《PostgreSQL 15 preview - PostgreSQL 15 将支持自定义归档WAL日志模块》](202202/20220208_02.md)  
+##### 202202/20220208_01.md   [《PostgreSQL 15 preview - PostgreSQL 15 将支持null的unique唯一约束可选项 UNIQUE [ NULLS [NOT] DISTINCT ]》](202202/20220208_01.md)  
+----  
 ##### 202201/20220129_02.md   [《德说-第88期, 公地的悲剧与生命的逆熵》](202201/20220129_02.md)  
 ##### 202201/20220129_01.md   [《PostgreSQL 15 preview - COPY text 格式支持 HEADER》](202201/20220129_01.md)  
 ##### 202201/20220126_01.md   [《PostgreSQL nestloop Materialize 代价算法》](202201/20220126_01.md)  

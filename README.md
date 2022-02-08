@@ -87,6 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202202/20220208_04.md   [《一起学PolarDB - 第21期 - 从3到2.5》](202202/20220208_04.md)  
 ##### 202202/20220208_03.md   [《PostgreSQL 15 preview - GiST sorted build method 索引性能优化》](202202/20220208_03.md)  
 ##### 202202/20220208_02.md   [《PostgreSQL 15 preview - PostgreSQL 15 将支持自定义归档WAL日志模块》](202202/20220208_02.md)  
 ##### 202202/20220208_01.md   [《PostgreSQL 15 preview - PostgreSQL 15 将支持null的unique唯一约束可选项 UNIQUE [ NULLS [NOT] DISTINCT ]》](202202/20220208_01.md)  

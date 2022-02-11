@@ -87,6 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202202/20220211_01.md   [《PostgreSQL 15 preview - Logical decoding of sequences》](202202/20220211_01.md)  
 ##### 202202/20220210_03.md   [《Linux 进程实际内存占用计算方法 - vsz,vss,rss,pss,uss 介绍》](202202/20220210_03.md)  
 ##### 202202/20220210_02.md   [《FETCH_COUNT、defaultRowFetchSize - 用游标解决 psql客户端内存溢出、jdbc OutOfMemoryError 内存溢出错误》](202202/20220210_02.md)  
 ##### 202202/20220210_01.md   [《如何查看PostgreSQL数据库系统中的所有约束》](202202/20220210_01.md)  

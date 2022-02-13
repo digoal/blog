@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20220213_02.md   [《德说-第89期, 行》](20220213_02.md)  
+##### 20220213_01.md   [《PostgreSQL 15 preview - pg_basebackup 支持client端和server端lz4压缩》](20220213_01.md)  
 ##### 20220211_01.md   [《PostgreSQL 15 preview - Logical decoding of sequences》](20220211_01.md)  
 ##### 20220210_03.md   [《Linux 进程实际内存占用计算方法 - vsz,vss,rss,pss,uss 介绍》](20220210_03.md)  
 ##### 20220210_02.md   [《FETCH_COUNT、defaultRowFetchSize - 用游标解决 psql客户端内存溢出、jdbc OutOfMemoryError 内存溢出错误》](20220210_02.md)  

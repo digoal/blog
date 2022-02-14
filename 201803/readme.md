@@ -54,7 +54,7 @@
 ##### 20180311_06.md   [《PostgreSQL rotate table 自动清理调度 - 约束，触发器》](20180311_06.md)  
 ##### 20180311_05.md   [《PostgreSQL checkpoint 相关参数优化设置与解释》](20180311_05.md)  
 ##### 20180311_04.md   [《PostgreSQL 垃圾版本引入的索引扫描性能下降诊断》](20180311_04.md)  
-##### 20180311_03.md   [《[未完待续] PostgreSQL 哪些状态不可中断 - 杀不掉的QUERY和会话》](20180311_03.md)  
+##### 20180311_03.md   [《PostgreSQL 哪些状态不可中断 - 杀不掉的QUERY和会话》](20180311_03.md)  
 ##### 20180311_02.md   [《[未完待续] PostgreSQL 扩展存储引擎介绍 - zheap - 1》](20180311_02.md)  
 ##### 20180311_01.md   [《[未完待续] PostgreSQL Oracle 兼容性之 - pl/sql 迁移到 plpgsql》](20180311_01.md)  
 ##### 20180310_09.md   [《[未完待续] PostgreSQL HeteroDB GPU 加速 - pl/cuda , pg-strom , heterodb》](20180310_09.md)  

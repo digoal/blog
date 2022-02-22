@@ -87,6 +87,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202202/20220222_02.md   [《德说-第90期, 开源与生态》](202202/20220222_02.md)  
+##### 202202/20220222_01.md   [《PostgreSQL 15 preview - Allow specifying row filters for logical replication of tables.》](202202/20220222_01.md)  
 ##### 202202/20220221_01.md   [《PostgreSQL 15 preview - postgres_fdw: Make postgres_fdw.application_name support more escape sequences.》](202202/20220221_01.md)  
 ##### 202202/20220216_01.md   [《一起学PolarDB - 第23期 - 为什么磁盘RT会严重影响vacuum垃圾回收效率?》](202202/20220216_01.md)  
 ##### 202202/20220214_01.md   [《一起学PolarDB - 第22期 - 为什么高并发数据写入吞吐无法达到磁盘极限-1》](202202/20220214_01.md)  

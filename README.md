@@ -87,6 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202202/20220228_01.md   [《PostgreSQL 存储引擎 - orioledb (undo, 基于b+tree, 支持copy on write checkpoint)》](202202/20220228_01.md)  
 ##### 202202/20220225_01.md   [《PostgreSQL 15 preview - postgres_fdw: 支持并行远程commit, 基于postgres_fdw的 sharding 写性能更进一步》](202202/20220225_01.md)  
 ##### 202202/20220222_02.md   [《德说-第90期, 开源与生态》](202202/20220222_02.md)  
 ##### 202202/20220222_01.md   [《PostgreSQL 15 preview - Allow specifying row filters for logical replication of tables.》](202202/20220222_01.md)  

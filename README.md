@@ -87,6 +87,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202203/20220302_01.md   [《PostgreSQL + FDW + vector 插件加速向量检索 - 在不确定世界寻找确定答案 (例如图像相似)》](202203/20220302_01.md)  
+----  
 ##### 202202/20220228_02.md   [《产品运营团队建设、第一性、组织保障、运营规划》](202202/20220228_02.md)  
 ##### 202202/20220228_01.md   [《PostgreSQL 存储引擎 - orioledb (undo, 基于b+tree, 支持copy on write checkpoint)》](202202/20220228_01.md)  
 ##### 202202/20220225_01.md   [《PostgreSQL 15 preview - postgres_fdw: 支持并行远程commit, 基于postgres_fdw的 sharding 写性能更进一步》](202202/20220225_01.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220311_01.md   [《PostgreSQL 15 preview - Add support for zstd with compression of full-page writes in WAL》](20220311_01.md)  
 ##### 20220309_02.md   [《PostgreSQL 15 preview - 逻辑复制、逻辑订阅增加错误信息errcontext(包含LSN). 结合pg_replication_origin_advance跳过冲突的wal回放》](20220309_02.md)  
 ##### 20220309_01.md   [《PostgreSQL 15 preview - 流复制协议支持gzip, lz4, zstd压缩算法. - pg_basebackup 支持配置 客户端压缩、数据库端压缩》](20220309_01.md)  
 ##### 20220308_01.md   [《产品与运营-OKR的设计和考核例子》](20220308_01.md)  

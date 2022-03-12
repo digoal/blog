@@ -87,6 +87,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202203/20220312_01.md   [《读书分享 - 《臣服实验》》](202203/20220312_01.md)  
 ##### 202203/20220311_01.md   [《PostgreSQL 15 preview - Add support for zstd with compression of full-page writes in WAL》](202203/20220311_01.md)  
 ##### 202203/20220309_02.md   [《PostgreSQL 15 preview - 逻辑复制、逻辑订阅增加错误信息errcontext(包含LSN). 结合pg_replication_origin_advance跳过冲突的wal回放》](202203/20220309_02.md)  
 ##### 202203/20220309_01.md   [《PostgreSQL 15 preview - 流复制协议支持gzip, lz4, zstd压缩算法. - pg_basebackup 支持配置 客户端压缩、数据库端压缩》](202203/20220309_01.md)  

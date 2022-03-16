@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20220316_02.md   [《PostgreSQL 15 preview - 支持在插件中增加pg_basebackup target, 支持basebackup_to_shell内置扩展插件, 配合pg_basebackup, 可以触发db server端的shell备份动作》](20220316_02.md)  
+##### 20220316_01.md   [《PostgreSQL 15 preview - Wake up for latches in CheckpointWriteDelay()》](20220316_01.md)  
 ##### 20220314_01.md   [《《一起学PolarDB》系列》](20220314_01.md)  
 ##### 20220312_01.md   [《读书分享 第1期 - 《臣服实验》》](20220312_01.md)  
 ##### 20220311_01.md   [《PostgreSQL 15 preview - Add support for zstd with compression of full-page writes in WAL》](20220311_01.md)  

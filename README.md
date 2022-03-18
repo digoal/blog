@@ -88,6 +88,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202203/20220318_01.md   [《PostgreSQL wal 日志与规定 和 backup 备份的有效性检测 - pg_waldump pg_verifybackup》](202203/20220318_01.md)  
 ##### 202203/20220317_01.md   [《PostgreSQL 15 preview - 支持 in-place tablespace , pg_tblspc 目录相对路径》](202203/20220317_01.md)  
 ##### 202203/20220316_02.md   [《PostgreSQL 15 preview - 支持在插件中增加pg_basebackup target, 支持basebackup_to_shell内置扩展插件, 配合pg_basebackup, 可以触发db server端的shell备份动作》](202203/20220316_02.md)  
 ##### 202203/20220316_01.md   [《PostgreSQL 15 preview - Wake up for latches in CheckpointWriteDelay()》](202203/20220316_01.md)  

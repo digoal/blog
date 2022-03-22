@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220322_01.md   [《PostgreSQL 15 preview - 支持 ALTER SUBSCRIPTION ... SKIP (lsn = XXX) 语法, 跳过逻辑复制发送冲突的事务》](20220322_01.md)  
 ##### 20220321_01.md   [《PostgreSQL 15 preview - Add circular WAL decoding buffer - support optimizations based on looking ahead》](20220321_01.md)  
 ##### 20220318_02.md   [《职业生涯下半场的使命召唤?》](20220318_02.md)  
 ##### 20220318_01.md   [《PostgreSQL wal 日志与规档 & backup 备份的有效性检测 - pg_waldump pg_verifybackup》](20220318_01.md)  

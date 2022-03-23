@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20220323_02.md   [《JSON 局部相似 搜索例子》](20220323_02.md)  
+##### 20220323_01.md   [《PostgreSQL 15 preview - 支持 security invoker views》](20220323_01.md)  
 ##### 20220322_01.md   [《PostgreSQL 15 preview - 支持 ALTER SUBSCRIPTION ... SKIP (lsn = XXX) 语法, 跳过逻辑复制发送冲突的事务》](20220322_01.md)  
 ##### 20220321_01.md   [《PostgreSQL 15 preview - Add circular WAL decoding buffer - support optimizations based on looking ahead》](20220321_01.md)  
 ##### 20220318_02.md   [《职业生涯下半场的使命召唤?》](20220318_02.md)  

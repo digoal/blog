@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220328_01.md   [《PostgreSQL 15 preview - PostgreSQL 15 内置逻辑订阅功能增强, 支持发布指定列》](20220328_01.md)  
 ##### 20220325_03.md   [《PostgreSQL 15 preview - PostgreSQL 15 内置逻辑订阅功能增强, 支持订阅序列变更》](20220325_03.md)  
 ##### 20220325_02.md   [《PostgreSQL 15 preview - 递归查询work table记录数评估可自控, 新增GUC 参数 recursive_worktable_factor》](20220325_02.md)  
 ##### 20220325_01.md   [《PostgreSQL 15 preview - pg_waldump 新增过滤选项: fork number,block number,relation,full page write》](20220325_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20220329_02.md   [《PostgreSQL 15 preview - 支持 MERGE INTO 语法》](20220329_02.md)  
+##### 20220329_01.md   [《为什么要经常手工对分区表的主表执行analyze, 更新主表的统计信息.》](20220329_01.md)  
 ##### 20220328_02.md   [《PostgreSQL 15 preview - SQL/JSON 标准构造器增强》](20220328_02.md)  
 ##### 20220328_01.md   [《PostgreSQL 15 preview - PostgreSQL 15 内置逻辑订阅功能增强, 支持发布指定列》](20220328_01.md)  
 ##### 20220325_03.md   [《PostgreSQL 15 preview - PostgreSQL 15 内置逻辑订阅功能增强, 支持订阅序列变更》](20220325_03.md)  

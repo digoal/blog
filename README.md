@@ -88,6 +88,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202203/20220331_05.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持zstd 内置并行压缩选项 `--compress WHERE-zstd:workers=N`》](202203/20220331_05.md)  
+##### 202203/20220331_04.md   [《PostgreSQL 15 preview - COPY FROM|file_fdw 支持 header match , 第一行作为列名匹配判断》](202203/20220331_04.md)  
+##### 202203/20220331_03.md   [《PostgreSQL 15 preview - Skip empty transactions for logical replication》](202203/20220331_03.md)  
+##### 202203/20220331_02.md   [《PostgreSQL 15 preview - jsonb 增加SQL/JSON 函数, 支持 jsonpath 表达式的执行》](202203/20220331_02.md)  
+##### 202203/20220331_01.md   [《PostgreSQL 15 preview - create database 增强, 支持策略 WAL_LOG (block-by-block strategy) , FILE_COPY》](202203/20220331_01.md)  
 ##### 202203/20220329_02.md   [《PostgreSQL 15 preview - 支持 MERGE INTO 语法》](202203/20220329_02.md)  
 ##### 202203/20220329_01.md   [《为什么要经常手工对分区表的主表执行analyze, 更新主表的统计信息.》](202203/20220329_01.md)  
 ##### 202203/20220328_02.md   [《PostgreSQL 15 preview - SQL/JSON 标准构造器增强》](202203/20220328_02.md)  

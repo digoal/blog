@@ -88,6 +88,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202204/20220401_02.md   [《PostgreSQL 15 preview - plpgsql debugger 插件扩展接口》](202204/20220401_02.md)  
+##### 202204/20220401_01.md   [《PostgreSQL 15 preview - 提高多列分组聚合(group agg)性能, 优化器增强 - enable_group_by_reordering》](202204/20220401_01.md)  
+----  
 ##### 202203/20220331_05.md   [《PostgreSQL 15 preview - pg_basebackup 增强, 支持zstd 内置并行压缩选项 `--compress WHERE-zstd:workers=N`》](202203/20220331_05.md)  
 ##### 202203/20220331_04.md   [《PostgreSQL 15 preview - COPY FROM|file_fdw 支持 header match , 第一行作为列名匹配判断》](202203/20220331_04.md)  
 ##### 202203/20220331_03.md   [《PostgreSQL 15 preview - Skip empty transactions for logical replication》](202203/20220331_03.md)  

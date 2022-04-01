@@ -2,5 +2,6 @@
   
 ### 文章列表  
 ----  
+##### 20220401_03.md   [《PostgreSQL HOT vacuum 收缩链路对DML where CTID=ctid 安全吗?》](20220401_03.md)  
 ##### 20220401_02.md   [《PostgreSQL 15 preview - plpgsql debugger 插件扩展接口》](20220401_02.md)  
-##### 20220401_01.md   [《PostgreSQL 15 preview - 提高多列分组聚合(group agg)性能, 优化器增强 - enable_group_by_reordering》](20220401_01.md)  
+##### 20220401_01.md   [《PostgreSQL 15 preview - 提高多列分组聚合(group by agg)性能, 优化器增强 - enable_group_by_reordering》](20220401_01.md)  

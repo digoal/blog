@@ -88,6 +88,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202204/20220407_01.md   [《PostgreSQL CTID 物理行号在并发DML时的隔离性问题》](202204/20220407_01.md)  
 ##### 202204/20220401_03.md   [《PostgreSQL HOT vacuum 收缩链路对DML where CTID=ctid 安全吗?》](202204/20220401_03.md)  
 ##### 202204/20220401_02.md   [《PostgreSQL 15 preview - plpgsql debugger 插件扩展接口》](202204/20220401_02.md)  
 ##### 202204/20220401_01.md   [《PostgreSQL 15 preview - 提高多列分组聚合(group by agg)性能, 优化器增强 - enable_group_by_reordering》](202204/20220401_01.md)  

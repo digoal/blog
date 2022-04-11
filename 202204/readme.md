@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20220411_02.md   [《PostgreSQL 15 preview - PostgreSQL 15 pg_stat_statements 增加对temp file blocks io timing的统计, 增加JIT的统计.》](20220411_02.md)  
+##### 20220411_01.md   [《PostgreSQL 15 preview - pg_walinspect 插件, pg_waldump SQL函数接口, 解析wal日志内容》](20220411_01.md)  
 ##### 20220408_09.md   [《PostgreSQL 15 preview - 支持 JSON_TABLE》](20220408_09.md)  
 ##### 20220408_08.md   [《PostgreSQL 15 preview - Improve the generation memory allocator》](20220408_08.md)  
 ##### 20220408_07.md   [《PostgreSQL 15 preview - explain buffers 增加支持 临时文件IO timing跟踪》](20220408_07.md)  

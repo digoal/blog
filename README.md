@@ -88,6 +88,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202204/20220412_01.md   [《PostgreSQL multirange 范围检索, 支持按时段、按对象 多维度搜索视频内容例子》](202204/20220412_01.md)  
 ##### 202204/20220411_02.md   [《PostgreSQL 15 preview - PostgreSQL 15 pg_stat_statements 增加对temp file blocks io timing的统计, 增加JIT的统计.》](202204/20220411_02.md)  
 ##### 202204/20220411_01.md   [《PostgreSQL 15 preview - pg_walinspect 插件, pg_waldump SQL函数接口, 解析wal日志内容》](202204/20220411_01.md)  
 ##### 202204/20220408_09.md   [《PostgreSQL 15 preview - 支持 JSON_TABLE》](202204/20220408_09.md)  

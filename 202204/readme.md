@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220413_02.md   [《德说-第92期, 怎么解决躺平|不想奋斗?》](20220413_02.md)  
 ##### 20220413_01.md   [《PolarDB-X 三权分立功能》](20220413_01.md)  
 ##### 20220412_01.md   [《PostgreSQL multirange 范围检索, 支持按时段、按对象 多维度搜索视频内容例子》](20220412_01.md)  
 ##### 20220411_02.md   [《PostgreSQL 15 preview - PostgreSQL 15 pg_stat_statements 增加对temp file blocks io timing的统计, 增加JIT的统计.》](20220411_02.md)  

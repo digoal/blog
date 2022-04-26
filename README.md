@@ -89,6 +89,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202204/20220426_01.md   [《德说-第93期, 如何将合作建立在磐石之上?》](202204/20220426_01.md)  
 ##### 202204/20220421_01.md   [《PostgreSQL 15 2pc 逻辑复制功能测试》](202204/20220421_01.md)  
 ##### 202204/20220420_01.md   [《PostgreSQL 增量物化视图插件 - pg_ivm incremental materialized view maintenance》](202204/20220420_01.md)  
 ##### 202204/20220413_02.md   [《德说-第92期, 怎么解决躺平|不想奋斗?》](202204/20220413_02.md)  
@@ -2055,7 +2056,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201804/20180424_02.md   [《PostgreSQL 11 preview - 分区过滤控制参数 - enable_partition_pruning》](201804/20180424_02.md)  
 ##### 201804/20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote 逃脱符号》](201804/20180424_01.md)  
 ##### 201804/20180423_03.md   [《[转载] Oracle record、varray、table和%type、%rowtype的使用详解》](201804/20180423_03.md)  
-##### 201804/20180423_02.md   [《Oracle migration to Greenplum - (含 Ora2pg)》](201804/20180423_02.md)  
+##### 201804/20180423_02.md   [《MySQL、Oracle migration to Greenplum、PostgreSQL - (含 Ora2pg)》](201804/20180423_02.md)  
 ##### 201804/20180423_01.md   [《[未完待续] PostgreSQL SQL Parser》](201804/20180423_01.md)  
 ##### 201804/20180420_03.md   [《PostgreSQL 实践 - 实时广告位推荐 1 (任意字段组合、任意维度组合搜索、输出TOP-K)》](201804/20180420_03.md)  
 ##### 201804/20180420_02.md   [《PostgreSQL 分区表的逻辑复制（逻辑订阅）》](201804/20180420_02.md)  

@@ -12,7 +12,7 @@
 ##### 20180424_02.md   [《PostgreSQL 11 preview - 分区过滤控制参数 - enable_partition_pruning》](20180424_02.md)  
 ##### 20180424_01.md   [《PostgreSQL Oracle 兼容性之 - 字符串 q quote 逃脱符号》](20180424_01.md)  
 ##### 20180423_03.md   [《[转载] Oracle record、varray、table和%type、%rowtype的使用详解》](20180423_03.md)  
-##### 20180423_02.md   [《Oracle migration to Greenplum - (含 Ora2pg)》](20180423_02.md)  
+##### 20180423_02.md   [《MySQL、Oracle migration to Greenplum、PostgreSQL - (含 Ora2pg)》](20180423_02.md)  
 ##### 20180423_01.md   [《[未完待续] PostgreSQL SQL Parser》](20180423_01.md)  
 ##### 20180420_03.md   [《PostgreSQL 实践 - 实时广告位推荐 1 (任意字段组合、任意维度组合搜索、输出TOP-K)》](20180420_03.md)  
 ##### 20180420_02.md   [《PostgreSQL 分区表的逻辑复制（逻辑订阅）》](20180420_02.md)  

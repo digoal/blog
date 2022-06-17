@@ -57,7 +57,7 @@ echo "  "  >> ./README.md
 echo "### 三、[感恩](201803/20180322_12.md)  " >> ./README.md
 echo "### 四、[思考](class/35.md)  " >> ./README.md
 echo "  "  >> ./README.md
-echo "1、[《德说》](202108/20210818_02.md)     " >> ./README.md 
+echo "1、[《德说-留给现象界》](202108/20210818_02.md)     " >> ./README.md 
 echo "2、[《读书分享 第1期 - 《臣服实验》》](202203/20220312_01.md)       " >> ./README.md 
 echo "3、[《PG社区建设方法论 - 五看三定》](202103/20210329_01.md)     " >> ./README.md 
 echo "4、[《PostgreSQL 社区建设思考》](202004/20200426_01.md)    " >> ./README.md

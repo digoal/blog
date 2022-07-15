@@ -89,6 +89,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202207/20220715_02.md   [《开源厂商社区和生态玩法》](202207/20220715_02.md)  
 ##### 202207/20220715_01.md   [《PostgreSQL 应用|业务开发者必修课系列-纲目》](202207/20220715_01.md)  
 ##### 202207/20220714_02.md   [《PostgreSQL 复杂SQL执行计划优化修正插件: pg_plan_inspector , pg_plan_advsr , pg_hint_plan , pg_store_plans》](202207/20220714_02.md)  
 ##### 202207/20220714_01.md   [《PostgreSQL 新书推荐: Postgrespro发布的 PostgreSQL Internals V14》](202207/20220714_01.md)  

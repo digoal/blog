@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220715_02.md   [《开源厂商社区和生态玩法》](20220715_02.md)  
 ##### 20220715_01.md   [《PostgreSQL 应用|业务开发者必修课系列-纲目》](20220715_01.md)  
 ##### 20220714_02.md   [《PostgreSQL 复杂SQL执行计划优化修正插件: pg_plan_inspector , pg_plan_advsr , pg_hint_plan , pg_store_plans》](20220714_02.md)  
 ##### 20220714_01.md   [《PostgreSQL 新书推荐: Postgrespro发布的 PostgreSQL Internals V14》](20220714_01.md)  

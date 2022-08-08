@@ -89,6 +89,13 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202208/20220808_06.md   [《PostgreSQL 16 devel preview - `pg_read_[binary_]file (filename, missing_ok)` 增加文件不存在的保护, 避免错误.》](202208/20220808_06.md)  
+##### 202208/20220808_05.md   [《PostgreSQL 16 devel preview - vacuumdb客户端 增加指定schema和排除schema 选项》](202208/20220808_05.md)  
+##### 202208/20220808_04.md   [《PostgreSQL 16 devel preview - 分区缓存, 提升批量写入特定分区的场景性能》](202208/20220808_04.md)  
+##### 202208/20220808_03.md   [《PostgreSQL 16 devel preview - 优化ORDER BY / DISTINCT aggreagtes聚合场景, 减少排序次数》](202208/20220808_03.md)  
+##### 202208/20220808_02.md   [《PostgreSQL 16 devel preview - 增加CPU指令集支持框架, 已支持SSE2; 未来可显示增加更多指令集》](202208/20220808_02.md)  
+##### 202208/20220808_01.md   [《PostgreSQL 16 devel preview - 增加中断处理, 解决某些杀不死问题, Add CHECK_FOR_INTERRUPTS in ExecInsert's speculative insertion loop》](202208/20220808_01.md)  
+----  
 ##### 202207/20220729_01.md   [《德说-第121期, 适合OKR管理的数据库?》](202207/20220729_01.md)  
 ##### 202207/20220727_02.md   [《德说-第120期, DNA双螺旋结构, 破解"既要又要还要"难题》](202207/20220727_02.md)  
 ##### 202207/20220727_01.md   [《德说-第119期, 如何面对对手的 专利壁垒、市场壁垒》](202207/20220727_01.md)  

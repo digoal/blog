@@ -89,6 +89,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202208/20220809_01.md   [《PostgreSQL 14 函数|存储过程 支持begin atomic 代码块, 提升sql函数|过程安全性》](202208/20220809_01.md)  
 ##### 202208/20220808_07.md   [《MACOS 安装gitbook》](202208/20220808_07.md)  
 ##### 202208/20220808_06.md   [《PostgreSQL 16 devel preview - `pg_read_[binary_]file (filename, missing_ok)` 增加文件不存在的保护, 避免错误.》](202208/20220808_06.md)  
 ##### 202208/20220808_05.md   [《PostgreSQL 16 devel preview - vacuumdb客户端 增加指定schema和排除schema 选项》](202208/20220808_05.md)  

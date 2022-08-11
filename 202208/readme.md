@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220811_01.md   [《PostgreSQL 16 devel preview - 高并发小事务写性能再次提升 - use sse2提升 xid/subxid searches in XidInMVCCSnapshot() 性能》](20220811_01.md)  
 ##### 20220810_01.md   [《MacOS PolarDB-X 数据库快速部署指南》](20220810_01.md)  
 ##### 20220809_01.md   [《PostgreSQL 14 函数|存储过程 支持begin atomic 代码块, 提升sql函数|过程安全性》](20220809_01.md)  
 ##### 20220808_07.md   [《MACOS 安装gitbook》](20220808_07.md)  

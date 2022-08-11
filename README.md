@@ -87,6 +87,8 @@ digoal's|PostgreSQL|文章|归类
 **[29 同、异构数据同步](class/29.md)** | **[30 数据分析](class/30.md)** | **[31 系列课程](class/31.md)** | **[32 其他](class/32.md)**    
 **[33 招聘与求职信息](class/33.md)** | **[34 沙龙、会议、培训](class/34.md)** | **[35 思维精进](class/35.md)** | **[36 视频回放](class/36.md)**    
   
+### Star History  
+[![Star History Chart](https://api.star-history.com/svg?repos=digoal/blog&type=Date)](https://star-history.com/#digoal/blog&Date)  
 ### 所有文档如下  
 ----  
 ##### 202208/20220811_02.md   [《德说-第122期, 隆中对 - 五看三定四配-华为基本法-战略制定》](202208/20220811_02.md)  

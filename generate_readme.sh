@@ -90,6 +90,10 @@ echo "欢迎转载(注明出处), 如有问题, 请发issue讨论或微信与我
 echo "  "  >> ./README.md
 echo "### 五、已归类文档如下(归档进行中... ...)  " >> ./README.md
 sed 's/](/](class\//g' class/README.md >> ./README.md
+echo "  "  >> ./README.md
+echo "### Star History  "  >> ./README.md 
+echo "[![Star History Chart](https://api.star-history.com/svg?repos=digoal/blog&type=Date)](https://star-history.com/#digoal/blog&Date)  "   >> ./README.md
+echo "  "  >> ./README.md
 echo "### 所有文档如下  " >> ./README.md
 
 for dir in `ls -lr|awk '{print $9}'|grep -E '^[0-9]{6}'` 

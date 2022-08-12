@@ -8,7 +8,7 @@
 #      dos2unix: converting file ./20161031_02.md to UNIX format ...
 
 > ./README.md
-echo "### 以前写在163 BLOG的老文章迁移至此  " > ./README.md
+echo "### 以前写在163 BLOG的老文章陆续迁移至此,还有几千篇,体力不支了.  " > ./README.md
 
 for dir in `ls -lr|awk '{print $9}'|grep -E '^[0-9]{6}'` 
 do

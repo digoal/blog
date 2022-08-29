@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20220829_04.md   [《DuckDB 快速生成海量数据的方法》](20220829_04.md)  
+##### 20220829_03.md   [《DuckDB:list,struct,map 类型很强大 - PostgreSQL:数组、row|record、json字典》](20220829_03.md)  
+##### 20220829_02.md   [《DuckDB 字符串相似性计算函数》](20220829_02.md)  
 ##### 20220829_01.md   [《DuckDB vs PostgreSQL TPC-H 测试》](20220829_01.md)  
 ##### 20220828_01.md   [《DuckDB TPC-H, TPC-DS 测试》](20220828_01.md)  
 ##### 20220827_01.md   [《DuckDB Window 窗口函数语法糖 - QUALIFY - window filter》](20220827_01.md)  

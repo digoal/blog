@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202208/20220829_01.md   [《DuckDB vs PostgreSQL TPC-H 测试》](202208/20220829_01.md)  
 ##### 202208/20220828_01.md   [《DuckDB TPC-H, TPC-DS 测试》](202208/20220828_01.md)  
 ##### 202208/20220827_01.md   [《DuckDB Window 窗口函数语法糖 - QUALIFY - window filter》](202208/20220827_01.md)  
 ##### 202208/20220826_02.md   [《DuckDB 定位OLAP方向的SQLite, 适合嵌入式数据分析 - tpch测试与简单试用》](202208/20220826_02.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220831_02.md   [《DuckDB 聚合函数用法举例》](20220831_02.md)  
 ##### 20220831_01.md   [《DuckDB的字符串 collate用法 - 大小写、口音(西方各国字符集)、地域属性 - (icu, noCASE, noACCENT, noNFC)》](20220831_01.md)  
 ##### 20220829_04.md   [《DuckDB 快速生成海量数据的方法》](20220829_04.md)  
 ##### 20220829_03.md   [《DuckDB:list,struct,map 类型很强大 - PostgreSQL:数组、row|record、json字典》](20220829_03.md)  

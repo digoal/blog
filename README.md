@@ -93,6 +93,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202209/20220911_01.md   [《SQLite3 的b-tree 存储 - 以及索引聚集表 (without rowid)》](202209/20220911_01.md)  
+##### 202209/20220910_04.md   [《部署 SQLite3 in MacOS, 以及如何安装和使用SQLite3的extension》](202209/20220910_04.md)  
 ##### 202209/20220910_03.md   [《SQLite3 通过virtual table extension 读取Parquet外部表》](202209/20220910_03.md)  
 ##### 202209/20220910_02.md   [《SQLite3 的index skip scan优化器功能》](202209/20220910_02.md)  
 ##### 202209/20220910_01.md   [《SQLite3 的索引推荐功能 - expert》](202209/20220910_01.md)  

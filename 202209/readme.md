@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20220911_01.md   [《SQLite3 的b-tree 存储 - 以及索引聚集表 (without rowid)》](20220911_01.md)  
+##### 20220910_04.md   [《部署 SQLite3 in MacOS, 以及如何安装和使用SQLite3的extension》](20220910_04.md)  
 ##### 20220910_03.md   [《SQLite3 通过virtual table extension 读取Parquet外部表》](20220910_03.md)  
 ##### 20220910_02.md   [《SQLite3 的index skip scan优化器功能》](20220910_02.md)  
 ##### 20220910_01.md   [《SQLite3 的索引推荐功能 - expert》](20220910_01.md)  

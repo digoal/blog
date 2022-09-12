@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202209/20220912_01.md   [《MacOS 制作ubuntu USB安装介质并安装和配置Ubuntu, openssh-server和expect ssh登陆脚本》](202209/20220912_01.md)  
 ##### 202209/20220911_01.md   [《SQLite3 的b-tree 存储 - 以及索引聚集表 (without rowid)》](202209/20220911_01.md)  
 ##### 202209/20220910_04.md   [《部署 SQLite3 in MacOS, 以及如何安装和使用SQLite3的extension》](202209/20220910_04.md)  
 ##### 202209/20220910_03.md   [《SQLite3 通过virtual table extension 读取Parquet外部表》](202209/20220910_03.md)  

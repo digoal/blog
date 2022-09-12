@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20220912_02.md   [《德说-第138期, 数据库市场、政策、生态、人才培养》](20220912_02.md)  
 ##### 20220912_01.md   [《MacOS 制作ubuntu USB安装介质并安装和配置Ubuntu, openssh-server和expect ssh登陆脚本》](20220912_01.md)  
 ##### 20220911_01.md   [《SQLite3 的b-tree 存储 - 以及索引聚集表 (without rowid)》](20220911_01.md)  
 ##### 20220910_04.md   [《部署 SQLite3 in MacOS, 以及如何安装和使用SQLite3的extension》](20220910_04.md)  

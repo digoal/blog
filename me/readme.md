@@ -3,11 +3,12 @@ digoal(德哥)
         
 [个人照片](digoal.png)        
           
+- 天上的繁星, 海边的沙粒.  
 - PostgreSQL 中国社区发起人之一。负责PostgreSQL数据库在中国的技术落地与推广、人才培养。          
 - 中国开源软件推进联盟PostgreSQL分会，特聘资深领域专家。         
 - [中国信息通信研究院主办、中国通信标准化协会支持的"OSCAR云计算开源产业大会"评选：2018届OSCAR开源尖峰人物之一](../201803/20180322_12.md)    
 - 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。    
-- 阿里巴巴钻石布道师
+- 阿里巴巴麒麟布道师
 - 42项数据库专利
 - [最近的一些思考](../class/35.md)  
 - B站开设有[<开慧社>](https://space.bilibili.com/310191812/channel/detail?cid=191242&ctype=0)、[<德说>](https://space.bilibili.com/310191812/channel/detail?cid=198648&ctype=0)、[<重新发现PG之美>](https://space.bilibili.com/310191812/channel/detail?cid=188682&ctype=0)、[<发现PolarDB之美>](https://space.bilibili.com/310191812/channel/detail?cid=201348&ctype=0)、[<DB吐槽会>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=238117&ctype=0)、[<每天5分钟PG聊通透>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=582141&ctype=0)等专栏。     
@@ -241,6 +242,8 @@ xxxx-xx-xx DB吐槽大会
 vivo oppo
 去哪儿
 邮储银行
+娃哈哈
+...
 ```
 - 常年不定期输出PostgreSQL公益培训。        
 - 长期坚持撰写技术文章，涵盖“开源产品使用、案例、应用开发实践、内核开发实践、管理实践、调优实践”等数据库生命周期相关文档. 截止2019.6 发表PG技术类文章数：    

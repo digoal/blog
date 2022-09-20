@@ -10,7 +10,7 @@ digoal(德哥)
 - 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。    
 - 阿里巴巴麒麟布道师
 - 42项数据库专利
-- [最近的一些思考](../class/35.md)  
+- [德说](../202108/20210818_02.md)以及[最近的一些思考](../class/35.md)  
 - B站开设有[<开慧社>](https://space.bilibili.com/310191812/channel/detail?cid=191242&ctype=0)、[<德说>](https://space.bilibili.com/310191812/channel/detail?cid=198648&ctype=0)、[<重新发现PG之美>](https://space.bilibili.com/310191812/channel/detail?cid=188682&ctype=0)、[<发现PolarDB之美>](https://space.bilibili.com/310191812/channel/detail?cid=201348&ctype=0)、[<DB吐槽会>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=238117&ctype=0)、[<每天5分钟PG聊通透>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=582141&ctype=0)等专栏。     
   
 ## 工作经历

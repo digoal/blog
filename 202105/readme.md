@@ -12,7 +12,7 @@
 ##### 20210527_03.md   [《数据科学家必须了解 - wolfram - wolfram alpha 科学计算 saas - 全球现代技术计算的终极系统》](20210527_03.md)  
 ##### 20210527_02.md   [《PostgreSQL PGSpider 插件(一款基于FDW的并行的联邦查询插件) - sqlite_fdw, influxdb_fdw, griddb_fdw, mysql_fdw, parquet_s3_fdw》](20210527_02.md)  
 ##### 20210527_01.md   [《PostgreSQL 随机查询采样 - 既要真随机、又要高性能 - table sample方法》](20210527_01.md)  
-##### 20210526_02.md   [《重新发现PG之美 - 系列视频》](20210526_02.md)  
+##### 20210526_02.md   [《重新发现PostgreSQL之美 - 系列视频》](20210526_02.md)  
 ##### 20210526_01.md   [《元认知》](20210526_01.md)  
 ##### 20210525_02.md   [《PostgreSQL 实例启动时的HOOK, 自动加载预定义SQL或文件 - pg_start_sql 插件》](20210525_02.md)  
 ##### 20210525_01.md   [《PostgreSQL 执行计划篡改、SQL rule自动改写SQL(query rewrite)、自动触发额外动作 - 指鹿为马、垂帘听政、狸猫换太子 - sql outline》](20210525_01.md)  

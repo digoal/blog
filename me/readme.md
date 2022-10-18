@@ -13,6 +13,11 @@ digoal(德哥)
 - [德说](../202108/20210818_02.md)以及[最近的一些思考](../class/35.md)  
 - B站开设有[<开慧社>](https://space.bilibili.com/310191812/channel/detail?cid=191242&ctype=0)、[<德说>](https://space.bilibili.com/310191812/channel/detail?cid=198648&ctype=0)、[<重新发现PG之美>](https://space.bilibili.com/310191812/channel/detail?cid=188682&ctype=0)、[<发现PolarDB之美>](https://space.bilibili.com/310191812/channel/detail?cid=201348&ctype=0)、[<DB吐槽会>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=238117&ctype=0)、[<每天5分钟PG聊通透>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=582141&ctype=0)等专栏。     
   
+```
+简短介绍
+简介: 德哥(digoal), 就职于阿里云数据库团队架构组, 负责阿里云PolarDB数据库开源产品运营。PostgreSQL 中国社区发起人之一, 负责PG在中国的技术落地与推广、人才培养. 申请了40余项数据库相关专利, 喜爱技术分享, 获得阿里巴巴麒麟布道师称号、2018届OSCAR开源尖峰人物之一. 
+```
+  
 ## 工作经历
 ### 2021.8 ~ 现在 阿里云  
 架构组, 负责阿里云数据库开源产品与运营.  

@@ -93,6 +93,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202210/20221026_05.md   [《DuckDB 对比 PostgreSQL 50张表JOIN 的优化器》](202210/20221026_05.md)  
+##### 202210/20221026_04.md   [《DuckDB 对比 PostgreSQL join 优化器推理优化又一例》](202210/20221026_04.md)  
+##### 202210/20221026_03.md   [《DuckDB COPY 数据导入导出 - 支持csv, parquet格式, 支持CODEC设置压缩》](202210/20221026_03.md)  
+##### 202210/20221026_02.md   [《DuckDB 虚拟列 - `GENERATED ALWAYS AS () VIRTUAL`》](202210/20221026_02.md)  
 ##### 202210/20221026_01.md   [《DuckDB DataLake 场景使用举例 - aliyun OSS对象存储parquet》](202210/20221026_01.md)  
 ##### 202210/20221025_06.md   [《德说-第166期, 象(决定人生命运的机会)只出现一次, 就看你能不能发现 - PolarDB的象》](202210/20221025_06.md)  
 ##### 202210/20221025_05.md   [《DuckDB lambda 函数使用 - list/array数据处理 - 元素的转换与过滤 (list_filter, list_transform)》](202210/20221025_05.md)  

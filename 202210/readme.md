@@ -2,8 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20221027_03.md   [《DuckDB select 语法糖: exclude, replace columns》](20221027_03.md)  
+##### 20221027_02.md   [《DuckDB 备份与恢复数据库》](20221027_02.md)  
+##### 20221027_01.md   [《德说-第167期, 水中捞月》](20221027_01.md)  
 ##### 20221026_06.md   [《MacOS下抓取火焰图和分析程序性能的方法(sample, FlameGraph) - Linux Perf》](20221026_06.md)  
-##### 20221026_05.md   [《DuckDB 对比 PostgreSQL 50张表JOIN 的优化器》](20221026_05.md)  
+##### 20221026_05.md   [《DuckDB 对比 PostgreSQL 48张表JOIN 的优化器》](20221026_05.md)  
 ##### 20221026_04.md   [《DuckDB 对比 PostgreSQL join 优化器推理优化又一例》](20221026_04.md)  
 ##### 20221026_03.md   [《DuckDB COPY 数据导入导出 - 支持csv, parquet格式, 支持CODEC设置压缩》](20221026_03.md)  
 ##### 20221026_02.md   [《DuckDB 虚拟列 - `GENERATED ALWAYS AS () VIRTUAL`》](20221026_02.md)  

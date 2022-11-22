@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20221122_04.md   [《DuckDB 0.6.0 内存管理增强, 提升超出内存大小的大数据集hashjoin,sort,window function性能》](20221122_04.md)  
+##### 20221122_03.md   [《DuckDB 0.6.0 语法糖: Add Python-style list-comprehension syntax support to SQL》](20221122_03.md)  
+##### 20221122_02.md   [《DuckDB 0.6.0 语法糖: 支持columns 语法 - 兼容clickhouse columns 语法》](20221122_02.md)  
+##### 20221122_01.md   [《DuckDB 0.6.0 新增UNION数据类型支持 - 单列支持多类型》](20221122_01.md)  
 ##### 20221121_02.md   [《《黄帝内经》学习笔记-1, 虚实症解法"子能令母实，母能令子虚"》](20221121_02.md)  
 ##### 20221121_01.md   [《如何explain查看prepared statement的generic plan》](20221121_01.md)  
 ##### 20221120_01.md   [《德说-第177期, 存在的意义》](20221120_01.md)  

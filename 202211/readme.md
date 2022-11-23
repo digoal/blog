@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20221123_03.md   [《DuckDB 0.6.0 数据批量写入性能优化》](20221123_03.md)  
+##### 20221123_02.md   [《为什么看好 DuckDB 的发展前景?》](20221123_02.md)  
+##### 20221123_01.md   [《德说-第178期, 亚伯拉罕的代祷在向上管理工作中的运用?》](20221123_01.md)  
 ##### 20221122_04.md   [《DuckDB 0.6.0 内存管理增强, 提升超出内存大小的大数据集hashjoin,sort,window function性能》](20221122_04.md)  
 ##### 20221122_03.md   [《DuckDB 0.6.0 语法糖: Add Python-style list-comprehension syntax support to SQL》](20221122_03.md)  
 ##### 20221122_02.md   [《DuckDB 0.6.0 语法糖: 支持columns 语法 - 兼容clickhouse columns 语法》](20221122_02.md)  

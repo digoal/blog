@@ -116,6 +116,8 @@ do
 #sed -i "" '/269ac3d1c492e938c0191101c7238216/d' ${file}
 # ###FREEURL###   
 #sed -i "" '/57258f76c37864c6e6d23383d05714ea/d' ${file}
+# ###POLARONEURL###
+#sed -i "" '/8642f60e04ed0c814bf9cb9677976bd4/d' ${file}
 # ###ALIPGURL###   
 #sed -i "" '/40cff096e9ed7122c512b35d8561d9c8/d' ${file}
 # ###LINK###   
@@ -126,14 +128,21 @@ do
     XYQ=`grep "269ac3d1c492e938c0191101c7238216" ${file}|grep -c "269ac3d1c492e938c0191101c7238216"`
     if [ $XYQ -lt 1 ]; then
       echo "  " >> ./${file}
-      echo "#### [期望 PostgreSQL 增加什么功能?](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\")" >> ./${file}
+      echo "#### [期望 PostgreSQL|开源PolarDB 增加什么功能?](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\")" >> ./${file}
       echo "  " >> ./${file}
     fi
 ##
     FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" ${file}|grep -c "57258f76c37864c6e6d23383d05714ea"`
     if [ $FREEURL -ne 1 ]; then
       echo "  " >> ./${file}
-      echo "#### [PolarDB for PostgreSQL云原生分布式开源数据库](https://github.com/ApsaraDB/PolarDB-for-PostgreSQL \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
+      echo "#### [PolarDB 云原生分布式开源数据库](https://github.com/ApsaraDB \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
+      echo "  " >> ./${file}
+    fi
+##
+    POLARONEURL=`grep "8642f60e04ed0c814bf9cb9677976bd4" ${file}|grep -c "8642f60e04ed0c814bf9cb9677976bd4"`
+    if [ $POLARONEURL -ne 1 ]; then
+      echo "  " >> ./${file}
+      echo "#### [PolarDB 学习图谱: 训练营、培训认证、在线互动实验、解决方案、生态合作、写心得拿奖品](https://www.aliyun.com/database/openpolardb/activity \"8642f60e04ed0c814bf9cb9677976bd4\")" >> ./${file}
       echo "  " >> ./${file}
     fi
 ##

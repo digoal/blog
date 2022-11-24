@@ -142,7 +142,7 @@ do
     POLARONEURL=`grep "8642f60e04ed0c814bf9cb9677976bd4" ${file}|grep -c "8642f60e04ed0c814bf9cb9677976bd4"`
     if [ $POLARONEURL -ne 1 ]; then
       echo "  " >> ./${file}
-      echo "#### [PolarDB 学习图谱: 训练营、培训认证、在线互动实验、解决方案、生态合作、写心得拿奖品](https://www.aliyun.com/database/openpolardb/activity \"8642f60e04ed0c814bf9cb9677976bd4\")" >> ./${file}
+      echo "#### [PolarDB 学习图谱: 训练营、培训认证、在线互动实验、解决方案、内核开发公开课、生态合作、写心得拿奖品](https://www.aliyun.com/database/openpolardb/activity \"8642f60e04ed0c814bf9cb9677976bd4\")" >> ./${file}
       echo "  " >> ./${file}
     fi
 ##

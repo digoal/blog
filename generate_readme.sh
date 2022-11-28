@@ -149,7 +149,7 @@ do
     ALIPGURL=`grep "40cff096e9ed7122c512b35d8561d9c8" ${file}|grep -c "40cff096e9ed7122c512b35d8561d9c8"`
     if [ $ALIPGURL -ne 1 ]; then
       echo "  " >> ./${file}
-      echo "#### [PostgreSQL 解决方案集合](https://yq.aliyun.com/topic/118 \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
+      echo "#### [PostgreSQL 解决方案集合](../201706/20170601_02.md \"40cff096e9ed7122c512b35d8561d9c8\")" >> ./${file}
       echo "  " >> ./${file}
     fi
 ## 

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20221208_03.md   [《PolarDB 开源版通过pg_rational插件支持Stern-Brocot trees , 实现高效自定义顺序和调整顺序需求》](20221208_03.md)  
 ##### 20221208_02.md   [《PolarDB 开源版通过roaringbitmap支持高效用户画像等标签操作》](20221208_02.md)  
 ##### 20221208_01.md   [《PostgreSQL 性能基准对比分析产品: pg_profile》](20221208_01.md)  
 ##### 20221207_03.md   [《PolarDB 开源版通过orafce支持Oracle兼容性》](20221207_03.md)  

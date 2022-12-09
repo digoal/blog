@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20221209_02.md   [《PolarDB 开源版通过 duckdb_fdw 支持 parquet 列存数据文件以及高效OLAP》](20221209_02.md)  
+##### 20221209_01.md   [《PolarDB 开源版通过pg_similarity实现17种文本相似搜索 - token归一切分, 根据文本相似度检索相似文本.》](20221209_01.md)  
 ##### 20221208_03.md   [《PolarDB 开源版通过pg_rational插件支持Stern-Brocot trees , 实现高效自定义顺序和调整顺序需求》](20221208_03.md)  
 ##### 20221208_02.md   [《PolarDB 开源版通过roaringbitmap支持高效用户画像等标签操作》](20221208_02.md)  
 ##### 20221208_01.md   [《PostgreSQL 性能基准对比分析产品: pg_profile》](20221208_01.md)  

@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20221130_01.md   [《PolarDB for PostgreSQL SPGiST 实现超光速 - 全球化业务根据来源IP智能DNS路由就近分配本地机房访问, 提升用户体验》](20221130_01.md)  
+##### 20221130_01.md   [《PolarDB for PostgreSQL 采用iprange和SPGiST index 实现超光速 - 全球化业务根据来源IP智能DNS路由就近分配本地机房访问, 提升用户体验》](20221130_01.md)  
 ##### 20221129_01.md   [《PostgreSQL 16 preview - 新增角色: pg_vacuum_all_tables and pg_analyze_all_tables》](20221129_01.md)  
 ##### 20221128_01.md   [《DuckDB 轻量级压缩解读》](20221128_01.md)  
 ##### 20221126_01.md   [《德说-第182期, 分形是上帝指纹的证据?》](20221126_01.md)  

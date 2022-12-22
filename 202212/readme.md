@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20221222_05.md   [《使用 PolarDB 开源版 bloom filter index 实现任意字段组合条件过滤》](20221222_05.md)  
 ##### 20221222_04.md   [《使用 PolarDB 开源版 和 imgsmlr 存储图像特征值以及快速的进行图像相似搜索》](20221222_04.md)  
 ##### 20221222_03.md   [《使用 PolarDB 开源版高效率解决用户画像、实时精准营销类业务需求》](20221222_03.md)  
 ##### 20221222_02.md   [《PostgreSQL 16 preview - 新增GUC enable_presorted_aggregate , 优化器支持预排序选择, 减少distinct|order by agg的显排消耗》](20221222_02.md)  

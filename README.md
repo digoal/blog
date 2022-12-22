@@ -93,6 +93,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202212/20221222_02.md   [《PostgreSQL 16 preview - 新增GUC enable_presorted_aggregate , 优化器支持预排序选择, 减少distinct|order by agg的显排消耗》](202212/20221222_02.md)  
+##### 202212/20221222_01.md   [《PostgreSQL 16 preview - 新增函数pg_dissect_walfile_name(), 可根据wal文件名计算得出这个wal是第几个wal segment 文件, 以及timeline是多少?》](202212/20221222_01.md)  
 ##### 202212/20221221_04.md   [《PostgreSQL pg_imv 实时增量物化视图》](202212/20221221_04.md)  
 ##### 202212/20221221_03.md   [《PolarDB 开源版通过 brin 实现千分之一的存储空间, 高效率检索时序数据》](202212/20221221_03.md)  
 ##### 202212/20221221_02.md   [《PolarDB 开源版通过 pg_trgm GIN 索引实现高效率 `like '%xxx%'` 模糊查询》](202212/20221221_02.md)  

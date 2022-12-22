@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20221222_03.md   [《使用 PolarDB 开源版高效率解决用户画像、实时精准营销类业务需求》](20221222_03.md)  
 ##### 20221222_02.md   [《PostgreSQL 16 preview - 新增GUC enable_presorted_aggregate , 优化器支持预排序选择, 减少distinct|order by agg的显排消耗》](20221222_02.md)  
 ##### 20221222_01.md   [《PostgreSQL 16 preview - 新增函数pg_dissect_walfile_name(), 可根据wal文件名计算得出这个wal是第几个wal segment 文件, 以及timeline是多少?》](20221222_01.md)  
 ##### 20221221_04.md   [《PostgreSQL pg_imv 实时增量物化视图》](20221221_04.md)  

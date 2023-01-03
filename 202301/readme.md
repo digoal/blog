@@ -2,4 +2,5 @@
   
 ### 文章列表  
 ----  
+##### 20230103_01.md   [《PostgreSQL 16 preview - Add 'logical_decoding_mode' GUC. buffered & immediate》](20230103_01.md)  
 ##### 20230102_01.md   [《PolarDB 开源版 使用pgpool-II实现透明读写分离》](20230102_01.md)  

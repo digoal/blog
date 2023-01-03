@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202301/20230103_01.md   [《PostgreSQL 16 preview - Add 'logical_decoding_mode' GUC. buffered & immediate》](202301/20230103_01.md)  
 ##### 202301/20230102_01.md   [《PolarDB 开源版 使用pgpool-II实现透明读写分离》](202301/20230102_01.md)  
 ----  
 ##### 202212/20221229_01.md   [《PolarDB 开源版 轨迹应用实践 - 出行、配送、快递等业务的调度; 传染溯源; 刑侦》](202212/20221229_01.md)  

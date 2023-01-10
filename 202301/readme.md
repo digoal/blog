@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20230110_03.md   [《PostgreSQL 16 preview - 逻辑复制支持大事务并行订阅回放》](20230110_03.md)  
+##### 20230110_02.md   [《PostgreSQL 16 preview - ltree 支持大小写字母,数字,下划线,连字符. 值长度增加到1000字符》](20230110_02.md)  
+##### 20230110_01.md   [《PostgreSQL 16 preview - vacuum SKIP_DATABASE_STATS|ONLY_DATABASE_STATS 加速vacuumdb》](20230110_01.md)  
 ##### 20230108_02.md   [《macOS sublime 解决中文乱码》](20230108_02.md)  
 ##### 20230108_01.md   [《德说-第188期, 如何分析公司、人? 值不值得加入、交往?》](20230108_01.md)  
 ##### 20230105_01.md   [《PolarDB 开源版 使用TimescaleDB 实现时序数据高速写入、压缩、实时聚合计算、自动老化等》](20230105_01.md)  

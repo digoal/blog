@@ -93,6 +93,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202301/20230111_03.md   [《PolarDB 开源版 numeric 性能增强插件 : fixeddecimal , pgdecimal (decimal128 , decimal64)》](202301/20230111_03.md)  
+##### 202301/20230111_02.md   [《PostgreSQL 16 preview - 优化器支持Incremental Sort for DISTINCT》](202301/20230111_02.md)  
+##### 202301/20230111_01.md   [《PostgreSQL 16 preview - 增加GUC createrole_self_grant, nonsuperuser创建用户支持inherit和set role自动反向赋予》](202301/20230111_01.md)  
+##### 202301/20230110_04.md   [《PostgreSQL 16 preview - 优化gin索引代价估算算法》](202301/20230110_04.md)  
 ##### 202301/20230110_03.md   [《PostgreSQL 16 preview - 逻辑复制支持大事务并行订阅回放》](202301/20230110_03.md)  
 ##### 202301/20230110_02.md   [《PostgreSQL 16 preview - ltree 支持大小写字母,数字,下划线,连字符. 值长度增加到1000字符》](202301/20230110_02.md)  
 ##### 202301/20230110_01.md   [《PostgreSQL 16 preview - vacuum SKIP_DATABASE_STATS|ONLY_DATABASE_STATS 加速vacuumdb》](202301/20230110_01.md)  

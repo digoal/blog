@@ -93,6 +93,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202301/20230113_03.md   [《德说-第191期, 谁是最伟大的布道师》](202301/20230113_03.md)  
+##### 202301/20230113_02.md   [《德说-第190期, 再谈什么是道, 如何修道, 如何以道御术?》](202301/20230113_02.md)  
+##### 202301/20230113_01.md   [《德说-第189期, 虫洞应用》](202301/20230113_01.md)  
 ##### 202301/20230111_03.md   [《PolarDB 开源版 numeric 性能增强插件 : fixeddecimal , pgdecimal (decimal128 , decimal64)》](202301/20230111_03.md)  
 ##### 202301/20230111_02.md   [《PostgreSQL 16 preview - 优化器支持Incremental Sort for DISTINCT》](202301/20230111_02.md)  
 ##### 202301/20230111_01.md   [《PostgreSQL 16 preview - 增加GUC createrole_self_grant, nonsuperuser创建用户支持inherit和set role自动反向赋予》](202301/20230111_01.md)  

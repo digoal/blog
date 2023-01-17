@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20230117_04.md   [《PostgeSQL sql server babelfish 迁移模式single-mode, multi-mode的选择策略》](20230117_04.md)  
+##### 20230117_03.md   [《PostgeSQL sql server兼容性之 - 扩展表名、字段名、函数名、视图名等长度至128》](20230117_03.md)  
+##### 20230117_02.md   [《PostgeSQL 使用icu支持中文按拼音|笔画数排序》](20230117_02.md)  
 ##### 20230117_01.md   [《PostgeSQL sql server兼容性with babelfish - babelfish部署on mssql 2019 docker on ubuntu》](20230117_01.md)  
 ##### 20230116_01.md   [《PostgeSQL sql server兼容性with babelfish - babelfish部署on CentOS8 docker》](20230116_01.md)  
 ##### 20230115_01.md   [《PostgeSQL 的undo存储引擎可能不那么重要了》](20230115_01.md)  

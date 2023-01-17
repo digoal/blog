@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20230117_01.md   [《PostgeSQL sql server兼容性with babelfish - babelfish部署on mssql 2019 docker on ubuntu》](20230117_01.md)  
 ##### 20230116_01.md   [《PostgeSQL sql server兼容性with babelfish - babelfish部署on CentOS8 docker》](20230116_01.md)  
 ##### 20230115_01.md   [《PostgeSQL 的undo存储引擎可能不那么重要了》](20230115_01.md)  
 ##### 20230114_02.md   [《microsoft sql server on docker 部署》](20230114_02.md)  

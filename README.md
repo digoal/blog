@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202301/20230118_01.md   [《gitbook docker 容器的使用 - 简化gitbook安装过程》](202301/20230118_01.md)  
 ##### 202301/20230117_04.md   [《PostgeSQL sql server babelfish 迁移模式single-mode, multi-mode的选择策略》](202301/20230117_04.md)  
 ##### 202301/20230117_03.md   [《PostgeSQL sql server兼容性之 - 扩展表名、字段名、函数名、视图名等长度至128》](202301/20230117_03.md)  
 ##### 202301/20230117_02.md   [《PostgeSQL 使用icu支持中文按拼音|笔画数排序》](202301/20230117_02.md)  

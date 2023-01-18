@@ -93,6 +93,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202301/20230118_03.md   [《SQL Server 迁移到 PostgreSQL(babelfish) 的兼容性评估工具: Babelfish Compass》](202301/20230118_03.md)  
+##### 202301/20230118_02.md   [《PostgreSQL SP-GiST GiST 索引选择?》](202301/20230118_02.md)  
 ##### 202301/20230118_01.md   [《gitbook docker 容器的使用 - 简化gitbook安装过程》](202301/20230118_01.md)  
 ##### 202301/20230117_04.md   [《PostgeSQL sql server babelfish 迁移模式single-mode, multi-mode的选择策略》](202301/20230117_04.md)  
 ##### 202301/20230117_03.md   [《PostgeSQL sql server兼容性之 - 扩展表名、字段名、函数名、视图名等长度至128》](202301/20230117_03.md)  

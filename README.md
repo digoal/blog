@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202301/20230124_01.md   [《macOS rar 压缩,解压缩使用》](202301/20230124_01.md)  
 ##### 202301/20230118_03.md   [《SQL Server 迁移到 PostgreSQL(babelfish) 的兼容性评估工具: Babelfish Compass》](202301/20230118_03.md)  
 ##### 202301/20230118_02.md   [《PostgreSQL SP-GiST GiST 索引选择?》](202301/20230118_02.md)  
 ##### 202301/20230118_01.md   [《gitbook docker 容器的使用 - 简化gitbook安装过程》](202301/20230118_01.md)  

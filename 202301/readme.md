@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20230125_05.md   [《PostgreSQL 16 preview - 简化lock table的权限管理》](20230125_05.md)  
+##### 20230125_04.md   [《PostgreSQL 16 preview - 为赋予了pg_use_reserved_connections角色的用户设置保留连接个数(reserved_connections).》](20230125_04.md)  
+##### 20230125_03.md   [《PostgreSQL 16 preview - string_agg, array_agg支持并行》](20230125_03.md)  
+##### 20230125_02.md   [《PostgreSQL 16 preview - pg_walinspect: Add pg_get_wal_fpi_info() to get full page image (FPI) from WAL record》](20230125_02.md)  
+##### 20230125_01.md   [《PostgreSQL 16 preview - 支持二进制、八进制、十六进制整型(integer,numeric)输入》](20230125_01.md)  
 ##### 20230124_01.md   [《macOS rar 压缩,解压缩使用》](20230124_01.md)  
 ##### 20230118_03.md   [《SQL Server 迁移到 PostgreSQL(babelfish) 的兼容性评估工具: Babelfish Compass》](20230118_03.md)  
 ##### 20230118_02.md   [《PostgreSQL SP-GiST GiST 索引选择?》](20230118_02.md)  

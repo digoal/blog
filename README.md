@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202301/20230126_01.md   [《德说-第192期, 形和神》](202301/20230126_01.md)  
 ##### 202301/20230125_05.md   [《PostgreSQL 16 preview - 简化lock table的权限管理》](202301/20230125_05.md)  
 ##### 202301/20230125_04.md   [《PostgreSQL 16 preview - 为赋予了pg_use_reserved_connections角色的用户设置保留连接个数(reserved_connections).》](202301/20230125_04.md)  
 ##### 202301/20230125_03.md   [《PostgreSQL 16 preview - string_agg, array_agg支持并行》](202301/20230125_03.md)  

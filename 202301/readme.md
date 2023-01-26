@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20230126_01.md   [《德说-第192期, 形和神》](20230126_01.md)  
 ##### 20230125_05.md   [《PostgreSQL 16 preview - 简化lock table的权限管理》](20230125_05.md)  
 ##### 20230125_04.md   [《PostgreSQL 16 preview - 为赋予了pg_use_reserved_connections角色的用户设置保留连接个数(reserved_connections).》](20230125_04.md)  
 ##### 20230125_03.md   [《PostgreSQL 16 preview - string_agg, array_agg支持并行》](20230125_03.md)  

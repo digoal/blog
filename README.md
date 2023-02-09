@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202302/20230209_03.md   [《PolarDB-X range_hash 分库分表例子 - 以及设计边界的分析例子》](202302/20230209_03.md)  
 ##### 202302/20230209_02.md   [《PostgreSQL 16 preview - IO 统计信息大升级》](202302/20230209_02.md)  
 ##### 202302/20230209_01.md   [《假如我和ChatGPT来一场PK》](202302/20230209_01.md)  
 ##### 202302/20230206_01.md   [《PostgreSQL 16 preview - Add support for progress reporting to pg_verifybackup》](202302/20230206_01.md)  

@@ -93,6 +93,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202303/20230318_03.md   [《记录下 在 nvidia cuda 容器中部署 postgresql + pg-strom》](202303/20230318_03.md)  
 ##### 202303/20230318_02.md   [《记录下 在 debian 中部署 nvidia cuda 容器》](202303/20230318_02.md)  
 ##### 202303/20230318_01.md   [《记录下 在 debian 宿主机中部署和使用 docker (常用docker命令、debian容器常用配置; debian容器部署duckdb和PostgreSQL例子)》](202303/20230318_01.md)  
 ##### 202303/20230317_02.md   [《记录下 debian 在带Nvidia显卡笔记本上的部署 - 用于测试 cuda 应用》](202303/20230317_02.md)  

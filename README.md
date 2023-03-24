@@ -93,6 +93,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202303/20230324_02.md   [《PostgreSQL 16 preview - 逻辑复制(发布、订阅) 初始化表同步数据阶段性能提升: 采用binary format copy.》](202303/20230324_02.md)  
+##### 202303/20230324_01.md   [《PostgreSQL 16 preview - `pg_stat_*` 支持 Count updates that move row to a new page统计, 用以fillfactor配置决策》](202303/20230324_01.md)  
 ##### 202303/20230321_01.md   [《德说-第212期, 如何从“智”人到“慧”人? - 到底怎么和AI合作|驾驭AI? - 关于prompt engineer - 关于怎么提问》](202303/20230321_01.md)  
 ##### 202303/20230320_01.md   [《程序员辅助编程利器只是AI应用的开始: cursor, An editor built for programming with AI》](202303/20230320_01.md)  
 ##### 202303/20230319_05.md   [《德说-第211期, okr 方法论: 以果决行&动态规划》](202303/20230319_05.md)  

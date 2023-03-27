@@ -93,6 +93,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202303/20230327_02.md   [《PostgreSQL 16 preview - explain (GENERIC_PLAN) 打印带变量SQL的 generic plan (通用执行计划)》](202303/20230327_02.md)  
+##### 202303/20230327_01.md   [《PostgreSQL 16 preview - Make SCRAM iteration count configurable, scram_iterations 可配置提升暴力破解难度》](202303/20230327_01.md)  
 ##### 202303/20230324_02.md   [《PostgreSQL 16 preview - 逻辑复制(发布、订阅) 初始化表同步数据阶段性能提升: 采用binary format copy.》](202303/20230324_02.md)  
 ##### 202303/20230324_01.md   [《PostgreSQL 16 preview - `pg_stat_*` 支持 Count updates that move row to a new page统计, 用以fillfactor配置决策》](202303/20230324_01.md)  
 ##### 202303/20230321_01.md   [《德说-第212期, 如何从“智”人到“慧”人? - 到底怎么和AI合作|驾驭AI? - 关于prompt engineer - 关于怎么提问》](202303/20230321_01.md)  

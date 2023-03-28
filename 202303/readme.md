@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20230328_01.md   [《德说-第213期, 如何解读一本书?》](20230328_01.md)  
 ##### 20230327_02.md   [《PostgreSQL 16 preview - explain (GENERIC_PLAN) 打印带变量SQL的 generic plan (通用执行计划)》](20230327_02.md)  
 ##### 20230327_01.md   [《PostgreSQL 16 preview - Make SCRAM iteration count configurable, scram_iterations 可配置提升暴力破解难度》](20230327_01.md)  
 ##### 20230324_02.md   [《PostgreSQL 16 preview - 逻辑复制(发布、订阅) 初始化表同步数据阶段性能提升: 采用binary format copy.》](20230324_02.md)  

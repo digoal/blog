@@ -2,12 +2,20 @@
   
 ### 文章列表  
 ----  
+##### 20230331_08.md   [《PostgreSQL 16 preview - pg_stat_io 增加 hits, Track shared buffer hits》](20230331_08.md)  
+##### 20230331_07.md   [《ChatGPT背后的数据库技术体验 - 向量近似搜索之 milvus(专业的向量数据库)》](20230331_07.md)  
+##### 20230331_06.md   [《Polars: 闪电般快速的 DataFrame 数据整理库/内存查询引擎 (可能比较适合开发者与数据科学家)》](20230331_06.md)  
+##### 20230331_05.md   [《PostgreSQL git.postgresql.org 分支使用 - 如何同步社区最新patch?》](20230331_05.md)  
+##### 20230331_04.md   [《Databend AI for DB - 结合openAI实现自然语言指令转换为 SQL 查询》](20230331_04.md)  
+##### 20230331_03.md   [《PostgreSQL AI for DB (chatgpt) 插件pg_gpt: 支持openai, 自动学习schema, 通过自然语言生成SQL》](20230331_03.md)  
+##### 20230331_02.md   [《PostgreSQL 16 preview - pg_walinspect插件增强 pg_get_wal_block_info 返回更多wal block级别信息》](20230331_02.md)  
+##### 20230331_01.md   [《PostgreSQL 16 preview - support Parallel Hash Full Join》](20230331_01.md)  
 ##### 20230330_04.md   [《使用jupyter notebook统计python 代码段执行时间》](20230330_04.md)  
-##### 20230330_03.md   [《lance 向量近似检索体验》](20230330_03.md)  
+##### 20230330_03.md   [《ChatGPT背后的数据库技术体验 - 向量近似搜索之 lance》](20230330_03.md)  
 ##### 20230330_02.md   [《PostgreSQL 16 preview - libpq支持简单的负载均衡配置: load_balance_hosts》](20230330_02.md)  
-##### 20230330_01.md   [《ChatGPT背后的数据库技术 - 向量搜索》](20230330_01.md)  
+##### 20230330_01.md   [《ChatGPT背后的数据库技术体验 - 向量近似搜索之 PostgreSQL+pase(hnsw,ivfflat,ivfpq)》](20230330_01.md)  
 ##### 20230329_02.md   [《德说-第214期, 秘密: 吸引力法则+臣服实验》](20230329_02.md)  
-##### 20230329_01.md   [《一款兼容mysql,clickhouse 使用rust写的数据湖产品databend - 适合"时序、IoT、feed?、分析、数据归档"等场景》](20230329_01.md)  
+##### 20230329_01.md   [《一款兼容mysql,clickhouse 使用rust写的数据湖产品databend(号称开源版snowflake) - 适合"时序、IoT、feed?、分析、数据归档"等场景》](20230329_01.md)  
 ##### 20230328_03.md   [《在 macOS 中刷机 iphone》](20230328_03.md)  
 ##### 20230328_02.md   [《将 "数据结构、数据存储" 从 "数据库管理系统" 剥离后 - 造就了大量大数据产品(arrow-rs, databend等)》](20230328_02.md)  
 ##### 20230328_01.md   [《德说-第213期, 如何解读一本书?》](20230328_01.md)  

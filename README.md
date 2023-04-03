@@ -93,6 +93,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202303/20230331_11.md   [《PostgreSQL 16 preview - standby将支持逻辑复制》](202303/20230331_11.md)  
+##### 202303/20230331_10.md   [《PostgreSQL 16 preview - SQL/JSON: support the IS JSON predicate》](202303/20230331_10.md)  
+##### 202303/20230331_09.md   [《德说-第215期, 和ChatGPT聊一聊, 高考如何选择专业?》](202303/20230331_09.md)  
 ##### 202303/20230331_08.md   [《PostgreSQL 16 preview - pg_stat_io 增加 hits, Track shared buffer hits》](202303/20230331_08.md)  
 ##### 202303/20230331_07.md   [《ChatGPT背后的数据库技术体验 - 向量近似搜索之 milvus(专业的向量数据库)》](202303/20230331_07.md)  
 ##### 202303/20230331_06.md   [《Polars: 闪电般快速的 DataFrame 数据整理库/内存查询引擎 (可能比较适合开发者与数据科学家)》](202303/20230331_06.md)  

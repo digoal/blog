@@ -2,11 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20230407_03.md   [《PostgreSQL 16 preview - Add VACUUM/ANALYZE BUFFER_USAGE_LIMIT option - 减少vacuum造成的wal flush, 提升vacuum速度》](20230407_03.md)  
+##### 20230407_02.md   [《PostgreSQL 16 preview - postgres_fdw foreign server option 支持 parallel_abort 选项, 并行回滚远端事务》](20230407_02.md)  
+##### 20230407_01.md   [《PostgreSQL 16 preview - zstd 压缩算法支持 --compress=zstd:long 模式, 加大内存窗口, 提升压缩比》](20230407_01.md)  
 ##### 20230406_05.md   [《PostgreSQL 16 preview - 支持 Right Anti Join , 对hash right join (non-nullable input)可选择small table作为hash table.》](20230406_05.md)  
 ##### 20230406_04.md   [《PostgreSQL 16 preview - pg_dump compress选项新增支持: zstd》](20230406_04.md)  
 ##### 20230406_03.md   [《PostgreSQL 16 preview - pl/pgsql 支持获取当前函数的OID: GET DIAGNOSTICS oid_variable = PG_ROUTINE_OID》](20230406_03.md)  
 ##### 20230406_02.md   [《PostgreSQL 16 preview - 新增pg_create_subscription 内置role, 同时精细化 subscription apply 时的角色选择 (subscription owner OR table owner)》](20230406_02.md)  
 ##### 20230406_01.md   [《PostgreSQL 16 preview - extend relation 优化, 扩展数据文件大幅度优化, 提升批量、高并发写入场景性能》](20230406_01.md)  
-##### 20230404_02.md   [《德说-第216期, 基因突变、创新 & 团队管理》](20230404_02.md)  
+##### 20230404_02.md   [《德说-第216期, 基因突变、创新 & 团队管理 & 汽车|数据库 颠覆式创新例子》](20230404_02.md)  
 ##### 20230404_01.md   [《rust 运行时错误 保护 例子》](20230404_01.md)  
 ##### 20230403_01.md   [《PostgreSQL 16 preview - standby将支持逻辑复制》](20230403_01.md)  

@@ -93,6 +93,14 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202304/20230410_08.md   [《德说-第219期, 为什么需要新品牌? - 汽车行业的颠覆式创新(第二曲线创新)例子》](202304/20230410_08.md)  
+##### 202304/20230410_07.md   [《PostgreSQL 16 preview - standby 支持 logical decoding》](202304/20230410_07.md)  
+##### 202304/20230410_06.md   [《PostgreSQL 16 preview - Add IO timing for reads, writes, extends, and fsyncs to `pg_stat_io` as well.》](202304/20230410_06.md)  
+##### 202304/20230410_05.md   [《PostgreSQL 16 preview - pg_buffercache 插件新增pg_buffercache_usage_counts统计 buffer usage count》](202304/20230410_05.md)  
+##### 202304/20230410_04.md   [《PostgreSQL 16 preview - Add io_direct setting (developer-only) - 终于想好好搞shared buffer管理了?》](202304/20230410_04.md)  
+##### 202304/20230410_03.md   [《PostgreSQL 16 preview - 数组随机打散和随机提取功能 : array_shuffle() , array_sample()》](202304/20230410_03.md)  
+##### 202304/20230410_02.md   [《德说-第218期, 数据库行业的颠覆式创新例子》](202304/20230410_02.md)  
+##### 202304/20230410_01.md   [《德说-第217期, 上善若水 & 高维意识觉醒》](202304/20230410_01.md)  
 ##### 202304/20230407_03.md   [《PostgreSQL 16 preview - Add VACUUM/ANALYZE BUFFER_USAGE_LIMIT option - 减少vacuum造成的wal flush, 提升vacuum速度》](202304/20230407_03.md)  
 ##### 202304/20230407_02.md   [《PostgreSQL 16 preview - postgres_fdw foreign server option 支持 parallel_abort 选项, 并行回滚远端事务》](202304/20230407_02.md)  
 ##### 202304/20230407_01.md   [《PostgreSQL 16 preview - zstd 压缩算法支持 --compress=zstd:long 模式, 加大内存窗口, 提升压缩比》](202304/20230407_01.md)  

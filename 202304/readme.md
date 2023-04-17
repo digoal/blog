@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20230417_01.md   [《德说-第220期, 团队管理: 价值|目标|结果|需求 方法论》](20230417_01.md)  
+##### 20230412_01.md   [《rust 所有权设计理念 & 卧底 & 单线》](20230412_01.md)  
 ##### 20230410_08.md   [《德说-第219期, 为什么需要新品牌? - 汽车行业的颠覆式创新(第二曲线创新)例子》](20230410_08.md)  
 ##### 20230410_07.md   [《PostgreSQL 16 preview - standby 支持 logical decoding》](20230410_07.md)  
 ##### 20230410_06.md   [《PostgreSQL 16 preview - Add IO timing for reads, writes, extends, and fsyncs to `pg_stat_io` as well.》](20230410_06.md)  

@@ -93,6 +93,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202306/20230609_02.md   [《德说-第240期, 为什么你找不到合伙人? 为什么在职场别人不愿意配合你的工作?》](202306/20230609_02.md)  
+##### 202306/20230609_01.md   [《德说-第239期, 为什么老板交代的事情做不好? 为什么老板“善变”? OKR相关》](202306/20230609_01.md)  
+##### 202306/20230606_01.md   [《单机部署体验 - 开源AWS Aurora for PostgreSQL: neon , 存算分离,server less. program by RUST》](202306/20230606_01.md)  
 ##### 202306/20230605_02.md   [《开源AWS Aurora for PostgreSQL: neon , 存算分离,server less. program by RUST》](202306/20230605_02.md)  
 ##### 202306/20230605_01.md   [《PostgreSQL又一个向量插件hnsw, 建议关注》](202306/20230605_01.md)  
 ----  
@@ -1494,7 +1497,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202011/20201123_01.md   [《用golang选什么pg驱动? pgx is a pure Go driver and toolkit for PostgreSQL.》](202011/20201123_01.md)  
 ##### 202011/20201122_01.md   [《PostgreSQL 中国 数据库内核研发 环境、人才现状与刺激方法》](202011/20201122_01.md)  
 ##### 202011/20201120_02.md   [《全面揭秘云数据库新形态MyBase - 2020数据库嘉年华回顾》](202011/20201120_02.md)  
-##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
+##### 202011/20201120_01.md   [《PostgreSQL - where x=round(random()\*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](202011/20201120_01.md)  
 ##### 202011/20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](202011/20201117_03.md)  
 ##### 202011/20201117_02.md   [《PostgreSQL 流复制冲突分类讲解以及对应解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL  - 特别是lock confict(vacuum truncate suffix free page引起的）》](202011/20201117_02.md)  
 ##### 202011/20201117_01.md   [《使用Postgres，MobilityDB和Citus大规模(百亿级)实时分析GPS轨迹》](202011/20201117_01.md)  
@@ -2297,7 +2300,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201809/20180925_02.md   [《PostgreSQL Heap Only Tuple - HOT (降低UPDATE引入的索引写IO放大)》](201809/20180925_02.md)  
 ##### 201809/20180925_01.md   [《PostgreSQL 内存表可选项 - unlogged table》](201809/20180925_01.md)  
 ##### 201809/20180922_01.md   [《PostgreSQL undo多版本存储引擎 zheap测试》](201809/20180922_01.md)  
-##### 201809/20180920_01.md   [《PostgreSQL 11 1Kw TPCC , 1亿 TPCB 7*24 强压耐久测试》](201809/20180920_01.md)  
+##### 201809/20180920_01.md   [《PostgreSQL 11 1Kw TPCC , 1亿 TPCB 7\*24 强压耐久测试》](201809/20180920_01.md)  
 ##### 201809/20180919_04.md   [《PostgreSQL pgbench tpcb 海量数据库测试 - 分区表测试优化》](201809/20180919_04.md)  
 ##### 201809/20180919_03.md   [《PostgreSQL pgbench tpcb 数据生成与SQL部分源码解读》](201809/20180919_03.md)  
 ##### 201809/20180919_02.md   [《PostgreSQL pageinspect 诊断与优化GIN (倒排) 索引合并延迟导致的查询性能下降问题》](201809/20180919_02.md)  
@@ -2333,7 +2336,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201808/20180826_01.md   [《[转载] TPCH 22条SQL语句分析》](201808/20180826_01.md)  
 ##### 201808/20180825_01.md   [《PostgreSQL 开启with-llvm(JIT)后，新增插件异常(clang: Command not found)处理》](201808/20180825_01.md)  
 ##### 201808/20180824_02.md   [《PostgreSQL sharding : citus 系列1 - 多机部署（含OLTP(TPC-B)测试）- 含Citus MX模式》](201808/20180824_02.md)  
-##### 201808/20180824_01.md   [《Greenplum csvlog(日志数据)检索、释义(gp_toolkit.gp_log*)》](201808/20180824_01.md)  
+##### 201808/20180824_01.md   [《Greenplum csvlog(日志数据)检索、释义(gp_toolkit.gp_log\*)》](201808/20180824_01.md)  
 ##### 201808/20180823_01.md   [《(TPC-H测试 SF=10,SF=200) PostgreSQL 11 vs 10 vs Deepgreen》](201808/20180823_01.md)  
 ##### 201808/20180822_04.md   [《PostgreSQL 快速返回表上某列的唯一值(枚举值) - pg_stats.most_common_vals》](201808/20180822_04.md)  
 ##### 201808/20180822_03.md   [《PostgreSQL 12 preview - plan_cache_mode参数控制强制使用plan cache或强制custom plan (force_custom_plan and force_generic_plan)》](201808/20180822_03.md)  
@@ -3546,7 +3549,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201605/20160506_01.md   [《论count与offset使用不当的罪名 和 分页的优化》](201605/20160506_01.md)  
 ##### 201605/20160505_01.md   [《论云数据库编程能力的重要性》](201605/20160505_01.md)  
 ##### 201605/20160503_02.md   [《PostgreSQL 可靠性和一致性 代码分析》](201605/20160503_02.md)  
-##### 201605/20160503_01.md   [《PostgreSQL Oracle 兼容性之 - psql prompt like Oracle SQL*Plus》](201605/20160503_01.md)  
+##### 201605/20160503_01.md   [《PostgreSQL Oracle 兼容性之 - psql prompt like Oracle SQL\*Plus》](201605/20160503_01.md)  
 ----  
 ##### 201604/20160429_02.md   [《如何分析D状态进程》](201604/20160429_02.md)  
 ##### 201604/20160429_01.md   [《[转载]postgresql 9.5版本之前实现upsert功能》](201604/20160429_01.md)  
@@ -3885,7 +3888,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201406/20140625_03.md   [《ZFS module parameters in Linux (OR kernel parameter in FreeBSD or zfs-in-kernel OS)》](201406/20140625_03.md)  
 ##### 201406/20140625_02.md   [《ZIL (ZFS intent log) zil.c》](201406/20140625_02.md)  
 ##### 201406/20140625_01.md   [《ZFS ARC & L2ARC zfs-$ver/module/zfs/arc.c》](201406/20140625_01.md)  
-##### 201406/20140619_01.md   [《ZFS 12*SATA JBOD vs MSA 2312FC 24*SAS》](201406/20140619_01.md)  
+##### 201406/20140619_01.md   [《ZFS 12\*SATA JBOD vs MSA 2312FC 24\*SAS》](201406/20140619_01.md)  
 ##### 201406/20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](201406/20140618_01.md)  
 ##### 201406/20140617_08.md   [《ZPOOL health check and repair use scrub》](201406/20140617_08.md)  
 ##### 201406/20140617_07.md   [《zpool performance optimal property vdev's ashift or sector at create time》](201406/20140617_07.md)  
@@ -3950,7 +3953,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201311/20131118_02.md   [《Systemtap examples, DISK IO - 3 Track Cumulative IO》](201311/20131118_02.md)  
 ##### 201311/20131118_01.md   [《Systemtap examples, DISK IO - 2 Tracking I/O Time For Each File Read or Write》](201311/20131118_01.md)  
 ##### 201311/20131115_01.md   [《Systemtap examples, DISK IO - 1 Summarizing Disk Read/Write Traffic》](201311/20131115_01.md)  
-##### 201311/20131114_06.md   [《Systemtap kernel.trace("*") events source code》](201311/20131114_06.md)  
+##### 201311/20131114_06.md   [《Systemtap kernel.trace("\*") events source code》](201311/20131114_06.md)  
 ##### 201311/20131114_05.md   [《Systemtap examples, Network - 5 Monitoring Network Packets Drops in Kernel》](201311/20131114_05.md)  
 ##### 201311/20131114_04.md   [《Systemtap examples, Network - 4 Monitoring TCP Packets》](201311/20131114_04.md)  
 ##### 201311/20131114_03.md   [《Systemtap examples, Network - 3 Monitoring Incoming TCP Connections》](201311/20131114_03.md)  

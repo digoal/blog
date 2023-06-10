@@ -7,7 +7,7 @@
 ##### 20180925_02.md   [《PostgreSQL Heap Only Tuple - HOT (降低UPDATE引入的索引写IO放大)》](20180925_02.md)  
 ##### 20180925_01.md   [《PostgreSQL 内存表可选项 - unlogged table》](20180925_01.md)  
 ##### 20180922_01.md   [《PostgreSQL undo多版本存储引擎 zheap测试》](20180922_01.md)  
-##### 20180920_01.md   [《PostgreSQL 11 1Kw TPCC , 1亿 TPCB 7*24 强压耐久测试》](20180920_01.md)  
+##### 20180920_01.md   [《PostgreSQL 11 1Kw TPCC , 1亿 TPCB 7\*24 强压耐久测试》](20180920_01.md)  
 ##### 20180919_04.md   [《PostgreSQL pgbench tpcb 海量数据库测试 - 分区表测试优化》](20180919_04.md)  
 ##### 20180919_03.md   [《PostgreSQL pgbench tpcb 数据生成与SQL部分源码解读》](20180919_03.md)  
 ##### 20180919_02.md   [《PostgreSQL pageinspect 诊断与优化GIN (倒排) 索引合并延迟导致的查询性能下降问题》](20180919_02.md)  

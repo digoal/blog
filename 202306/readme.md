@@ -2,5 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20230609_02.md   [《德说-第240期, 为什么你找不到合伙人? 为什么在职场别人不愿意配合你的工作?》](20230609_02.md)  
+##### 20230609_01.md   [《德说-第239期, 为什么老板交代的事情做不好? 为什么老板“善变”? OKR相关》](20230609_01.md)  
+##### 20230606_01.md   [《单机部署体验 - 开源AWS Aurora for PostgreSQL: neon , 存算分离,server less. program by RUST》](20230606_01.md)  
 ##### 20230605_02.md   [《开源AWS Aurora for PostgreSQL: neon , 存算分离,server less. program by RUST》](20230605_02.md)  
 ##### 20230605_01.md   [《PostgreSQL又一个向量插件hnsw, 建议关注》](20230605_01.md)  

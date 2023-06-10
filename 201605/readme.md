@@ -37,4 +37,4 @@
 ##### 20160506_01.md   [《论count与offset使用不当的罪名 和 分页的优化》](20160506_01.md)  
 ##### 20160505_01.md   [《论云数据库编程能力的重要性》](20160505_01.md)  
 ##### 20160503_02.md   [《PostgreSQL 可靠性和一致性 代码分析》](20160503_02.md)  
-##### 20160503_01.md   [《PostgreSQL Oracle 兼容性之 - psql prompt like Oracle SQL*Plus》](20160503_01.md)  
+##### 20160503_01.md   [《PostgreSQL Oracle 兼容性之 - psql prompt like Oracle SQL\*Plus》](20160503_01.md)  

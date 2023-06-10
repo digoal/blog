@@ -20,7 +20,7 @@
 ##### 20131118_02.md   [《Systemtap examples, DISK IO - 3 Track Cumulative IO》](20131118_02.md)  
 ##### 20131118_01.md   [《Systemtap examples, DISK IO - 2 Tracking I/O Time For Each File Read or Write》](20131118_01.md)  
 ##### 20131115_01.md   [《Systemtap examples, DISK IO - 1 Summarizing Disk Read/Write Traffic》](20131115_01.md)  
-##### 20131114_06.md   [《Systemtap kernel.trace("*") events source code》](20131114_06.md)  
+##### 20131114_06.md   [《Systemtap kernel.trace("\*") events source code》](20131114_06.md)  
 ##### 20131114_05.md   [《Systemtap examples, Network - 5 Monitoring Network Packets Drops in Kernel》](20131114_05.md)  
 ##### 20131114_04.md   [《Systemtap examples, Network - 4 Monitoring TCP Packets》](20131114_04.md)  
 ##### 20131114_03.md   [《Systemtap examples, Network - 3 Monitoring Incoming TCP Connections》](20131114_03.md)  

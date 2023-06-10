@@ -9,7 +9,7 @@
 ##### 20140625_03.md   [《ZFS module parameters in Linux (OR kernel parameter in FreeBSD or zfs-in-kernel OS)》](20140625_03.md)  
 ##### 20140625_02.md   [《ZIL (ZFS intent log) zil.c》](20140625_02.md)  
 ##### 20140625_01.md   [《ZFS ARC & L2ARC zfs-$ver/module/zfs/arc.c》](20140625_01.md)  
-##### 20140619_01.md   [《ZFS 12*SATA JBOD vs MSA 2312FC 24*SAS》](20140619_01.md)  
+##### 20140619_01.md   [《ZFS 12\*SATA JBOD vs MSA 2312FC 24\*SAS》](20140619_01.md)  
 ##### 20140618_01.md   [《单网卡绑多个IP时如何指定IP出口(VIP出口绑定) - use ip modify route table use vip as src trans in multi-IP bonded env》](20140618_01.md)  
 ##### 20140617_08.md   [《ZPOOL health check and repair use scrub》](20140617_08.md)  
 ##### 20140617_07.md   [《zpool performance optimal property vdev's ashift or sector at create time》](20140617_07.md)  

@@ -17,7 +17,7 @@
 ##### 20201123_01.md   [《用golang选什么pg驱动? pgx is a pure Go driver and toolkit for PostgreSQL.》](20201123_01.md)  
 ##### 20201122_01.md   [《PostgreSQL 中国 数据库内核研发 环境、人才现状与刺激方法》](20201122_01.md)  
 ##### 20201120_02.md   [《全面揭秘云数据库新形态MyBase - 2020数据库嘉年华回顾》](20201120_02.md)  
-##### 20201120_01.md   [《PostgreSQL - where x=round(random()*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](20201120_01.md)  
+##### 20201120_01.md   [《PostgreSQL - where x=round(random()\*xx) 返回结果反常 - 背后的函数稳定性逻辑 (immutable stable volatile)》](20201120_01.md)  
 ##### 20201117_03.md   [《gdb - debug - core dump - How to Analyze a PostgreSQL Crash Dump File》](20201117_03.md)  
 ##### 20201117_02.md   [《PostgreSQL 流复制冲突分类讲解以及对应解决方案 - DEALING WITH STREAMING REPLICATION CONFLICTS IN POSTGRESQL  - 特别是lock confict(vacuum truncate suffix free page引起的）》](20201117_02.md)  
 ##### 20201117_01.md   [《使用Postgres，MobilityDB和Citus大规模(百亿级)实时分析GPS轨迹》](20201117_01.md)  

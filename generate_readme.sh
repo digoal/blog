@@ -53,6 +53,7 @@ echo "15、[《快速入门PostgreSQL应用开发与管理 - 5 数据定义》](
 echo "16、[《快速入门PostgreSQL应用开发与管理 - 6 事务和锁》](201704/20170412_01.md)    " >> ./README.md
 echo "17、[《快速入门PostgreSQL应用开发与管理 - 7 函数、存储过程和触发器》](201704/20170412_02.md)    " >> ./README.md
 echo "18、[《快速入门PostgreSQL应用开发与管理 - 8 PostgreSQL 管理》](201704/20170412_04.md)    " >> ./README.md
+echo "19、[PolarDB开源数据库高校工作室 发布《PostgreSQL+PolarDB开源数据库人才认证培训》教程+实验手册 下载](202306/20230616_03.md)    " >> ./README.md
 echo "  "  >> ./README.md
 echo "### 三、[感恩](201803/20180322_12.md)  " >> ./README.md
 echo "### 四、[思考](class/35.md)  " >> ./README.md

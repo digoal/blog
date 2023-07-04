@@ -59,7 +59,7 @@
 ##### 20200324_21.md   [《PostgreSQL 一种高效率精确数值类型 - pg_rational》](20200324_21.md)  
 ##### 20200324_20.md   [《PostgreSQL ruby fdw - Ruby Foreign Data Wrapper》](20200324_20.md)  
 ##### 20200324_19.md   [《PostgreSQL 全文检索加速 - 外部加速器 groonga》](20200324_19.md)  
-##### 20200324_18.md   [《PostgreSQL 数据结构比对工具 pgquarrel - pg diff》](20200324_18.md)  
+##### 20200324_18.md   [《PostgreSQL 数据结构(DDL schema)比对工具 pgquarrel - pg diff》](20200324_18.md)  
 ##### 20200324_17.md   [《PostgreSQL 一种高性能中文分词器 - friso》](20200324_17.md)  
 ##### 20200324_16.md   [《PostgreSQL 外围 SQL parser lib库》](20200324_16.md)  
 ##### 20200324_15.md   [《PostgreSQL period record插件 - 记录的超期设定 , 自动清理记录 , 自动过期 , 生命周期 , 类似redis》](20200324_15.md)  

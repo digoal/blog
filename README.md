@@ -94,6 +94,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202307/20230705_03.md   [《PolarDB和PostgreSQL开源通过pg_qualstats 优化数据库性能: 推荐索引》](202307/20230705_03.md)  
+##### 202307/20230705_02.md   [《PolarDB和PostgreSQL开源通过pggraphblas 稀疏矩阵计算加速深层图式搜索》](202307/20230705_02.md)  
+##### 202307/20230705_01.md   [《PolarDB和PostgreSQL开源通过hdfs_fdw 访问hive|spark on hadoop》](202307/20230705_01.md)  
 ##### 202307/20230704_03.md   [《pg_hexedit, 一款PostgreSQL数据文件编辑|修复|读数 工具 (类似pg_filedump)》](202307/20230704_03.md)  
 ##### 202307/20230704_02.md   [《bao, 一个经过学习的 PostgreSQL 复杂查询优化器》](202307/20230704_02.md)  
 ##### 202307/20230704_01.md   [《hydra, 一款基于PostgreSQL的开源HTAP数据库. 支持列存,向量化,物化,冷热分离存储,cloud 等特性》](202307/20230704_01.md)  

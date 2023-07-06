@@ -94,6 +94,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202307/20230706_05.md   [《PostgreSQL 或PolarDB 使用插件pg_tiktoken - 使用 OpenAI tiktoken库文本向量化(tokenization) - 使用分词算法BPE - NLP 自然语言处理》](202307/20230706_05.md)  
+##### 202307/20230706_04.md   [《[转] Docker 深度清除镜像缓存 `docker system prune -a --force` `docker builder prune`》](202307/20230706_04.md)  
+##### 202307/20230706_03.md   [《PostgreSQL 17 preview - Allow Incremental Sorts on GiST and SP-GiST indexes》](202307/20230706_03.md)  
+##### 202307/20230706_02.md   [《PostgreSQL 17 preview - libpq: Add support for Close on portals and statements , 释放绑定变量语句入口(prepared statements)》](202307/20230706_02.md)  
+##### 202307/20230706_01.md   [《IvorySQL, PostgreSQL体系开源Oracle兼容性产品》](202307/20230706_01.md)  
 ##### 202307/20230705_03.md   [《PolarDB和PostgreSQL开源通过pg_qualstats 优化数据库性能: 推荐索引》](202307/20230705_03.md)  
 ##### 202307/20230705_02.md   [《PolarDB和PostgreSQL开源通过pggraphblas 稀疏矩阵计算加速深层图式搜索》](202307/20230705_02.md)  
 ##### 202307/20230705_01.md   [《PolarDB和PostgreSQL开源通过hdfs_fdw 访问hive|spark on hadoop》](202307/20230705_01.md)  

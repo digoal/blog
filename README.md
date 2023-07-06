@@ -1962,7 +1962,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201911/20191120_01.md   [《Linux 网卡队列、combined、irqbalance对网络性能的影响和优化》](201911/20191120_01.md)  
 ##### 201911/20191118_01.md   [《PostgreSQL pg_roaringbitmap - 用户画像、标签、高效检索》](201911/20191118_01.md)  
 ##### 201911/20191116_01.md   [《为什么PG这么火 - 2019数据库嘉年华回顾》](201911/20191116_01.md)  
-##### 201911/20191115_03.md   [《PostgreSQL 敏感信息遮掩插件 anon - security label provider - anon》](201911/20191115_03.md)  
+##### 201911/20191115_03.md   [《PostgreSQL 敏感信息遮掩插件 anon (Anonymizer) - security label provider - anon》](201911/20191115_03.md)  
 ##### 201911/20191115_02.md   [《PostgreSQL 12 - GENERATED column stored - 自动生成列》](201911/20191115_02.md)  
 ##### 201911/20191115_01.md   [《PostgreSQL 查询 依赖extension (type)的table》](201911/20191115_01.md)  
 ##### 201911/20191113_03.md   [《SQL Server to PostgreSQL - 康恩贝、乘数分享ppt》](201911/20191113_03.md)  

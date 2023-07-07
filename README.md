@@ -94,6 +94,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202307/20230707_02.md   [《PostgreSQL的安全场景介绍, 以及security label(安全标签功能)的label provider: pgsodium 加密库介绍(隐藏|加密敏感信息) - 字段透明加解密 - libsodium 加密库实现》](202307/20230707_02.md)  
+##### 202307/20230707_01.md   [《PostgreSQL的安全场景介绍, 以及security label(安全标签功能)和两个label provider: anon, sepgsql的介绍(隐藏|加密敏感信息)》](202307/20230707_01.md)  
 ##### 202307/20230706_05.md   [《PostgreSQL 或PolarDB 使用插件pg_tiktoken - 使用 OpenAI tiktoken库文本向量化(tokenization) - 使用分词算法BPE - NLP 自然语言处理》](202307/20230706_05.md)  
 ##### 202307/20230706_04.md   [《[转] Docker 深度清除镜像缓存 `docker system prune -a --force` `docker builder prune`》](202307/20230706_04.md)  
 ##### 202307/20230706_03.md   [《PostgreSQL 17 preview - Allow Incremental Sorts on GiST and SP-GiST indexes》](202307/20230706_03.md)  

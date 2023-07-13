@@ -94,6 +94,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202307/20230713_02.md   [《PostgreSQL 17 preview - 增加index vacuum 进度打印》](202307/20230713_02.md)  
+##### 202307/20230713_01.md   [《PostgreSQL 17 preview - Add new parallel message type to progress reporting.》](202307/20230713_01.md)  
 ##### 202307/20230710_03.md   [《使用Dockerfile+docker build制作PolarDB | PostgreSQL 开源docker镜像, 集成大量插件方便学习, 并推送到阿里云镜像服务》](202307/20230710_03.md)  
 ##### 202307/20230710_02.md   [《制作PolarDB | PostgreSQL 开源docker镜像, 集成大量插件方便学习, 并推送到阿里云镜像服务》](202307/20230710_02.md)  
 ##### 202307/20230710_01.md   [《配置阿里云 Docker 镜像加速服务, 以及如何查找官方镜像tags 信息》](202307/20230710_01.md)  

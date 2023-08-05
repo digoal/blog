@@ -28,6 +28,6 @@
 ##### 20170906_03.md   [《PostgreSQL vs Greenplum Hash outer join hash表的选择》](20170906_03.md)  
 ##### 20170906_02.md   [《A Look at How PostgreSQL Executes a Tiny Join (HashJoin)》](20170906_02.md)  
 ##### 20170906_01.md   [《阿里云RDS PostgreSQL OSS 外部表实践 - (dblink异步调用封装并行) 数据并行导出到OSS》](20170906_01.md)  
-##### 20170905_01.md   [《PostgreSQL 黑科技 - 空间聚集存储, 内窥GIN, GiST, SP-GiST索引》](20170905_01.md)  
+##### 20170905_01.md   [《PostgreSQL 黑科技 - 空间聚集存储, 使用gevel插件(增强pageinspect)内窥GIN, GiST, SP-GiST索引》](20170905_01.md)  
 ##### 20170902_02.md   [《PostgreSQL 10 黑科技 - 自定义统计信息》](20170902_02.md)  
 ##### 20170902_01.md   [《PostgreSQL cube 插件 - 多维空间对象》](20170902_01.md)  

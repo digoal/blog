@@ -10,7 +10,7 @@
 ##### 20191228_03.md   [《fio io测试阿里云ecs 本地ssd, essd性能 - 2》](20191228_03.md)  
 ##### 20191228_02.md   [《fio io测试阿里云ecs 本地ssd, essd性能 - 1》](20191228_02.md)  
 ##### 20191228_01.md   [《[转载] fio io测试软件介绍》](20191228_01.md)  
-##### 20191219_02.md   [《PostgreSQL 阿里云rds pg发布高维向量索引，支持图像识别、人脸识别 - pase 插件》](20191219_02.md)  
+##### 20191219_02.md   [《PostgreSQL 阿里云rds pg发布高维向量索引，支持图像识别、人脸识别 - pase 插件, 以及ivfflat,hnsw搜索算法说明》](20191219_02.md)  
 ##### 20191219_01.md   [《PostgreSQL log_fdw 阿里云rds pg如何查看、配置实时数据库日志》](20191219_01.md)  
 ##### 20191218_02.md   [《PostgreSQL GiST Order by 距离 + 距离范围判定 + limit 骤变优化与背景原因》](20191218_02.md)  
 ##### 20191218_01.md   [《PostgreSQL 时序数据库timescaledb支持compress调度》](20191218_01.md)  

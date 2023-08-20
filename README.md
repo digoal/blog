@@ -94,6 +94,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202308/20230819_02.md   [《沉浸式学习PostgreSQL|PolarDB 1: 短视频去重、UV统计分析场景》](202308/20230819_02.md)  
+##### 202308/20230819_01.md   [《数据库UDF安全沙箱: wasm extension》](202308/20230819_01.md)  
+##### 202308/20230817_03.md   [《PostgreSQL 17 preview - 函数parser阶段优化, 函数guc into lists避免parser》](202308/20230817_03.md)  
+##### 202308/20230817_02.md   [《PostgreSQL 17 preview - 支持自定义等待事件》](202308/20230817_02.md)  
+##### 202308/20230817_01.md   [《PostgreSQL 17 preview - 增加alter table部分属性hook, 未来可定制化审计功能》](202308/20230817_01.md)  
 ##### 202308/20230814_02.md   [《arm64 , 使用Dockerfile+docker build制作PolarDB | PostgreSQL 开源docker镜像, 集成大量插件方便学习, 并推送到阿里云镜像服务》](202308/20230814_02.md)  
 ##### 202308/20230814_01.md   [《在Apple chip(M1,M2)的macOS上以兼容方式运行amd64/x86的docker容器? 如何跨平台编译兼容amd64/arm64的容器?》](202308/20230814_01.md)  
 ##### 202308/20230808_03.md   [《DuckDB ADBC - 通过 Arrow 数据库连接进行 零复制|零格式转换 数据传输 VS ODBC/JDBC》](202308/20230808_03.md)  

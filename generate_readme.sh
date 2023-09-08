@@ -32,6 +32,7 @@ echo "10、[《2021-Ask 德哥 系列 - 适合DBA与业务开发者》](202109/2
 echo "11、[《2018-PG生态、案例、开发实践系列 - 适合架构师与业务开发者》](https://edu.aliyun.com/course/836/lesson/list)  "  >> ./README.md
 echo "12、[《2018-阿里云POLARDB for Oracle|RDS for PPAS 讲解视频》](https://yq.aliyun.com/live/582)  "  >> ./README.md   
 echo "13、[《2022-每天5分钟,PG聊通透 - 系列1 - 热门问题》](202112/20211209_02.md)   "  >> ./README.md   
+echo "14、[《2023-沉浸式学习PostgreSQL|PolarDB 系列》](202308/20230822_02.md)     "  >> ./README.md   
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md

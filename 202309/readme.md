@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20230910_04.md   [《PostgreSQL 17 preview - Add JIT deform_counter》](20230910_04.md)  
+##### 20230910_03.md   [《PostgreSQL pg_later async SQL, 异步SQL调用, (非dblink实现)》](20230910_03.md)  
+##### 20230910_02.md   [《Nano ID for PostgreSQL (在PG中生成nano id的函数接口.)》](20230910_02.md)  
 ##### 20230910_01.md   [《[转载] 如何在 Debian 11 上设置 OpenVPN 服务器》](20230910_01.md)  
 ##### 20230909_01.md   [《德说-第256期, 团队管理和队形布置方法论》](20230909_01.md)  
 ##### 20230908_02.md   [《沉浸式学习PostgreSQL|PolarDB 15: 企业ERP软件、网站、分析型业务场景、营销场景人群圈选, 任意字段组合条件数据筛选》](20230908_02.md)  

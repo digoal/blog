@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20230912_01.md   [《制作 PostgresML docker 镜像》](20230912_01.md)  
 ##### 20230911_01.md   [《PostgresML=模型集市+向量数据库+自定义模型 : 用postgresml体验AI应用(图像搜索、推荐系统和自然语言处理)与向量检索》](20230911_01.md)  
 ##### 20230910_04.md   [《PostgreSQL 17 preview - Add JIT deform_counter》](20230910_04.md)  
 ##### 20230910_03.md   [《PostgreSQL pg_later async SQL, 异步SQL调用, (非dblink实现)》](20230910_03.md)  

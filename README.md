@@ -95,6 +95,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202309/20230913_01.md   [《体验 PostgreSQL|PolarDB 图式数据插件age和WEB产品age-viewer》](202309/20230913_01.md)  
 ##### 202309/20230912_01.md   [《制作 PostgresML docker 镜像》](202309/20230912_01.md)  
 ##### 202309/20230911_01.md   [《PostgresML=模型集市+向量数据库+自定义模型 : 用postgresml体验AI应用(图像搜索、推荐系统和自然语言处理)与向量检索》](202309/20230911_01.md)  
 ##### 202309/20230910_04.md   [《PostgreSQL 17 preview - Add JIT deform_counter》](202309/20230910_04.md)  

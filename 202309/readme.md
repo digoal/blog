@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20230923_03.md   [《解决 git clone 错误:【GnuTLS recv error (-110): The TLS connection was non-properly terminated.】》](20230923_03.md)  
+##### 20230923_02.md   [《RUST cargo timeout? 试试国内源》](20230923_02.md)  
 ##### 20230923_01.md   [《德说-第258期, 终身学习+实践》](20230923_01.md)  
 ##### 20230922_04.md   [《pg_onnx, 接入开放神经网络集市, load已有模型, 让数据库快速具备推理能力》](20230922_04.md)  
 ##### 20230922_03.md   [《pg_tiktoken - 标记token数的工具, 防止问答到达AI大模型chatbot token上限》](20230922_03.md)  

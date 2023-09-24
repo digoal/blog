@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20230924_01.md   [《使用LFS 存储git大文件, 下载存储在LFS的大文件》](20230924_01.md)  
 ##### 20230923_03.md   [《解决 git clone 错误:【GnuTLS recv error (-110): The TLS connection was non-properly terminated.】》](20230923_03.md)  
 ##### 20230923_02.md   [《RUST cargo timeout? 试试国内源》](20230923_02.md)  
 ##### 20230923_01.md   [《德说-第258期, 终身学习+实践》](20230923_01.md)  

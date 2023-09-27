@@ -95,6 +95,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202309/20230927_01.md   [《DuckDB 发布新版本 0.9.0》](202309/20230927_01.md)  
+##### 202309/20230926_01.md   [《PostgreSQL 17 preview - Add GUC: event_triggers . for temporarily disabling event triggers》](202309/20230926_01.md)  
 ##### 202309/20230924_01.md   [《使用LFS 存储git大文件, 下载存储在LFS的大文件》](202309/20230924_01.md)  
 ##### 202309/20230923_03.md   [《解决 git clone 错误:【GnuTLS recv error (-110): The TLS connection was non-properly terminated.】》](202309/20230923_03.md)  
 ##### 202309/20230923_02.md   [《RUST cargo timeout? 试试国内源》](202309/20230923_02.md)  

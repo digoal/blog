@@ -2,6 +2,19 @@
   
 ### 文章列表  
 ----  
+##### 20230928_14.md   [《DuckDB 语法糖: Union data type 支持不同类型存储在同一个字段内, 同时保留每个字段值类型》](20230928_14.md)  
+##### 20230928_13.md   [《DuckDB 语法糖: Automatic struct creation 自动创建struct(select 表名)》](20230928_13.md)  
+##### 20230928_12.md   [《DuckDB 语法糖: 解开`struct.*`》](20230928_12.md)  
+##### 20230928_11.md   [《DuckDB 语法糖: List comprehensions 支持python语法, 过滤和转换同时支持》](20230928_11.md)  
+##### 20230928_10.md   [《DuckDB 语法糖: List lambda functions》](20230928_10.md)  
+##### 20230928_09.md   [《DuckDB 语法糖: Dynamic PIVOT and UNPIVOT 动态行列转换》](20230928_09.md)  
+##### 20230928_08.md   [《DuckDB 语法糖: Insert by name , 自动留白未含字段》](20230928_08.md)  
+##### 20230928_07.md   [《DuckDB 语法糖: Union by name , 自动补齐空缺字段, append数据》](20230928_07.md)  
+##### 20230928_06.md   [《DuckDB 语法糖: Function chaining 函数调用链》](20230928_06.md)  
+##### 20230928_05.md   [《DuckDB 语法糖: FROM first in SELECT statements》](20230928_05.md)  
+##### 20230928_04.md   [《DuckDB 语法糖: Automatic JSON to nested types conversion》](20230928_04.md)  
+##### 20230928_03.md   [《DuckDB 语法糖: Dynamic column selection 支持通配符,exclude,replace,lambda 等动态列选择|值替换|列选择》](20230928_03.md)  
+##### 20230928_02.md   [《DuckDB 语法糖: Reusable column aliases》](20230928_02.md)  
 ##### 20230928_01.md   [《TimescaleDB 发布基于DiskANN的增强向量索引》](20230928_01.md)  
 ##### 20230927_01.md   [《DuckDB 发布新版本 0.9.0》](20230927_01.md)  
 ##### 20230926_01.md   [《PostgreSQL 17 preview - Add GUC: event_triggers . for temporarily disabling event triggers》](20230926_01.md)  

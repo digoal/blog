@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20231011_01.md   [《沉浸式学习PostgreSQL|PolarDB 19: 体验最流行的开源企业ERP软件 odoo》](20231011_01.md)  
 ##### 20231010_01.md   [《一款开源PostGIS 地图矢量瓦片(tile)服务: Martin(Rust-powered), pg_tileserv(golang-powered)》](20231010_01.md)  
 ##### 20231008_03.md   [《debian 使用gdb实现rhel / centos pstack功能》](20231008_03.md)  
 ##### 20231008_02.md   [《在大平台老化、KOL自媒体崛起背景下的联盟社区形态分析和运营方法》](20231008_02.md)  

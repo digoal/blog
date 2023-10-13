@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202310/20231013_01.md   [《沉浸式学习PostgreSQL|PolarDB 21: 相似图像搜索》](202310/20231013_01.md)  
 ##### 202310/20231012_01.md   [《沉浸式学习PostgreSQL|PolarDB 20: 学习成为数据库大师级别的优化技能》](202310/20231012_01.md)  
 ##### 202310/20231011_01.md   [《沉浸式学习PostgreSQL|PolarDB 19: 体验最流行的开源企业ERP软件 odoo》](202310/20231011_01.md)  
 ##### 202310/20231010_01.md   [《一款开源PostGIS 地图矢量瓦片(tile)服务: Martin(Rust-powered), pg_tileserv(golang-powered)》](202310/20231010_01.md)  

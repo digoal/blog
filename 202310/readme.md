@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20231016_06.md   [《PostgreSQL 17 preview - 添加checkpoint delay等待事件》](20231016_06.md)  
+##### 20231016_05.md   [《PostgreSQL schema document(包括对象关系ER,注释,函数等)生成工具: tbls》](20231016_05.md)  
+##### 20231016_04.md   [《PostgreSQL 16 preview - 检测字符串是否可自动转换为目标类型: pg_input_is_valid, pg_input_error_info》](20231016_04.md)  
+##### 20231016_03.md   [《PostgreSQL pg_bm25(open source by paradedb)：Postgres 内部的弹性质量全文搜索 性能优于tsvector tsrank 20x》](20231016_03.md)  
+##### 20231016_02.md   [《PostgreSQL 16+ - 官方文档新增章节: 事务处理内部原理》](20231016_02.md)  
+##### 20231016_01.md   [《PostgreSQL 17 preview - 内置支持login event trigger》](20231016_01.md)  
 ##### 20231015_01.md   [《德说-第262期, 求仙问道 全用逆法》](20231015_01.md)  
 ##### 20231013_01.md   [《沉浸式学习PostgreSQL|PolarDB 21: 相似图像搜索》](20231013_01.md)  
 ##### 20231012_01.md   [《沉浸式学习PostgreSQL|PolarDB 20: 学习成为数据库大师级别的优化技能》](20231012_01.md)  

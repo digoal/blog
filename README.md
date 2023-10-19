@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202310/20231019_02.md   [《PostgreSQL 17 preview - Add `local_blk_{read|write}_time` I/O timing statistics for local blocks》](202310/20231019_02.md)  
+##### 202310/20231019_01.md   [《PostgreSQL 16 preview - Count write times when extending relation files for shared buffers》](202310/20231019_01.md)  
 ##### 202310/20231016_06.md   [《PostgreSQL 17 preview - 添加checkpoint delay等待事件》](202310/20231016_06.md)  
 ##### 202310/20231016_05.md   [《PostgreSQL schema document(包括对象关系ER,注释,函数等)生成工具: tbls》](202310/20231016_05.md)  
 ##### 202310/20231016_04.md   [《PostgreSQL 16 preview - 检测字符串是否可自动转换为目标类型: pg_input_is_valid, pg_input_error_info》](202310/20231016_04.md)  

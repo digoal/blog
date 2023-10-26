@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20231026_05.md   [《德说-第264期, 2023 CCF 中国开源大会 见闻与思考: 数据库全球竞争情况? 我们靠什么超车？学校、学生为什么要以及如何参加开源？》](20231026_05.md)  
+##### 20231026_04.md   [《rust编写的兼容PostgreSQL的开源流数据库:risingwave, 10X 于 apache flink》](20231026_04.md)  
+##### 20231026_03.md   [《德说-第263期, 从修路到城市与文明的发展, 从开源到开放的商业生态系统》](20231026_03.md)  
+##### 20231026_02.md   [《pgbouncer 1.21 开始支持 prepared statement in 事务模式》](20231026_02.md)  
+##### 20231026_01.md   [《PostgreSQL 17 preview - Allow ALTER SYSTEM to set unrecognized custom GUCs.》](20231026_01.md)  
 ##### 20231019_02.md   [《PostgreSQL 17 preview - Add `local_blk_{read|write}_time` I/O timing statistics for local blocks》](20231019_02.md)  
 ##### 20231019_01.md   [《PostgreSQL 16 preview - Count write times when extending relation files for shared buffers》](20231019_01.md)  
 ##### 20231016_06.md   [《PostgreSQL 17 preview - 添加checkpoint delay等待事件》](20231016_06.md)  

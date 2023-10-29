@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202310/20231029_01.md   [《macOS 通过“oversea region ECS和ssh隧道转发代理请求” OR “openVPN” 提升github等访问体验 - chrome Proxy SwitchyOmega , cli ... 可用》](202310/20231029_01.md)  
 ##### 202310/20231028_01.md   [《macOS Surge 做软路由/代理, SwitchyOmega浏览器代理, openWRT开源软路由》](202310/20231028_01.md)  
 ##### 202310/20231027_02.md   [《沉浸式学习PostgreSQL|PolarDB 23: 数据寻龙点穴-通过数据热度分析寻找商机》](202310/20231027_02.md)  
 ##### 202310/20231027_01.md   [《沉浸式学习PostgreSQL|PolarDB 22: 用KMeans 数据聚集算法进行无监督学习和数据分类分析》](202310/20231027_01.md)  

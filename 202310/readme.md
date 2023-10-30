@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20231030_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 2 准备》](20231030_04.md)  
+##### 20231030_03.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 1 课程介绍》](20231030_03.md)  
+##### 20231030_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 大纲》](20231030_02.md)  
+##### 20231030_01.md   [《PostgreSQL 17 preview - Introduce pg_stat_checkpointer》](20231030_01.md)  
 ##### 20231029_01.md   [《macOS 通过“oversea region ECS和ssh隧道转发代理请求” OR “openVPN” 提升github等访问体验 - chrome Proxy SwitchyOmega , cli ... 可用》](20231029_01.md)  
 ##### 20231028_01.md   [《macOS Surge 做软路由/代理, SwitchyOmega浏览器代理, openWRT开源软路由》](20231028_01.md)  
 ##### 20231027_02.md   [《沉浸式学习PostgreSQL|PolarDB 23: 数据寻龙点穴-通过数据热度分析寻找商机》](20231027_02.md)  

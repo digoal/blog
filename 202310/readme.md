@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20231031_01.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 3.1 PostgreSQL社区版本必学知识 - 覆盖知识点概览》](20231031_01.md)  
 ##### 20231030_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 2 准备》](20231030_04.md)  
 ##### 20231030_03.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 1 课程介绍》](20231030_03.md)  
 ##### 20231030_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 大纲》](20231030_02.md)  

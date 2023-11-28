@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20231128_02.md   [《PostgreSQL 17 preview - Reduce rate of walwriter wakeups due to async commits》](20231128_02.md)  
+##### 20231128_01.md   [《PostgreSQL 17 preview - improve range type pg_stats》](20231128_01.md)  
 ##### 20231124_01.md   [《如何快速关闭处于CLOSE_WAIT状态的任何套接字》](20231124_01.md)  
 ##### 20231118_01.md   [《德说-第267期, 从虾米到大神》](20231118_01.md)  
 ##### 20231117_01.md   [《德说-第266期, 孩子考不上普通高中怎么办？程序员老了去哪? 职业学校是蓝海?》](20231117_01.md)  

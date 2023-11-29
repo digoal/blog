@@ -97,6 +97,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202311/20231129_01.md   [《Linux 调试利器 gcore, gdb, pstack, gstack, strace, pstree, lsof, blktrace, blkparse, btt, blkiomon, iowatcher》](202311/20231129_01.md)  
 ##### 202311/20231128_02.md   [《PostgreSQL 17 preview - Reduce rate of walwriter wakeups due to async commits》](202311/20231128_02.md)  
 ##### 202311/20231128_01.md   [《PostgreSQL 17 preview - improve range type pg_stats》](202311/20231128_01.md)  
 ##### 202311/20231124_01.md   [《如何快速关闭处于CLOSE_WAIT状态的任何套接字》](202311/20231124_01.md)  

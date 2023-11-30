@@ -97,6 +97,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202311/20231130_03.md   [《Linux `time Command` : Real, User and Sys process time statistics》](202311/20231130_03.md)  
+##### 202311/20231130_02.md   [《PostgreSQL 17 preview - Add tests for XID wraparound》](202311/20231130_02.md)  
+##### 202311/20231130_01.md   [《如何将PostgreSQL query/table 快速导出为parquet文件或导入DuckDB table?》](202311/20231130_01.md)  
 ##### 202311/20231129_01.md   [《Linux 调试利器 gcore, gdb, pstack, gstack, strace, pstree, lsof, blktrace, blkparse, btt, blkiomon, iowatcher》](202311/20231129_01.md)  
 ##### 202311/20231128_02.md   [《PostgreSQL 17 preview - Reduce rate of walwriter wakeups due to async commits》](202311/20231128_02.md)  
 ##### 202311/20231128_01.md   [《PostgreSQL 17 preview - improve range type pg_stats》](202311/20231128_01.md)  

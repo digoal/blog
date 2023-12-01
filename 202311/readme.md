@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20231130_07.md   [《德说-第270期, 开源社区与校企合作》](20231130_07.md)  
+##### 20231130_06.md   [《德说-第269期, 为什么企业更愿意抱团组织/参加小型沙龙》](20231130_06.md)  
+##### 20231130_05.md   [《德说-第268期, PolarDB开源社区发布大学生实习项目》](20231130_05.md)  
+##### 20231130_04.md   [《期望未来DuckDB的架构演变方向》](20231130_04.md)  
 ##### 20231130_03.md   [《Linux `time Command` : Real, User and Sys process time statistics》](20231130_03.md)  
 ##### 20231130_02.md   [《PostgreSQL 17 preview - Add tests for XID wraparound》](20231130_02.md)  
 ##### 20231130_01.md   [《如何将PostgreSQL query/table 快速导出为parquet文件或导入DuckDB table?》](20231130_01.md)  

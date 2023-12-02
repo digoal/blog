@@ -2,4 +2,5 @@
   
 ### 文章列表  
 ----  
+##### 20231202_01.md   [《PostgreSQL, MySQL, DuckDB, DuckDB+mysqlscanner 1000万记录的简单分析SQL对比》](20231202_01.md)  
 ##### 20231201_01.md   [《DuckDB 0.9.2 TPC-DS 测试》](20231201_01.md)  

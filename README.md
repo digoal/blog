@@ -97,6 +97,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202312/20231203_01.md   [《DuckDB Internals PDF》](202312/20231203_01.md)  
 ##### 202312/20231202_01.md   [《PostgreSQL, MySQL, DuckDB, DuckDB+mysqlscanner 1000万记录的简单分析SQL对比》](202312/20231202_01.md)  
 ##### 202312/20231201_01.md   [《DuckDB 0.9.2 TPC-DS 测试》](202312/20231201_01.md)  
 ----  

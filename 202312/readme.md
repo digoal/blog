@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20231207_03.md   [《PostgreSQL 17 preview - postgres_fdw 支持semi-join pushdown (exists (...))》](20231207_03.md)  
+##### 20231207_02.md   [《转载 - gcc/ld 动态连接库和静态连接库使用方法》](20231207_02.md)  
+##### 20231207_01.md   [《转载 - Linux 环境变量之 LD_PRELOAD & LD_LIBRARY_PATH & LD_DEBUG & rpath》](20231207_01.md)  
 ##### 20231206_01.md   [《德说-第271期, 未来的书应该这么写 - 践行双师教育理念》](20231206_01.md)  
 ##### 20231203_01.md   [《DuckDB Internals PDF》](20231203_01.md)  
 ##### 20231202_01.md   [《PostgreSQL, MySQL, DuckDB, DuckDB+mysqlscanner 1000万记录的简单分析SQL对比》](20231202_01.md)  

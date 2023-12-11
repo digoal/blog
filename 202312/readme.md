@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20231211_02.md   [《PostgreSQL 17 preview - Allow parallel CREATE INDEX for BRIN indexes》](20231211_02.md)  
+##### 20231211_01.md   [《PostgreSQL 17 preview - btree index backward scan (order by desc 场景)优化》](20231211_01.md)  
 ##### 20231210_01.md   [《茶叶保存,醒茶,冲泡方法,四季饮用推荐》](20231210_01.md)  
 ##### 20231208_01.md   [《转载 - Docker volumn, bind mount, tmpfs mount 的使用. 宿主机如何和容器共享数据? 容器使用宿主机内存?》](20231208_01.md)  
 ##### 20231207_03.md   [《PostgreSQL 17 preview - postgres_fdw 支持semi-join pushdown (exists (...))》](20231207_03.md)  

@@ -2,6 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20231214_07.md   [《某音, 我要用PostgreSQL|PolarDB挑战你的短视频核心推荐算法》](20231214_07.md)  
+##### 20231214_06.md   [《pg_graphql 新版本支持 postgresql functions》](20231214_06.md)  
+##### 20231214_05.md   [《PostgREST (REST API for any Postgres database) v12 发布》](20231214_05.md)  
+##### 20231214_04.md   [《DoltgreSQL 一款兼容PostgreSQL协议, 支持数据库版本管理(类似给数据库的schema打快照, 有版本变更记录)的数据库.》](20231214_04.md)  
+##### 20231214_03.md   [《PostgreSQL wire protocol 库for rust语言》](20231214_03.md)  
+##### 20231214_02.md   [《PostgreSQL 云原生 多租户 连接池 supavisor》](20231214_02.md)  
+##### 20231214_01.md   [《PostgreSQL 基于逻辑复制 的minimal downtime大版本升级开源项目pg_easy_replicate》](20231214_01.md)  
+##### 20231213_01.md   [《小时候玩的24点游戏, ChatGPT看了都摇头, PG轻松做出来了》](20231213_01.md)  
 ##### 20231211_02.md   [《PostgreSQL 17 preview - Allow parallel CREATE INDEX for BRIN indexes》](20231211_02.md)  
 ##### 20231211_01.md   [《PostgreSQL 17 preview - btree index backward scan (order by desc 场景)优化》](20231211_01.md)  
 ##### 20231210_01.md   [《茶叶保存,醒茶,冲泡方法,四季饮用推荐》](20231210_01.md)  

@@ -128,6 +128,10 @@ do
 #sed -i "" '/22709685feb7cab07d30f30387f0a9ae/d' ${file}
 # ###WXLINK###   
 #sed -i "" '/f7ad92eeba24523fd47a6e1a0e691b59/d' ${file}
+# ###ABOUTDIGOAL###   
+#sed -i "" '/a37735981e7704886ffd590565582dd0/d' ${file}
+# ###POLARDBYUNDASHI###   
+#sed -i "" '/e0495c413bedacabb75ff1e880be465a/d' ${file}
 ## 
     XYQ=`grep "269ac3d1c492e938c0191101c7238216" ${file}|grep -c "269ac3d1c492e938c0191101c7238216"`
     if [ $XYQ -lt 1 ]; then
@@ -139,15 +143,22 @@ do
     FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" ${file}|grep -c "57258f76c37864c6e6d23383d05714ea"`
     if [ $FREEURL -ne 1 ]; then
       echo "  " >> ./${file}
-      echo "#### [PolarDB 云原生分布式开源数据库](https://github.com/ApsaraDB \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
+      echo "#### [PolarDB 开源数据库](https://openpolardb.com/home \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
       echo "  " >> ./${file}
     fi
 ##
     POLARONEURL=`grep "8642f60e04ed0c814bf9cb9677976bd4" ${file}|grep -c "8642f60e04ed0c814bf9cb9677976bd4"`
     if [ $POLARONEURL -ne 1 ]; then
       echo "  " >> ./${file}
-      echo "#### [PolarDB 学习图谱: 训练营、培训认证、在线互动实验、解决方案、内核开发公开课、生态合作、写心得拿奖品](https://www.aliyun.com/database/openpolardb/activity \"8642f60e04ed0c814bf9cb9677976bd4\")" >> ./${file}
+      echo "#### [PolarDB 学习图谱](https://www.aliyun.com/database/openpolardb/activity \"8642f60e04ed0c814bf9cb9677976bd4\")" >> ./${file}
       echo "  " >> ./${file}
+    fi
+## 
+    POLARDBYUNDASHI=`grep "e0495c413bedacabb75ff1e880be465a" $file|grep -c "e0495c413bedacabb75ff1e880be465a"`
+    if [ $POLARDBYUNDASHI -ne 1 ]; then
+      echo "  " >> ./$file
+      echo "#### [购买PolarDB云服务折扣活动进行中, 55元起](https://www.aliyun.com/activity/new/polardb-yunparter?userCode=bsb3t4al \"e0495c413bedacabb75ff1e880be465a\")" >> ./$file
+      echo "  " >> ./$file
     fi
 ##
     ALIPGURL=`grep "40cff096e9ed7122c512b35d8561d9c8" ${file}|grep -c "40cff096e9ed7122c512b35d8561d9c8"`
@@ -160,7 +171,14 @@ do
     LINK=`grep "22709685feb7cab07d30f30387f0a9ae" $file|grep -c "22709685feb7cab07d30f30387f0a9ae"`
     if [ $LINK -ne 1 ]; then
       echo "  " >> ./$file
-      echo "#### [德哥 / digoal's github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
+      echo "#### [德哥 / digoal's Github - 公益是一辈子的事.](https://github.com/digoal/blog/blob/master/README.md \"22709685feb7cab07d30f30387f0a9ae\")" >> ./$file
+      echo "  " >> ./$file
+    fi
+## 
+    ABOUTDIGOAL=`grep "a37735981e7704886ffd590565582dd0" $file|grep -c "a37735981e7704886ffd590565582dd0"`
+    if [ $ABOUTDIGOAL -ne 1 ]; then
+      echo "  " >> ./$file
+      echo "#### [About 德哥](https://github.com/digoal/blog/blob/master/me/readme.md \"a37735981e7704886ffd590565582dd0\")" >> ./$file
       echo "  " >> ./$file
     fi
 ## 

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20231220_01.md   [《PostgreSQL 17 preview - WAL锁竞争优化 - reading WAL buffer contents without a lock, Additional write barrier in AdvanceXLInsertBuffer()》](20231220_01.md)  
 ##### 20231219_01.md   [《一款rust写的PostgreSQL插件管理(build、发布、安装)工具: trunk》](20231219_01.md)  
 ##### 20231218_01.md   [《PostgreSQL extension(插件) 管理工具项目 pgxman - 大家把编译方法贡献给pgxman集中管理? OR pgxn?》](20231218_01.md)  
 ##### 20231217_01.md   [《如何下载 在线直播 回放 流媒体 mp4文件?》](20231217_01.md)  

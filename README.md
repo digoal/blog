@@ -97,6 +97,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202312/20231222_01.md   [《PostgreSQL 17 preview - 内置块级别物理增量备份(INCREMENTAL backup/pg_combinebackup)功能》](202312/20231222_01.md)  
 ##### 202312/20231220_01.md   [《PostgreSQL 17 preview - WAL锁竞争优化 - reading WAL buffer contents without a lock, Additional write barrier in AdvanceXLInsertBuffer()》](202312/20231220_01.md)  
 ##### 202312/20231219_01.md   [《一款rust写的PostgreSQL插件管理(build、发布、安装)工具: trunk》](202312/20231219_01.md)  
 ##### 202312/20231218_01.md   [《PostgreSQL extension(插件) 管理工具项目 pgxman - 大家把编译方法贡献给pgxman集中管理? OR pgxn?》](202312/20231218_01.md)  

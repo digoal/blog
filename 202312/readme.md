@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20231223_01.md   [《DuckDB 存储生态: lance(向量存储引擎)的安装使用》](20231223_01.md)  
 ##### 20231222_01.md   [《PostgreSQL 17 preview - 内置块级别物理增量备份(INCREMENTAL backup/pg_combinebackup)功能》](20231222_01.md)  
 ##### 20231220_01.md   [《PostgreSQL 17 preview - WAL锁竞争优化 - reading WAL buffer contents without a lock, Additional write barrier in AdvanceXLInsertBuffer()》](20231220_01.md)  
 ##### 20231219_01.md   [《一款rust写的PostgreSQL插件管理(build、发布、安装)工具: trunk》](20231219_01.md)  

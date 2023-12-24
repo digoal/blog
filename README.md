@@ -97,6 +97,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202312/20231224_03.md   [《PostgreSQL pgdd: PostgreSQL Data Dictionary for 开发者》](202312/20231224_03.md)  
+##### 202312/20231224_02.md   [《PostgreSQL plpgsql 断言(assert)语法》](202312/20231224_02.md)  
 ##### 202312/20231224_01.md   [《PostgreSQL pg_idkit: 各种 UUID 生成方法函数大集合》](202312/20231224_01.md)  
 ##### 202312/20231223_01.md   [《DuckDB 存储生态: lance(向量存储引擎)的安装使用》](202312/20231223_01.md)  
 ##### 202312/20231222_01.md   [《PostgreSQL 17 preview - 内置块级别物理增量备份(INCREMENTAL backup/pg_combinebackup)功能》](202312/20231222_01.md)  

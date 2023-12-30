@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20231225_02.md   [《PostgreSQL 17 preview - 增强standby节点检查点统计信息》](20231225_02.md)  
+##### 20231225_01.md   [《这个PostgreSQL how to和每天5分钟PG聊通透有点类似》](20231225_01.md)  
 ##### 20231224_03.md   [《PostgreSQL pgdd: PostgreSQL Data Dictionary for 开发者》](20231224_03.md)  
 ##### 20231224_02.md   [《PostgreSQL plpgsql 断言(assert)语法》](20231224_02.md)  
 ##### 20231224_01.md   [《PostgreSQL pg_idkit: 各种 UUID 生成方法函数大集合》](20231224_01.md)  

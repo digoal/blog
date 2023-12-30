@@ -97,6 +97,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202312/20231225_02.md   [《PostgreSQL 17 preview - 增强standby节点检查点统计信息》](202312/20231225_02.md)  
+##### 202312/20231225_01.md   [《这个PostgreSQL how to和每天5分钟PG聊通透有点类似》](202312/20231225_01.md)  
 ##### 202312/20231224_03.md   [《PostgreSQL pgdd: PostgreSQL Data Dictionary for 开发者》](202312/20231224_03.md)  
 ##### 202312/20231224_02.md   [《PostgreSQL plpgsql 断言(assert)语法》](202312/20231224_02.md)  
 ##### 202312/20231224_01.md   [《PostgreSQL pg_idkit: 各种 UUID 生成方法函数大集合》](202312/20231224_01.md)  

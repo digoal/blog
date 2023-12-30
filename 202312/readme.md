@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20231230_01.md   [《试用MotherDuck: DuckDB 的ServerLess版(或者叫NoServer版)云服务》](20231230_01.md)  
 ##### 20231225_02.md   [《PostgreSQL 17 preview - 增强standby节点检查点统计信息》](20231225_02.md)  
 ##### 20231225_01.md   [《这个PostgreSQL how to和每天5分钟PG聊通透有点类似》](20231225_01.md)  
 ##### 20231224_03.md   [《PostgreSQL pgdd: PostgreSQL Data Dictionary for 开发者》](20231224_03.md)  

@@ -2,5 +2,6 @@
   
 ### 文章列表  
 ----  
+##### 20240101_03.md   [《PostgreSQL 17 preview - XX000 内部错误 backtrace, add GUC backtrace_on_internal_error》](20240101_03.md)  
 ##### 20240101_02.md   [《DuckDB book: <DuckDB In Action> by MotheDuck》](20240101_02.md)  
 ##### 20240101_01.md   [《德说-第272期, 知行合一 (2023 我干了什么? 2024 我要干什么?)》](20240101_01.md)  

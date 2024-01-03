@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240103_01.md   [《PostgreSQL 获得2023年度数据库, 和你我有什么关系?》](20240103_01.md)  
 ##### 20240102_02.md   [《facechain, 开源数字人形象的深度学习模型工具》](20240102_02.md)  
 ##### 20240102_01.md   [《体验MotherDuck读写阿里云OSS》](20240102_01.md)  
 ##### 20240101_03.md   [《PostgreSQL 17 preview - XX000 内部错误 backtrace, add GUC backtrace_on_internal_error》](20240101_03.md)  

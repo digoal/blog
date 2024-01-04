@@ -97,7 +97,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202401/20240103_02.md   [《用递归模拟SEMI-JOIN性能提升1325倍》](202401/20240103_02.md)  
+##### 202401/20240104_04.md   [《用pg_migrate实现PostgreSQL online DDL with table rewrite》](202401/20240104_04.md)  
+##### 202401/20240104_03.md   [《PostgreSQL 17 preview - 主库视图 `pg_replication_slots`.`conflict_reason` 支持逻辑复制冲突原因跟踪》](202401/20240104_03.md)  
+##### 202401/20240104_02.md   [《PostgreSQL 利用GPU加速OLAP的插件pg-strom发布5.0版本》](202401/20240104_02.md)  
+##### 202401/20240104_01.md   [《PostgreSQL 17 preview - pg_upgrade大版本升级支持保留逻辑订阅全部信息 (preserve the full subscription's state)》](202401/20240104_01.md)  
+##### 202401/20240103_02.md   [《用递归模拟SEMI-JOIN性能提升921倍》](202401/20240103_02.md)  
 ##### 202401/20240103_01.md   [《PostgreSQL 获得2023年度数据库, 和你我有什么关系?》](202401/20240103_01.md)  
 ##### 202401/20240102_02.md   [《facechain, 开源数字人形象的深度学习模型工具》](202401/20240102_02.md)  
 ##### 202401/20240102_01.md   [《体验MotherDuck读写阿里云OSS》](202401/20240102_01.md)  

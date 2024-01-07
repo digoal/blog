@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240107_01.md   [《PostgreSQL如何支持可选择性表空间(Selectivity Tablespace)备份和时间点(PITR)恢复?》](20240107_01.md)  
 ##### 20240105_02.md   [《PostgreSQL 17 preview - 支持修改生成列表达式 `alter table ... ALTER COLUMN ... SET EXPRESSION AS (express)`》](20240105_02.md)  
 ##### 20240105_01.md   [《PostgreSQL 17 preview - plpgsql 支持定义 `%TYPE` `%ROWTYPE` 数组变量类型》](20240105_01.md)  
 ##### 20240104_04.md   [《用pg_migrate实现PostgreSQL online DDL with table rewrite》](20240104_04.md)  

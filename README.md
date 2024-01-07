@@ -97,6 +97,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240105_02.md   [《PostgreSQL 17 preview - 支持修改生成列表达式 `alter table ... ALTER COLUMN ... SET EXPRESSION AS (express)`》](202401/20240105_02.md)  
+##### 202401/20240105_01.md   [《PostgreSQL 17 preview - plpgsql 支持定义 `%TYPE` `%ROWTYPE` 数组变量类型》](202401/20240105_01.md)  
 ##### 202401/20240104_04.md   [《用pg_migrate实现PostgreSQL online DDL with table rewrite》](202401/20240104_04.md)  
 ##### 202401/20240104_03.md   [《PostgreSQL 17 preview - 主库视图 `pg_replication_slots`.`conflict_reason` 支持逻辑复制冲突原因跟踪》](202401/20240104_03.md)  
 ##### 202401/20240104_02.md   [《PostgreSQL 利用GPU加速OLAP的插件pg-strom发布5.0版本》](202401/20240104_02.md)  

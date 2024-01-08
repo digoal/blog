@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20240108_04.md   [《分库架构全局唯一序列生成方案: Snowflake ID implementation for PostgreSQL》](20240108_04.md)  
+##### 20240108_03.md   [《pg_vectorize - 结合pgvector, openAI的 DB&AI 工具》](20240108_03.md)  
+##### 20240108_02.md   [《pg_later - 异步调用方案. 依赖PostgreSQL消息队列解决方案pgmq》](20240108_02.md)  
+##### 20240108_01.md   [《pgmq , PostgreSQL消息队列解决方案》](20240108_01.md)  
 ##### 20240107_01.md   [《PostgreSQL如何支持可选择性表空间(Selectivity Tablespace)备份和时间点(PITR)恢复?》](20240107_01.md)  
 ##### 20240105_02.md   [《PostgreSQL 17 preview - 支持修改生成列表达式 `alter table ... ALTER COLUMN ... SET EXPRESSION AS (express)`》](20240105_02.md)  
 ##### 20240105_01.md   [《PostgreSQL 17 preview - plpgsql 支持定义 `%TYPE` `%ROWTYPE` 数组变量类型》](20240105_01.md)  

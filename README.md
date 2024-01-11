@@ -97,6 +97,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240110_02.md   [《PostgreSQL 17 preview - libpq新增`PQchangePassword()`接口, 防止alter user修改密码时明文被记录在SQL活跃会话、log、pg_stat_statements中》](202401/20240110_02.md)  
+##### 202401/20240110_01.md   [《为什么PostgreSQL支持基于表空间的在线备份和完全恢复?》](202401/20240110_01.md)  
 ##### 202401/20240108_04.md   [《分库架构全局唯一序列生成方案: Snowflake ID implementation for PostgreSQL》](202401/20240108_04.md)  
 ##### 202401/20240108_03.md   [《pg_vectorize - 结合pgvector, openAI的 DB&AI 工具》](202401/20240108_03.md)  
 ##### 202401/20240108_02.md   [《pg_later - 异步调用方案. 依赖PostgreSQL消息队列解决方案pgmq》](202401/20240108_02.md)  

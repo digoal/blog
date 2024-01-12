@@ -97,6 +97,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240112_02.md   [《PostgreSQL 17 preview - Add new function `pg_get_wal_summarizer_state()` 分析为聚合入 pg_wal/summaries 的pid内存中的wal片段信息》](202401/20240112_02.md)  
+##### 202401/20240112_01.md   [《PostgreSQL 17 preview - Add new pg_walsummary tool》](202401/20240112_01.md)  
 ##### 202401/20240110_02.md   [《PostgreSQL 17 preview - libpq新增`PQchangePassword()`接口, 防止alter user修改密码时明文被记录在SQL活跃会话、log、pg_stat_statements中》](202401/20240110_02.md)  
 ##### 202401/20240110_01.md   [《为什么PostgreSQL支持基于表空间的在线备份和完全恢复?》](202401/20240110_01.md)  
 ##### 202401/20240108_04.md   [《分库架构全局唯一序列生成方案: Snowflake ID implementation for PostgreSQL》](202401/20240108_04.md)  

@@ -97,6 +97,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240113_01.md   [《德说-第273期, 如何实现“物质世界”和“精神世界”的双向积累与发展?》](202401/20240113_01.md)  
 ##### 202401/20240112_02.md   [《PostgreSQL 17 preview - Add new function `pg_get_wal_summarizer_state()` 分析为聚合入 pg_wal/summaries 的pid内存中的wal片段信息》](202401/20240112_02.md)  
 ##### 202401/20240112_01.md   [《PostgreSQL 17 preview - Add new pg_walsummary tool》](202401/20240112_01.md)  
 ##### 202401/20240110_02.md   [《PostgreSQL 17 preview - libpq新增`PQchangePassword()`接口, 防止alter user修改密码时明文被记录在SQL活跃会话、log、pg_stat_statements中》](202401/20240110_02.md)  

@@ -97,6 +97,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240119_01.md   [《PostgreSQL 17 preview - Optimize vacuuming of relations with no indexes 降低wal产出》](202401/20240119_01.md)  
+##### 202401/20240118_03.md   [《PostgreSQL 17 preview - Add new COPY option SAVE_ERROR_TO (copy跳过错误行)》](202401/20240118_03.md)  
+##### 202401/20240118_02.md   [《PostgreSQL 17 preview - Support identity columns in partitioned tables》](202401/20240118_02.md)  
+##### 202401/20240118_01.md   [《PostgreSQL hook实现: 统计被全表扫描的表及其对应SQL》](202401/20240118_01.md)  
+##### 202401/20240116_02.md   [《SadTalker: 1段文本 + 1张图片 -> 合成一段 语音+视频》](202401/20240116_02.md)  
+##### 202401/20240116_01.md   [《原神 TTS 开源项目, Bert-VITS2 大模型 文本to语音》](202401/20240116_01.md)  
 ##### 202401/20240113_02.md   [《PostgreSQL在线备份&恢复的3个细节问题&原理》](202401/20240113_02.md)  
 ##### 202401/20240113_01.md   [《德说-第273期, 如何实现“物质世界”和“精神世界”的双向积累与发展?》](202401/20240113_01.md)  
 ##### 202401/20240112_02.md   [《PostgreSQL 17 preview - Add new function `pg_get_wal_summarizer_state()` 分析为聚合入 pg_wal/summaries 的pid内存中的wal片段信息》](202401/20240112_02.md)  

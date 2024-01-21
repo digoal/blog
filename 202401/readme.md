@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20240121_02.md   [《PostgreSQL 17 preview - Introduce the dynamic shared memory registry (DSM 注册器)》](20240121_02.md)  
+##### 20240121_01.md   [《PostgreSQL 17 preview - 将unstable hashfunc剥离, 提升in-memory场景哈希计算性能和算法自由度》](20240121_01.md)  
 ##### 20240119_01.md   [《PostgreSQL 17 preview - Optimize vacuuming of relations with no indexes 降低wal产出》](20240119_01.md)  
 ##### 20240118_03.md   [《PostgreSQL 17 preview - Add new COPY option SAVE_ERROR_TO (copy跳过错误行)》](20240118_03.md)  
 ##### 20240118_02.md   [《PostgreSQL 17 preview - Support identity columns in partitioned tables》](20240118_02.md)  

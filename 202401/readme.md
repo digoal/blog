@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20240122_02.md   [《PostgreSQL 17 preview - 新增代码注入功能(enable-injection-points), 类似hook.》](20240122_02.md)  
+##### 20240122_01.md   [《PostgreSQL 17 preview - 优化器增强,group by支持Incremental Sort, GUC: enable_group_by_reordering》](20240122_01.md)  
 ##### 20240121_02.md   [《PostgreSQL 17 preview - Introduce the dynamic shared memory registry (DSM 注册器)》](20240121_02.md)  
 ##### 20240121_01.md   [《PostgreSQL 17 preview - 将unstable hashfunc剥离, 提升in-memory场景哈希计算性能和算法自由度》](20240121_01.md)  
 ##### 20240119_01.md   [《PostgreSQL 17 preview - Optimize vacuuming of relations with no indexes 降低wal产出》](20240119_01.md)  

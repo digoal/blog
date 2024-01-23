@@ -97,6 +97,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240123_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.1 PolarDB开源版本必学特性 - 章节概览》](202401/20240123_02.md)  
+##### 202401/20240123_01.md   [《在WEB浏览器中运行数据库: DuckDB-WASM 与 extension》](202401/20240123_01.md)  
 ##### 202401/20240122_02.md   [《PostgreSQL 17 preview - 新增代码注入功能(enable-injection-points), 类似hook.》](202401/20240122_02.md)  
 ##### 202401/20240122_01.md   [《PostgreSQL 17 preview - 优化器增强,group by支持Incremental Sort, GUC: enable_group_by_reordering》](202401/20240122_01.md)  
 ##### 202401/20240121_02.md   [《PostgreSQL 17 preview - Introduce the dynamic shared memory registry (DSM 注册器)》](202401/20240121_02.md)  

@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20240124_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.3 PolarDB开源版本必学特性 - PolarDB 安装部署》](20240124_04.md)  
+##### 20240124_03.md   [《正则表达式: 非以`\`结束的行的行尾》](20240124_03.md)  
+##### 20240124_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.2 PolarDB开源版本必学特性 - PolarDB 架构解读》](20240124_02.md)  
+##### 20240124_01.md   [《用chatgpt排查PG `create extension duckdb_fdw`异常: `could not load library...undefined symbol...`》](20240124_01.md)  
 ##### 20240123_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.1 PolarDB开源版本必学特性 - 章节概览》](20240123_02.md)  
 ##### 20240123_01.md   [《在WEB浏览器中运行数据库: DuckDB-WASM 与 extension》](20240123_01.md)  
 ##### 20240122_02.md   [《PostgreSQL 17 preview - 新增代码注入功能(enable-injection-points), 类似hook.》](20240122_02.md)  

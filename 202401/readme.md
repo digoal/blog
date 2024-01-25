@@ -2,7 +2,14 @@
   
 ### 文章列表  
 ----  
-##### 20240124_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.3 PolarDB开源版本必学特性 - PolarDB 安装部署》](20240124_04.md)  
+##### 20240125_07.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.6 PolarDB 特性解读与体验》](20240125_07.md)  
+##### 20240125_06.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.3 PolarDB开源版本必学特性 - 快速体验 PolarDB》](20240125_06.md)  
+##### 20240125_05.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.5 PolarDB开源版本必学特性 - PolarDB 日常运维》](20240125_05.md)  
+##### 20240125_04.md   [《PostgreSQL 17 preview - pg_stat_progress_copy Add progress reporting of skipped tuples during COPY FROM》](20240125_04.md)  
+##### 20240125_03.md   [《PostgreSQL 记录审计、版本跟踪插件 supa_audit (Generic Table Auditing)》](20240125_03.md)  
+##### 20240125_02.md   [《PostgreSQL 17 preview - pgbench工具新增meta语法syncpipeline, `pgbench: Add \syncpipeline`》](20240125_02.md)  
+##### 20240125_01.md   [《PostgreSQL 17 preview - 简化exclude约束用法, 对primary key,unique约束增加without overlaps可选项》](20240125_01.md)  
+##### 20240124_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.4 PolarDB开源版本必学特性 - PolarDB 安装部署》](20240124_04.md)  
 ##### 20240124_03.md   [《正则表达式: 非以`\`结束的行的行尾》](20240124_03.md)  
 ##### 20240124_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.2 PolarDB开源版本必学特性 - PolarDB 架构解读》](20240124_02.md)  
 ##### 20240124_01.md   [《用chatgpt排查PG `create extension duckdb_fdw`异常: `could not load library...undefined symbol...`》](20240124_01.md)  

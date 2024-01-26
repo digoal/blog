@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20240126_03.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.7 安装与使用PostgreSQL开源插件/工具》](20240126_03.md)  
+##### 20240126_02.md   [《PostgreSQL 17 preview - Implement various jsonpath methods》](20240126_02.md)  
+##### 20240126_01.md   [《PostgreSQL 17 preview - 支持逻辑复制槽failover for流复制. `pg_create_logical_replication_slot(... failover = true|false ...)`》](20240126_01.md)  
 ##### 20240125_07.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.6 PolarDB 特性解读与体验》](20240125_07.md)  
 ##### 20240125_06.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.3 PolarDB开源版本必学特性 - 快速体验 PolarDB》](20240125_06.md)  
 ##### 20240125_05.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.5 PolarDB开源版本必学特性 - PolarDB 日常运维》](20240125_05.md)  

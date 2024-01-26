@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240127_01.md   [《Memoize: nestloop join 优化, inner table's `joinkey&value` hash and stored into memory》](20240127_01.md)  
 ##### 20240126_03.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.7 安装与使用PostgreSQL开源插件/工具》](20240126_03.md)  
 ##### 20240126_02.md   [《PostgreSQL 17 preview - Implement various jsonpath methods》](20240126_02.md)  
 ##### 20240126_01.md   [《PostgreSQL 17 preview - 支持逻辑复制槽failover for流复制. `pg_create_logical_replication_slot(... failover = true|false ...)`》](20240126_01.md)  

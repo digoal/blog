@@ -23,7 +23,7 @@
 13、[《2022-每天5分钟,PG聊通透 - 系列1 - 热门问题》](202112/20211209_02.md)   
 14、[《2023-PostgreSQL|PolarDB 学习实验手册》](202308/20230822_02.md)     
 15、[《2023-PostgreSQL|PolarDB 永久免费实验环境》](https://developer.aliyun.com/adc/scenario/f55dbfac77c0467a9d3cd95ff6697a31)     
-16、[《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课》](202310/20231030_02.md)     
+16、[《2024-开源PolarDB|PostgreSQL 应用开发者&DBA 公开课》](202310/20231030_02.md)     
 17、[《2023-PostgreSQL Docker镜像学习环境 ARM64版, 已集成热门插件和工具》](202308/20230814_02.md)     
 18、[《2023-PostgreSQL Docker镜像学习环境 AMD64版, 已集成热门插件和工具》](202307/20230710_03.md)     
   

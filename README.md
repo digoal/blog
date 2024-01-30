@@ -97,6 +97,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240130_05.md   [《rust cargo编译内存不足 优化方法》](202401/20240130_05.md)  
+##### 202401/20240130_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.10 PolarDB开源版本必学特性 - 玩转PolarDB 开源社区》](202401/20240130_04.md)  
+##### 202401/20240130_03.md   [《PostgreSQL zero-ETL 超融合计算 插件 pg_analytics》](202401/20240130_03.md)  
+##### 202401/20240130_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.9 PolarDB开源版本必学特性 - PolarDB 生态》](202401/20240130_02.md)  
+##### 202401/20240130_01.md   [《PostgreSQL 17 preview - Add EXPLAIN (MEMORY) to report planner memory consumption》](202401/20240130_01.md)  
 ##### 202401/20240129_01.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.8 PolarDB开源版本必学特性 - PolarDB 应用实践实验》](202401/20240129_01.md)  
 ##### 202401/20240128_02.md   [《德说-第275期, 不可言说的, 保持沉默.》](202401/20240128_02.md)  
 ##### 202401/20240128_01.md   [《德说-第274期, 杠杆》](202401/20240128_01.md)  

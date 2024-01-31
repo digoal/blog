@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202401/20240131_02.md   [《多模融合查询: 文本(分词匹配、模糊匹配、字面相似、rank算法、rank排序) + AI(语义向量相似、其他相似) + 空间(范围、距离排序) + 数组标签(包含、相交、不包含、相似性) + 标量过滤(范围、等值、不等) + 图》](202401/20240131_02.md)  
+##### 202401/20240131_01.md   [《alien 转换 rpm TO deb 安装包》](202401/20240131_01.md)  
 ##### 202401/20240130_05.md   [《rust cargo编译内存不足 优化方法》](202401/20240130_05.md)  
 ##### 202401/20240130_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.9 PolarDB开源版本必学特性 - 玩转PolarDB 开源社区》](202401/20240130_04.md)  
 ##### 202401/20240130_03.md   [《PostgreSQL zero-ETL 超融合计算 插件 pg_analytics》](202401/20240130_03.md)  
@@ -109,7 +111,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202401/20240127_01.md   [《Memoize: nestloop join 优化, inner table's `joinkey&value` hash and stored into memory》](202401/20240127_01.md)  
 ##### 202401/20240126_03.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.6 PolarDB开源版本必学特性 - 安装与使用PostgreSQL开源插件/工具》](202401/20240126_03.md)  
 ##### 202401/20240126_02.md   [《PostgreSQL 17 preview - Implement various jsonpath methods》](202401/20240126_02.md)  
-##### 202401/20240126_01.md   [《PostgreSQL 17 preview - 支持逻辑复制槽failover for流复制. `pg_create_logical_replication_slot(... failover = true|false ...)`》](202401/20240126_01.md)  
+##### 202401/20240126_01.md   [《PostgreSQL 17 preview - 支持逻辑复制槽failover to 流复制standby节点. `pg_create_logical_replication_slot(... failover = true|false ...)`》](202401/20240126_01.md)  
 ##### 202401/20240125_07.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.5 PolarDB开源版本必学特性 - PolarDB 特性解读与体验》](202401/20240125_07.md)  
 ##### 202401/20240125_06.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.2 PolarDB开源版本必学特性 - 快速体验 PolarDB》](202401/20240125_06.md)  
 ##### 202401/20240125_05.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.4 PolarDB开源版本必学特性 - PolarDB 日常运维》](202401/20240125_05.md)  

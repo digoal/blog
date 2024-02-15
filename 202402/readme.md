@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20240215_02.md   [《ssh proxy dns - 防dns污染/篡改/劫持/挟持》](20240215_02.md)  
+##### 20240215_01.md   [《转载 - SSH 命令的三种代理功能（`-L/-R/-D`）  正向代理,反向代理,socks5 代理》](20240215_01.md)  
+##### 20240214_03.md   [《DuckDB 新版本 0.10.0 介绍》](20240214_03.md)  
+##### 20240214_02.md   [《PostgreSQL 17 preview - sync logical replication slot LSN, Failover & Switchover》](20240214_02.md)  
+##### 20240214_01.md   [《PostgreSQL 17 preview - preparation for replicating unflushed WAL data》](20240214_01.md)  
 ##### 20240202_02.md   [《markdown文档 微信公众号 排版工具》](20240202_02.md)  
 ##### 20240202_01.md   [《如果向量超过2000维度怎么办? pg_sparse: 在 Postgres 中使用 SPLADE 进行相似性搜索》](20240202_01.md)  
 ##### 20240201_04.md   [《PostgreSQL plrust 插件》](20240201_04.md)  

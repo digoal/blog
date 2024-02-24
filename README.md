@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202402/20240223_01.md   [《PostgreSQL 17 preview - Add a new slot sync worker to synchronize logical slots》](202402/20240223_01.md)  
+##### 202402/20240222_01.md   [《pg_quack: PostgreSQL duckdb Table Access Method》](202402/20240222_01.md)  
 ##### 202402/20240215_02.md   [《ssh proxy dns - 防dns污染/篡改/劫持/挟持》](202402/20240215_02.md)  
 ##### 202402/20240215_01.md   [《转载 - SSH 命令的三种代理功能（`-L/-R/-D`）  正向代理,反向代理,socks5 代理》](202402/20240215_01.md)  
 ##### 202402/20240214_03.md   [《DuckDB 新版本 0.10.0 介绍》](202402/20240214_03.md)  

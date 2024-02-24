@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240224_01.md   [《PostgreSQL 17 preview - 引入新的smgr, 优化bulk loading》](20240224_01.md)  
 ##### 20240223_01.md   [《PostgreSQL 17 preview - Add a new slot sync worker to synchronize logical slots》](20240223_01.md)  
 ##### 20240222_01.md   [《pg_quack: PostgreSQL duckdb Table Access Method》](20240222_01.md)  
 ##### 20240215_02.md   [《ssh proxy dns - 防dns污染/篡改/劫持/挟持》](20240215_02.md)  

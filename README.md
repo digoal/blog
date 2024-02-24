@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202402/20240224_01.md   [《PostgreSQL 17 preview - 引入新的smgr, 优化bulk loading》](202402/20240224_01.md)  
 ##### 202402/20240223_01.md   [《PostgreSQL 17 preview - Add a new slot sync worker to synchronize logical slots》](202402/20240223_01.md)  
 ##### 202402/20240222_01.md   [《pg_quack: PostgreSQL duckdb Table Access Method》](202402/20240222_01.md)  
 ##### 202402/20240215_02.md   [《ssh proxy dns - 防dns污染/篡改/劫持/挟持》](202402/20240215_02.md)  

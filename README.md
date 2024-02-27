@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202402/20240227_02.md   [《PostgreSQL 15 Docker镜像学习环境 ARM64版》](202402/20240227_02.md)  
+##### 202402/20240227_01.md   [《debian/ubuntu apt update Warning: Key is stored in legacy `trusted.gpg` keyring (`/etc/apt/trusted.gpg`), see the DEPRECATION section in `apt-key(8)` for details》](202402/20240227_01.md)  
 ##### 202402/20240224_01.md   [《PostgreSQL 17 preview - 引入新的smgr, 优化bulk loading》](202402/20240224_01.md)  
 ##### 202402/20240223_01.md   [《PostgreSQL 17 preview - Add a new slot sync worker to synchronize logical slots》](202402/20240223_01.md)  
 ##### 202402/20240222_01.md   [《pg_quack: PostgreSQL duckdb Table Access Method》](202402/20240222_01.md)  
@@ -344,7 +346,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202307/20230713_01.md   [《PostgreSQL 17 preview - Add new parallel message type to progress reporting.》](202307/20230713_01.md)  
 ##### 202307/20230710_03.md   [《amd64 , 使用Dockerfile+docker build制作PolarDB | PostgreSQL 开源docker镜像, 集成大量插件方便学习, 并推送到阿里云镜像服务》](202307/20230710_03.md)  
 ##### 202307/20230710_02.md   [《制作PolarDB | PostgreSQL 开源docker镜像, 集成大量插件方便学习, 并推送到阿里云镜像服务》](202307/20230710_02.md)  
-##### 202307/20230710_01.md   [《配置阿里云 Docker 镜像加速服务, 以及如何查找官方镜像tags 信息》](202307/20230710_01.md)  
+##### 202307/20230710_01.md   [《配置阿里云 Docker 镜像加速服务, 以及如何查找docker hub官方镜像tags 信息》](202307/20230710_01.md)  
 ##### 202307/20230707_02.md   [《PostgreSQL的安全场景介绍, 以及security label(安全标签功能)的label provider: pgsodium 加密库介绍(隐藏|加密敏感信息) - 字段透明加解密 - libsodium 加密库实现》](202307/20230707_02.md)  
 ##### 202307/20230707_01.md   [《PostgreSQL的安全场景介绍, 以及security label(安全标签功能)和两个label provider: anon, sepgsql的介绍(隐藏|加密敏感信息)》](202307/20230707_01.md)  
 ##### 202307/20230706_05.md   [《PostgreSQL 或PolarDB 使用插件pg_tiktoken - 使用 OpenAI tiktoken库文本向量化(tokenization) - 使用分词算法BPE - NLP 自然语言处理》](202307/20230706_05.md)  

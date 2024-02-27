@@ -9,7 +9,7 @@
 ##### 20230713_01.md   [《PostgreSQL 17 preview - Add new parallel message type to progress reporting.》](20230713_01.md)  
 ##### 20230710_03.md   [《amd64 , 使用Dockerfile+docker build制作PolarDB | PostgreSQL 开源docker镜像, 集成大量插件方便学习, 并推送到阿里云镜像服务》](20230710_03.md)  
 ##### 20230710_02.md   [《制作PolarDB | PostgreSQL 开源docker镜像, 集成大量插件方便学习, 并推送到阿里云镜像服务》](20230710_02.md)  
-##### 20230710_01.md   [《配置阿里云 Docker 镜像加速服务, 以及如何查找官方镜像tags 信息》](20230710_01.md)  
+##### 20230710_01.md   [《配置阿里云 Docker 镜像加速服务, 以及如何查找docker hub官方镜像tags 信息》](20230710_01.md)  
 ##### 20230707_02.md   [《PostgreSQL的安全场景介绍, 以及security label(安全标签功能)的label provider: pgsodium 加密库介绍(隐藏|加密敏感信息) - 字段透明加解密 - libsodium 加密库实现》](20230707_02.md)  
 ##### 20230707_01.md   [《PostgreSQL的安全场景介绍, 以及security label(安全标签功能)和两个label provider: anon, sepgsql的介绍(隐藏|加密敏感信息)》](20230707_01.md)  
 ##### 20230706_05.md   [《PostgreSQL 或PolarDB 使用插件pg_tiktoken - 使用 OpenAI tiktoken库文本向量化(tokenization) - 使用分词算法BPE - NLP 自然语言处理》](20230706_05.md)  

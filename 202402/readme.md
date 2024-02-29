@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20240229_02.md   [《pg_dumpbinary: PostgreSQL copy binary 格式逻辑备份》](20240229_02.md)  
+##### 20240229_01.md   [《pg_statement_rollback: 服务端auto savepoint和rollback statement支持》](20240229_01.md)  
 ##### 20240227_02.md   [《PostgreSQL 15 Docker镜像学习环境 ARM64版》](20240227_02.md)  
 ##### 20240227_01.md   [《debian/ubuntu apt update Warning: Key is stored in legacy `trusted.gpg` keyring (`/etc/apt/trusted.gpg`), see the DEPRECATION section in `apt-key(8)` for details》](20240227_01.md)  
 ##### 20240224_01.md   [《PostgreSQL 17 preview - 引入新的smgr, 优化bulk loading》](20240224_01.md)  

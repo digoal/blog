@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202403/20240302_02.md   [《tpcc结果中的ng 是什么意思?》](202403/20240302_02.md)  
 ##### 202403/20240302_01.md   [《PostgreSQL 17 preview - 引入读写原子操作函数接口with full barrier semantics》](202403/20240302_01.md)  
 ----  
 ##### 202402/20240229_02.md   [《pg_dumpbinary: PostgreSQL copy binary 格式逻辑备份》](202402/20240229_02.md)  

@@ -2,4 +2,5 @@
   
 ### 文章列表  
 ----  
+##### 20240302_02.md   [《tpcc结果中的ng 是什么意思?》](20240302_02.md)  
 ##### 20240302_01.md   [《PostgreSQL 17 preview - 引入读写原子操作函数接口with full barrier semantics》](20240302_01.md)  

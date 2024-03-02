@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202403/20240302_01.md   [《PostgreSQL 17 preview - 引入读写原子操作函数接口with full barrier semantics》](202403/20240302_01.md)  
+----  
 ##### 202402/20240229_02.md   [《pg_dumpbinary: PostgreSQL copy binary 格式逻辑备份》](202402/20240229_02.md)  
 ##### 202402/20240229_01.md   [《pg_statement_rollback: 服务端auto savepoint和rollback statement支持》](202402/20240229_01.md)  
 ##### 202402/20240227_02.md   [《PostgreSQL 15 Docker镜像学习环境 ARM64版》](202402/20240227_02.md)  

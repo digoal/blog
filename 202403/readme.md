@@ -2,5 +2,6 @@
   
 ### 文章列表  
 ----  
+##### 20240303_01.md   [《DuckDB 语法糖macro,columns表达式,list lambda等结合例子: 动态聚合分析》](20240303_01.md)  
 ##### 20240302_02.md   [《tpcc结果中的ng 是什么意思?》](20240302_02.md)  
 ##### 20240302_01.md   [《PostgreSQL 17 preview - 引入读写原子操作函数接口with full barrier semantics》](20240302_01.md)  

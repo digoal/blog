@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20240308_01.md   [《老白说PG有隐藏的安全隐患, 真的吗?》](20240308_01.md)  
+##### 20240306_02.md   [《和总监们一起聊聊数据库三害》](20240306_02.md)  
+##### 20240306_01.md   [《PostgreSQL 17 preview - Add `--copy-file-range` option to `pg_upgrade`》](20240306_01.md)  
+##### 20240304_01.md   [《PostgreSQL 锁跟踪分析工具 pg_lock_tracer》](20240304_01.md)  
 ##### 20240303_01.md   [《DuckDB 语法糖macro,columns表达式,list lambda等结合例子: 动态聚合分析》](20240303_01.md)  
 ##### 20240302_02.md   [《tpcc结果中的ng 是什么意思?》](20240302_02.md)  
 ##### 20240302_01.md   [《PostgreSQL 17 preview - 引入读写原子操作函数接口with full barrier semantics》](20240302_01.md)  

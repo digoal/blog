@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240312_01.md   [《PostgreSQL 17 preview - 解除vacuumdb,clusterdb,reindexdb的某些options组合限制》](20240312_01.md)  
 ##### 20240311_03.md   [《PostgreSQL wikipedia 百科 : pgPedia》](20240311_03.md)  
 ##### 20240311_02.md   [《PostgreSQL数据库相关AI项目: 向量、机器人、SQL & TEXT 、优化器、配置》](20240311_02.md)  
 ##### 20240311_01.md   [《Spock 插件: PostgreSQL Multi-Master Replication with Conflict Resolution & Avoidance》](20240311_01.md)  

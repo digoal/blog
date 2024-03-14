@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20240314_06.md   [《PostgreSQL 17 preview - 新增 "builtin" collation provider》](20240314_06.md)  
+##### 20240314_05.md   [《翻译: 如何使用 PostgreSQL 执行（军事）地理分析任务》](20240314_05.md)  
+##### 20240314_04.md   [《PostgreSQL 监控和审计工具 : pgCluu PostgreSQL Cluster utilization》](20240314_04.md)  
+##### 20240314_03.md   [《PostgreSQL ETL 工具 peerdb, 支持逻辑订阅、时间base、xmin base增量提取, 号称10x速度现有产品》](20240314_03.md)  
+##### 20240314_02.md   [《PostgreSQL 17 preview - 增量备份patch: Add the system identifier to backup manifests》](20240314_02.md)  
+##### 20240314_01.md   [《PostgreSQL 17 preview - 引入MAINTAIN权限及pg_maintain预制角色》](20240314_01.md)  
 ##### 20240312_03.md   [《德说-第276期, 阿卡西记录与大模型》](20240312_03.md)  
 ##### 20240312_02.md   [《DB吐槽大会,第87期 - PG 视图的基表列类型无法修改》](20240312_02.md)  
 ##### 20240312_01.md   [《PostgreSQL 17 preview - 解除vacuumdb,clusterdb,reindexdb的某些options组合限制》](20240312_01.md)  

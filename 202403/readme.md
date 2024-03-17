@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240317_01.md   [《德说-第277期, 社区的商业模式探讨》](20240317_01.md)  
 ##### 20240314_06.md   [《PostgreSQL 17 preview - 新增 "builtin" collation provider》](20240314_06.md)  
 ##### 20240314_05.md   [《翻译: 如何使用 PostgreSQL 执行（军事）地理分析任务》](20240314_05.md)  
 ##### 20240314_04.md   [《PostgreSQL 监控和审计工具 : pgCluu PostgreSQL Cluster utilization》](20240314_04.md)  

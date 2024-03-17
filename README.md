@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202403/20240317_01.md   [《德说-第277期, 社区的商业模式探讨》](202403/20240317_01.md)  
 ##### 202403/20240314_06.md   [《PostgreSQL 17 preview - 新增 "builtin" collation provider》](202403/20240314_06.md)  
 ##### 202403/20240314_05.md   [《翻译: 如何使用 PostgreSQL 执行（军事）地理分析任务》](202403/20240314_05.md)  
 ##### 202403/20240314_04.md   [《PostgreSQL 监控和审计工具 : pgCluu PostgreSQL Cluster utilization》](202403/20240314_04.md)  

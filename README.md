@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202403/20240319_02.md   [《PostgreSQL 17 preview - 增加uuid功能函数: 提取UUID值里面的时间戳 和 生成UUID值的函数版本》](202403/20240319_02.md)  
 ##### 202403/20240319_01.md   [《PostgreSQL neon(开源替代AWS Aurora存算分离PG数据库) 编译和使用测试》](202403/20240319_01.md)  
 ##### 202403/20240318_02.md   [《PostgreSQL 17 preview - Add RETURNING support to MERGE》](202403/20240318_02.md)  
 ##### 202403/20240318_01.md   [《马斯克开源3140亿参数大模型Grok》](202403/20240318_01.md)  

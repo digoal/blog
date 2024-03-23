@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240323_01.md   [《好消息, Mac Studio 可以跑马斯克开源的 Grok-1 开源大语言模型》](20240323_01.md)  
 ##### 20240319_02.md   [《PostgreSQL 17 preview - 增加uuid功能函数: 提取UUID值里面的时间戳 和 生成UUID值的函数版本》](20240319_02.md)  
 ##### 20240319_01.md   [《PostgreSQL neon(开源替代AWS Aurora存算分离PG数据库) 编译和使用测试》](20240319_01.md)  
 ##### 20240318_02.md   [《PostgreSQL 17 preview - Add RETURNING support to MERGE》](20240318_02.md)  

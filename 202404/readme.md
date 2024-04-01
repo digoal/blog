@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240401_04.md   [《PostgreSQL 17 preview - COPY LOG_VERBOSITY notice ERROR信息》](20240401_04.md)  
 ##### 20240401_03.md   [《PostgreSQL 17 preview - pg_basetype 获得domain类型的基本类型》](20240401_03.md)  
 ##### 20240401_02.md   [《PostgreSQL 17 preview - Add support for `MERGE ... WHEN NOT MATCHED BY SOURCE`》](20240401_02.md)  
 ##### 20240401_01.md   [《PostgreSQL 17 preview - 频繁提交table access method相关patch, undo-based table access methods真的快来了吗?》](20240401_01.md)  

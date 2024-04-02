@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202404/20240402_02.md   [《PostgreSQL 17 preview - 使用TidStore数据结构存储dead tupleids, 提升vacuum效率, 为什么PG单表不建议超过8.9亿条记录?》](202404/20240402_02.md)  
+##### 202404/20240402_01.md   [《PostgreSQL 17 preview - pg_restore `--transaction-size=N` 支持N个对象封装为一个事务提交》](202404/20240402_01.md)  
 ##### 202404/20240401_04.md   [《PostgreSQL 17 preview - COPY LOG_VERBOSITY notice ERROR信息》](202404/20240401_04.md)  
 ##### 202404/20240401_03.md   [《PostgreSQL 17 preview - pg_basetype 获得domain类型的基本类型》](202404/20240401_03.md)  
 ##### 202404/20240401_02.md   [《PostgreSQL 17 preview - Add support for `MERGE ... WHEN NOT MATCHED BY SOURCE`》](202404/20240401_02.md)  

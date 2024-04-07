@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202404/20240407_02.md   [《PostgreSQL 17 preview - Implement `ALTER TABLE ... MERGE|SPLIT PARTITION` ... command》](202404/20240407_02.md)  
+##### 202404/20240407_01.md   [《PostgreSQL 17 preview - vacuum_buffer_usage_limit调大默认值, 减少vacuum造成的wal flush, 提升vacuum速度》](202404/20240407_01.md)  
 ##### 202404/20240405_01.md   [《PostgreSQL 17 preview - 通过pg_wal_replay_wait()支持读写分离pool实现跨实例的读写一致性》](202404/20240405_01.md)  
 ##### 202404/20240402_02.md   [《PostgreSQL 17 preview - 使用TidStore数据结构存储dead tupleids, 提升vacuum效率, 为什么PG单表不建议超过8.9亿条记录?》](202404/20240402_02.md)  
 ##### 202404/20240402_01.md   [《PostgreSQL 17 preview - pg_restore `--transaction-size=N` 支持N个对象封装为一个事务提交》](202404/20240402_01.md)  

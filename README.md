@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202404/20240408_01.md   [《把系统时间调小对数据库有什么影响?》](202404/20240408_01.md)  
 ##### 202404/20240407_02.md   [《PostgreSQL 17 preview - Implement `ALTER TABLE ... MERGE|SPLIT PARTITION` ... command》](202404/20240407_02.md)  
 ##### 202404/20240407_01.md   [《PostgreSQL 17 preview - vacuum_buffer_usage_limit调大默认值, 减少vacuum造成的wal flush, 提升vacuum速度》](202404/20240407_01.md)  
 ##### 202404/20240405_01.md   [《PostgreSQL 17 preview - 通过pg_wal_replay_wait()支持读写分离pool实现跨实例的读写一致性》](202404/20240405_01.md)  

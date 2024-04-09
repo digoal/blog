@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20240409_06.md   [《PostgreSQL 17 preview - JSON_TABLE: Add support for NESTED paths and columns》](20240409_06.md)  
+##### 20240409_05.md   [《PostgreSQL 17 preview - table AM增强: Custom reloptions for table AM》](20240409_05.md)  
+##### 20240409_04.md   [《PostgreSQL 17 preview - 代码注入(injection_points)功能增强, Introduce runtime conditions》](20240409_04.md)  
+##### 20240409_03.md   [《PostgreSQL 17 preview - 新增 GUC trace_connection_negotiation : 跟踪客户端 SSLRequest or GSSENCRequest packet》](20240409_03.md)  
+##### 20240409_02.md   [《PostgreSQL 17 preview - 新增 GUC: or_to_any_transform_limit 控制`OR to ANY`转换》](20240409_02.md)  
+##### 20240409_01.md   [《震惊!ACE装国产数据库花了2周,吓得我赶紧试了一下自家产品》](20240409_01.md)  
 ##### 20240408_01.md   [《把系统时间调小对数据库有什么影响?》](20240408_01.md)  
 ##### 20240407_02.md   [《PostgreSQL 17 preview - Implement `ALTER TABLE ... MERGE|SPLIT PARTITION` ... command》](20240407_02.md)  
 ##### 20240407_01.md   [《PostgreSQL 17 preview - vacuum_buffer_usage_limit调大默认值, 减少vacuum造成的wal flush, 提升vacuum速度》](20240407_01.md)  

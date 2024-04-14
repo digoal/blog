@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240412_01.md   [《PostgreSQL 17 preview - transaction_timeout》](20240412_01.md)  
 ##### 20240411_01.md   [《PostgreSQL 17 到底值不值得期待? 看完这篇就明白了.》](20240411_01.md)  
 ##### 20240409_06.md   [《PostgreSQL 17 preview - JSON_TABLE: Add support for NESTED paths and columns》](20240409_06.md)  
 ##### 20240409_05.md   [《PostgreSQL 17 preview - table AM增强: Custom reloptions for table AM》](20240409_05.md)  

@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202404/20240412_01.md   [《PostgreSQL 17 preview - transaction_timeout》](202404/20240412_01.md)  
 ##### 202404/20240411_01.md   [《PostgreSQL 17 到底值不值得期待? 看完这篇就明白了.》](202404/20240411_01.md)  
 ##### 202404/20240409_06.md   [《PostgreSQL 17 preview - JSON_TABLE: Add support for NESTED paths and columns》](202404/20240409_06.md)  
 ##### 202404/20240409_05.md   [《PostgreSQL 17 preview - table AM增强: Custom reloptions for table AM》](202404/20240409_05.md)  

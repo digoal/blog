@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202404/20240416_02.md   [《Percona 开源 PostgreSQL 16+ TDE 插件》](202404/20240416_02.md)  
+##### 202404/20240416_01.md   [《天呐, “能不能并发更新同一条记录”这个问题还需要回答吗? 这不是常识吗?》](202404/20240416_01.md)  
 ##### 202404/20240412_01.md   [《PostgreSQL 17 preview - transaction_timeout》](202404/20240412_01.md)  
 ##### 202404/20240411_01.md   [《PostgreSQL 17 到底值不值得期待? 看完这篇就明白了.》](202404/20240411_01.md)  
 ##### 202404/20240409_06.md   [《PostgreSQL 17 preview - JSON_TABLE: Add support for NESTED paths and columns》](202404/20240409_06.md)  

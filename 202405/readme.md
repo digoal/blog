@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240503_07.md   [《Oracle 23ai 发布, 廉颇老矣?》](20240503_07.md)  
 ##### 20240503_06.md   [《DuckDB Positional Joins 语法糖》](20240503_06.md)  
 ##### 20240503_05.md   [《DuckDB semi join , anti join 语法糖》](20240503_05.md)  
 ##### 20240503_04.md   [《DuckDB unpivot 行列转换 internals》](20240503_04.md)  

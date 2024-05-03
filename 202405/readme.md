@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20240503_06.md   [《DuckDB Positional Joins 语法糖》](20240503_06.md)  
+##### 20240503_05.md   [《DuckDB semi join , anti join 语法糖》](20240503_05.md)  
 ##### 20240503_04.md   [《DuckDB unpivot 行列转换 internals》](20240503_04.md)  
 ##### 20240503_03.md   [《DuckDB unpivot 行列转换 太好用了》](20240503_03.md)  
 ##### 20240503_02.md   [《macOS 配置 DHCP server 服务 `/usr/libexec/bootpd -D`》](20240503_02.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20240506_03.md   [《向量搜索优化3板斧: 空间、性能、召回(recall)》](20240506_03.md)  
+##### 20240506_02.md   [《什么? PostgreSQL大佬tom lane公司crunchydata“模仿”DuckDB创意?》](20240506_02.md)  
+##### 20240506_01.md   [《把PostgreSQL冷数据转储到OSS的插件: pg_tier + parquet_s3_fdw》](20240506_01.md)  
 ##### 20240505_03.md   [《DuckDB 发布vss 向量插件》](20240505_03.md)  
 ##### 20240505_02.md   [《iphone/macOS PC 使用nginx配置proxy.pac共享socks5 代理加速github网络访问》](20240505_02.md)  
 ##### 20240505_01.md   [《macOS 通过 “debian 11 配置的 openVPN Server” 提升github等访问体验》](20240505_01.md)  

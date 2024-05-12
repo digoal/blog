@@ -110,7 +110,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202405/20240506_02.md   [《什么? PostgreSQL大佬tom lane公司crunchydata“模仿”DuckDB创意?》](202405/20240506_02.md)  
 ##### 202405/20240506_01.md   [《把PostgreSQL冷数据转储到OSS的插件: pg_tier + parquet_s3_fdw》](202405/20240506_01.md)  
 ##### 202405/20240505_03.md   [《DuckDB 发布vss 向量插件》](202405/20240505_03.md)  
-##### 202405/20240505_02.md   [《iphone/macOS PC 使用nginx配置proxy.pac共享socks5 代理加速github网络访问》](202405/20240505_02.md)  
+##### 202405/20240505_02.md   [《iphone/macOS PC 使用nginx/httpd配置proxy.pac共享socks5 代理加速github网络访问》](202405/20240505_02.md)  
 ##### 202405/20240505_01.md   [《macOS 通过 “debian 11 配置的 openVPN Server” 提升github等访问体验》](202405/20240505_01.md)  
 ##### 202405/20240503_08.md   [《分享一些有趣的知识类视频》](202405/20240503_08.md)  
 ##### 202405/20240503_07.md   [《Oracle 23ai 发布, 廉颇老矣?》](202405/20240503_07.md)  

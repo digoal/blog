@@ -98,7 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202405/20240525_01.md   [《PG被DuckDB碾压,还不反省? DuckDB v0.10.3 在Macmini 2023款上的tpch性能表现如何? PostgreSQL使用duckdb_fdw 的tpch加速性能表现如何?》](202405/20240525_01.md)  
+##### 202405/20240525_01.md   [《PG被DuckDB碾压,该反省哪些方面? DuckDB v0.10.3 在Macmini 2023款上的tpch性能表现如何? PostgreSQL使用duckdb_fdw 的tpch加速性能表现如何?》](202405/20240525_01.md)  
 ##### 202405/20240522_01.md   [《德说-第280期, 从海信聚好看DBDoctor产品学到的GTM技巧》](202405/20240522_01.md)  
 ##### 202405/20240521_01.md   [《如何判断当前PostgreSQL数据库是否处于一致状态?》](202405/20240521_01.md)  
 ##### 202405/20240520_01.md   [《paradedb v0.7.0发布, 支持PostgreSQL数据湖插件pg_lakehouse 访问本地、远端对象存储的parquet,csv,json,avro,orc等文件》](202405/20240520_01.md)  

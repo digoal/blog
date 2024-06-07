@@ -38,7 +38,7 @@
 ##### 20240311_01.md   [《Spock 插件: PostgreSQL Multi-Master Replication with Conflict Resolution & Avoidance》](20240311_01.md)  
 ##### 20240309_02.md   [《PostgreSQL 17 preview - 增加GUC standby_slot_names , 保证这些standby已接收并flush所有逻辑slot向下游发送逻辑数据对应的WAL》](20240309_02.md)  
 ##### 20240309_01.md   [《PostgreSQL 17 preview - Add support for `DEFAULT` in `ALTER TABLE .. SET ACCESS METHOD`》](20240309_01.md)  
-##### 20240308_01.md   [《老白说PG有隐藏的安全隐患, 真的吗?》](20240308_01.md)  
+##### 20240308_01.md   [《DB吐槽大会,第98期 - 文件删了不报错还能启动、能查询! PG有隐患》](20240308_01.md)  
 ##### 20240306_02.md   [《和总监们一起聊聊数据库三害》](20240306_02.md)  
 ##### 20240306_01.md   [《PostgreSQL 17 preview - Add `--copy-file-range` option to `pg_upgrade`》](20240306_01.md)  
 ##### 20240304_01.md   [《PostgreSQL 锁跟踪分析工具 pg_lock_tracer》](20240304_01.md)  

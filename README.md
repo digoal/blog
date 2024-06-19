@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202406/20240619_01.md   [《PolarDB for PostgreSQL TPCH 测试与优化tips》](202406/20240619_01.md)  
 ##### 202406/20240618_01.md   [《PG PK MySQL/Oracle/国产.又干输了? 教你几招性能PK的“作弊技巧”!》](202406/20240618_01.md)  
 ##### 202406/20240614_03.md   [《DBA老司机都头痛的TPCH优化, AI 10秒就搞定了》](202406/20240614_03.md)  
 ##### 202406/20240614_02.md   [《pg-ferret: 开源的基于eBPF 低overhead采样 All-in-one tracing toolkit for PostgreSQL》](202406/20240614_02.md)  

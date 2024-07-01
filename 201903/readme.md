@@ -19,7 +19,7 @@
 ##### 20190331_01.md   [《PostgreSQL 12 preview - partitions pruned at plan time. 原生分区表性能提升23.5倍，已与pg_pathman持平。》](20190331_01.md)  
 ##### 20190330_09.md   [《PostgreSQL 12 preview - DROP OWNED BY xxx 删除xxx的所有对象》](20190330_09.md)  
 ##### 20190330_08.md   [《PostgreSQL 12 preview - Delete empty pages during GiST VACUUM - 降低GiST索引膨胀概率》](20190330_08.md)  
-##### 20190330_07.md   [《PostgreSQL 12 preview - 事务特征继承 - commit | rollback and CHAIN》](20190330_07.md)  
+##### 20190330_07.md   [《PostgreSQL 12 preview - 事务特征继承, 减少交互次数 - commit | rollback and CHAIN》](20190330_07.md)  
 ##### 20190330_06.md   [《PostgreSQL 12 preview - 支持列出 vacuum full, cluster 过程详情  pg_stat_progress_cluster》](20190330_06.md)  
 ##### 20190330_05.md   [《PostgreSQL 12 preview - 自定义统计信息 - 支持mcv 多列高频词》](20190330_05.md)  
 ##### 20190330_04.md   [《PostgreSQL 12 preview - 64bit xid, 规避freeze - FullTransactionId GetTopFullTransactionId GetCurrentFullTransactionId》](20190330_04.md)  

@@ -2,4 +2,9 @@
   
 ### 文章列表  
 ----  
-##### 20240701_01.md   [《test》](20240701_01.md)  
+##### 20240701_06.md   [《PostgreSQL 18 preview - 64-bit XID 设计和patch出炉, 真的来了?》](20240701_06.md)  
+##### 20240701_05.md   [《PostgreSQL 18 preview - pg_log_query_plan() 打印running SQL的执行计划》](20240701_05.md)  
+##### 20240701_04.md   [《PostgreSQL 18 preview - PostgreSQL pg_stat_activity新增状态authenticating, 可检测拒绝服务DDoS攻击》](20240701_04.md)  
+##### 20240701_03.md   [《PostgreSQL 18 preview - 会话各状态耗时/计数分析: pg_stat_session》](20240701_03.md)  
+##### 20240701_02.md   [《PostgreSQL 18 preview - psql客户端支持扩展协议prepared statement元语: bind parse bindx close》](20240701_02.md)  
+##### 20240701_01.md   [《DB吐槽大会,第104期 - 日志混淆不清》](20240701_01.md)  

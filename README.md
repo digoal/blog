@@ -98,7 +98,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
-##### 202407/20240701_01.md   [《test》](202407/20240701_01.md)  
+##### 202407/20240701_06.md   [《PostgreSQL 18 preview - 64-bit XID 设计和patch出炉, 真的来了?》](202407/20240701_06.md)  
+##### 202407/20240701_05.md   [《PostgreSQL 18 preview - pg_log_query_plan() 打印running SQL的执行计划》](202407/20240701_05.md)  
+##### 202407/20240701_04.md   [《PostgreSQL 18 preview - PostgreSQL pg_stat_activity新增状态authenticating, 可检测拒绝服务DDoS攻击》](202407/20240701_04.md)  
+##### 202407/20240701_03.md   [《PostgreSQL 18 preview - 会话各状态耗时/计数分析: pg_stat_session》](202407/20240701_03.md)  
+##### 202407/20240701_02.md   [《PostgreSQL 18 preview - psql客户端支持扩展协议prepared statement元语: bind parse bindx close》](202407/20240701_02.md)  
+##### 202407/20240701_01.md   [《DB吐槽大会,第104期 - 日志混淆不清》](202407/20240701_01.md)  
 ----  
 ##### 202406/20240626_04.md   [《explain 执行计划结果可视化》](202406/20240626_04.md)  
 ##### 202406/20240626_03.md   [《某大厂员工薪资泄露! 开发背锅了, 这个数据库功能别滥用》](202406/20240626_03.md)  
@@ -2539,7 +2544,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 201903/20190331_01.md   [《PostgreSQL 12 preview - partitions pruned at plan time. 原生分区表性能提升23.5倍，已与pg_pathman持平。》](201903/20190331_01.md)  
 ##### 201903/20190330_09.md   [《PostgreSQL 12 preview - DROP OWNED BY xxx 删除xxx的所有对象》](201903/20190330_09.md)  
 ##### 201903/20190330_08.md   [《PostgreSQL 12 preview - Delete empty pages during GiST VACUUM - 降低GiST索引膨胀概率》](201903/20190330_08.md)  
-##### 201903/20190330_07.md   [《PostgreSQL 12 preview - 事务特征继承 - commit | rollback and CHAIN》](201903/20190330_07.md)  
+##### 201903/20190330_07.md   [《PostgreSQL 12 preview - 事务特征继承, 减少交互次数 - commit | rollback and CHAIN》](201903/20190330_07.md)  
 ##### 201903/20190330_06.md   [《PostgreSQL 12 preview - 支持列出 vacuum full, cluster 过程详情  pg_stat_progress_cluster》](201903/20190330_06.md)  
 ##### 201903/20190330_05.md   [《PostgreSQL 12 preview - 自定义统计信息 - 支持mcv 多列高频词》](201903/20190330_05.md)  
 ##### 201903/20190330_04.md   [《PostgreSQL 12 preview - 64bit xid, 规避freeze - FullTransactionId GetTopFullTransactionId GetCurrentFullTransactionId》](201903/20190330_04.md)  

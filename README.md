@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202407/20240704_01.md   [《通过http / https proxy代理配置拉取docker hub镜像》](202407/20240704_01.md)  
 ##### 202407/20240701_06.md   [《PostgreSQL 18 preview - 64-bit XID 设计和patch出炉, 真的来了?》](202407/20240701_06.md)  
 ##### 202407/20240701_05.md   [《PostgreSQL 18 preview - pg_log_query_plan() 打印running SQL的执行计划》](202407/20240701_05.md)  
 ##### 202407/20240701_04.md   [《PostgreSQL 18 preview - PostgreSQL pg_stat_activity新增状态authenticating, 可检测拒绝服务DDoS攻击》](202407/20240701_04.md)  

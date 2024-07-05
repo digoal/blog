@@ -98,6 +98,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202407/20240705_03.md   [《PostgreSQL 18 preview - Support "Right Semi Join" plan shapes》](202407/20240705_03.md)  
+##### 202407/20240705_02.md   [《PostgreSQL 18 preview - Add memory/disk usage for Material nodes in EXPLAIN》](202407/20240705_02.md)  
+##### 202407/20240705_01.md   [《400K star的王炸开源项目》](202407/20240705_01.md)  
 ##### 202407/20240704_01.md   [《通过http / https proxy代理配置拉取docker hub镜像》](202407/20240704_01.md)  
 ##### 202407/20240701_06.md   [《PostgreSQL 18 preview - 64-bit XID 设计和patch出炉, 真的来了?》](202407/20240701_06.md)  
 ##### 202407/20240701_05.md   [《PostgreSQL 18 preview - pg_log_query_plan() 打印running SQL的执行计划》](202407/20240701_05.md)  

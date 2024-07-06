@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240706_01.md   [《解决 macOS 通过隔空投送拷贝的脚本无法执行? bad interpreter: Operation not permitted》](20240706_01.md)  
 ##### 20240705_03.md   [《PostgreSQL 18 preview - Support "Right Semi Join" plan shapes》](20240705_03.md)  
 ##### 20240705_02.md   [《PostgreSQL 18 preview - Add memory/disk usage for Material nodes in EXPLAIN》](20240705_02.md)  
 ##### 20240705_01.md   [《Github 最火的开源项目》](20240705_01.md)  

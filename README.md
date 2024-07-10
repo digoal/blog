@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202407/20240709_02.md   [《德说-第284期, 个人如何利用复利思维》](202407/20240709_02.md)  
+##### 202407/20240709_01.md   [《DuckDB-NSQL 自然语言TO SQL开源项目》](202407/20240709_01.md)  
 ##### 202407/20240706_01.md   [《解决 macOS 通过隔空投送拷贝的脚本无法执行? bad interpreter: Operation not permitted》](202407/20240706_01.md)  
 ##### 202407/20240705_03.md   [《PostgreSQL 18 preview - Support "Right Semi Join" plan shapes》](202407/20240705_03.md)  
 ##### 202407/20240705_02.md   [《PostgreSQL 18 preview - Add memory/disk usage for Material nodes in EXPLAIN》](202407/20240705_02.md)  

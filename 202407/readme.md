@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20240713_09.md   [《PostgreSQL 18 preview - tuplestore.c使用generation.c memory context, 物化节点内存使用率降低,性能提升22%》](20240713_09.md)  
+##### 20240713_08.md   [《PostgreSQL 18 preview - pg_upgrade使用CREATE DATABASE ... STRATEGY = FILE_COPY提升大版本升级过程中create database性能》](20240713_08.md)  
+##### 20240713_07.md   [《PostgreSQL 18 preview - Teach planner how to estimate rows for timestamp generate_series》](20240713_07.md)  
+##### 20240713_06.md   [《PostgreSQL 18 preview - EXPLAIN ANALYZE 展示 Parallel Bitmap Heap Scan worker stats 信息》](20240713_06.md)  
+##### 20240713_05.md   [《PostgreSQL 18 preview - Pluggable cumulative statistics》](20240713_05.md)  
+##### 20240713_04.md   [《PostgreSQL 18 preview - numeric 类型乘法算法性能优化》](20240713_04.md)  
+##### 20240713_03.md   [《PostgreSQL 18 preview - 新增角色pg_signal_autovacuum_worker, 可以向autovacuum worker进程发出cancel or terminate信号》](20240713_03.md)  
+##### 20240713_02.md   [《PostgreSQL 18 preview - pg_get_acl() 支持sub-OID, 如列级别权限检测》](20240713_02.md)  
+##### 20240713_01.md   [《PostgreSQL 18 preview - 并行 nestloop join 优先考虑 物化最廉价的inner path》](20240713_01.md)  
 ##### 20240709_02.md   [《德说-第284期, 个人如何利用复利思维》](20240709_02.md)  
 ##### 20240709_01.md   [《DuckDB-NSQL 自然语言TO SQL开源项目》](20240709_01.md)  
 ##### 20240706_01.md   [《解决 macOS 通过隔空投送拷贝的脚本无法执行? bad interpreter: Operation not permitted》](20240706_01.md)  

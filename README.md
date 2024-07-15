@@ -98,6 +98,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202407/20240715_01.md   [《PostgreSQL白嫖DuckDB实现湖仓一体功能》](202407/20240715_01.md)  
 ##### 202407/20240713_09.md   [《PostgreSQL 18 preview - tuplestore.c使用generation.c memory context, 物化节点内存使用率降低,性能提升22%》](202407/20240713_09.md)  
 ##### 202407/20240713_08.md   [《PostgreSQL 18 preview - pg_upgrade使用CREATE DATABASE ... STRATEGY = FILE_COPY提升大版本升级过程中create database性能》](202407/20240713_08.md)  
 ##### 202407/20240713_07.md   [《PostgreSQL 18 preview - Teach planner how to estimate rows for timestamp generate_series》](202407/20240713_07.md)  
@@ -377,7 +378,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202311/20231105_03.md   [《chrome|firefox disable DASH 让youtube支持持续无限缓冲视频》](202311/20231105_03.md)  
 ##### 202311/20231105_02.md   [《OpenWRT|lede|asuswrt|merlin|koolshare|koolcenter|软路由 科普文》](202311/20231105_02.md)  
 ##### 202311/20231105_01.md   [《解决macos,linux 终端复制粘贴后前后会多出`0~`和`~1`的问题? 终端无法复制的问题?》](202311/20231105_01.md)  
-##### 202311/20231104_01.md   [《德说-第265期, 掌握超级信息检索技术, 产生信息差 - 普通人变强的唯一外挂 | 全套宝藏实操秘技》](202311/20231104_01.md)  
+##### 202311/20231104_01.md   [《德说-第265期, 掌握超级信息检索/搜索技术, 产生信息差 - 普通人变强的唯一外挂 | 全套宝藏实操秘技》](202311/20231104_01.md)  
 ----  
 ##### 202310/20231031_01.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 3.1 PostgreSQL社区版本必学知识 - 覆盖知识点概览》](202310/20231031_01.md)  
 ##### 202310/20231030_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 2 准备》](202310/20231030_04.md)  

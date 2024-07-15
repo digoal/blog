@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240715_01.md   [《PostgreSQL白嫖DuckDB实现湖仓一体功能》](20240715_01.md)  
 ##### 20240713_09.md   [《PostgreSQL 18 preview - tuplestore.c使用generation.c memory context, 物化节点内存使用率降低,性能提升22%》](20240713_09.md)  
 ##### 20240713_08.md   [《PostgreSQL 18 preview - pg_upgrade使用CREATE DATABASE ... STRATEGY = FILE_COPY提升大版本升级过程中create database性能》](20240713_08.md)  
 ##### 20240713_07.md   [《PostgreSQL 18 preview - Teach planner how to estimate rows for timestamp generate_series》](20240713_07.md)  

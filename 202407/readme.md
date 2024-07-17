@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20240717_02.md   [《DuckDB官方推出"社区扩展插件市场", 未来可期》](20240717_02.md)  
+##### 20240717_01.md   [《DuckDB高效内存管理: 流式执行 , 临时文件 , 缓冲区管理》](20240717_01.md)  
 ##### 20240715_01.md   [《PostgreSQL白嫖DuckDB实现湖仓一体功能》](20240715_01.md)  
 ##### 20240713_09.md   [《PostgreSQL 18 preview - tuplestore.c使用generation.c memory context, 物化节点内存使用率降低,性能提升22%》](20240713_09.md)  
 ##### 20240713_08.md   [《PostgreSQL 18 preview - pg_upgrade使用CREATE DATABASE ... STRATEGY = FILE_COPY提升大版本升级过程中create database性能》](20240713_08.md)  

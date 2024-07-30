@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240730_01.md   [《AI大模型+全文检索+tf-idf+向量数据库+我的文章 系列之7 - 开源项目postgres_finetuning_kb, 如何生成 “微调(fine-tuning)大语言模型(LLM)” 的问题素材?》](20240730_01.md)  
 ##### 20240729_01.md   [《PostgreSQL 18 preview - Reduce memory used by try_partitionwise_join》](20240729_01.md)  
 ##### 20240727_01.md   [《编程效果不错! 22B大模型Codestral,擅长代码生成,python表现最好》](20240727_01.md)  
 ##### 20240726_01.md   [《德说-第285期, DBA岗位正遭遇降维攻击, 该如何反击?》](20240726_01.md)  

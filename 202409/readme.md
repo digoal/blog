@@ -2,4 +2,6 @@
   
 ### 文章列表  
 ----  
+##### 20240905_01.md   [《如何对高维向量进行可视化: T-SNE降维》](20240905_01.md)  
+##### 20240904_01.md   [《PostgreSQL 18 preview - 逻辑订阅冲突统计 Collect statistics about conflicts in logical replication》](20240904_01.md)  
 ##### 20240902_01.md   [《PostgreSQL 18 preview - VACUUM FULL / CLUSTER CONCURRENTLY》](20240902_01.md)  

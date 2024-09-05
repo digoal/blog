@@ -98,6 +98,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 所有文档如下  
 ----  
+##### 202409/20240905_01.md   [《如何对高维向量进行可视化: T-SNE降维》](202409/20240905_01.md)  
+##### 202409/20240904_01.md   [《PostgreSQL 18 preview - 逻辑订阅冲突统计 Collect statistics about conflicts in logical replication》](202409/20240904_01.md)  
 ##### 202409/20240902_01.md   [《PostgreSQL 18 preview - VACUUM FULL / CLUSTER CONCURRENTLY》](202409/20240902_01.md)  
 ----  
 ##### 202408/20240830_02.md   [《如何去除向量数据库的重复相似内容》](202408/20240830_02.md)  

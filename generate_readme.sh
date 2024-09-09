@@ -158,7 +158,7 @@ do
     POLARDBYUNDASHI=`grep "e0495c413bedacabb75ff1e880be465a" $file|grep -c "e0495c413bedacabb75ff1e880be465a"`
     if [ $POLARDBYUNDASHI -ne 1 ]; then
       echo "  " >> ./$file
-      echo "#### [购买PolarDB云服务折扣活动进行中, 55元起](https://www.aliyun.com/activity/new/polardb-yunparter?userCode=bsb3t4al \"e0495c413bedacabb75ff1e880be465a\")" >> ./$file
+      echo "#### [PolarDB 安可版](https://www.aliyun.com/activity/database/polardb-v2 \"e0495c413bedacabb75ff1e880be465a\")" >> ./$file
       echo "  " >> ./$file
     fi
 ##

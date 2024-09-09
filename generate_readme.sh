@@ -155,12 +155,12 @@ do
       echo "  " >> ./${file}
     fi
 ## 
-    POLARDBYUNDASHI=`grep "e0495c413bedacabb75ff1e880be465a" $file|grep -c "e0495c413bedacabb75ff1e880be465a"`
-    if [ $POLARDBYUNDASHI -ne 1 ]; then
-      echo "  " >> ./$file
-      echo "#### [PolarDB 安可版](https://www.aliyun.com/activity/database/polardb-v2 \"e0495c413bedacabb75ff1e880be465a\")" >> ./$file
-      echo "  " >> ./$file
-    fi
+###    POLARDBYUNDASHI=`grep "e0495c413bedacabb75ff1e880be465a" $file|grep -c "e0495c413bedacabb75ff1e880be465a"`
+###    if [ $POLARDBYUNDASHI -ne 1 ]; then
+###      echo "  " >> ./$file
+###      echo "#### [PolarDB 安可版](https://www.aliyun.com/activity/database/polardb-v2 \"e0495c413bedacabb75ff1e880be465a\")" >> ./$file
+###      echo "  " >> ./$file
+###    fi
 ##
     ALIPGURL=`grep "40cff096e9ed7122c512b35d8561d9c8" ${file}|grep -c "40cff096e9ed7122c512b35d8561d9c8"`
     if [ $ALIPGURL -ne 1 ]; then

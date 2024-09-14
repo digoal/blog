@@ -37,6 +37,7 @@ echo "15、[《2023-PostgreSQL|PolarDB 永久免费实验环境》](https://deve
 echo "16、[《2024-开源PolarDB|PostgreSQL 应用开发者&DBA 公开课》](202310/20231030_02.md)     "  >> ./README.md    
 echo "17、[《2023-PostgreSQL Docker镜像学习环境 ARM64版, 已集成热门插件和工具》](202308/20230814_02.md)     "  >> ./README.md    
 echo "18、[《2023-PostgreSQL Docker镜像学习环境 AMD64版, 已集成热门插件和工具》](202307/20230710_03.md)     "  >> ./README.md    
+echo "19、[《2024-应用开发者 数据库筑基课》](202409/20240914_01.md)     "  >> ./README.md    
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md

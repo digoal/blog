@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20240915_01.md   [《PostgreSQL深耕中国的技术洞察 PPT》](20240915_01.md)  
 ##### 20240914_04.md   [《推荐一本开源电子书 深度学习, Deep Learning Book Chinese Translation》](20240914_04.md)  
 ##### 20240914_03.md   [《LLMs 在“分类、总结、个性化、结果质量评估”等4个场景的 提示(Prompting)技巧》](20240914_03.md)  
 ##### 20240914_02.md   [《如何成为一名PostgreSQL code reviewer》](20240914_02.md)  

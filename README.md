@@ -99,6 +99,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202409/20240918_04.md   [《Elasticsearch vs Paradedb pg_search - RAG绝配: PostgreSQL 混合搜索插件(全文检索+语义(向量)检索)》](202409/20240918_04.md)  
+##### 202409/20240918_03.md   [《PostgreSQL 又一 DuckDB 插件: pg_analytics 让PG支持查询Apache Iceberg》](202409/20240918_03.md)  
+##### 202409/20240918_02.md   [《PostgreSQL 18 preview - primary key, unique 世俗约束 (gist 实现 without overlaps)》](202409/20240918_02.md)  
+##### 202409/20240918_01.md   [《PostgreSQL 18 preview - pg_upgrade 大版本升级工具支持并行框架》](202409/20240918_01.md)  
 ##### 202409/20240915_02.md   [《GPT-o1的开源替代品: reflection》](202409/20240915_02.md)  
 ##### 202409/20240915_01.md   [《PostgreSQL深耕中国的技术洞察 PPT》](202409/20240915_01.md)  
 ##### 202409/20240914_04.md   [《推荐一本开源电子书 深度学习, Deep Learning Book Chinese Translation》](202409/20240914_04.md)  

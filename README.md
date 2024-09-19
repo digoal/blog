@@ -99,7 +99,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
-##### 202409/20240919_01.md   [《Mistral Small 22B 开源LLM 升级到 v24.09》](202409/20240919_01.md)  
+##### 202409/20240919_02.md   [《数据库筑基课 - heap 表组织结构》](202409/20240919_02.md)  
+##### 202409/20240919_01.md   [《22B 开源LLM: Mistral Small 升级到 v24.09》](202409/20240919_01.md)  
 ##### 202409/20240918_04.md   [《Elasticsearch vs Paradedb pg_search - RAG绝配: PostgreSQL 混合搜索插件(全文检索+语义(向量)检索)》](202409/20240918_04.md)  
 ##### 202409/20240918_03.md   [《PostgreSQL 又一 DuckDB 插件: pg_analytics 让PG支持查询Apache Iceberg》](202409/20240918_03.md)  
 ##### 202409/20240918_02.md   [《PostgreSQL 18 preview - primary key, unique 世俗约束 (gist 实现 without overlaps)》](202409/20240918_02.md)  

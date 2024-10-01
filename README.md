@@ -99,6 +99,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202410/20241001_01.md   [《德说-第292期, 国测是静态的, 产品是动态发展的》](202410/20241001_01.md)  
+----  
 ##### 202409/20240924_01.md   [《PostgreSQL 18 preview - 增加fast-path lock slots, 提升访问多对象的高并发OLTP业务性能》](202409/20240924_01.md)  
 ##### 202409/20240923_01.md   [《数据库筑基课 - 行列混存之 zedstore 表组织结构》](202409/20240923_01.md)  
 ##### 202409/20240921_01.md   [《德说-第291期, 儆醒》](202409/20240921_01.md)  
@@ -173,7 +175,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202407/20240713_01.md   [《PostgreSQL 18 preview - 并行 nestloop join 优先考虑 物化最廉价的inner path》](202407/20240713_01.md)  
 ##### 202407/20240709_02.md   [《德说-第284期, 个人如何利用复利思维》](202407/20240709_02.md)  
 ##### 202407/20240709_01.md   [《DuckDB-NSQL 自然语言TO SQL开源项目》](202407/20240709_01.md)  
-##### 202407/20240706_01.md   [《解决 macOS 通过隔空投送拷贝的脚本无法执行? bad interpreter: Operation not permitted》](202407/20240706_01.md)  
+##### 202407/20240706_01.md   [《解决 macOS 通过隔空投送拷贝的脚本无法执行? 文件夹/文件带有\@属性? bad interpreter: Operation not permitted》](202407/20240706_01.md)  
 ##### 202407/20240705_03.md   [《PostgreSQL 18 preview - Support "Right Semi Join" plan shapes》](202407/20240705_03.md)  
 ##### 202407/20240705_02.md   [《PostgreSQL 18 preview - Add memory/disk usage for Material nodes in EXPLAIN》](202407/20240705_02.md)  
 ##### 202407/20240705_01.md   [《Github 最火的开源项目》](202407/20240705_01.md)  
@@ -332,11 +334,11 @@ digoal's|PostgreSQL|文章|归类
 ##### 202401/20240131_02.md   [《多模融合查询: 文本(分词匹配、模糊匹配、字面相似、rank算法、rank排序) + AI(语义向量相似、其他相似) + 空间(范围、距离排序) + 数组标签(包含、相交、不包含、相似性) + 标量过滤(范围、等值、不等) + 图》](202401/20240131_02.md)  
 ##### 202401/20240131_01.md   [《alien 转换 rpm TO deb 安装包》](202401/20240131_01.md)  
 ##### 202401/20240130_05.md   [《rust cargo编译内存不足 优化方法》](202401/20240130_05.md)  
-##### 202401/20240130_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.9 PolarDB开源版本必学特性 - 玩转PolarDB 开源社区》](202401/20240130_04.md)  
+##### 202401/20240130_04.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.9 PolarDB开源版本必学特性 - 玩转 PolarDB 开源社区》](202401/20240130_04.md)  
 ##### 202401/20240130_03.md   [《PostgreSQL zero-ETL 超融合计算 插件 pg_analytics》](202401/20240130_03.md)  
 ##### 202401/20240130_02.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.8 PolarDB开源版本必学特性 - PolarDB 生态》](202401/20240130_02.md)  
 ##### 202401/20240130_01.md   [《PostgreSQL 17 preview - Add EXPLAIN (MEMORY) to report planner memory consumption》](202401/20240130_01.md)  
-##### 202401/20240129_01.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.7 PolarDB开源版本必学特性 - PolarDB 应用实践实验》](202401/20240129_01.md)  
+##### 202401/20240129_01.md   [《开源PolarDB|PostgreSQL 应用开发者&DBA 公开课 - 5.7 PolarDB开源版本必学特性 - PolarDB 应用实践与实验》](202401/20240129_01.md)  
 ##### 202401/20240128_02.md   [《德说-第275期, 不可言说的, 保持沉默.》](202401/20240128_02.md)  
 ##### 202401/20240128_01.md   [《德说-第274期, 杠杆》](202401/20240128_01.md)  
 ##### 202401/20240127_01.md   [《Memoize: nestloop join 优化, inner table's `joinkey&value` hash and stored into memory》](202401/20240127_01.md)  

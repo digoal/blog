@@ -99,6 +99,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202410/20241008_05.md   [《PostgreSQL 18 preview - COPY 最多可跳过的错误行数(REJECT_LIMIT N)》](202410/20241008_05.md)  
+##### 202410/20241008_04.md   [《PolarDB数据库创新设计国赛 - 初赛提交作品指南》](202410/20241008_04.md)  
+##### 202410/20241008_03.md   [《PostgreSQL 18 preview - COPY支持log_verbosity = silent对跳过的错误行保持静默; file_fdw options支持on_error 及 log_verbosity》](202410/20241008_03.md)  
+##### 202410/20241008_02.md   [《PostgreSQL 18 preview - pg_stat_checkpointer.num_done 统计实际完成的检查点次数》](202410/20241008_02.md)  
+##### 202410/20241008_01.md   [《PostgreSQL 18 preview - pg社区这个patch有点不理性! 不解决问题, 解决提问题的人. - Remove support for unlogged on partitioned tables》](202410/20241008_01.md)  
 ##### 202410/20241001_01.md   [《德说-第292期, 国测是静态的, 产品是动态发展的》](202410/20241001_01.md)  
 ----  
 ##### 202409/20240924_01.md   [《PostgreSQL 18 preview - 增加fast-path lock slots, 提升访问多对象的高并发OLTP业务性能》](202409/20240924_01.md)  

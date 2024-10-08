@@ -99,6 +99,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202410/20241008_06.md   [《德说-第293期, 推荐几部纪录片》](202410/20241008_06.md)  
 ##### 202410/20241008_05.md   [《PostgreSQL 18 preview - COPY 最多可跳过的错误行数(REJECT_LIMIT N)》](202410/20241008_05.md)  
 ##### 202410/20241008_04.md   [《PolarDB数据库创新设计国赛 - 初赛提交作品指南》](202410/20241008_04.md)  
 ##### 202410/20241008_03.md   [《PostgreSQL 18 preview - COPY支持log_verbosity = silent对跳过的错误行保持静默; file_fdw options支持on_error 及 log_verbosity》](202410/20241008_03.md)  

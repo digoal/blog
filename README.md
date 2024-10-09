@@ -99,6 +99,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202410/20241009_04.md   [《PostgreSQL 18 preview - Allow pushdown of HAVING clauses with grouping sets》](202410/20241009_04.md)  
+##### 202410/20241009_03.md   [《PostgreSQL 18 preview - mergejoins 支持 incremental sort》](202410/20241009_03.md)  
+##### 202410/20241009_02.md   [《在shell中如何实现并行和并发度控制(队列)》](202410/20241009_02.md)  
+##### 202410/20241009_01.md   [《PostgreSQL 18 preview - pg_stat_statements: Add columns to track parallel worker activity》](202410/20241009_01.md)  
 ##### 202410/20241008_06.md   [《德说-第293期, 推荐几部纪录片》](202410/20241008_06.md)  
 ##### 202410/20241008_05.md   [《PostgreSQL 18 preview - COPY 最多可跳过的错误行数(REJECT_LIMIT N)》](202410/20241008_05.md)  
 ##### 202410/20241008_04.md   [《PolarDB数据库创新设计国赛 - 初赛提交作品指南》](202410/20241008_04.md)  

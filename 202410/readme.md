@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20241011_02.md   [《神器, 在Linux/Windows中跑macOS虚拟机》](20241011_02.md)  
+##### 20241011_01.md   [《性能大赛附分算法例子》](20241011_01.md)  
 ##### 20241009_04.md   [《PostgreSQL 18 preview - Allow pushdown of HAVING clauses with grouping sets》](20241009_04.md)  
 ##### 20241009_03.md   [《PostgreSQL 18 preview - mergejoins 支持 incremental sort》](20241009_03.md)  
 ##### 20241009_02.md   [《在shell中如何实现并行和并发度控制(队列)》](20241009_02.md)  

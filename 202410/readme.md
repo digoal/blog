@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20241012_03.md   [《屌炸天,PG要干掉Oracle引以为傲的内存表IMCS了》](20241012_03.md)  
+##### 20241012_02.md   [《PostgreSQL 18 preview - PG 18支持重置(pg_clear_relation_stats)和设置(pg_set_relation_stats)指定对象的统计信息》](20241012_02.md)  
+##### 20241012_01.md   [《PostgreSQL 18 preview - pg_ls_summariesdir() 查询 pg_wal/summaries目录(wal 倒排索引)》](20241012_01.md)  
 ##### 20241011_02.md   [《神器, 在Linux/Windows中跑macOS虚拟机》](20241011_02.md)  
 ##### 20241011_01.md   [《性能大赛附分算法例子》](20241011_01.md)  
 ##### 20241009_04.md   [《PostgreSQL 18 preview - Allow pushdown of HAVING clauses with grouping sets》](20241009_04.md)  

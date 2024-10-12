@@ -99,6 +99,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202410/20241012_03.md   [《屌炸天,PG要干掉Oracle引以为傲的内存表IMCS了》](202410/20241012_03.md)  
+##### 202410/20241012_02.md   [《PostgreSQL 18 preview - PG 18支持重置(pg_clear_relation_stats)和设置(pg_set_relation_stats)指定对象的统计信息》](202410/20241012_02.md)  
+##### 202410/20241012_01.md   [《PostgreSQL 18 preview - pg_ls_summariesdir() 查询 pg_wal/summaries目录(wal 倒排索引)》](202410/20241012_01.md)  
 ##### 202410/20241011_02.md   [《神器, 在Linux/Windows中跑macOS虚拟机》](202410/20241011_02.md)  
 ##### 202410/20241011_01.md   [《性能大赛附分算法例子》](202410/20241011_01.md)  
 ##### 202410/20241009_04.md   [《PostgreSQL 18 preview - Allow pushdown of HAVING clauses with grouping sets》](202410/20241009_04.md)  
@@ -810,7 +813,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202212/20221210_02.md   [《德说-第186期, 从 “黄帝内经-移精变气论” 到 “面子,里子,求存,求真”》](202212/20221210_02.md)  
 ##### 202212/20221210_01.md   [《MacBook Pro 无头骑士二手淘记 - 安全下车》](202212/20221210_01.md)  
 ##### 202212/20221209_03.md   [《PostgreSQL 1000 个不错的extension 插件》](202212/20221209_03.md)  
-##### 202212/20221209_02.md   [《PolarDB 开源版通过 duckdb_fdw 支持 parquet 列存数据文件以及高效OLAP》](202212/20221209_02.md)  
+##### 202212/20221209_02.md   [《PolarDB 开源版通过 duckdb_fdw 支持 parquet 列存数据文件以及高效OLAP / TPCH》](202212/20221209_02.md)  
 ##### 202212/20221209_01.md   [《PolarDB 开源版通过pg_similarity实现17种文本相似搜索 - token归一切分, 根据文本相似度检索相似文本.》](202212/20221209_01.md)  
 ##### 202212/20221208_03.md   [《PolarDB 开源版通过pg_rational插件支持Stern-Brocot trees , 实现高效自定义顺序和调整顺序需求》](202212/20221208_03.md)  
 ##### 202212/20221208_02.md   [《PolarDB 开源版通过roaringbitmap支持高效用户画像等标签操作》](202212/20221208_02.md)  

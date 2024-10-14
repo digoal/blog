@@ -99,6 +99,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202410/20241014_01.md   [《spacex(隔壁老王)成功了, 你欢呼个啥?》](202410/20241014_01.md)  
 ##### 202410/20241012_03.md   [《屌炸天,PG要干掉Oracle引以为傲的内存表IMCS了》](202410/20241012_03.md)  
 ##### 202410/20241012_02.md   [《PostgreSQL 18 preview - PG 18支持重置(pg_clear_relation_stats)和设置(pg_set_relation_stats)指定对象的统计信息》](202410/20241012_02.md)  
 ##### 202410/20241012_01.md   [《PostgreSQL 18 preview - pg_ls_summariesdir() 查询 pg_wal/summaries目录(wal 倒排索引)》](202410/20241012_01.md)  

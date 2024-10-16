@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20241016_01.md   [《PostgreSQL 18 preview - 新增插件: pglogicalinspect 内视 logical decoding components 信息》](20241016_01.md)  
 ##### 20241015_01.md   [《数据库筑基课 - 列存之 Parquet》](20241015_01.md)  
 ##### 20241014_01.md   [《spacex(隔壁老王)成功了, 你欢呼个啥?》](20241014_01.md)  
 ##### 20241012_03.md   [《屌炸天,PG要干掉Oracle引以为傲的内存表IMCS了》](20241012_03.md)  

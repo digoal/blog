@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20241022_01.md   [《用“大参数模型”和“特定领域内容”fine-tuning提升“小参数模型的RAG性能”》](20241022_01.md)  
 ##### 20241016_01.md   [《PostgreSQL 18 preview - 新增插件: pglogicalinspect 内视 logical decoding components 信息》](20241016_01.md)  
 ##### 20241015_01.md   [《数据库筑基课 - 列存之 Parquet》](20241015_01.md)  
 ##### 20241014_01.md   [《spacex(隔壁老王)成功了, 你欢呼个啥?》](20241014_01.md)  

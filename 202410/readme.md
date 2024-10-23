@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20241023_02.md   [《最牛的文生图项目 Stable Diffusion 3.5 开源》](20241023_02.md)  
+##### 20241023_01.md   [《PostgreSQL 18 preview - PG 18支持重置(pg_clear_attribute_stats)和设置(pg_set_attribute_stats)指定对象的列级统计信息》](20241023_01.md)  
 ##### 20241022_01.md   [《用“大参数模型”和“特定领域内容”fine-tuning提升“小参数模型的RAG性能”》](20241022_01.md)  
 ##### 20241016_01.md   [《PostgreSQL 18 preview - 新增插件: pglogicalinspect 内视 logical decoding components 信息》](20241016_01.md)  
 ##### 20241015_01.md   [《数据库筑基课 - 列存之 Parquet》](20241015_01.md)  

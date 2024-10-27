@@ -99,6 +99,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202410/20241026_02.md   [《PostgreSQL 18 preview - 提升 GetLockStatusData 效率, 优化高并发小事务性能》](202410/20241026_02.md)  
+##### 202410/20241026_01.md   [《PostgreSQL 18 preview - 支持统计信息导出导入, 将来用pg_upgrade大版本升级后不需要analyze了》](202410/20241026_01.md)  
 ##### 202410/20241024_01.md   [《数据库筑基课 - cluster 表》](202410/20241024_01.md)  
 ##### 202410/20241023_02.md   [《最牛的文生图项目 Stable Diffusion 3.5 开源》](202410/20241023_02.md)  
 ##### 202410/20241023_01.md   [《PostgreSQL 18 preview - PG 18支持重置(pg_clear_attribute_stats)和设置(pg_set_attribute_stats)指定对象的列级统计信息》](202410/20241023_01.md)  

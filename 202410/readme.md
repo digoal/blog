@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20241028_03.md   [《PostgreSQL 18 preview - Set query ID for inner queries of CREATE TABLE AS and DECLARE》](20241028_03.md)  
+##### 20241028_02.md   [《PostgreSQL 18 preview - 提升大事务逻辑复制性能》](20241028_02.md)  
+##### 20241028_01.md   [《德说-第294期, 国产数据库厂商抓狂的痛点》](20241028_01.md)  
 ##### 20241026_02.md   [《PostgreSQL 18 preview - 提升 GetLockStatusData 效率, 优化高并发小事务性能》](20241026_02.md)  
 ##### 20241026_01.md   [《PostgreSQL 18 preview - 支持统计信息导出导入, 将来用pg_upgrade大版本升级后不需要analyze了》](20241026_01.md)  
 ##### 20241024_01.md   [《数据库筑基课 - cluster 表》](20241024_01.md)  

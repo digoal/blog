@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20241031_01.md   [《PostgreSQL 数据湖架构,列存储新贵 - pg_mooncake》](20241031_01.md)  
 ##### 20241028_03.md   [《PostgreSQL 18 preview - Set query ID for inner queries of CREATE TABLE AS and DECLARE》](20241028_03.md)  
 ##### 20241028_02.md   [《PostgreSQL 18 preview - 提升大事务逻辑复制性能》](20241028_02.md)  
 ##### 20241028_01.md   [《德说-第294期, 国产数据库厂商抓狂的痛点》](20241028_01.md)  

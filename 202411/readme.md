@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20241115_03.md   [《PostgreSQL SaaS业务DBaaS设计 - schema与database的优劣 - schema如何解决隔离问题?》](20241115_03.md)  
 ##### 20241115_02.md   [《如何使用stable diffusion在Apple Silicon芯片的Mac上画图（GPU加速）- 文生图text-to-image》](20241115_02.md)  
 ##### 20241115_01.md   [《qwen2.5-coder真牛~~用它打PolarDB国赛劲劲的》](20241115_01.md)  
 ##### 20241114_01.md   [《pgvector发布v0.8.0, 亮点: 迭代式索引扫描方法解决order by & filter步调不一致引起的性能问题》](20241114_01.md)  

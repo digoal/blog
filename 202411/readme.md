@@ -2,11 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20241120_02.md   [《千万别学国产数据库!》](20241120_02.md)  
+##### 20241120_01.md   [《huggingface 镜像网站、HF_ENDPOINT的使用, 解决墙的问题》](20241120_01.md)  
 ##### 20241117_01.md   [《caffeinate , 防止macOS锁屏后断网、休眠磁盘、关闭显示器等》](20241117_01.md)  
 ##### 20241116_02.md   [《用privoxy配置http proxy代理, 将http请求转发给socks5服务》](20241116_02.md)  
 ##### 20241116_01.md   [《用tcpdump抓包了解程序到底在访问什么URL, 科学上网/翻墙场景》](20241116_01.md)  
 ##### 20241115_03.md   [《PostgreSQL SaaS业务DBaaS设计 - schema与database的优劣 - schema如何解决隔离问题?》](20241115_03.md)  
-##### 20241115_02.md   [《DiffusionBee/ComfyUI/Diffusers 如何使用stable diffusion在Apple Silicon芯片的Mac上画图（GPU加速）- 文生图text-to-image》](20241115_02.md)  
+##### 20241115_02.md   [《AI生成图片: DiffusionBee/ComfyUI/Diffusers 如何使用stable diffusion在Apple Silicon芯片的Mac上画图（GPU加速）- 文生图text-to-image》](20241115_02.md)  
 ##### 20241115_01.md   [《qwen2.5-coder真牛~~用它打PolarDB国赛劲劲的》](20241115_01.md)  
 ##### 20241114_01.md   [《pgvector发布v0.8.0, 亮点: 迭代式索引扫描方法解决order by & filter步调不一致引起的性能问题》](20241114_01.md)  
 ##### 20241113_01.md   [《Oracle 深陷困境, 对手不讲武德》](20241113_01.md)  

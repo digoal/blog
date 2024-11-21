@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20241121_02.md   [《openai+http插件让PostgreSQL快捷使用openai/自建openai服务》](20241121_02.md)  
+##### 20241121_01.md   [《PostgreSQL 18 preview - file_fdw 最多可跳过的错误行数(REJECT_LIMIT N)》](20241121_01.md)  
 ##### 20241120_02.md   [《千万别学国产数据库!》](20241120_02.md)  
 ##### 20241120_01.md   [《huggingface 镜像网站、HF_ENDPOINT的使用, 解决墙的问题》](20241120_01.md)  
 ##### 20241117_01.md   [《caffeinate , 防止macOS锁屏后断网、休眠磁盘、关闭显示器等》](20241117_01.md)  

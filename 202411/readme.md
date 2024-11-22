@@ -2,13 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20241122_01.md   [《数据库筑基课 - lsm-tree》](20241122_01.md)  
 ##### 20241121_02.md   [《openai+http插件让PostgreSQL快捷使用openai/自建openai服务》](20241121_02.md)  
 ##### 20241121_01.md   [《PostgreSQL 18 preview - file_fdw 最多可跳过的错误行数(REJECT_LIMIT N)》](20241121_01.md)  
 ##### 20241120_02.md   [《千万别学国产数据库!》](20241120_02.md)  
 ##### 20241120_01.md   [《huggingface 镜像网站、HF_ENDPOINT的使用, 解决墙的问题》](20241120_01.md)  
 ##### 20241117_01.md   [《caffeinate , 防止macOS锁屏后断网、休眠磁盘、关闭显示器等》](20241117_01.md)  
 ##### 20241116_02.md   [《用privoxy配置http proxy代理, 将http请求转发给socks5服务》](20241116_02.md)  
-##### 20241116_01.md   [《用tcpdump抓包了解程序到底在访问什么URL, 科学上网/翻墙场景》](20241116_01.md)  
+##### 20241116_01.md   [《用tcpdump抓包了解程序到底在访问什么URL, 科学上网/翻墙场景 - 搞定DiffusionBee下载文生图模型》](20241116_01.md)  
 ##### 20241115_03.md   [《PostgreSQL SaaS业务DBaaS设计 - schema与database的优劣 - schema如何解决隔离问题?》](20241115_03.md)  
 ##### 20241115_02.md   [《AI生成图片: DiffusionBee/ComfyUI/Diffusers 如何使用stable diffusion在Apple Silicon芯片的Mac上画图（GPU加速）- 文生图text-to-image》](20241115_02.md)  
 ##### 20241115_01.md   [《qwen2.5-coder真牛~~用它打PolarDB国赛劲劲的》](20241115_01.md)  

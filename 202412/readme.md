@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20241211_02.md   [《PostgreSQL 数据传输/数据存储 数据的序列化和反序列化 (serialization/serialization)》](20241211_02.md)  
+##### 20241211_02.md   [《PostgreSQL 数据传输&存储 数据的序列化和反序列化 (serialization/deserialization)》](20241211_02.md)  
 ##### 20241211_01.md   [《德说-第302期, 永远不要站在这些人的对立面》](20241211_01.md)  
 ##### 20241210_01.md   [《PolarDB 100 问 | PolarDB 11 使用 pg_bulkload 插件导入数据报错》](20241210_01.md)  
 ##### 20241209_02.md   [《PolarDB 100 问 | PolarDB 11 编译 pg_bulkload 插件报错》](20241209_02.md)  

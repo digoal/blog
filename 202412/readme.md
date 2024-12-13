@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20241213_04.md   [《DuckDB 图数据库插件 duckpgq》](20241213_04.md)  
+##### 20241213_03.md   [《他山之石可以攻玉 | 向量召回IO性能问题解决之道 - 线性化降维(Hilbert & Z-Order)》](20241213_03.md)  
+##### 20241213_02.md   [《10x+ 提速, BemiDB: 整合 PolarDB PostgreSQL & Iceberg & 对象存储》](20241213_02.md)  
+##### 20241213_01.md   [《把 protobuf 二进制数据存入PolarDB for PostgreSQL 是种什么体验? 来看看这个插件: postgres_protobuf》](20241213_01.md)  
 ##### 20241211_02.md   [《PostgreSQL 数据传输&存储 数据的序列化和反序列化 (serialization/deserialization)》](20241211_02.md)  
 ##### 20241211_01.md   [《德说-第302期, 永远不要站在这些人的对立面》](20241211_01.md)  
 ##### 20241210_01.md   [《PolarDB 100 问 | PolarDB 11 使用 pg_bulkload 插件导入数据报错》](20241210_01.md)  

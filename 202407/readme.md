@@ -32,7 +32,7 @@
 ##### 20240705_03.md   [《PostgreSQL 18 preview - Support "Right Semi Join" plan shapes》](20240705_03.md)  
 ##### 20240705_02.md   [《PostgreSQL 18 preview - Add memory/disk usage for Material nodes in EXPLAIN》](20240705_02.md)  
 ##### 20240705_01.md   [《Github 最火的开源项目》](20240705_01.md)  
-##### 20240704_01.md   [《通过海外服务器配置squid http/https proxy代理, 本地ssh建隧道 端口映射, 使用http/https proxy代理配置拉取docker hub镜像》](20240704_01.md)  
+##### 20240704_01.md   [《通过海外服务器配置squid http/https proxy代理, 本地ssh建隧道 端口映射, 使用http/https proxy代理配置拉取docker hub镜像, 手机youtube app登陆等》](20240704_01.md)  
 ##### 20240701_06.md   [《PostgreSQL 18 preview - 64-bit XID 设计和patch出炉, 真的来了?》](20240701_06.md)  
 ##### 20240701_05.md   [《PostgreSQL 18 preview - pg_log_query_plan() 打印running SQL的执行计划》](20240701_05.md)  
 ##### 20240701_04.md   [《PostgreSQL 18 preview - PostgreSQL pg_stat_activity新增状态authenticating, 可检测拒绝服务DDoS攻击》](20240701_04.md)  

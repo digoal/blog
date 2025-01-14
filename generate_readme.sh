@@ -35,9 +35,10 @@ echo "13、[《2022-每天5分钟,PG聊通透 - 系列1 - 热门问题》](20211
 echo "14、[《2023-PostgreSQL|PolarDB 学习实验手册》](202308/20230822_02.md)     "  >> ./README.md   
 echo "15、[《2023-PostgreSQL|PolarDB 永久免费实验环境》](https://developer.aliyun.com/adc/scenario/f55dbfac77c0467a9d3cd95ff6697a31)     "  >> ./README.md    
 echo "16、[《2024-开源PolarDB|PostgreSQL 应用开发者&DBA 公开课》](202310/20231030_02.md)     "  >> ./README.md    
-echo "17、[《2023-PostgreSQL Docker镜像学习环境 ARM64版, 已集成热门插件和工具》](202308/20230814_02.md)     "  >> ./README.md    
-echo "18、[《2023-PostgreSQL Docker镜像学习环境 AMD64版, 已集成热门插件和工具》](202307/20230710_03.md)     "  >> ./README.md    
-echo "19、[《2024-应用开发者 数据库筑基课》](202409/20240914_01.md)     "  >> ./README.md    
+echo "17、[《2025-穷鬼玩PolarDB RAC一写多读集群 系列文章》](202501/20250114_01.md)     "  >> ./README.md    
+echo "18、[《2023-PostgreSQL Docker镜像学习环境 ARM64版, 已集成热门插件和工具》](202308/20230814_02.md)     "  >> ./README.md    
+echo "19、[《2023-PostgreSQL Docker镜像学习环境 AMD64版, 已集成热门插件和工具》](202307/20230710_03.md)     "  >> ./README.md    
+echo "20、[《2024-应用开发者 数据库筑基课》](202409/20240914_01.md)     "  >> ./README.md    
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md

@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202501/20250117_01.md   [《猛料! 月饼(pgmooncake)进化了》](202501/20250117_01.md)  
 ##### 202501/20250115_03.md   [《A国产数据库PolarDB 能不能跑在 H国产操作系统openEuler里?》](202501/20250115_03.md)  
 ##### 202501/20250115_02.md   [《PostgreSQL 18 preview - backend process IO 统计功能 `pg_stat_get_backend_io($PID)`》](202501/20250115_02.md)  
 ##### 202501/20250115_01.md   [《PostgreSQL 18 preview - 妥协了? check和foreign key 约束要引入假设为真(NOT ENFORCED)了?》](202501/20250115_01.md)  

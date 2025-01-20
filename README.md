@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202501/20250120_01.md   [《PostgreSQL 18 preview - Add OLD/NEW support to RETURNING in DML queries》](202501/20250120_01.md)  
 ##### 202501/20250117_01.md   [《猛料! 月饼(pgmooncake)进化了》](202501/20250117_01.md)  
 ##### 202501/20250115_03.md   [《A国产数据库PolarDB 能不能跑在 H国产操作系统openEuler里?》](202501/20250115_03.md)  
 ##### 202501/20250115_02.md   [《PostgreSQL 18 preview - backend process IO 统计功能 `pg_stat_get_backend_io($PID)`》](202501/20250115_02.md)  
@@ -117,7 +118,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202501/20250102_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | pg_bulkload适配PFS加速批量导入》](202501/20250102_01.md)  
 ----  
 ##### 202412/20241231_03.md   [《别找`Oracle pl/sql`与`PG plpgsql`的存储过程/函数语法转换工具了, 用AI就可以!》](202412/20241231_03.md)  
-##### 202412/20241231_02.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 接入pg_duckdb支持数据湖功能,且OLAP性能数量级提升》](202412/20241231_02.md)  
+##### 202412/20241231_02.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 接入pg_duckdb & pgmooncake支持数据湖功能,且OLAP性能数量级提升》](202412/20241231_02.md)  
 ##### 202412/20241231_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 接入PostGIS插件全功能》](202412/20241231_01.md)  
 ##### 202412/20241230_02.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 接入私有化大模型服务》](202412/20241230_02.md)  
 ##### 202412/20241230_01.md   [《PostgreSQL 18 preview - tuple deformation 优化, OLAP 场景性能提升5-20%》](202412/20241230_01.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250120_01.md   [《PostgreSQL 18 preview - Add OLD/NEW support to RETURNING in DML queries》](20250120_01.md)  
 ##### 20250117_01.md   [《猛料! 月饼(pgmooncake)进化了》](20250117_01.md)  
 ##### 20250115_03.md   [《A国产数据库PolarDB 能不能跑在 H国产操作系统openEuler里?》](20250115_03.md)  
 ##### 20250115_02.md   [《PostgreSQL 18 preview - backend process IO 统计功能 `pg_stat_get_backend_io($PID)`》](20250115_02.md)  

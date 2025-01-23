@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250123_01.md   [《罗马数字长啥样? 数据库to_number, to_char如何将数值与罗马数字进行转换?》](20250123_01.md)  
 ##### 20250121_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 原来PolarDB还有单机版?》](20250121_01.md)  
 ##### 20250120_01.md   [《PostgreSQL 18 preview - Add OLD/NEW support to RETURNING in DML queries》](20250120_01.md)  
 ##### 20250117_01.md   [《猛料! 月饼(pgmooncake)进化了》](20250117_01.md)  

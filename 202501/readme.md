@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250126_02.md   [《微调大模型时 vocab.json 和 tokenizer.json 有什么用? 如何扩充中文词汇表?》](20250126_02.md)  
+##### 20250126_01.md   [《PostgreSQL 18 preview - `CASEFOLD()` 增强式 `LOWER()` , 多字节字符 大小写不敏感》](20250126_01.md)  
 ##### 20250123_01.md   [《罗马数字长啥样? 数据库to_number, to_char如何将数值与罗马数字进行转换?》](20250123_01.md)  
 ##### 20250121_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 原来PolarDB还有单机版?》](20250121_01.md)  
 ##### 20250120_01.md   [《PostgreSQL 18 preview - Add OLD/NEW support to RETURNING in DML queries》](20250120_01.md)  

@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202502/20250206_04.md   [《Markdown内用mermaid代码画图》](202502/20250206_04.md)  
+##### 202502/20250206_03.md   [《DuckDB 1.2.0 发布》](202502/20250206_03.md)  
+##### 202502/20250206_02.md   [《PostgreSQL 18 preview - Add data for WAL in pg_stat_io and backend statistics (pg_stat_get_backend_io)》](202502/20250206_02.md)  
+##### 202502/20250206_01.md   [《PostgreSQL 18 preview - 解决大表的自动垃圾回收频率低问题: autovacuum_vacuum_max_threshold》](202502/20250206_01.md)  
 ##### 202502/20250204_02.md   [《推荐2集圆桌派 - 基因、量子》](202502/20250204_02.md)  
 ##### 202502/20250204_01.md   [《AI 生成PPT绝配啊》](202502/20250204_01.md)  
 ----  

@@ -12,7 +12,7 @@
 ##### 20250115_03.md   [《A国产数据库PolarDB 能不能跑在 H国产操作系统openEuler里?》](20250115_03.md)  
 ##### 20250115_02.md   [《PostgreSQL 18 preview - backend process IO 统计功能 `pg_stat_get_backend_io($PID)`》](20250115_02.md)  
 ##### 20250115_01.md   [《PostgreSQL 18 preview - 妥协了? check和foreign key 约束要引入假设为真(NOT ENFORCED)了?》](20250115_01.md)  
-##### 20250114_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列文章》](20250114_01.md)  
+##### 20250114_01.md   [《PolarDB 进阶教程 - 穷鬼玩PolarDB RAC一写多读集群系列文章》](20250114_01.md)  
 ##### 20250111_01.md   [《PostgreSQL数据库正在执行long query时, 客户端异常断开, 会怎么样?》](20250111_01.md)  
 ##### 20250110_06.md   [《[转载] Part5：评估与测试》](20250110_06.md)  
 ##### 20250110_05.md   [《[转载] Part4: 使用MLX微调LLM》](20250110_05.md)  

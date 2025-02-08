@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20250208_04.md   [《DeepSeek多模态大模型Janus的使用 (文本生成 , 图像生成 , 图像分析)》](20250208_04.md)  
+##### 20250208_03.md   [《从huggingface 下载 safetensors, GGUF转换为ollama本地管理模型》](20250208_03.md)  
+##### 20250208_02.md   [《ollama Modelfile 之 TEMPLATE的详解》](20250208_02.md)  
+##### 20250208_01.md   [《PostgreSQL 18 preview - Virtual generated columns》](20250208_01.md)  
 ##### 20250206_04.md   [《Markdown内用mermaid代码画图》](20250206_04.md)  
 ##### 20250206_03.md   [《DuckDB 1.2.0 发布》](20250206_03.md)  
 ##### 20250206_02.md   [《PostgreSQL 18 preview - Add data for WAL in pg_stat_io and backend statistics (pg_stat_get_backend_io)》](20250206_02.md)  

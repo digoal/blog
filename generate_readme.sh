@@ -39,6 +39,7 @@ echo "17、[《2025-PolarDB 进阶课程, 穷鬼玩PolarDB RAC一写多读集群
 echo "18、[《2023-PostgreSQL Docker镜像学习环境 ARM64版, 已集成热门插件和工具》](202308/20230814_02.md)     "  >> ./README.md    
 echo "19、[《2023-PostgreSQL Docker镜像学习环境 AMD64版, 已集成热门插件和工具》](202307/20230710_03.md)     "  >> ./README.md    
 echo "20、[《2024-数据库筑基课 系列》](202409/20240914_01.md)     "  >> ./README.md    
+echo "21、[《2025-用AI学PolarDB PostgreSQL数据库内核源码 系列课程》](202502/20250218_03.md)     "  >> ./README.md    
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md

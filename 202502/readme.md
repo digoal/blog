@@ -2,7 +2,7 @@
   
 ### 文章列表  
 ----  
-##### 20250222_01.md   [《用macOS apple arm chip使用vLLM, 貌似不如Ollama方便》](20250222_01.md)  
+##### 20250222_01.md   [《用macOS apple arm chip使用vLLM, 不如Ollama方便, 性能有BUG?》](20250222_01.md)  
 ##### 20250221_06.md   [《如何在DuckDB中调用openAI/ollama API接口?》](20250221_06.md)  
 ##### 20250221_05.md   [《如何 3分钟 通过OpenWebUI Ollama 搭建AI chat网站》](20250221_05.md)  
 ##### 20250221_04.md   [《PostgreSQL 18 preview - psql 支持pipeline流水线模式》](20250221_04.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250228_02.md   [《AI论文解读 | Fire-Flyer AI-HPC: 一种用于深度学习的经济高效的软硬件协同设计》](20250228_02.md)  
 ##### 20250228_01.md   [《DeepSeek 开源周看点总结》](20250228_01.md)  
 ##### 20250227_02.md   [《AI辅助 PolarDB内核学习 - 6 解读PolarDB PostgreSQL 15 bootstrap.c》](20250227_02.md)  
 ##### 20250227_01.md   [《AI论文解读 | 神经概率语言模型 - A Neural Probabilistic Language Model》](20250227_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250307_02.md   [《PostgreSQL 18 preview - int和bytea支持互相转换》](20250307_02.md)  
+##### 20250307_01.md   [《AI辅助 PolarDB内核学习 - 11 rewrite (SQL规则重写器)》](20250307_01.md)  
 ##### 20250306_03.md   [《QwQ 32B打平DeepSeek-R1 671B的关键技术: 强化学习(RL)是什么? 它和微调有什么区别?》](20250306_03.md)  
 ##### 20250306_02.md   [《NineData社区版本试用, 平滑将PolarDB PostgreSQL大表转换为分区表》](20250306_02.md)  
 ##### 20250306_01.md   [《PostgreSQL 18 preview - 增强wal receiver进程的WAL写入监控》](20250306_01.md)  

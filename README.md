@@ -101,6 +101,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202503/20250312_02.md   [《PostgreSQL 18 preview - explain 增强 window 函数使用输出信息》](202503/20250312_02.md)  
+##### 202503/20250312_01.md   [《PostgreSQL 18 preview - explain analyze支持index searches统计》](202503/20250312_01.md)  
 ##### 202503/20250311_04.md   [《3分钟上手体验OceanBase》](202503/20250311_04.md)  
 ##### 202503/20250311_03.md   [《PostgreSQL 18 preview - 使用扩展统计信息提高hash join bucket估算准确度》](202503/20250311_03.md)  
 ##### 202503/20250311_02.md   [《PostgreSQL 18 preview - 优化分区表Append节点选择最优执行计划的策略, 引入tuple_fraction》](202503/20250311_02.md)  

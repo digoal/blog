@@ -101,6 +101,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202503/20250313_02.md   [《PostgreSQL 18 preview - 提高默认的 effective_io_concurrency 至 16》](202503/20250313_02.md)  
+##### 202503/20250313_01.md   [《PostgreSQL 18 preview - log_connections 模块化 , 精细记录用户连接阶段信息》](202503/20250313_01.md)  
 ##### 202503/20250312_02.md   [《PostgreSQL 18 preview - explain 增强 window 函数使用输出信息》](202503/20250312_02.md)  
 ##### 202503/20250312_01.md   [《PostgreSQL 18 preview - explain analyze支持index searches统计》](202503/20250312_01.md)  
 ##### 202503/20250311_04.md   [《3分钟上手体验OceanBase》](202503/20250311_04.md)  

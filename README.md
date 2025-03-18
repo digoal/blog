@@ -101,11 +101,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202503/20250318_01.md   [《深入浅出分析 MCP 与 ACP：AI 时代的「连接器」与「协作网」》](202503/20250318_01.md)  
 ##### 202503/20250317_08.md   [《DuckDB 支持 Parquet 布隆过滤器》](202503/20250317_08.md)  
 ##### 202503/20250317_07.md   [《DuckDB UI 开启乔布斯时刻: An Analyzer, A Brain, A Portal》](202503/20250317_07.md)  
 ##### 202503/20250317_06.md   [《PostgreSQL 18 preview - bitmapheapscan 适配 read_stream 接口, 提升位图堆扫描的性能》](202503/20250317_06.md)  
 ##### 202503/20250317_05.md   [《PostgreSQL 18 preview - read_stream 启发式预读量优化, 异步IO准备》](202503/20250317_05.md)  
-##### 202503/20250317_04.md   [《PostgreSQL 18 preview - read_stream 预读逻辑优化, 提示IO性能》](202503/20250317_04.md)  
+##### 202503/20250317_04.md   [《PostgreSQL 18 preview - read_stream 预读逻辑优化, 提升IO性能》](202503/20250317_04.md)  
 ##### 202503/20250317_03.md   [《PostgreSQL 18 preview - 新增GUC参数:log_lock_failure 记录获取锁错误详细日志》](202503/20250317_03.md)  
 ##### 202503/20250317_02.md   [《PostgreSQL 18 preview - 高并发性能优化 之 fast-path lock优化》](202503/20250317_02.md)  
 ##### 202503/20250317_01.md   [《PostgreSQL 18 preview - 泛化索引AM排序接口: PrepareSortSupportFromIndexRel() 函数》](202503/20250317_01.md)  

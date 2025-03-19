@@ -101,6 +101,15 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202503/20250319_09.md   [《DuckDB Iceberg插件增强: 支持访问 Amazon S3 table & SageMaker Lakehouse》](202503/20250319_09.md)  
+##### 202503/20250319_08.md   [《PostgreSQL 18 preview - 新增GUC: extension_control_path 指定插件位置》](202503/20250319_08.md)  
+##### 202503/20250319_07.md   [《PostgreSQL 18 preview - 新增IO合并硬限制: io_max_combine_limit》](202503/20250319_07.md)  
+##### 202503/20250319_06.md   [《PostgreSQL 18 preview - vacuumdb支持跳过已有统计信息对象, 提升pg_upgrade体验》](202503/20250319_06.md)  
+##### 202503/20250319_05.md   [《PostgreSQL 18 preview - 新增 GUC: query_id_squash_values 支持SQL IN查询混淆开关》](202503/20250319_05.md)  
+##### 202503/20250319_04.md   [《PostgreSQL 18 preview - 新增 EXPLAIN 扩展信息钩子》](202503/20250319_04.md)  
+##### 202503/20250319_03.md   [《PostgreSQL 18 preview - 放宽对非 B-tree 索引用于partition keys、matviews的限制》](202503/20250319_03.md)  
+##### 202503/20250319_02.md   [《PostgreSQL 18 preview - 重磅, 刚刚支持异步IO框架》](202503/20250319_02.md)  
+##### 202503/20250319_01.md   [《PostgreSQL 18 preview - pg_combinebackup 支持硬链接(hard link)》](202503/20250319_01.md)  
 ##### 202503/20250318_01.md   [《深入浅出分析 MCP 与 ACP：AI 时代的「连接器」与「协作网」》](202503/20250318_01.md)  
 ##### 202503/20250317_08.md   [《DuckDB 支持 Parquet 布隆过滤器》](202503/20250317_08.md)  
 ##### 202503/20250317_07.md   [《DuckDB UI 开启乔布斯时刻: An Analyzer, A Brain, A Portal》](202503/20250317_07.md)  
@@ -113,9 +122,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 202503/20250314_05.md   [《AI辅助 PolarDB内核学习 - 14 path(路径生成) 之 选择性(clausesel.c)代码》](202503/20250314_05.md)  
 ##### 202503/20250314_04.md   [《AI辅助 PolarDB内核学习 - 13 path (路径生成)代码概览》](202503/20250314_04.md)  
 ##### 202503/20250314_03.md   [《PostgreSQL 18 preview - 改进buffer manager API适配未来read_stream.c 的改进》](202503/20250314_03.md)  
-##### 202503/20250314_02.md   [《德说-第312期, 什么是基础设施? 什么时候用服务OR自建? 为什么DBA会消失? 我的建议是什么?》](202503/20250314_02.md)  
+##### 202503/20250314_02.md   [《德说-第312期, 什么是基础设施? 什么时候用服务OR自建? 为什么DBA会消失? 我对DBA和数据库厂商的建议是什么?》](202503/20250314_02.md)  
 ##### 202503/20250314_01.md   [《PostgreSQL 18 preview - 支持字节流反序列函数 reverse(bytea)》](202503/20250314_01.md)  
-##### 202503/20250313_02.md   [《PostgreSQL 18 preview - 提高默认的 effective_io_concurrency 至 16》](202503/20250313_02.md)  
+##### 202503/20250313_02.md   [《PostgreSQL 18 preview - 提高默认的 effective_io_concurrency , maintenance_io_concurrency 至 16》](202503/20250313_02.md)  
 ##### 202503/20250313_01.md   [《PostgreSQL 18 preview - log_connections 模块化 , 精细记录用户连接阶段信息》](202503/20250313_01.md)  
 ##### 202503/20250312_02.md   [《PostgreSQL 18 preview - explain 增强 window 函数使用输出信息》](202503/20250312_02.md)  
 ##### 202503/20250312_01.md   [《PostgreSQL 18 preview - explain analyze支持index searches统计》](202503/20250312_01.md)  

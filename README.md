@@ -101,6 +101,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202503/20250320_01.md   [《裁员导致AGE开源图数据库项目面临死亡! 我们还能相信企业开源产品吗?》](202503/20250320_01.md)  
 ##### 202503/20250319_09.md   [《DuckDB Iceberg插件增强: 支持访问 Amazon S3 table & SageMaker Lakehouse》](202503/20250319_09.md)  
 ##### 202503/20250319_08.md   [《PostgreSQL 18 preview - 新增GUC: extension_control_path 指定插件位置》](202503/20250319_08.md)  
 ##### 202503/20250319_07.md   [《PostgreSQL 18 preview - 新增IO合并硬限制: io_max_combine_limit》](202503/20250319_07.md)  

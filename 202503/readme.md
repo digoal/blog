@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250321_03.md   [《AI辅助 PolarDB内核学习 - 15 path(路径生成) 之 估算路径成本(costsize.c)代码》](20250321_03.md)  
+##### 20250321_02.md   [《DBA 智能体来了: Xata》](20250321_02.md)  
+##### 20250321_01.md   [《PostgreSQL 18 preview - 新增GUC: vacuum_truncate 控制垃圾回收时是否收缩文件大小(截断表的末尾空页)》](20250321_01.md)  
 ##### 20250320_01.md   [《裁员导致AGE开源图数据库项目面临死亡! 我们还能相信企业开源产品吗?》](20250320_01.md)  
 ##### 20250319_09.md   [《DuckDB Iceberg插件增强: 支持访问 Amazon S3 table & SageMaker Lakehouse》](20250319_09.md)  
 ##### 20250319_08.md   [《PostgreSQL 18 preview - 新增GUC: extension_control_path 指定插件位置》](20250319_08.md)  

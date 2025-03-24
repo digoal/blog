@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20250324_05.md   [《德说-第313期, 下一代DBA必备技能: 开发MCP Server》](20250324_05.md)  
+##### 20250324_04.md   [《DuckDB + delta 版本升级提升数据湖性能》](20250324_04.md)  
+##### 20250324_03.md   [《PostgreSQL 18 preview - 索引启发式扫描 优化 `in` , `= any(array)` 多值匹配性能》](20250324_03.md)  
+##### 20250324_02.md   [《PostgreSQL 18 preview - 订阅数控制参数: max_active_replication_origins》](20250324_02.md)  
+##### 20250324_01.md   [《PostgreSQL 18 preview - 流式IO提升索引垃圾回收效率》](20250324_01.md)  
 ##### 20250321_03.md   [《AI辅助 PolarDB内核学习 - 15 path(路径生成) 之 估算路径成本(costsize.c)代码》](20250321_03.md)  
 ##### 20250321_02.md   [《DBA 智能体来了: Xata》](20250321_02.md)  
 ##### 20250321_01.md   [《PostgreSQL 18 preview - 新增GUC: vacuum_truncate 控制垃圾回收时是否收缩文件大小(截断表的末尾空页)》](20250321_01.md)  

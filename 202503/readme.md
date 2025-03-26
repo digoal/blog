@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250326_02.md   [《两大国产数据库PolarDB & OB通过MCP与AI完美整合》](20250326_02.md)  
+##### 20250326_01.md   [《PostgreSQL 18 preview - pg_upgrade大版本升级支持swap选项(mv data)》](20250326_01.md)  
 ##### 20250325_02.md   [《德说-第314期, AI DBA市场分析, 如何设计一款AI DBA》](20250325_02.md)  
 ##### 20250325_01.md   [《PostgreSQL 18 preview - 打开文件数限制max_files_per_process更新, 为异步IO io_uring做准备》](20250325_01.md)  
 ##### 20250324_05.md   [《德说-第313期, 下一代DBA必备技能: 开发MCP Server》](20250324_05.md)  

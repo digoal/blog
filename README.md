@@ -100,7 +100,14 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
-##### 202503/20250326_02.md   [《两大国产数据库PolarDB & OB通过MCP与AI完美整合》](202503/20250326_02.md)  
+##### 202503/20250327_07.md   [《Cursor 如何接入百炼 dashscope 内的大模型 例如QwQ , Qwen , Deepseek》](202503/20250327_07.md)  
+##### 202503/20250327_06.md   [《AI辅助 PolarDB内核学习 - 16 path(路径生成) 之 等价类(equivclass.c)代码》](202503/20250327_06.md)  
+##### 202503/20250327_05.md   [《德说-第315期, 万物都在用MCP接入AI Agent, 你还在等什么?》](202503/20250327_05.md)  
+##### 202503/20250327_04.md   [《MCP太火了, 新手仅3分钟用Cursor Agent接管2大国产数据库》](202503/20250327_04.md)  
+##### 202503/20250327_03.md   [《PostgreSQL 18 preview - 异步IO支持io_uring, IO性能大幅提升》](202503/20250327_03.md)  
+##### 202503/20250327_02.md   [《PostgreSQL 18 preview - 支持 pg_overexplain 插件, 增加EXPLAIN debug,range_table选项》](202503/20250327_02.md)  
+##### 202503/20250327_01.md   [《PostgreSQL 18 preview - 支持 `gamma()` 和 `lgamma()` 函数》](202503/20250327_01.md)  
+##### 202503/20250326_02.md   [《两大国产数据库PolarDB & OB通过MCP与AI Agent应用整合》](202503/20250326_02.md)  
 ##### 202503/20250326_01.md   [《PostgreSQL 18 preview - pg_upgrade大版本升级支持swap选项(mv data)》](202503/20250326_01.md)  
 ##### 202503/20250325_02.md   [《德说-第314期, AI DBA市场分析, 如何设计一款AI DBA》](202503/20250325_02.md)  
 ##### 202503/20250325_01.md   [《PostgreSQL 18 preview - 打开文件数限制max_files_per_process更新, 为异步IO io_uring做准备》](202503/20250325_01.md)  

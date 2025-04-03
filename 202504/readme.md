@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20250404_01.md   [《3分钟速玩Dify(高度可定制的企业级AI应用开源项目)》](20250404_01.md)  
+##### 20250403_07.md   [《PostgreSQL 18 preview - range类型增加GiST 和 B-树的 `sortsupport` 接口》](20250403_07.md)  
+##### 20250403_06.md   [《PostgreSQL 18 preview - 连接协议兼容性、安全性改进, 支持min/max_protocol_version》](20250403_06.md)  
+##### 20250403_05.md   [《PostgreSQL 18 preview - 连接协议改进, cancel key增加到256字节》](20250403_05.md)  
 ##### 20250403_04.md   [《AI辅助 PolarDB内核学习 - 32 优化器解析树预处理模块(prep) 概览》](20250403_04.md)  
 ##### 20250403_03.md   [《PostgreSQL 18 preview - AIO增强 : 增加监控工具、增强测试能力、清理代码、改进错误诊断》](20250403_03.md)  
 ##### 20250403_02.md   [《PostgreSQL 18 preview - 新增函数array_sort 支持数组元素排序》](20250403_02.md)  

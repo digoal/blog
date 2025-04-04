@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250405_03.md   [《PostgreSQL 18 preview - 支持`copy 物化视图 to`》](20250405_03.md)  
+##### 20250405_02.md   [《PostgreSQL 18 preview - bitmap Heap Scan支持AIO批量读》](20250405_02.md)  
+##### 20250405_01.md   [《PostgreSQL 18 preview - `in (values ())` 支持自动按需转换为 `= any(array)`》](20250405_01.md)  
 ##### 20250404_02.md   [《视频、音频、图片、文章 怎么去重?》](20250404_02.md)  
 ##### 20250404_01.md   [《3分钟速玩Dify(高度可定制的企业级AI应用开源项目)》](20250404_01.md)  
 ##### 20250403_07.md   [《PostgreSQL 18 preview - range类型增加GiST 和 B-树的 `sortsupport` 接口》](20250403_07.md)  

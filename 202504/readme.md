@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20250406_05.md   [《PostgreSQL 18 preview - pgcrypto 新增2个更安全的密码哈希算法》](20250406_05.md)  
+##### 20250406_04.md   [《PostgreSQL 18 preview - pg_dump 导出统计信息功能优化》](20250406_04.md)  
+##### 20250406_03.md   [《PostgreSQL 18 preview - `autoprewarm` `shared buffer`预热插件改用`streaming read I/O`》](20250406_03.md)  
+##### 20250406_02.md   [《PostgreSQL 18 preview - pg_recvlogical 支持创建 failover slot》](20250406_02.md)  
+##### 20250406_01.md   [《PostgreSQL 18 preview - index skip scan 优化》](20250406_01.md)  
 ##### 20250405_03.md   [《PostgreSQL 18 preview - 支持`copy 物化视图 to`》](20250405_03.md)  
 ##### 20250405_02.md   [《PostgreSQL 18 preview - bitmap Heap Scan支持AIO批量读》](20250405_02.md)  
 ##### 20250405_01.md   [《PostgreSQL 18 preview - `in (values ())` 支持自动按需转换为 `= any(array)`》](20250405_01.md)  

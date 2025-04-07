@@ -2,6 +2,17 @@
   
 ### 文章列表  
 ----  
+##### 20250407_11.md   [《14以来最值得期待的版本: PostgreSQL 18》](20250407_11.md)  
+##### 20250407_10.md   [《AI辅助 PolarDB内核学习 - 42 优化器辅助功能模块(util) 核心代码 joininfo.c》](20250407_10.md)  
+##### 20250407_09.md   [《AI辅助 PolarDB内核学习 - 41 优化器辅助功能模块(util) 核心代码 inherit.c》](20250407_09.md)  
+##### 20250407_08.md   [《AI辅助 PolarDB内核学习 - 40 优化器辅助功能模块(util) 核心代码 clauses.c》](20250407_08.md)  
+##### 20250407_07.md   [《AI辅助 PolarDB内核学习 - 39 优化器辅助功能模块(util) 核心代码 appendinfo.c》](20250407_07.md)  
+##### 20250407_06.md   [《AI辅助 PolarDB内核学习 - 38 优化器辅助功能模块(util) 概览》](20250407_06.md)  
+##### 20250407_05.md   [《AI辅助 PolarDB内核学习 - 37 优化器解析树预处理模块(prep) 核心代码 prepunion.c》](20250407_05.md)  
+##### 20250407_04.md   [《AI辅助 PolarDB内核学习 - 36 优化器解析树预处理模块(prep) 核心代码 preptlist.c》](20250407_04.md)  
+##### 20250407_03.md   [《AI辅助 PolarDB内核学习 - 35 优化器解析树预处理模块(prep) 核心代码 prepqual.c》](20250407_03.md)  
+##### 20250407_02.md   [《AI辅助 PolarDB内核学习 - 34 优化器解析树预处理模块(prep) 核心代码 prepjointree.c》](20250407_02.md)  
+##### 20250407_01.md   [《AI辅助 PolarDB内核学习 - 33 优化器解析树预处理模块(prep) 核心代码 planagg.c》](20250407_01.md)  
 ##### 20250406_05.md   [《PostgreSQL 18 preview - pgcrypto 新增2个更安全的密码哈希算法》](20250406_05.md)  
 ##### 20250406_04.md   [《PostgreSQL 18 preview - pg_dump 导出统计信息功能优化》](20250406_04.md)  
 ##### 20250406_03.md   [《PostgreSQL 18 preview - `autoprewarm` `shared buffer`预热插件改用`streaming read I/O`》](20250406_03.md)  

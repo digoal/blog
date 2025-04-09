@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250409_03.md   [《德说-第320期, 数据库服务器集成GPU不是目的, 数据库到底要提升什么能力?来更好的结合AI?》](20250409_03.md)  
+##### 20250409_02.md   [《PostgreSQL 18 preview - 新增获取进程内存上下文函数: pg_get_process_memory_contexts》](20250409_02.md)  
+##### 20250409_01.md   [《PostgreSQL 18 preview - file_copy_method = COPY/CLONE( 支持 COW )》](20250409_01.md)  
 ##### 20250408_12.md   [《AI Agent 分类 & 热门开源项目》](20250408_12.md)  
 ##### 20250408_11.md   [《AI辅助 PolarDB内核学习 - 48 优化器辅助功能模块(util) 核心代码 predtest.c》](20250408_11.md)  
 ##### 20250408_10.md   [《PostgreSQL 18 preview - 调整 BAS_BULKREAD 算法适配 并发IO请求 和 合并IO大小》](20250408_10.md)  
@@ -14,7 +17,7 @@
 ##### 20250408_03.md   [《AI辅助 PolarDB内核学习 - 43 优化器辅助功能模块(util) 核心代码 orclauses.c》](20250408_03.md)  
 ##### 20250408_02.md   [《PostgreSQL 18 preview - `pg_stat_io` "实时"刷新`wal sender`统计信息》](20250408_02.md)  
 ##### 20250408_01.md   [《PostgreSQL 18 preview - 引入 NUMA 感知能力》](20250408_01.md)  
-##### 20250407_11.md   [《14以来最值得期待的版本: PostgreSQL 18》](20250407_11.md)  
+##### 20250407_11.md   [《PostgreSQL 18 功能整理 : 14以来最值得期待的版本》](20250407_11.md)  
 ##### 20250407_10.md   [《AI辅助 PolarDB内核学习 - 42 优化器辅助功能模块(util) 核心代码 joininfo.c》](20250407_10.md)  
 ##### 20250407_09.md   [《AI辅助 PolarDB内核学习 - 41 优化器辅助功能模块(util) 核心代码 inherit.c》](20250407_09.md)  
 ##### 20250407_08.md   [《AI辅助 PolarDB内核学习 - 40 优化器辅助功能模块(util) 核心代码 clauses.c》](20250407_08.md)  

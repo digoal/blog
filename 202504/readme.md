@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20250410_04.md   [《AI辅助 PolarDB内核学习 - 52 优化器辅助功能模块(util) 核心代码 var.c》](20250410_04.md)  
+##### 20250410_03.md   [《AI辅助 PolarDB内核学习 - 51 优化器辅助功能模块(util) 核心代码 tlist.c》](20250410_03.md)  
+##### 20250410_02.md   [《AI辅助 PolarDB内核学习 - 50 优化器辅助功能模块(util) 核心代码 restrictinfo.c》](20250410_02.md)  
+##### 20250410_01.md   [《AI辅助 PolarDB内核学习 - 49 优化器辅助功能模块(util) 核心代码 relnode.c》](20250410_01.md)  
 ##### 20250409_03.md   [《德说-第320期, 数据库服务器集成GPU不是目的, 数据库到底要提升什么能力?来更好的结合AI?》](20250409_03.md)  
 ##### 20250409_02.md   [《PostgreSQL 18 preview - 新增获取进程内存上下文函数: pg_get_process_memory_contexts》](20250409_02.md)  
 ##### 20250409_01.md   [《PostgreSQL 18 preview - file_copy_method = COPY/CLONE( 支持 COW )》](20250409_01.md)  

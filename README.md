@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202504/20250424_11.md   [《德说-第326期, 干货为什么没人看了?》](202504/20250424_11.md)  
 ##### 202504/20250424_10.md   [《AI论文解读 | BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding》](202504/20250424_10.md)  
 ##### 202504/20250424_09.md   [《AI论文解读 | 基于熵的BM25语义相似增强搜索 BMX : Entropy-weighted Similarity and Semantic-enhanced Lexical Search》](202504/20250424_09.md)  
 ##### 202504/20250424_08.md   [《AI论文解读 | 通用多语言长文本表示与重排序模型 mGTE: Generalized Long-Context Text Representation and Reranking Models for Multilingual Text Retrieval》](202504/20250424_08.md)  

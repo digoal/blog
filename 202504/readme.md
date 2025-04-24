@@ -2,6 +2,16 @@
   
 ### 文章列表  
 ----  
+##### 20250424_10.md   [《AI论文解读 | BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding》](20250424_10.md)  
+##### 20250424_09.md   [《AI论文解读 | 基于熵的BM25语义相似增强搜索 BMX : Entropy-weighted Similarity and Semantic-enhanced Lexical Search》](20250424_09.md)  
+##### 20250424_08.md   [《AI论文解读 | 通用多语言长文本表示与重排序模型 mGTE: Generalized Long-Context Text Representation and Reranking Models for Multilingual Text Retrieval》](20250424_08.md)  
+##### 20250424_07.md   [《AI论文解读 | CRAG , Corrective Retrieval Augmented Generation》](20250424_07.md)  
+##### 20250424_06.md   [《AI论文解读 | XoT 万象思维：突破彭罗斯三角定律的思想生成, EVERYTHING OF THOUGHTS: DEFYING THE LAW OF PENROSE TRIANGLE FOR THOUGHT GENERATION》](20250424_06.md)  
+##### 20250424_05.md   [《AI论文解读 | 图思维, Graph of Thoughts: Solving Elaborate Problems with Large Language Models》](20250424_05.md)  
+##### 20250424_04.md   [《AI论文解读 | 思维链, Chain-of-Thought Prompting Elicits Reasoning in Large Language Models》](20250424_04.md)  
+##### 20250424_03.md   [《AI论文解读 | 推理与行动, REACT: SYNERGIZING REASONING AND ACTING IN LANGUAGE MODELS》](20250424_03.md)  
+##### 20250424_02.md   [《AI论文解读 | 提示词微调, The Power of Scale for Parameter-Efficient Prompt Tuning》](20250424_02.md)  
+##### 20250424_01.md   [《AI论文解读 | 前缀微调, Prefix-Tuning: Optimizing Continuous Prompts for Generation》](20250424_01.md)  
 ##### 20250423_05.md   [《AI论文解读 | Adapter 微调, Parameter-Efficient Transfer Learning for NLP》](20250423_05.md)  
 ##### 20250423_04.md   [《AI论文解读 | 低秩微调大模型 LoRA: Low-Rank Adaptation of Large Language Models》](20250423_04.md)  
 ##### 20250423_03.md   [《RDS的秘密: “不改一行源码, 让PostgreSQL性能飙升”》](20250423_03.md)  

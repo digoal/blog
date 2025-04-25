@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202504/20250425_05.md   [《德说-第328期, 人生最重要的事10: 死磕突破阈值》](202504/20250425_05.md)  
+##### 202504/20250425_04.md   [《德说-第327期, MySQL认证免费了, 它的“阴谋”是什么?》](202504/20250425_04.md)  
+##### 202504/20250425_03.md   [《AI论文解读 | 多模态大模型 Gemini: A Family of Highly Capable Multimodal Models》](202504/20250425_03.md)  
+##### 202504/20250425_02.md   [《AI论文解读 | BERT模型综述 , A Primer in BERTology: What We Know About How BERT Works》](202504/20250425_02.md)  
+##### 202504/20250425_01.md   [《AI论文解读 | Transformer 模型 : Attention Is All You Need》](202504/20250425_01.md)  
 ##### 202504/20250424_11.md   [《德说-第326期, 干货为什么没人看了?》](202504/20250424_11.md)  
 ##### 202504/20250424_10.md   [《AI论文解读 | BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding》](202504/20250424_10.md)  
 ##### 202504/20250424_09.md   [《AI论文解读 | 基于熵的BM25语义相似增强搜索 BMX : Entropy-weighted Similarity and Semantic-enhanced Lexical Search》](202504/20250424_09.md)  

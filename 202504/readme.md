@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250426_05.md   [《德说-第329期, RAG逆向应用 | 谷歌Gemini实现AI回复结果核查(证明或证伪)功能》](20250426_05.md)  
 ##### 20250426_04.md   [《AI论文解读 | BM25 Query Augmentation Learned End-to-End》](20250426_04.md)  
 ##### 20250426_03.md   [《AI论文解读 | Injecting the BM25 Score as Text Improves BERT-Based Re-rankers》](20250426_03.md)  
 ##### 20250426_02.md   [《AI论文解读 | The Probabilistic Relevance Framework: BM25 and Beyond》](20250426_02.md)  

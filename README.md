@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202504/20250426_05.md   [《德说-第329期, RAG逆向应用 | 谷歌Gemini实现AI回复结果核查(证明或证伪)功能》](202504/20250426_05.md)  
 ##### 202504/20250426_04.md   [《AI论文解读 | BM25 Query Augmentation Learned End-to-End》](202504/20250426_04.md)  
 ##### 202504/20250426_03.md   [《AI论文解读 | Injecting the BM25 Score as Text Improves BERT-Based Re-rankers》](202504/20250426_03.md)  
 ##### 202504/20250426_02.md   [《AI论文解读 | The Probabilistic Relevance Framework: BM25 and Beyond》](202504/20250426_02.md)  

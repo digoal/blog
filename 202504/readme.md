@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20250426_04.md   [《AI论文解读 | BM25 Query Augmentation Learned End-to-End》](20250426_04.md)  
+##### 20250426_03.md   [《AI论文解读 | Injecting the BM25 Score as Text Improves BERT-Based Re-rankers》](20250426_03.md)  
+##### 20250426_02.md   [《AI论文解读 | The Probabilistic Relevance Framework: BM25 and Beyond》](20250426_02.md)  
+##### 20250426_01.md   [《AI论文解读 | 思维树 , Tree of Thoughts: Deliberate Problem Solving with Large Language Models》](20250426_01.md)  
 ##### 20250425_05.md   [《德说-第328期, 人生最重要的事10: 死磕突破阈值》](20250425_05.md)  
 ##### 20250425_04.md   [《德说-第327期, MySQL认证免费了, 它的“阴谋”是什么?》](20250425_04.md)  
 ##### 20250425_03.md   [《AI论文解读 | 多模态大模型 Gemini: A Family of Highly Capable Multimodal Models》](20250425_03.md)  

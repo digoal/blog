@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202504/20250427_04.md   [《召回精度提升插件: pg_tokenizer + VectorChord-BM25 reranking》](202504/20250427_04.md)  
+##### 202504/20250427_03.md   [《掀桌子了, 人人都是内核大佬: DeepWiKi 解读一切代码》](202504/20250427_03.md)  
+##### 202504/20250427_02.md   [《向量插件新贵 VectorChord(IVF+ RaBitQ量化), pgvector 和 milvus 都被秒杀了》](202504/20250427_02.md)  
+##### 202504/20250427_01.md   [《AI论文解读 | 向量ANNs方法之 RaBitQ: Quantizing High-Dimensional Vectors with a Theoretical Error Bound for Approximate Nearest Neighbor Search》](202504/20250427_01.md)  
 ##### 202504/20250426_06.md   [《裸考拿下Oracle AI Foundations Associate认证》](202504/20250426_06.md)  
 ##### 202504/20250426_05.md   [《德说-第329期, RAG逆向应用 | 谷歌Gemini实现AI回复结果核查(证明或证伪)功能》](202504/20250426_05.md)  
 ##### 202504/20250426_04.md   [《AI论文解读 | BM25 Query Augmentation Learned End-to-End》](202504/20250426_04.md)  

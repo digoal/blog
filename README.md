@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202505/20250515_01.md   [《AI论文解读 | KAG: Boosting LLMs in Professional Domains via Knowledge Augmented Generation》](202505/20250515_01.md)  
 ##### 202505/20250514_03.md   [《AI论文解读 | DiskANN: Fast Accurate Billion-point Nearest Neighbor Search on a Single Node》](202505/20250514_03.md)  
 ##### 202505/20250514_02.md   [《AI论文解读 | From Local to Global: A GraphRAG Approach to Query-Focused Summarization》](202505/20250514_02.md)  
 ##### 202505/20250514_01.md   [《AI论文解读 | Retrieval-Augmented Generation with Graphs (GraphRAG)》](202505/20250514_01.md)  

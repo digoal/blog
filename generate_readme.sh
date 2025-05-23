@@ -216,8 +216,10 @@ done
 echo "### digoal,德哥的PostgreSQL私房菜, 老文章 : [进入](old_blogs_from_163/README.md)  " >> ./README.md
 
 echo "<a rel=\"nofollow\" href=\"http://info.flagcounter.com/h9V1\"  ><img src=\"http://s03.flagcounter.com/count/h9V1/bg_FFFFFF/txt_000000/border_CCCCCC/columns_2/maxflags_12/viewers_0/labels_0/pageviews_0/flags_0/\"  alt=\"Flag Counter\"  border=\"0\"  ></a>  " >> ./README.md
-echo "  " >> ./README.md
-
+echo "  " >> ./README.md  
+echo "[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/digoal/blog)" >> ./README.md  
+echo "  " >> ./README.md  
+   
 cd old_blogs_from_163
 . ./generate_readme.sh
 cd ..

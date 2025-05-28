@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202505/20250528_02.md   [《再见分布式湖仓一体, 你好DuckLake》](202505/20250528_02.md)  
+##### 202505/20250528_01.md   [《AI论文解读 | Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics》](202505/20250528_01.md)  
 ##### 202505/20250527_01.md   [《AI论文解读 | The LDBC Graphalytics Benchmark》](202505/20250527_01.md)  
 ##### 202505/20250526_01.md   [《DuckDB 1.3.0 CTE递归增强(支持USING KEY、循环表访问) - 大型图查询`结果集爆减、性能飙升、内存爆省`》](202505/20250526_01.md)  
 ##### 202505/20250525_01.md   [《DuckDB 重构 arrow 扩展插件增强 Arrow IPC 文件读写体验》](202505/20250525_01.md)  

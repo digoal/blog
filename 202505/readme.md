@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250529_01.md   [《德说-第340期, 人生最重要的事11: 如果要给自己的人生做个总结, 我会怎么写? 暨我要给后人留点什么?》](20250529_01.md)  
 ##### 20250528_02.md   [《再见分布式湖仓一体, 你好DuckLake》](20250528_02.md)  
 ##### 20250528_01.md   [《AI论文解读 | Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics》](20250528_01.md)  
 ##### 20250527_01.md   [《AI论文解读 | The LDBC Graphalytics Benchmark》](20250527_01.md)  

@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250601_01.md   [《AI4DB、DB4AI 应用场景与相关论文》](202506/20250601_01.md)  
+----  
+##### 202505/20250531_02.md   [《从遥遥领先到贴身肉搏 | 2025一季度中国AI发展报告》](202505/20250531_02.md)  
+##### 202505/20250531_01.md   [《AI论文解读 | Lance: Efficient Random Access in Columnar Storage through Adaptive Structural Encodings》](202505/20250531_01.md)  
 ##### 202505/20250530_03.md   [《AI论文解读 | ZipCache: Accurate and Efficient KV Cache Quantization with Salient Token Identification》](202505/20250530_03.md)  
 ##### 202505/20250530_02.md   [《AI论文解读 | Keep the Cost Down: A Review on Methods to Optimize LLM’s KV Cache Consumption》](202505/20250530_02.md)  
 ##### 202505/20250530_01.md   [《AI论文解读 | CacheGen: KV Cache Compression and Streaming for Fast Large Language Model Serving》](202505/20250530_01.md)  

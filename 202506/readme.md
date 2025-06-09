@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250609_02.md   [《AI论文解读 | Scaling Laws for Neural Language Models》](20250609_02.md)  
+##### 20250609_01.md   [《DuckDB 存储编排优化 之 任意字段组合过滤》](20250609_01.md)  
 ##### 20250608_01.md   [《AI论文解读 | Language Models are Unsupervised Multitask Learners》](20250608_01.md)  
 ##### 20250603_02.md   [《德说-第342期, AI时代, 再见MySQL, 你好PG》](20250603_02.md)  
 ##### 20250603_01.md   [《德说-第341期, Google Gemini 正偷偷抢占智能体入口》](20250603_01.md)  

@@ -2,12 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20250612_03.md   [《AI论文解读 | LLaMA: Open and Efficient Foundation Language Models》](20250612_03.md)  
+##### 20250612_02.md   [《AI论文解读 | Constitutional AI: Harmlessness from AI Feedback》](20250612_02.md)  
 ##### 20250612_01.md   [《AI论文解读 | Training language models to follow instructions with human feedback》](20250612_01.md)  
 ##### 20250611_04.md   [《德说-第345期, 某些国产数据库公众号正集体“赴死”》](20250611_04.md)  
 ##### 20250611_03.md   [《某国产数据库内核研发被洗脑了? PG比MySQL快这么多是不符合预期的!》](20250611_03.md)  
 ##### 20250611_02.md   [《德说-第344期, 未来 AI Agent 社会的畅想》](20250611_02.md)  
 ##### 20250611_01.md   [《AI论文解读 | FINETUNED LANGUAGE MODELS ARE ZERO-SHOT LEARNERS》](20250611_01.md)  
-##### 20250610_04.md   [《祝贺DuckDB斩获30K star, Roadmap令人兴奋》](20250610_04.md)  
+##### 20250610_04.md   [《祝贺DuckDB斩获30K star, Roadmap暴露野心, 估值可能过百亿》](20250610_04.md)  
 ##### 20250610_03.md   [《DuckDB 迎来第一波“抄袭者”!》](20250610_03.md)  
 ##### 20250610_02.md   [《德说-第343期, 人生最重要的事12: 贵人》](20250610_02.md)  
 ##### 20250610_01.md   [《AI论文解读 | Emergent Abilities of Large Language Models》](20250610_01.md)  

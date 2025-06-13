@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250613_01.md   [《AI论文解读 | Training Compute-Optimal Large Language Models》](202506/20250613_01.md)  
 ##### 202506/20250612_03.md   [《AI论文解读 | LLaMA: Open and Efficient Foundation Language Models》](202506/20250612_03.md)  
 ##### 202506/20250612_02.md   [《AI论文解读 | Constitutional AI: Harmlessness from AI Feedback》](202506/20250612_02.md)  
 ##### 202506/20250612_01.md   [《AI论文解读 | Training language models to follow instructions with human feedback》](202506/20250612_01.md)  

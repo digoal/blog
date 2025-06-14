@@ -100,11 +100,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250614_01.md   [《AI论文解读 | PaLM: Scaling Language Modeling with Pathways》](202506/20250614_01.md)  
 ##### 202506/20250613_01.md   [《AI论文解读 | Training Compute-Optimal Large Language Models》](202506/20250613_01.md)  
 ##### 202506/20250612_03.md   [《AI论文解读 | LLaMA: Open and Efficient Foundation Language Models》](202506/20250612_03.md)  
 ##### 202506/20250612_02.md   [《AI论文解读 | Constitutional AI: Harmlessness from AI Feedback》](202506/20250612_02.md)  
 ##### 202506/20250612_01.md   [《AI论文解读 | Training language models to follow instructions with human feedback》](202506/20250612_01.md)  
-##### 202506/20250611_04.md   [《德说-第345期, 某些国产数据库公众号正集体“赴死”》](202506/20250611_04.md)  
+##### 202506/20250611_04.md   [《德说-第345期, 是公司变了?还是我没看清本质? 某些国产数据库公众号正集体“赴死”?》](202506/20250611_04.md)  
 ##### 202506/20250611_03.md   [《某国产数据库内核研发被洗脑了? PG比MySQL快这么多是不符合预期的!》](202506/20250611_03.md)  
 ##### 202506/20250611_02.md   [《德说-第344期, 未来 AI Agent 社会的畅想》](202506/20250611_02.md)  
 ##### 202506/20250611_01.md   [《AI论文解读 | FINETUNED LANGUAGE MODELS ARE ZERO-SHOT LEARNERS》](202506/20250611_01.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250616_03.md   [《如何评测 Text-to-SQL 产品是否靠谱? | BIRD-SQL》](20250616_03.md)  
+##### 20250616_02.md   [《AI论文解读 | Automated Graph Machine Learning Operations (MLOps) Workflow: A Data-Centric Perspective》](20250616_02.md)  
+##### 20250616_01.md   [《AI论文解读 | Data-centric Artificial Intelligence: A Survey》](20250616_01.md)  
 ##### 20250615_02.md   [《AI论文解读 | Machine Learning Operations (MLOps): Overview, Definition, and Architecture》](20250615_02.md)  
 ##### 20250615_01.md   [《AI论文解读 | Practitioners guide to MLOps》](20250615_01.md)  
 ##### 20250614_02.md   [《DuckDB进军AI数据库底座, 坐实了 | 文本语义(向量)搜索、全文检索、bm25搜索与排序、模糊搜索详解》](20250614_02.md)  

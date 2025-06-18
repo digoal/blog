@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250618_03.md   [《如何评测 AI4DB SQL问题诊断与解决产品是否靠谱? | BIRD-CRITIC》](202506/20250618_03.md)  
+##### 202506/20250618_02.md   [《AI论文解读 | Before Generation, Align it! A Novel and Effective Strategy for Mitigating Hallucinations in Text-to-SQL Generation》](202506/20250618_02.md)  
+##### 202506/20250618_01.md   [《AI论文解读 | Can LLM Already Serve as A Database Interface? A BIg Bench for Large-Scale Database Grounded Text-to-SQLs》](202506/20250618_01.md)  
 ##### 202506/20250617_05.md   [《PGLite: 把PG塞进浏览器中运行 , PG教学演示又方便了!》](202506/20250617_05.md)  
 ##### 202506/20250617_04.md   [《云原生PG持续归档/备份工具: pgrwl》](202506/20250617_04.md)  
 ##### 202506/20250617_03.md   [《数学真美, 可这样估算PostgreSQL SQL响应时间 p95》](202506/20250617_03.md)  

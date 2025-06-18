@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250618_04.md   [《德说-第346期, 做官之道其实就三句话: 和光同尘、雨露均沾、花花轿子众人抬》](202506/20250618_04.md)  
 ##### 202506/20250618_03.md   [《如何评测 AI4DB SQL问题诊断与解决产品是否靠谱? | BIRD-CRITIC》](202506/20250618_03.md)  
 ##### 202506/20250618_02.md   [《AI论文解读 | Before Generation, Align it! A Novel and Effective Strategy for Mitigating Hallucinations in Text-to-SQL Generation》](202506/20250618_02.md)  
 ##### 202506/20250618_01.md   [《AI论文解读 | Can LLM Already Serve as A Database Interface? A BIg Bench for Large-Scale Database Grounded Text-to-SQLs》](202506/20250618_01.md)  

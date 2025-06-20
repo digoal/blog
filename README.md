@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250620_02.md   [《用 “DuckDB/DuckLake + ECharts + LLM” 实现一个智能数据可视化产品?》](202506/20250620_02.md)  
+##### 202506/20250620_01.md   [《AI论文解读 | THE FAISS LIBRARY》](202506/20250620_01.md)  
 ##### 202506/20250619_03.md   [《数据分析师直呼过瘾 | DuckDB + Excel 帅哭了》](202506/20250619_03.md)  
 ##### 202506/20250619_02.md   [《AI论文解读 | Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs》](202506/20250619_02.md)  
 ##### 202506/20250619_01.md   [《AI论文解读 | Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task》](202506/20250619_01.md)  

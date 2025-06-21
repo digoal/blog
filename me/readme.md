@@ -16,15 +16,19 @@ digoal(德哥)
 - 阿里巴巴麒麟布道师
 - 42项数据库专利
 - [德说](../202108/20210818_02.md)以及[最近的一些思考](../class/35.md)  
-- B站开设有[<开慧社>](https://space.bilibili.com/310191812/channel/detail?cid=191242&ctype=0)、[<德说>](https://space.bilibili.com/310191812/channel/detail?cid=198648&ctype=0)、[<重新发现PG之美>](https://space.bilibili.com/310191812/channel/detail?cid=188682&ctype=0)、[<发现PolarDB之美>](https://space.bilibili.com/310191812/channel/detail?cid=201348&ctype=0)、[<DB吐槽会>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=238117&ctype=0)、[<每天5分钟PG聊通透>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=582141&ctype=0)等专栏。     
+- B站开设有[<开慧社>](https://space.bilibili.com/310191812/channel/detail?cid=191242&ctype=0)、[<德说>](https://space.bilibili.com/310191812/channel/detail?cid=198648&ctype=0)、[<重新发现PG之美>](https://space.bilibili.com/310191812/channel/detail?cid=188682&ctype=0)、[<发现PolarDB之美>](https://space.bilibili.com/310191812/channel/detail?cid=201348&ctype=0)、[<DB吐槽会>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=238117&ctype=0)、[<每天5分钟PG聊通透>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=582141&ctype=0)等专栏。
+- "digoal德哥"公众号与视频号主理人
   
 ```
 简短介绍
-简介: zzz, 网名德哥(digoal). 就职于阿里云数据库团队, 阿里云PolarDB数据库开源社区负责人, PostgreSQL 中国社区发起人之一, 获得40余项数据库专利. 担任过DBA、架构师、产品经理、开源社区运营与生态建设等工作. 长期致力于推动开源数据库技术、生态在中国的发展与开源产业人才培养. 曾荣获阿里巴巴麒麟布道师称号、2018届OSCAR开源尖峰人物. 
+简介: zzz, 网名德哥(digoal). PostgreSQL 中国社区发起人之一, 荣获40余项数据库领域专利. 曾就职于阿里云(至今)、杭州斯凯(SkyMobi), 担任过DBA、架构师、产品经理、开源社区运营与生态建设等工作. 长期致力于推动开源数据库技术、生态在中国的发展与开源产业人才培养. 曾荣获阿里巴巴麒麟布道师最高荣誉、OSCAR开源尖峰人物、PG分会ACED、PG中文社区猛犸象最高奖项. 未来将长期致力于AI、PostgreSQL、DuckDB领域研究及个人感悟等分享.  
 ```
   
-## 工作经历
-### 2021.8 ~ 现在 阿里云  
+## 工作经历  
+### 2023.10 ~ 现在 阿里云  
+运营与品牌, PolarDB 开源合作与商业促进.   
+  
+### 2021.8 ~ 2023.10 
 架构组, 负责阿里云数据库开源产品与运营.  
 - PolarDB 开源社区框架构建. 
 - 剖析国家支持开源的战略意图, 开源对国家、业务方、生态共建方的价值

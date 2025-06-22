@@ -2,10 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20250622_02.md   [《AI论文解读 | Approximate Nearest Neighbors: Towards Removing the Curse of Dimensionality》](20250622_02.md)  
+##### 20250622_01.md   [《AI论文解读 | M-Tree: An Efficient Access Method for Similarity Search in Metric Spaces》](20250622_01.md)  
 ##### 20250621_03.md   [《AI论文解读 | K-nearest Neighbor Search by Random Projection Forests》](20250621_03.md)  
 ##### 20250621_02.md   [《AI论文解读 | Data Structures and Algorithms for Nearest Neighbor Search in General Metric Spaces》](20250621_02.md)  
 ##### 20250621_01.md   [《数据库向量索引种类繁多, 研读哪些论文》](20250621_01.md)  
-##### 20250620_02.md   [《用 “DuckDB/DuckLake + ECharts + LLM” 实现一个智能数据可视化产品?》](20250620_02.md)  
+##### 20250620_02.md   [《用 “DuckDB/DuckLake + ECharts + LLM” 实现一个BI智能数据可视化产品?》](20250620_02.md)  
 ##### 20250620_01.md   [《AI论文解读 | THE FAISS LIBRARY》](20250620_01.md)  
 ##### 20250619_03.md   [《数据分析师直呼过瘾 | DuckDB + Excel 帅哭了》](20250619_03.md)  
 ##### 20250619_02.md   [《AI论文解读 | Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs》](20250619_02.md)  

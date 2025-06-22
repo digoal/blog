@@ -14,10 +14,11 @@ digoal(德哥)
 - [中国信息通信研究院主办、中国通信标准化协会支持的"OSCAR云计算开源产业大会"评选：2018届OSCAR开源尖峰人物之一](../201803/20180322_12.md)    
 - 阿里云数据库首席专家团队[成员](aliyun_shouxi_db_service.png)，提供[数据库首席专家服务](https://www.aliyun.com/service/chiefexpert/database)。    
 - 阿里巴巴麒麟布道师
-- 42项数据库专利
+- 42项数据库领域专利
 - [德说](../202108/20210818_02.md)以及[最近的一些思考](../class/35.md)  
 - B站开设有[<开慧社>](https://space.bilibili.com/310191812/channel/detail?cid=191242&ctype=0)、[<德说>](https://space.bilibili.com/310191812/channel/detail?cid=198648&ctype=0)、[<重新发现PG之美>](https://space.bilibili.com/310191812/channel/detail?cid=188682&ctype=0)、[<发现PolarDB之美>](https://space.bilibili.com/310191812/channel/detail?cid=201348&ctype=0)、[<DB吐槽会>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=238117&ctype=0)、[<每天5分钟PG聊通透>](https://space.bilibili.com/310191812/channel/seriesdetail?sid=582141&ctype=0)等专栏。
-- "digoal德哥"公众号与视频号主理人
+- `digoal德哥` 公众号与视频号主理人 
+- `https://github.com/digoal/blog` 项目主理人 
   
 ```
 简短介绍

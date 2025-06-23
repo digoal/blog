@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250623_05.md   [《从ETL到MTL, DuckDB flockMTL插件把大模型玩得很溜》](202506/20250623_05.md)  
+##### 202506/20250623_04.md   [《DuckDB 相关论文整理》](202506/20250623_04.md)  
+##### 202506/20250623_03.md   [《AI论文解读 | Hashing with Graphs》](202506/20250623_03.md)  
+##### 202506/20250623_02.md   [《AI论文解读 | Multi-Probe LSH: Efficient Indexing for High-Dimensional Similarity Search》](202506/20250623_02.md)  
+##### 202506/20250623_01.md   [《网友称DuckDB是玩具》](202506/20250623_01.md)  
 ##### 202506/20250622_02.md   [《AI论文解读 | Approximate Nearest Neighbors: Towards Removing the Curse of Dimensionality》](202506/20250622_02.md)  
 ##### 202506/20250622_01.md   [《AI论文解读 | M-Tree: An Efficient Access Method for Similarity Search in Metric Spaces》](202506/20250622_01.md)  
 ##### 202506/20250621_03.md   [《AI论文解读 | K-nearest Neighbor Search by Random Projection Forests》](202506/20250621_03.md)  

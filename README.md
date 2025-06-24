@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250624_03.md   [《数据库筑基课 - 向量索引之 hnsw》](202506/20250624_03.md)  
+##### 202506/20250624_02.md   [《AI论文解读 | Deep Hashing for Compact Binary Codes Learning》](202506/20250624_02.md)  
+##### 202506/20250624_01.md   [《AI论文解读 | Approximate Nearest Neighbor Search on High Dimensional Data — Experiments, Analyses, and Improvement (v1.0)》](202506/20250624_01.md)  
 ##### 202506/20250623_05.md   [《从ETL到MTL, DuckDB flockMTL插件把大模型玩得很溜》](202506/20250623_05.md)  
 ##### 202506/20250623_04.md   [《DuckDB 相关论文整理》](202506/20250623_04.md)  
 ##### 202506/20250623_03.md   [《AI论文解读 | Hashing with Graphs》](202506/20250623_03.md)  

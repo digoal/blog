@@ -100,8 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202506/20250625_03.md   [《德说-第348期, 富豪圈要变天了, 程序员将占半边天》](202506/20250625_03.md)  
+##### 202506/20250625_02.md   [《AI论文解读 | Fast Approximate Nearest Neighbor Search With The Navigating Spreading-out Graph》](202506/20250625_02.md)  
+##### 202506/20250625_01.md   [《AI论文解读 | High-Dimensional Approximate Nearest Neighbor Search: with Reliable and Efficient Distance Comparison Operations》](202506/20250625_01.md)  
 ##### 202506/20250624_04.md   [《德说-第347期, 未来的产业趋势》](202506/20250624_04.md)  
-##### 202506/20250624_03.md   [《数据库筑基课 - 向量索引之 hnsw》](202506/20250624_03.md)  
+##### 202506/20250624_03.md   [《数据库筑基课 - 向量索引之 HNSW》](202506/20250624_03.md)  
 ##### 202506/20250624_02.md   [《AI论文解读 | Deep Hashing for Compact Binary Codes Learning》](202506/20250624_02.md)  
 ##### 202506/20250624_01.md   [《AI论文解读 | Approximate Nearest Neighbor Search on High Dimensional Data — Experiments, Analyses, and Improvement (v1.0)》](202506/20250624_01.md)  
 ##### 202506/20250623_05.md   [《从ETL到MTL, DuckDB flockMTL插件把大模型玩得很溜》](202506/20250623_05.md)  
@@ -488,7 +491,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202412/20241224_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 主机全毁, 只剩共享存储的PolarDB还有救吗?》](202412/20241224_01.md)  
 ##### 202412/20241223_02.md   [《对云盘100万IOPS有什么误解吗? 可能要先从队列深度谈起》](202412/20241223_02.md)  
 ##### 202412/20241223_01.md   [《PostgreSQL 正在挤牙膏? 不, 它在云化》](202412/20241223_01.md)  
-##### 202412/20241220_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 读写分离》](202412/20241220_01.md)  
+##### 202412/20241220_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 读写分离 (pgpool-II, 含scram配置)》](202412/20241220_01.md)  
 ##### 202412/20241219_02.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 时间点恢复(PITR)》](202412/20241219_02.md)  
 ##### 202412/20241219_01.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 实时流式归档》](202412/20241219_01.md)  
 ##### 202412/20241218_05.md   [《穷鬼玩PolarDB RAC一写多读集群系列 | 在线归档》](202412/20241218_05.md)  

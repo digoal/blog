@@ -2,8 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20250625_03.md   [《德说-第348期, 富豪圈要变天了, 程序员将占半边天》](20250625_03.md)  
+##### 20250625_02.md   [《AI论文解读 | Fast Approximate Nearest Neighbor Search With The Navigating Spreading-out Graph》](20250625_02.md)  
+##### 20250625_01.md   [《AI论文解读 | High-Dimensional Approximate Nearest Neighbor Search: with Reliable and Efficient Distance Comparison Operations》](20250625_01.md)  
 ##### 20250624_04.md   [《德说-第347期, 未来的产业趋势》](20250624_04.md)  
-##### 20250624_03.md   [《数据库筑基课 - 向量索引之 hnsw》](20250624_03.md)  
+##### 20250624_03.md   [《数据库筑基课 - 向量索引之 HNSW》](20250624_03.md)  
 ##### 20250624_02.md   [《AI论文解读 | Deep Hashing for Compact Binary Codes Learning》](20250624_02.md)  
 ##### 20250624_01.md   [《AI论文解读 | Approximate Nearest Neighbor Search on High Dimensional Data — Experiments, Analyses, and Improvement (v1.0)》](20250624_01.md)  
 ##### 20250623_05.md   [《从ETL到MTL, DuckDB flockMTL插件把大模型玩得很溜》](20250623_05.md)  

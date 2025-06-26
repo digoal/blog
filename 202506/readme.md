@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20250626_04.md   [《用 gemini-cli 写一个股价预测程序》](20250626_04.md)  
+##### 20250626_03.md   [《gemini-cli 体验 | 一句话完成 俄罗斯方块 + 高考志愿填报 程序》](20250626_03.md)  
+##### 20250626_02.md   [《AI论文解读 | Optimized Product Quantization》](20250626_02.md)  
+##### 20250626_01.md   [《AI论文解读 | Product Quantization for Nearest Neighbor Search》](20250626_01.md)  
 ##### 20250625_03.md   [《德说-第348期, 富豪圈要变天了, 程序员将占半边天》](20250625_03.md)  
 ##### 20250625_02.md   [《AI论文解读 | Fast Approximate Nearest Neighbor Search With The Navigating Spreading-out Graph》](20250625_02.md)  
 ##### 20250625_01.md   [《AI论文解读 | High-Dimensional Approximate Nearest Neighbor Search: with Reliable and Efficient Distance Comparison Operations》](20250625_01.md)  

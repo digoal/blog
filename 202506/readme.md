@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250629_03.md   [《AI论文解读 | The Case for Learned Index Structures》](20250629_03.md)  
+##### 20250629_02.md   [《AI论文解读 | Efficient Nearest Neighbor Search for Cross-Encoder Models using Matrix Factorization》](20250629_02.md)  
 ##### 20250629_01.md   [《2025 IvorySQL峰会暨PG高峰论坛 参会记录》](20250629_01.md)  
 ##### 20250626_04.md   [《用 gemini-cli 写一个股价预测程序》](20250626_04.md)  
 ##### 20250626_03.md   [《gemini-cli 体验 | 一句话完成 俄罗斯方块 + 高考志愿填报 程序》](20250626_03.md)  

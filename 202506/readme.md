@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250630_01.md   [《AI论文解读 | Billion-scale similarity search with GPUs》](20250630_01.md)  
 ##### 20250629_03.md   [《AI论文解读 | The Case for Learned Index Structures》](20250629_03.md)  
 ##### 20250629_02.md   [《AI论文解读 | Efficient Nearest Neighbor Search for Cross-Encoder Models using Matrix Factorization》](20250629_02.md)  
 ##### 20250629_01.md   [《2025 IvorySQL峰会暨PG高峰论坛 参会记录》](20250629_01.md)  

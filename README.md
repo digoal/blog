@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250701_03.md   [《SQL:2028 将定义 vector 标准?》](202507/20250701_03.md)  
+##### 202507/20250701_02.md   [《AI论文解读 | Similarity Search in High Dimensions via Hashing》](202507/20250701_02.md)  
+##### 202507/20250701_01.md   [《AI论文解读 | FreshDiskANN: A Fast and Accurate Graph-Based ANN Index for Streaming Similarity Search》](202507/20250701_01.md)  
+----  
 ##### 202506/20250630_01.md   [《AI论文解读 | Billion-scale similarity search with GPUs》](202506/20250630_01.md)  
 ##### 202506/20250629_03.md   [《AI论文解读 | The Case for Learned Index Structures》](202506/20250629_03.md)  
 ##### 202506/20250629_02.md   [《AI论文解读 | Efficient Nearest Neighbor Search for Cross-Encoder Models using Matrix Factorization》](202506/20250629_02.md)  
@@ -1831,7 +1835,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202109/20210916_01.md   [《鞭尸系列(DB错误使用姿势)-1 用count判断是否存在》](202109/20210916_01.md)  
 ##### 202109/20210915_07.md   [《DB吐槽大会,第47期 - PG 崩溃恢复能快点吗》](202109/20210915_07.md)  
 ##### 202109/20210915_06.md   [《DB吐槽大会,第46期(v17 add) - PG copy不能跳过错误行》](202109/20210915_06.md)  
-##### 202109/20210915_05.md   [《DB吐槽大会,第45期 - PG 不支持rotate表》](202109/20210915_05.md)  
+##### 202109/20210915_05.md   [《DB吐槽大会,第45期 - PG 不支持rotate/TTL表》](202109/20210915_05.md)  
 ##### 202109/20210915_04.md   [《DB吐槽大会,第44期 - PG 同步复制不支持自动升降级》](202109/20210915_04.md)  
 ##### 202109/20210915_03.md   [《DB吐槽大会,第43期 - PG 倒排索引启动和recheck代价高》](202109/20210915_03.md)  
 ##### 202109/20210915_02.md   [《DB吐槽大会,第42期 - PG 读写分离不友好》](202109/20210915_02.md)  

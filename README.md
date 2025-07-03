@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250703_03.md   [《前阿里高管创业 | 瞄准国产信创数据库一体机》](202507/20250703_03.md)  
+##### 202507/20250703_02.md   [《AI论文解读 | Comparing Apples to Oranges: Learning Similarity Functions for Data Produced by Different Distributions》](202507/20250703_02.md)  
+##### 202507/20250703_01.md   [《AI论文解读 | Efficient Approximate Nearest Neighbor Search in Multi-dimensional Databases》](202507/20250703_01.md)  
+##### 202507/20250702_02.md   [《AI论文解读 | Efficient Query Processing for Scalable Web Search》](202507/20250702_02.md)  
+##### 202507/20250702_01.md   [《AI论文解读 | Filtered − DiskANN: Graph Algorithms for Approximate Nearest Neighbor Search with Filters》](202507/20250702_01.md)  
 ##### 202507/20250701_03.md   [《SQL:2028 将定义 vector 标准?》](202507/20250701_03.md)  
 ##### 202507/20250701_02.md   [《AI论文解读 | Similarity Search in High Dimensions via Hashing》](202507/20250701_02.md)  
 ##### 202507/20250701_01.md   [《AI论文解读 | FreshDiskANN: A Fast and Accurate Graph-Based ANN Index for Streaming Similarity Search》](202507/20250701_01.md)  

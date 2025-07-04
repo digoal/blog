@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250704_02.md   [《AI论文解读 | ImageNet Classification with Deep Convolutional Neural Networks》](202507/20250704_02.md)  
+##### 202507/20250704_01.md   [《AI论文解读 | Yannakakis+ : Practical Acyclic Query Evaluation with Theoretical Guarantees》](202507/20250704_01.md)  
 ##### 202507/20250703_03.md   [《前阿里高管创业 | 瞄准国产信创数据库一体机》](202507/20250703_03.md)  
 ##### 202507/20250703_02.md   [《AI论文解读 | Comparing Apples to Oranges: Learning Similarity Functions for Data Produced by Different Distributions》](202507/20250703_02.md)  
 ##### 202507/20250703_01.md   [《AI论文解读 | Efficient Approximate Nearest Neighbor Search in Multi-dimensional Databases》](202507/20250703_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250712_03.md   [《AI论文解读 | Beyond Quacking: Deep Integration of Language Models and RAG into DuckDB》](20250712_03.md)  
+##### 20250712_02.md   [《AI论文解读 | DuckDB: an Embeddable Analytical Database》](20250712_02.md)  
 ##### 20250712_01.md   [《将iphone里的照片备份到移动硬盘》](20250712_01.md)  
 ##### 20250704_02.md   [《AI论文解读 | ImageNet Classification with Deep Convolutional Neural Networks》](20250704_02.md)  
 ##### 20250704_01.md   [《AI论文解读 | Yannakakis+ : Practical Acyclic Query Evaluation with Theoretical Guarantees》](20250704_01.md)  

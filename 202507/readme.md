@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250713_03.md   [《DuckDB 在做云边一体》](20250713_03.md)  
 ##### 20250713_02.md   [《AI论文解读 | DuckDB-SGX2: The Good, The Bad and The Ugly within Confidential Analytical Query Processing》](20250713_02.md)  
 ##### 20250713_01.md   [《AI论文解读 | DuckDB-Wasm: Fast Analytical Processing for the Web》](20250713_01.md)  
 ##### 20250712_03.md   [《AI论文解读 | Beyond Quacking: Deep Integration of Language Models and RAG into DuckDB》](20250712_03.md)  

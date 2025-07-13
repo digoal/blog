@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250713_02.md   [《AI论文解读 | DuckDB-SGX2: The Good, The Bad and The Ugly within Confidential Analytical Query Processing》](202507/20250713_02.md)  
+##### 202507/20250713_01.md   [《AI论文解读 | DuckDB-Wasm: Fast Analytical Processing for the Web》](202507/20250713_01.md)  
 ##### 202507/20250712_03.md   [《AI论文解读 | Beyond Quacking: Deep Integration of Language Models and RAG into DuckDB》](202507/20250712_03.md)  
 ##### 202507/20250712_02.md   [《AI论文解读 | DuckDB: an Embeddable Analytical Database》](202507/20250712_02.md)  
 ##### 202507/20250712_01.md   [《将iphone里的照片备份到移动硬盘》](202507/20250712_01.md)  

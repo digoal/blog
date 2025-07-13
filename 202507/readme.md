@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250713_04.md   [《PlanetScale发布Postgres云服务, 吊打主流云厂商“胜之不武”》](20250713_04.md)  
 ##### 20250713_03.md   [《DuckDB 在做云边一体》](20250713_03.md)  
 ##### 20250713_02.md   [《AI论文解读 | DuckDB-SGX2: The Good, The Bad and The Ugly within Confidential Analytical Query Processing》](20250713_02.md)  
 ##### 20250713_01.md   [《AI论文解读 | DuckDB-Wasm: Fast Analytical Processing for the Web》](20250713_01.md)  

@@ -100,6 +100,18 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250714_12.md   [《PostgreSQL 19 preview - 支持 CHECKPOINT 精细化控制 FAST SPREAD FLUSH_UNLOGGED》](202507/20250714_12.md)  
+##### 202507/20250714_11.md   [《PostgreSQL 19 preview - 新增 `injection_points_list()` 函数》](202507/20250714_11.md)  
+##### 202507/20250714_10.md   [《PostgreSQL 19 preview - 新增视图pg_dsm_registry_allocations》](202507/20250714_10.md)  
+##### 202507/20250714_09.md   [《PostgreSQL 19 preview - 合理合并 AIO io_uring 的内存映射》](202507/20250714_09.md)  
+##### 202507/20250714_08.md   [《PostgreSQL 19 preview - COPY FROM 命令中支持多行表头》](202507/20250714_08.md)  
+##### 202507/20250714_07.md   [《PostgreSQL 19 preview - ANTI join 且内表唯一时 启用 Memoize 算子提升性能》](202507/20250714_07.md)  
+##### 202507/20250714_06.md   [《PostgreSQL 19 preview - FETCH 归一化 in pg_stat_statements (合并多次fetch语句为同一 queryID)》](202507/20250714_06.md)  
+##### 202507/20250714_05.md   [《PostgreSQL 19 preview - 新增regdatabase OID别名》](202507/20250714_05.md)  
+##### 202507/20250714_04.md   [《PostgreSQL 19 preview - 64位事务号FullTransactionId覆盖面扩展到2PC》](202507/20250714_04.md)  
+##### 202507/20250714_03.md   [《PostgreSQL 19 preview - 加速临时表的truncate操作》](202507/20250714_03.md)  
+##### 202507/20250714_02.md   [《AI论文解读 | MotherDuck: DuckDB in the cloud and in the client》](202507/20250714_02.md)  
+##### 202507/20250714_01.md   [《AI论文解读 | Efficient External Sorting in DuckDB》](202507/20250714_01.md)  
 ##### 202507/20250713_04.md   [《PlanetScale发布Postgres云服务, 吊打主流云厂商“胜之不武”》](202507/20250713_04.md)  
 ##### 202507/20250713_03.md   [《DuckDB 在做云边一体》](202507/20250713_03.md)  
 ##### 202507/20250713_02.md   [《AI论文解读 | DuckDB-SGX2: The Good, The Bad and The Ugly within Confidential Analytical Query Processing》](202507/20250713_02.md)  

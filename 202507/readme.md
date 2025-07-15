@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250715_02.md   [《AI论文解读 | POLARDB Meets Computational Storage: Efficiently Support Analytical Workloads in Cloud-Native Relational Database》](20250715_02.md)  
+##### 20250715_01.md   [《AI论文解读 | PolarFS: An Ultra-low Latency and Failure Resilient Distributed File System for Shared Storage Cloud Database》](20250715_01.md)  
 ##### 20250714_12.md   [《PostgreSQL 19 preview - 支持 CHECKPOINT 精细化控制 FAST SPREAD FLUSH_UNLOGGED》](20250714_12.md)  
 ##### 20250714_11.md   [《PostgreSQL 19 preview - 新增 `injection_points_list()` 函数》](20250714_11.md)  
 ##### 20250714_10.md   [《PostgreSQL 19 preview - 新增视图pg_dsm_registry_allocations》](20250714_10.md)  

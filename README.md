@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250715_02.md   [《AI论文解读 | POLARDB Meets Computational Storage: Efficiently Support Analytical Workloads in Cloud-Native Relational Database》](202507/20250715_02.md)  
+##### 202507/20250715_01.md   [《AI论文解读 | PolarFS: An Ultra-low Latency and Failure Resilient Distributed File System for Shared Storage Cloud Database》](202507/20250715_01.md)  
 ##### 202507/20250714_12.md   [《PostgreSQL 19 preview - 支持 CHECKPOINT 精细化控制 FAST SPREAD FLUSH_UNLOGGED》](202507/20250714_12.md)  
 ##### 202507/20250714_11.md   [《PostgreSQL 19 preview - 新增 `injection_points_list()` 函数》](202507/20250714_11.md)  
 ##### 202507/20250714_10.md   [《PostgreSQL 19 preview - 新增视图pg_dsm_registry_allocations》](202507/20250714_10.md)  

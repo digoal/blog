@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250716_03.md   [《德说-第350期, 国产数据库厂商到底能不能做好开源?》](20250716_03.md)  
+##### 20250716_02.md   [《AI论文解读 | PolarDB-SCC: A Cloud-Native Database Ensuring Low Latency for Strongly Consistent Reads》](20250716_02.md)  
+##### 20250716_01.md   [《AI论文解读 | PolarDB-IMCI: A Cloud-Native HTAP Database System at Alibaba》](20250716_01.md)  
 ##### 20250715_02.md   [《AI论文解读 | POLARDB Meets Computational Storage: Efficiently Support Analytical Workloads in Cloud-Native Relational Database》](20250715_02.md)  
 ##### 20250715_01.md   [《AI论文解读 | PolarFS: An Ultra-low Latency and Failure Resilient Distributed File System for Shared Storage Cloud Database》](20250715_01.md)  
 ##### 20250714_12.md   [《PostgreSQL 19 preview - 支持 CHECKPOINT 精细化控制 FAST SPREAD FLUSH_UNLOGGED》](20250714_12.md)  

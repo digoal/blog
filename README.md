@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250716_03.md   [《德说-第350期, 国产数据库厂商到底能不能做好开源?》](202507/20250716_03.md)  
+##### 202507/20250716_02.md   [《AI论文解读 | PolarDB-SCC: A Cloud-Native Database Ensuring Low Latency for Strongly Consistent Reads》](202507/20250716_02.md)  
+##### 202507/20250716_01.md   [《AI论文解读 | PolarDB-IMCI: A Cloud-Native HTAP Database System at Alibaba》](202507/20250716_01.md)  
 ##### 202507/20250715_02.md   [《AI论文解读 | POLARDB Meets Computational Storage: Efficiently Support Analytical Workloads in Cloud-Native Relational Database》](202507/20250715_02.md)  
 ##### 202507/20250715_01.md   [《AI论文解读 | PolarFS: An Ultra-low Latency and Failure Resilient Distributed File System for Shared Storage Cloud Database》](202507/20250715_01.md)  
 ##### 202507/20250714_12.md   [《PostgreSQL 19 preview - 支持 CHECKPOINT 精细化控制 FAST SPREAD FLUSH_UNLOGGED》](202507/20250714_12.md)  
@@ -135,7 +138,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202506/20250630_01.md   [《AI论文解读 | Billion-scale similarity search with GPUs》](202506/20250630_01.md)  
 ##### 202506/20250629_03.md   [《AI论文解读 | The Case for Learned Index Structures》](202506/20250629_03.md)  
 ##### 202506/20250629_02.md   [《AI论文解读 | Efficient Nearest Neighbor Search for Cross-Encoder Models using Matrix Factorization》](202506/20250629_02.md)  
-##### 202506/20250629_01.md   [《2025 IvorySQL峰会暨PG高峰论坛 参会记录》](202506/20250629_01.md)  
+##### 202506/20250629_01.md   [《德说-第349期, 2025 IvorySQL峰会暨PG高峰论坛 参会记录》](202506/20250629_01.md)  
 ##### 202506/20250626_04.md   [《用 gemini-cli 写一个股价预测程序》](202506/20250626_04.md)  
 ##### 202506/20250626_03.md   [《gemini-cli 体验 | 一句话完成 俄罗斯方块 + 高考志愿填报 程序》](202506/20250626_03.md)  
 ##### 202506/20250626_02.md   [《AI论文解读 | Optimized Product Quantization》](202506/20250626_02.md)  

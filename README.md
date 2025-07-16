@@ -100,7 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
-##### 202507/20250716_03.md   [《德说-第350期, 国产数据库厂商到底能不能做好开源?》](202507/20250716_03.md)  
+##### 202507/20250716_03.md   [《德说-第350期, 犯了什么大忌? 国产数据库厂商到底能不能做好开源?》](202507/20250716_03.md)  
 ##### 202507/20250716_02.md   [《AI论文解读 | PolarDB-SCC: A Cloud-Native Database Ensuring Low Latency for Strongly Consistent Reads》](202507/20250716_02.md)  
 ##### 202507/20250716_01.md   [《AI论文解读 | PolarDB-IMCI: A Cloud-Native HTAP Database System at Alibaba》](202507/20250716_01.md)  
 ##### 202507/20250715_02.md   [《AI论文解读 | POLARDB Meets Computational Storage: Efficiently Support Analytical Workloads in Cloud-Native Relational Database》](202507/20250715_02.md)  

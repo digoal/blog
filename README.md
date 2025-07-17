@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250717_03.md   [《AI论文解读 | Adaptive Cardinality Estimation》](202507/20250717_03.md)  
+##### 202507/20250717_02.md   [《天啊! 某国产数据库安装TimescaleDB插件要价20万》](202507/20250717_02.md)  
+##### 202507/20250717_01.md   [《AI论文解读 | PolarDB-MP: A Multi-Primary Cloud-Native Database via Disaggregated Shared Memory》](202507/20250717_01.md)  
 ##### 202507/20250716_03.md   [《德说-第350期, 犯了什么大忌? 国产数据库厂商到底能不能做好开源?》](202507/20250716_03.md)  
 ##### 202507/20250716_02.md   [《AI论文解读 | PolarDB-SCC: A Cloud-Native Database Ensuring Low Latency for Strongly Consistent Reads》](202507/20250716_02.md)  
 ##### 202507/20250716_01.md   [《AI论文解读 | PolarDB-IMCI: A Cloud-Native HTAP Database System at Alibaba》](202507/20250716_01.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250718_02.md   [《AI论文解读 | Understanding the difficulty of training deep feedforward neural networks》](20250718_02.md)  
+##### 20250718_01.md   [《AI论文解读 | PolarDB Serverless: A Cloud Native Database for Disaggregated Data Centers》](20250718_01.md)  
 ##### 20250717_03.md   [《AI论文解读 | Adaptive Cardinality Estimation》](20250717_03.md)  
 ##### 20250717_02.md   [《天啊! 某国产数据库安装TimescaleDB插件要价20万》](20250717_02.md)  
 ##### 20250717_01.md   [《AI论文解读 | PolarDB-MP: A Multi-Primary Cloud-Native Database via Disaggregated Shared Memory》](20250717_01.md)  

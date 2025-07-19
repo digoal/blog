@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20250719_09.md   [《AI论文解读 | A Comprehensive Overview of GPU Accelerated Databases》](20250719_09.md)  
+##### 20250719_08.md   [《AI论文解读 | DuckPGQ: Bringing SQL/PGQ to DuckDB》](20250719_08.md)  
+##### 20250719_07.md   [《AI论文解读 | These Rows Are Made for Sorting and That’s Just What We’ll Do》](20250719_07.md)  
+##### 20250719_06.md   [《AI论文解读 | DuckPGQ: Efficient Property Graph Queries in an analytical RDBMS》](20250719_06.md)  
+##### 20250719_05.md   [《AI论文解读 | GaussML: An End-to-End In-Database Machine Learning System》](20250719_05.md)  
+##### 20250719_04.md   [《AI论文解读 | THE INTEGRATION OF ARTIFICIAL INTELLIGENCE INTO DATABASE SYSTEMS (AI-DB INTEGRATION REVIEW)》](20250719_04.md)  
+##### 20250719_03.md   [《AI论文解读 | X-Engine: An Optimized Storage Engine for Large-scale E-commerce Transaction Processing》](20250719_03.md)  
+##### 20250719_02.md   [《AI论文解读 | Towards a Shared-storage-based Serverless Database Achieving Seamless Scale-up and Read Scale-out》](20250719_02.md)  
+##### 20250719_01.md   [《AI论文解读 | Unlocking the Potential of CXL for Disaggregated Memory in Cloud-Native Databases》](20250719_01.md)  
 ##### 20250718_02.md   [《AI论文解读 | Understanding the difficulty of training deep feedforward neural networks》](20250718_02.md)  
 ##### 20250718_01.md   [《AI论文解读 | PolarDB Serverless: A Cloud Native Database for Disaggregated Data Centers》](20250718_01.md)  
 ##### 20250717_03.md   [《AI论文解读 | Adaptive Cardinality Estimation》](20250717_03.md)  

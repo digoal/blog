@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250720_03.md   [《Web3 相关论文》](20250720_03.md)  
 ##### 20250720_02.md   [《AI论文解读 | Photon: A Fast Query Engine for Lakehouse Systems》](20250720_02.md)  
 ##### 20250720_01.md   [《AI论文解读 | Incremental Fusion: Unifying Compiled and Vectorized Query Execution》](20250720_01.md)  
 ##### 20250719_09.md   [《AI论文解读 | A Comprehensive Overview of GPU Accelerated Databases》](20250719_09.md)  

@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250720_03.md   [《Web3 相关论文》](202507/20250720_03.md)  
 ##### 202507/20250720_02.md   [《AI论文解读 | Photon: A Fast Query Engine for Lakehouse Systems》](202507/20250720_02.md)  
 ##### 202507/20250720_01.md   [《AI论文解读 | Incremental Fusion: Unifying Compiled and Vectorized Query Execution》](202507/20250720_01.md)  
 ##### 202507/20250719_09.md   [《AI论文解读 | A Comprehensive Overview of GPU Accelerated Databases》](202507/20250719_09.md)  

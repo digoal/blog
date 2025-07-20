@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250720_02.md   [《AI论文解读 | Photon: A Fast Query Engine for Lakehouse Systems》](20250720_02.md)  
+##### 20250720_01.md   [《AI论文解读 | Incremental Fusion: Unifying Compiled and Vectorized Query Execution》](20250720_01.md)  
 ##### 20250719_09.md   [《AI论文解读 | A Comprehensive Overview of GPU Accelerated Databases》](20250719_09.md)  
 ##### 20250719_08.md   [《AI论文解读 | DuckPGQ: Bringing SQL/PGQ to DuckDB》](20250719_08.md)  
 ##### 20250719_07.md   [《AI论文解读 | These Rows Are Made for Sorting and That’s Just What We’ll Do》](20250719_07.md)  

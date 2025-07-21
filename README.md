@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250721_05.md   [《AI论文解读 | Bao: Learning to Steer Query Optimizers》](202507/20250721_05.md)  
+##### 202507/20250721_04.md   [《AI论文解读 | 深入解读《从第一性原理设计智能生态系统》：主动推断与未来AI , Designing Ecosystems of Intelligence from First Principles》](202507/20250721_04.md)  
+##### 202507/20250721_03.md   [《AI论文解读 | Learned Cardinalities: Estimating Correlated Joins with Deep Learning》](202507/20250721_03.md)  
+##### 202507/20250721_02.md   [《AI论文解读 | Deep Unsupervised Cardinality Estimation》](202507/20250721_02.md)  
+##### 202507/20250721_01.md   [《内存解耦池化的硬件技术CXL有什么弊端吗?》](202507/20250721_01.md)  
 ##### 202507/20250720_03.md   [《Web3 相关论文》](202507/20250720_03.md)  
 ##### 202507/20250720_02.md   [《AI论文解读 | Photon: A Fast Query Engine for Lakehouse Systems》](202507/20250720_02.md)  
 ##### 202507/20250720_01.md   [《AI论文解读 | Incremental Fusion: Unifying Compiled and Vectorized Query Execution》](202507/20250720_01.md)  
@@ -4347,9 +4352,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201611/20161125_01.md   [《PostgreSQL 利用编译器extension 支持int128，提升聚合性能》](201611/20161125_01.md)  
 ##### 201611/20161124_02.md   [《PostgreSQL 与 12306 抢火车票的思考》](201611/20161124_02.md)  
 ##### 201611/20161124_01.md   [《门禁广告销售系统需求剖析 与 PostgreSQL数据库实现》](201611/20161124_01.md)  
+##### 201611/20161123_01.md   [《PostgreSQL AWR报告(for 阿里云ApsaraDB PgSQL)》](201611/20161123_01.md)  
 ##### 201611/20161123_01_pdf_002.md   [《报告时间段: ```2016-11-24 10:57:04.081798``` ~ ```2016-11-24 11:10:13.201455```》](201611/20161123_01_pdf_002.md)  
 ##### 201611/20161123_01_pdf_001.md   [《报告时间段: ```2016-11-24 10:51:14.744512``` ~ ```2016-11-24 10:57:04.081798```》](201611/20161123_01_pdf_001.md)  
-##### 201611/20161123_01.md   [《PostgreSQL AWR报告(for 阿里云ApsaraDB PgSQL)》](201611/20161123_01.md)  
 ##### 201611/20161121_02.md   [《PostgreSQL 函数调试、诊断、优化 & auto_explain & plprofiler》](201611/20161121_02.md)  
 ##### 201611/20161121_01.md   [《PostgreSQL on Linux 最佳部署手册 - 珍藏级》](201611/20161121_01.md)  
 ##### 201611/20161120_06.md   [《转载 - Linux软中断不均的调优》](201611/20161120_06.md)  

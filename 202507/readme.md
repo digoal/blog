@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20250721_05.md   [《AI论文解读 | Bao: Learning to Steer Query Optimizers》](20250721_05.md)  
+##### 20250721_04.md   [《AI论文解读 | 深入解读《从第一性原理设计智能生态系统》：主动推断与未来AI , Designing Ecosystems of Intelligence from First Principles》](20250721_04.md)  
+##### 20250721_03.md   [《AI论文解读 | Learned Cardinalities: Estimating Correlated Joins with Deep Learning》](20250721_03.md)  
+##### 20250721_02.md   [《AI论文解读 | Deep Unsupervised Cardinality Estimation》](20250721_02.md)  
+##### 20250721_01.md   [《内存解耦池化的硬件技术CXL有什么弊端吗?》](20250721_01.md)  
 ##### 20250720_03.md   [《Web3 相关论文》](20250720_03.md)  
 ##### 20250720_02.md   [《AI论文解读 | Photon: A Fast Query Engine for Lakehouse Systems》](20250720_02.md)  
 ##### 20250720_01.md   [《AI论文解读 | Incremental Fusion: Unifying Compiled and Vectorized Query Execution》](20250720_01.md)  

@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250722_03.md   [《深度研究报告 | AI 智能体所需的数据库产品及未来发展趋势》](202507/20250722_03.md)  
+##### 202507/20250722_02.md   [《AI论文解读 | Neo: A Learned Query Optimizer》](202507/20250722_02.md)  
+##### 202507/20250722_01.md   [《AI论文解读 | Self-Driving Database Management Systems》](202507/20250722_01.md)  
 ##### 202507/20250721_05.md   [《AI论文解读 | Bao: Learning to Steer Query Optimizers》](202507/20250721_05.md)  
 ##### 202507/20250721_04.md   [《AI论文解读 | 深入解读《从第一性原理设计智能生态系统》：主动推断与未来AI , Designing Ecosystems of Intelligence from First Principles》](202507/20250721_04.md)  
 ##### 202507/20250721_03.md   [《AI论文解读 | Learned Cardinalities: Estimating Correlated Joins with Deep Learning》](202507/20250721_03.md)  

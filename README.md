@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250724_03.md   [《AI论文解读 | Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods》](202507/20250724_03.md)  
+##### 202507/20250724_02.md   [《AI论文解读 | RAG vs. GraphRAG: A Systematic Evaluation and Key Insights》](202507/20250724_02.md)  
+##### 202507/20250724_01.md   [《AI论文解读 | The MADlib Analytics Library or MAD Skills, the SQL》](202507/20250724_01.md)  
 ##### 202507/20250723_09.md   [《生成PG内部元数据对象关系图的小工具》](202507/20250723_09.md)  
 ##### 202507/20250723_08.md   [《还在为age图插件的停更惋惜? Postgres用GraphBLAS每秒处理数十亿条边》](202507/20250723_08.md)  
 ##### 202507/20250723_07.md   [《滥用`LISTEN/NOTIFY`导致PG数据库的CPU被“吃”了》](202507/20250723_07.md)  

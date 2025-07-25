@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20250725_06.md   [《AGE要复活了? PG将内置PGQ(SQL:2023 Property-Graph Queries)》](20250725_06.md)  
+##### 20250725_05.md   [《AI论文解读 | Enhancing High-Availability Database Systems: An AI-Driven Approach to Anomaly Detection》](20250725_05.md)  
+##### 20250725_04.md   [《AI论文解读 | AI-Driven Anomaly Detection: Strengthening Data Security and Quality in Large Databases》](20250725_04.md)  
+##### 20250725_03.md   [《AI论文解读 | StarRocks Technical Overview》](20250725_03.md)  
+##### 20250725_02.md   [《AI论文解读 | StarRocks The new kid on the real-time analytical databases block》](20250725_02.md)  
+##### 20250725_01.md   [《AI论文解读 | Split block Bloom filters》](20250725_01.md)  
 ##### 20250724_03.md   [《AI论文解读 | Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods》](20250724_03.md)  
 ##### 20250724_02.md   [《AI论文解读 | RAG vs. GraphRAG: A Systematic Evaluation and Key Insights》](20250724_02.md)  
 ##### 20250724_01.md   [《AI论文解读 | The MADlib Analytics Library or MAD Skills, the SQL》](20250724_01.md)  

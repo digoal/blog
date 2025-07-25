@@ -100,6 +100,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250725_06.md   [《AGE要复活了? PG将内置PGQ(SQL:2023 Property-Graph Queries)》](202507/20250725_06.md)  
+##### 202507/20250725_05.md   [《AI论文解读 | Enhancing High-Availability Database Systems: An AI-Driven Approach to Anomaly Detection》](202507/20250725_05.md)  
+##### 202507/20250725_04.md   [《AI论文解读 | AI-Driven Anomaly Detection: Strengthening Data Security and Quality in Large Databases》](202507/20250725_04.md)  
+##### 202507/20250725_03.md   [《AI论文解读 | StarRocks Technical Overview》](202507/20250725_03.md)  
+##### 202507/20250725_02.md   [《AI论文解读 | StarRocks The new kid on the real-time analytical databases block》](202507/20250725_02.md)  
+##### 202507/20250725_01.md   [《AI论文解读 | Split block Bloom filters》](202507/20250725_01.md)  
 ##### 202507/20250724_03.md   [《AI论文解读 | Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods》](202507/20250724_03.md)  
 ##### 202507/20250724_02.md   [《AI论文解读 | RAG vs. GraphRAG: A Systematic Evaluation and Key Insights》](202507/20250724_02.md)  
 ##### 202507/20250724_01.md   [《AI论文解读 | The MADlib Analytics Library or MAD Skills, the SQL》](202507/20250724_01.md)  

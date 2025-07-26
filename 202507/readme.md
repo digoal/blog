@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250726_04.md   [《AI论文解读 | Adaptive Factorization Using Linear-Chained Hash Tables》](20250726_04.md)  
 ##### 20250726_03.md   [《AI论文解读 | Deep Learning Advancements in Anomaly Detection: A Comprehensive Survey》](20250726_03.md)  
 ##### 20250726_02.md   [《AI论文解读 | Dive into Time-Series Anomaly Detection: A Decade Review》](20250726_02.md)  
 ##### 20250726_01.md   [《AI论文解读 | DEEP LEARNING FOR ANOMALY DETECTION: A SURVEY》](20250726_01.md)  

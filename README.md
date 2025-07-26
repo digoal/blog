@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250726_03.md   [《AI论文解读 | Deep Learning Advancements in Anomaly Detection: A Comprehensive Survey》](202507/20250726_03.md)  
+##### 202507/20250726_02.md   [《AI论文解读 | Dive into Time-Series Anomaly Detection: A Decade Review》](202507/20250726_02.md)  
+##### 202507/20250726_01.md   [《AI论文解读 | DEEP LEARNING FOR ANOMALY DETECTION: A SURVEY》](202507/20250726_01.md)  
 ##### 202507/20250725_06.md   [《AGE要复活了? PG将内置PGQ(SQL:2023 Property-Graph Queries)》](202507/20250725_06.md)  
 ##### 202507/20250725_05.md   [《AI论文解读 | Enhancing High-Availability Database Systems: An AI-Driven Approach to Anomaly Detection》](202507/20250725_05.md)  
 ##### 202507/20250725_04.md   [《AI论文解读 | AI-Driven Anomaly Detection: Strengthening Data Security and Quality in Large Databases》](202507/20250725_04.md)  

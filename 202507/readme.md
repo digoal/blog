@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250727_01.md   [《图数据库赛道没了 | SQL:PGQ标准出炉, 还不懂PGQ图式查询用法? 用DuckDB将PGQ一次整明白》](20250727_01.md)  
 ##### 20250726_04.md   [《AI论文解读 | Adaptive Factorization Using Linear-Chained Hash Tables》](20250726_04.md)  
 ##### 20250726_03.md   [《AI论文解读 | Deep Learning Advancements in Anomaly Detection: A Comprehensive Survey》](20250726_03.md)  
 ##### 20250726_02.md   [《AI论文解读 | Dive into Time-Series Anomaly Detection: A Decade Review》](20250726_02.md)  

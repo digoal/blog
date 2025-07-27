@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250727_04.md   [《AI论文解读 | TensorFlow: A system for large-scale machine learning》](202507/20250727_04.md)  
+##### 202507/20250727_03.md   [《AI论文解读 | MLbase: A Distributed Machine-learning System》](202507/20250727_03.md)  
+##### 202507/20250727_02.md   [《AI论文解读 | MAD Skills: New Analysis Practices for Big Data》](202507/20250727_02.md)  
 ##### 202507/20250727_01.md   [《图数据库赛道没了 | SQL:PGQ标准出炉, 还不懂PGQ图式查询用法? 用DuckDB将PGQ一次整明白》](202507/20250727_01.md)  
 ##### 202507/20250726_04.md   [《AI论文解读 | Adaptive Factorization Using Linear-Chained Hash Tables》](202507/20250726_04.md)  
 ##### 202507/20250726_03.md   [《AI论文解读 | Deep Learning Advancements in Anomaly Detection: A Comprehensive Survey》](202507/20250726_03.md)  

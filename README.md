@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250728_02.md   [《AI论文解读 | Ease.ML: A Lifecycle Management System for MLDev and MLOps》](202507/20250728_02.md)  
+##### 202507/20250728_01.md   [《AI论文解读 | Apache Spark: A Unified Engine for Big Data Processing》](202507/20250728_01.md)  
 ##### 202507/20250727_04.md   [《AI论文解读 | TensorFlow: A system for large-scale machine learning》](202507/20250727_04.md)  
 ##### 202507/20250727_03.md   [《AI论文解读 | MLbase: A Distributed Machine-learning System》](202507/20250727_03.md)  
 ##### 202507/20250727_02.md   [《AI论文解读 | MAD Skills: New Analysis Practices for Big Data》](202507/20250727_02.md)  

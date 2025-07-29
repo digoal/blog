@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250729_03.md   [《下一个风口 | AI 中台》](20250729_03.md)  
+##### 20250729_02.md   [《AI论文解读 | openGauss: An Autonomous Database System》](20250729_02.md)  
+##### 20250729_01.md   [《AI论文解读 | A Study of the Fundamental Performance Characteristics of GPUs and CPUs for Database Analytics》](20250729_01.md)  
 ##### 20250728_02.md   [《AI论文解读 | Ease.ML: A Lifecycle Management System for MLDev and MLOps》](20250728_02.md)  
 ##### 20250728_01.md   [《AI论文解读 | Apache Spark: A Unified Engine for Big Data Processing》](20250728_01.md)  
 ##### 20250727_04.md   [《AI论文解读 | TensorFlow: A system for large-scale machine learning》](20250727_04.md)  

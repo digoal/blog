@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250729_03.md   [《下一个风口 | AI 中台》](202507/20250729_03.md)  
+##### 202507/20250729_02.md   [《AI论文解读 | openGauss: An Autonomous Database System》](202507/20250729_02.md)  
+##### 202507/20250729_01.md   [《AI论文解读 | A Study of the Fundamental Performance Characteristics of GPUs and CPUs for Database Analytics》](202507/20250729_01.md)  
 ##### 202507/20250728_02.md   [《AI论文解读 | Ease.ML: A Lifecycle Management System for MLDev and MLOps》](202507/20250728_02.md)  
 ##### 202507/20250728_01.md   [《AI论文解读 | Apache Spark: A Unified Engine for Big Data Processing》](202507/20250728_01.md)  
 ##### 202507/20250727_04.md   [《AI论文解读 | TensorFlow: A system for large-scale machine learning》](202507/20250727_04.md)  

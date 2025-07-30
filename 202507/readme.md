@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20250730_02.md   [《AI论文解读 | Efficient Training of Language Models to Fill in the Middle》](20250730_02.md)  
+##### 20250730_01.md   [《AI论文解读 | Mathematical Foundations of the GraphBLAS》](20250730_01.md)  
 ##### 20250729_03.md   [《下一个风口 | AI 中台》](20250729_03.md)  
 ##### 20250729_02.md   [《AI论文解读 | openGauss: An Autonomous Database System》](20250729_02.md)  
 ##### 20250729_01.md   [《AI论文解读 | A Study of the Fundamental Performance Characteristics of GPUs and CPUs for Database Analytics》](20250729_01.md)  

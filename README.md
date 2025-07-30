@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202507/20250730_02.md   [《AI论文解读 | Efficient Training of Language Models to Fill in the Middle》](202507/20250730_02.md)  
+##### 202507/20250730_01.md   [《AI论文解读 | Mathematical Foundations of the GraphBLAS》](202507/20250730_01.md)  
 ##### 202507/20250729_03.md   [《下一个风口 | AI 中台》](202507/20250729_03.md)  
 ##### 202507/20250729_02.md   [《AI论文解读 | openGauss: An Autonomous Database System》](202507/20250729_02.md)  
 ##### 202507/20250729_01.md   [《AI论文解读 | A Study of the Fundamental Performance Characteristics of GPUs and CPUs for Database Analytics》](202507/20250729_01.md)  

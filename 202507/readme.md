@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250731_03.md   [《PostgreSQL 19 preview - pg_stat_statements新增generic_plan和custom_plan计数器》](20250731_03.md)  
+##### 20250731_02.md   [《AI论文解读 | The Belief-Desire-Intention Model of Agency》](20250731_02.md)  
+##### 20250731_01.md   [《AI论文解读 | BDI Agents: From Theory to Practice》](20250731_01.md)  
 ##### 20250730_02.md   [《AI论文解读 | Efficient Training of Language Models to Fill in the Middle》](20250730_02.md)  
 ##### 20250730_01.md   [《AI论文解读 | Mathematical Foundations of the GraphBLAS》](20250730_01.md)  
 ##### 20250729_03.md   [《下一个风口 | AI 中台》](20250729_03.md)  

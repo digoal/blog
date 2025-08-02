@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250802_04.md   [《AI论文解读 | Effective Explanations for Belief-Desire-Intention Robots: When and What to Explain》](202508/20250802_04.md)  
+##### 202508/20250802_03.md   [《AI论文解读 | Real-Time BDI Agents: A Model and Its Implementation》](202508/20250802_03.md)  
+##### 202508/20250802_02.md   [《AI论文解读 | BDI Agent Architectures: A Survey》](202508/20250802_02.md)  
+##### 202508/20250802_01.md   [《AI论文解读 | BDI: Applications and Architectures》](202508/20250802_01.md)  
 ##### 202508/20250801_03.md   [《如何统计PG每个进程的真实内存消耗?》](202508/20250801_03.md)  
 ##### 202508/20250801_02.md   [《AI论文解读 | Generative Adversarial Nets》](202508/20250801_02.md)  
 ##### 202508/20250801_01.md   [《AI论文解读 | Autoencoders》](202508/20250801_01.md)  

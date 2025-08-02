@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250801_03.md   [《如何统计PG每个进程的真实内存消耗?》](202508/20250801_03.md)  
+##### 202508/20250801_02.md   [《AI论文解读 | Generative Adversarial Nets》](202508/20250801_02.md)  
+##### 202508/20250801_01.md   [《AI论文解读 | Autoencoders》](202508/20250801_01.md)  
+----  
 ##### 202507/20250731_03.md   [《PostgreSQL 19 preview - pg_stat_statements新增generic_plan和custom_plan计数器》](202507/20250731_03.md)  
 ##### 202507/20250731_02.md   [《AI论文解读 | The Belief-Desire-Intention Model of Agency》](202507/20250731_02.md)  
 ##### 202507/20250731_01.md   [《AI论文解读 | BDI Agents: From Theory to Practice》](202507/20250731_01.md)  

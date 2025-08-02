@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250802_08.md   [《AI论文解读 | Foundations for an Ontology of Belief, Desire and Intention》](202508/20250802_08.md)  
+##### 202508/20250802_07.md   [《AI论文解读 | Emotional Belief-Desire-Intention Agent Model: Previous Work and Proposed Architecture》](202508/20250802_07.md)  
+##### 202508/20250802_06.md   [《AI论文解读 | Bratman on belief, intention, and intentional action》](202508/20250802_06.md)  
+##### 202508/20250802_05.md   [《AI论文解读 | Satori: Towards Proactive AR Assistant with Belief-Desire-Intention User Modeling》](202508/20250802_05.md)  
 ##### 202508/20250802_04.md   [《AI论文解读 | Effective Explanations for Belief-Desire-Intention Robots: When and What to Explain》](202508/20250802_04.md)  
 ##### 202508/20250802_03.md   [《AI论文解读 | Real-Time BDI Agents: A Model and Its Implementation》](202508/20250802_03.md)  
 ##### 202508/20250802_02.md   [《AI论文解读 | BDI Agent Architectures: A Survey》](202508/20250802_02.md)  

@@ -100,6 +100,13 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250803_07.md   [《AI论文解读 | Understanding the Performance Implications of the Design Principles in Storage-Disaggregated Databases》](202508/20250803_07.md)  
+##### 202508/20250803_06.md   [《AI论文解读 | Amazon Aurora High Availability and Disaster Recovery Features for Global Resilience》](202508/20250803_06.md)  
+##### 202508/20250803_05.md   [《AI论文解读 | Resource Management in Aurora Serverless》](202508/20250803_05.md)  
+##### 202508/20250803_04.md   [《AI论文解读 | Socrates: The New SQL Server in the Cloud》](202508/20250803_04.md)  
+##### 202508/20250803_03.md   [《AI论文解读 | Amazon Aurora: On Avoiding Distributed Consensus for I/Os, Commits, and Membership Changes》](202508/20250803_03.md)  
+##### 202508/20250803_02.md   [《AI论文解读 | Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases》](202508/20250803_02.md)  
+##### 202508/20250803_01.md   [《AI论文解读 | A Belief-desire-intention Agent Model for Modeling End-user Decision-Making under Demand Response》](202508/20250803_01.md)  
 ##### 202508/20250802_08.md   [《AI论文解读 | Foundations for an Ontology of Belief, Desire and Intention》](202508/20250802_08.md)  
 ##### 202508/20250802_07.md   [《AI论文解读 | Emotional Belief-Desire-Intention Agent Model: Previous Work and Proposed Architecture》](202508/20250802_07.md)  
 ##### 202508/20250802_06.md   [《AI论文解读 | Bratman on belief, intention, and intentional action》](202508/20250802_06.md)  

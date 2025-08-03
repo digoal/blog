@@ -2,6 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20250803_07.md   [《AI论文解读 | Understanding the Performance Implications of the Design Principles in Storage-Disaggregated Databases》](20250803_07.md)  
+##### 20250803_06.md   [《AI论文解读 | Amazon Aurora High Availability and Disaster Recovery Features for Global Resilience》](20250803_06.md)  
+##### 20250803_05.md   [《AI论文解读 | Resource Management in Aurora Serverless》](20250803_05.md)  
+##### 20250803_04.md   [《AI论文解读 | Socrates: The New SQL Server in the Cloud》](20250803_04.md)  
+##### 20250803_03.md   [《AI论文解读 | Amazon Aurora: On Avoiding Distributed Consensus for I/Os, Commits, and Membership Changes》](20250803_03.md)  
+##### 20250803_02.md   [《AI论文解读 | Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases》](20250803_02.md)  
+##### 20250803_01.md   [《AI论文解读 | A Belief-desire-intention Agent Model for Modeling End-user Decision-Making under Demand Response》](20250803_01.md)  
 ##### 20250802_08.md   [《AI论文解读 | Foundations for an Ontology of Belief, Desire and Intention》](20250802_08.md)  
 ##### 20250802_07.md   [《AI论文解读 | Emotional Belief-Desire-Intention Agent Model: Previous Work and Proposed Architecture》](20250802_07.md)  
 ##### 20250802_06.md   [《AI论文解读 | Bratman on belief, intention, and intentional action》](20250802_06.md)  

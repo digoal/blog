@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250804_03.md   [《PostgreSQL 19 preview - 逻辑订阅端冲突检测增强后续, 检测并报告 update_deleted 冲突》](202508/20250804_03.md)  
+##### 202508/20250804_02.md   [《AI论文解读 | An Introduction to Variational Autoencoders》](202508/20250804_02.md)  
+##### 202508/20250804_01.md   [《AI论文解读 | ANOMALY DETECTION USING ONE-CLASS NEURAL NETWORKS》](202508/20250804_01.md)  
 ##### 202508/20250803_07.md   [《AI论文解读 | Understanding the Performance Implications of the Design Principles in Storage-Disaggregated Databases》](202508/20250803_07.md)  
 ##### 202508/20250803_06.md   [《AI论文解读 | Amazon Aurora High Availability and Disaster Recovery Features for Global Resilience》](202508/20250803_06.md)  
 ##### 202508/20250803_05.md   [《AI论文解读 | Resource Management in Aurora Serverless》](202508/20250803_05.md)  

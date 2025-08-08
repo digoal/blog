@@ -2,6 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20250808_08.md   [《DeepMind Genie 3凭什么被称为“世界模型”?》](20250808_08.md)  
+##### 20250808_07.md   [《使用开发者参数 backtrace_functions 对 Postgres 错误进行实时堆栈跟踪》](20250808_07.md)  
+##### 20250808_06.md   [《PostgreSQL 流复制LSN位点跟踪`restart_lsn`, `confirmed_flush_lsn`含义》](20250808_06.md)  
+##### 20250808_05.md   [《PostgreSQL 19 preview - SQL整型聚合运算中间结果"128 位整数"操作增强》](20250808_05.md)  
+##### 20250808_04.md   [《PostgreSQL 19 preview - 协议扩展: 新增宏替代魔法字符》](20250808_04.md)  
+##### 20250808_03.md   [《PostgreSQL 19 preview - pg_stat_progress_basebackup 新增区分 backup_type 字段》](20250808_03.md)  
+##### 20250808_02.md   [《AI论文解读 | Snorkel: Rapid Training Data Creation with Weak Supervision》](20250808_02.md)  
+##### 20250808_01.md   [《AI论文解读 | Snorkel DryBell: A Case Study in Deploying Weak Supervision at Industrial Scale》](20250808_01.md)  
 ##### 20250804_03.md   [《PostgreSQL 19 preview - 逻辑订阅端冲突检测增强后续, 检测并报告 update_deleted 冲突》](20250804_03.md)  
 ##### 20250804_02.md   [《AI论文解读 | An Introduction to Variational Autoencoders》](20250804_02.md)  
 ##### 20250804_01.md   [《AI论文解读 | ANOMALY DETECTION USING ONE-CLASS NEURAL NETWORKS》](20250804_01.md)  

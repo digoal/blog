@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250810_03.md   [《AI论文解读 | RECATHON: A Middleware for Context-Aware Recommendation in Database Systems》](20250810_03.md)  
+##### 20250810_02.md   [《AI论文解读 | RecDB in Action: Recommendation Made Easy in Relational Databases》](20250810_02.md)  
+##### 20250810_01.md   [《AI论文解读 | Database System Support for Personalized Recommendation Applications》](20250810_01.md)  
 ##### 20250808_08.md   [《DeepMind Genie 3凭什么被称为“世界模型”?》](20250808_08.md)  
 ##### 20250808_07.md   [《使用开发者参数 backtrace_functions 对 Postgres 错误进行实时堆栈跟踪》](20250808_07.md)  
 ##### 20250808_06.md   [《PostgreSQL 流复制LSN位点跟踪`restart_lsn`, `confirmed_flush_lsn`含义》](20250808_06.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250811_01.md   [《PostGIS霸主地位不保! DuckDB SPATIAL_JOIN算子傲视群雄》](20250811_01.md)  
 ##### 20250810_03.md   [《AI论文解读 | RECATHON: A Middleware for Context-Aware Recommendation in Database Systems》](20250810_03.md)  
 ##### 20250810_02.md   [《AI论文解读 | RecDB in Action: Recommendation Made Easy in Relational Databases》](20250810_02.md)  
 ##### 20250810_01.md   [《AI论文解读 | Database System Support for Personalized Recommendation Applications》](20250810_01.md)  

@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250811_01.md   [《PostGIS霸主地位不保! DuckDB SPATIAL_JOIN算子傲视群雄》](202508/20250811_01.md)  
 ##### 202508/20250810_03.md   [《AI论文解读 | RECATHON: A Middleware for Context-Aware Recommendation in Database Systems》](202508/20250810_03.md)  
 ##### 202508/20250810_02.md   [《AI论文解读 | RecDB in Action: Recommendation Made Easy in Relational Databases》](202508/20250810_02.md)  
 ##### 202508/20250810_01.md   [《AI论文解读 | Database System Support for Personalized Recommendation Applications》](202508/20250810_01.md)  

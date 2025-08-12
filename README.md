@@ -100,6 +100,17 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250812_09.md   [《LVM Cache 如何处理 SSD 缓存卷故障》](202508/20250812_09.md)  
+##### 202508/20250812_08.md   [《Ceph Cache Tiering 功能替代方案: LVM Cache 实践》](202508/20250812_08.md)  
+##### 202508/20250812_07.md   [《Ceph Cache Tiering 功能替代方案》](202508/20250812_07.md)  
+##### 202508/20250812_06.md   [《作为Ceph存储层的机械盘故障, 如何更换?》](202508/20250812_06.md)  
+##### 202508/20250812_05.md   [《作为Ceph缓存层的SSD盘故障, 如何更换?》](202508/20250812_05.md)  
+##### 202508/20250812_04.md   [《如何配置Ceph cache tier SSD 读写缓存?》](202508/20250812_04.md)  
+##### 202508/20250812_03.md   [《PolarDB存算分离共享存储 : Ceph SSD+机械盘 2层存储 典型配置实践》](202508/20250812_03.md)  
+##### 202508/20250812_02.md   [《AI论文解读 | Algorand: Scaling Byzantine Agreements for Cryptocurrencies》](202508/20250812_02.md)  
+##### 202508/20250812_01.md   [《AI论文解读 | Ouroboros: A Provably Secure Proof-of-Stake Blockchain Protocol》](202508/20250812_01.md)  
+##### 202508/20250811_03.md   [《AI论文解读 | Ethereum: A Next-Generation Smart Contract and Decentralized Application Platform》](202508/20250811_03.md)  
+##### 202508/20250811_02.md   [《AI论文解读 | Bitcoin: A Peer-to-Peer Electronic Cash System》](202508/20250811_02.md)  
 ##### 202508/20250811_01.md   [《PostGIS霸主地位不保! DuckDB SPATIAL_JOIN算子傲视群雄》](202508/20250811_01.md)  
 ##### 202508/20250810_03.md   [《AI论文解读 | RECATHON: A Middleware for Context-Aware Recommendation in Database Systems》](202508/20250810_03.md)  
 ##### 202508/20250810_02.md   [《AI论文解读 | RecDB in Action: Recommendation Made Easy in Relational Databases》](202508/20250810_02.md)  
@@ -285,7 +296,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202506/20250611_02.md   [《德说-第344期, 未来 AI Agent 社会的畅想》](202506/20250611_02.md)  
 ##### 202506/20250611_01.md   [《AI论文解读 | FINETUNED LANGUAGE MODELS ARE ZERO-SHOT LEARNERS》](202506/20250611_01.md)  
 ##### 202506/20250610_04.md   [《祝贺DuckDB斩获30K star, Roadmap暴露野心, 估值可能过百亿》](202506/20250610_04.md)  
-##### 202506/20250610_03.md   [《DuckDB 迎来第一波“抄袭者”!》](202506/20250610_03.md)  
+##### 202506/20250610_03.md   [《DuckDB 迎来第一波“抄袭者”!  Rust:GlareDB》](202506/20250610_03.md)  
 ##### 202506/20250610_02.md   [《德说-第343期, 人生最重要的事12: 贵人》](202506/20250610_02.md)  
 ##### 202506/20250610_01.md   [《AI论文解读 | Emergent Abilities of Large Language Models》](202506/20250610_01.md)  
 ##### 202506/20250609_02.md   [《AI论文解读 | Scaling Laws for Neural Language Models》](202506/20250609_02.md)  

@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250813_04.md   [《DuckDB excel插件中文支持不友好, 国人坐不住了, 用rust手撸了一个rusty-sheet插件》](202508/20250813_04.md)  
+##### 202508/20250813_03.md   [《AI论文解读 | Towards Scaling Blockchain Systems via Sharding》](202508/20250813_03.md)  
+##### 202508/20250813_02.md   [《AI论文解读 | Revisiting Query Performance in GPU Database Systems》](202508/20250813_02.md)  
+##### 202508/20250813_01.md   [《PolarDB PFS mkfs 大机械盘慢的原因和优化思路》](202508/20250813_01.md)  
 ##### 202508/20250812_09.md   [《LVM Cache 如何处理 SSD 缓存卷故障》](202508/20250812_09.md)  
 ##### 202508/20250812_08.md   [《Ceph Cache Tiering 功能替代方案: LVM Cache 实践》](202508/20250812_08.md)  
 ##### 202508/20250812_07.md   [《Ceph Cache Tiering 功能替代方案》](202508/20250812_07.md)  
@@ -111,7 +115,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202508/20250812_01.md   [《AI论文解读 | Ouroboros: A Provably Secure Proof-of-Stake Blockchain Protocol》](202508/20250812_01.md)  
 ##### 202508/20250811_03.md   [《AI论文解读 | Ethereum: A Next-Generation Smart Contract and Decentralized Application Platform》](202508/20250811_03.md)  
 ##### 202508/20250811_02.md   [《AI论文解读 | Bitcoin: A Peer-to-Peer Electronic Cash System》](202508/20250811_02.md)  
-##### 202508/20250811_01.md   [《PostGIS霸主地位不保! DuckDB SPATIAL_JOIN算子傲视群雄》](202508/20250811_01.md)  
+##### 202508/20250811_01.md   [《PostGIS霸主地位不保! DuckDB SPATIAL_JOIN算子傲视群雄(建议持续观察迭代进展)》](202508/20250811_01.md)  
 ##### 202508/20250810_03.md   [《AI论文解读 | RECATHON: A Middleware for Context-Aware Recommendation in Database Systems》](202508/20250810_03.md)  
 ##### 202508/20250810_02.md   [《AI论文解读 | RecDB in Action: Recommendation Made Easy in Relational Databases》](202508/20250810_02.md)  
 ##### 202508/20250810_01.md   [《AI论文解读 | Database System Support for Personalized Recommendation Applications》](202508/20250810_01.md)  

@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250814_03.md   [《Ceph 机械盘分组优化思路》](20250814_03.md)  
+##### 20250814_02.md   [《AI论文解读 | Blockchain Scaling using Rollups: A Comprehensive Survey》](20250814_02.md)  
+##### 20250814_01.md   [《AI论文解读 | Plasma: Scalable Autonomous Smart Contracts》](20250814_01.md)  
 ##### 20250813_04.md   [《DuckDB excel插件中文支持不友好, 国人坐不住了, 用rust手撸了一个rusty-sheet插件》](20250813_04.md)  
 ##### 20250813_03.md   [《AI论文解读 | Towards Scaling Blockchain Systems via Sharding》](20250813_03.md)  
 ##### 20250813_02.md   [《AI论文解读 | Revisiting Query Performance in GPU Database Systems》](20250813_02.md)  

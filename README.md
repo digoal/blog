@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250814_03.md   [《Ceph 机械盘分组优化思路》](202508/20250814_03.md)  
+##### 202508/20250814_02.md   [《AI论文解读 | Blockchain Scaling using Rollups: A Comprehensive Survey》](202508/20250814_02.md)  
+##### 202508/20250814_01.md   [《AI论文解读 | Plasma: Scalable Autonomous Smart Contracts》](202508/20250814_01.md)  
 ##### 202508/20250813_04.md   [《DuckDB excel插件中文支持不友好, 国人坐不住了, 用rust手撸了一个rusty-sheet插件》](202508/20250813_04.md)  
 ##### 202508/20250813_03.md   [《AI论文解读 | Towards Scaling Blockchain Systems via Sharding》](202508/20250813_03.md)  
 ##### 202508/20250813_02.md   [《AI论文解读 | Revisiting Query Performance in GPU Database Systems》](202508/20250813_02.md)  

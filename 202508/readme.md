@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20250824_06.md   [《AI论文解读 | Overview of Polkadot and its Design Considerations》](20250824_06.md)  
+##### 20250824_05.md   [《AI论文解读 | POLKADOT: VISION FOR A HETEROGENEOUS MULTI-CHAIN FRAMEWORK DRAFT 1》](20250824_05.md)  
+##### 20250824_04.md   [《AI论文解读 | A network analysis of the non‑fungible token (NFT) market: structural characteristics, evolution, and interactions》](20250824_04.md)  
+##### 20250824_03.md   [《AI论文解读 | Non-Fungible Token (NFT): Overview, Evaluation, Opportunities and Challenges》](20250824_03.md)  
+##### 20250824_02.md   [《AI论文解读 | Decentralized Autonomous Organizations: targeting the potential beyond the hype》](20250824_02.md)  
+##### 20250824_01.md   [《AI论文解读 | Decentralized Autonomous Organizations: Beyond the Hype》](20250824_01.md)  
 ##### 20250820_03.md   [《海南封关》](20250820_03.md)  
 ##### 20250820_02.md   [《AI论文解读 | DEFINING BLOCKCHAIN GOVERNANCE PRINCIPLES: A COMPREHENSIVE FRAMEWORK》](20250820_02.md)  
 ##### 20250820_01.md   [《AI论文解读 | Decentralized Finance: On Blockchain- and Smart Contract-Based Financial Markets》](20250820_01.md)  

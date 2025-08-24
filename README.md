@@ -100,6 +100,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250824_06.md   [《AI论文解读 | Overview of Polkadot and its Design Considerations》](202508/20250824_06.md)  
+##### 202508/20250824_05.md   [《AI论文解读 | POLKADOT: VISION FOR A HETEROGENEOUS MULTI-CHAIN FRAMEWORK DRAFT 1》](202508/20250824_05.md)  
+##### 202508/20250824_04.md   [《AI论文解读 | A network analysis of the non‑fungible token (NFT) market: structural characteristics, evolution, and interactions》](202508/20250824_04.md)  
+##### 202508/20250824_03.md   [《AI论文解读 | Non-Fungible Token (NFT): Overview, Evaluation, Opportunities and Challenges》](202508/20250824_03.md)  
+##### 202508/20250824_02.md   [《AI论文解读 | Decentralized Autonomous Organizations: targeting the potential beyond the hype》](202508/20250824_02.md)  
+##### 202508/20250824_01.md   [《AI论文解读 | Decentralized Autonomous Organizations: Beyond the Hype》](202508/20250824_01.md)  
 ##### 202508/20250820_03.md   [《海南封关》](202508/20250820_03.md)  
 ##### 202508/20250820_02.md   [《AI论文解读 | DEFINING BLOCKCHAIN GOVERNANCE PRINCIPLES: A COMPREHENSIVE FRAMEWORK》](202508/20250820_02.md)  
 ##### 202508/20250820_01.md   [《AI论文解读 | Decentralized Finance: On Blockchain- and Smart Contract-Based Financial Markets》](202508/20250820_01.md)  

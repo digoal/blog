@@ -2,14 +2,14 @@
   
 ### 文章列表  
 ----  
-##### 20250825_08.md   [《》](20250825_08.md)  
-##### 20250825_07.md   [《》](20250825_07.md)  
-##### 20250825_06.md   [《》](20250825_06.md)  
-##### 20250825_05.md   [《》](20250825_05.md)  
-##### 20250825_04.md   [《》](20250825_04.md)  
-##### 20250825_03.md   [《》](20250825_03.md)  
-##### 20250825_02.md   [《》](20250825_02.md)  
-##### 20250825_01.md   [《》](20250825_01.md)  
+##### 20250825_08.md   [《VectorChord新版本发布: 支持图(DiskANN和HNSW)索引、召回率评估》](20250825_08.md)  
+##### 20250825_07.md   [《PostgreSQL 性能优化场景依赖哪些 logging 配置》](20250825_07.md)  
+##### 20250825_06.md   [《再谈PostgreSQL分区表, 通过直接哈希分区计算绕过 PostgreSQL catalog 开销, 提速20倍》](20250825_06.md)  
+##### 20250825_05.md   [《PostgreSQL 19 preview - 优化OOM处理逻辑(libpq 在 OOM 时的行为改动)》](20250825_05.md)  
+##### 20250825_04.md   [《PostgreSQL 19 preview - PL/Python支持事件触发器了》](20250825_04.md)  
+##### 20250825_03.md   [《PostgreSQL 19 preview - pg_buffercache 插件优化, 增加中断信号处理逻辑》](20250825_03.md)  
+##### 20250825_02.md   [《AI论文解读 | Galaxy Research: Exploring the Cosmos》](20250825_02.md)  
+##### 20250825_01.md   [《AI论文解读 | Cosmos Whitepaper: A Network of Distributed Ledgers》](20250825_01.md)  
 ##### 20250824_06.md   [《AI论文解读 | Overview of Polkadot and its Design Considerations》](20250824_06.md)  
 ##### 20250824_05.md   [《AI论文解读 | POLKADOT: VISION FOR A HETEROGENEOUS MULTI-CHAIN FRAMEWORK DRAFT 1》](20250824_05.md)  
 ##### 20250824_04.md   [《AI论文解读 | A network analysis of the non‑fungible token (NFT) market: structural characteristics, evolution, and interactions》](20250824_04.md)  

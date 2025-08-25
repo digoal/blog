@@ -2,6 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20250825_08.md   [《》](20250825_08.md)  
+##### 20250825_07.md   [《》](20250825_07.md)  
+##### 20250825_06.md   [《》](20250825_06.md)  
+##### 20250825_05.md   [《》](20250825_05.md)  
+##### 20250825_04.md   [《》](20250825_04.md)  
+##### 20250825_03.md   [《》](20250825_03.md)  
+##### 20250825_02.md   [《》](20250825_02.md)  
+##### 20250825_01.md   [《》](20250825_01.md)  
 ##### 20250824_06.md   [《AI论文解读 | Overview of Polkadot and its Design Considerations》](20250824_06.md)  
 ##### 20250824_05.md   [《AI论文解读 | POLKADOT: VISION FOR A HETEROGENEOUS MULTI-CHAIN FRAMEWORK DRAFT 1》](20250824_05.md)  
 ##### 20250824_04.md   [《AI论文解读 | A network analysis of the non‑fungible token (NFT) market: structural characteristics, evolution, and interactions》](20250824_04.md)  
@@ -19,7 +27,7 @@
 ##### 20250817_03.md   [《绝不吹牛! 用 DuckDB 超高性能完成机器学习数据预处理任务》](20250817_03.md)  
 ##### 20250817_02.md   [《AI论文解读 | Tornado Cash and Blockchain Privacy: A Primer for Economists and Policymakers》](20250817_02.md)  
 ##### 20250817_01.md   [《AI论文解读 | Mixicles: Simple Private Decentralized Finance》](20250817_01.md)  
-##### 20250815_10.md   [《集群文件系统GFS/OCFS2上部署 PolarDB RAC 一写多读集群?》](20250815_10.md)  
+##### 20250815_10.md   [《集群文件系统GFS/OCFS2上能不能部署 PolarDB RAC 一写多读集群? macOS+docker环境下的一种模拟测试方法》](20250815_10.md)  
 ##### 20250815_09.md   [《Docker 有哪些挂载volume的driver选项, 哪种性能最好?》](20250815_09.md)  
 ##### 20250815_08.md   [《在未使用DirectIO模式挂载宿主机目录的容器内使用DirectIO flag写数据时, 到底能不能保障DIO?》](20250815_08.md)  
 ##### 20250815_07.md   [《macOS 是否支持DirectIO》](20250815_07.md)  

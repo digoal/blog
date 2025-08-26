@@ -2,6 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20250826_07.md   [《自驱动数据库功能之一 | PostgreSQL索引自动维护》](20250826_07.md)  
+##### 20250826_06.md   [《高并发持久工作流/任务流/任务分配的数据库选型: 为什么PG会胜出?》](20250826_06.md)  
+##### 20250826_05.md   [《PostgreSQL JSONB 索引实践》](20250826_05.md)  
+##### 20250826_04.md   [《OLTP数据库内置LakeHouse能力, 架构千篇一律》](20250826_04.md)  
+##### 20250826_03.md   [《AI搜索“不等于”向量搜索, 那么答案究竟是什么?》](20250826_03.md)  
+##### 20250826_02.md   [《AI论文解读 | TOKENOMICS: DYNAMIC ADOPTION AND VALUATION》](20250826_02.md)  
+##### 20250826_01.md   [《AI论文解读 | The Economics of Cryptocurrencies – Bitcoin and Beyond》](20250826_01.md)  
 ##### 20250825_08.md   [《VectorChord新版本发布: 支持图(DiskANN和HNSW)索引、召回率评估》](20250825_08.md)  
 ##### 20250825_07.md   [《PostgreSQL 性能优化场景依赖哪些 logging 配置》](20250825_07.md)  
 ##### 20250825_06.md   [《再谈PostgreSQL分区表, 通过直接哈希分区计算绕过 PostgreSQL catalog 开销, 提速20倍》](20250825_06.md)  

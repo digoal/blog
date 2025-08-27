@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20250827_05.md   [《不是混合搜索? 另一种解决方案提高向量搜索结果相关性! 使用 PostgreSQL 中的 ColBERT rerank 增强向量搜索》](20250827_05.md)  
+##### 20250827_04.md   [《残差矢量量化(RVQ) : 探索“神经音频编解码器”的核心技术》](20250827_04.md)  
+##### 20250827_03.md   [《超越文本: 使用 Modal 和 PostgreSQL+VectorChord 解锁无 OCR 的 RAG, 无惧PDF、扫描文档等》](20250827_03.md)  
+##### 20250827_02.md   [《AI论文解读 | Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation》](20250827_02.md)  
+##### 20250827_01.md   [《AI论文解读 | Long Short-Term Memory》](20250827_01.md)  
 ##### 20250826_07.md   [《自驱动数据库功能之一 | PostgreSQL索引自动维护》](20250826_07.md)  
 ##### 20250826_06.md   [《高并发持久工作流/任务流/任务分配的数据库选型: 为什么PG会胜出?》](20250826_06.md)  
 ##### 20250826_05.md   [《PostgreSQL JSONB 索引实践》](20250826_05.md)  

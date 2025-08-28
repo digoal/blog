@@ -100,7 +100,17 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
-##### 202508/20250827_05.md   [《不是混合搜索? 另一种解决方案提高向量搜索结果相关性! 使用 PostgreSQL 中的 ColBERT rerank 增强向量搜索》](202508/20250827_05.md)  
+##### 202508/20250828_10.md   [《什么是多向量(multi-vector)相似搜索?》](202508/20250828_10.md)  
+##### 202508/20250828_09.md   [《什么是上下文检索(contextual-retrieval)》](202508/20250828_09.md)  
+##### 202508/20250828_08.md   [《VectorChord-BM25：通过 BM25 排名彻底提升 PostgreSQL 搜索性能和效果 — 甚至比 ElasticSearch 快 2.26 倍》](202508/20250828_08.md)  
+##### 202508/20250828_07.md   [《使用 Postgres Native BM25 和 VectorChord 进行混合搜索》](202508/20250828_07.md)  
+##### 202508/20250828_06.md   [《用PG构建RAG数据库, 除了向量插件, 还需要什么? VectorChord Suite: 构建RAG的完整套件!》](202508/20250828_06.md)  
+##### 202508/20250828_05.md   [《AI论文解读 | ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT》](202508/20250828_05.md)  
+##### 202508/20250828_04.md   [《AI论文解读 | ColPali: EFFICIENT DOCUMENT RETRIEVAL WITH VISION LANGUAGE MODELS》](202508/20250828_04.md)  
+##### 202508/20250828_03.md   [《AI论文解读 | High-Fidelity Audio Compression with Improved RVQGAN》](202508/20250828_03.md)  
+##### 202508/20250828_02.md   [《AI论文解读 | SoundStream: An End-to-End Neural Audio Codec》](202508/20250828_02.md)  
+##### 202508/20250828_01.md   [《AI论文解读 | Advances in Residual Vector Quantization: A Review》](202508/20250828_01.md)  
+##### 202508/20250827_05.md   [《不是混合搜索? 另一种解决方案提升向量搜索结果相关性! 使用 PostgreSQL vectorchord 多向量搜索 + ColBERT rerank 增强向量搜索相关性》](202508/20250827_05.md)  
 ##### 202508/20250827_04.md   [《残差矢量量化(RVQ) : 探索“神经音频编解码器”的核心技术》](202508/20250827_04.md)  
 ##### 202508/20250827_03.md   [《超越文本: 使用 Modal 和 PostgreSQL+VectorChord 解锁无 OCR 的 RAG, 无惧PDF、扫描文档等》](202508/20250827_03.md)  
 ##### 202508/20250827_02.md   [《AI论文解读 | Learning Phrase Representations using RNN Encoder–Decoder for Statistical Machine Translation》](202508/20250827_02.md)  

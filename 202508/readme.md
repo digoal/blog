@@ -2,6 +2,17 @@
   
 ### 文章列表  
 ----  
+##### 20250829_11.md   [《PG vectorchord 向量索引预热(prewarm)原理》](20250829_11.md)  
+##### 20250829_10.md   [《PG 向量搜索优化 | 这样写 Limit 怎么会导致性能骤降?》](20250829_10.md)  
+##### 20250829_09.md   [《既生瑜何生亮 | 有了 pg_duckdb/pg_mooncake 为什么还要 pg_parquet》](20250829_09.md)  
+##### 20250829_08.md   [《pg_hint_plan 插件支持 PG 18》](20250829_08.md)  
+##### 20250829_07.md   [《PostgreSQL C 插件开发与打包介绍》](20250829_07.md)  
+##### 20250829_06.md   [《MongoDB 慌了, DocumentDB 开源并正式加入 Linux 基金会》](20250829_06.md)  
+##### 20250829_05.md   [《AI论文解读 | Exploiting Query Reformulation and Reciprocal Rank Fusion in Math-Aware Search Engines》](20250829_05.md)  
+##### 20250829_04.md   [《AI论文解读 | Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods》](20250829_04.md)  
+##### 20250829_03.md   [《AI论文解读 | MMMORRF: Multimodal Multilingual MOdularized Reciprocal Rank Fusion》](20250829_03.md)  
+##### 20250829_02.md   [《AI论文解读 | RAG-FUSION: A NEW TAKE ON RETRIEVAL-AUGMENTED GENERATION》](20250829_02.md)  
+##### 20250829_01.md   [《AI论文解读 | WARP: An Efficient Engine for Multi-Vector Retrieval》](20250829_01.md)  
 ##### 20250828_10.md   [《什么是多向量(multi-vector)相似搜索?》](20250828_10.md)  
 ##### 20250828_09.md   [《什么是上下文检索(contextual-retrieval)》](20250828_09.md)  
 ##### 20250828_08.md   [《VectorChord-BM25：通过 BM25 排名彻底提升 PostgreSQL 搜索性能和效果 — 甚至比 ElasticSearch 快 2.26 倍》](20250828_08.md)  

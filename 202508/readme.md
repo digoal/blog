@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20250830_04.md   [《AI论文解读 | Flamingo: a Visual Language Model for Few-Shot Learning》](20250830_04.md)  
+##### 20250830_03.md   [《AI论文解读 | Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision》](20250830_03.md)  
+##### 20250830_02.md   [《AI论文解读 | Learning Transferable Visual Models From Natural Language Supervision》](20250830_02.md)  
+##### 20250830_01.md   [《AI论文解读 | A Study on Reciprocal Ranking Fusion in Consumer Health Search》](20250830_01.md)  
 ##### 20250829_11.md   [《PG vectorchord 向量索引预热(prewarm)原理》](20250829_11.md)  
 ##### 20250829_10.md   [《PG 向量搜索优化 | 这样写 Limit 怎么会导致性能骤降?》](20250829_10.md)  
 ##### 20250829_09.md   [《既生瑜何生亮 | 有了 pg_duckdb/pg_mooncake 为什么还要 pg_parquet》](20250829_09.md)  

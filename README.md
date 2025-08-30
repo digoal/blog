@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250830_04.md   [《AI论文解读 | Flamingo: a Visual Language Model for Few-Shot Learning》](202508/20250830_04.md)  
+##### 202508/20250830_03.md   [《AI论文解读 | Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision》](202508/20250830_03.md)  
+##### 202508/20250830_02.md   [《AI论文解读 | Learning Transferable Visual Models From Natural Language Supervision》](202508/20250830_02.md)  
+##### 202508/20250830_01.md   [《AI论文解读 | A Study on Reciprocal Ranking Fusion in Consumer Health Search》](202508/20250830_01.md)  
 ##### 202508/20250829_11.md   [《PG vectorchord 向量索引预热(prewarm)原理》](202508/20250829_11.md)  
 ##### 202508/20250829_10.md   [《PG 向量搜索优化 | 这样写 Limit 怎么会导致性能骤降?》](202508/20250829_10.md)  
 ##### 202508/20250829_09.md   [《既生瑜何生亮 | 有了 pg_duckdb/pg_mooncake 为什么还要 pg_parquet》](202508/20250829_09.md)  

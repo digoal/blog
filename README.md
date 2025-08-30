@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250830_05.md   [《AI论文解读 | BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation》](202508/20250830_05.md)  
 ##### 202508/20250830_04.md   [《AI论文解读 | Flamingo: a Visual Language Model for Few-Shot Learning》](202508/20250830_04.md)  
 ##### 202508/20250830_03.md   [《AI论文解读 | Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision》](202508/20250830_03.md)  
 ##### 202508/20250830_02.md   [《AI论文解读 | Learning Transferable Visual Models From Natural Language Supervision》](202508/20250830_02.md)  

@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20250831_06.md   [《AI论文解读 | Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond》](20250831_06.md)  
+##### 20250831_05.md   [《AI论文解读 | EMU: GENERATIVE PRETRAINING IN MULTIMODALITY》](20250831_05.md)  
+##### 20250831_04.md   [《AI论文解读 | Language Is Not All You Need: Aligning Perception with Language Models》](20250831_04.md)  
+##### 20250831_03.md   [《AI论文解读 | PALI: A JOINTLY-SCALED MULTILINGUAL LANGUAGE-IMAGE MODEL》](20250831_03.md)  
+##### 20250831_02.md   [《AI论文解读 | Visual Instruction Tuning》](20250831_02.md)  
+##### 20250831_01.md   [《AI论文解读 | BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models》](20250831_01.md)  
 ##### 20250830_05.md   [《AI论文解读 | BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation》](20250830_05.md)  
 ##### 20250830_04.md   [《AI论文解读 | Flamingo: a Visual Language Model for Few-Shot Learning》](20250830_04.md)  
 ##### 20250830_03.md   [《AI论文解读 | Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision》](20250830_03.md)  

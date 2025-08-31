@@ -100,6 +100,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202508/20250831_06.md   [《AI论文解读 | Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond》](202508/20250831_06.md)  
+##### 202508/20250831_05.md   [《AI论文解读 | EMU: GENERATIVE PRETRAINING IN MULTIMODALITY》](202508/20250831_05.md)  
+##### 202508/20250831_04.md   [《AI论文解读 | Language Is Not All You Need: Aligning Perception with Language Models》](202508/20250831_04.md)  
+##### 202508/20250831_03.md   [《AI论文解读 | PALI: A JOINTLY-SCALED MULTILINGUAL LANGUAGE-IMAGE MODEL》](202508/20250831_03.md)  
+##### 202508/20250831_02.md   [《AI论文解读 | Visual Instruction Tuning》](202508/20250831_02.md)  
+##### 202508/20250831_01.md   [《AI论文解读 | BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models》](202508/20250831_01.md)  
 ##### 202508/20250830_05.md   [《AI论文解读 | BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation》](202508/20250830_05.md)  
 ##### 202508/20250830_04.md   [《AI论文解读 | Flamingo: a Visual Language Model for Few-Shot Learning》](202508/20250830_04.md)  
 ##### 202508/20250830_03.md   [《AI论文解读 | Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision》](202508/20250830_03.md)  

@@ -100,6 +100,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250901_02.md   [《又涨知识了, 向量搜索异步IO优化》](202509/20250901_02.md)  
+##### 202509/20250901_01.md   [《又涨知识了, 向量索引前置/预过滤器》](202509/20250901_01.md)  
+----  
 ##### 202508/20250831_06.md   [《AI论文解读 | Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond》](202508/20250831_06.md)  
 ##### 202508/20250831_05.md   [《AI论文解读 | EMU: GENERATIVE PRETRAINING IN MULTIMODALITY》](202508/20250831_05.md)  
 ##### 202508/20250831_04.md   [《AI论文解读 | Language Is Not All You Need: Aligning Perception with Language Models》](202508/20250831_04.md)  

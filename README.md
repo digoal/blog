@@ -100,6 +100,14 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250903_08.md   [《大学生数据库实践课-PostgreSQL本地学习镜像的使用》](202509/20250903_08.md)  
+##### 202509/20250903_07.md   [《PostgreSQL 代码追踪分析: pg_uprobe》](202509/20250903_07.md)  
+##### 202509/20250903_06.md   [《大学生数据库实践课设计》](202509/20250903_06.md)  
+##### 202509/20250903_05.md   [《AI论文解读 | The Log-Structured Merge-Tree (LSM-Tree)》](202509/20250903_05.md)  
+##### 202509/20250903_04.md   [《AI论文解读 | Interleaving Retrieval with Chain-of-Thought Reasoning for Knowledge-Intensive Multi-Step Questions》](202509/20250903_04.md)  
+##### 202509/20250903_03.md   [《AI论文解读 | SOAR: Improved Indexing for Approximate Nearest Neighbor Search》](202509/20250903_03.md)  
+##### 202509/20250903_02.md   [《AI论文解读 | Soar: A Functional Approach to General Intelligence》](202509/20250903_02.md)  
+##### 202509/20250903_01.md   [《AI论文解读 | Introduction to the Soar Cognitive Architecture》](202509/20250903_01.md)  
 ##### 202509/20250902_04.md   [《PostgreSQL 19 preview - 逻辑订阅端冲突检测双保险 retain_dead_tuples + max_retention_duration》](202509/20250902_04.md)  
 ##### 202509/20250902_03.md   [《德说-第351期, 终于不用在大厂打螺丝了》](202509/20250902_03.md)  
 ##### 202509/20250902_02.md   [《AI论文解读 | The Ubiquitous B-Tree》](202509/20250902_02.md)  

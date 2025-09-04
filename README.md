@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250904_05.md   [《AI论文解读 | Multi-Entry Generalized Search Trees for Indexing Trajectories》](202509/20250904_05.md)  
+##### 202509/20250904_04.md   [《AI论文解读 | Space-Partitioning Trees in PostgreSQL: Realization and Performance》](202509/20250904_04.md)  
+##### 202509/20250904_03.md   [《AI论文解读 | Generalized Search Trees for Database Systems》](202509/20250904_03.md)  
+##### 202509/20250904_02.md   [《AI论文解读 | Linear Hashing: A New Tool for File and Table Addressing》](202509/20250904_02.md)  
+##### 202509/20250904_01.md   [《AI论文解读 | When to use Graphs in RAG: A Comprehensive Analysis for Graph Retrieval-Augmented Generation》](202509/20250904_01.md)  
 ##### 202509/20250903_08.md   [《大学生数据库实践课-PostgreSQL本地学习镜像的使用》](202509/20250903_08.md)  
 ##### 202509/20250903_07.md   [《PostgreSQL 代码追踪分析: pg_uprobe》](202509/20250903_07.md)  
 ##### 202509/20250903_06.md   [《大学生数据库实践课设计》](202509/20250903_06.md)  

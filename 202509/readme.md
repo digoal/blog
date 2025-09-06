@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20250906_13.md   [《AI论文解读 | MonetDB/X100: Hyper-Pipelining Query Execution》](20250906_13.md)  
+##### 20250906_12.md   [《AI论文解读 | Super-Scalar RAM-CPU Cache Compression》](20250906_12.md)  
+##### 20250906_11.md   [《AI论文解读 | ARIES: A Transaction Recovery Method Supporting Fine-Granularity Locking and Partial Rollbacks Using Write-Ahead Logging》](20250906_11.md)  
 ##### 20250906_10.md   [《AI论文解读 | Hashing geographical point data using the space-filling H-curve》](20250906_10.md)  
 ##### 20250906_09.md   [《AI论文解读 | Multidimensional Access Methods》](20250906_09.md)  
 ##### 20250906_08.md   [《AI论文解读 | Bounds on the number of discontinuities of Morton-type space-filling curves》](20250906_08.md)  

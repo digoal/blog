@@ -2,6 +2,19 @@
   
 ### 文章列表  
 ----  
+##### 20250907_17.md   [《AI论文解读 | Citus: Distributed PostgreSQL for Data-Intensive Applications》](20250907_17.md)  
+##### 20250907_16.md   [《AI论文解读 | Serializable Snapshot Isolation in PostgreSQL》](20250907_16.md)  
+##### 20250907_15.md   [《AI论文解读 | THE IMPLEMENTATION OF POSTGRES》](20250907_15.md)  
+##### 20250907_14.md   [《AI论文解读 | THE DESIGN OF POSTGRES》](20250907_14.md)  
+##### 20250907_13.md   [《AI论文解读 | Deep Dive: InnoDB Transactions and Write Paths》](20250907_13.md)  
+##### 20250907_12.md   [《AI论文解读 | Innodb Architecture and Internals》](20250907_12.md)  
+##### 20250907_11.md   [《AI论文解读 | Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores》](20250907_11.md)  
+##### 20250907_10.md   [《AI论文解读 | Data Lake Management: Challenges and Opportunities》](20250907_10.md)  
+##### 20250907_09.md   [《AI论文解读 | The End of an Architectural Era (It’s Time for a Complete Rewrite)》](20250907_09.md)  
+##### 20250907_08.md   [《AI论文解读 | Dremel: Interactive Analysis of Web-Scale Datasets》](20250907_08.md)  
+##### 20250907_07.md   [《AI论文解读 | Petabyte-Scale Row-Level Operations in Data Lakehouses》](20250907_07.md)  
+##### 20250907_06.md   [《AI论文解读 | Scalable Metadata Management in Data Lakes: The Role of Apache Iceberg》](20250907_06.md)  
+##### 20250907_05.md   [《AI论文解读 | Lotus: Scalable Multi-Partition Transactions on Single-Threaded Partitioned Databases》](20250907_05.md)  
 ##### 20250907_04.md   [《AI论文解读 | Iceberg: Enhancing HLS Modeling with Synthetic Data》](20250907_04.md)  
 ##### 20250907_03.md   [《AI论文解读 | Iceberg Sensemaking: A Process Model for Critical Data Analysis》](20250907_03.md)  
 ##### 20250907_02.md   [《AI论文解读 | Bigtable: A Distributed Storage System for Structured Data》](20250907_02.md)  

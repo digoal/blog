@@ -100,6 +100,19 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250907_17.md   [《AI论文解读 | Citus: Distributed PostgreSQL for Data-Intensive Applications》](202509/20250907_17.md)  
+##### 202509/20250907_16.md   [《AI论文解读 | Serializable Snapshot Isolation in PostgreSQL》](202509/20250907_16.md)  
+##### 202509/20250907_15.md   [《AI论文解读 | THE IMPLEMENTATION OF POSTGRES》](202509/20250907_15.md)  
+##### 202509/20250907_14.md   [《AI论文解读 | THE DESIGN OF POSTGRES》](202509/20250907_14.md)  
+##### 202509/20250907_13.md   [《AI论文解读 | Deep Dive: InnoDB Transactions and Write Paths》](202509/20250907_13.md)  
+##### 202509/20250907_12.md   [《AI论文解读 | Innodb Architecture and Internals》](202509/20250907_12.md)  
+##### 202509/20250907_11.md   [《AI论文解读 | Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores》](202509/20250907_11.md)  
+##### 202509/20250907_10.md   [《AI论文解读 | Data Lake Management: Challenges and Opportunities》](202509/20250907_10.md)  
+##### 202509/20250907_09.md   [《AI论文解读 | The End of an Architectural Era (It’s Time for a Complete Rewrite)》](202509/20250907_09.md)  
+##### 202509/20250907_08.md   [《AI论文解读 | Dremel: Interactive Analysis of Web-Scale Datasets》](202509/20250907_08.md)  
+##### 202509/20250907_07.md   [《AI论文解读 | Petabyte-Scale Row-Level Operations in Data Lakehouses》](202509/20250907_07.md)  
+##### 202509/20250907_06.md   [《AI论文解读 | Scalable Metadata Management in Data Lakes: The Role of Apache Iceberg》](202509/20250907_06.md)  
+##### 202509/20250907_05.md   [《AI论文解读 | Lotus: Scalable Multi-Partition Transactions on Single-Threaded Partitioned Databases》](202509/20250907_05.md)  
 ##### 202509/20250907_04.md   [《AI论文解读 | Iceberg: Enhancing HLS Modeling with Synthetic Data》](202509/20250907_04.md)  
 ##### 202509/20250907_03.md   [《AI论文解读 | Iceberg Sensemaking: A Process Model for Critical Data Analysis》](202509/20250907_03.md)  
 ##### 202509/20250907_02.md   [《AI论文解读 | Bigtable: A Distributed Storage System for Structured Data》](202509/20250907_02.md)  

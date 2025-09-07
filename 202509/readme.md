@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20250907_04.md   [《AI论文解读 | Iceberg: Enhancing HLS Modeling with Synthetic Data》](20250907_04.md)  
+##### 20250907_03.md   [《AI论文解读 | Iceberg Sensemaking: A Process Model for Critical Data Analysis》](20250907_03.md)  
+##### 20250907_02.md   [《AI论文解读 | Bigtable: A Distributed Storage System for Structured Data》](20250907_02.md)  
+##### 20250907_01.md   [《AI论文解读 | C-Store: A Column-oriented DBMS》](20250907_01.md)  
 ##### 20250906_13.md   [《AI论文解读 | MonetDB/X100: Hyper-Pipelining Query Execution》](20250906_13.md)  
 ##### 20250906_12.md   [《AI论文解读 | Super-Scalar RAM-CPU Cache Compression》](20250906_12.md)  
 ##### 20250906_11.md   [《AI论文解读 | ARIES: A Transaction Recovery Method Supporting Fine-Granularity Locking and Partial Rollbacks Using Write-Ahead Logging》](20250906_11.md)  

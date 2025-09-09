@@ -100,6 +100,17 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250909_06.md   [《DuckDB 以就是平民劳斯莱斯, 0.3%的成本完成SF=10,000 TPC-H测试》](202509/20250909_06.md)  
+##### 202509/20250909_05.md   [《AI论文解读 | AnyBlox: A Framework for Self-Decoding Datasets》](202509/20250909_05.md)  
+##### 202509/20250909_04.md   [《AI论文解读 | MementoHash: A Stateful, Minimal Memory, Best Performing Consistent Hash Algorithm》](202509/20250909_04.md)  
+##### 202509/20250909_03.md   [《AI论文解读 | Scalable Distributed Cache Using Consistent Hashing》](202509/20250909_03.md)  
+##### 202509/20250909_02.md   [《AI论文解读 | Fast Consistent Hashing in Constant Time》](202509/20250909_02.md)  
+##### 202509/20250909_01.md   [《AI论文解读 | Consistent Hashing and Random Trees: Distributed Caching Protocols for Relieving Hot Spots on the World Wide Web》](202509/20250909_01.md)  
+##### 202509/20250908_05.md   [《AI论文解读 | Diva: Dynamic Range Filter for Var-Length Keys and Queries》](202509/20250908_05.md)  
+##### 202509/20250908_04.md   [《AI论文解读 | LLM-R²: A Large Language Model Enhanced Rule-based Rewrite System for Boosting Query Efficiency》](202509/20250908_04.md)  
+##### 202509/20250908_03.md   [《AI论文解读 | Taurus: Lightweight Parallel Logging for In-Memory Database Management Systems》](202509/20250908_03.md)  
+##### 202509/20250908_02.md   [《AI论文解读 | TicToc: Time Traveling Optimistic Concurrency Control》](202509/20250908_02.md)  
+##### 202509/20250908_01.md   [《AI论文解读 | Staring into the Abyss: An Evaluation of Concurrency Control with One Thousand Cores》](202509/20250908_01.md)  
 ##### 202509/20250907_17.md   [《AI论文解读 | Citus: Distributed PostgreSQL for Data-Intensive Applications》](202509/20250907_17.md)  
 ##### 202509/20250907_16.md   [《AI论文解读 | Serializable Snapshot Isolation in PostgreSQL》](202509/20250907_16.md)  
 ##### 202509/20250907_15.md   [《AI论文解读 | THE IMPLEMENTATION OF POSTGRES》](202509/20250907_15.md)  

@@ -2,6 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20250910_07.md   [《啥是BaaS? 为什么云数据库厂商都在推Supabase服务?》](20250910_07.md)  
+##### 20250910_06.md   [《PostgreSQL 19 preview - 生成随机测试数据random函数增强, `random(min,max)` 增加data和timestamp类型》](20250910_06.md)  
+##### 20250910_05.md   [《AI论文解读 | The LDBC Financial Benchmark: Transaction Workload》](20250910_05.md)  
+##### 20250910_04.md   [《AI论文解读 | The UDFBench Benchmark for General-purpose UDF Queries》](20250910_04.md)  
+##### 20250910_03.md   [《AI论文解读 | Delta Sharing: An Open Protocol for Cross-Platform Data Sharing》](20250910_03.md)  
+##### 20250910_02.md   [《AI论文解读 | Ursa: A Lakehouse-Native Data Streaming Engine for Kafka》](20250910_02.md)  
+##### 20250910_01.md   [《AI论文解读 | The Key to Effective UDF Optimization: Before Inlining, First Perform Outlining》](20250910_01.md)  
 ##### 20250909_06.md   [《DuckDB 以就是平民劳斯莱斯, 0.3%的成本完成SF=10,000 TPC-H测试》](20250909_06.md)  
 ##### 20250909_05.md   [《AI论文解读 | AnyBlox: A Framework for Self-Decoding Datasets》](20250909_05.md)  
 ##### 20250909_04.md   [《AI论文解读 | MementoHash: A Stateful, Minimal Memory, Best Performing Consistent Hash Algorithm》](20250909_04.md)  

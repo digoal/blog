@@ -100,6 +100,13 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250910_07.md   [《啥是BaaS? 为什么云数据库厂商都在推Supabase服务?》](202509/20250910_07.md)  
+##### 202509/20250910_06.md   [《PostgreSQL 19 preview - 生成随机测试数据random函数增强, `random(min,max)` 增加data和timestamp类型》](202509/20250910_06.md)  
+##### 202509/20250910_05.md   [《AI论文解读 | The LDBC Financial Benchmark: Transaction Workload》](202509/20250910_05.md)  
+##### 202509/20250910_04.md   [《AI论文解读 | The UDFBench Benchmark for General-purpose UDF Queries》](202509/20250910_04.md)  
+##### 202509/20250910_03.md   [《AI论文解读 | Delta Sharing: An Open Protocol for Cross-Platform Data Sharing》](202509/20250910_03.md)  
+##### 202509/20250910_02.md   [《AI论文解读 | Ursa: A Lakehouse-Native Data Streaming Engine for Kafka》](202509/20250910_02.md)  
+##### 202509/20250910_01.md   [《AI论文解读 | The Key to Effective UDF Optimization: Before Inlining, First Perform Outlining》](202509/20250910_01.md)  
 ##### 202509/20250909_06.md   [《DuckDB 以就是平民劳斯莱斯, 0.3%的成本完成SF=10,000 TPC-H测试》](202509/20250909_06.md)  
 ##### 202509/20250909_05.md   [《AI论文解读 | AnyBlox: A Framework for Self-Decoding Datasets》](202509/20250909_05.md)  
 ##### 202509/20250909_04.md   [《AI论文解读 | MementoHash: A Stateful, Minimal Memory, Best Performing Consistent Hash Algorithm》](202509/20250909_04.md)  

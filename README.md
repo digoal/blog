@@ -100,6 +100,15 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250912_09.md   [《用了Qwen3-Max-Preview, 第一感受: 阿里的股票还要大涨》](202509/20250912_09.md)  
+##### 202509/20250912_08.md   [《爽! 用 pgbench 跑 tpcc benchmark》](202509/20250912_08.md)  
+##### 202509/20250912_07.md   [《PostgreSQL postmaster代码深入探究, 从启动到关闭的逻辑》](202509/20250912_07.md)  
+##### 202509/20250912_06.md   [《Supabase 拿到专利权并宣布: OrioleDB 真正 Free 了》](202509/20250912_06.md)  
+##### 202509/20250912_05.md   [《PostgreSQL 18 牙膏挤爆了, 被谈及最多的3个特性是啥?》](202509/20250912_05.md)  
+##### 202509/20250912_04.md   [《pg_duckdb 1.0.0 正式发布, 有哪些重大更新?》](202509/20250912_04.md)  
+##### 202509/20250912_03.md   [《利用DuckDB宏(macro)巧妙查找字符串弱相关记录》](202509/20250912_03.md)  
+##### 202509/20250912_02.md   [《AI论文解读 | Accelerating Large-Scale Inference with Anisotropic Vector Quantization》](202509/20250912_02.md)  
+##### 202509/20250912_01.md   [《AI论文解读 | Fast and Scalable Gene Embedding Search: A Comparative Study of FAISS and ScaNN》](202509/20250912_01.md)  
 ##### 202509/20250910_07.md   [《啥是BaaS? 为什么云数据库厂商都在推Supabase服务?》](202509/20250910_07.md)  
 ##### 202509/20250910_06.md   [《PostgreSQL 19 preview - 生成随机测试数据random函数增强, `random(min,max)` 增加data和timestamp类型》](202509/20250910_06.md)  
 ##### 202509/20250910_05.md   [《AI论文解读 | The LDBC Financial Benchmark: Transaction Workload》](202509/20250910_05.md)  

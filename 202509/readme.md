@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20250913_06.md   [《AI论文解读 | Mining Meaningful Keys and Foreign Keys with High Precision and Recall》](20250913_06.md)  
+##### 20250913_05.md   [《AI论文解读 | UmbraPerf - Profiling Results Tailored for DBMS Developers》](20250913_05.md)  
+##### 20250913_04.md   [《AI论文解读 | Chameleon: a Heterogeneous and Disaggregated Accelerator System for Retrieval-Augmented Language Models》](20250913_04.md)  
+##### 20250913_03.md   [《AI论文解读 | ScaNN for AlloyDB , Next gen vector search by bringing 12 years of Google research to databases》](20250913_03.md)  
+##### 20250913_02.md   [《AI论文解读 | Comparing different BaaS solutions and their performance》](20250913_02.md)  
+##### 20250913_01.md   [《AI论文解读 | Attacking LLMs and AI Agents: Advertisement Embedding Attacks Against Large Language Models》](20250913_01.md)  
 ##### 20250912_09.md   [《用了Qwen3-Max-Preview, 第一感受: 阿里的股票还要大涨》](20250912_09.md)  
 ##### 20250912_08.md   [《爽! 用 pgbench 跑 tpcc benchmark》](20250912_08.md)  
 ##### 20250912_07.md   [《PostgreSQL postmaster代码深入探究, 从启动到关闭的逻辑》](20250912_07.md)  

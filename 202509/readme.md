@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20250913_15.md   [《AI论文解读 | VLA-ADAPTER: AN EFFECTIVE PARADIGM FOR TINY-SCALE VISION-LANGUAGE-ACTION MODEL》](20250913_15.md)  
+##### 20250913_14.md   [《AI论文解读 | A Survey of Reinforcement Learning for Large Reasoning Models》](20250913_14.md)  
+##### 20250913_13.md   [《AI论文解读 | A Survey of Scientific Large Language Models: From Data Foundations to Agent Frontiers》](20250913_13.md)  
+##### 20250913_12.md   [《AI论文解读 | Reverse-Engineered Reasoning for Open-Ended Generation》](20250913_12.md)  
+##### 20250913_11.md   [《AI论文解读 | Why Language Models Hallucinate》](20250913_11.md)  
+##### 20250913_10.md   [《AI论文解读 | The Landscape of Agentic Reinforcement Learning for LLMs: A Survey》](20250913_10.md)  
+##### 20250913_09.md   [《AI论文解读 | Drivel-ology: Challenging LLMs with Interpreting Nonsense with Depth》](20250913_09.md)  
+##### 20250913_08.md   [《AI论文解读 | A.S.E: A Repository-Level Benchmark for Evaluating Security in AI-Generated Code》](20250913_08.md)  
+##### 20250913_07.md   [《AI论文解读 | Sharing is Caring: Efficient LM Post-Training with Collective RL Experience Sharing》](20250913_07.md)  
 ##### 20250913_06.md   [《AI论文解读 | Mining Meaningful Keys and Foreign Keys with High Precision and Recall》](20250913_06.md)  
 ##### 20250913_05.md   [《AI论文解读 | UmbraPerf - Profiling Results Tailored for DBMS Developers》](20250913_05.md)  
 ##### 20250913_04.md   [《AI论文解读 | Chameleon: a Heterogeneous and Disaggregated Accelerator System for Retrieval-Augmented Language Models》](20250913_04.md)  

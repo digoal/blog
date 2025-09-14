@@ -2,6 +2,21 @@
   
 ### 文章列表  
 ----  
+##### 20250914_15.md   [《AI论文解读 | SimpleTIR: End-to-End Reinforcement Learning for Multi-Turn Tool-Integrated Reasoning》](20250914_15.md)  
+##### 20250914_14.md   [《AI论文解读 | FROM EDITOR TO DENSE GEOMETRY ESTIMATOR》](20250914_14.md)  
+##### 20250914_13.md   [《AI论文解读 | Parallel-R1: Towards Parallel Thinking via Reinforcement Learning》](20250914_13.md)  
+##### 20250914_12.md   [《AI论文解读 | HuMo: Human-Centric Video Generation via Collaborative Multi-Modal Conditioning》](20250914_12.md)  
+##### 20250914_11.md   [《AI论文解读 | R-4B: INCENTIVIZING GENERAL-PURPOSE AUTOTHINKING CAPABILITY IN MLLMS VIA BI-MODE ANNEALING AND REINFORCE LEARNING》](20250914_11.md)  
+##### 20250914_10.md   [《AI论文解读 | UI-TARS-2 Technical Report: Advancing GUI Agent with Multi-Turn Reinforcement Learning》](20250914_10.md)  
+##### 20250914_09.md   [《AI论文解读 | Memento: Fine-tuning LLM Agents without Fine-tuning LLMs》](20250914_09.md)  
+##### 20250914_08.md   [《AI论文解读 | VERIGUI: VERIFIABLE LONG-CHAIN GUI DATASET》](20250914_08.md)  
+##### 20250914_07.md   [《AI论文解读 | ON THE GENERALIZATION OF SFT: A REINFORCEMENT LEARNING PERSPECTIVE WITH REWARD RECTIFICATION》](20250914_07.md)  
+##### 20250914_06.md   [《AI论文解读 | GLM-4.5: Agentic, Reasoning, and Coding (ARC) Foundation Models》](20250914_06.md)  
+##### 20250914_05.md   [《AI论文解读 | InternVL3.5: Advancing Open-Source Multimodal Models in Versatility, Reasoning, and Efficiency》](20250914_05.md)  
+##### 20250914_04.md   [《AI论文解读 | Is Chain-of-Thought Reasoning of LLMs a Mirage? A Data Distribution Lens》](20250914_04.md)  
+##### 20250914_03.md   [《AI论文解读 | Qwen-Image Technical Report》](20250914_03.md)  
+##### 20250914_02.md   [《AI论文解读 | INTERN-S1: A SCIENTIFIC MULTIMODAL FOUNDATION MODEL》](20250914_02.md)  
+##### 20250914_01.md   [《AI论文解读 | DINOv3》](20250914_01.md)  
 ##### 20250913_15.md   [《AI论文解读 | VLA-ADAPTER: AN EFFECTIVE PARADIGM FOR TINY-SCALE VISION-LANGUAGE-ACTION MODEL》](20250913_15.md)  
 ##### 20250913_14.md   [《AI论文解读 | A Survey of Reinforcement Learning for Large Reasoning Models》](20250913_14.md)  
 ##### 20250913_13.md   [《AI论文解读 | A Survey of Scientific Large Language Models: From Data Foundations to Agent Frontiers》](20250913_13.md)  

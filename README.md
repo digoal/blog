@@ -100,6 +100,21 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250914_15.md   [《AI论文解读 | SimpleTIR: End-to-End Reinforcement Learning for Multi-Turn Tool-Integrated Reasoning》](202509/20250914_15.md)  
+##### 202509/20250914_14.md   [《AI论文解读 | FROM EDITOR TO DENSE GEOMETRY ESTIMATOR》](202509/20250914_14.md)  
+##### 202509/20250914_13.md   [《AI论文解读 | Parallel-R1: Towards Parallel Thinking via Reinforcement Learning》](202509/20250914_13.md)  
+##### 202509/20250914_12.md   [《AI论文解读 | HuMo: Human-Centric Video Generation via Collaborative Multi-Modal Conditioning》](202509/20250914_12.md)  
+##### 202509/20250914_11.md   [《AI论文解读 | R-4B: INCENTIVIZING GENERAL-PURPOSE AUTOTHINKING CAPABILITY IN MLLMS VIA BI-MODE ANNEALING AND REINFORCE LEARNING》](202509/20250914_11.md)  
+##### 202509/20250914_10.md   [《AI论文解读 | UI-TARS-2 Technical Report: Advancing GUI Agent with Multi-Turn Reinforcement Learning》](202509/20250914_10.md)  
+##### 202509/20250914_09.md   [《AI论文解读 | Memento: Fine-tuning LLM Agents without Fine-tuning LLMs》](202509/20250914_09.md)  
+##### 202509/20250914_08.md   [《AI论文解读 | VERIGUI: VERIFIABLE LONG-CHAIN GUI DATASET》](202509/20250914_08.md)  
+##### 202509/20250914_07.md   [《AI论文解读 | ON THE GENERALIZATION OF SFT: A REINFORCEMENT LEARNING PERSPECTIVE WITH REWARD RECTIFICATION》](202509/20250914_07.md)  
+##### 202509/20250914_06.md   [《AI论文解读 | GLM-4.5: Agentic, Reasoning, and Coding (ARC) Foundation Models》](202509/20250914_06.md)  
+##### 202509/20250914_05.md   [《AI论文解读 | InternVL3.5: Advancing Open-Source Multimodal Models in Versatility, Reasoning, and Efficiency》](202509/20250914_05.md)  
+##### 202509/20250914_04.md   [《AI论文解读 | Is Chain-of-Thought Reasoning of LLMs a Mirage? A Data Distribution Lens》](202509/20250914_04.md)  
+##### 202509/20250914_03.md   [《AI论文解读 | Qwen-Image Technical Report》](202509/20250914_03.md)  
+##### 202509/20250914_02.md   [《AI论文解读 | INTERN-S1: A SCIENTIFIC MULTIMODAL FOUNDATION MODEL》](202509/20250914_02.md)  
+##### 202509/20250914_01.md   [《AI论文解读 | DINOv3》](202509/20250914_01.md)  
 ##### 202509/20250913_15.md   [《AI论文解读 | VLA-ADAPTER: AN EFFECTIVE PARADIGM FOR TINY-SCALE VISION-LANGUAGE-ACTION MODEL》](202509/20250913_15.md)  
 ##### 202509/20250913_14.md   [《AI论文解读 | A Survey of Reinforcement Learning for Large Reasoning Models》](202509/20250913_14.md)  
 ##### 202509/20250913_13.md   [《AI论文解读 | A Survey of Scientific Large Language Models: From Data Foundations to Agent Frontiers》](202509/20250913_13.md)  

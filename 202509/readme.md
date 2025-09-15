@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20250915_09.md   [《德说-第352期, 以后只有一种应用架构》](20250915_09.md)  
+##### 20250915_08.md   [《PostgreSQL iceberg 实时数据湖表 by pg_mooncake + moonlink》](20250915_08.md)  
+##### 20250915_07.md   [《DuckDB 读 iceberg 实时数据湖表 by duckdb_mooncake + moonlink》](20250915_07.md)  
+##### 20250915_06.md   [《AI论文解读 | A Critique Of The Sql Database Language》](20250915_06.md)  
+##### 20250915_05.md   [《AI论文解读 | Extending The Database Relational Model To Capture More Meaning》](20250915_05.md)  
+##### 20250915_04.md   [《AI论文解读 | Ingres: A Relational Data Base System》](20250915_04.md)  
+##### 20250915_03.md   [《AI论文解读 | Sequel: A Structured English Query Language》](20250915_03.md)  
+##### 20250915_02.md   [《AI论文解读 | A Relational Model of Data for Large Shared Data Banks》](20250915_02.md)  
+##### 20250915_01.md   [《Mooncake-Labs 架构进化, 核心是 moonlink》](20250915_01.md)  
 ##### 20250914_15.md   [《AI论文解读 | SimpleTIR: End-to-End Reinforcement Learning for Multi-Turn Tool-Integrated Reasoning》](20250914_15.md)  
 ##### 20250914_14.md   [《AI论文解读 | FROM EDITOR TO DENSE GEOMETRY ESTIMATOR》](20250914_14.md)  
 ##### 20250914_13.md   [《AI论文解读 | Parallel-R1: Towards Parallel Thinking via Reinforcement Learning》](20250914_13.md)  

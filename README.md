@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250916_05.md   [《AI论文解读 | In Search of an Understandable Consensus Algorithm》](202509/20250916_05.md)  
+##### 202509/20250916_04.md   [《AI论文解读 | CONSENSUS: BRIDGING THEORY AND PRACTICE》](202509/20250916_04.md)  
+##### 202509/20250916_03.md   [《AI论文解读 | Paxos Made Simple》](202509/20250916_03.md)  
+##### 202509/20250916_02.md   [《AI论文解读 | The Part-Time Parliament》](202509/20250916_02.md)  
+##### 202509/20250916_01.md   [《AI论文解读 | A Critique of Snapshot Isolation》](202509/20250916_01.md)  
 ##### 202509/20250915_09.md   [《德说-第352期, 以后只有一种应用架构》](202509/20250915_09.md)  
 ##### 202509/20250915_08.md   [《PostgreSQL iceberg 实时数据湖表 by pg_mooncake + moonlink》](202509/20250915_08.md)  
 ##### 202509/20250915_07.md   [《DuckDB 读 iceberg 实时数据湖表 by duckdb_mooncake + moonlink》](202509/20250915_07.md)  

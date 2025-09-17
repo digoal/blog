@@ -100,6 +100,15 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250917_09.md   [《pg_resetwal -O multixact-offset 算法解释》](202509/20250917_09.md)  
+##### 202509/20250917_08.md   [《DuckDB 社区支持策略解读》](202509/20250917_08.md)  
+##### 202509/20250917_07.md   [《DuckDB 1.4.0 LTS 版重磅发布, 要拿下Teradata了!》](202509/20250917_07.md)  
+##### 202509/20250917_06.md   [《update时新tuple如何选择空闲block插入?》](202509/20250917_06.md)  
+##### 202509/20250917_05.md   [《AI论文解读 | Logical Physical Clocks and Consistent Snapshots in Globally Distributed Databases》](202509/20250917_05.md)  
+##### 202509/20250917_04.md   [《AI论文解读 | Consistency Tradeoffs in Modern Distributed Database System Design》](202509/20250917_04.md)  
+##### 202509/20250917_03.md   [《AI论文解读 | Paxos vs Raft: Have we reached consensus on distributed consensus?》](202509/20250917_03.md)  
+##### 202509/20250917_02.md   [《AI论文解读 | A Generalised Solution to Distributed Consensus》](202509/20250917_02.md)  
+##### 202509/20250917_01.md   [《AI论文解读 | Distributed consensus revised》](202509/20250917_01.md)  
 ##### 202509/20250916_05.md   [《AI论文解读 | In Search of an Understandable Consensus Algorithm》](202509/20250916_05.md)  
 ##### 202509/20250916_04.md   [《AI论文解读 | CONSENSUS: BRIDGING THEORY AND PRACTICE》](202509/20250916_04.md)  
 ##### 202509/20250916_03.md   [《AI论文解读 | Paxos Made Simple》](202509/20250916_03.md)  

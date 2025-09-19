@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20250918_05.md   [《AI论文解读 | HOW PEOPLE USE CHATGPT》](20250918_05.md)  
+##### 20250918_04.md   [《AI论文解读 | Concept Decompositionsfor Large Sparse Text Data using Clustering》](20250918_04.md)  
+##### 20250918_03.md   [《AI论文解读 | k-means++: The Advantages of Careful Seeding》](20250918_03.md)  
+##### 20250918_02.md   [《AI论文解读 | Using the Triangle Inequality to Accelerate k-Means》](20250918_02.md)  
+##### 20250918_01.md   [《AI论文解读 | PASE: PostgreSQL Ultra-High-Dimensional Approximate Nearest Neighbor Search Extension》](20250918_01.md)  
 ##### 20250917_09.md   [《pg_resetwal -O multixact-offset 算法解释》](20250917_09.md)  
 ##### 20250917_08.md   [《DuckDB 社区支持策略解读》](20250917_08.md)  
 ##### 20250917_07.md   [《DuckDB 1.4.0 LTS 版重磅发布, 要拿下Teradata了!》](20250917_07.md)  

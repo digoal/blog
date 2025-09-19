@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250918_05.md   [《AI论文解读 | HOW PEOPLE USE CHATGPT》](202509/20250918_05.md)  
+##### 202509/20250918_04.md   [《AI论文解读 | Concept Decompositionsfor Large Sparse Text Data using Clustering》](202509/20250918_04.md)  
+##### 202509/20250918_03.md   [《AI论文解读 | k-means++: The Advantages of Careful Seeding》](202509/20250918_03.md)  
+##### 202509/20250918_02.md   [《AI论文解读 | Using the Triangle Inequality to Accelerate k-Means》](202509/20250918_02.md)  
+##### 202509/20250918_01.md   [《AI论文解读 | PASE: PostgreSQL Ultra-High-Dimensional Approximate Nearest Neighbor Search Extension》](202509/20250918_01.md)  
 ##### 202509/20250917_09.md   [《pg_resetwal -O multixact-offset 算法解释》](202509/20250917_09.md)  
 ##### 202509/20250917_08.md   [《DuckDB 社区支持策略解读》](202509/20250917_08.md)  
 ##### 202509/20250917_07.md   [《DuckDB 1.4.0 LTS 版重磅发布, 要拿下Teradata了!》](202509/20250917_07.md)  

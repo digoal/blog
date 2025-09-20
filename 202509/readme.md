@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250920_05.md   [《AI论文解读 | HiChunk: Evaluating and Enhancing Retrieval-Augmented Generation with Hierarchical Chunking》](20250920_05.md)  
 ##### 20250920_04.md   [《DuckLake 更新, 支持Iceberg互换数据及Geometry类型等》](20250920_04.md)  
 ##### 20250920_03.md   [《别用superuser维护PG了, 很危险! 这几个内置角色了解一下?》](20250920_03.md)  
 ##### 20250920_02.md   [《Tom Lane 同事分享 Postgres 18 最满意的5个特性》](20250920_02.md)  

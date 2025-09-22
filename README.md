@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250922_05.md   [《AI论文解读 | System R: Relational Approach to Database Management》](202509/20250922_05.md)  
+##### 202509/20250922_04.md   [《AI论文解读 | Architecture of a Database System》](202509/20250922_04.md)  
+##### 202509/20250922_03.md   [《AI论文解读 | Strong and Efficient Consistency with Consistency-aware Durability》](202509/20250922_03.md)  
+##### 202509/20250922_02.md   [《AI论文解读 | Anna: A KVS For Any Scale》](202509/20250922_02.md)  
+##### 202509/20250922_01.md   [《AI论文解读 | Ark: A Real-World Consensus Implementation》](202509/20250922_01.md)  
 ##### 202509/20250921_01.md   [《为什么 vacuum 不仅清理dead tuple, 还清理clog?》](202509/20250921_01.md)  
 ##### 202509/20250920_05.md   [《AI论文解读 | HiChunk: Evaluating and Enhancing Retrieval-Augmented Generation with Hierarchical Chunking》](202509/20250920_05.md)  
 ##### 202509/20250920_04.md   [《DuckLake 更新, 支持Iceberg互换数据及Geometry类型等》](202509/20250920_04.md)  

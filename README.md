@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250923_01.md   [《德说-第353期, 职场中“油腻”一点, 用规则保护自己》](202509/20250923_01.md)  
 ##### 202509/20250922_05.md   [《AI论文解读 | System R: Relational Approach to Database Management》](202509/20250922_05.md)  
 ##### 202509/20250922_04.md   [《AI论文解读 | Architecture of a Database System》](202509/20250922_04.md)  
 ##### 202509/20250922_03.md   [《AI论文解读 | Strong and Efficient Consistency with Consistency-aware Durability》](202509/20250922_03.md)  

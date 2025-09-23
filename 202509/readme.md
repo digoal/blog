@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250923_01.md   [《德说-第353期, 职场中“油腻”一点, 用规则保护自己》](20250923_01.md)  
 ##### 20250922_05.md   [《AI论文解读 | System R: Relational Approach to Database Management》](20250922_05.md)  
 ##### 20250922_04.md   [《AI论文解读 | Architecture of a Database System》](20250922_04.md)  
 ##### 20250922_03.md   [《AI论文解读 | Strong and Efficient Consistency with Consistency-aware Durability》](20250922_03.md)  

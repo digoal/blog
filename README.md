@@ -100,6 +100,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250924_06.md   [《谁说国产只会套壳, 这个国产向量数据库就不是pgvector套壳》](202509/20250924_06.md)  
+##### 202509/20250924_05.md   [《AI论文解读 | Online, Asynchronous Schema Change in F1》](202509/20250924_05.md)  
+##### 202509/20250924_04.md   [《AI论文解读 | Spanner: Google’s Globally Distributed Database》](202509/20250924_04.md)  
+##### 202509/20250924_03.md   [《AI论文解读 | Megastore: Providing Scalable, Highly Available Storage for Interactive Services》](202509/20250924_03.md)  
+##### 202509/20250924_02.md   [《AI论文解读 | Query Processing in Main Memory Database Management Systems》](202509/20250924_02.md)  
+##### 202509/20250924_01.md   [《AI论文解读 | The Design and Implementation of INGRES》](202509/20250924_01.md)  
 ##### 202509/20250923_01.md   [《德说-第353期, 职场中“油腻”一点, 用规则保护自己》](202509/20250923_01.md)  
 ##### 202509/20250922_05.md   [《AI论文解读 | System R: Relational Approach to Database Management》](202509/20250922_05.md)  
 ##### 202509/20250922_04.md   [《AI论文解读 | Architecture of a Database System》](202509/20250922_04.md)  

@@ -2,6 +2,13 @@
   
 ### 文章列表  
 ----  
+##### 20250925_07.md   [《容器体验VexDB! 暴露PostgreSQL,openGauss,vastbase基因》](20250925_07.md)  
+##### 20250925_06.md   [《DuckDB 1.4.0 新排序算法介绍(大幅性能提升)》](20250925_06.md)  
+##### 20250925_05.md   [《AI论文解读 | Dynamo: Amazon’s Highly Available Key-value Store》](20250925_05.md)  
+##### 20250925_04.md   [《AI论文解读 | TiDB: A Raft-based HTAP Database》](20250925_04.md)  
+##### 20250925_03.md   [《AI论文解读 | F1 Lightning: HTAP as a Service》](20250925_03.md)  
+##### 20250925_02.md   [《AI论文解读 | CockroachDB: The Resilient Geo-Distributed SQL Database》](20250925_02.md)  
+##### 20250925_01.md   [《AI论文解读 | Looking Back at Postgres》](20250925_01.md)  
 ##### 20250924_06.md   [《谁说国产只会套壳, 这个国产向量数据库就不是pgvector套壳》](20250924_06.md)  
 ##### 20250924_05.md   [《AI论文解读 | Online, Asynchronous Schema Change in F1》](20250924_05.md)  
 ##### 20250924_04.md   [《AI论文解读 | Spanner: Google’s Globally Distributed Database》](20250924_04.md)  

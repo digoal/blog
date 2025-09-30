@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20250928_09.md   [《AI论文解读 | Seeing, Listening, Remembering, and Reasoning: A Multimodal Agent with Long-Term Memory》](20250928_09.md)  
+##### 20250928_08.md   [《如何通过KV Cache加速大模型的推理吞吐率》](20250928_08.md)  
+##### 20250928_07.md   [《大模型的量化格式》](20250928_07.md)  
+##### 20250928_06.md   [《如何写AI Agent?》](20250928_06.md)  
+##### 20250928_05.md   [《AI论文解读 | PNUTS to Sherpa: Lessons from Yahoo!’s Cloud Database》](20250928_05.md)  
+##### 20250928_04.md   [《AI论文解读 | Azure Data Lake Store: A Hyperscale Distributed File Service for Big Data Analytics》](20250928_04.md)  
+##### 20250928_03.md   [《AI论文解读 | Windows Azure Storage: A Highly Available Cloud Storage Service with Strong Consistency》](20250928_03.md)  
+##### 20250928_02.md   [《AI论文解读 | Cassandra - A Decentralized Structured Storage System》](20250928_02.md)  
+##### 20250928_01.md   [《AI论文解读 | PNUTS: Yahoo!’s Hosted Data Serving Platform》](20250928_01.md)  
 ##### 20250926_09.md   [《体验PostgreSQL 18的`WITHOUT OVERLAPS`唯一约束和`PERIOD`外键约束》](20250926_09.md)  
 ##### 20250926_08.md   [《云栖大会热词洞察: AI就绪 (AI Ready) 及其对产业生态的深远影响》](20250926_08.md)  
 ##### 20250926_07.md   [《AI论文解读 | Select Edges Wisely: Monotonic Path Aware Graph Layout Optimization for Disk-based ANN Search》](20250926_07.md)  

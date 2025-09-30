@@ -100,6 +100,15 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250928_09.md   [《AI论文解读 | Seeing, Listening, Remembering, and Reasoning: A Multimodal Agent with Long-Term Memory》](202509/20250928_09.md)  
+##### 202509/20250928_08.md   [《如何通过KV Cache加速大模型的推理吞吐率》](202509/20250928_08.md)  
+##### 202509/20250928_07.md   [《大模型的量化格式》](202509/20250928_07.md)  
+##### 202509/20250928_06.md   [《如何写AI Agent?》](202509/20250928_06.md)  
+##### 202509/20250928_05.md   [《AI论文解读 | PNUTS to Sherpa: Lessons from Yahoo!’s Cloud Database》](202509/20250928_05.md)  
+##### 202509/20250928_04.md   [《AI论文解读 | Azure Data Lake Store: A Hyperscale Distributed File Service for Big Data Analytics》](202509/20250928_04.md)  
+##### 202509/20250928_03.md   [《AI论文解读 | Windows Azure Storage: A Highly Available Cloud Storage Service with Strong Consistency》](202509/20250928_03.md)  
+##### 202509/20250928_02.md   [《AI论文解读 | Cassandra - A Decentralized Structured Storage System》](202509/20250928_02.md)  
+##### 202509/20250928_01.md   [《AI论文解读 | PNUTS: Yahoo!’s Hosted Data Serving Platform》](202509/20250928_01.md)  
 ##### 202509/20250926_09.md   [《体验PostgreSQL 18的`WITHOUT OVERLAPS`唯一约束和`PERIOD`外键约束》](202509/20250926_09.md)  
 ##### 202509/20250926_08.md   [《云栖大会热词洞察: AI就绪 (AI Ready) 及其对产业生态的深远影响》](202509/20250926_08.md)  
 ##### 202509/20250926_07.md   [《AI论文解读 | Select Edges Wisely: Monotonic Path Aware Graph Layout Optimization for Disk-based ANN Search》](202509/20250926_07.md)  
@@ -4699,9 +4708,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201611/20161125_01.md   [《PostgreSQL 利用编译器extension 支持int128，提升聚合性能》](201611/20161125_01.md)  
 ##### 201611/20161124_02.md   [《PostgreSQL 与 12306 抢火车票的思考》](201611/20161124_02.md)  
 ##### 201611/20161124_01.md   [《门禁广告销售系统需求剖析 与 PostgreSQL数据库实现》](201611/20161124_01.md)  
-##### 201611/20161123_01.md   [《PostgreSQL AWR报告(for 阿里云ApsaraDB PgSQL)》](201611/20161123_01.md)  
 ##### 201611/20161123_01_pdf_002.md   [《报告时间段: ```2016-11-24 10:57:04.081798``` ~ ```2016-11-24 11:10:13.201455```》](201611/20161123_01_pdf_002.md)  
 ##### 201611/20161123_01_pdf_001.md   [《报告时间段: ```2016-11-24 10:51:14.744512``` ~ ```2016-11-24 10:57:04.081798```》](201611/20161123_01_pdf_001.md)  
+##### 201611/20161123_01.md   [《PostgreSQL AWR报告(for 阿里云ApsaraDB PgSQL)》](201611/20161123_01.md)  
 ##### 201611/20161121_02.md   [《PostgreSQL 函数调试、诊断、优化 & auto_explain & plprofiler》](201611/20161121_02.md)  
 ##### 201611/20161121_01.md   [《PostgreSQL on Linux 最佳部署手册 - 珍藏级》](201611/20161121_01.md)  
 ##### 201611/20161120_06.md   [《转载 - Linux软中断不均的调优》](201611/20161120_06.md)  

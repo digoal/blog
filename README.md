@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250930_05.md   [《AI论文解读 | The Volcano Optimizer Generator- Extensibility And Efficient Search》](202509/20250930_05.md)  
+##### 202509/20250930_04.md   [《AI论文解读 | Extensible/Rule Based Query Rewrite Optimization In Starburst》](202509/20250930_04.md)  
+##### 202509/20250930_03.md   [《AI论文解读 | The Exodus Optimizer Generator》](202509/20250930_03.md)  
+##### 202509/20250930_02.md   [《AI论文解读 | Query Optimization By Simulated Annealing》](202509/20250930_02.md)  
+##### 202509/20250930_01.md   [《AI论文解读 | Access Path Selection In A Relational Database Management System》](202509/20250930_01.md)  
 ##### 202509/20250928_09.md   [《AI论文解读 | Seeing, Listening, Remembering, and Reasoning: A Multimodal Agent with Long-Term Memory》](202509/20250928_09.md)  
 ##### 202509/20250928_08.md   [《如何通过KV Cache加速大模型的推理吞吐率》](202509/20250928_08.md)  
 ##### 202509/20250928_07.md   [《大模型的量化格式》](202509/20250928_07.md)  

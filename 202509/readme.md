@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20250930_06.md   [《AI 搜索关键技术点: 稀疏向量、稠密向量和向量量化》](20250930_06.md)  
 ##### 20250930_05.md   [《AI论文解读 | The Volcano Optimizer Generator- Extensibility And Efficient Search》](20250930_05.md)  
 ##### 20250930_04.md   [《AI论文解读 | Extensible/Rule Based Query Rewrite Optimization In Starburst》](20250930_04.md)  
 ##### 20250930_03.md   [《AI论文解读 | The Exodus Optimizer Generator》](20250930_03.md)  

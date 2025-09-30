@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202509/20250930_06.md   [《AI 搜索关键技术点: 稀疏向量、稠密向量和向量量化》](202509/20250930_06.md)  
 ##### 202509/20250930_05.md   [《AI论文解读 | The Volcano Optimizer Generator- Extensibility And Efficient Search》](202509/20250930_05.md)  
 ##### 202509/20250930_04.md   [《AI论文解读 | Extensible/Rule Based Query Rewrite Optimization In Starburst》](202509/20250930_04.md)  
 ##### 202509/20250930_03.md   [《AI论文解读 | The Exodus Optimizer Generator》](202509/20250930_03.md)  

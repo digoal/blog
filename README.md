@@ -100,6 +100,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251001_05.md   [《AI论文解读 | Parallelizing Query Optimization on Shared-Nothing Architectures》](202510/20251001_05.md)  
+##### 202510/20251001_04.md   [《AI论文解读 | Orca: A Modular Query Optimizer Architecture for Big Data》](202510/20251001_04.md)  
+##### 202510/20251001_03.md   [《AI论文解读 | Robust Query Processing through Progressive Optimization》](202510/20251001_03.md)  
+##### 202510/20251001_02.md   [《AI论文解读 | An Overview of Query Optimization in Relational Systems》](202510/20251001_02.md)  
+##### 202510/20251001_01.md   [《AI论文解读 | The Cascades Framework for Query Optimization》](202510/20251001_01.md)  
+----  
 ##### 202509/20250930_06.md   [《AI 搜索关键技术点: 稀疏向量、稠密向量和向量量化》](202509/20250930_06.md)  
 ##### 202509/20250930_05.md   [《AI论文解读 | The Volcano Optimizer Generator- Extensibility And Efficient Search》](202509/20250930_05.md)  
 ##### 202509/20250930_04.md   [《AI论文解读 | Extensible/Rule Based Query Rewrite Optimization In Starburst》](202509/20250930_04.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20251002_05.md   [《AI论文解读 | Query Optimization By Predicate Move-Around》](20251002_05.md)  
 ##### 20251002_04.md   [《AI论文解读 | Grammar-Like Functional Rules For Representing Query Optimization Alternatives》](20251002_04.md)  
 ##### 20251002_03.md   [《AI论文解读 | Translating Sql Into Relational Algebra: Optimization, Semantics, And Equivalence Of Sql Queries》](20251002_03.md)  
 ##### 20251002_02.md   [《AI论文解读 | Processing Queries With Quantifiers A Horticultural Approach》](20251002_02.md)  

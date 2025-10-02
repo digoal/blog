@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251002_05.md   [《AI论文解读 | Query Optimization By Predicate Move-Around》](202510/20251002_05.md)  
 ##### 202510/20251002_04.md   [《AI论文解读 | Grammar-Like Functional Rules For Representing Query Optimization Alternatives》](202510/20251002_04.md)  
 ##### 202510/20251002_03.md   [《AI论文解读 | Translating Sql Into Relational Algebra: Optimization, Semantics, And Equivalence Of Sql Queries》](202510/20251002_03.md)  
 ##### 202510/20251002_02.md   [《AI论文解读 | Processing Queries With Quantifiers A Horticultural Approach》](202510/20251002_02.md)  

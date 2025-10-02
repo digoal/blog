@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251002_04.md   [《AI论文解读 | Grammar-Like Functional Rules For Representing Query Optimization Alternatives》](202510/20251002_04.md)  
+##### 202510/20251002_03.md   [《AI论文解读 | Translating Sql Into Relational Algebra: Optimization, Semantics, And Equivalence Of Sql Queries》](202510/20251002_03.md)  
+##### 202510/20251002_02.md   [《AI论文解读 | Processing Queries With Quantifiers A Horticultural Approach》](202510/20251002_02.md)  
+##### 202510/20251002_01.md   [《AI论文解读 | The MemSQL Query Optimizer: A modern optimizer for real-time analytics in a distributed database》](202510/20251002_01.md)  
 ##### 202510/20251001_06.md   [《幻读和不可重复读的区别》](202510/20251001_06.md)  
 ##### 202510/20251001_05.md   [《AI论文解读 | Parallelizing Query Optimization on Shared-Nothing Architectures》](202510/20251001_05.md)  
 ##### 202510/20251001_04.md   [《AI论文解读 | Orca: A Modular Query Optimizer Architecture for Big Data》](202510/20251001_04.md)  

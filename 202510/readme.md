@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20251003_11.md   [《AI论文解读 | On Optimizing An Sql-Like Nested Query》](20251003_11.md)  
+##### 20251003_10.md   [《AI论文解读 | Using Semi-Joins To Solve Relational Queries》](20251003_10.md)  
+##### 20251003_09.md   [《AI论文解读 | Cost-Based Query Transformation In Oracle》](20251003_09.md)  
+##### 20251003_08.md   [《AI论文解读 | Parameterized Queries And Nesting Equivalences》](20251003_08.md)  
+##### 20251003_07.md   [《AI论文解读 | Eager Aggregation And Lazy Aggregation》](20251003_07.md)  
 ##### 20251003_06.md   [《在 Postgres 中实现卡尔曼滤波器清理 GPS 噪声数据》](20251003_06.md)  
 ##### 20251003_05.md   [《用 wal_inspect 分析PG WAL日志, 结合pgBadger找出快查询是怎么突然变慢的》](20251003_05.md)  
 ##### 20251003_04.md   [《AIO 是PostgreSQL的终点吗? 不, 未来将大力发展DIO》](20251003_04.md)  

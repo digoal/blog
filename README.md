@@ -100,6 +100,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251003_06.md   [《在 Postgres 中实现卡尔曼滤波器清理 GPS 噪声数据》](202510/20251003_06.md)  
+##### 202510/20251003_05.md   [《用 wal_inspect 分析PG WAL日志, 结合pgBadger找出快查询是怎么突然变慢的》](202510/20251003_05.md)  
+##### 202510/20251003_04.md   [《AIO 是PostgreSQL的终点吗? 不, 未来将大力发展DIO》](202510/20251003_04.md)  
+##### 202510/20251003_03.md   [《PostgreSQL 19 preview - 修复 pgstattuple 插件因索引页错误导致的统计查询报错》](202510/20251003_03.md)  
+##### 202510/20251003_02.md   [《PostgreSQL 19 preview - group by all》](202510/20251003_02.md)  
+##### 202510/20251003_01.md   [《大新闻 | Databricks收购Mooncake, 补齐AI Agent实时数据管道短板》](202510/20251003_01.md)  
 ##### 202510/20251002_05.md   [《AI论文解读 | Query Optimization By Predicate Move-Around》](202510/20251002_05.md)  
 ##### 202510/20251002_04.md   [《AI论文解读 | Grammar-Like Functional Rules For Representing Query Optimization Alternatives》](202510/20251002_04.md)  
 ##### 202510/20251002_03.md   [《AI论文解读 | Translating Sql Into Relational Algebra: Optimization, Semantics, And Equivalence Of Sql Queries》](202510/20251002_03.md)  

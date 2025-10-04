@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251004_05.md   [《AI论文解读 | A Unitied Approach To Processing Queries That Contain Nested Subqueries, Aggregates, And Quantifiers》](202510/20251004_05.md)  
+##### 202510/20251004_04.md   [《AI论文解读 | Optimization Of Nested Sql Queries Revisited》](202510/20251004_04.md)  
+##### 202510/20251004_03.md   [《AI论文解读 | Sql-Like And Quel-Like Correlation Queries With Aggregates Revisited》](202510/20251004_03.md)  
+##### 202510/20251004_02.md   [《AI论文解读 | Optimization Of Nested Queries In A Distributed Relational Database》](202510/20251004_02.md)  
+##### 202510/20251004_01.md   [《AI论文解读 | AGENT AI: SURVEYING THE HORIZONS OF MULTIMODAL INTERACTION》](202510/20251004_01.md)  
 ##### 202510/20251003_11.md   [《AI论文解读 | On Optimizing An Sql-Like Nested Query》](202510/20251003_11.md)  
 ##### 202510/20251003_10.md   [《AI论文解读 | Using Semi-Joins To Solve Relational Queries》](202510/20251003_10.md)  
 ##### 202510/20251003_09.md   [《AI论文解读 | Cost-Based Query Transformation In Oracle》](202510/20251003_09.md)  

@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20251004_05.md   [《AI论文解读 | A Unitied Approach To Processing Queries That Contain Nested Subqueries, Aggregates, And Quantifiers》](20251004_05.md)  
+##### 20251004_04.md   [《AI论文解读 | Optimization Of Nested Sql Queries Revisited》](20251004_04.md)  
+##### 20251004_03.md   [《AI论文解读 | Sql-Like And Quel-Like Correlation Queries With Aggregates Revisited》](20251004_03.md)  
+##### 20251004_02.md   [《AI论文解读 | Optimization Of Nested Queries In A Distributed Relational Database》](20251004_02.md)  
+##### 20251004_01.md   [《AI论文解读 | AGENT AI: SURVEYING THE HORIZONS OF MULTIMODAL INTERACTION》](20251004_01.md)  
 ##### 20251003_11.md   [《AI论文解读 | On Optimizing An Sql-Like Nested Query》](20251003_11.md)  
 ##### 20251003_10.md   [《AI论文解读 | Using Semi-Joins To Solve Relational Queries》](20251003_10.md)  
 ##### 20251003_09.md   [《AI论文解读 | Cost-Based Query Transformation In Oracle》](20251003_09.md)  

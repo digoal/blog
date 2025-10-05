@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20251005_05.md   [《AI论文解读 | Unnesting Arbitrary Queries》](20251005_05.md)  
+##### 20251005_04.md   [《AI论文解读 | Enhanced Subquery Optimizations In Oracle》](20251005_04.md)  
+##### 20251005_03.md   [《AI论文解读 | Execution Strategies For Sql Subqueries》](20251005_03.md)  
+##### 20251005_02.md   [《AI论文解读 | Winmagic : Subquery Elimination Using Window Aggregation》](20251005_02.md)  
+##### 20251005_01.md   [《AI论文解读 | Orthogonal Optimization Of Subqueries And Aggregation》](20251005_01.md)  
 ##### 20251004_05.md   [《AI论文解读 | A Unitied Approach To Processing Queries That Contain Nested Subqueries, Aggregates, And Quantifiers》](20251004_05.md)  
 ##### 20251004_04.md   [《AI论文解读 | Optimization Of Nested Sql Queries Revisited》](20251004_04.md)  
 ##### 20251004_03.md   [《AI论文解读 | Sql-Like And Quel-Like Correlation Queries With Aggregates Revisited》](20251004_03.md)  

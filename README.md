@@ -100,6 +100,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251005_05.md   [《AI论文解读 | Unnesting Arbitrary Queries》](202510/20251005_05.md)  
+##### 202510/20251005_04.md   [《AI论文解读 | Enhanced Subquery Optimizations In Oracle》](202510/20251005_04.md)  
+##### 202510/20251005_03.md   [《AI论文解读 | Execution Strategies For Sql Subqueries》](202510/20251005_03.md)  
+##### 202510/20251005_02.md   [《AI论文解读 | Winmagic : Subquery Elimination Using Window Aggregation》](202510/20251005_02.md)  
+##### 202510/20251005_01.md   [《AI论文解读 | Orthogonal Optimization Of Subqueries And Aggregation》](202510/20251005_01.md)  
 ##### 202510/20251004_05.md   [《AI论文解读 | A Unitied Approach To Processing Queries That Contain Nested Subqueries, Aggregates, And Quantifiers》](202510/20251004_05.md)  
 ##### 202510/20251004_04.md   [《AI论文解读 | Optimization Of Nested Sql Queries Revisited》](202510/20251004_04.md)  
 ##### 202510/20251004_03.md   [《AI论文解读 | Sql-Like And Quel-Like Correlation Queries With Aggregates Revisited》](202510/20251004_03.md)  
@@ -4742,9 +4747,9 @@ digoal's|PostgreSQL|文章|归类
 ##### 201611/20161125_01.md   [《PostgreSQL 利用编译器extension 支持int128，提升聚合性能》](201611/20161125_01.md)  
 ##### 201611/20161124_02.md   [《PostgreSQL 与 12306 抢火车票的思考》](201611/20161124_02.md)  
 ##### 201611/20161124_01.md   [《门禁广告销售系统需求剖析 与 PostgreSQL数据库实现》](201611/20161124_01.md)  
+##### 201611/20161123_01.md   [《PostgreSQL AWR报告(for 阿里云ApsaraDB PgSQL)》](201611/20161123_01.md)  
 ##### 201611/20161123_01_pdf_002.md   [《报告时间段: ```2016-11-24 10:57:04.081798``` ~ ```2016-11-24 11:10:13.201455```》](201611/20161123_01_pdf_002.md)  
 ##### 201611/20161123_01_pdf_001.md   [《报告时间段: ```2016-11-24 10:51:14.744512``` ~ ```2016-11-24 10:57:04.081798```》](201611/20161123_01_pdf_001.md)  
-##### 201611/20161123_01.md   [《PostgreSQL AWR报告(for 阿里云ApsaraDB PgSQL)》](201611/20161123_01.md)  
 ##### 201611/20161121_02.md   [《PostgreSQL 函数调试、诊断、优化 & auto_explain & plprofiler》](201611/20161121_02.md)  
 ##### 201611/20161121_01.md   [《PostgreSQL on Linux 最佳部署手册 - 珍藏级》](201611/20161121_01.md)  
 ##### 201611/20161120_06.md   [《转载 - Linux软中断不均的调优》](201611/20161120_06.md)  

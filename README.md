@@ -100,6 +100,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251006_05.md   [《AI论文解读 | Incorporating Partitioning And Parallel Plans Into The Scope Optimizer》](202510/20251006_05.md)  
 ##### 202510/20251006_04.md   [《AI论文解读 | An Efficient Framework For Order Optimization》](202510/20251006_04.md)  
 ##### 202510/20251006_03.md   [《AI论文解读 | Exploiting Functional Dependence In Query Optimization》](202510/20251006_03.md)  
 ##### 202510/20251006_02.md   [《AI论文解读 | Fundamental Techniques For Order Optimization》](202510/20251006_02.md)  

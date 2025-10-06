@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251006_02.md   [《AI论文解读 | Fundamental Techniques For Order Optimization》](202510/20251006_02.md)  
+##### 202510/20251006_01.md   [《AI论文解读 | The Complete Story Of Joins》](202510/20251006_01.md)  
 ##### 202510/20251005_05.md   [《AI论文解读 | Unnesting Arbitrary Queries》](202510/20251005_05.md)  
 ##### 202510/20251005_04.md   [《AI论文解读 | Enhanced Subquery Optimizations In Oracle》](202510/20251005_04.md)  
 ##### 202510/20251005_03.md   [《AI论文解读 | Execution Strategies For Sql Subqueries》](202510/20251005_03.md)  

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20251006_02.md   [《AI论文解读 | Fundamental Techniques For Order Optimization》](20251006_02.md)  
+##### 20251006_01.md   [《AI论文解读 | The Complete Story Of Joins》](20251006_01.md)  
 ##### 20251005_05.md   [《AI论文解读 | Unnesting Arbitrary Queries》](20251005_05.md)  
 ##### 20251005_04.md   [《AI论文解读 | Enhanced Subquery Optimizations In Oracle》](20251005_04.md)  
 ##### 20251005_03.md   [《AI论文解读 | Execution Strategies For Sql Subqueries》](20251005_03.md)  

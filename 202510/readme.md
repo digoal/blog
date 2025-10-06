@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20251006_04.md   [《AI论文解读 | An Efficient Framework For Order Optimization》](20251006_04.md)  
 ##### 20251006_03.md   [《AI论文解读 | Exploiting Functional Dependence In Query Optimization》](20251006_03.md)  
 ##### 20251006_02.md   [《AI论文解读 | Fundamental Techniques For Order Optimization》](20251006_02.md)  
 ##### 20251006_01.md   [《AI论文解读 | The Complete Story Of Joins》](20251006_01.md)  

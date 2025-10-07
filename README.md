@@ -103,7 +103,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202510/20251007_05.md   [《AI论文解读 | Hypergraph Based Reorderings Of Outer Join Queries With Complex Predicates》](202510/20251007_05.md)  
 ##### 202510/20251007_04.md   [《AI论文解读 | Outerjoin Simplication And Reordering For Query Optimization》](202510/20251007_04.md)  
 ##### 202510/20251007_03.md   [《AI论文解读 | Extending The Algebraic Framework Of Query Processing To Handle Outerjoins》](202510/20251007_03.md)  
-##### 202510/20251007_02.md   [《AI论文解读 | Access Paths In The" Abe" Statistical Query Facility》](202510/20251007_02.md)  
+##### 202510/20251007_02.md   [《AI论文解读 | Access Paths In The "Abe" Statistical Query Facility》](202510/20251007_02.md)  
 ##### 202510/20251007_01.md   [《AI论文解读 | Accelerating Queries With Groupby And Join By Group Join》](202510/20251007_01.md)  
 ##### 202510/20251006_05.md   [《AI论文解读 | Incorporating Partitioning And Parallel Plans Into The Scope Optimizer》](202510/20251006_05.md)  
 ##### 202510/20251006_04.md   [《AI论文解读 | An Efficient Framework For Order Optimization》](202510/20251006_04.md)  

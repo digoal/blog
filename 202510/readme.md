@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20251008_06.md   [《AI论文解读 | Optimal Top-Down Join Enumeration》](20251008_06.md)  
+##### 20251008_05.md   [《AI论文解读 | Analysis Of Two Existing And One New Dynamic Programming Algorithm For The Generation Of Optimal Bushy Join Trees Without Cross Products》](20251008_05.md)  
+##### 20251008_04.md   [《AI论文解读 | Using Eels, A Practical Approach To Outerjoin And Antijoin Reordering》](20251008_04.md)  
+##### 20251008_03.md   [《AI论文解读 | Rapid Bushy Join-Order Optimization With Cartesian Products》](20251008_03.md)  
+##### 20251008_02.md   [《AI论文解读 | TDSQL: Tencent Distributed Database System》](20251008_02.md)  
+##### 20251008_01.md   [《AI论文解读 | Binary Embedding-based Retrieval at Tencent》](20251008_01.md)  
 ##### 20251007_05.md   [《AI论文解读 | Hypergraph Based Reorderings Of Outer Join Queries With Complex Predicates》](20251007_05.md)  
 ##### 20251007_04.md   [《AI论文解读 | Outerjoin Simplication And Reordering For Query Optimization》](20251007_04.md)  
 ##### 20251007_03.md   [《AI论文解读 | Extending The Algebraic Framework Of Query Processing To Handle Outerjoins》](20251007_03.md)  

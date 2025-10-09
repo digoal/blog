@@ -100,6 +100,18 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251009_12.md   [《PostgreSQL 19 preview - planner Hook扩展, 未来有望接入更多外部优化器提升优化器能力》](202510/20251009_12.md)  
+##### 202510/20251009_11.md   [《PostgreSQL 19 preview - pg_stat_replication_slots增加mem_exceeded_count计数器记录逻辑decode超过logical_decoding_work_mem内存限制次数.》](202510/20251009_11.md)  
+##### 202510/20251009_10.md   [《PostgreSQL 19 preview - bufmgr(缓冲区管理器) 优化》](202510/20251009_10.md)  
+##### 202510/20251009_09.md   [《德说-第356期, 没有SLA保障的开源数据库, 为什么有企业用?》](202510/20251009_09.md)  
+##### 202510/20251009_08.md   [《德说-第355期, 数据库产品的枷锁: 库》](202510/20251009_08.md)  
+##### 202510/20251009_07.md   [《德说-第354期, 如何判断国产数据库是不是真开源?》](202510/20251009_07.md)  
+##### 202510/20251009_06.md   [《PostgreSQL 19 preview - 国人提交“JOIN+聚合场景”优化补丁》](202510/20251009_06.md)  
+##### 202510/20251009_05.md   [《AI论文解读 | Adaptive Optimization Of Very Large Join Queries》](202510/20251009_05.md)  
+##### 202510/20251009_04.md   [《AI论文解读 | Improving Join Reorderability With Compensation Operators》](202510/20251009_04.md)  
+##### 202510/20251009_03.md   [《AI论文解读 | How Good Are Query Optimizers, Really?》](202510/20251009_03.md)  
+##### 202510/20251009_02.md   [《AI论文解读 | On The Correct And Complete Enumeration Of The Core Search Space》](202510/20251009_02.md)  
+##### 202510/20251009_01.md   [《AI论文解读 | Dynamic Programming Strikes Back》](202510/20251009_01.md)  
 ##### 202510/20251008_06.md   [《AI论文解读 | Optimal Top-Down Join Enumeration》](202510/20251008_06.md)  
 ##### 202510/20251008_05.md   [《AI论文解读 | Analysis Of Two Existing And One New Dynamic Programming Algorithm For The Generation Of Optimal Bushy Join Trees Without Cross Products》](202510/20251008_05.md)  
 ##### 202510/20251008_04.md   [《AI论文解读 | Using Eels, A Practical Approach To Outerjoin And Antijoin Reordering》](202510/20251008_04.md)  

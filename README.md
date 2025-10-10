@@ -100,6 +100,17 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251010_11.md   [《AI论文解读 | INFLLM-V2: DENSE-SPARSE SWITCHABLE ATTENTION FOR SEAMLESS SHORT-TO-LONG ADAPTATION》](202510/20251010_11.md)  
+##### 202510/20251010_10.md   [《AI论文解读 | BridgeScope: A Universal Toolkit for Bridging Large Language Models and Databases》](202510/20251010_10.md)  
+##### 202510/20251010_09.md   [《AI论文解读 | Approximation Schemes for Many-Objective Query Optimization》](202510/20251010_09.md)  
+##### 202510/20251010_08.md   [《AI论文解读 | SEEKing the truth about ad hoc join costs》](202510/20251010_08.md)  
+##### 202510/20251010_07.md   [《PostgreSQL 19 preview - 发布端支持`FOR ALL SEQUENCES`, 通过逻辑复制进行大版本升级丝滑了亿点点》](202510/20251010_07.md)  
+##### 202510/20251010_06.md   [《PG模拟DB2/Oracle事务中语句级报错行为的插件pg_statement_rollback》](202510/20251010_06.md)  
+##### 202510/20251010_05.md   [《PG 在什么场景需要 OAuth 身份验证方法?》](202510/20251010_05.md)  
+##### 202510/20251010_04.md   [《使用内置逻辑复制功能进行“PG迁移/大版本升级”实操》](202510/20251010_04.md)  
+##### 202510/20251010_03.md   [《PG 冷热分离案例 | 把JSON存入S3 Parquet》](202510/20251010_03.md)  
+##### 202510/20251010_02.md   [《使用GDB和VS Code调试PostgreSQL实操》](202510/20251010_02.md)  
+##### 202510/20251010_01.md   [《AI论文解读 | Modelling Costs for a MM-DBMS》](202510/20251010_01.md)  
 ##### 202510/20251009_12.md   [《PostgreSQL 19 preview - planner Hook扩展, 未来有望接入更多外部优化器提升优化器能力》](202510/20251009_12.md)  
 ##### 202510/20251009_11.md   [《PostgreSQL 19 preview - pg_stat_replication_slots增加mem_exceeded_count计数器记录逻辑decode超过logical_decoding_work_mem内存限制次数.》](202510/20251009_11.md)  
 ##### 202510/20251009_10.md   [《PostgreSQL 19 preview - bufmgr(缓冲区管理器) 优化》](202510/20251009_10.md)  

@@ -100,6 +100,18 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251011_12.md   [《AI论文解读 | New Streaming Algorithms for High Dimensional EMD and MST》](202510/20251011_12.md)  
+##### 202510/20251011_11.md   [《AI论文解读 | PLAID: An Efficient Engine for Late Interaction Retrieval》](202510/20251011_11.md)  
+##### 202510/20251011_10.md   [《AI论文解读 | MUVERA: Multi-Vector Retrieval via Fixed Dimensional Encodings》](202510/20251011_10.md)  
+##### 202510/20251011_09.md   [《AI论文解读 | Accurate Estimation Of The Number Of Tuples Satisfying A Condition》](202510/20251011_09.md)  
+##### 202510/20251011_08.md   [《AI论文解读 | Multi-Objective Parametric Query Optimization》](202510/20251011_08.md)  
+##### 202510/20251011_07.md   [《VexDB BM25 算法的全文检索 fulltext 索引原理与实践》](202510/20251011_07.md)  
+##### 202510/20251011_06.md   [《VexDB HybridAnn 向量标量混合索引原理与实践》](202510/20251011_06.md)  
+##### 202510/20251011_05.md   [《VexDB DiskANN 图索引原理与实践》](202510/20251011_05.md)  
+##### 202510/20251011_04.md   [《VexDB Graph_Index 图索引原理与实践》](202510/20251011_04.md)  
+##### 202510/20251011_03.md   [《PG Data Block中LSN的作用是什么?》](202510/20251011_03.md)  
+##### 202510/20251011_02.md   [《谷歌开源多向量近似计算高效算法和论文: MUVERA》](202510/20251011_02.md)  
+##### 202510/20251011_01.md   [《恭喜 DuckDB v1.4 拿下 ClickBench 排行榜第一名》](202510/20251011_01.md)  
 ##### 202510/20251010_11.md   [《AI论文解读 | INFLLM-V2: DENSE-SPARSE SWITCHABLE ATTENTION FOR SEAMLESS SHORT-TO-LONG ADAPTATION》](202510/20251010_11.md)  
 ##### 202510/20251010_10.md   [《AI论文解读 | BridgeScope: A Universal Toolkit for Bridging Large Language Models and Databases》](202510/20251010_10.md)  
 ##### 202510/20251010_09.md   [《AI论文解读 | Approximation Schemes for Many-Objective Query Optimization》](202510/20251010_09.md)  

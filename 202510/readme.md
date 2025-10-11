@@ -2,6 +2,18 @@
   
 ### 文章列表  
 ----  
+##### 20251011_12.md   [《AI论文解读 | New Streaming Algorithms for High Dimensional EMD and MST》](20251011_12.md)  
+##### 20251011_11.md   [《AI论文解读 | PLAID: An Efficient Engine for Late Interaction Retrieval》](20251011_11.md)  
+##### 20251011_10.md   [《AI论文解读 | MUVERA: Multi-Vector Retrieval via Fixed Dimensional Encodings》](20251011_10.md)  
+##### 20251011_09.md   [《AI论文解读 | Accurate Estimation Of The Number Of Tuples Satisfying A Condition》](20251011_09.md)  
+##### 20251011_08.md   [《AI论文解读 | Multi-Objective Parametric Query Optimization》](20251011_08.md)  
+##### 20251011_07.md   [《VexDB BM25 算法的全文检索 fulltext 索引原理与实践》](20251011_07.md)  
+##### 20251011_06.md   [《VexDB HybridAnn 向量标量混合索引原理与实践》](20251011_06.md)  
+##### 20251011_05.md   [《VexDB DiskANN 图索引原理与实践》](20251011_05.md)  
+##### 20251011_04.md   [《VexDB Graph_Index 图索引原理与实践》](20251011_04.md)  
+##### 20251011_03.md   [《PG Data Block中LSN的作用是什么?》](20251011_03.md)  
+##### 20251011_02.md   [《谷歌开源多向量近似计算高效算法和论文: MUVERA》](20251011_02.md)  
+##### 20251011_01.md   [《恭喜 DuckDB v1.4 拿下 ClickBench 排行榜第一名》](20251011_01.md)  
 ##### 20251010_11.md   [《AI论文解读 | INFLLM-V2: DENSE-SPARSE SWITCHABLE ATTENTION FOR SEAMLESS SHORT-TO-LONG ADAPTATION》](20251010_11.md)  
 ##### 20251010_10.md   [《AI论文解读 | BridgeScope: A Universal Toolkit for Bridging Large Language Models and Databases》](20251010_10.md)  
 ##### 20251010_09.md   [《AI论文解读 | Approximation Schemes for Many-Objective Query Optimization》](20251010_09.md)  

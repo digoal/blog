@@ -100,6 +100,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251012_06.md   [《AI论文解读 | Optimal Histograms For Limiting Worst-Case Error Propagation In The Size Of Join Results》](202510/20251012_06.md)  
+##### 202510/20251012_05.md   [《AI论文解读 | Towards Robust Pruning: An Adaptive Knowledge-Retention Pruning Strategy for Language Models》](202510/20251012_05.md)  
+##### 202510/20251012_04.md   [《AI论文解读 | Pruning Adversarially Robust Neural Networks without Adversarial Examples》](202510/20251012_04.md)  
+##### 202510/20251012_03.md   [《AI论文解读 | Robustness to Pruning Predicts Generalization in Deep Neural Networks》](202510/20251012_03.md)  
 ##### 202510/20251012_02.md   [《AI论文解读 | ROBUST PRUNING AT INITIALIZATION》](202510/20251012_02.md)  
 ##### 202510/20251012_01.md   [《AI论文解读 | BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation of Information Retrieval Models》](202510/20251012_01.md)  
 ##### 202510/20251011_12.md   [《AI论文解读 | New Streaming Algorithms for High Dimensional EMD and MST》](202510/20251011_12.md)  

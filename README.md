@@ -100,6 +100,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251012_02.md   [《AI论文解读 | ROBUST PRUNING AT INITIALIZATION》](202510/20251012_02.md)  
+##### 202510/20251012_01.md   [《AI论文解读 | BEIR: A Heterogeneous Benchmark for Zero-shot Evaluation of Information Retrieval Models》](202510/20251012_01.md)  
 ##### 202510/20251011_12.md   [《AI论文解读 | New Streaming Algorithms for High Dimensional EMD and MST》](202510/20251011_12.md)  
 ##### 202510/20251011_11.md   [《AI论文解读 | PLAID: An Efficient Engine for Late Interaction Retrieval》](202510/20251011_11.md)  
 ##### 202510/20251011_10.md   [《AI论文解读 | MUVERA: Multi-Vector Retrieval via Fixed Dimensional Encodings》](202510/20251011_10.md)  

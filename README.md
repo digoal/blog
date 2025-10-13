@@ -100,6 +100,21 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251013_15.md   [《体系化剖析开源OB代码: 2.4 计划缓存与执行器》](202510/20251013_15.md)  
+##### 202510/20251013_14.md   [《体系化剖析开源OB代码: 2.3 优化器》](202510/20251013_14.md)  
+##### 202510/20251013_13.md   [《体系化剖析开源OB代码: 2.2 查询重写和转换》](202510/20251013_13.md)  
+##### 202510/20251013_12.md   [《体系化剖析开源OB代码: 2.1 语法解析器(Parsing)和语义解析器(Resolution)》](202510/20251013_12.md)  
+##### 202510/20251013_11.md   [《都是解析器, 数据库中 parser 和 resolution 的区别》](202510/20251013_11.md)  
+##### 202510/20251013_10.md   [《体系化剖析开源OB代码: 5 配置与系统状态管理》](202510/20251013_10.md)  
+##### 202510/20251013_09.md   [《体系化剖析开源OB代码: 4 分布式管理系统》](202510/20251013_09.md)  
+##### 202510/20251013_08.md   [《体系化剖析开源OB代码: 3 存储引擎》](202510/20251013_08.md)  
+##### 202510/20251013_07.md   [《体系化剖析开源OB代码: 2 SQL 处理系统》](202510/20251013_07.md)  
+##### 202510/20251013_06.md   [《体系化剖析开源OB代码: 1 蓝图》](202510/20251013_06.md)  
+##### 202510/20251013_05.md   [《AI论文解读 | Automated Statistics Collection In Db2 Udb》](202510/20251013_05.md)  
+##### 202510/20251013_04.md   [《AI论文解读 | The History Of Histograms》](202510/20251013_04.md)  
+##### 202510/20251013_03.md   [《AI论文解读 | Improved Histograms For Selectivity Estimation Of Range Predicates》](202510/20251013_03.md)  
+##### 202510/20251013_02.md   [《AI论文解读 | Balancing Histogram Optimality And Practicality For Query Result Size Estimation》](202510/20251013_02.md)  
+##### 202510/20251013_01.md   [《AI论文解读 | Universality Of Serial Histograms》](202510/20251013_01.md)  
 ##### 202510/20251012_06.md   [《AI论文解读 | Optimal Histograms For Limiting Worst-Case Error Propagation In The Size Of Join Results》](202510/20251012_06.md)  
 ##### 202510/20251012_05.md   [《AI论文解读 | Towards Robust Pruning: An Adaptive Knowledge-Retention Pruning Strategy for Language Models》](202510/20251012_05.md)  
 ##### 202510/20251012_04.md   [《AI论文解读 | Pruning Adversarially Robust Neural Networks without Adversarial Examples》](202510/20251012_04.md)  

@@ -2,6 +2,23 @@
   
 ### 文章列表  
 ----  
+##### 20251014_17.md   [《体系化剖析开源OB代码: 5.2 会话管理》](20251014_17.md)  
+##### 20251014_16.md   [《体系化剖析开源OB代码: 5.1 参数配置系统》](20251014_16.md)  
+##### 20251014_15.md   [《体系化剖析开源OB代码: 4.3 错误处理和 RPC 系统》](20251014_15.md)  
+##### 20251014_14.md   [《体系化剖析开源OB代码: 4.2 DDL 任务调度系统》](20251014_14.md)  
+##### 20251014_13.md   [《体系化剖析开源OB代码: 4.1 DDL 服务与操作》](20251014_13.md)  
+##### 20251014_12.md   [《何为MySQL 调试同步基础设施(Debug Synchronization Infrastructure)?》](20251014_12.md)  
+##### 20251014_11.md   [《体系化剖析开源OB代码: 3.4 高可用(HA)与数据恢复系统》](20251014_11.md)  
+##### 20251014_10.md   [《体系化剖析开源OB代码: 3.3 存储压缩(Compaction)》](20251014_10.md)  
+##### 20251014_09.md   [《体系化剖析开源OB代码: 3.2 Tablet 管理系统》](20251014_09.md)  
+##### 20251014_08.md   [《体系化剖析开源OB代码: 3.1 事务管理》](20251014_08.md)  
+##### 20251014_07.md   [《体系化剖析开源OB代码: 2.6 向量索引系统》](20251014_07.md)  
+##### 20251014_06.md   [《体系化剖析开源OB代码: 2.5 PL/SQL 支持系统》](20251014_06.md)  
+##### 20251014_05.md   [《AI论文解读 | Exploiting Ordered Dictionaries To Efficiently Construct Histograms With Q-Error Guarantees In Sap Hana》](20251014_05.md)  
+##### 20251014_04.md   [《AI论文解读 | Synopses For Massive Data: Samples, Histograms, Wavelets, Sketches》](20251014_04.md)  
+##### 20251014_03.md   [《AI论文解读 | Histograms Reloaded: The Merits Of Bucket Diversity》](20251014_03.md)  
+##### 20251014_02.md   [《AI论文解读 | Optimizer Plan Change Management: Improved Stability And Performance In Oracle 11G》](20251014_02.md)  
+##### 20251014_01.md   [《AI论文解读 | Adaptive Query Processing In The Looking Glass》](20251014_01.md)  
 ##### 20251013_15.md   [《体系化剖析开源OB代码: 2.4 计划缓存与执行器》](20251013_15.md)  
 ##### 20251013_14.md   [《体系化剖析开源OB代码: 2.3 优化器》](20251013_14.md)  
 ##### 20251013_13.md   [《体系化剖析开源OB代码: 2.2 查询重写和转换》](20251013_13.md)  

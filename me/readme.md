@@ -24,6 +24,27 @@ digoal(德哥)
 简短介绍
 简介: zzz, 网名德哥(digoal). PostgreSQL 中国社区发起人之一, 荣获40余项数据库领域专利. 曾就职于阿里云(至今)、杭州斯凯(SkyMobi), 担任过DBA、架构师、产品经理、开源社区运营与生态建设等工作. 长期致力于推动开源数据库技术、生态在中国的发展与开源产业人才培养. 曾荣获阿里巴巴麒麟布道师最高荣誉、OSCAR开源尖峰人物、PG分会ACED、PG中文社区猛犸象最高奖项. 未来将长期致力于AI、PostgreSQL、DuckDB领域研究及个人感悟等分享.  
 ```
+   
+经过坚持更新, 全网粉丝已4.6万+, 文章及视频传播量超2000万人次.    
+```
+B站, 4600+
+- https://space.bilibili.com/310191812
+
+阿里云开发者社区, 20700+
+- https://developer.aliyun.com/profile/3x5dm5sgv4yq6
+
+知乎, LV8
+- https://www.zhihu.com/people/digoal
+
+微信公众号“digoal德哥”, 11000+
+- https://mp.weixin.qq.com/s/G-KusBPYxbC2A4erZgC0gQ
+
+微信视频号“digoal德哥”, 2100+
+- https://weixin.qq.com/sph/AdoKKWKJl
+
+Github, 8.3k
+- https://github.com/digoal/blog
+```
   
 ## 工作经历  
 ### 2023.10 ~ 现在 阿里云  
@@ -262,7 +283,7 @@ vivo oppo
 ```
 - 常年不定期输出PostgreSQL公益培训。        
 - 长期坚持撰写技术文章，涵盖“开源产品使用、案例、应用开发实践、内核开发实践、管理实践、调优实践”等数据库生命周期相关文档. 截止2019.6 发表PG技术类文章数：    
-    - 2000+ ，外部引用+github浏览量：2000万+ (ata, yq, yq_internal, weixin, github, postgres.cn, 163blog, PG社区公众号 ... 等渠道) 
+    - 2000+ ，外部引用+Github浏览量：2000万+ (ata, yq, yq_internal, weixin, github, postgres.cn, 163blog, PG社区公众号 ... 等渠道) 
 - 组建PG技术钉钉交流群：     
     - 人数4000+  (截至202005)     
 - 对接数据库newsletter， 负责PG新闻和趋势分析报道。  

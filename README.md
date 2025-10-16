@@ -100,7 +100,17 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
-##### 202510/20251015_14.md   [《德说-第358期, 如何定义 AI 是否觉醒?》](202510/20251015_14.md)  
+##### 202510/20251016_10.md   [《LangChain 源码学习: 4 应用开发》](202510/20251016_10.md)  
+##### 202510/20251016_09.md   [《LangChain 源码学习: 3 外部提供商(Provider)包集成》](202510/20251016_09.md)  
+##### 202510/20251016_08.md   [《LangChain 源码学习: 2 核心架构》](202510/20251016_08.md)  
+##### 202510/20251016_07.md   [《LangChain 源码学习: 1.1 包生态系统》](202510/20251016_07.md)  
+##### 202510/20251016_06.md   [《LangChain 源码学习: 1 设计思想》](202510/20251016_06.md)  
+##### 202510/20251016_05.md   [《AI论文解读 | Neurocard: One Cardinality Estimator For All Tables》](202510/20251016_05.md)  
+##### 202510/20251016_04.md   [《AI论文解读 | Pessimistic Cardinality Estimation: Tighter Upper Bounds For Intermediate Join Cardinalities》](202510/20251016_04.md)  
+##### 202510/20251016_03.md   [《AI论文解读 | Preventing Bad Plans By Bounding The Impact Of Cardinality Estimation Errors》](202510/20251016_03.md)  
+##### 202510/20251016_02.md   [《AI论文解读 | New Estimation Algorithms For Streaming Data: Count-Min Can Do More》](202510/20251016_02.md)  
+##### 202510/20251016_01.md   [《AI论文解读 | An Improved Data Stream Summary: The Count-Min Sketch And Its Applications》](202510/20251016_01.md)  
+##### 202510/20251015_14.md   [《德说-第358期, 如何定义 AI 是否觉醒? 元神与识神》](202510/20251015_14.md)  
 ##### 202510/20251015_13.md   [《德说-第357期, 人生最重要的事13: 成为优秀“演员”》](202510/20251015_13.md)  
 ##### 202510/20251015_12.md   [《如何给数据库瘦身?》](202510/20251015_12.md)  
 ##### 202510/20251015_11.md   [《《2025 年人工智能现状报告》（State of AI Report 2025）解读》](202510/20251015_11.md)  

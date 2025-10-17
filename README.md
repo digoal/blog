@@ -101,6 +101,18 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251017_12.md   [《LangChain 源码学习: 2.3 工具与函数调用（Tools and Function Calling）》](202510/20251017_12.md)  
+##### 202510/20251017_11.md   [《LangChain 源码学习: 2.2 语言模型与聊天模型核心抽象》](202510/20251017_11.md)  
+##### 202510/20251017_10.md   [《LangChain 源码学习: 2.1 Runnable 接口与 LCEL（LangChain 表达式语言）》](202510/20251017_10.md)  
+##### 202510/20251017_09.md   [《LangChain 源码学习: 6 开发者体验（Developer Experience）》](202510/20251017_09.md)  
+##### 202510/20251017_08.md   [《LangChain 源码学习: 5 代码测试与评估框架》](202510/20251017_08.md)  
+##### 202510/20251017_07.md   [《PostgreSQL 19 preview - vacuum优化补丁, 最多可少产生50% WAL》](202510/20251017_07.md)  
+##### 202510/20251017_06.md   [《全文检索的地基: 标记化(Tokenization)原理详解》](202510/20251017_06.md)  
+##### 202510/20251017_05.md   [《AI论文解读 | Main-Memory Hash Joins On Modern Processor Architectures》](202510/20251017_05.md)  
+##### 202510/20251017_04.md   [《AI论文解读 | Multi-Core, Main-Memory Joins: Sort Vs. Hash Revisited》](202510/20251017_04.md)  
+##### 202510/20251017_03.md   [《AI论文解读 | Efficiently Compiling Efficient Query Plans For Modern Hardware》](202510/20251017_03.md)  
+##### 202510/20251017_02.md   [《AI论文解读 | Volcano - An Extensible And Parallel Query Evaluation System》](202510/20251017_02.md)  
+##### 202510/20251017_01.md   [《AI论文解读 | Query Evaluation Techniques For Large Databases》](202510/20251017_01.md)  
 ##### 202510/20251016_11.md   [《OceanBase 源码入门学习24篇 汇总》](202510/20251016_11.md)  
 ##### 202510/20251016_10.md   [《LangChain 源码学习: 4 应用开发》](202510/20251016_10.md)  
 ##### 202510/20251016_09.md   [《LangChain 源码学习: 3 外部提供商(Provider)包集成》](202510/20251016_09.md)  

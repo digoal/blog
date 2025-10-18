@@ -101,7 +101,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
-##### 202510/20251017_13.md   [《德说-第359期, 人生最重要的事14: 综合性人才将失去竞争力》](202510/20251017_13.md)  
+##### 202510/20251018_05.md   [《AI论文解读 | DB2 Parallel Edition》](202510/20251018_05.md)  
+##### 202510/20251018_04.md   [《AI论文解读 | Adaptive Execution of Compiled Queries》](202510/20251018_04.md)  
+##### 202510/20251018_03.md   [《AI论文解读 | Everything You Always Wanted to Know About Compiled and Vectorized Queries But Were Afraid to Ask》](202510/20251018_03.md)  
+##### 202510/20251018_02.md   [《AI论文解读 | Looking Ahead Makes Query Plans Robust》](202510/20251018_02.md)  
+##### 202510/20251018_01.md   [《AI论文解读 | Relaxed Operator Fusion for In-Memory Databases: Making Compilation, Vectorization, and Prefetching Work Together At Last》](202510/20251018_01.md)  
+##### 202510/20251017_13.md   [《德说-第359期, 人生最重要的事14: 综合性人才将失去竞争力!  基础能力+长板+AI杠杆才是趋势!》](202510/20251017_13.md)  
 ##### 202510/20251017_12.md   [《LangChain 源码学习: 2.3 工具与函数调用（Tools and Function Calling）》](202510/20251017_12.md)  
 ##### 202510/20251017_11.md   [《LangChain 源码学习: 2.2 语言模型与聊天模型核心抽象》](202510/20251017_11.md)  
 ##### 202510/20251017_10.md   [《LangChain 源码学习: 2.1 Runnable 接口与 LCEL（LangChain 表达式语言）》](202510/20251017_10.md)  

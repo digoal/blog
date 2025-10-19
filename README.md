@@ -101,6 +101,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251019_05.md   [《AI论文解读 | The 5 Minute Rule For Trading Memory For Disc Accesses And The 10 Byte Rule For Trading Memory For Cpu Time》](202510/20251019_05.md)  
+##### 202510/20251019_04.md   [《AI论文解读 | Optimizing Queries Over Partitioned Tables In Mpp Systems》](202510/20251019_04.md)  
+##### 202510/20251019_03.md   [《AI论文解读 | Adaptive And Big Data Scale Parallel Execution In Oracle》](202510/20251019_03.md)  
+##### 202510/20251019_02.md   [《AI论文解读 | Query Optimization In Microsoft Sql Server Pdw》](202510/20251019_02.md)  
+##### 202510/20251019_01.md   [《AI论文解读 | Parallel Sql Execution In Oracle 10G》](202510/20251019_01.md)  
 ##### 202510/20251018_05.md   [《AI论文解读 | DB2 Parallel Edition》](202510/20251018_05.md)  
 ##### 202510/20251018_04.md   [《AI论文解读 | Adaptive Execution of Compiled Queries》](202510/20251018_04.md)  
 ##### 202510/20251018_03.md   [《AI论文解读 | Everything You Always Wanted to Know About Compiled and Vectorized Queries But Were Afraid to Ask》](202510/20251018_03.md)  

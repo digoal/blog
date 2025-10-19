@@ -2,6 +2,11 @@
   
 ### 文章列表  
 ----  
+##### 20251019_05.md   [《AI论文解读 | The 5 Minute Rule For Trading Memory For Disc Accesses And The 10 Byte Rule For Trading Memory For Cpu Time》](20251019_05.md)  
+##### 20251019_04.md   [《AI论文解读 | Optimizing Queries Over Partitioned Tables In Mpp Systems》](20251019_04.md)  
+##### 20251019_03.md   [《AI论文解读 | Adaptive And Big Data Scale Parallel Execution In Oracle》](20251019_03.md)  
+##### 20251019_02.md   [《AI论文解读 | Query Optimization In Microsoft Sql Server Pdw》](20251019_02.md)  
+##### 20251019_01.md   [《AI论文解读 | Parallel Sql Execution In Oracle 10G》](20251019_01.md)  
 ##### 20251018_05.md   [《AI论文解读 | DB2 Parallel Edition》](20251018_05.md)  
 ##### 20251018_04.md   [《AI论文解读 | Adaptive Execution of Compiled Queries》](20251018_04.md)  
 ##### 20251018_03.md   [《AI论文解读 | Everything You Always Wanted to Know About Compiled and Vectorized Queries But Were Afraid to Ask》](20251018_03.md)  

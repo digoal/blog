@@ -2,6 +2,17 @@
   
 ### 文章列表  
 ----  
+##### 20251020_11.md   [《LangChain 源码学习: 4.2 CLI 与项目脚手架 (CLI and Project Scaffolding)》](20251020_11.md)  
+##### 20251020_10.md   [《LangChain 源码学习: 4.1 文本处理与文档处理》](20251020_10.md)  
+##### 20251020_09.md   [《LangChain 源码学习: 3.3 集成模式与架构（Integration Patterns and Architecture）》](20251020_09.md)  
+##### 20251020_08.md   [《LangChain 源码学习: 3.2 Anthropic 集成》](20251020_08.md)  
+##### 20251020_07.md   [《LangChain 源码学习: 3.1 主流大模型提供商集成（Major Provider Integrations）》](20251020_07.md)  
+##### 20251020_06.md   [《LangChain 源码学习: 2.4 消息与提示（Messages and Prompts）》](20251020_06.md)  
+##### 20251020_05.md   [《AI论文解读 | Exploring Wavelet Trees as Space-Efficient Physical-to-Sorted Mapping for Learned Indexes》](20251020_05.md)  
+##### 20251020_04.md   [《AI论文解读 | A Practical Theory of Generalization in Selectivity Learning》](20251020_04.md)  
+##### 20251020_03.md   [《AI论文解读 | Data-Agnostic Cardinality Learning from Imperfect Workloads》](20251020_03.md)  
+##### 20251020_02.md   [《AI论文解读 | Balsa: Learning a Query Optimizer Without Expert》](20251020_02.md)  
+##### 20251020_01.md   [《AI论文解读 | Bao: Making Learned Query Optimization Practical》](20251020_01.md)  
 ##### 20251019_05.md   [《AI论文解读 | The 5 Minute Rule For Trading Memory For Disc Accesses And The 10 Byte Rule For Trading Memory For Cpu Time》](20251019_05.md)  
 ##### 20251019_04.md   [《AI论文解读 | Optimizing Queries Over Partitioned Tables In Mpp Systems》](20251019_04.md)  
 ##### 20251019_03.md   [《AI论文解读 | Adaptive And Big Data Scale Parallel Execution In Oracle》](20251019_03.md)  

@@ -2,6 +2,18 @@
   
 ### 文章列表  
 ----  
+##### 20251021_12.md   [《PostgreSQL 19 preview - 支持 `COPY 分区表 TO ...`》](20251021_12.md)  
+##### 20251021_11.md   [《开发 AI Agent 的推荐框架》](20251021_11.md)  
+##### 20251021_10.md   [《LangChain 源码学习: 6.2 CI/CD 与发布流程》](20251021_10.md)  
+##### 20251021_09.md   [《LangChain 源码学习: 6.1 包结构与构建系统(Package Structure and Build System)》](20251021_09.md)  
+##### 20251021_08.md   [《LangChain 源码学习: 5.2 依赖管理与测试策略(Dependency Management and Testing Strategy)》](20251021_08.md)  
+##### 20251021_07.md   [《LangChain 源码学习: 5.1 标准测试框架（Standard Testing Framework）》](20251021_07.md)  
+##### 20251021_06.md   [《LangChain 源码学习: 4.3 V1 中间件代理系统（Middleware Agent System）》](20251021_06.md)  
+##### 20251021_05.md   [《AI论文解读 | AdaChain: A Learned Adaptive Blockchain》](20251021_05.md)  
+##### 20251021_04.md   [《AI论文解读 | Robust Query Driven Cardinality Estimation under Changing Workloads》](20251021_04.md)  
+##### 20251021_03.md   [《AI论文解读 | SageDB: An Instance-Optimized Data Analytics System》](20251021_03.md)  
+##### 20251021_02.md   [《AI论文解读 | Benchmarking Learned Indexes》](20251021_02.md)  
+##### 20251021_01.md   [《AI论文解读 | A Human-Inspired Reading Agent with Gist Memory of Very Long Contexts》](20251021_01.md)  
 ##### 20251020_11.md   [《LangChain 源码学习: 4.2 CLI 与项目脚手架 (CLI and Project Scaffolding)》](20251020_11.md)  
 ##### 20251020_10.md   [《LangChain 源码学习: 4.1 文本处理与文档处理》](20251020_10.md)  
 ##### 20251020_09.md   [《LangChain 源码学习: 3.3 集成模式与架构（Integration Patterns and Architecture）》](20251020_09.md)  

@@ -2,6 +2,21 @@
   
 ### 文章列表  
 ----  
+##### 20251022_15.md   [《DuckDB 源码学习: 1.1 设计理念》](20251022_15.md)  
+##### 20251022_14.md   [《DuckDB 源码学习: 8 开发与贡献(Development & Contributing)》](20251022_14.md)  
+##### 20251022_13.md   [《DuckDB 源码学习: 7 客户端 API》](20251022_13.md)  
+##### 20251022_12.md   [《DuckDB 源码学习: 6 扩展系统(Extension System)》](20251022_12.md)  
+##### 20251022_11.md   [《DuckDB 源码学习: 5 数据导入与导出》](20251022_11.md)  
+##### 20251022_10.md   [《DuckDB 源码学习: 4 查询执行（Query Execution）》](20251022_10.md)  
+##### 20251022_09.md   [《DuckDB 源码学习: 3 存储引擎》](20251022_09.md)  
+##### 20251022_08.md   [《DuckDB 源码学习: 2 核心数据结构》](20251022_08.md)  
+##### 20251022_07.md   [《DuckDB 源码学习: 1 概述》](20251022_07.md)  
+##### 20251022_06.md   [《DeepSeek 最新 "OCR-上下文光学压缩" 论文的重大意义 : 向量数据库的筒子们又有活干了》](20251022_06.md)  
+##### 20251022_05.md   [《AI论文解读 | Low Rank Approximation for Learned Query Optimization》](20251022_05.md)  
+##### 20251022_04.md   [《AI论文解读 | AutoSteer: Learned Query Optimization for Any SQL Database》](20251022_04.md)  
+##### 20251022_03.md   [《AI论文解读 | Auto-WLM: Machine Learning Enhanced Workload Management》](20251022_03.md)  
+##### 20251022_02.md   [《AI论文解读 | Kepler: Robust Learning for Faster Parametric Query Optimization》](20251022_02.md)  
+##### 20251022_01.md   [《AI论文解读 | DeepSeek-OCR: Contexts Optical Compression》](20251022_01.md)  
 ##### 20251021_13.md   [《LangChain 源码入门学习21篇 汇总》](20251021_13.md)  
 ##### 20251021_12.md   [《PostgreSQL 19 preview - 支持 `COPY 分区表 TO ...`》](20251021_12.md)  
 ##### 20251021_11.md   [《开发 AI Agent 的推荐框架》](20251021_11.md)  

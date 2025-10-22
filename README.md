@@ -102,6 +102,21 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251022_15.md   [《DuckDB 源码学习: 1.1 设计理念》](202510/20251022_15.md)  
+##### 202510/20251022_14.md   [《DuckDB 源码学习: 8 开发与贡献(Development & Contributing)》](202510/20251022_14.md)  
+##### 202510/20251022_13.md   [《DuckDB 源码学习: 7 客户端 API》](202510/20251022_13.md)  
+##### 202510/20251022_12.md   [《DuckDB 源码学习: 6 扩展系统(Extension System)》](202510/20251022_12.md)  
+##### 202510/20251022_11.md   [《DuckDB 源码学习: 5 数据导入与导出》](202510/20251022_11.md)  
+##### 202510/20251022_10.md   [《DuckDB 源码学习: 4 查询执行（Query Execution）》](202510/20251022_10.md)  
+##### 202510/20251022_09.md   [《DuckDB 源码学习: 3 存储引擎》](202510/20251022_09.md)  
+##### 202510/20251022_08.md   [《DuckDB 源码学习: 2 核心数据结构》](202510/20251022_08.md)  
+##### 202510/20251022_07.md   [《DuckDB 源码学习: 1 概述》](202510/20251022_07.md)  
+##### 202510/20251022_06.md   [《DeepSeek 最新 "OCR-上下文光学压缩" 论文的重大意义 : 向量数据库的筒子们又有活干了》](202510/20251022_06.md)  
+##### 202510/20251022_05.md   [《AI论文解读 | Low Rank Approximation for Learned Query Optimization》](202510/20251022_05.md)  
+##### 202510/20251022_04.md   [《AI论文解读 | AutoSteer: Learned Query Optimization for Any SQL Database》](202510/20251022_04.md)  
+##### 202510/20251022_03.md   [《AI论文解读 | Auto-WLM: Machine Learning Enhanced Workload Management》](202510/20251022_03.md)  
+##### 202510/20251022_02.md   [《AI论文解读 | Kepler: Robust Learning for Faster Parametric Query Optimization》](202510/20251022_02.md)  
+##### 202510/20251022_01.md   [《AI论文解读 | DeepSeek-OCR: Contexts Optical Compression》](202510/20251022_01.md)  
 ##### 202510/20251021_13.md   [《LangChain 源码入门学习21篇 汇总》](202510/20251021_13.md)  
 ##### 202510/20251021_12.md   [《PostgreSQL 19 preview - 支持 `COPY 分区表 TO ...`》](202510/20251021_12.md)  
 ##### 202510/20251021_11.md   [《开发 AI Agent 的推荐框架》](202510/20251021_11.md)  

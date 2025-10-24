@@ -30,6 +30,7 @@
 20、[《2025-AI辅助 学PolarDB/PostgreSQL数据库内核源码 系列课程, 含传统学习曲线及素材建议》](202502/20250218_03.md)     
 21、[《2025-OceanBase 源码入门学习24篇 汇总》](202510/20251016_11.md)     
 22、[《2025-LangChain 源码入门学习21篇 汇总》](202510/20251021_13.md)     
+23、[《2025-DuckDB 源码入门学习27篇 汇总》](202510/20251024_17.md)     
   
 ### 二、学习资料  
   
@@ -102,6 +103,23 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251024_17.md   [《DuckDB 源码入门学习27篇 汇总》](202510/20251024_17.md)  
+##### 202510/20251024_16.md   [《Milvus 源码学习: 2 核心组件(Core Components)》](202510/20251024_16.md)  
+##### 202510/20251024_15.md   [《Milvus 源码学习: 1.3 依赖与集成(Dependencies and Integration)》](202510/20251024_15.md)  
+##### 202510/20251024_14.md   [《Milvus 源码学习: 1.2 关键概念（Key Concepts）》](202510/20251024_14.md)  
+##### 202510/20251024_13.md   [《Milvus 源码学习: 1.1 架构（Architecture）》](202510/20251024_13.md)  
+##### 202510/20251024_12.md   [《Milvus 源码学习: 1 什么是 Milvus?》](202510/20251024_12.md)  
+##### 202510/20251024_11.md   [《PostgreSQL 19 preview - 逻辑订阅端支持 `REFRESH SEQUENCES`》](202510/20251024_11.md)  
+##### 202510/20251024_10.md   [《DuckDB 源码学习: 8.2 配置系统(Configuration System)》](202510/20251024_10.md)  
+##### 202510/20251024_09.md   [《DuckDB 源码学习: 8.1 CI/CD 流水线》](202510/20251024_09.md)  
+##### 202510/20251024_08.md   [《DuckDB 源码学习: 7.2 C/C++ API》](202510/20251024_08.md)  
+##### 202510/20251024_07.md   [《DuckDB 源码学习: 7.1 Python API》](202510/20251024_07.md)  
+##### 202510/20251024_06.md   [《DuckDB 源码学习: 6.1 扩展架构与开发 (Extension Architecture and Development)》](202510/20251024_06.md)  
+##### 202510/20251024_05.md   [《AI论文解读 | The five-minute rule twenty years later, and how flash memory changes the rules》](202510/20251024_05.md)  
+##### 202510/20251024_04.md   [《AI论文解读 | The Five-Minute Rule Ten Years Later, and Other Computer Storage Rules of Thumb》](202510/20251024_04.md)  
+##### 202510/20251024_03.md   [《AI论文解读 | Low Rank Learning for Offline Query Optimization》](202510/20251024_03.md)  
+##### 202510/20251024_02.md   [《AI论文解读 | Learned Offline Query Planning via Bayesian Optimization》](202510/20251024_02.md)  
+##### 202510/20251024_01.md   [《AI论文解读 | ScaleLLM: A Technique for Scalable LLM-augmented Data》](202510/20251024_01.md)  
 ##### 202510/20251023_20.md   [《DuckDB 源码学习: 5.3 Parquet 集成》](202510/20251023_20.md)  
 ##### 202510/20251023_19.md   [《DuckDB 源码学习: 5.2 CSV 扫描器实现 (CSV Scanner Implementation)》](202510/20251023_19.md)  
 ##### 202510/20251023_18.md   [《DuckDB 源码学习: 5.1 CSV 处理》](202510/20251023_18.md)  

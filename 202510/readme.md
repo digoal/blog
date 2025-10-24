@@ -2,6 +2,23 @@
   
 ### 文章列表  
 ----  
+##### 20251024_17.md   [《DuckDB 源码入门学习27篇 汇总》](20251024_17.md)  
+##### 20251024_16.md   [《Milvus 源码学习: 2 核心组件(Core Components)》](20251024_16.md)  
+##### 20251024_15.md   [《Milvus 源码学习: 1.3 依赖与集成(Dependencies and Integration)》](20251024_15.md)  
+##### 20251024_14.md   [《Milvus 源码学习: 1.2 关键概念（Key Concepts）》](20251024_14.md)  
+##### 20251024_13.md   [《Milvus 源码学习: 1.1 架构（Architecture）》](20251024_13.md)  
+##### 20251024_12.md   [《Milvus 源码学习: 1 什么是 Milvus?》](20251024_12.md)  
+##### 20251024_11.md   [《PostgreSQL 19 preview - 逻辑订阅端支持 `REFRESH SEQUENCES`》](20251024_11.md)  
+##### 20251024_10.md   [《DuckDB 源码学习: 8.2 配置系统(Configuration System)》](20251024_10.md)  
+##### 20251024_09.md   [《DuckDB 源码学习: 8.1 CI/CD 流水线》](20251024_09.md)  
+##### 20251024_08.md   [《DuckDB 源码学习: 7.2 C/C++ API》](20251024_08.md)  
+##### 20251024_07.md   [《DuckDB 源码学习: 7.1 Python API》](20251024_07.md)  
+##### 20251024_06.md   [《DuckDB 源码学习: 6.1 扩展架构与开发 (Extension Architecture and Development)》](20251024_06.md)  
+##### 20251024_05.md   [《AI论文解读 | The five-minute rule twenty years later, and how flash memory changes the rules》](20251024_05.md)  
+##### 20251024_04.md   [《AI论文解读 | The Five-Minute Rule Ten Years Later, and Other Computer Storage Rules of Thumb》](20251024_04.md)  
+##### 20251024_03.md   [《AI论文解读 | Low Rank Learning for Offline Query Optimization》](20251024_03.md)  
+##### 20251024_02.md   [《AI论文解读 | Learned Offline Query Planning via Bayesian Optimization》](20251024_02.md)  
+##### 20251024_01.md   [《AI论文解读 | ScaleLLM: A Technique for Scalable LLM-augmented Data》](20251024_01.md)  
 ##### 20251023_20.md   [《DuckDB 源码学习: 5.3 Parquet 集成》](20251023_20.md)  
 ##### 20251023_19.md   [《DuckDB 源码学习: 5.2 CSV 扫描器实现 (CSV Scanner Implementation)》](20251023_19.md)  
 ##### 20251023_18.md   [《DuckDB 源码学习: 5.1 CSV 处理》](20251023_18.md)  

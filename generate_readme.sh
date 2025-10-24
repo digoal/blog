@@ -41,6 +41,7 @@ echo "19、[《2024-数据库筑基课 系列》](202409/20240914_01.md)     "  
 echo "20、[《2025-AI辅助 学PolarDB/PostgreSQL数据库内核源码 系列课程, 含传统学习曲线及素材建议》](202502/20250218_03.md)     "  >> ./README.md    
 echo "21、[《2025-OceanBase 源码入门学习24篇 汇总》](202510/20251016_11.md)     "  >> ./README.md    
 echo "22、[《2025-LangChain 源码入门学习21篇 汇总》](202510/20251021_13.md)     "  >> ./README.md    
+echo "23、[《2025-DuckDB 源码入门学习27篇 汇总》](202510/20251024_17.md)     "  >> ./README.md    
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md

@@ -2,6 +2,8 @@
   
 ### 文章列表  
 ----  
+##### 20251029_08.md   [《Milvus 源码入门学习31篇 汇总》](20251029_08.md)  
+##### 20251029_07.md   [《Milvus 源码学习: 7.3 持续集成/持续部署 (CI/CD) 流水线》](20251029_07.md)  
 ##### 20251029_06.md   [《AI论文解读 | XIndex: A Scalable Learned Index for Multicore Data Storage》](20251029_06.md)  
 ##### 20251029_05.md   [《AI论文解读 | Umbra: A Disk-Based System with In-Memory Performance》](20251029_05.md)  
 ##### 20251029_04.md   [《AI论文解读 | Learning Multi-dimensional Indexes》](20251029_04.md)  

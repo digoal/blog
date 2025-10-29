@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20251029_06.md   [《AI论文解读 | XIndex: A Scalable Learned Index for Multicore Data Storage》](20251029_06.md)  
+##### 20251029_05.md   [《AI论文解读 | Umbra: A Disk-Based System with In-Memory Performance》](20251029_05.md)  
+##### 20251029_04.md   [《AI论文解读 | Learning Multi-dimensional Indexes》](20251029_04.md)  
+##### 20251029_03.md   [《AI论文解读 | LSM-based Storage Techniques: A Survey》](20251029_03.md)  
+##### 20251029_02.md   [《AI论文解读 | SuRF: Practical Range Query Filtering with Fast Succinct Tries》](20251029_02.md)  
+##### 20251029_01.md   [《AI论文解读 | Skip Lists: A Probabilistic Alternative to Balanced Trees》](20251029_01.md)  
 ##### 20251028_21.md   [《CUDA architecture 在 Milvus 中的作用以及如何使用》](20251028_21.md)  
 ##### 20251028_20.md   [《Milvus 源码学习: 7.2 测试框架(Testing Framework)》](20251028_20.md)  
 ##### 20251028_19.md   [《Milvus 源码学习: 7.1 构建系统(Build System)》](20251028_19.md)  

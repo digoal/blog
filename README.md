@@ -104,6 +104,21 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202510/20251030_15.md   [《VectorChord 源码学习: 3 核心组件 (Core Components)》](202510/20251030_15.md)  
+##### 202510/20251030_14.md   [《VectorChord 源码学习: 2.4 数据类型和 SQL 接口 (Data Types and SQL Interface)》](202510/20251030_14.md)  
+##### 202510/20251030_13.md   [《VectorChord 源码学习: 2.3 索引存取方法 (Index Access Methods) 概述》](202510/20251030_13.md)  
+##### 202510/20251030_12.md   [《VectorChord 源码学习: 2.2 Crate（包）结构和依赖项》](202510/20251030_12.md)  
+##### 202510/20251030_11.md   [《VectorChord 源码学习: 2.1 PostgreSQL 扩展集成（PostgreSQL Extension Integration）》](202510/20251030_11.md)  
+##### 202510/20251030_10.md   [《VectorChord 源码学习: 2 架构（Architecture）》](202510/20251030_10.md)  
+##### 202510/20251030_09.md   [《VectorChord 源码学习: 1.2 功能与能力（Features and Capabilities）》](202510/20251030_09.md)  
+##### 202510/20251030_08.md   [《VectorChord 源码学习: 1.1 快速入门指南 (Quick Start Guide)》](202510/20251030_08.md)  
+##### 202510/20251030_07.md   [《VectorChord 源码学习: 1 概览》](202510/20251030_07.md)  
+##### 202510/20251030_06.md   [《DuckLake推出真ServerLess(无需Catalog元数据库)玩法: `Frozen DuckLakes`》](202510/20251030_06.md)  
+##### 202510/20251030_05.md   [《AI论文解读 | Concurrency Control in Distributed Database Systems》](202510/20251030_05.md)  
+##### 202510/20251030_04.md   [《AI论文解读 | The Notions of Consistency and Predicate Locks in a Database System》](202510/20251030_04.md)  
+##### 202510/20251030_03.md   [《AI论文解读 | CaaS-LSM: Compaction-as-a-Service for LSM-based Key-Value Stores in Storage Disaggregated Infrastructure》](202510/20251030_03.md)  
+##### 202510/20251030_02.md   [《AI论文解读 | From WiscKey to Bourbon: A Learned Index for Log-Structured Merge Trees》](202510/20251030_02.md)  
+##### 202510/20251030_01.md   [《AI论文解读 | The PGM-index: a fully-dynamic compressed learned index with provable worst-case bounds》](202510/20251030_01.md)  
 ##### 202510/20251029_08.md   [《Milvus 源码入门学习31篇 汇总》](202510/20251029_08.md)  
 ##### 202510/20251029_07.md   [《Milvus 源码学习: 7.3 持续集成/持续部署 (CI/CD) 流水线》](202510/20251029_07.md)  
 ##### 202510/20251029_06.md   [《AI论文解读 | XIndex: A Scalable Learned Index for Multicore Data Storage》](202510/20251029_06.md)  

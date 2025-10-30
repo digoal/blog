@@ -2,6 +2,21 @@
   
 ### 文章列表  
 ----  
+##### 20251030_15.md   [《VectorChord 源码学习: 3 核心组件 (Core Components)》](20251030_15.md)  
+##### 20251030_14.md   [《VectorChord 源码学习: 2.4 数据类型和 SQL 接口 (Data Types and SQL Interface)》](20251030_14.md)  
+##### 20251030_13.md   [《VectorChord 源码学习: 2.3 索引存取方法 (Index Access Methods) 概述》](20251030_13.md)  
+##### 20251030_12.md   [《VectorChord 源码学习: 2.2 Crate（包）结构和依赖项》](20251030_12.md)  
+##### 20251030_11.md   [《VectorChord 源码学习: 2.1 PostgreSQL 扩展集成（PostgreSQL Extension Integration）》](20251030_11.md)  
+##### 20251030_10.md   [《VectorChord 源码学习: 2 架构（Architecture）》](20251030_10.md)  
+##### 20251030_09.md   [《VectorChord 源码学习: 1.2 功能与能力（Features and Capabilities）》](20251030_09.md)  
+##### 20251030_08.md   [《VectorChord 源码学习: 1.1 快速入门指南 (Quick Start Guide)》](20251030_08.md)  
+##### 20251030_07.md   [《VectorChord 源码学习: 1 概览》](20251030_07.md)  
+##### 20251030_06.md   [《DuckLake推出真ServerLess(无需Catalog元数据库)玩法: `Frozen DuckLakes`》](20251030_06.md)  
+##### 20251030_05.md   [《AI论文解读 | Concurrency Control in Distributed Database Systems》](20251030_05.md)  
+##### 20251030_04.md   [《AI论文解读 | The Notions of Consistency and Predicate Locks in a Database System》](20251030_04.md)  
+##### 20251030_03.md   [《AI论文解读 | CaaS-LSM: Compaction-as-a-Service for LSM-based Key-Value Stores in Storage Disaggregated Infrastructure》](20251030_03.md)  
+##### 20251030_02.md   [《AI论文解读 | From WiscKey to Bourbon: A Learned Index for Log-Structured Merge Trees》](20251030_02.md)  
+##### 20251030_01.md   [《AI论文解读 | The PGM-index: a fully-dynamic compressed learned index with provable worst-case bounds》](20251030_01.md)  
 ##### 20251029_08.md   [《Milvus 源码入门学习31篇 汇总》](20251029_08.md)  
 ##### 20251029_07.md   [《Milvus 源码学习: 7.3 持续集成/持续部署 (CI/CD) 流水线》](20251029_07.md)  
 ##### 20251029_06.md   [《AI论文解读 | XIndex: A Scalable Learned Index for Multicore Data Storage》](20251029_06.md)  

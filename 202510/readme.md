@@ -2,6 +2,17 @@
   
 ### 文章列表  
 ----  
+##### 20251031_11.md   [《VectorChord 源码学习: 3.2 vchordg 索引方法 (Index Method)》](20251031_11.md)  
+##### 20251031_10.md   [《VectorChord 源码学习: 3.1.4 并行构建基础设施 (Parallel Build Infrastructure)》](20251031_10.md)  
+##### 20251031_09.md   [《VectorChord 源码学习: 3.1.3 插入与维护操作 (Insert and Maintenance Operations)》](20251031_09.md)  
+##### 20251031_08.md   [《VectorChord 源码学习: 3.1.2 搜索管线与重排序（Reranking）》](20251031_08.md)  
+##### 20251031_07.md   [《VectorChord 源码学习: 3.1.1 索引结构和构建策略（Index Structure and Build Strategies）》](20251031_07.md)  
+##### 20251031_06.md   [《VectorChord 源码学习: 3.1 vchordrq 索引方法 (Index Method)》](20251031_06.md)  
+##### 20251031_05.md   [《AI论文解读 | A Critique Of Ansi Sql Isolation Levels》](20251031_05.md)  
+##### 20251031_04.md   [《AI论文解读 | Aries: A Transaction Recovery Method Supporting Fine-Granularity Locking And Partial Rollbacks Using Write-Ahead Logging》](20251031_04.md)  
+##### 20251031_03.md   [《AI论文解读 | Multiversion Concurrency Control - Theory And Algorithms》](20251031_03.md)  
+##### 20251031_02.md   [《AI论文解读 | Principles Of Transaction-Oriented Database Recovery》](20251031_02.md)  
+##### 20251031_01.md   [《AI论文解读 | On Optimistic Methods For Concurrency Control》](20251031_01.md)  
 ##### 20251030_15.md   [《VectorChord 源码学习: 3 核心组件 (Core Components)》](20251030_15.md)  
 ##### 20251030_14.md   [《VectorChord 源码学习: 2.4 数据类型和 SQL 接口 (Data Types and SQL Interface)》](20251030_14.md)  
 ##### 20251030_13.md   [《VectorChord 源码学习: 2.3 索引存取方法 (Index Access Methods) 概述》](20251030_13.md)  

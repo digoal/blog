@@ -2,4 +2,5 @@
   
 ### 文章列表  
 ----  
+##### 20251101_02.md   [《VectorChord 源码学习: 3.4 SIMD (单指令多数据) 优化系统》](20251101_02.md)  
 ##### 20251101_01.md   [《VectorChord 源码学习: 3.3 存储层与元组系统 (Storage Layer and Tuple System)》](20251101_01.md)  

@@ -104,6 +104,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251101_01.md   [《VectorChord 源码学习: 3.3 存储层与元组系统 (Storage Layer and Tuple System)》](202511/20251101_01.md)  
+----  
 ##### 202510/20251031_11.md   [《VectorChord 源码学习: 3.2 vchordg 索引方法 (Index Method)》](202510/20251031_11.md)  
 ##### 202510/20251031_10.md   [《VectorChord 源码学习: 3.1.4 并行构建基础设施 (Parallel Build Infrastructure)》](202510/20251031_10.md)  
 ##### 202510/20251031_09.md   [《VectorChord 源码学习: 3.1.3 插入与维护操作 (Insert and Maintenance Operations)》](202510/20251031_09.md)  

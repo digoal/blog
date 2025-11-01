@@ -104,6 +104,12 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251101_08.md   [《VectorChord 源码学习: 4.2 距离度量和运算符（Distance Metrics and Operators）》](202511/20251101_08.md)  
+##### 202511/20251101_07.md   [《VectorChord 源码学习: 4.1 向量类型与量化 (Vector Types and Quantization)》](202511/20251101_07.md)  
+##### 202511/20251101_06.md   [《VectorChord 源码学习: 4 数据处理 (Data Processing)》](202511/20251101_06.md)  
+##### 202511/20251101_05.md   [《VectorChord 源码学习: 3.5 内存管理（Memory Management）》](202511/20251101_05.md)  
+##### 202511/20251101_04.md   [《VectorChord 源码学习: 3.4.2 跨平台 SIMD 实现 (Cross-Platform SIMD Implementation)》](202511/20251101_04.md)  
+##### 202511/20251101_03.md   [《VectorChord 源码学习: 3.4.1 SIMD 操作参考 (SIMD Operations Reference)》](202511/20251101_03.md)  
 ##### 202511/20251101_02.md   [《VectorChord 源码学习: 3.4 SIMD (单指令多数据) 优化系统》](202511/20251101_02.md)  
 ##### 202511/20251101_01.md   [《VectorChord 源码学习: 3.3 存储层与元组系统 (Storage Layer and Tuple System)》](202511/20251101_01.md)  
 ----  

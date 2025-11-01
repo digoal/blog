@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20251101_09.md   [《VectorChord 源码学习: 4.3 外部数据管道 (External Data Pipeline)》](20251101_09.md)  
 ##### 20251101_08.md   [《VectorChord 源码学习: 4.2 距离度量和运算符（Distance Metrics and Operators）》](20251101_08.md)  
 ##### 20251101_07.md   [《VectorChord 源码学习: 4.1 向量类型与量化 (Vector Types and Quantization)》](20251101_07.md)  
 ##### 20251101_06.md   [《VectorChord 源码学习: 4 数据处理 (Data Processing)》](20251101_06.md)  

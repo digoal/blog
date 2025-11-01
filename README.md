@@ -104,6 +104,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251101_11.md   [《VectorChord 源码学习: 6.1 SQL Interface and Operators (SQL 接口和操作符)》](202511/20251101_11.md)  
+##### 202511/20251101_10.md   [《VectorChord 源码学习: 6 使用指南（Usage Guide）》](202511/20251101_10.md)  
 ##### 202511/20251101_09.md   [《VectorChord 源码学习: 4.3 外部数据管道 (External Data Pipeline)》](202511/20251101_09.md)  
 ##### 202511/20251101_08.md   [《VectorChord 源码学习: 4.2 距离度量和运算符（Distance Metrics and Operators）》](202511/20251101_08.md)  
 ##### 202511/20251101_07.md   [《VectorChord 源码学习: 4.1 向量类型与量化 (Vector Types and Quantization)》](202511/20251101_07.md)  

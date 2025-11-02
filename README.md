@@ -104,6 +104,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251102_07.md   [《VectorChord 源码学习: 5.2 SIMD 构建过程（SIMD Build Process）》](202511/20251102_07.md)  
+##### 202511/20251102_06.md   [《VectorChord 源码学习: 5.1 构建系统（Build System）》](202511/20251102_06.md)  
 ##### 202511/20251102_05.md   [《VectorChord 源码学习: 5 构建与部署 (Building and Deployment)》](202511/20251102_05.md)  
 ##### 202511/20251102_04.md   [《VectorChord 源码学习: 6.5 基准测试 (Benchmarking)》](202511/20251102_04.md)  
 ##### 202511/20251102_03.md   [《VectorChord 源码学习: 6.4 查询采样与召回率评估 (Query Sampling and Recall Evaluation)》](202511/20251102_03.md)  

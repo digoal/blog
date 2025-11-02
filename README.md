@@ -104,6 +104,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251102_05.md   [《VectorChord 源码学习: 5 构建与部署 (Building and Deployment)》](202511/20251102_05.md)  
 ##### 202511/20251102_04.md   [《VectorChord 源码学习: 6.5 基准测试 (Benchmarking)》](202511/20251102_04.md)  
 ##### 202511/20251102_03.md   [《VectorChord 源码学习: 6.4 查询采样与召回率评估 (Query Sampling and Recall Evaluation)》](202511/20251102_03.md)  
 ##### 202511/20251102_02.md   [《VectorChord 源码学习: 6.3 Performance Tuning (性能调优)》](202511/20251102_02.md)  

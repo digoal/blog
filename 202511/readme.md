@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20251102_04.md   [《VectorChord 源码学习: 6.5 基准测试 (Benchmarking)》](20251102_04.md)  
+##### 20251102_03.md   [《VectorChord 源码学习: 6.4 查询采样与召回率评估 (Query Sampling and Recall Evaluation)》](20251102_03.md)  
+##### 20251102_02.md   [《VectorChord 源码学习: 6.3 Performance Tuning (性能调优)》](20251102_02.md)  
+##### 20251102_01.md   [《VectorChord 源码学习: 6.2 配置参数 (Configuration Parameters)》](20251102_01.md)  
 ##### 20251101_11.md   [《VectorChord 源码学习: 6.1 SQL Interface and Operators (SQL 接口和操作符)》](20251101_11.md)  
 ##### 20251101_10.md   [《VectorChord 源码学习: 6 使用指南（Usage Guide）》](20251101_10.md)  
 ##### 20251101_09.md   [《VectorChord 源码学习: 4.3 外部数据管道 (External Data Pipeline)》](20251101_09.md)  

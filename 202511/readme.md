@@ -2,6 +2,23 @@
   
 ### 文章列表  
 ----  
+##### 20251103_17.md   [《VectorChord 源码入门学习39篇 汇总》](20251103_17.md)  
+##### 20251103_16.md   [《pgvector 源码学习: 2.4 bit 类型 (bit Type)》](20251103_16.md)  
+##### 20251103_15.md   [《pgvector 源码学习: 2.3 稀疏向量类型 (`sparsevec Type`)》](20251103_15.md)  
+##### 20251103_14.md   [《pgvector 源码学习: 2.2 halfvec 类型 (`halfvec Type`)》](20251103_14.md)  
+##### 20251103_13.md   [《pgvector 源码学习: 2.1 `vector` 类型》](20251103_13.md)  
+##### 20251103_12.md   [《pgvector 源码学习: 2 向量数据类型（`Vector Data Types`）》](20251103_12.md)  
+##### 20251103_11.md   [《pgvector 源码学习: 1 pgvector 简介 (Introduction to pgvector)》](20251103_11.md)  
+##### 20251103_10.md   [《VectorChord 源码学习: 7.2 扩展开发指南 (Extension Development Guide)》](20251103_10.md)  
+##### 20251103_09.md   [《VectorChord 源码学习: 7.1 测试基础设施 (Testing Infrastructure)》](20251103_09.md)  
+##### 20251103_08.md   [《VectorChord 源码学习: 7 开发 (Development)》](20251103_08.md)  
+##### 20251103_07.md   [《VectorChord 源码学习: 5.5 Docker 部署 (Deployment)》](20251103_07.md)  
+##### 20251103_06.md   [《VectorChord 源码学习: 5.4 封装与分发 (Packaging and Distribution)》](20251103_06.md)  
+##### 20251103_05.md   [《AI论文解读 | Staring Into The Abyss: An Evaluation Of Concurrency Control With One Thousand Cores》](20251103_05.md)  
+##### 20251103_04.md   [《AI论文解读 | Maat: Effective And Scalable Coordination Of Distributed Transactions In The Cloud》](20251103_04.md)  
+##### 20251103_03.md   [《AI论文解读 | Calvin: Fast Distributed Transactions For Partitioned Database Systems》](20251103_03.md)  
+##### 20251103_02.md   [《AI论文解读 | Large-Scale Incremental Processing Using Distributed Transactions And Notifications》](20251103_02.md)  
+##### 20251103_01.md   [《AI论文解读 | Generalized Isolation Level Definitions》](20251103_01.md)  
 ##### 20251102_08.md   [《VectorChord 源码学习: 5.3 CI/CD 管道 (Pipeline)》](20251102_08.md)  
 ##### 20251102_07.md   [《VectorChord 源码学习: 5.2 SIMD 构建过程（SIMD Build Process）》](20251102_07.md)  
 ##### 20251102_06.md   [《VectorChord 源码学习: 5.1 构建系统（Build System）》](20251102_06.md)  

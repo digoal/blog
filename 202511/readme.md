@@ -2,6 +2,20 @@
   
 ### 文章列表  
 ----  
+##### 20251104_14.md   [《pgvector 源码学习: 6 高级主题（Advanced Topics）》](20251104_14.md)  
+##### 20251104_13.md   [《pgvector 源码学习: 4.3 索引性能与调优 (`Index Performance and Tuning`)》](20251104_13.md)  
+##### 20251104_12.md   [《pgvector 源码学习: 4.2 IVFFlat 索引 (IVFFlat Index)》](20251104_12.md)  
+##### 20251104_11.md   [《pgvector 源码学习: 4.1 HNSW 索引 (HNSW Index)》](20251104_11.md)  
+##### 20251104_10.md   [《pgvector 源码学习: 4 索引方法 (Indexing Methods)》](20251104_10.md)  
+##### 20251104_09.md   [《pgvector 源码学习: 3.3 操作符类 (Operator Classes)》](20251104_09.md)  
+##### 20251104_08.md   [《pgvector 源码学习: 3.2 比特向量距离度量 (`Bit Vector Distance Metrics`)》](20251104_08.md)  
+##### 20251104_07.md   [《pgvector 源码学习: 3.1 向量距离度量 (Vector Distance Metrics)》](20251104_07.md)  
+##### 20251104_06.md   [《pgvector 源码学习: 3 距离函数与运算符（Distance Functions and Operators）》](20251104_06.md)  
+##### 20251104_05.md   [《AI论文解读 | Elkan's k-Means for Graphs》](20251104_05.md)  
+##### 20251104_04.md   [《AI论文解读 | Elkan’s k-Means Algorithm for Graphs》](20251104_04.md)  
+##### 20251104_03.md   [《AI论文解读 | An Empirical Evaluation of In-Memory Multi-Version Concurrency Control》](20251104_03.md)  
+##### 20251104_02.md   [《AI论文解读 | Fast Serializable Multi-Version Concurrency Control for Main-Memory Database Systems》](20251104_02.md)  
+##### 20251104_01.md   [《AI论文解读 | An Evaluation of the Advantages and Disadvantages of Deterministic Database Systems》](20251104_01.md)  
 ##### 20251103_17.md   [《VectorChord 源码入门学习39篇 汇总》](20251103_17.md)  
 ##### 20251103_16.md   [《pgvector 源码学习: 2.4 bit 类型 (bit Type)》](20251103_16.md)  
 ##### 20251103_15.md   [《pgvector 源码学习: 2.3 稀疏向量类型 (`sparsevec Type`)》](20251103_15.md)  

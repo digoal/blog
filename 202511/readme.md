@@ -2,6 +2,23 @@
   
 ### 文章列表  
 ----  
+##### 20251105_17.md   [《pgvector 源码入门学习26篇 汇总》](20251105_17.md)  
+##### 20251105_16.md   [《pgvector 源码学习: 8 测试与质量保证 (Testing and Quality Assurance)》](20251105_16.md)  
+##### 20251105_15.md   [《pgvector 源码学习: 9 类型系统架构 (Type System Architecture)》](20251105_15.md)  
+##### 20251105_14.md   [《pgvector 源码学习: 5.3 过滤和复杂查询（Filtering and Complex Queries）》](20251105_14.md)  
+##### 20251105_13.md   [《pgvector 源码学习: 5.2 创建和使用索引》](20251105_13.md)  
+##### 20251105_12.md   [《pgvector 源码学习: 5.1 基本向量操作（Basic Vector Operations）》](20251105_12.md)  
+##### 20251105_11.md   [《pgvector 源码学习: 5 使用示例 (Usage Examples)》](20251105_11.md)  
+##### 20251105_10.md   [《pgvector 源码学习: 7 安装与部署 (Installation and Deployment) 及编译优化项》](20251105_10.md)  
+##### 20251105_09.md   [《pgvector 源码学习: 6.4 CPU 优化与调度》](20251105_09.md)  
+##### 20251105_08.md   [《pgvector 源码学习: 6.3 并行索引构建（Parallel Index Building）》](20251105_08.md)  
+##### 20251105_07.md   [《pgvector 源码学习: 6.2 VACUUM 与索引维护 (Index Maintenance)》](20251105_07.md)  
+##### 20251105_06.md   [《pgvector 源码学习: 6.1 处理大型向量（Working with Large Vectors）》](20251105_06.md)  
+##### 20251105_05.md   [《AI论文解读 | Adaptive HTAP through Elastic Resource Scheduling》](20251105_05.md)  
+##### 20251105_04.md   [《AI论文解读 | Autoscaling Tiered Cloud Storage in Anna》](20251105_04.md)  
+##### 20251105_03.md   [《AI论文解读 | Automated Demand-driven Resource Scaling in Relational Database-as-a-Service》](20251105_03.md)  
+##### 20251105_02.md   [《AI论文解读 | Scalable Garbage Collection for In-Memory MVCC Systems》](20251105_02.md)  
+##### 20251105_01.md   [《AI论文解读 | An Evaluation of Distributed Concurrency Control》](20251105_01.md)  
 ##### 20251104_14.md   [《pgvector 源码学习: 6 高级主题（Advanced Topics）》](20251104_14.md)  
 ##### 20251104_13.md   [《pgvector 源码学习: 4.3 索引性能与调优 (`Index Performance and Tuning`)》](20251104_13.md)  
 ##### 20251104_12.md   [《pgvector 源码学习: 4.2 IVFFlat 索引 (IVFFlat Index)》](20251104_12.md)  

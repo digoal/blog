@@ -33,6 +33,7 @@
 23、[《2025-DuckDB 源码入门学习27篇 汇总》](202510/20251024_17.md)     
 24、[《2025-Milvus 源码入门学习31篇 汇总》](202510/20251029_08.md)     
 25、[《2025-VectorChord 源码入门学习39篇 汇总》](202511/20251103_17.md)     
+26、[《2025-pgvector 源码入门学习26篇 汇总》](202511/20251105_17.md)     
   
 ### 二、学习资料  
   
@@ -105,6 +106,23 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251105_17.md   [《pgvector 源码入门学习26篇 汇总》](202511/20251105_17.md)  
+##### 202511/20251105_16.md   [《pgvector 源码学习: 8 测试与质量保证 (Testing and Quality Assurance)》](202511/20251105_16.md)  
+##### 202511/20251105_15.md   [《pgvector 源码学习: 9 类型系统架构 (Type System Architecture)》](202511/20251105_15.md)  
+##### 202511/20251105_14.md   [《pgvector 源码学习: 5.3 过滤和复杂查询（Filtering and Complex Queries）》](202511/20251105_14.md)  
+##### 202511/20251105_13.md   [《pgvector 源码学习: 5.2 创建和使用索引》](202511/20251105_13.md)  
+##### 202511/20251105_12.md   [《pgvector 源码学习: 5.1 基本向量操作（Basic Vector Operations）》](202511/20251105_12.md)  
+##### 202511/20251105_11.md   [《pgvector 源码学习: 5 使用示例 (Usage Examples)》](202511/20251105_11.md)  
+##### 202511/20251105_10.md   [《pgvector 源码学习: 7 安装与部署 (Installation and Deployment) 及编译优化项》](202511/20251105_10.md)  
+##### 202511/20251105_09.md   [《pgvector 源码学习: 6.4 CPU 优化与调度》](202511/20251105_09.md)  
+##### 202511/20251105_08.md   [《pgvector 源码学习: 6.3 并行索引构建（Parallel Index Building）》](202511/20251105_08.md)  
+##### 202511/20251105_07.md   [《pgvector 源码学习: 6.2 VACUUM 与索引维护 (Index Maintenance)》](202511/20251105_07.md)  
+##### 202511/20251105_06.md   [《pgvector 源码学习: 6.1 处理大型向量（Working with Large Vectors）》](202511/20251105_06.md)  
+##### 202511/20251105_05.md   [《AI论文解读 | Adaptive HTAP through Elastic Resource Scheduling》](202511/20251105_05.md)  
+##### 202511/20251105_04.md   [《AI论文解读 | Autoscaling Tiered Cloud Storage in Anna》](202511/20251105_04.md)  
+##### 202511/20251105_03.md   [《AI论文解读 | Automated Demand-driven Resource Scaling in Relational Database-as-a-Service》](202511/20251105_03.md)  
+##### 202511/20251105_02.md   [《AI论文解读 | Scalable Garbage Collection for In-Memory MVCC Systems》](202511/20251105_02.md)  
+##### 202511/20251105_01.md   [《AI论文解读 | An Evaluation of Distributed Concurrency Control》](202511/20251105_01.md)  
 ##### 202511/20251104_14.md   [《pgvector 源码学习: 6 高级主题（Advanced Topics）》](202511/20251104_14.md)  
 ##### 202511/20251104_13.md   [《pgvector 源码学习: 4.3 索引性能与调优 (`Index Performance and Tuning`)》](202511/20251104_13.md)  
 ##### 202511/20251104_12.md   [《pgvector 源码学习: 4.2 IVFFlat 索引 (IVFFlat Index)》](202511/20251104_12.md)  

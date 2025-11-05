@@ -142,19 +142,19 @@ do
 # ###POLARDBYUNDASHI###   
 #sed -i "" '/e0495c413bedacabb75ff1e880be465a/d' ${file}
 ## 
-    XYQ=`grep "269ac3d1c492e938c0191101c7238216" ${file}|grep -c "269ac3d1c492e938c0191101c7238216"`
-    if [ $XYQ -lt 1 ]; then
-      echo "  " >> ./${file}
-      echo "#### [期望 PostgreSQL|开源PolarDB 增加什么功能?](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\")" >> ./${file}
-      echo "  " >> ./${file}
-    fi
+###    XYQ=`grep "269ac3d1c492e938c0191101c7238216" ${file}|grep -c "269ac3d1c492e938c0191101c7238216"`
+###    if [ $XYQ -lt 1 ]; then
+###      echo "  " >> ./${file}
+###      echo "#### [期望 PostgreSQL|开源PolarDB 增加什么功能?](https://github.com/digoal/blog/issues/76 \"269ac3d1c492e938c0191101c7238216\")" >> ./${file}
+###      echo "  " >> ./${file}
+###    fi
 ##
-    FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" ${file}|grep -c "57258f76c37864c6e6d23383d05714ea"`
-    if [ $FREEURL -ne 1 ]; then
-      echo "  " >> ./${file}
-      echo "#### [PolarDB 开源数据库](https://openpolardb.com/home \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
-      echo "  " >> ./${file}
-    fi
+###    FREEURL=`grep "57258f76c37864c6e6d23383d05714ea" ${file}|grep -c "57258f76c37864c6e6d23383d05714ea"`
+###    if [ $FREEURL -ne 1 ]; then
+###      echo "  " >> ./${file}
+###      echo "#### [PolarDB 开源数据库](https://openpolardb.com/home \"57258f76c37864c6e6d23383d05714ea\")" >> ./${file}
+###      echo "  " >> ./${file}
+###    fi
 ##
     POLARONEURL=`grep "8642f60e04ed0c814bf9cb9677976bd4" ${file}|grep -c "8642f60e04ed0c814bf9cb9677976bd4"`
     if [ $POLARONEURL -ne 1 ]; then

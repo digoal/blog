@@ -2,6 +2,20 @@
   
 ### 文章列表  
 ----  
+##### 20251108_14.md   [《DuckPGQ 源码入门学习35篇 汇总》](20251108_14.md)  
+##### 20251108_13.md   [《DuckPGQ 源码学习: 7.5 扩展分发 (Extension Distribution)》](20251108_13.md)  
+##### 20251108_12.md   [《DuckPGQ 源码学习: 7.4 扩展模板 (Extension Template)》](20251108_12.md)  
+##### 20251108_11.md   [《DuckPGQ 源码学习: 7.3 CI/CD 流水线 (Pipeline)》](20251108_11.md)  
+##### 20251108_10.md   [《DuckPGQ 源码学习: 7.2 测试框架 (`Testing Framework`)》](20251108_10.md)  
+##### 20251108_09.md   [《DuckPGQ 源码学习: 7.1 从源代码构建 (Building from Source)》](20251108_09.md)  
+##### 20251108_08.md   [《DuckPGQ 源码学习: 7 开发指南 (Development Guide)》](20251108_08.md)  
+##### 20251108_07.md   [《DuckPGQ 源码学习: 8.3 错误消息与故障排除 (Error Messages and Troubleshooting)》](20251108_07.md)  
+##### 20251108_06.md   [《DuckPGQ 源码学习: 8.2 函数参考 (Function Reference)》](20251108_06.md)  
+##### 20251108_05.md   [《DuckPGQ 源码学习: 8.1 SQL 语法参考 (`SQL Syntax Reference`)》](20251108_05.md)  
+##### 20251108_04.md   [《DuckPGQ 源码学习: 6.4 并行查询处理（Parallel Query Processing）》](20251108_04.md)  
+##### 20251108_03.md   [《DuckPGQ 源码学习: 6.3 跨模式 (Cross-Schema) 和跨目录 (Cross-Catalog) 图》](20251108_03.md)  
+##### 20251108_02.md   [《DuckPGQ 源码学习: 5.4 中心性算法（Centrality Algorithms）》](20251108_02.md)  
+##### 20251108_01.md   [《DuckPGQ 源码学习: 2.4 状态管理 (State Management)》](20251108_01.md)  
 ##### 20251107_25.md   [《AI论文解读 | A Deep Dive into Common Open Formats for Analytical DBMSs》](20251107_25.md)  
 ##### 20251107_24.md   [《DuckPGQ 源码学习: 8 参考 (Reference)》](20251107_24.md)  
 ##### 20251107_23.md   [《DuckPGQ 源码学习: 6.2 与 SQL 的集成 (Integration with SQL)》](20251107_23.md)  

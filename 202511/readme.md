@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20251109_09.md   [《pgvectorscale 源码学习: 3.1 索引构建 (Index Building)》](20251109_09.md)  
+##### 20251109_08.md   [《pgvectorscale 源码学习: 3 StreamingDiskANN 索引》](20251109_08.md)  
+##### 20251109_07.md   [《pgvectorscale 源码学习: 2.3 扩展升级机制 (Extension Upgrade Mechanism)》](20251109_07.md)  
+##### 20251109_06.md   [《pgvectorscale 源码学习: 2.2 PostgreSQL 访问方法集成 (`Access Method Integration`)》](20251109_06.md)  
+##### 20251109_05.md   [《pgvectorscale 源码学习: 2.1 扩展结构与初始化 (Extension Structure and Initialization)》](20251109_05.md)  
+##### 20251109_04.md   [《pgvectorscale 源码学习: 2 系统架构 (System Architecture)》](20251109_04.md)  
+##### 20251109_03.md   [《pgvectorscale 源码学习: 1.2 快速入门指南（Quick Start Guide）》](20251109_03.md)  
+##### 20251109_02.md   [《pgvectorscale 源码学习: 1.1 安装和设置 (Installation and Setup)》](20251109_02.md)  
+##### 20251109_01.md   [《pgvectorscale 源码学习: 1》](20251109_01.md)  
 ##### 20251108_14.md   [《DuckPGQ 源码入门学习35篇 汇总》](20251108_14.md)  
 ##### 20251108_13.md   [《DuckPGQ 源码学习: 7.5 扩展分发 (Extension Distribution)》](20251108_13.md)  
 ##### 20251108_12.md   [《DuckPGQ 源码学习: 7.4 扩展模板 (Extension Template)》](20251108_12.md)  

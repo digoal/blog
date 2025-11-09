@@ -107,6 +107,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251109_11.md   [《pgvectorscale 源码学习: 3.3 索引扫描与查询 (Index Scanning and Queries)》](202511/20251109_11.md)  
+##### 202511/20251109_10.md   [《pgvectorscale 源码学习: 3.2 索引插入 (Index Insertion)》](202511/20251109_10.md)  
 ##### 202511/20251109_09.md   [《pgvectorscale 源码学习: 3.1 索引构建 (Index Building)》](202511/20251109_09.md)  
 ##### 202511/20251109_08.md   [《pgvectorscale 源码学习: 3 StreamingDiskANN 索引》](202511/20251109_08.md)  
 ##### 202511/20251109_07.md   [《pgvectorscale 源码学习: 2.3 扩展升级机制 (Extension Upgrade Mechanism)》](202511/20251109_07.md)  

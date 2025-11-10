@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20251110_15.md   [《AI论文解读 | The Snowflake Elastic Data Warehouse》](20251110_15.md)  
 ##### 20251110_14.md   [《pgvectorscale 源码学习: 4.4 页面管理 (Page Management)》](20251110_14.md)  
 ##### 20251110_13.md   [《pgvectorscale 源码学习: 4.3 纯存储 (Plain Storage)》](20251110_13.md)  
 ##### 20251110_12.md   [《pgvectorscale 源码学习: 4.2 SBQ 压缩（SBQ Compression）》](20251110_12.md)  
@@ -10,6 +11,12 @@
 ##### 20251110_09.md   [《pgvectorscale 源码学习: 4 存储系统（Storage System）》](20251110_09.md)  
 ##### 20251110_08.md   [《pgvectorscale 源码学习: 3.5 索引元数据（Index Metadata）》](20251110_08.md)  
 ##### 20251110_07.md   [《pgvectorscale 源码学习: 3.4 索引维护与清理（Index Maintenance and Vacuum）》](20251110_07.md)  
+##### 20251110_06.md   [《AI论文解读 | Matryoshka Representation Learning》](20251110_06.md)  
+##### 20251110_05.md   [《AI论文解读 | Pregel: A System for Large-Scale Graph Processing》](20251110_05.md)  
+##### 20251110_04.md   [《AI论文解读 | Spark SQL: Relational Data Processing in Spark》](20251110_04.md)  
+##### 20251110_03.md   [《AI论文解读 | Are We Ready For Learned Cardinality Estimation?》](20251110_03.md)  
+##### 20251110_02.md   [《AI论文解读 | An End-to-End Learning-based Cost Estimator》](20251110_02.md)  
+##### 20251110_01.md   [《AI论文解读 | ALEX: An Updatable Adaptive Learned Index》](20251110_01.md)  
 ##### 20251109_11.md   [《pgvectorscale 源码学习: 3.3 索引扫描与查询 (Index Scanning and Queries)》](20251109_11.md)  
 ##### 20251109_10.md   [《pgvectorscale 源码学习: 3.2 索引插入 (Index Insertion)》](20251109_10.md)  
 ##### 20251109_09.md   [《pgvectorscale 源码学习: 3.1 索引构建 (Index Building)》](20251109_09.md)  

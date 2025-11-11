@@ -2,6 +2,22 @@
   
 ### 文章列表  
 ----  
+##### 20251111_16.md   [《pgvectorscale 源码学习: 7 Label-Based Filtering (基于标签的过滤)》](20251111_16.md)  
+##### 20251111_15.md   [《pgvectorscale 源码学习: 6.3 向量数据管理 (Vector Data Management)》](20251111_15.md)  
+##### 20251111_14.md   [《pgvectorscale 源码学习: 6.2 SIMD 优化（SIMD Optimizations）》](20251111_14.md)  
+##### 20251111_13.md   [《pgvectorscale 源码学习: 6.1 支持的距离度量（Supported Distance Metrics）》](20251111_13.md)  
+##### 20251111_12.md   [《pgvectorscale 源码学习: 6 距离函数与向量 (`Distance Functions and Vectors`)》](20251111_12.md)  
+##### 20251111_11.md   [《pgvectorscale 源码学习: 5.3 贪婪搜索算法 (Greedy Search Algorithm)》](20251111_11.md)  
+##### 20251111_10.md   [《pgvectorscale 源码学习: 5.2 邻居选择与剪枝 (Neighbor Selection and Pruning)》](20251111_10.md)  
+##### 20251111_09.md   [《pgvectorscale 源码学习: 5.1 图结构 (Graph Structure) 与 邻居管理 (Neighbor Management)》](20251111_09.md)  
+##### 20251111_08.md   [《pgvectorscale 源码学习: 5 基于图的搜索 (`Graph-Based Search`)》](20251111_08.md)  
+##### 20251111_07.md   [《pgvectorscale 源码学习: 4.5 缓冲区与指针管理 (Buffer and Pointer Management)》](20251111_07.md)  
+##### 20251111_06.md   [《AI论文解读 | Deep Learning for Entity Matching: A Design Space Exploration》](20251111_06.md)  
+##### 20251111_05.md   [《AI论文解读 | HoloClean: Holistic Data Repairs with Probabilistic Inference》](20251111_05.md)  
+##### 20251111_04.md   [《AI论文解读 | Deep Entity Matching with Pre-Trained Language Models》](20251111_04.md)  
+##### 20251111_03.md   [《AI论文解读 | An End-to-End Automatic Cloud Database Tuning System Using Deep Reinforcement Learning》](20251111_03.md)  
+##### 20251111_02.md   [《AI论文解读 | Automatic Database Management System Tuning Through Large-scale Machine Learning》](20251111_02.md)  
+##### 20251111_01.md   [《AI论文解读 | Hekaton: SQL Server’s Memory-Optimized OLTP Engine》](20251111_01.md)  
 ##### 20251110_15.md   [《AI论文解读 | The Snowflake Elastic Data Warehouse》](20251110_15.md)  
 ##### 20251110_14.md   [《pgvectorscale 源码学习: 4.4 页面管理 (Page Management)》](20251110_14.md)  
 ##### 20251110_13.md   [《pgvectorscale 源码学习: 4.3 纯存储 (Plain Storage)》](20251110_13.md)  

@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20251113_01.md   [《1亿条向量创建索引需要多久? VectorChord 发新版在16c机器上干到了20分钟!》](20251113_01.md)  
 ##### 20251112_20.md   [《pgvectorscale(StreamingDiskANN) 源码入门学习39篇 汇总》](20251112_20.md)  
 ##### 20251112_19.md   [《pgvectorscale 源码学习: 9.4 打包与分发（Packaging and Distribution）》](20251112_19.md)  
 ##### 20251112_18.md   [《pgvectorscale 源码学习: 9.3 CI/CD Pipeline（持续集成/持续部署管线）》](20251112_18.md)  

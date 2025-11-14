@@ -107,6 +107,20 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251114_14.md   [《德说-第363期, TiDB的开源成功不可复制》](202511/20251114_14.md)  
+##### 202511/20251114_13.md   [《pg_tokenizer 源码学习: 3.4 文本分析器 (Text Analyzers)》](202511/20251114_13.md)  
+##### 202511/20251114_12.md   [《pg_tokenizer 源码学习: 3.3 模型 (Models)》](202511/20251114_12.md)  
+##### 202511/20251114_11.md   [《pg_tokenizer 源码学习: 3.2 文本处理流程 (Text Processing Pipeline)》](202511/20251114_11.md)  
+##### 202511/20251114_10.md   [《pg_tokenizer 源码学习: 3.1 系统架构 (System Architecture)》](202511/20251114_10.md)  
+##### 202511/20251114_09.md   [《pg_tokenizer 源码学习: 3 核心概念（Core Concepts）》](202511/20251114_09.md)  
+##### 202511/20251114_08.md   [《pg_tokenizer 源码学习: 2 Installation (安装)》](202511/20251114_08.md)  
+##### 202511/20251114_07.md   [《pg_tokenizer 源码学习: 1 概览 (Overview)》](202511/20251114_07.md)  
+##### 202511/20251114_06.md   [《AI论文解读 | Debunking the Myth of Join Ordering: Toward Robust SQL Analytics》](202511/20251114_06.md)  
+##### 202511/20251114_05.md   [《AI论文解读 | BIRNE: Mixed-paradigm Workload Execution in SQL Engines》](202511/20251114_05.md)  
+##### 202511/20251114_04.md   [《AI论文解读 | Anarchy in the Database: A Survey and Evaluation of Database Management System Extensibility》](202511/20251114_04.md)  
+##### 202511/20251114_03.md   [《AI论文解读 | CUBIT: Concurrent Updatable Bitmap Indexing》](202511/20251114_03.md)  
+##### 202511/20251114_02.md   [《AI论文解读 | Democratize MATCH_RECOGNIZE》](202511/20251114_02.md)  
+##### 202511/20251114_01.md   [《AI论文解读 | Environmental Footprints of Query Processing: A Vision for Sustainable Database Architectures》](202511/20251114_01.md)  
 ##### 202511/20251113_01.md   [《1亿条向量创建索引需要多久? VectorChord 发新版在16c机器上干到了20分钟!》](202511/20251113_01.md)  
 ##### 202511/20251112_20.md   [《pgvectorscale(StreamingDiskANN) 源码入门学习39篇 汇总》](202511/20251112_20.md)  
 ##### 202511/20251112_19.md   [《pgvectorscale 源码学习: 9.4 打包与分发（Packaging and Distribution）》](202511/20251112_19.md)  

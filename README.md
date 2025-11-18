@@ -107,6 +107,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251118_09.md   [《DuckDB 悄悄发布1.4.2 LTS版, 支持Vortex存储格式, 随机访问性能飙升》](202511/20251118_09.md)  
 ##### 202511/20251118_08.md   [《pg_tokenizer 源码学习: 5 进阶功能 (Advanced Features)》](202511/20251118_08.md)  
 ##### 202511/20251118_07.md   [《pg_tokenizer 源码学习: 4.4 基础分词（Basic Tokenization）》](202511/20251118_07.md)  
 ##### 202511/20251118_06.md   [《OceanBase开源SeekDB AI原生数据库 硬杠 PostgreSQL+DuckDB》](202511/20251118_06.md)  

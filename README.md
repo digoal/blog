@@ -107,6 +107,14 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251118_08.md   [《pg_tokenizer 源码学习: 5 进阶功能 (Advanced Features)》](202511/20251118_08.md)  
+##### 202511/20251118_07.md   [《pg_tokenizer 源码学习: 4.4 基础分词（Basic Tokenization）》](202511/20251118_07.md)  
+##### 202511/20251118_06.md   [《OceanBase开源SeekDB AI原生数据库 硬杠 PostgreSQL+DuckDB》](202511/20251118_06.md)  
+##### 202511/20251118_05.md   [《pg_tokenizer 源码学习: 4.3 使用内建模型 (Built-in Models)》](202511/20251118_05.md)  
+##### 202511/20251118_04.md   [《pg_tokenizer 源码学习: 4.2 创建文本分析器 (`Creating Text Analyzers`)》](202511/20251118_04.md)  
+##### 202511/20251118_03.md   [《PostgreSQL 19 preview - 异步IO继续深化革新PG方方面面, BRIN索引vacuum工作流支持流式异步IO》](202511/20251118_03.md)  
+##### 202511/20251118_02.md   [《AI论文解读 | Towards a Converged Relational-Graph Optimization Framework》](202511/20251118_02.md)  
+##### 202511/20251118_01.md   [《AI论文解读 | Kosmos: An AI Scientist for Autonomous Discovery》](202511/20251118_01.md)  
 ##### 202511/20251117_03.md   [《德说-第364期, 开源项目与高校合作的几个常见策略》](202511/20251117_03.md)  
 ##### 202511/20251117_02.md   [《pg_tokenizer 源码学习: 4.1 快速入门 (Quick Start)》](202511/20251117_02.md)  
 ##### 202511/20251117_01.md   [《pg_tokenizer 源码学习: 4 入门指南 (Getting Started)》](202511/20251117_01.md)  

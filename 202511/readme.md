@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20251119_09.md   [《RaBitQ 向量压缩算法简介》](20251119_09.md)  
+##### 20251119_08.md   [《pg_tokenizer 源码学习: 5.4 模型预加载 (Model Preloading)》](20251119_08.md)  
+##### 20251119_07.md   [《pg_tokenizer 源码学习: 5.3 令牌过滤 (Token Filtering)》](20251119_07.md)  
+##### 20251119_06.md   [《pg_tokenizer 源码学习: 5.2 高级用法 (Advanced Usage)》](20251119_06.md)  
+##### 20251119_05.md   [《pg_tokenizer 源码学习: 5.1 自定义模型 (Custom Models)》](20251119_05.md)  
+##### 20251119_04.md   [《AI论文解读 | Accelerating GPU Data Processing using FastLanes Compression》](20251119_04.md)  
+##### 20251119_03.md   [《AI论文解读 | The FastLanes Compression Layout: Decoding \>100 Billion Integers per Second with Scalar Code》](20251119_03.md)  
+##### 20251119_02.md   [《AI论文解读 | Data Chunk Compaction in Vectorized Execution》](20251119_02.md)  
+##### 20251119_01.md   [《AI论文解读 | Vortex: A Stream-oriented Storage Engine For Big Data Analytics》](20251119_01.md)  
 ##### 20251118_09.md   [《DuckDB 悄悄发布1.4.2 LTS版, 支持Vortex存储格式, 随机访问性能飙升》](20251118_09.md)  
 ##### 20251118_08.md   [《pg_tokenizer 源码学习: 5 进阶功能 (Advanced Features)》](20251118_08.md)  
 ##### 20251118_07.md   [《pg_tokenizer 源码学习: 4.4 基础分词（Basic Tokenization）》](20251118_07.md)  

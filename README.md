@@ -107,6 +107,20 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251120_14.md   [《pg_tokenizer 源码学习: 8 开发 (`Development`)》](202511/20251120_14.md)  
+##### 202511/20251120_13.md   [《pg_tokenizer 源码学习: 7.3 限制与注意事项 (Limitations and Caveats)》](202511/20251120_13.md)  
+##### 202511/20251120_12.md   [《pg_tokenizer 源码学习: 7.2 配置参考 (Configuration Reference)》](202511/20251120_12.md)  
+##### 202511/20251120_11.md   [《pg_tokenizer 源码学习: 7.1 SQL 函数参考 (SQL Function Reference)》](202511/20251120_11.md)  
+##### 202511/20251120_10.md   [《pg_tokenizer 源码学习: 7 参考 (`Reference`)》](202511/20251120_10.md)  
+##### 202511/20251120_09.md   [《pg_tokenizer 源码学习: 6.3 日语文本处理 (Japanese Text Processing)》](202511/20251120_09.md)  
+##### 202511/20251120_08.md   [《PostgreSQL 19 preview - JOIN 计划耗时出大问题了? 可能是你的统计bucket太多, 和MCV匹配算法有关》](202511/20251120_08.md)  
+##### 202511/20251120_07.md   [《pg_tokenizer 源码学习: 6.2 汉字文本处理 (Chinese Text Processing)》](202511/20251120_07.md)  
+##### 202511/20251120_06.md   [《pg_tokenizer 源码学习: 6.1 英语文本处理 (English Text Processing)》](202511/20251120_06.md)  
+##### 202511/20251120_05.md   [《pg_tokenizer 源码学习: 6 语言支持 (`Language Support`)》](202511/20251120_05.md)  
+##### 202511/20251120_04.md   [《AI论文解读 | JSON Tiles: Fast Analytics on Semi-Structured Data》](202511/20251120_04.md)  
+##### 202511/20251120_03.md   [《AI论文解读 | Procella: Unifying serving and analytical data at YouTube》](202511/20251120_03.md)  
+##### 202511/20251120_02.md   [《AI论文解读 | FSST: Fast Random Access String Compression》](202511/20251120_02.md)  
+##### 202511/20251120_01.md   [《AI论文解读 | ALP: Adaptive Lossless floating-Point Compression》](202511/20251120_01.md)  
 ##### 202511/20251119_09.md   [《RaBitQ 向量压缩算法简介》](202511/20251119_09.md)  
 ##### 202511/20251119_08.md   [《pg_tokenizer 源码学习: 5.4 模型预加载 (Model Preloading)》](202511/20251119_08.md)  
 ##### 202511/20251119_07.md   [《pg_tokenizer 源码学习: 5.3 令牌过滤 (Token Filtering)》](202511/20251119_07.md)  

@@ -2,6 +2,20 @@
   
 ### 文章列表  
 ----  
+##### 20251120_14.md   [《pg_tokenizer 源码学习: 8 开发 (`Development`)》](20251120_14.md)  
+##### 20251120_13.md   [《pg_tokenizer 源码学习: 7.3 限制与注意事项 (Limitations and Caveats)》](20251120_13.md)  
+##### 20251120_12.md   [《pg_tokenizer 源码学习: 7.2 配置参考 (Configuration Reference)》](20251120_12.md)  
+##### 20251120_11.md   [《pg_tokenizer 源码学习: 7.1 SQL 函数参考 (SQL Function Reference)》](20251120_11.md)  
+##### 20251120_10.md   [《pg_tokenizer 源码学习: 7 参考 (`Reference`)》](20251120_10.md)  
+##### 20251120_09.md   [《pg_tokenizer 源码学习: 6.3 日语文本处理 (Japanese Text Processing)》](20251120_09.md)  
+##### 20251120_08.md   [《PostgreSQL 19 preview - JOIN 计划耗时出大问题了? 可能是你的统计bucket太多, 和MCV匹配算法有关》](20251120_08.md)  
+##### 20251120_07.md   [《pg_tokenizer 源码学习: 6.2 汉字文本处理 (Chinese Text Processing)》](20251120_07.md)  
+##### 20251120_06.md   [《pg_tokenizer 源码学习: 6.1 英语文本处理 (English Text Processing)》](20251120_06.md)  
+##### 20251120_05.md   [《pg_tokenizer 源码学习: 6 语言支持 (`Language Support`)》](20251120_05.md)  
+##### 20251120_04.md   [《AI论文解读 | JSON Tiles: Fast Analytics on Semi-Structured Data》](20251120_04.md)  
+##### 20251120_03.md   [《AI论文解读 | Procella: Unifying serving and analytical data at YouTube》](20251120_03.md)  
+##### 20251120_02.md   [《AI论文解读 | FSST: Fast Random Access String Compression》](20251120_02.md)  
+##### 20251120_01.md   [《AI论文解读 | ALP: Adaptive Lossless floating-Point Compression》](20251120_01.md)  
 ##### 20251119_09.md   [《RaBitQ 向量压缩算法简介》](20251119_09.md)  
 ##### 20251119_08.md   [《pg_tokenizer 源码学习: 5.4 模型预加载 (Model Preloading)》](20251119_08.md)  
 ##### 20251119_07.md   [《pg_tokenizer 源码学习: 5.3 令牌过滤 (Token Filtering)》](20251119_07.md)  

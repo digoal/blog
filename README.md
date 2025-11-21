@@ -35,6 +35,8 @@
 25、[《2025-VectorChord 源码入门学习39篇 汇总》](202511/20251103_17.md)     
 26、[《2025-pgvector 源码入门学习27篇 汇总》](202511/20251105_17.md)     
 27、[《2025-DuckPGQ 源码入门学习35篇 汇总》](202511/20251108_14.md)     
+28、[《2025-pgvectorscale(StreamingDiskANN) 源码入门学习39篇 汇总》](202511/20251112_20.md)     
+29、[《2025-pg_tokenizer 源码入门学习29篇 汇总》](202511/20251121_18.md)     
   
 ### 二、学习资料  
   
@@ -107,6 +109,25 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251121_19.md   [《AI论文解读 | SQLite: Past, Present, and Future》](202511/20251121_19.md)  
+##### 202511/20251121_18.md   [《pg_tokenizer 源码入门学习29篇 汇总》](202511/20251121_18.md)  
+##### 202511/20251121_17.md   [《VectorChord-bm25 源码学习: 2 核心组件 (`Core Components`)》](202511/20251121_17.md)  
+##### 202511/20251121_16.md   [《VectorChord-bm25 源码学习: 1.1 架构 (Architecture)》](202511/20251121_16.md)  
+##### 202511/20251121_15.md   [《VectorChord-bm25 源码学习: 1 概述》](202511/20251121_15.md)  
+##### 202511/20251121_14.md   [《pg_tokenizer 源码学习: 8.3 发布流程 (Release Process)》](202511/20251121_14.md)  
+##### 202511/20251121_13.md   [《pg_tokenizer 源码学习: 8.2 构建与测试 (Building and Testing)》](202511/20251121_13.md)  
+##### 202511/20251121_12.md   [《pg_tokenizer 源码学习: 8.1 开发环境设置 (Development Setup)》](202511/20251121_12.md)  
+##### 202511/20251121_11.md   [《Spock ：PostgreSQL 的多主复制插件》](202511/20251121_11.md)  
+##### 202511/20251121_10.md   [《PostGIS 性能优化系列文章: 空间裁剪优化, 相交谓词与叠加操作(Intersection Predicates and Overlays)》](202511/20251121_10.md)  
+##### 202511/20251121_09.md   [《PostGIS 性能优化系列文章: bounding boxes》](202511/20251121_09.md)  
+##### 202511/20251121_08.md   [《从 Google Summer of Code (GSoC) 能学到什么? 开源项目如何通过赛事培养贡献者?》](202511/20251121_08.md)  
+##### 202511/20251121_07.md   [《这个项目导致PostgreSQL内核开发者离下岗又近了一大步!》](202511/20251121_07.md)  
+##### 202511/20251121_06.md   [《微软宣布: GitHub Copilot加入去O大军, Oracle 真的慌了》](202511/20251121_06.md)  
+##### 202511/20251121_05.md   [《安全方面, PG和SQLite都不如DuckDB? 为什么?》](202511/20251121_05.md)  
+##### 202511/20251121_04.md   [《AI论文解读 | Selection Pushdown in Column Stores using Bit Manipulation Instructions》](202511/20251121_04.md)  
+##### 202511/20251121_03.md   [《AI论文解读 | BtrBlocks: Efficient Columnar Compression for Data Lakes》](202511/20251121_03.md)  
+##### 202511/20251121_02.md   [《AI论文解读 | Memento Filter: A Fast, Dynamic, and Robust Range Filter》](202511/20251121_02.md)  
+##### 202511/20251121_01.md   [《AI论文解读 | Exploiting Cloud Object Storage for High-Performance Analytics》](202511/20251121_01.md)  
 ##### 202511/20251120_14.md   [《pg_tokenizer 源码学习: 8 开发 (`Development`)》](202511/20251120_14.md)  
 ##### 202511/20251120_13.md   [《pg_tokenizer 源码学习: 7.3 限制与注意事项 (Limitations and Caveats)》](202511/20251120_13.md)  
 ##### 202511/20251120_12.md   [《pg_tokenizer 源码学习: 7.2 配置参考 (Configuration Reference)》](202511/20251120_12.md)  

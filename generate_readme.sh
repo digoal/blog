@@ -46,6 +46,8 @@ echo "24、[《2025-Milvus 源码入门学习31篇 汇总》](202510/20251029_08
 echo "25、[《2025-VectorChord 源码入门学习39篇 汇总》](202511/20251103_17.md)     "  >> ./README.md    
 echo "26、[《2025-pgvector 源码入门学习27篇 汇总》](202511/20251105_17.md)     "  >> ./README.md    
 echo "27、[《2025-DuckPGQ 源码入门学习35篇 汇总》](202511/20251108_14.md)     "  >> ./README.md    
+echo "28、[《2025-pgvectorscale(StreamingDiskANN) 源码入门学习39篇 汇总》](202511/20251112_20.md)     "  >> ./README.md    
+echo "29、[《2025-pg_tokenizer 源码入门学习29篇 汇总》](202511/20251121_18.md)     "  >> ./README.md    
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md

@@ -109,6 +109,16 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251122_10.md   [《AI论文解读 | Oracle ZFS Storage: The Bestof-Breed Solution for Highly Scalable Oracle Cloud》](202511/20251122_10.md)  
+##### 202511/20251122_09.md   [《AI论文解读 | The ZFS filesystem on FreeBSD》](202511/20251122_09.md)  
+##### 202511/20251122_08.md   [《AI论文解读 | Oracle Solaris ZFS Data Management》](202511/20251122_08.md)  
+##### 202511/20251122_07.md   [《AI论文解读 | ZFS The Zettabyte File System》](202511/20251122_07.md)  
+##### 202511/20251122_06.md   [《AI论文解读 | Reliability Analysis of ZFS》](202511/20251122_06.md)  
+##### 202511/20251122_05.md   [《AI论文解读 | The Zettabyte File System》](202511/20251122_05.md)  
+##### 202511/20251122_04.md   [《AI论文解读 | ZenFS+: Nurturing Performance and Isolation to ZenFS》](202511/20251122_04.md)  
+##### 202511/20251122_03.md   [《AI论文解读 | Optimization of RocksDB for Redis on Flash》](202511/20251122_03.md)  
+##### 202511/20251122_02.md   [《AI论文解读 | Disaggregating RocksDB: A Production Experience》](202511/20251122_02.md)  
+##### 202511/20251122_01.md   [《AI论文解读 | RocksDB: Evolution of Development Priorities in a Key-value Store Serving Large-scale Applications》](202511/20251122_01.md)  
 ##### 202511/20251121_19.md   [《AI论文解读 | SQLite: Past, Present, and Future》](202511/20251121_19.md)  
 ##### 202511/20251121_18.md   [《pg_tokenizer 源码入门学习29篇 汇总》](202511/20251121_18.md)  
 ##### 202511/20251121_17.md   [《VectorChord-bm25 源码学习: 2 核心组件 (`Core Components`)》](202511/20251121_17.md)  

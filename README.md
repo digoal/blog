@@ -109,6 +109,19 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251125_05.md   [《VectorChord-bm25 源码学习: 4 实施细节（Implementation Details）》](202511/20251125_05.md)  
+##### 202511/20251124_12.md   [《VectorChord-bm25 源码学习: 3.3 分词 (Tokenization)》](202511/20251124_12.md)  
+##### 202511/20251124_11.md   [《VectorChord-bm25 源码学习: 3.2 配置 (Configuration)》](202511/20251124_11.md)  
+##### 202511/20251124_10.md   [《VectorChord-bm25 源码学习: 3.1 SQL 接口 (SQL Interface)》](202511/20251124_10.md)  
+##### 202511/20251124_09.md   [《VectorChord-bm25 源码学习: 3 用法 (Usage)》](202511/20251124_09.md)  
+##### 202511/20251124_08.md   [《VectorChord-bm25 源码学习: 2.4 Block-WeakAnd 算法》](202511/20251124_08.md)  
+##### 202511/20251124_07.md   [《VectorChord-bm25 源码学习: 2.3 虚拟页面系统 (Virtual Page System)》](202511/20251124_07.md)  
+##### 202511/20251124_06.md   [《VectorChord-bm25 源码学习: 2.2 BM25 索引 (BM25 Index)》](202511/20251124_06.md)  
+##### 202511/20251124_05.md   [《VectorChord-bm25 源码学习: 2.1 数据类型 (`Data Types`)》](202511/20251124_05.md)  
+##### 202511/20251124_04.md   [《AI论文解读 | Robust External Hash Aggregation in the Solid State Age》](202511/20251124_04.md)  
+##### 202511/20251124_03.md   [《AI论文解读 | POLAR: Adaptive and Non-invasive Join Order Selection via Plans of Least Resistance》](202511/20251124_03.md)  
+##### 202511/20251124_02.md   [《AI论文解读 | Runtime-Extensible Parsers》](202511/20251124_02.md)  
+##### 202511/20251124_01.md   [《AI论文解读 | How DuckDB is USING KEY to Unlock Recursive Query Performance》](202511/20251124_01.md)  
 ##### 202511/20251122_10.md   [《AI论文解读 | Oracle ZFS Storage: The Bestof-Breed Solution for Highly Scalable Oracle Cloud》](202511/20251122_10.md)  
 ##### 202511/20251122_09.md   [《AI论文解读 | The ZFS filesystem on FreeBSD》](202511/20251122_09.md)  
 ##### 202511/20251122_08.md   [《AI论文解读 | Oracle Solaris ZFS Data Management》](202511/20251122_08.md)  

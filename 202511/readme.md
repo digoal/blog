@@ -2,7 +2,23 @@
   
 ### 文章列表  
 ----  
+##### 20251125_17.md   [《SeekDB 源码学习: 2 快速入门 (Getting Started)》](20251125_17.md)  
+##### 20251125_16.md   [《SeekDB 源码学习: 1 概述 (Overview)》](20251125_16.md)  
+##### 20251125_15.md   [《VectorChord-bm25 源码学习: 5.2 打包与部署 (`Packaging & Deployment`)》](20251125_15.md)  
+##### 20251125_14.md   [《VectorChord-bm25 源码学习: 5.1 构建与测试 (`Building & Testing`)》](20251125_14.md)  
+##### 20251125_13.md   [《VectorChord-bm25 源码学习: 5 开发 (Development)》](20251125_13.md)  
+##### 20251125_12.md   [《VectorChord-bm25 源码学习: 4.5 页面管理 (Page Management)》](20251125_12.md)  
+##### 20251125_11.md   [《VectorChord-bm25 源码学习: 4.4 字段规范化处理 (Field Norm Handling)》](20251125_11.md)  
+##### 20251125_10.md   [《VectorChord-bm25 源码学习: 4.3 清理和维护 (`Vacuuming & Maintenance`)》](20251125_10.md)  
+##### 20251125_09.md   [《VectorChord-bm25 源码学习: 4.2 段管理 (Segment Management)》](20251125_09.md)  
+##### 20251125_08.md   [《VectorChord-bm25 源码学习: 4.1 Posting Lists (倒排列表)》](20251125_08.md)  
+##### 20251125_07.md   [《PostgreSQL 19 preview - 监控跨CPU访问内存问题(buffer page含不同NUMA节点内存页)》](20251125_07.md)  
+##### 20251125_06.md   [《AI 日常使用总结》](20251125_06.md)  
 ##### 20251125_05.md   [《VectorChord-bm25 源码学习: 4 实施细节（Implementation Details）》](20251125_05.md)  
+##### 20251125_04.md   [《AI论文解读 | A Plea for Lean Software》](20251125_04.md)  
+##### 20251125_03.md   [《AI论文解读 | Data Management for Data Science Towards Embedded Analytics》](20251125_03.md)  
+##### 20251125_02.md   [《AI论文解读 | Dear User-Defined Functions, Inlining isn’t working out so great for us. Let’s try batching to make our relationship work. Sincerely, SQL》](20251125_02.md)  
+##### 20251125_01.md   [《AI论文解读 | How to Make your Duck Fly: Advanced Floating Point Compression to the Rescue》](20251125_01.md)  
 ##### 20251124_12.md   [《VectorChord-bm25 源码学习: 3.3 分词 (Tokenization)》](20251124_12.md)  
 ##### 20251124_11.md   [《VectorChord-bm25 源码学习: 3.2 配置 (Configuration)》](20251124_11.md)  
 ##### 20251124_10.md   [《VectorChord-bm25 源码学习: 3.1 SQL 接口 (SQL Interface)》](20251124_10.md)  

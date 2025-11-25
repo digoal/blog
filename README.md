@@ -109,7 +109,23 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251125_17.md   [《SeekDB 源码学习: 2 快速入门 (Getting Started)》](202511/20251125_17.md)  
+##### 202511/20251125_16.md   [《SeekDB 源码学习: 1 概述 (Overview)》](202511/20251125_16.md)  
+##### 202511/20251125_15.md   [《VectorChord-bm25 源码学习: 5.2 打包与部署 (`Packaging & Deployment`)》](202511/20251125_15.md)  
+##### 202511/20251125_14.md   [《VectorChord-bm25 源码学习: 5.1 构建与测试 (`Building & Testing`)》](202511/20251125_14.md)  
+##### 202511/20251125_13.md   [《VectorChord-bm25 源码学习: 5 开发 (Development)》](202511/20251125_13.md)  
+##### 202511/20251125_12.md   [《VectorChord-bm25 源码学习: 4.5 页面管理 (Page Management)》](202511/20251125_12.md)  
+##### 202511/20251125_11.md   [《VectorChord-bm25 源码学习: 4.4 字段规范化处理 (Field Norm Handling)》](202511/20251125_11.md)  
+##### 202511/20251125_10.md   [《VectorChord-bm25 源码学习: 4.3 清理和维护 (`Vacuuming & Maintenance`)》](202511/20251125_10.md)  
+##### 202511/20251125_09.md   [《VectorChord-bm25 源码学习: 4.2 段管理 (Segment Management)》](202511/20251125_09.md)  
+##### 202511/20251125_08.md   [《VectorChord-bm25 源码学习: 4.1 Posting Lists (倒排列表)》](202511/20251125_08.md)  
+##### 202511/20251125_07.md   [《PostgreSQL 19 preview - 监控跨CPU访问内存问题(buffer page含不同NUMA节点内存页)》](202511/20251125_07.md)  
+##### 202511/20251125_06.md   [《AI 日常使用总结》](202511/20251125_06.md)  
 ##### 202511/20251125_05.md   [《VectorChord-bm25 源码学习: 4 实施细节（Implementation Details）》](202511/20251125_05.md)  
+##### 202511/20251125_04.md   [《AI论文解读 | A Plea for Lean Software》](202511/20251125_04.md)  
+##### 202511/20251125_03.md   [《AI论文解读 | Data Management for Data Science Towards Embedded Analytics》](202511/20251125_03.md)  
+##### 202511/20251125_02.md   [《AI论文解读 | Dear User-Defined Functions, Inlining isn’t working out so great for us. Let’s try batching to make our relationship work. Sincerely, SQL》](202511/20251125_02.md)  
+##### 202511/20251125_01.md   [《AI论文解读 | How to Make your Duck Fly: Advanced Floating Point Compression to the Rescue》](202511/20251125_01.md)  
 ##### 202511/20251124_12.md   [《VectorChord-bm25 源码学习: 3.3 分词 (Tokenization)》](202511/20251124_12.md)  
 ##### 202511/20251124_11.md   [《VectorChord-bm25 源码学习: 3.2 配置 (Configuration)》](202511/20251124_11.md)  
 ##### 202511/20251124_10.md   [《VectorChord-bm25 源码学习: 3.1 SQL 接口 (SQL Interface)》](202511/20251124_10.md)  

@@ -13,7 +13,7 @@
 ##### 20251125_09.md   [《VectorChord-bm25 源码学习: 4.2 段管理 (Segment Management)》](20251125_09.md)  
 ##### 20251125_08.md   [《VectorChord-bm25 源码学习: 4.1 Posting Lists (倒排列表)》](20251125_08.md)  
 ##### 20251125_07.md   [《PostgreSQL 19 preview - 监控跨CPU访问内存问题(buffer page含不同NUMA节点内存页)》](20251125_07.md)  
-##### 20251125_06.md   [《AI 日常使用总结》](20251125_06.md)  
+##### 20251125_06.md   [《德说-第365期, AI 日常使用总结》](20251125_06.md)  
 ##### 20251125_05.md   [《VectorChord-bm25 源码学习: 4 实施细节（Implementation Details）》](20251125_05.md)  
 ##### 20251125_04.md   [《AI论文解读 | A Plea for Lean Software》](20251125_04.md)  
 ##### 20251125_03.md   [《AI论文解读 | Data Management for Data Science Towards Embedded Analytics》](20251125_03.md)  

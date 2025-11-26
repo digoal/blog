@@ -48,6 +48,8 @@ echo "26、[《2025-pgvector 源码入门学习27篇 汇总》](202511/20251105_
 echo "27、[《2025-DuckPGQ 源码入门学习35篇 汇总》](202511/20251108_14.md)     "  >> ./README.md    
 echo "28、[《2025-pgvectorscale(StreamingDiskANN) 源码入门学习39篇 汇总》](202511/20251112_20.md)     "  >> ./README.md    
 echo "29、[《2025-pg_tokenizer 源码入门学习29篇 汇总》](202511/20251121_18.md)     "  >> ./README.md    
+echo "30、[《2025-VectorChord-bm25 源码入门学习20篇 汇总》](202511/20251126_18.md)     "  >> ./README.md    
+echo "31、[《2025-SeekDB 源码入门学习13篇 汇总》](202511/20251126_19.md)     "  >> ./README.md    
 echo "  "  >> ./README.md
 echo "### 二、学习资料  " >> ./README.md
 echo "  "  >> ./README.md

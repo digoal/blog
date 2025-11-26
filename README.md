@@ -37,6 +37,8 @@
 27、[《2025-DuckPGQ 源码入门学习35篇 汇总》](202511/20251108_14.md)     
 28、[《2025-pgvectorscale(StreamingDiskANN) 源码入门学习39篇 汇总》](202511/20251112_20.md)     
 29、[《2025-pg_tokenizer 源码入门学习29篇 汇总》](202511/20251121_18.md)     
+30、[《2025-VectorChord-bm25 源码入门学习20篇 汇总》](202511/20251126_18.md)     
+31、[《2025-SeekDB 源码入门学习13篇 汇总》](202511/20251126_19.md)     
   
 ### 二、学习资料  
   
@@ -109,6 +111,25 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251126_19.md   [《SeekDB 源码入门学习13篇 汇总》](202511/20251126_19.md)  
+##### 202511/20251126_18.md   [《VectorChord-bm25 源码入门学习20篇 汇总》](202511/20251126_18.md)  
+##### 202511/20251126_17.md   [《辩论话题: AI 原生数据库的终极形态“单节点”vs“分布式”, 谁将主导 RAG 生产环境?》](202511/20251126_17.md)  
+##### 202511/20251126_16.md   [《辩论话题: “强一致”和“最终一致”, 你站哪一边?》](202511/20251126_16.md)  
+##### 202511/20251126_15.md   [《SeekDB 源码学习: 4.2 Build Targets and Options (构建目标和选项)》](202511/20251126_15.md)  
+##### 202511/20251126_14.md   [《SeekDB 源码学习: 4.1 项目文件结构 (Project File Structure)》](202511/20251126_14.md)  
+##### 202511/20251126_13.md   [《SeekDB 源码学习: 4 参考资料 (Reference)》](202511/20251126_13.md)  
+##### 202511/20251126_12.md   [《SeekDB 源码学习: 3.4 测试基础设施 (Testing Infrastructure)》](202511/20251126_12.md)  
+##### 202511/20251126_11.md   [《SeekDB 源码学习: 3.3 配置系统 (Configuration System)》](202511/20251126_11.md)  
+##### 202511/20251126_10.md   [《SeekDB 源码学习: 3.2 SQL和PL解析器系统 (SQL and PL Parser System)》](202511/20251126_10.md)  
+##### 202511/20251126_09.md   [《SeekDB 源码学习: 3.1 核心组件 (`Core Components`)》](202511/20251126_09.md)  
+##### 202511/20251126_08.md   [《SeekDB 源码学习: 3 架构概览 (Architecture Overview)》](202511/20251126_08.md)  
+##### 202511/20251126_07.md   [《SeekDB 源码学习: 2.3 安装与部署》](202511/20251126_07.md)  
+##### 202511/20251126_06.md   [《SeekDB 源码学习: 2.2 从源代码构建 (Building from Source)》](202511/20251126_06.md)  
+##### 202511/20251126_05.md   [《SeekDB 源码学习: 2.1 开发环境设置 (`Development Environment Setup`)》](202511/20251126_05.md)  
+##### 202511/20251126_04.md   [《AI论文解读 | Continual Learning with Pre-Trained Models: A Survey》](202511/20251126_04.md)  
+##### 202511/20251126_03.md   [《AI论文解读 | AutoAgents: A Framework for Automatic Agent Generation》](202511/20251126_03.md)  
+##### 202511/20251126_02.md   [《AI论文解读 | Large Language Model based Multi-Agents: A Survey of Progress and Challenges》](202511/20251126_02.md)  
+##### 202511/20251126_01.md   [《AI论文解读 | The Design of Fast Delta Encoding for Delta Compression Based Storage Systems》](202511/20251126_01.md)  
 ##### 202511/20251125_17.md   [《SeekDB 源码学习: 2 快速入门 (Getting Started)》](202511/20251125_17.md)  
 ##### 202511/20251125_16.md   [《SeekDB 源码学习: 1 概述 (Overview)》](202511/20251125_16.md)  
 ##### 202511/20251125_15.md   [《VectorChord-bm25 源码学习: 5.2 打包与部署 (`Packaging & Deployment`)》](202511/20251125_15.md)  

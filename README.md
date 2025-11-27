@@ -111,6 +111,21 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251127_15.md   [《AI论文解读 | VStream: A Distributed Streaming Vector Search System》](202511/20251127_15.md)  
+##### 202511/20251127_14.md   [《Supabase 源码学习: 2.1.1 应用程序架构 (Application Architecture)》](202511/20251127_14.md)  
+##### 202511/20251127_13.md   [《Supabase 源码学习: 2.1 Studio 控制面板 (Studio Dashboard)》](202511/20251127_13.md)  
+##### 202511/20251127_12.md   [《PostgreSQL 19 preview - TID Range Scan支持并行, 补其动态并行能力》](202511/20251127_12.md)  
+##### 202511/20251127_11.md   [《PostgreSQL 19 preview - 这个patch告诉你为什么`count(*)` 比 `count(1)` 快》](202511/20251127_11.md)  
+##### 202511/20251127_10.md   [《Supabase 源码学习: 2 应用 (Applications)》](202511/20251127_10.md)  
+##### 202511/20251127_09.md   [《Supabase 源码学习: 1.2 技术栈 (Technology Stack)》](202511/20251127_09.md)  
+##### 202511/20251127_08.md   [《Supabase 源码学习: 1.1 Monorepo (单体仓库) 结构》](202511/20251127_08.md)  
+##### 202511/20251127_07.md   [《辩论话题: 云厂商, 别再招数据库专家了!》](202511/20251127_07.md)  
+##### 202511/20251127_06.md   [《辩论话题: Supabase “开源大礼包”是革新, 还是自设的运维陷阱?》](202511/20251127_06.md)  
+##### 202511/20251127_05.md   [《Supabase 源码学习: 1 概览 (Overview)》](202511/20251127_05.md)  
+##### 202511/20251127_04.md   [《AI论文解读 | Empowering Time Series Analysis with Large Language Models: A Survey》](202511/20251127_04.md)  
+##### 202511/20251127_03.md   [《AI论文解读 | ScreenAI: A Vision-Language Model for UI and Infographics Understanding》](202511/20251127_03.md)  
+##### 202511/20251127_02.md   [《AI论文解读 | A Survey of Graph Meets Large Language Model: Progress and Future Directions》](202511/20251127_02.md)  
+##### 202511/20251127_01.md   [《AI论文解读 | Large Language Models for Time Series: A Survey》](202511/20251127_01.md)  
 ##### 202511/20251126_19.md   [《SeekDB 源码入门学习13篇 汇总》](202511/20251126_19.md)  
 ##### 202511/20251126_18.md   [《VectorChord-bm25 源码入门学习20篇 汇总》](202511/20251126_18.md)  
 ##### 202511/20251126_17.md   [《辩论话题: AI 原生数据库的终极形态“单节点”vs“分布式”, 谁将主导 RAG 生产环境?》](202511/20251126_17.md)  

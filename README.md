@@ -111,6 +111,17 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251128_11.md   [《Supabase 源码学习: 2.1.2 构建配置（Build Configuration）》](202511/20251128_11.md)  
+##### 202511/20251128_10.md   [《PostgreSQL 19 preview - 物理standby逻辑复制槽状态同步异常监控》](202511/20251128_10.md)  
+##### 202511/20251128_09.md   [《PG不合群, PG没朋友! PG的臭毛病要改改了》](202511/20251128_09.md)  
+##### 202511/20251128_08.md   [《世界排名前3的数据库, 正在被这个产品“放血”》](202511/20251128_08.md)  
+##### 202511/20251128_07.md   [《PostgreSQL AI 原生插件来了: pg_ai_query》](202511/20251128_07.md)  
+##### 202511/20251128_06.md   [《PostGIS: 巧用大数定律和采用功能, 性能可提升百倍》](202511/20251128_06.md)  
+##### 202511/20251128_05.md   [《PostgreSQL 19 preview - 刷脏调试利器“干预缓存, 标记脏页”》](202511/20251128_05.md)  
+##### 202511/20251128_04.md   [《AI论文解读 | Beyond The Limits: A Survey of Techniques to Extend The Context Length in Large Language Models》](202511/20251128_04.md)  
+##### 202511/20251128_03.md   [《AI论文解读 | A Comprehensive Survey on Graph Reduction: Sparsification, Coarsening, and Condensation》](202511/20251128_03.md)  
+##### 202511/20251128_02.md   [《AI论文解读 | DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models》](202511/20251128_02.md)  
+##### 202511/20251128_01.md   [《AI论文解读 | DeepSeekMath-V2: Towards Self-Verifiable Mathematical Reasoning》](202511/20251128_01.md)  
 ##### 202511/20251127_15.md   [《AI论文解读 | VStream: A Distributed Streaming Vector Search System》](202511/20251127_15.md)  
 ##### 202511/20251127_14.md   [《Supabase 源码学习: 2.1.1 应用程序架构 (Application Architecture)》](202511/20251127_14.md)  
 ##### 202511/20251127_13.md   [《Supabase 源码学习: 2.1 Studio 控制面板 (Studio Dashboard)》](202511/20251127_13.md)  

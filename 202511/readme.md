@@ -2,6 +2,17 @@
   
 ### 文章列表  
 ----  
+##### 20251128_11.md   [《Supabase 源码学习: 2.1.2 构建配置（Build Configuration）》](20251128_11.md)  
+##### 20251128_10.md   [《PostgreSQL 19 preview - 物理standby逻辑复制槽状态同步异常监控》](20251128_10.md)  
+##### 20251128_09.md   [《PG不合群, PG没朋友! PG的臭毛病要改改了》](20251128_09.md)  
+##### 20251128_08.md   [《世界排名前3的数据库, 正在被这个产品“放血”》](20251128_08.md)  
+##### 20251128_07.md   [《PostgreSQL AI 原生插件来了: pg_ai_query》](20251128_07.md)  
+##### 20251128_06.md   [《PostGIS: 巧用大数定律和采用功能, 性能可提升百倍》](20251128_06.md)  
+##### 20251128_05.md   [《PostgreSQL 19 preview - 刷脏调试利器“干预缓存, 标记脏页”》](20251128_05.md)  
+##### 20251128_04.md   [《AI论文解读 | Beyond The Limits: A Survey of Techniques to Extend The Context Length in Large Language Models》](20251128_04.md)  
+##### 20251128_03.md   [《AI论文解读 | A Comprehensive Survey on Graph Reduction: Sparsification, Coarsening, and Condensation》](20251128_03.md)  
+##### 20251128_02.md   [《AI论文解读 | DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models》](20251128_02.md)  
+##### 20251128_01.md   [《AI论文解读 | DeepSeekMath-V2: Towards Self-Verifiable Mathematical Reasoning》](20251128_01.md)  
 ##### 20251127_15.md   [《AI论文解读 | VStream: A Distributed Streaming Vector Search System》](20251127_15.md)  
 ##### 20251127_14.md   [《Supabase 源码学习: 2.1.1 应用程序架构 (Application Architecture)》](20251127_14.md)  
 ##### 20251127_13.md   [《Supabase 源码学习: 2.1 Studio 控制面板 (Studio Dashboard)》](20251127_13.md)  

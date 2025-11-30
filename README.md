@@ -111,6 +111,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202511/20251130_04.md   [《AI论文解读 | Starling: An I/O-Efficient Disk-Resident Graph Index Framework for High-Dimensional Vector Similarity Search on Data Segment》](202511/20251130_04.md)  
+##### 202511/20251130_03.md   [《AI论文解读 | Table-GPT: Table-tuned GPT for Diverse Table Tasks》](202511/20251130_03.md)  
+##### 202511/20251130_02.md   [《AI论文解读 | CodeS: Towards Building Open-source Language Models for Text-to-SQL》](202511/20251130_02.md)  
+##### 202511/20251130_01.md   [《AI论文解读 | PQCache: Product Quantization-based KVCache for Long Context LLM Inference》](202511/20251130_01.md)  
 ##### 202511/20251128_11.md   [《Supabase 源码学习: 2.1.2 构建配置（Build Configuration）》](202511/20251128_11.md)  
 ##### 202511/20251128_10.md   [《PostgreSQL 19 preview - 物理standby逻辑复制槽状态同步异常监控》](202511/20251128_10.md)  
 ##### 202511/20251128_09.md   [《PG不合群, PG没朋友! PG的臭毛病要改改了》](202511/20251128_09.md)  

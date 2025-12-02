@@ -111,6 +111,16 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202512/20251202_10.md   [《大学生数据库实践课开课了 : 1 大纲》](202512/20251202_10.md)  
+##### 202512/20251202_09.md   [《最近邻索引 (Nearest Neighbor Indexes)：Pgvector 中的 IVFFlat 索引是什么，它们如何工作》](202512/20251202_09.md)  
+##### 202512/20251202_08.md   [《暴雷! PG在AI赛道可能要凉凉》](202512/20251202_08.md)  
+##### 202512/20251202_07.md   [《postgresml 源码学习: 2 核心系统架构（Core System Architecture）》](202512/20251202_07.md)  
+##### 202512/20251202_06.md   [《postgresml 源码学习: 1 概览》](202512/20251202_06.md)  
+##### 202512/20251202_05.md   [《劲爆新闻: DuckDB Iceberg 数据湖插件支持实时 update/delete 了》](202512/20251202_05.md)  
+##### 202512/20251202_04.md   [《AI论文解读 | High-performance Effective Scientific Error-bounded Lossy Compression with Auto-tuned Multi-component Interpolation》](202512/20251202_04.md)  
+##### 202512/20251202_03.md   [《AI论文解读 | Billion-Scale Similarity Search Using a Hybrid Indexing Approach with Advanced Filtering》](202512/20251202_03.md)  
+##### 202512/20251202_02.md   [《AI论文解读 | DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models》](202512/20251202_02.md)  
+##### 202512/20251202_01.md   [《AI论文解读 | DeepSeek-V3.2-Exp: Boosting Long-Context Efficiency with DeepSeek Sparse Attention》](202512/20251202_01.md)  
 ##### 202512/20251201_05.md   [《AI 纠正了我的愚蠢: 如何让PG自定义聚合函数的finalfunc仅执行一次?》](202512/20251201_05.md)  
 ##### 202512/20251201_04.md   [《AI论文解读 | Origin-Destination Travel Time Oracle for Map-based Services》](202512/20251201_04.md)  
 ##### 202512/20251201_03.md   [《AI论文解读 | RaBitQ: Quantizing High-Dimensional Vectors with A Theoretical Error Bound for Approximate Nearest Neighbor Search》](202512/20251201_03.md)  

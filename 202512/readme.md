@@ -2,6 +2,14 @@
   
 ### 文章列表  
 ----  
+##### 20251203_08.md   [《Lance 源码学习: 2 核心架构 (Core Architecture)》](20251203_08.md)  
+##### 20251203_07.md   [《Lance 源码学习: 1 概述》](20251203_07.md)  
+##### 20251203_06.md   [《“基于 AI 的应用”是否注定导致数据库“长事务”成为主流？》](20251203_06.md)  
+##### 20251203_05.md   [《“实时数据库数据”是否应纳入“大模型训练”体系？》](20251203_05.md)  
+##### 20251203_04.md   [《AI论文解读 | ProtoPFormer: Concentrating on Prototypical Parts in Vision Transformers for Interpretable Image Recognition》](20251203_04.md)  
+##### 20251203_03.md   [《AI论文解读 | Large Language Models Are Not Strong Abstract Reasoners》](20251203_03.md)  
+##### 20251203_02.md   [《AI论文解读 | ScreenAgent: A Vision Language Model-driven Computer Control Agent》](20251203_02.md)  
+##### 20251203_01.md   [《AI论文解读 | ChatSpot: Bootstrapping Multimodal LLMs via Precise Referring Instruction Tuning》](20251203_01.md)  
 ##### 20251202_10.md   [《大学生数据库实践课开课了 : 1 大纲》](20251202_10.md)  
 ##### 20251202_09.md   [《最近邻索引 (Nearest Neighbor Indexes)：Pgvector 中的 IVFFlat 索引是什么，它们如何工作》](20251202_09.md)  
 ##### 20251202_08.md   [《暴雷! PG在AI赛道可能要凉凉》](20251202_08.md)  

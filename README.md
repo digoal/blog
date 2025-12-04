@@ -111,6 +111,13 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202512/20251204_07.md   [《Lance 源码学习: 3.2 模式与数据类型 (Schema and Data Types)》](202512/20251204_07.md)  
+##### 202512/20251204_06.md   [《Lance 源码学习: 3.1 数据集 API 参考 (Dataset API Reference)》](202512/20251204_06.md)  
+##### 202512/20251204_05.md   [《Lance 源码学习: 3 Dataset Management (数据集管理)》](202512/20251204_05.md)  
+##### 202512/20251204_04.md   [《AI论文解读 | Transformers in Time Series: A Survey》](202512/20251204_04.md)  
+##### 202512/20251204_03.md   [《AI论文解读 | From Skepticism to Acceptance: Simulating the Attitude Dynamics Toward Fake News》](202512/20251204_03.md)  
+##### 202512/20251204_02.md   [《AI论文解读 | Safety of Multimodal Large Language Models on Images and Texts》](202512/20251204_02.md)  
+##### 202512/20251204_01.md   [《AI论文解读 | DuckDB on xNVMe》](202512/20251204_01.md)  
 ##### 202512/20251203_08.md   [《Lance 源码学习: 2 核心架构 (Core Architecture)》](202512/20251203_08.md)  
 ##### 202512/20251203_07.md   [《Lance 源码学习: 1 概述》](202512/20251203_07.md)  
 ##### 202512/20251203_06.md   [《“基于 AI 的应用”是否注定导致数据库“长事务”成为主流？》](202512/20251203_06.md)  

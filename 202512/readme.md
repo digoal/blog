@@ -2,6 +2,12 @@
   
 ### 文章列表  
 ----  
+##### 20251207_04.md   [《AI论文解读 | Neural Attributed Community Search at Billion Scale》](20251207_04.md)  
+##### 20251207_03.md   [《AI论文解读 | Proving Query Equivalence Using Linear Integer Arithmetic》](20251207_03.md)  
+##### 20251207_02.md   [《AI论文解读 | Learning to Optimize LSM-trees: Towards A ReinforcementLearning based Key-Value Store for Dynamic Workloads》](20251207_02.md)  
+##### 20251207_01.md   [《AI论文解读 | Latent Collaboration in Multi-Agent Systems》](20251207_01.md)  
+##### 20251205_02.md   [《大学生数据库实践课, docker 镜像》](20251205_02.md)  
+##### 20251205_01.md   [《AI论文解读 | On the Paradox of Learning to Reason from Data》](20251205_01.md)  
 ##### 20251204_07.md   [《Lance 源码学习: 3.2 模式与数据类型 (Schema and Data Types)》](20251204_07.md)  
 ##### 20251204_06.md   [《Lance 源码学习: 3.1 数据集 API 参考 (Dataset API Reference)》](20251204_06.md)  
 ##### 20251204_05.md   [《Lance 源码学习: 3 Dataset Management (数据集管理)》](20251204_05.md)  

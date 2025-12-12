@@ -2,9 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20251212_09.md   [《欧洲核子研究组织 (CERN) 如何利用 TimescaleDB 助力开创性物理学研究》](20251212_09.md)  
+##### 20251212_08.md   [《PostgreSQL 数据扫描方法原理详解》](20251212_08.md)  
 ##### 20251212_07.md   [《Lance 源码学习: 5.3 Merge Insert Operations（合并插入操作）》](20251212_07.md)  
 ##### 20251212_06.md   [《Lance 源码学习: 5.2 更新和删除操作 (Update and Delete Operations)》](20251212_06.md)  
 ##### 20251212_05.md   [《Lance 源码学习: 5.1 插入和追加操作（Insert and Append Operations）》](20251212_05.md)  
+##### 20251212_04.md   [《AI论文解读 | Unsupervised Misaligned Infrared and Visible Image Fusion via Cross-Modality Image Generation and Registration》](20251212_04.md)  
+##### 20251212_03.md   [《AI论文解读 | A Survey of Vision-Language Pre-Trained Models》](20251212_03.md)  
+##### 20251212_02.md   [《AI论文解读 | The Shapley Value in Machine Learning》](20251212_02.md)  
+##### 20251212_01.md   [《AI论文解读 | Joint-MAE: 2D-3D Joint Masked Autoencoders for 3D Point Cloud Pre-training》](20251212_01.md)  
 ##### 20251211_23.md   [《大学生数据库实践课: 19.3 PGQ 金融反欺诈风控系统实践》](20251211_23.md)  
 ##### 20251211_22.md   [《大学生数据库实践课: 19.2 PGQ 航空数据分析实践》](20251211_22.md)  
 ##### 20251211_21.md   [《大学生数据库实践课: 19.1 PGQ 社交场景实践》](20251211_21.md)  

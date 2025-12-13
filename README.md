@@ -119,6 +119,7 @@ digoal's|PostgreSQL|文章|归类
 ##### 202512/20251213_07.md   [《跟 PG FDW 瓶颈说拜拜, 异步流式传输来了!》](202512/20251213_07.md)  
 ##### 202512/20251213_06.md   [《MongoDB CEO 炮轰 PostgreSQL 根本扩展不了》](202512/20251213_06.md)  
 ##### 202512/20251213_05.md   [《复刻人类开发者》](202512/20251213_05.md)  
+##### 202512/20251213_04.md   [《PostgreSQL 19 preview - 有slot同步时强制 promote》](202512/20251213_04.md)  
 ##### 202512/20251213_03.md   [《AI论文解读 | HongTu: Scalable Full-Graph GNN Training on Multiple GPUs》](202512/20251213_03.md)  
 ##### 202512/20251213_02.md   [《AI论文解读 | Vexless: A Serverless Vector Data Management System Using Cloud Functions》](202512/20251213_02.md)  
 ##### 202512/20251213_01.md   [《AI论文解读 | Cloudspecs: Cloud Hardware Evolution Through the Looking Glass》](202512/20251213_01.md)  

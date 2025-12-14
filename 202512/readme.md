@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20251214_01.md   [《AI论文解读 | Machine Unlearning in Learned Databases: An Experimental Analysis》](20251214_01.md)  
 ##### 20251213_12.md   [《clickhouse 来抱 PG 大腿了?》](20251213_12.md)  
 ##### 20251213_11.md   [《pgAdmin 4 v9.11 版本发布》](20251213_11.md)  
 ##### 20251213_10.md   [《别再让数据积灰, whoDB“数据探索”工具来了》](20251213_10.md)  

@@ -2,6 +2,10 @@
   
 ### 文章列表  
 ----  
+##### 20251215_04.md   [《PostgreSQL 19 preview - 32位XID狗皮膏药到底能不能撕掉?》](20251215_04.md)  
+##### 20251215_03.md   [《PostgreSQL 19 preview - 提供统计信息持久化增强接口》](20251215_03.md)  
+##### 20251215_02.md   [《PostgreSQL 19 preview - 再次提高逻辑复制可靠性》](20251215_02.md)  
+##### 20251215_01.md   [《AI论文解读 | Generative》](20251215_01.md)  
 ##### 20251214_01.md   [《AI论文解读 | Machine Unlearning in Learned Databases: An Experimental Analysis》](20251214_01.md)  
 ##### 20251213_12.md   [《clickhouse 来抱 PG 大腿了?》](20251213_12.md)  
 ##### 20251213_11.md   [《pgAdmin 4 v9.11 版本发布》](20251213_11.md)  

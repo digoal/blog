@@ -111,10 +111,11 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202512/20251216_01.md   [《AI论文解读 | FastDiff: A Fast Conditional Diffusion Model for High-Quality Speech Synthesis》](202512/20251216_01.md)  
 ##### 202512/20251215_04.md   [《PostgreSQL 19 preview - 32位XID狗皮膏药到底能不能撕掉?》](202512/20251215_04.md)  
 ##### 202512/20251215_03.md   [《PostgreSQL 19 preview - 提供统计信息持久化增强接口》](202512/20251215_03.md)  
 ##### 202512/20251215_02.md   [《PostgreSQL 19 preview - 再次提高逻辑复制可靠性》](202512/20251215_02.md)  
-##### 202512/20251215_01.md   [《AI论文解读 | Generative》](202512/20251215_01.md)  
+##### 202512/20251215_01.md   [《AI论文解读 | SVTR: Scene Text Recognition with a Single Visual Model》](202512/20251215_01.md)  
 ##### 202512/20251214_01.md   [《AI论文解读 | Machine Unlearning in Learned Databases: An Experimental Analysis》](202512/20251214_01.md)  
 ##### 202512/20251213_12.md   [《clickhouse 来抱 PG 大腿了?》](202512/20251213_12.md)  
 ##### 202512/20251213_11.md   [《pgAdmin 4 v9.11 版本发布》](202512/20251213_11.md)  

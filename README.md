@@ -111,6 +111,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202512/20251217_03.md   [《看不上AI的都会被AI抛弃: 人与AI和谐共生, 我1分钟搞定了向量教学例子》](202512/20251217_03.md)  
+##### 202512/20251217_02.md   [《大学生数据库实践课 : 课后大作业》](202512/20251217_02.md)  
+##### 202512/20251217_01.md   [《AI论文解读 | Boundary-Guided Camouflaged Object Detection》](202512/20251217_01.md)  
 ##### 202512/20251216_01.md   [《AI论文解读 | FastDiff: A Fast Conditional Diffusion Model for High-Quality Speech Synthesis》](202512/20251216_01.md)  
 ##### 202512/20251215_04.md   [《PostgreSQL 19 preview - 32位XID狗皮膏药到底能不能撕掉?》](202512/20251215_04.md)  
 ##### 202512/20251215_03.md   [《PostgreSQL 19 preview - 提供统计信息持久化增强接口》](202512/20251215_03.md)  

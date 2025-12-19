@@ -2,6 +2,9 @@
   
 ### 文章列表  
 ----  
+##### 20251219_03.md   [《德说-第367期, 私有化AI编程服务到底有没有商业前景?》](20251219_03.md)  
+##### 20251219_02.md   [《Timescale 决定开源 pg_textsearch》](20251219_02.md)  
+##### 20251219_01.md   [《德说-第366期, 我的2025年度总结和2026行业展望》](20251219_01.md)  
 ##### 20251217_03.md   [《看不上AI的都会被AI抛弃: 人与AI和谐共生, 我1分钟搞定了向量教学例子》](20251217_03.md)  
 ##### 20251217_02.md   [《大学生数据库实践课 : 课后大作业》](20251217_02.md)  
 ##### 20251217_01.md   [《AI论文解读 | Boundary-Guided Camouflaged Object Detection》](20251217_01.md)  
@@ -113,7 +116,7 @@
 ##### 20251203_03.md   [《AI论文解读 | Large Language Models Are Not Strong Abstract Reasoners》](20251203_03.md)  
 ##### 20251203_02.md   [《AI论文解读 | ScreenAgent: A Vision Language Model-driven Computer Control Agent》](20251203_02.md)  
 ##### 20251203_01.md   [《AI论文解读 | ChatSpot: Bootstrapping Multimodal LLMs via Precise Referring Instruction Tuning》](20251203_01.md)  
-##### 20251202_10.md   [《大学生数据库实践课开课了 : 1 大纲》](20251202_10.md)  
+##### 20251202_10.md   [《大学生数据库实践课开课了 : 1 大纲 及 教程入口》](20251202_10.md)  
 ##### 20251202_09.md   [《最近邻索引 (Nearest Neighbor Indexes)：Pgvector 中的 IVFFlat 索引是什么，它们如何工作》](20251202_09.md)  
 ##### 20251202_08.md   [《暴雷! PG在AI赛道可能要凉凉》](20251202_08.md)  
 ##### 20251202_07.md   [《postgresml 源码学习: 2 核心系统架构（Core System Architecture）》](20251202_07.md)  

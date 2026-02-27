@@ -162,12 +162,12 @@ do
 ###      echo "  " >> ./${file}
 ###    fi
 ##
-    POLARONEURL=`grep "8642f60e04ed0c814bf9cb9677976bd4" ${file}|grep -c "8642f60e04ed0c814bf9cb9677976bd4"`
-    if [ $POLARONEURL -ne 1 ]; then
-      echo "  " >> ./${file}
-      echo "#### [PolarDB 学习图谱](https://www.aliyun.com/database/openpolardb/activity \"8642f60e04ed0c814bf9cb9677976bd4\")" >> ./${file}
-      echo "  " >> ./${file}
-    fi
+#    POLARONEURL=`grep "8642f60e04ed0c814bf9cb9677976bd4" ${file}|grep -c "8642f60e04ed0c814bf9cb9677976bd4"`
+#    if [ $POLARONEURL -ne 1 ]; then
+#      echo "  " >> ./${file}
+#      echo "#### [PolarDB 学习图谱](https://www.aliyun.com/database/openpolardb/activity \"8642f60e04ed0c814bf9cb9677976bd4\")" >> ./${file}
+#      echo "  " >> ./${file}
+#    fi
 ## 
 ###    POLARDBYUNDASHI=`grep "e0495c413bedacabb75ff1e880be465a" $file|grep -c "e0495c413bedacabb75ff1e880be465a"`
 ###    if [ $POLARDBYUNDASHI -ne 1 ]; then

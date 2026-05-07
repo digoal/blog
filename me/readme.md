@@ -23,6 +23,26 @@ digoal(德哥)
 ```
 简短介绍
 简介: zzz, 网名德哥(digoal). 数据库开源发展联盟(简称 COSDA)理事成员, PostgreSQL 中国社区发起人之一, 荣获40余项数据库领域专利. 曾就职于阿里云(至今)、杭州斯凯(SkyMobi), 担任过DBA、架构师、产品经理、开源社区运营与生态建设等工作. 长期致力于推动开源数据库技术、生态在中国的发展与开源产业人才培养. 曾荣获阿里巴巴麒麟布道师最高荣誉、OSCAR开源尖峰人物、PG分会ACED、PG中文社区猛犸象最高奖项. 未来将长期致力于AI、PostgreSQL、DuckDB领域研究及个人感悟等分享.  
+
+title:
+zzz(digoal, 德哥):
+PostgreSQL 中国社区发起人之一
+中国开源软件推进联盟PostgreSQL分会特聘资深领域专家
+中国开源软件推进联盟PostgreSQL分会ACED
+数据库开源发展联盟(简称 COSDA)理事成员
+IvorySQL 数据库顾问团成员
+HaloDB 数据库顾问团成员
+海量数据库顾问团成员
+2018届OSCAR开源尖峰人物
+“digoal德哥”公众号与视频号主理人
+“https://github.com/digoal/blog”项目主理人
+曾任阿里云数据库首席专家团队成员
+阿里巴巴麒麟布道师
+阿里云RDS PostgreSQL数据库架构师
+阿里云RDS PostgreSQL数据库高级产品专家
+阿里云PolarDB数据库高级产品专家
+阿里云开源数据库社区高级运营专家
+SKIMOBI数据库团队负责人
 ```
    
 经过坚持更新, 全网粉丝已4.6万+, 文章及视频传播量超2000万人次.    

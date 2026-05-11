@@ -88,6 +88,8 @@
   
 - `higher-order-article-writer`: 给出 url 或文章内容, 仔细阅读并消化后, 写一篇更高层次的博弈文章. 
   
+- `product-tech-influence-article`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
+  
 ## only for claude web
 `skills_for_claude_web` 目录中的 skill 仅用于 Claude web 版.
   
@@ -127,6 +129,8 @@
 - `personal-planner`: 基于提问者提供的背景、资源等信息. 编写符合提问者的未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中.  
   
 - `enterprise-planner`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
+  
+- `product-neutral-advisor`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中  
   
 ## 依赖  
 1、  

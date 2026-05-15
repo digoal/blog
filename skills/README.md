@@ -12,6 +12,10 @@
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
 - `buffett`: 巴菲特思想解读股票代码. 来自 https://github.com/agi-now/buffett-skills  
+   其他相关项目获文档  
+   - [《把 MiniMax 接入 Claude, 给 TradingAgents 添加 MiniMax 模型供应商支持 玩转股票深度分析》](../202603/20260330_07.md)  
+   - [《TradingAgents: 多 Agent 股票分析与交易决策系统试用》](../202603/20260327_03.md)  
+   - [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](../202603/20260325_01.md)  
   
 - `digoal`：基于 digoal/德哥博客沉淀，面向 PostgreSQL、AI+数据库、开源生态、技术文章和架构判断，输出证据驱动、场景优先、可验证的德哥式分析与方案。  
   
@@ -90,6 +94,8 @@
   
 - `product-tech-influence-article`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
   
+- `industry-news-insight`: 输入某个行业名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
+  
 ## only for claude web
 `skills_for_claude_web` 目录中的 skill 仅用于 Claude web 版.
   
@@ -131,6 +137,8 @@
 - `enterprise-planner`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
   
 - `product-neutral-advisor`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中  
+  
+- `industry-insight-writer`: 输入某个行业名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中
   
 ## 依赖  
 1、  

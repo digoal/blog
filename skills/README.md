@@ -140,6 +140,8 @@
   
 - `industry-insight-writer`: 输入某个行业名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中
   
+- `podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  
+  
 ## 依赖  
 1、  
   

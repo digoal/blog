@@ -49,6 +49,8 @@
   
 - `financial-report-analysis`: 财报分析, 输入公司财报文件或URL, 输出专业的财报解读文章.  
   
+- `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出markdown格式文件, 保存到当前项目 markdown 目录中. 
+  
 - `opensourcefaq`: 解答与开源产品有关的问题. 
   ```
   输入: 
@@ -118,6 +120,8 @@
 - `db-foundation-course`: 数据库筑基课 写作 skill, 输入数据库筑基课的文章标题 以及 相关的参考资料(通常是该篇数据库筑基课相关的技术文档、产品手册、开源项目地址、deepwiki地址、论文地址等). 输出最终 markdown 文件.   
   
 - `financial-report-analyst`: 财报分析, 输入公司财报文件或URL, 输出专业的财报解读文章.  
+  
+- `industry-chain-analyst`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出markdown格式文件, 保存到当前项目 markdown 目录中.  
   
 - `opensourcefaq`: 解答与开源产品有关的问题.
   ```

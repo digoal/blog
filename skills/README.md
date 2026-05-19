@@ -100,6 +100,16 @@
   
 - `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
   
+- `huashu-nuwa` , `darwin-skill` : 女娲skill造人(蒸馏), 达尔文skill进化
+  ```
+  cd ~/.codex/skills
+  git clone --depth 1 https://github.com/alchaincyf/nuwa-skill
+  git clone --depth 1 https://github.com/alchaincyf/darwin-skill
+  
+  cp -r nuwa-skill ~/.claude/skills/
+  cp -r darwin-skill ~/.claude/skills/
+  ```
+  
 ## only for claude web
 `skills_for_claude_web` 目录中的 skill 仅用于 Claude web 版.
   

@@ -7,7 +7,7 @@ description: Read a provided URL, local file, or pasted article, digest its core
 
 ## Overview
 
-Use this skill to transform an existing article into a sharper, higher-level standalone article. Digest the source deeply, but do not expose the scaffolding by default. The final article should read like an original piece: concise, focused, source-backed, and centered on one clear thesis.
+Use this skill to transform an existing article into a sharper, higher-level standalone article. Digest the source deeply, but do not expose the scaffolding or describe what the source article said unless the user explicitly asks for critique. The final article should read like an original piece: concise, focused, source-backed, and centered on one clear thesis.
 
 Default to Chinese output unless the user explicitly asks for another language.
 
@@ -51,6 +51,7 @@ Default to Chinese output unless the user explicitly asks for another language.
    - Create or reuse `markdown/` under the current project.
    - Save the file with a descriptive slug and date when useful.
    - Write a clean standalone article. Do not include sections named "旧文真正说了什么", "旧逻辑的关键漏洞", "如果基石假设崩塌", "逻辑三洽检验", or similar analysis scaffolding unless the user explicitly asks for an audit-style output.
+   - Treat the source article as internal raw material. Do not write "原文认为", "原文提到", "原文实验说明", "旧文指出", "作者说", "source article", or similar phrases in the final article unless the user asks for an audit, critique, or comparison.
    - Include at least one useful visual. Prefer one Mermaid diagram for structure or flow. Add inline SVG only when it explains a concept better than text or Mermaid; do not add decorative visuals.
    - Keep the article compact. For ordinary blog/news rewrites, target about 900-1,600 Chinese characters of body text before references unless the user asks for a long article.
 
@@ -98,8 +99,8 @@ flowchart LR
 
 - Keep the new article higher-level than the source: more abstract in mechanism, more concrete in evidence.
 - Use short, forceful section titles.
-- Make the article feel original. Use the source as raw material, not as the visible structure.
-- Avoid explicit "old article vs new article" framing unless the user asks for critique, audit, or deconstruction.
+- Make the article feel original and self-contained. Use the source as raw material, not as the visible structure or an object being summarized.
+- Avoid explicit "old article vs new article" framing unless the user asks for critique, audit, or deconstruction. Do not narrate how the source article argued; present the rebuilt thesis directly.
 - Keep scope tight. Prefer 2-4 strong sections over exhaustive coverage.
 - Highlight the central point early, then support it with the fewest necessary facts and cases.
 - Prefer direct declarative framing over forced binary contrast. Titles, subtitles, blockquotes, and section headings should usually state the new judgment directly, such as "DuckDB 正式将 AI 向量检索变成一等公民".

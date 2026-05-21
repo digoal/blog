@@ -102,7 +102,8 @@ flowchart LR
 - Avoid explicit "old article vs new article" framing unless the user asks for critique, audit, or deconstruction.
 - Keep scope tight. Prefer 2-4 strong sections over exhaustive coverage.
 - Highlight the central point early, then support it with the fewest necessary facts and cases.
-- Use "不是...而是..." sparingly. It can clarify a core contrast once, but repeated use makes the article feel formulaic.
+- Prefer direct declarative framing over forced binary contrast. Titles, subtitles, blockquotes, and section headings should usually state the new judgment directly, such as "DuckDB 正式将 AI 向量检索变成一等公民".
+- Avoid "不是...而是..." by default. Use it only when a genuine misconception must be corrected and a direct sentence would be weaker; never use it as a habitual narrative template.
 - Explain concepts enough for an intelligent non-specialist without diluting the argument.
 - Avoid generic rewrites, moralizing, empty trend language, and unsourced data.
 - Do not fabricate article content, data, citations, cases, or quotes.

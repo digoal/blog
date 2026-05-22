@@ -160,6 +160,8 @@
   
 - `bug-hunter`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
   
+- `article-rewriter`: 消化内容后, 从更高维度重写. 输入URL或原始内容, 输出markdown到当前项目markdown目录中.  
+  
 ## 依赖  
 1、  
   

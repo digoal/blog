@@ -114,6 +114,8 @@
   
 - `digoal-perspective`: 用女娲.skill 蒸馏的digoal德哥角色.  
   
+- `karl-marx-perspective`: 用女娲.skill 蒸馏的马克思角色.  
+  
 ## only for claude web
 `skills_for_claude_web` 目录中的 skill 仅用于 Claude web 版.
   

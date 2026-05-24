@@ -43,7 +43,19 @@
   
 - `pgfaq`: clone https://github.com/postgres/postgres 源码, 将其作为项目目录. 输入 PostgreSQL 相关的问题, 将回答结果保存到项目目录的 markdown 子目录中. 回答时会参考代码、文档和deepwiki, 并对回答内容正确性进行校验.  
   
-- `database-foundation-course-writer`: 数据库筑基课 写作 skill, 输入数据库筑基课的文章标题 以及 相关的参考资料(通常是该篇数据库筑基课相关的技术文档、产品手册、开源项目地址、deepwiki地址、论文地址等). 输出最终 markdown 文件并保存到当前项目 markdown 文件夹中. 例如  `“数据库筑基课 - 索引之 rum” , 参考资料 https://github.com/postgrespro/rum https://deepwiki.com/postgrespro/rum`  
+- `database-foundation-course-writer`: 数据库筑基课 写作 skill, 输入数据库筑基课的文章标题 以及 相关的参考资料(通常是该篇数据库筑基课相关的技术文档、产品手册、开源项目地址、deepwiki地址、论文地址等). 输出最终 markdown 文件并保存到当前项目 markdown 文件夹中. 例如:  
+  ```
+  文章标题:
+    数据库筑基课 - 索引组织表(Index-Organized Table, IOT)
+  项目源码(已克隆到当前项目如下目录中): 
+    orioledb 
+  项目 deepwiki reponame: 
+    orioledb/orioledb
+  参考论文: 
+    Oracle8i Index-Organized Table and its Application to New Domains
+    The Ubiquitous B-Tree
+    Efficient Locking for Concurrent Operations on B-Trees
+  ```
   
 - `article-to-podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  例如: `$article-to-podcast-script 根据 markdown/finance-beginner-explainer-2026-04-22.md 文章, 生成 2 人播客脚本, 字数限定在1000字内, 如果无法完成限定, 请在结尾时引导听众阅读“digoal德哥”公众号发布的文字稿.` . 生成完之后还可以调整文件, 或者生成是告知风格(如犀利、金句频出等) . 然后用这篇文章介绍的方法, 生成播客语音. [《Mac本地生成 播客配音, 想要谁的声音都行, 还能带BGM》](../202604/20260422_02.md)  (非常耗内存, 如果你的播客很长, 建议剪成几篇分开生成, 或者升级内存) 
   

@@ -1,47 +1,8 @@
 这些 skill 的生成方式: [《如何创建 SKILL》](../202604/20260421_02.md)  
   
 ## skill 介绍
-- `daily-finance`：每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
-  
-- `finance-core-analysis`：基于 `daily-finance` 的事实底稿，再联网复核关键数据，用流动性、利率、风险偏好、资金流、政策和资产负债表模型生成可发布的深度财经分析。  
-  
-- `finance-explosive-article`：基于前两份财经文档和最新外部数据校验，用“第一性原理 + 反直觉 + 系统模型”的德哥风格生成公众号爆款财经文章。  
-  
-- `finance-beginner-explainer`: 基于 `finance-explosive-article` 的文案, 面向小白进行更细致的解读, 必要时会用到 `daily-finance` 和 `finance-core-analysis` 增加证据链完整性.  
-  
-- `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
-  
-- `buffett`: 巴菲特思想解读股票代码. 来自 https://github.com/agi-now/buffett-skills  
-   其他相关项目获文档  
-   - [《把 MiniMax 接入 Claude, 给 TradingAgents 添加 MiniMax 模型供应商支持 玩转股票深度分析》](../202603/20260330_07.md)  
-   - [《TradingAgents: 多 Agent 股票分析与交易决策系统试用》](../202603/20260327_03.md)  
-   - [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](../202603/20260325_01.md)  
-  
-- `digoal`：基于 digoal/德哥博客沉淀，面向 PostgreSQL、AI+数据库、开源生态、技术文章和架构判断，输出证据驱动、场景优先、可验证的德哥式分析与方案。  
-  
-- `github-weekly-trending`: 输入从 `https://github.com/trending?since=weekly&spoken_language_code=` 拷贝的内容, 编写本周热门开源项目文章, 输出到当前项目 markdown 目录中.   
-  
-- `open-source-project-article`: 输入开源项目地址, 深度分析该开源项目, 输出到当前项目 markdown 目录中.  
-  
-- `marketing-wechat-operator`: `微信公众号运营`, 编写爆款文章.  
-
-- `postgres-commit-history-article`: 先进入 postgres 项目目录, 输入 `commitid1 commitid2` , 分析并解读这两个 commitid 中间的所有提交 (也包括这两个 commit), 输出到当前项目 markdown 目录中.
-  
-- `paper-interpretation`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文. 例如用于解读 AI 论文 https://arxiv.org/abs/2604.14141 https://arxiv.org/abs/2508.02739 
-  ````
-  AI 论文:    
-  - https://huggingface.co/papers/trending
-  - https://huggingface.co/papers    
-  - https://github.com/tensorchord/Awesome-LLMOps    
-      
-  数据库 论文:    
-  - https://github.com/lonng/db-papers    
-      
-  AI4DB 论文:    
-  - https://github.com/LumingSun/ML4DB-paper-list
-  ````
-  
-- `pgfaq`: clone https://github.com/postgres/postgres 源码, 将其作为项目目录. 输入 PostgreSQL 相关的问题, 将回答结果保存到项目目录的 markdown 子目录中. 回答时会参考代码、文档和deepwiki, 并对回答内容正确性进行校验.  
+### 底层公理 
+- `axiom-explainer`: 输入公理/定理/观点, 输出把“观点 / 公理 / 定理 / 理论系统”生成面向学生的中文 Markdown 文章. 参考 [《德说-第100期, 人生最重要的事3: 建立公理体系和逻辑能力》](../202206/20220610_01.md)  
   
 - `database-foundation-course-writer`: 数据库筑基课 写作 skill, 输入数据库筑基课的文章标题 以及 相关的参考资料(通常是该篇数据库筑基课相关的技术文档、产品手册、开源项目地址、deepwiki地址、论文地址等). 输出最终 markdown 文件并保存到当前项目 markdown 文件夹中. 例如:  
   ```
@@ -57,11 +18,70 @@
     Efficient Locking for Concurrent Operations on B-Trees
   ```
   
-- `article-to-podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  例如: `$article-to-podcast-script 根据 markdown/finance-beginner-explainer-2026-04-22.md 文章, 生成 2 人播客脚本, 字数限定在1000字内, 如果无法完成限定, 请在结尾时引导听众阅读“digoal德哥”公众号发布的文字稿.` . 生成完之后还可以调整文件, 或者生成是告知风格(如犀利、金句频出等) . 然后用这篇文章介绍的方法, 生成播客语音. [《Mac本地生成 播客配音, 想要谁的声音都行, 还能带BGM》](../202604/20260422_02.md)  (非常耗内存, 如果你的播客很长, 建议剪成几篇分开生成, 或者升级内存) 
+- `douban-book-notes`: 输入豆瓣链接, 生成读书笔记.  
+  
+### 发现世界 bug
+- `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
+  
+### 行业分析
+- `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出markdown格式文件, 保存到当前项目 markdown 目录中. 
   
 - `financial-report-analysis`: 财报分析, 输入公司财报文件或URL, 输出专业的财报解读文章.  
   
-- `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出markdown格式文件, 保存到当前项目 markdown 目录中. 
+### 未来规划
+- `future-planning-advisor`: 基于提问者提供的背景、资源等信息. 编写符合提问者的未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中.  
+  
+- `enterprise-future-planning-advisor`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
+  
+### 财经类
+- `daily-finance`：每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
+  
+- `finance-core-analysis`：基于 `daily-finance` 的事实底稿，再联网复核关键数据，用流动性、利率、风险偏好、资金流、政策和资产负债表模型生成可发布的深度财经分析。  
+  
+- `finance-explosive-article`：基于前两份财经文档和最新外部数据校验，用“第一性原理 + 反直觉 + 系统模型”的德哥风格生成公众号爆款财经文章。  
+  
+- `finance-beginner-explainer`: 基于 `finance-explosive-article` 的文案, 面向小白进行更细致的解读, 必要时会用到 `daily-finance` 和 `finance-core-analysis` 增加证据链完整性.  
+  
+- `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
+  
+### 智囊团
+- `karl-marx-perspective`: 用女娲.skill 蒸馏的马克思角色.  
+  
+- `mao-zedong-perspective`: 用女娲.skill 蒸馏的教员角色.  
+
+- `digoal-perspective`: 用女娲.skill 蒸馏的digoal德哥角色.  
+  
+- `digoal`：基于 digoal/德哥博客沉淀，面向 PostgreSQL、AI+数据库、开源生态、技术文章和架构判断，输出证据驱动、场景优先、可验证的德哥式分析与方案。  
+  
+- `buffett`: 巴菲特思想解读股票代码. 来自 https://github.com/agi-now/buffett-skills  
+   其他相关项目获文档  
+   - [《把 MiniMax 接入 Claude, 给 TradingAgents 添加 MiniMax 模型供应商支持 玩转股票深度分析》](../202603/20260330_07.md)  
+   - [《TradingAgents: 多 Agent 股票分析与交易决策系统试用》](../202603/20260327_03.md)  
+   - [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](../202603/20260325_01.md)  
+  
+### 前沿跟进
+- `github-weekly-trending`: 输入从 `https://github.com/trending?since=weekly&spoken_language_code=` 拷贝的内容, 编写本周热门开源项目文章, 输出到当前项目 markdown 目录中.   
+  
+- `open-source-project-article`: 输入开源项目地址, 深度分析该开源项目, 输出到当前项目 markdown 目录中.  
+  
+- `paper-interpretation`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文. 例如用于解读 AI 论文 https://arxiv.org/abs/2604.14141 https://arxiv.org/abs/2508.02739 
+  ````
+  AI 论文:    
+  - https://huggingface.co/papers/trending
+  - https://huggingface.co/papers    
+  - https://github.com/tensorchord/Awesome-LLMOps    
+      
+  数据库 论文:    
+  - https://github.com/lonng/db-papers    
+      
+  AI4DB 论文:    
+  - https://github.com/LumingSun/ML4DB-paper-list
+  ````
+  
+### 开源项目问答助手
+- `postgres-commit-history-article`: 先进入 postgres 项目目录, 输入 `commitid1 commitid2` , 分析并解读这两个 commitid 中间的所有提交 (也包括这两个 commit), 输出到当前项目 markdown 目录中.
+  
+- `pgfaq`: clone https://github.com/postgres/postgres 源码, 将其作为项目目录. 输入 PostgreSQL 相关的问题, 将回答结果保存到项目目录的 markdown 子目录中. 回答时会参考代码、文档和deepwiki, 并对回答内容正确性进行校验.  
   
 - `opensourcefaq`: 解答与开源产品有关的问题. 
   ```
@@ -96,23 +116,21 @@
     postgres/postgres
   ```
   
-- `douban-book-notes`: 输入豆瓣链接, 生成读书笔记.  
-  
-- `axiom-explainer`: 输入公理/定理/观点, 输出把“观点 / 公理 / 定理 / 理论系统”生成面向学生的中文 Markdown 文章. 参考 [《德说-第100期, 人生最重要的事3: 建立公理体系和逻辑能力》](../202206/20220610_01.md)  
-  
-- `future-planning-advisor`: 基于提问者提供的背景、资源等信息. 编写符合提问者的未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中.  
-  
-- `enterprise-future-planning-advisor`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
-  
+### 写作
 - `higher-order-article-writer`: 给出 url 或文章内容, 仔细阅读并消化后, 写一篇更高层次的博弈文章. 
-  
-- `product-tech-influence-article`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
   
 - `industry-news-insight`: 输入某个行业名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
   
-- `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
+- `product-tech-influence-article`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
   
-- `huashu-nuwa` , `darwin-skill` : 女娲skill造人(蒸馏), 达尔文skill进化
+- `article-to-podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  例如: `$article-to-podcast-script 根据 markdown/finance-beginner-explainer-2026-04-22.md 文章, 生成 2 人播客脚本, 字数限定在1000字内, 如果无法完成限定, 请在结尾时引导听众阅读“digoal德哥”公众号发布的文字稿.` . 生成完之后还可以调整文件, 或者生成是告知风格(如犀利、金句频出等) . 然后用这篇文章介绍的方法, 生成播客语音. [《Mac本地生成 播客配音, 想要谁的声音都行, 还能带BGM》](../202604/20260422_02.md)  (非常耗内存, 如果你的播客很长, 建议剪成几篇分开生成, 或者升级内存) 
+  
+- `marketing-wechat-operator`: `微信公众号运营`, 编写爆款文章.  
+  
+### 造人与进化
+- `huashu-nuwa`: 女娲 skill, 造人(蒸馏) 
+  
+- `darwin-skill`: 达尔文 skill, 进化 SKILL
   ```
   cd ~/.codex/skills
   git clone --depth 1 https://github.com/alchaincyf/nuwa-skill
@@ -122,11 +140,6 @@
   cp -r darwin-skill ~/.claude/skills/
   ```
   
-- `mao-zedong-perspective`: 用女娲.skill 蒸馏的教员角色.  
-  
-- `digoal-perspective`: 用女娲.skill 蒸馏的digoal德哥角色.  
-  
-- `karl-marx-perspective`: 用女娲.skill 蒸馏的马克思角色.  
   
 ## only for claude web
 `skills_for_claude_web` 目录中的 skill 仅用于 Claude web 版.
@@ -219,4 +232,6 @@ npx --yes @seflless/deepwiki
 ```  
   
 如果要把它加入 Codex MCP，需要用你当前环境对应的 MCP 配置命令；从技能内容本身看，只能确定它需要 DeepWiki MCP 能力，不能确定唯一安装方式。  
+  
+其他参考: [《珍藏级 - Claude , Codex 使用经验总结》](../202604/20260415_05.md)  
   

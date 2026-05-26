@@ -119,7 +119,7 @@
     postgres/postgres
   ```
   
-### 写作
+### 写作, PPT, 原型设计
 - `higher-order-article-writer`: 给出 url 或文章内容, 仔细阅读并消化后, 写一篇更高层次的博弈文章. 
   
 - `industry-news-insight`: 输入某个行业名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
@@ -127,6 +127,9 @@
 - `product-tech-influence-article`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
   
 - `article-to-podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  例如: `$article-to-podcast-script 根据 markdown/finance-beginner-explainer-2026-04-22.md 文章, 生成 2 人播客脚本, 字数限定在1000字内, 如果无法完成限定, 请在结尾时引导听众阅读“digoal德哥”公众号发布的文字稿.` . 生成完之后还可以调整文件, 或者生成是告知风格(如犀利、金句频出等) . 然后用这篇文章介绍的方法, 生成播客语音. [《Mac本地生成 播客配音, 想要谁的声音都行, 还能带BGM》](../202604/20260422_02.md)  (非常耗内存, 如果你的播客很长, 建议剪成几篇分开生成, 或者升级内存) 
+  
+- `huashu-design`: 花叔Design（Huashu-Design）——用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
+    - https://github.com/alchaincyf/huashu-design
   
 - `marketing-wechat-operator`: `微信公众号运营`, 编写爆款文章.  
   

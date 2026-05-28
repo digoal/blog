@@ -47,6 +47,8 @@
   
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
+- `retail-trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.    
+  
 ### 智囊团
 - `karl-marx-perspective`: 用女娲.skill 蒸馏的马克思角色.  
   
@@ -163,6 +165,8 @@
 - `finance-beginner-explainer`: 基于 `finance-explosive-article` 的文案, 面向小白进行更细致的解读, 必要时会用到 `daily-finance` 和 `finance-core-analysis` 增加证据链完整性.  
   
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
+  
+- `trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.  
   
 - `paper-interpreter`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文.   
   

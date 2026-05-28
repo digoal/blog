@@ -1,125 +1,382 @@
 # 全品种操盘手册写作参考
 
-This reference captures the intended product scope from `/Users/digoal/Downloads/bug-hunter-散户AI操盘产品-20260528.md`. Use it to choose the next subsection and keep chapters consistent.
+本参考文件固化原始文章《散户投资小白金融全品种操盘手册》的完整目录与写作主线。
 
-## Product Positioning
+权威源文:
+- GitHub: https://github.com/digoal/blog/blob/master/202605/20260528_03.md
+- 日期: 2026-05-28
+- 作者: digoal
 
-Write a paid knowledge/subscription manual for novice retail investors. The product should solve three problems:
+写作目标: 帮助投资小白/散户完成一套按小节持续交付的付费知识手册。每次只写一个小节, 但要始终放回全书目录中定位, 避免漏章、串章、重复写。
 
-- Information overload: translate market information into an executable educational framework.
-- Narrow product vision: help retail investors understand more than A-share single stocks.
-- Weak discipline: make position sizing, stop-loss, suitability, and review habits explicit.
+## 产品定位
 
-Use "market environment -> suitable tools -> operating framework -> risk boundary -> checklist" as the repeated pattern.
+解决三个问题:
 
-## Full Chapter Map
+- 信息过载: 把市场信息翻译成可执行的教育框架。
+- 品种视野狭窄: 帮散户理解不止 A 股个股, 还包括现金、债券、基金、ETF、转债、黄金、REITs、QDII、港股、美股、期权、期货等工具。
+- 纪律薄弱: 明确适当性、仓位、止损、复盘和风险边界。
 
-### 第一章: 什么市场环境买什么
+反复使用的写作模式:
 
-Goal: Teach investors to classify market regimes before choosing instruments.
+市场环境 -> 适合工具 -> 操作框架 -> 仓位边界 -> 风险清单 -> 复盘问题
 
-Suggested subsections:
+全书主线:
 
-- 牛市初期: A股成长股、宽基/行业ETF、谨慎理解杠杆ETF
-- 震荡市: 可转债、红利ETF、网格/分批思路
-- 熊市: 黄金、货币基金、短债/债券ETF、现金仓位
-- 通胀上行: 商品、资源类ETF、REITs, and why futures are not beginner defaults
-- 利率下行: 债券ETF、高股息、长久期风险
-- 市场环境识别框架: trend, valuation, liquidity, policy, risk appetite
+小白先用现金和 ETF 活下来, 再用 A 股/美股/港股扩大视野, 用转债、黄金、REITs 改善组合结构, 最后才学习期权、期货、杠杆工具的风险边界。
 
-### 第二章: A股个股操盘
+## 完整章节地图
 
-Goal: Make stock trading disciplined and risk-aware, not stock-picking entertainment.
+### 第一章: 先建立操盘地图: 你到底在买什么风险
 
-Suggested subsections:
+目标: 先建立风险语言和统一操作模板, 让读者知道自己买的不是代码, 而是风险暴露。
 
-- 选股框架: 基本面、技术面、资金面
-- 买入时机: bottom features, volume-price signals, confirmation vs guessing
-- 卖出时机: profit-taking logic, stop-loss discipline, thesis invalidation
-- 仓位管理: pyramid adding, diversification, maximum single-name exposure
-- 小白排雷: story stocks, high leverage, chasing limit-up boards, hearsay
+小节:
 
-### 第三章: ETF操盘
+1. 为什么小白第一课不是赚钱, 而是识别风险
+2. 金融产品的六大底层风险: 权益、利率、信用、商品、汇率、杠杆
+3. 散户可参与工具全图: 现金、债券、股票、基金、ETF、转债、黄金、REITs、QDII、港股、美股、期权、期货
+4. 三类账户: 证券账户、基金账户、期货/黄金账户
+5. 什么叫投资者适当性: 为什么有些工具有门槛
+6. 本书统一操作模板: 环境判断 -> 品种选择 -> 仓位上限 -> 买入条件 -> 卖出条件 -> 复盘
+7. 小白红线: 不借钱、不满仓、不碰不懂的杠杆、不听消息重仓
 
-Goal: Present ETFs as the most beginner-friendly core instrument while explaining their hidden risks.
+### 第二章: 什么市场环境买什么
 
-Suggested subsections:
+目标: 教读者先判断市场环境, 再选择工具, 不把市场环境判断误解成预测涨跌。
 
-- 宽基ETF定投策略
-- 行业ETF轮动策略
-- 主题ETF: when narrative becomes risk
-- ETF套利机会识别: premium/discount, liquidity, transaction cost; avoid overpromising
-- ETF风险: tracking error, liquidity, concentration, leverage/inverse products
+小节:
 
-### 第四章: 可转债操盘
+1. 市场环境不是预测涨跌, 而是判断胜率
+2. 四个核心变量: 经济周期、流动性、利率、风险偏好
+3. 牛市初期: 宽基ETF、成长风格、弹性行业
+4. 牛市中期: 趋势确认后的加仓与止盈
+5. 牛市末期: 估值过热、成交过热、情绪过热时如何降风险
+6. 震荡市: 红利ETF、可转债、网格、现金管理
+7. 熊市: 货币基金、短债、黄金、分批定投
+8. 利率下行: 债券ETF、高股息、REITs
+9. 通胀上行: 黄金、商品基金、资源股、REITs
+10. 海外资产配置: 美股、港股、QDII、美元资产
+11. 市场切换时: 如何从"猜对方向"改成"调整仓位"
+12. 不同市场环境下的工具选择表
 
-Goal: Explain convertible bonds as a hybrid instrument with stock-like and bond-like features.
+### 第三章: 现金管理与低风险工具
 
-Suggested subsections:
+目标: 让读者理解现金不是浪费, 而是整个投资系统的氧气。
 
-- 可转债基础: 债底、转股价、转股价值、溢价率
-- 双低策略
-- 转股溢价率监控
-- 强赎、回售、下修: terms that can change the game
-- 退市和信用风险规避
-- 可转债仓位与分散规则
+小节:
 
-### 第五章: 黄金操盘
+1. 现金不是浪费, 是投资系统的氧气
+2. 货币基金: 适合什么钱, 不适合什么预期
+3. 国债逆回购: 节假日前后的资金使用技巧
+4. 短债基金: 比货币基金多承担了什么风险
+5. 中长期债券基金: 利率下行时为什么可能赚钱
+6. 债券ETF: 场内交易、波动、折溢价和流动性
+7. 同业存单指数基金: 收益来源与风险边界
+8. 银行理财、存款、基金的区别
+9. 现金仓位怎么设: 生活钱、防守钱、进攻钱
+10. 常见错误: 拿短期钱买长期波动资产
 
-Goal: Teach gold as a risk and currency-liquidity asset, not a magic safe haven.
+### 第四章: ETF操盘: 最适合散户的核心品种
 
-Suggested subsections:
+目标: 把 ETF 作为小白核心工具讲清楚, 同时说明它的隐藏风险。
 
-- 黄金与美元、实际利率、避险情绪的关系
-- 实物黄金 vs 黄金ETF vs 黄金T+D
-- 买入/卖出时机: trend, real rates, position crowding, allocation role
-- 黄金仓位: hedge allocation, not all-in replacement
-- 黄金常见坑: jewelry premium, spread, leverage, emotional chasing
+小节:
 
-### 第六章: 港股/美股（散户可参与部分）
+1. ETF是什么: 用一只基金买一篮子资产
+2. 场内ETF、场外指数基金、联接基金有什么区别
+3. 宽基ETF: 沪深300、中证500、创业板、科创等
+4. 宽基ETF定投策略
+5. 行业ETF轮动策略
+6. 红利ETF、低波ETF、质量ETF
+7. 债券ETF、货币ETF、黄金ETF、跨境ETF、商品ETF
+8. ETF买卖规则: 成交量、盘口、折溢价、跟踪误差
+9. ETF套利机会识别: 小白学原理, 不轻易实操
+10. 规模太小、流动性太差、溢价太高的ETF为什么危险
+11. ETF组合: 核心宽基 + 卫星行业 + 防守资产
+12. ETF复盘表: 指数、估值、趋势、资金、仓位
 
-Goal: Explain cross-border exposure with special attention to FX, rules, liquidity, and access paths.
+### 第五章: A股个股操盘
 
-Suggested subsections:
+目标: 让个股交易从"听故事"变成有框架、有仓位、有失效条件的研究。
 
-- 港股通使用指南
-- QDII基金配置
-- 美股券商直投: account, tax, FX, time-zone, regulatory caveats
-- AH溢价套利机会: framework and limitations
-- 跨境投资风险: FX, liquidity, holiday mismatch, information gap
+小节:
 
-### 第七章: 期权入门（保险策略为主）
+1. 个股为什么比ETF难
+2. 三类股票: 成长、价值、周期
+3. 基本面框架: 行业空间、商业模式、竞争优势、财务质量
+4. 财报小白版: 收入、利润、现金流、负债、毛利率
+5. 估值入门: PE、PB、PS、股息率
+6. 技术面: 趋势、支撑、压力、成交量
+7. 资金面: 北向、机构、龙虎榜、成交额
+8. 买入时机: 底部区域、趋势确认、回踩确认
+9. 卖出时机: 逻辑破坏、估值过热、趋势破位、仓位失控
+10. 止盈与止损: 为什么卖出规则必须提前写好
+11. 仓位管理: 单票上限、行业上限、分批买入
+12. ST、退市、财务造假、高质押、高商誉排雷
+13. 个股复盘模板: 买入理由是否还成立
 
-Goal: Keep options beginner-safe by focusing on insurance/hedging and explicitly excluding complex speculation.
+### 第六章: 可转债操盘
 
-Suggested subsections:
+目标: 解释可转债的债性、股性和条款性, 让小白理解风险收益不对称的前提。
 
-- 期权基础: call, put, premium, expiry, strike, intrinsic/time value
-- 用期权保护持仓: protective put and collar as insurance analogies
-- 备兑开仓: income with capped upside and downside stock risk
-- 期权买方基本策略: define maximum loss but warn about time decay
-- 不适合散户的策略: naked selling, high-frequency short gamma, over-levered spreads
-- 期权风险清单: liquidity, Greeks, expiry, exercise/assignment, suitability
+小节:
 
-### 第八章: 心理与纪律
+1. 可转债是什么: 债底 + 股票看涨期权
+2. 为什么可转债适合学习风险收益不对称
+3. 转股价值、转股溢价率、纯债价值、到期收益率
+4. 双低策略: 低价格 + 低溢价率
+5. 强赎条款: 赚钱时最容易忽视的风险
+6. 下修条款: 为什么下修可能改善转债价值
+7. 回售、到期赎回、信用评级
+8. 新债申购: 收益想象与破发风险
+9. 配债策略: 为什么不适合所有小白
+10. 低价转债陷阱: 便宜不等于安全
+11. 可转债组合: 分散、止损、单只上限
+12. 可转债退市与违约风险规避
 
-Goal: Turn knowledge into repeatable behavior.
+### 第七章: 黄金与贵金属操盘
 
-Suggested subsections:
+目标: 把黄金讲成风险重估和货币信用资产, 而不是神秘避险神器。
 
-- 止损为什么执行不了: loss aversion, sunk cost, confirmation bias
-- 如何建立可执行的操盘系统
-- 复盘方法论
-- 交易日志模板
-- 仓位纪律和情绪管理
-- 亏损后的恢复流程
+小节:
 
-## Cross-Chapter Principles
+1. 黄金不是生息资产, 它赚的是风险重估的钱
+2. 黄金与美元、实际利率、通胀、央行购金的关系
+3. 实物黄金: 保管、买卖价差、流动性
+4. 黄金ETF: 小白最容易理解的黄金工具
+5. 黄金基金、黄金股、黄金ETF的区别
+6. 黄金T+D: 杠杆、保证金、延期费, 为什么不适合作为小白默认工具
+7. 白银: 比黄金弹性更大, 风险也更大
+8. 黄金买入时机: 实际利率下行、避险上升、货币信用受疑
+9. 黄金卖出时机: 风险偏好回升、实际利率走强、仓位过高
+10. 黄金仓位: 防守资产不是重仓赌博
+11. 常见错误: 追涨黄金、把黄金当短线暴富工具
 
-- Start with suitability. "Can I use this?" comes before "Can it make money?"
-- Always explain what can go wrong under the opposite market environment.
-- Position sizing should be numeric and conservative. Use example ranges only as education, not personal advice.
-- Separate observation from action: signal, interpretation, possible framework, risk control.
-- Prefer scenarios over predictions.
-- Treat leverage as an advanced tool that most beginners should avoid until they can explain the liquidation/loss path.
-- Repeat the legal boundary naturally: educational framework, historical logic, and risk checklist; no personalized securities recommendation.
+### 第八章: 公募REITs与高股息资产
+
+目标: 帮读者理解现金流资产, 区分收益型资产和保本资产。
+
+小节:
+
+1. REITs是什么: 买的是基础设施现金流
+2. 公募REITs和股票、债券、房地产的区别
+3. REITs收益来源: 分红、资产运营、估值变化
+4. 关键指标: 分派率、出租率、收费权、剩余期限
+5. 适合环境: 利率下行、现金流资产受欢迎时
+6. 风险来源: 项目经营、估值波动、流动性、政策变化
+7. 高股息资产: 稳定现金流还是价值陷阱
+8. 红利ETF vs 单只高股息股票
+9. REITs买入卖出: 不要只看分红率
+10. 小白组合中的位置: 收益型资产, 不是保本工具
+
+### 第九章: 美股入门: 参与路径与规则
+
+目标: 先讲参与路径、账户安全、税务、汇率和披露规则, 再讲买什么。
+
+小节:
+
+1. 为什么要学美股: 全球资产配置的重要组成部分
+2. 美股市场结构: NYSE、Nasdaq、AMEX、OTC
+3. 美股主要资产: 个股、ETF、REITs、ADR、债券ETF、货币市场基金
+4. 三种参与路径: QDII基金、跨境ETF、境外券商账户
+5. 小白优先级: 先指数ETF, 再行业ETF, 再龙头个股, 最后才是期权和杠杆产品
+6. 美股账户安全: 券商资质、SIPC保护、账户托管、双重验证
+7. 汇率风险: 买美股不是只买股票, 还叠加人民币/美元波动
+8. 资金出入境与合规边界
+9. 美股交易时间: 盘前、盘中、盘后
+10. 现金账户、保证金账户、日内交易规则
+11. 分红税与非美国居民税务入门
+12. 美股信息披露体系: 10-K、10-Q、8-K、Earnings Call
+13. 常用数据来源: SEC EDGAR、公司IR、Nasdaq、NYSE、FINRA
+14. 小白常见误区: 只看中文社区、只看股价、不看汇率、不看税、不看估值
+
+### 第十章: 美股ETF与指数操盘
+
+目标: 把美股指数和 ETF 作为小白学习海外资产的优先入口。
+
+小节:
+
+1. 为什么小白买美股, 优先研究指数和ETF
+2. 标普500: 美国大盘核心资产代表
+3. 纳斯达克100: 科技成长集中度高, 弹性大, 回撤也大
+4. 道琼斯指数: 历史意义大, 但不是最适合新手的核心基准
+5. 罗素2000: 小盘股风险和经济周期敏感度
+6. 美股宽基ETF: 费用率、规模、流动性、跟踪误差
+7. 行业ETF: 科技、医疗、金融、能源、消费、半导体
+8. 主题ETF: AI、机器人、云计算、网络安全, 为什么容易被高估
+9. 债券ETF: 短债、中债、长债、TIPS
+10. 美元现金管理: 货币市场基金与短债ETF
+11. 美股REITs: 房地产现金流资产, 但不是无风险高息
+12. 杠杆ETF和反向ETF: 为什么只适合短期工具
+13. ETF溢价、折价、成交量、买卖价差
+14. 美股ETF组合: 核心宽基 + 行业卫星 + 债券/黄金防守
+15. 美股ETF定投: 估值、汇率、仓位、再平衡
+16. 美股ETF止盈止损: 不要把长期配置做成短线赌博
+
+### 第十一章: 美股个股操盘
+
+目标: 讲清美股个股研究的框架和陷阱, 不把海外市场神化。
+
+小节:
+
+1. 美股个股为什么值得研究, 但不等于更容易赚钱
+2. 公司分类: 科技成长、消费龙头、金融、医药、能源、工业、周期股
+3. 美股财报基础: 收入、毛利率、营业利润、自由现金流
+4. GAAP 与 Non-GAAP: 为什么公司会调整利润
+5. EPS、Revenue、Guidance: 财报季最重要的三个词
+6. 估值指标: PE、Forward PE、PS、EV/EBITDA、FCF Yield
+7. 成长股估值: 收入增速、利润率改善、市场空间
+8. 价值股估值: 现金流、分红、回购、资产负债表
+9. 科技股研究框架: 产品、生态、云、AI、算力、订阅收入
+10. 消费股研究框架: 品牌、渠道、复购、提价能力
+11. 医药股研究框架: 管线、专利、FDA审批、单品依赖
+12. 金融股研究框架: 利率、净息差、坏账、资本充足率
+13. 美股回购制度: 为什么回购会影响EPS和股价
+14. Insider交易、机构持仓、13F: 能看什么, 不能迷信什么
+15. 财报后大涨大跌: 预期差比绝对好坏更重要
+16. 个股买入框架: 好公司、合理价格、明确仓位、失效条件
+17. 个股卖出框架: 基本面变坏、估值透支、竞争格局变化、仓位过重
+18. 中概股与ADR: 美元交易不等于没有中国风险
+19. 小盘股、仙股、SPAC、Meme股排雷
+20. 小白个股仓位上限: 个股不应替代核心资产配置
+
+### 第十二章: 港股与全球配置
+
+目标: 讲清全球配置不是追热点, 而是处理市场、货币、规则和再平衡。
+
+小节:
+
+1. 港股通: 内地账户参与港股的正规路径
+2. 港股市场特点: 低估值、高波动、流动性分层
+3. 港股个股、港股ETF、港股通ETF
+4. 港股交易规则: 每手股数、交易时间、费用、汇率
+5. QDII基金: 普通散户配置海外资产的主路径
+6. 跨境ETF: 方便, 但要警惕高溢价
+7. A股、港股、美股的市场风格差异
+8. AH股、ADR、中概股之间的关系
+9. 汇率在全球配置中的作用
+10. 全球组合怎么搭: A股核心 + 美股核心 + 港股补充 + 黄金/债券防守
+11. 什么时候不要做全球配置: 不懂规则、短期要用钱、只为追热点
+12. 全球资产年度再平衡方法
+
+### 第十三章: 商品与期货: 只给小白讲边界
+
+目标: 只给小白讲商品和期货的风险边界, 不把杠杆工具包装成入门捷径。
+
+小节:
+
+1. 商品资产是什么: 能源、金属、农产品
+2. 商品价格由什么决定: 供需、库存、美元、地缘、天气
+3. 小白参与商品的低风险路径: 商品ETF、商品基金、资源行业ETF
+4. 期货是什么: 保证金、杠杆、每日结算
+5. 为什么期货不适合大多数小白重仓参与
+6. 趋势、基差、期限结构
+7. 通胀上行时商品为什么可能表现好
+8. 商品追涨的风险: 高波动、高回撤、高杠杆
+9. 如果一定学习期货: 模拟、极小仓位、先学风控
+10. 明确排雷: 满仓期货、借钱交易、扛单、频繁加保证金
+
+### 第十四章: 期权入门: 把它当保险, 不当彩票
+
+目标: 把期权优先讲成保险和风险管理工具, 明确排除裸卖、重仓末日期权等高危玩法。
+
+小节:
+
+1. 期权是什么: 权利、义务、到期日、行权价
+2. 看涨期权、看跌期权、买方、卖方
+3. 期权为什么有门槛: 复杂、杠杆、到期归零
+4. 买入看跌期权: 给持仓买保险
+5. 备兑开仓: 有现货时卖出认购期权
+6. 领口策略: 用有限成本控制下跌风险
+7. 期权买方的坑: 方向对了也可能亏时间价值
+8. 期权卖方的坑: 小赚很多次, 一次亏很大
+9. 希腊字母小白版: Delta、Theta、Vega
+10. A股期权、美股期权的规则差异
+11. 不适合散户的策略: 裸卖、跨式裸卖、重仓末日期权
+12. 期权复盘: 你是在保险、增强收益, 还是赌博
+
+### 第十五章: 仓位管理与组合系统
+
+目标: 把亏损的核心从"看错"转向"仓位错", 建立组合层面的生存系统。
+
+小节:
+
+1. 为什么大多数亏损不是看错, 而是仓位错
+2. 三层账户法: 生活资金、防守资金、进攻资金
+3. 核心仓、卫星仓、试错仓
+4. 单品种仓位上限: ETF、个股、转债、黄金、REITs、美股分别怎么设
+5. A股、美股、港股之间如何分配
+6. 金字塔加仓: 只在盈利和逻辑增强时加
+7. 分批买入: 左侧、右侧、定投的区别
+8. 止损: 价格止损、逻辑止损、时间止损
+9. 止盈: 估值止盈、趋势止盈、目标仓位止盈
+10. 再平衡: 让组合自动低买高卖
+11. 最大回撤管理: 先问自己能承受多大亏损
+12. 黑天鹅预案: 流动性、停牌、暴跌、政策变化
+13. 组合体检表: 收益、回撤、波动、集中度、相关性
+
+### 第十六章: 心理与纪律
+
+目标: 把知识变成可重复行为, 降低追涨杀跌、急于翻本和情绪交易。
+
+小节:
+
+1. 止损为什么执行不了: 损失厌恶与侥幸心理
+2. 为什么散户容易追涨杀跌: 羊群效应与信息过载
+3. 赚钱后为什么更危险: 过度自信
+4. 亏损后为什么更危险: 急于翻本
+5. 如何建立交易前检查清单
+6. 如何写买入计划: 买什么、为什么买、错了怎么办
+7. 如何写卖出计划: 什么时候减仓、什么时候清仓
+8. 复盘方法: 日复盘、周复盘、月复盘
+9. 建立自己的策略库: 有效、失效、待验证
+10. 远离"老师带单""内幕消息""稳赚模型"
+11. 什么时候应该停止交易: 情绪失控、连续亏损、看不懂市场
+
+### 第十七章: 典型场景实战手册
+
+目标: 把前面章节的工具和纪律放进真实场景, 训练读者从场景到动作框架。
+
+小节:
+
+1. 刚入门的90天学习路径
+2. 只有少量资金时, 为什么ETF优先于个股
+3. 牛市来了怎么避免踏空焦虑
+4. 熊市亏损后如何重建组合
+5. 震荡市如何减少无效交易
+6. 利率下行周期如何配置债券和高股息
+7. 通胀周期如何理解黄金和商品
+8. 美股大跌时QDII和跨境ETF该怎么看
+9. 美元升值/贬值时, 美股资产该怎么理解
+10. 持仓被套后: 补仓、止损、等待的判断框架
+11. 年度资产配置复盘: 下一年怎么调
+
+### 附录
+
+目标: 给全书提供可复用表格、术语、数据源、清单和复盘模板。
+
+小节:
+
+1. 散户可参与金融工具对照表: 门槛、风险、流动性、适合人群
+2. A股、港股、美股交易规则对照表
+3. ETF、QDII、跨境ETF、美股ETF对照表
+4. 常用术语表: PE、PB、久期、溢价率、回撤、波动率、EPS、Guidance
+5. 常用数据来源: 交易所、基金公告、指数公司、SEC、公司IR、央行、统计局
+6. 下单前检查清单
+7. 每周复盘模板
+8. 每月组合体检模板
+9. 高风险产品红线清单
+10. 本书所有策略的适用前提与失效条件
+
+## 跨章原则
+
+- 适当性先于收益想象: 先问"我能不能用", 再问"它能不能赚钱"。
+- 先保命, 再赚钱: 现金、仓位、止损、流动性优先于收益率想象。
+- 每章都要说明相反市场环境下会出什么问题。
+- 仓位示例要保守且数字化, 只能作为教育示例, 不能替代个性化建议。
+- 分开写"事实、解释、可观察信号、可选动作、风险控制"。
+- 用场景替代预测, 用前提替代口号。
+- 杠杆、期货、期权、T+D、融资融券只能作为进阶风险边界讲解, 不能包装成小白默认工具。
+- 案例用来解释机制, 不能用个例证明普遍结论。
+- 结尾自然重复合规边界: 这是教育框架、历史逻辑和风险清单, 不是个性化证券推荐。

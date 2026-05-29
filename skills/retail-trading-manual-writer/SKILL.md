@@ -15,8 +15,7 @@ Each subsection must present its main view as a single reasoning chain, not as s
 
 Always load `references/manual-outline.md` before drafting a new subsection.
 
-Treat `references/manual-outline.md` as the source-of-truth chapter map, which mirrors the original GitHub article:
-`https://github.com/digoal/blog/blob/master/202605/20260528_03.md`.
+Treat `references/manual-outline.md` as the source-of-truth chapter map.  
 
 When the user asks to continue, complete the whole manual, or write the next subsection, maintain a progress file at `markdown/manual-progress.md`. Use it only to track chapter/subsection status, saved file paths, and short notes; do not merge multiple subsections into one article.
 
@@ -109,55 +108,55 @@ Use this structure unless the user explicitly requests a different one:
 
 ## 一句话先懂
 
-## 本节核心观点
+## 核心观点
 
-## 从前提推到结论: 这个观点为什么成立
+用1-2段话直接说出本节最重要的判断，不要序言式的铺垫。
 
-| 依赖的前提 | 类型 | 为什么依赖它 | 什么情况下可能被推翻 | 推翻后的新结论 |
-|---|---|---|---|---|
+## 逻辑推导链
 
-![...](assets/<slug>/01-*.svg)
+用连贯的自然段落展开推导，从为什么这个观点成立说起，逐层展开：
 
-### 给小白看的推导过程
+1. 因为[前提A] → 所以[机制/现象]
+2. 因为[前提B] + [前提A] → 所以[进一步推论]
+3. 继续展开...
+4. 最后得到[核心结论]
 
-1. 因为...
-2. 所以...
-3. 进一步...
-4. 最后得到...
+在推导过程中，每引入一个新前提，说明：
+- 它为什么重要（如果它不成立，整条链就断在哪里）
+- 什么情况下它会被推翻
+- 推翻后结论如何调整
 
-### 如果前提变了, 结论将发生什么变化
+推导完成后，用一段话补充：这条结论在什么边界条件下成立，权威数据/案例是如何支撑或限制它的。
 
-| 变化的前提 | 原结论为什么不再可靠 | 重新推导后的结论 | 小白应如何应对变化 |
-|---|---|---|---|
+## 适用边界
 
-### 权威数据与案例如何验证这条推导链
+- 适合什么样的人/市场环境
+- 什么情况下这条结论不再可靠，需要重新判断
 
-## 小白必须先分清
+## 操作框架
 
-## 适合什么市场/什么人
+给出可直接执行的动作步骤（3-5步），每步说清输入什么、判断什么、得到什么动作。
 
-![...](assets/<slug>/02-*.svg)
+## 实操例子
 
-## 怎么操作才不乱
-
-## 实操例子: 从输入到动作框架
-
-## 举一反三: 换一个品种/环境时怎么迁移
-
-## 风险在哪里
-
-![...](assets/<slug>/03-*.svg)
+用一个具体场景演示如何把框架套进去。不是推荐具体产品，而是示范判断流程。
 
 ## 常见错误
 
+列出3-5个最常见的认知偏差或行为错误，每个用一句话点破。
+
 ## 执行清单
 
+用表格列出3-5个买入前必须确认的问题，每行一个具体问题加判断标准。
+
 ## 本节小结
+
+用2-3句话收束，回归底层原则，给出下一节的逻辑钩子。
 
 ## 参考资料
 ```
 
-Target length: 2,500-4,500 Chinese characters for a paid-course subsection. Prefer short paragraphs, tables, and diagrams over dense prose.
+Target length: 2,000-3,500 Chinese characters. Prefer short paragraphs and diagrams over dense prose.
 
 ## SVG Standards
 

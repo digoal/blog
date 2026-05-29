@@ -37,6 +37,8 @@
 - `enterprise-future-planning-advisor`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
   
 ### 财经类
+- `market-opening-analyst`: 市场开局分析, 分析下一次开市可能会引爆上涨、下跌的行业或标的. 以 markdown 格式图文并茂(采用mermaid、ascii text等图)的输出到当前项目 markdown 目录中.  
+  
 - `daily-finance`：每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
   
 - `finance-core-analysis`：基于 `daily-finance` 的事实底稿，再联网复核关键数据，用流动性、利率、风险偏好、资金流、政策和资产负债表模型生成可发布的深度财经分析。  
@@ -155,6 +157,7 @@
 `.skill` 是 claude web skill 的压缩包.  
 
 ### skills
+- `market-opening-analyst`: 市场开局分析, 分析下一次开市可能会引爆上涨、下跌的行业或标的. 以 markdown 格式图文并茂(采用mermaid、ascii text等图)的输出到当前项目 markdown 目录中.  
   
 - `daily-finance`: 每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
   

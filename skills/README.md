@@ -15,6 +15,8 @@
     orioledb 
   项目 deepwiki reponame: 
     orioledb/orioledb
+  项目 codebase:
+    orioledb/CLAUDE.md
   参考论文: 
     Oracle8i Index-Organized Table and its Application to New Domains
     The Ubiquitous B-Tree

@@ -54,6 +54,8 @@
 - `retail-trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.    
   
 ### 智囊团
+- `multi-expert-analyzer`: 通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.   
+  
 - `karl-marx-perspective`: 用女娲.skill 蒸馏的马克思角色.  
   
 - `mao-zedong-perspective`: 用女娲.skill 蒸馏的教员角色.  

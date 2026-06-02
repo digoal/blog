@@ -32,6 +32,7 @@ If the user gives several concepts, choose the central one only when the concept
 2. Scope the audience:
    - Default to university students and adults with social experience unless the user specifies another level.
    - Use concrete analogies before abstract notation.
+   - Prefer examples from investment and personal finance, product management, product operations, marketing, interpersonal relationships, and workplace scenarios unless the concept or user request clearly calls for another domain.
    - Define specialized terms at first use.
    - State any simplifications made for readability.
 
@@ -145,11 +146,11 @@ Use this structure unless the user asks for a different format:
 
 ### 正例: 怎么用它提升能力
 
-<学习、工作或生活中的可操作例子>
+<优先使用投资理财、产品经理、产品运营、营销、人际交往或职场中的可操作例子>
 
 ### 反例: 前提不成立会怎样
 
-<实际生活或工作中的失败例子，突出逻辑判断和洞察>
+<优先使用投资理财、产品经理、产品运营、营销、人际交往或职场中的失败例子，突出逻辑判断和洞察>
 
 ## 思考
 
@@ -172,7 +173,7 @@ Use this structure unless the user asks for a different format:
 - For theorems, separate "直观理解" from "严格证明". If the full proof is too long, provide a reliable proof skeleton and name the missing lemmas.
 - For viewpoints, expose the hidden assumptions and show what evidence would make the viewpoint stronger or weaker.
 - Explain assumptions twice when useful: once in "求真讲法" as logical premises, once in "求存讲法" as practical boundaries.
-- Use examples that adults can observe, summarize, and reuse. Prefer university learning, career development, work collaboration, technology, money, time, management, investment, health, and decision-making examples.
+- Use examples that adults can observe, summarize, and reuse. Prefer investment and personal finance, product management, product operations, marketing, interpersonal relationships, and workplace examples. Use university learning, technology, health, or other domains only when they better fit the concept or the user's request.
 - Include at least one positive example and one negative example. The negative example must fail because a named assumption is false, not because the person "did it wrong" vaguely.
 - Use concise headings and short paragraphs. Avoid empty motivational language.
 - Mark uncertain claims explicitly instead of overstating them.
@@ -236,6 +237,7 @@ Before finishing, verify:
 - The explanation names the assumptions behind the concept.
 - The article includes at least one Mermaid diagram, at least one standalone SVG file reference, and one additional visual/table/SVG/TXT figure.
 - The article includes positive and negative examples tied to the assumptions.
+- Positive and negative examples preferentially come from investment and personal finance, product management, product operations, marketing, interpersonal relationships, or workplace scenarios unless another domain is clearly more suitable.
 - The article distinguishes derivation, proof, motivation, and applicability boundaries correctly.
 - Any uncertain statement is marked or removed.
 - The article does not contain any anti-pattern listed above.

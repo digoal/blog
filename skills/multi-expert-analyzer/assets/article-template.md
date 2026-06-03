@@ -6,9 +6,16 @@
 
 ## 文件名
 
-- 中文: `markdown/<主题>-多角度分析-<YYYYMMDD>.md`
-- 英文: `markdown/<topic>-multi-perspective-<YYYYMMDD>.md`
-- 主题用 kebab-case, 3-6 个词概括问题
+本 skill 在 `markdown/` 目录下产出两类文件, `<主题>` 必须完全一致以便关联:
+
+- **专家中间稿** (步骤 3.8 落盘, N 个, N = 参与专家数):
+  - 中文: `markdown/<主题>-专家<编号>-<角色>-<YYYYMMDD>.md`
+  - 英文: `markdown/<topic>-expert-<n>-<role>-<YYYYMMDD>.md`
+- **最终综合稿** (步骤 5 产出, 1 个):
+  - 中文: `markdown/<主题>-多角度分析-<YYYYMMDD>.md`
+  - 英文: `markdown/<topic>-multi-perspective-<YYYYMMDD>.md`
+
+主题用 kebab-case, 3-6 个词概括问题。`<角色>` 用 kebab-case 的人设关键词, 例如 `逆向投资人`、`量化pm`、`hrd-p9`。
 
 ## 标题
 
@@ -62,6 +69,8 @@
 - [ ] 核心术语都有"白话解释" (要么不用, 要么用了立刻解释)
 - [ ] 读给朋友听一遍, 哪里有理解障碍就改
 - [ ] 上游每位专家的草稿都有 3.7 / 模板第 7 节的"通过"记录, 没有"未消解疑点"被悄悄丢弃
+- [ ] `markdown/` 目录里能数出 N 个专家稿 + 1 个综合稿, 共 N+1 个文件, 文件名 `<主题>` 前缀一致
+- [ ] 专家稿的编号顺序、综合稿中引入该专家的先后顺序、`<角色>` 关键词三者一致
 
 ## 章节命名禁忌
 

@@ -247,7 +247,10 @@ DeepWiki MCP / Node 工具
 `open-source-project-article` 和 `pgfaq` 依赖 DeepWiki MCP。若本地没有配置，可安装/运行对应 MCP 包：  
   
 ```bash  
-npx --yes @seflless/deepwiki  
+npx --yes @seflless/deepwiki
+
+# 某些依赖 playwright 
+npx playwright install
 ```  
   
 如果要把它加入 Codex MCP，需要用你当前环境对应的 MCP 配置命令；从技能内容本身看，只能确定它需要 DeepWiki MCP 能力，不能确定唯一安装方式。  

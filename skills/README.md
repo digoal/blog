@@ -56,6 +56,8 @@
 ### 智囊团
 - `multi-expert-analyzer`: 通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.   
   
+- `rational-red-blue-debate`: 扮演红蓝队互相辩论的通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.  
+  
 - `karl-marx-perspective`: 用女娲.skill 蒸馏的马克思角色.  
   
 - `mao-zedong-perspective`: 用女娲.skill 蒸馏的教员角色.  
@@ -211,6 +213,8 @@
 - `article-rewriter`: 消化内容后, 从更高维度重写. 输入URL或原始内容, 输出markdown到当前项目markdown目录中.  
   
 - `multi-expert-analyzer`: 通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.   
+  
+- `red-blue-debate`: 扮演红蓝队互相辩论的通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.  
   
 ## 依赖  
 1、  

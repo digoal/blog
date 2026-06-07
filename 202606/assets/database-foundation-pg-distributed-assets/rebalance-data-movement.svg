@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="760" viewBox="0 0 1180 760" role="img" aria-labelledby="title desc">
+  <title id="title">Citus 扩容后的 shard move 与 rebalance 流程</title>
+  <desc id="desc">展示添加 worker 后，rebalancer 计算移动计划，非阻塞 shard move 通过逻辑复制、COPY、追平 LSN、短暂阻塞写入、更新 pg_dist_placement 和清理资源完成迁移。</desc>
+  <style>
+    .bg { fill: #fbfcfd; }
+    .title { font: 700 27px sans-serif; fill: #111827; }
+    .subtitle { font: 16px sans-serif; fill: #4b5563; }
+    .box { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.5; rx: 8; }
+    .plan { fill: #eef6ff; stroke: #2563eb; stroke-width: 1.7; rx: 8; }
+    .copy { fill: #f0fdf4; stroke: #16a34a; stroke-width: 1.7; rx: 8; }
+    .commit { fill: #fff7ed; stroke: #f97316; stroke-width: 1.7; rx: 8; }
+    .risk { fill: #fef2f2; stroke: #dc2626; stroke-width: 1.6; rx: 8; }
+    .node { fill: #fefce8; stroke: #ca8a04; stroke-width: 1.5; rx: 8; }
+    .small { font: 13px sans-serif; fill: #4b5563; }
+    .bold { font: 700 16px sans-serif; fill: #111827; }
+    .step { font: 700 14px sans-serif; fill: #111827; }
+    .arrow { stroke: #475569; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    .blue { stroke: #2563eb; stroke-width: 2.3; fill: none; marker-end: url(#arrowBlue); }
+    .green { stroke: #16a34a; stroke-width: 2.3; fill: none; marker-end: url(#arrowGreen); }
+    .orange { stroke: #f97316; stroke-width: 2.3; fill: none; marker-end: url(#arrowOrange); }
+    .dash { stroke: #64748b; stroke-width: 1.9; fill: none; stroke-dasharray: 7 5; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L8,3 z" fill="#f97316"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1180" height="760"/>
+  <text class="title" x="40" y="48">扩容不是只加机器：还要移动 shard group、更新 placement、清理外部资源</text>
+  <text class="subtitle" x="40" y="78">Citus 的 rebalance 先在内存中找更均衡的 placement，然后用 shard move 逐步把数据迁到目标节点。</text>
+
+  <rect class="node" x="70" y="130" width="260" height="145"/>
+  <text class="bold" x="142" y="164">扩容前</text>
+  <text class="small" x="100" y="194">Worker A：420 GB</text>
+  <text class="small" x="100" y="218">Worker B：180 GB</text>
+  <text class="small" x="100" y="242">Worker C：新加入，0 GB</text>
+
+  <rect class="plan" x="430" y="130" width="310" height="145"/>
+  <text class="bold" x="540" y="164">Rebalance plan</text>
+  <text class="small" x="462" y="194">默认 by_disk_size 以 shard group 成本估算</text>
+  <text class="small" x="462" y="218">超过 threshold 才移动，避免过度搬迁</text>
+  <text class="small" x="462" y="242">一个任务通常是一次 shard group move</text>
+
+  <rect class="node" x="850" y="130" width="260" height="145"/>
+  <text class="bold" x="922" y="164">扩容后目标</text>
+  <text class="small" x="880" y="194">Worker A：约 200 GB</text>
+  <text class="small" x="880" y="218">Worker B：约 200 GB</text>
+  <text class="small" x="880" y="242">Worker C：约 200 GB</text>
+
+  <path class="blue" d="M330 202 L430 202"/>
+  <path class="blue" d="M740 202 L850 202"/>
+
+  <rect class="copy" x="65" y="360" width="185" height="92"/>
+  <text class="step" x="92" y="391">1. 建目标 shard</text>
+  <text class="small" x="88" y="420">约束、owner、权限</text>
+  <text class="small" x="88" y="442">先不建所有索引</text>
+
+  <rect class="copy" x="280" y="360" width="185" height="92"/>
+  <text class="step" x="305" y="391">2. 建发布和槽</text>
+  <text class="small" x="303" y="420">publication / slot</text>
+  <text class="small" x="303" y="442">导出 snapshot</text>
+
+  <rect class="copy" x="495" y="360" width="185" height="92"/>
+  <text class="step" x="532" y="391">3. COPY 主体</text>
+  <text class="small" x="518" y="420">worker_shard_copy</text>
+  <text class="small" x="518" y="442">binary COPY 到目标</text>
+
+  <rect class="copy" x="710" y="360" width="185" height="92"/>
+  <text class="step" x="742" y="391">4. 追平增量</text>
+  <text class="small" x="733" y="420">启用 subscription</text>
+  <text class="small" x="733" y="442">等待追到当前 LSN</text>
+
+  <rect class="commit" x="925" y="360" width="185" height="92"/>
+  <text class="step" x="952" y="391">5. 短暂封口</text>
+  <text class="small" x="948" y="420">全局 metadata lock</text>
+  <text class="small" x="948" y="442">阻塞新写并 final catch-up</text>
+
+  <path class="green" d="M250 406 L280 406"/>
+  <path class="green" d="M465 406 L495 406"/>
+  <path class="green" d="M680 406 L710 406"/>
+  <path class="green" d="M895 406 L925 406"/>
+
+  <rect class="commit" x="230" y="555" width="290" height="100"/>
+  <text class="bold" x="315" y="588">更新元数据</text>
+  <text class="small" x="260" y="617">pg_dist_placement 指向新 node group</text>
+  <text class="small" x="260" y="639">最终提交使用 2PC 特征</text>
+
+  <rect class="risk" x="660" y="555" width="290" height="100"/>
+  <text class="bold" x="750" y="588">清理资源</text>
+  <text class="small" x="690" y="617">publication、subscription、slot、旧 shard</text>
+  <text class="small" x="690" y="639">失败时依赖 pg_dist_cleanup 和 daemon</text>
+
+  <path class="orange" d="M1018 452 C920 520, 620 548, 520 605"/>
+  <path class="dash" d="M520 605 L660 605"/>
+
+  <rect class="risk" x="405" y="680" width="370" height="42"/>
+  <text class="small" x="435" y="706">边界：没有 replica identity 的表做非阻塞 move 时，UPDATE / DELETE 复制会受限制。</text>
+</svg>

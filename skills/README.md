@@ -51,6 +51,10 @@
   
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
+- `us-stock-prediction`: 预测某只指定美股的次日走势, 结果输出到当前项目 markdown 目录中.  
+  
+- `a-stock-prediction`: 预测某只指定A股的次日走势, 结果输出到当前项目 markdown 目录中.   
+  
 - `retail-trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.    
   
 ### 智囊团

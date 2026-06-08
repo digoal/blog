@@ -31,6 +31,8 @@
 ### 行业分析
 - `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出markdown格式文件, 保存到当前项目 markdown 目录中. 
   
+- `industry-deep-explainer`: 快速且通熟易懂的讲透一个行业. 输入希望分析的行业名进行分析, 同时分析行业中的商业机会, 将结果以 markdown 格式输出到当前项目的 markdown 目录中.  
+  
 - `financial-report-analysis`: 财报分析, 输入公司财报文件或URL, 输出专业的财报解读文章.  
   
 ### 未来规划
@@ -46,6 +48,7 @@
 - `a-stock-prediction`: 预测某只指定A股的次日走势, 结果输出到当前项目 markdown 目录中.   
   
 - `investor-news-impact`: 面向投资者, 抓取最近3天内发生的新闻. 总结并分析推演对哪些行业、上市公司带来哪些影响.  
+    - 区别于 industry-chain-investment-analysis 和 industry-news-insight, 前者主要针对投行/上市公司, 后者针对公众号文. 本skill则定位"战略顾问+创业者"视角. 
   
 - `daily-finance`：每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
   

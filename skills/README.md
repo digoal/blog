@@ -211,6 +211,8 @@ PostgreSQL 问答助手
   
 - `us-stock-predictor`: 预测某只指定美股的次日走势, 结果输出到当前项目 markdown 目录中.
   
+- `a-stock-predictor`: 预测某只指定A股的次日走势, 结果输出到当前项目 markdown 目录中.   
+  
 - `investor-news-impact`: 面向投资者, 抓取最近3天内发生的新闻. 总结并分析推演对哪些行业、上市公司带来哪些影响.  
   
 - `daily-finance`: 每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  

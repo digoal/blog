@@ -1,12 +1,18 @@
-这些 skill 的生成方式: [《如何创建 SKILL》](../202604/20260421_02.md)  
+**这些 skill 的生成方式参考** : [《如何创建 SKILL》](../202604/20260421_02.md)  
   
 ## skill 介绍
-### 底层公理 
+### [日常] 打基础
+  
+思维筑基  
 - `axiom-explainer`: 输入公理/定理/观点, 输出把“观点 / 公理 / 定理 / 理论系统”生成面向学生的中文 Markdown 文章. 参考:
     - [《德说-第100期, 人生最重要的事3: 建立公理体系和逻辑能力》](../202206/20220610_01.md)
     - [《德说-第477期, 学科分类方法, 如何组建及蒸馏AI核心智囊团》](../202605/20260519_66.md)
     - [《德说-第474期, 人生最重要的事15: 在快速变化的世界中的生存法则》](../202605/20260515_01.md)  
   
+财经筑基  
+- `retail-trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.    
+  
+数据库筑基. 已完成 [《数据库筑基课 目录》](../202409/20240914_01.md)      
 - `database-foundation-course-writer`: 数据库筑基课 写作 skill, 输入数据库筑基课的文章标题 以及 相关的参考资料(通常是该篇数据库筑基课相关的技术文档、产品手册、开源项目地址、deepwiki地址、论文地址等). 输出最终 markdown 文件并保存到当前项目 markdown 文件夹中. 例如:  
   ```
   文章标题:
@@ -23,32 +29,17 @@
     Efficient Locking for Concurrent Operations on B-Trees
   ```
   
+读书笔记  
 - `douban-book-notes`: 输入豆瓣链接, 生成读书笔记.  
   
-### 发现世界 bug
-- `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
-  
-### 行业分析
-- `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出markdown格式文件, 保存到当前项目 markdown 目录中. 
-  
-- `industry-deep-explainer`: 快速且通熟易懂的讲透一个行业. 输入希望分析的行业名进行分析, 同时分析行业中的商业机会, 将结果以 markdown 格式输出到当前项目的 markdown 目录中.  
-    - 区别于 industry-chain-investment-analysis 和 industry-news-insight, 前者主要针对投行/上市公司, 后者针对公众号文. 本skill则定位"战略顾问+创业者"视角. 
-  
-- `financial-report-analysis`: 财报分析, 输入公司财报文件或URL, 输出专业的财报解读文章.  
-  
-### 未来规划
-- `future-planning-advisor`: 基于提问者提供的背景、资源等信息. 编写符合提问者的未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中.  
-  
-- `enterprise-future-planning-advisor`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
-  
-### 财经类
-- `market-opening-analyst`: 市场开局分析, 分析下一次开市可能会引爆上涨、下跌的行业或标的. 以 markdown 格式图文并茂(采用mermaid、ascii text等图)的输出到当前项目 markdown 目录中.  
+### [日常] 财经类, 日常分析与预测
+- `market-opening-analyst`: 市场开局分析, 分析并预测下一次开市可能会引爆上涨、下跌的行业或标的. 以 markdown 格式图文并茂(采用mermaid、ascii text等图)的输出到当前项目 markdown 目录中.  
   
 - `us-stock-prediction`: 预测某只指定美股的次日走势, 结果输出到当前项目 markdown 目录中.  
   
 - `a-stock-prediction`: 预测某只指定A股的次日走势, 结果输出到当前项目 markdown 目录中.   
   
-- `investor-news-impact`: 面向投资者, 抓取最近3天内发生的新闻. 总结并分析推演对哪些行业、上市公司带来哪些影响.  
+- `investor-news-impact`: 面向投资者, 抓取最近3天内发生的新闻. 总结并推演分析将对哪些行业、上市公司带来何种影响.  
   
 - `daily-finance`：每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
   
@@ -59,33 +50,63 @@
 - `finance-beginner-explainer`: 基于 `finance-explosive-article` 的文案, 面向小白进行更细致的解读, 必要时会用到 `daily-finance` 和 `finance-core-analysis` 增加证据链完整性.  
   
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
-    
-- `retail-trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.    
   
-### 智囊团
+### [日常] 发现世界 bug
+抓取行业新闻, 分析并发现BUG和商机, 设计解决方案、产品与商业模式
+- `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
+  
+### 产业、行业、上市公司深度分析
+产业/行业分析(面向"投行"视角)  
+- `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出 markdown 格式文件, 保存到当前项目 markdown 目录中. 
+  
+产业/行业分析(面向"战略顾问+创业者"视角)  
+- `industry-deep-explainer`: 输入行业名, 快速且通熟易懂的讲透一个行业. 并且分析行业中的商业机会, 将结果以 markdown 格式输出到当前项目的 markdown 目录中.  
+    - 区别于 industry-chain-investment-analysis 和 industry-news-insight, 前者主要针对投行/上市公司, 后者针对公众号文. 本 skill 则定位"战略顾问+创业者"视角. 
+  
+企业财报分析  
+- `financial-report-analysis`: 财报分析, 输入公司财报文件或URL, 输出专业的财报解读文章.  
+  
+### 未来规划
+根据个人情况、综合大环境与趋势, 给出人生规划建议书   
+- `future-planning-advisor`: 基于提问者提供的背景、资源等信息. 编写符合提问者的未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中.  
+  
+根据企业情况、综合大环境与趋势, 给出企业规划建议书  
+- `enterprise-future-planning-advisor`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
+  
+### [日常] 智囊团
+通用问题解答专家  
 - `multi-expert-analyzer`: 通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.   
   
+扮演红蓝队互相辩论的通用问题解答专家  
 - `rational-red-blue-debate`: 扮演红蓝队互相辩论的通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.  
   
+马克思  
 - `karl-marx-perspective`: 用女娲.skill 蒸馏的马克思角色.  
   
+教员  
 - `mao-zedong-perspective`: 用女娲.skill 蒸馏的教员角色.  
-
+  
+digoal德哥(女娲.skill 蒸馏, 保留了思维方式、方法论等)  
 - `digoal-perspective`: 用女娲.skill 蒸馏的digoal德哥角色.  
   
+digoal德哥(根据 blog 蒸馏, 更像 RAG 角色)  
 - `digoal`：基于 digoal/德哥博客沉淀，面向 PostgreSQL、AI+数据库、开源生态、技术文章和架构判断，输出证据驱动、场景优先、可验证的德哥式分析与方案。  
   
+巴菲特  
 - `buffett`: 巴菲特思想解读股票代码. 来自 https://github.com/agi-now/buffett-skills  
    其他相关项目获文档  
    - [《把 MiniMax 接入 Claude, 给 TradingAgents 添加 MiniMax 模型供应商支持 玩转股票深度分析》](../202603/20260330_07.md)  
    - [《TradingAgents: 多 Agent 股票分析与交易决策系统试用》](../202603/20260327_03.md)  
    - [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](../202603/20260325_01.md)  
   
-### 前沿跟进
+### [日常] 前沿跟进
+开源项目排行榜解读  
 - `github-weekly-trending`: 输入从 `https://github.com/trending?since=weekly&spoken_language_code=` 拷贝的内容, 编写本周热门开源项目文章, 输出到当前项目 markdown 目录中.   
   
+指定开源项目深度分析  
 - `open-source-project-article`: 输入开源项目地址, 深度分析该开源项目, 输出到当前项目 markdown 目录中.  
   
+论文解读  
 - `paper-interpretation`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文. 例如用于解读 AI 论文 https://arxiv.org/abs/2604.14141 https://arxiv.org/abs/2508.02739 
   ````
   AI 论文:    
@@ -100,11 +121,14 @@
   - https://github.com/LumingSun/ML4DB-paper-list
   ````
   
-### 开源项目问答助手
+### [日常] 开源项目问答助手
+从 PostgreSQL 指定提交区间的代码、提交日志中, 分析与DBA、开发者相关的特性
 - `postgres-commit-history-article`: 先进入 postgres 项目目录, 输入 `commitid1 commitid2` , 分析并解读这两个 commitid 中间的所有提交 (也包括这两个 commit), 输出到当前项目 markdown 目录中.
   
+PostgreSQL 问答助手  
 - `pgfaq`: clone https://github.com/postgres/postgres 源码, 将其作为项目目录. 输入 PostgreSQL 相关的问题, 将回答结果保存到项目目录的 markdown 子目录中. 回答时会参考代码、文档和deepwiki, 并对回答内容正确性进行校验.  
   
+适合任何开源项目的问答助手  
 - `opensourcefaq`: 解答与开源产品有关的问题. 
   ```
   输入: 
@@ -138,23 +162,31 @@
     postgres/postgres
   ```
   
-### 写作, PPT, 原型设计
+### [日常] 写作, PPT, 原型设计
+消化已有文章后, 从更高维度发现价值并重写  
 - `higher-order-article-writer`: 给出 url 或文章内容, 仔细阅读并消化后, 写一篇更高层次的博弈文章. 
   
+指定行业, 将近期新闻整理成文章  
 - `industry-news-insight`: 输入某个行业名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
   
+指定产品, 将近期新闻整理成“技术影响力”文章.     
 - `product-tech-influence-article`: 输入某个产品名称, 将近期新闻整理成文章, 以 markdown 格式保存到当前项目 markdown 目录中. 
   
+生成播客脚本
 - `article-to-podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  例如: `$article-to-podcast-script 根据 markdown/finance-beginner-explainer-2026-04-22.md 文章, 生成 2 人播客脚本, 字数限定在1000字内, 如果无法完成限定, 请在结尾时引导听众阅读“digoal德哥”公众号发布的文字稿.` . 生成完之后还可以调整文件, 或者生成是告知风格(如犀利、金句频出等) . 然后用这篇文章介绍的方法, 生成播客语音. [《Mac本地生成 播客配音, 想要谁的声音都行, 还能带BGM》](../202604/20260422_02.md)  (非常耗内存, 如果你的播客很长, 建议剪成几篇分开生成, 或者升级内存) 
   
-- `huashu-design`: 花叔Design（Huashu-Design）——用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
+用HTML做高保真原型、交互Demo、幻灯片、动画  
+- `huashu-design`: 花叔Design（Huashu-Design） —— 用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
     - https://github.com/alchaincyf/huashu-design
   
+将文章改写成公众号爆款文章  
 - `marketing-wechat-operator`: `微信公众号运营`, 编写爆款文章.  
   
 ### 造人与进化
+女娲 skill, 造人(蒸馏角色)   
 - `huashu-nuwa`: 女娲 skill, 造人(蒸馏) 
   
+达尔文 skill, 进化 SKILL  
 - `darwin-skill`: 达尔文 skill, 进化 SKILL
   ```
   cd ~/.codex/skills
@@ -190,7 +222,7 @@
   
 - `trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.  
   
-- `industry-deep-explainer`: 快速且通熟易懂的讲透一个行业. 输入希望分析的行业名进行分析, 同时分析行业中的商业机会, 将结果以 markdown 格式输出到当前项目的 markdown 目录中.  
+- `industry-deep-explainer`: 输入行业名, 快速且通熟易懂的讲透一个行业. 并且分析行业中的商业机会, 将结果以 markdown 格式输出到当前项目的 markdown 目录中.    
     - 区别于 industry-chain-analyst 和 industry-insight-writer, 前者主要针对投行/上市公司, 后者针对公众号文. 本skill则定位"战略顾问+创业者"视角. 
   
 - `paper-interpreter`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文.   

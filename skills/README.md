@@ -1,6 +1,7 @@
 **这些 skill 的生成方式参考** : [《如何创建 SKILL》](../202604/20260421_02.md)  
   
 ## skill 介绍
+  
 ### [日常] 打基础
   
 思维筑基  
@@ -197,8 +198,9 @@ PostgreSQL 问答助手
   cp -r darwin-skill ~/.claude/skills/
   ```
   
+-----
   
-## only for claude web
+# SKILL for claude web
 `skills_for_claude_web` 目录中的 skill 仅用于 Claude web 版.
   
 `.skill` 是 claude web skill 的压缩包.  
@@ -264,7 +266,11 @@ PostgreSQL 问答助手
   
 - `red-blue-debate`: 扮演红蓝队互相辩论的通用解答问题专家. 输入任何问题, 分析问题后扮演领域专家, 解答问题. 输出为 markdown 格式, 存储到当前项目 markdown 文件夹中.  
   
-## 依赖  
+-----
+
+# 依赖  
+在 claude code cli 或 codex cli 中使用这些 skill 时, 可能依赖的一些包或软件.  
+  
 1、  
   
 ```bash  

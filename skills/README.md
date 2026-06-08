@@ -174,6 +174,8 @@
 ### skills
 - `market-opening-analyst`: 市场开局分析, 分析下一次开市可能会引爆上涨、下跌的行业或标的. 以 markdown 格式图文并茂(采用mermaid、ascii text等图)的输出到当前项目 markdown 目录中.  
   
+- `investor-news-impact`: 面向投资者, 抓取最近3天内发生的新闻. 总结并分析推演对哪些行业、上市公司带来哪些影响.  
+  
 - `daily-finance`: 每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
   
 - `finance-core-analysis`: 基于 `daily-finance` 的事实底稿，再联网复核关键数据，用流动性、利率、风险偏好、资金流、政策和资产负债表模型生成可发布的深度财经分析。  
@@ -185,6 +187,9 @@
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
 - `trading-manual-writer`: 散户投资小白金融全品种操盘手册writer, 输入小结标题和其他参考信息, 输出 以 markdown 格式保存到当前项目的 markdown 目录中.  
+  
+- `industry-deep-explainer`: 快速且通熟易懂的讲透一个行业. 输入希望分析的行业名进行分析, 同时分析行业中的商业机会, 将结果以 markdown 格式输出到当前项目的 markdown 目录中.  
+    - 区别于 industry-chain-analyst 和 industry-insight-writer, 前者主要针对投行/上市公司, 后者针对公众号文. 本skill则定位"战略顾问+创业者"视角. 
   
 - `paper-interpreter`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文.   
   

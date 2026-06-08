@@ -34,22 +34,23 @@
 - `douban-book-notes`: 输入豆瓣链接, 生成读书笔记.  
   
 ### [日常] 财经类, 日常分析与预测
+市场开局分析  
 - `market-opening-analyst`: 市场开局分析, 分析并预测下一次开市可能会引爆上涨、下跌的行业或标的. 以 markdown 格式图文并茂(采用mermaid、ascii text等图)的输出到当前项目 markdown 目录中.  
   
+指定美股分析  
 - `us-stock-prediction`: 预测某只指定美股的次日走势, 结果输出到当前项目 markdown 目录中.  
   
+指定A股分析  
 - `a-stock-prediction`: 预测某只指定A股的次日走势, 结果输出到当前项目 markdown 目录中.   
   
+根据最近3天新闻推演对市场的影响  
 - `investor-news-impact`: 面向投资者, 抓取最近3天内发生的新闻. 总结并推演分析将对哪些行业、上市公司带来何种影响.  
-  
+
+系列技能: 每日财经事件、深度分析、公众号爆款文章、小白解读、未来一周市场预测  
 - `daily-finance`：每日联网采集并校验高质量财经新闻、市场数据和关键事件，生成可直接发布的公众号财经日报，并作为后续深度分析的事实底稿。  
-  
 - `finance-core-analysis`：基于 `daily-finance` 的事实底稿，再联网复核关键数据，用流动性、利率、风险偏好、资金流、政策和资产负债表模型生成可发布的深度财经分析。  
-  
 - `finance-explosive-article`：基于前两份财经文档和最新外部数据校验，用“第一性原理 + 反直觉 + 系统模型”的德哥风格生成公众号爆款财经文章。  
-  
 - `finance-beginner-explainer`: 基于 `finance-explosive-article` 的文案, 面向小白进行更细致的解读, 必要时会用到 `daily-finance` 和 `finance-core-analysis` 增加证据链完整性.  
-  
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
 ### [日常] 发现世界 bug

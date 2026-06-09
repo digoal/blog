@@ -54,15 +54,15 @@
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
 ### [日常] 发现世界 bug  
-抓取行业新闻, 分析并发现BUG和商机, 设计解决方案、产品与商业模式
+抓取行业新闻, 分析并发现BUG和**商机**, 设计解决方案、产品与商业模式
 - `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
   
-产品经理, 根据上面发现的BUG和商机, 编写 BRD, MRD, PRD.  
+产品经理, 根据上面发现的BUG和商机, 编写 **BRD, MRD, PRD**.  
 - `write-brd`: 输入 idea, 将 BRD 以 markdown 格式保存到当前项目 markdown 目录中. 
 - `write-mrd`: 输入 idea, 将 MRD 以 markdown 格式保存到当前项目 markdown 目录中. 
 - `write-prd`: 输入 idea, 将 PRD 以 markdown 格式保存到当前项目 markdown 目录中. 
   
-用HTML做高保真原型、交互Demo、幻灯片、动画  
+用HTML做高保真**产品原型**、交互Demo、幻灯片、动画  
 - `huashu-design`: 花叔Design（Huashu-Design） —— 用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
     - https://github.com/alchaincyf/huashu-design
     

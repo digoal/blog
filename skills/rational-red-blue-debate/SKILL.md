@@ -40,6 +40,18 @@ Each team must:
 - Specify how to prove or falsify its conclusion with future observations.
 - Perform a self-verification pass before saving the expert output.
 
+**Causal chain must be presented in chronological order.** Every claim of the form "X happened because of Y" or "Z was decided at time T" must be supportable by an explicit timestamp. Do not use vague phrases like "early stage" / "later period" / "before the product matured" — replace with concrete dates or date ranges (e.g., "2025 H2", "between 2024-11 and 2025-05"). **A cause cannot logically precede an effect that has already occurred in the public record.**
+
+## Cross-Generation / Multi-Event Contexts
+
+When the question involves multiple generations of a product, multiple events, or an evolutionary timeline, special care is required. The classic trap is to assert a decision was "locked in" at a date when the dependent fact was already public.
+
+Required when context is multi-generational or multi-event:
+
+- Build a **timeline of key public events first** (release dates, sales milestones, public statements, competitor moves) before constructing causal claims.
+- For each "locked-in at time T" claim, verify T precedes the dependent event in the public record. If T is after the dependent event, the claim is structurally invalid and must be reframed (e.g., "predictions were updated but still insufficient" rather than "predictions were made without sight of the data").
+- State the same timeline in both red and blue expert files so cross-checking is possible.
+
 ## Expert Intermediate Files
 
 For each expert role, write a separate Markdown file named:
@@ -54,11 +66,12 @@ Each expert file must include:
 2. Question restatement and domain framing.
 3. Expert-role analysis.
 4. First-principles reasoning and prerequisite conditions.
+   - **Prerequisite conditions must include any implicit temporal assumptions** the argument relies on (e.g., "I assume decision X was made before event Y became public"). Make these explicit so the timeline check below can verify them.
 5. Evidence and cases with source links when browsing or external materials are used.
 6. Diagram when useful, using Mermaid, ASCII text, or an external SVG file.
 7. Applicability boundaries.
 8. Falsification and proof plan: what to observe, how to prove, how to disprove.
-9. Self-verification: data check, logic check, assumption check, and revision note.
+9. Self-verification: data check, logic check, assumption check, **timeline check**, and revision note.
 
 If an SVG is needed, save it as a separate `.svg` file under `markdown/` and reference it from the Markdown file. Prefer Mermaid or ASCII diagrams when they are sufficient.
 
@@ -91,6 +104,7 @@ The final article must:
 - Keep conclusions conditional: say what must be true for the conclusion to hold.
 - Include a practical observation checklist for proving or falsifying the conclusion.
 - Cite sources when external evidence is used.
+- **When the question crosses multiple time-bound events (e.g., product generations, market milestones), present a brief timeline of public events early in the article** so the reader can independently verify the chronology before reading the analysis. If a prior draft made a chronological error, acknowledge and correct it explicitly in the final article (do not silently patch it).
 
 Save the final article as:
 
@@ -103,8 +117,19 @@ Before replying to the user:
 1. Confirm every required Markdown file exists.
 2. Confirm red and blue conclusions are mutually exclusive.
 3. Confirm the debate has no more than five rounds.
-4. Confirm each expert file has self-verification.
+4. Confirm each expert file has self-verification **including an explicit timeline check**.
 5. Confirm the final article is first-person, beginner-friendly, and does not expose the synthesis process.
 6. Confirm source links are present when external evidence was used.
+7. **For multi-event or multi-generation topics, confirm the final article presents a brief public-event timeline early on, and that all "locked-in at time T" claims have T before the dependent event.**
 
 In the final response to the user, list the generated file paths and note any verification that could not be completed.
+
+## Revision Protocol for Chronology Errors
+
+If, after producing the deliverables, a chronology or temporal-ordering error is discovered (e.g., a user points out that a "decision at time T" actually post-dates the dependent event):
+
+1. **Acknowledge the error in the affected expert file** — add a dated "Revision note" section explaining what changed and why. Do not silently rewrite history.
+2. **Re-derive the conclusion** from the corrected timeline. In many cases, this strengthens one team and weakens the other; weight the final synthesis accordingly.
+3. **Surface the correction in the judge final** — a brief parenthetical "时间线修正" or "timeline correction" line is acceptable, even though the article otherwise hides the synthesis process. Hiding a factual error is worse than breaking the no-meta rule once.
+4. **Update the red-blue debate** with a new "unresolved disagreement" item capturing how the correction shifted the balance.
+5. **Do not delete the original (wrong) text silently.** Either strike it through, or leave it with a "[corrected: see revision note]" tag. Auditability matters.

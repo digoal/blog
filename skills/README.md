@@ -53,15 +53,19 @@
 - `finance-beginner-explainer`: 基于 `finance-explosive-article` 的文案, 面向小白进行更细致的解读, 必要时会用到 `daily-finance` 和 `finance-core-analysis` 增加证据链完整性.  
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
-### [日常] 发现世界 bug
+### [日常] 发现世界 bug  
 抓取行业新闻, 分析并发现BUG和商机, 设计解决方案、产品与商业模式
 - `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
   
-产品经理, 根据上面发现的BUG和商机, 编写BRD,MRD,PRD.
+产品经理, 根据上面发现的BUG和商机, 编写 BRD, MRD, PRD.  
 - `write-brd`: 输入 idea, 将 BRD 以 markdown 格式保存到当前项目 markdown 目录中. 
 - `write-mrd`: 输入 idea, 将 MRD 以 markdown 格式保存到当前项目 markdown 目录中. 
 - `write-prd`: 输入 idea, 将 PRD 以 markdown 格式保存到当前项目 markdown 目录中. 
   
+用HTML做高保真原型、交互Demo、幻灯片、动画  
+- `huashu-design`: 花叔Design（Huashu-Design） —— 用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
+    - https://github.com/alchaincyf/huashu-design
+    
 ### 产业、行业、上市公司深度分析
 产业/行业分析(面向"投行"视角)  
 - `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出 markdown 格式文件, 保存到当前项目 markdown 目录中. 
@@ -181,10 +185,6 @@ PostgreSQL 问答助手
   
 生成播客脚本
 - `article-to-podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  例如: `$article-to-podcast-script 根据 markdown/finance-beginner-explainer-2026-04-22.md 文章, 生成 2 人播客脚本, 字数限定在1000字内, 如果无法完成限定, 请在结尾时引导听众阅读“digoal德哥”公众号发布的文字稿.` . 生成完之后还可以调整文件, 或者生成是告知风格(如犀利、金句频出等) . 然后用这篇文章介绍的方法, 生成播客语音. [《Mac本地生成 播客配音, 想要谁的声音都行, 还能带BGM》](../202604/20260422_02.md)  (非常耗内存, 如果你的播客很长, 建议剪成几篇分开生成, 或者升级内存) 
-  
-用HTML做高保真原型、交互Demo、幻灯片、动画  
-- `huashu-design`: 花叔Design（Huashu-Design） —— 用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
-    - https://github.com/alchaincyf/huashu-design
   
 将文章改写成公众号爆款文章  
 - `marketing-wechat-operator`: `微信公众号运营`, 编写爆款文章.  

@@ -238,6 +238,8 @@ PostgreSQL 问答助手
 - `industry-deep-explainer`: 输入行业名, 快速且通熟易懂的讲透一个行业. 并且分析行业中的商业机会, 将结果以 markdown 格式输出到当前项目的 markdown 目录中.    
     - 区别于 industry-chain-analyst 和 industry-insight-writer, 前者主要针对投行/上市公司, 后者针对公众号文. 本skill则定位"战略顾问+创业者"视角. 
   
+- `product-multi-role-analysis`: 分别扮演“用户、投资人、产品经理、市场运营、品牌运营、友商、合作伙伴”这7个角色, 分析这个产品.  
+  
 - `paper-interpreter`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文.   
   
 - `db-foundation-course`: 数据库筑基课 写作 skill, 输入数据库筑基课的文章标题 以及 相关的参考资料(通常是该篇数据库筑基课相关的技术文档、产品手册、开源项目地址、deepwiki地址、论文地址等). 输出最终 markdown 文件.   

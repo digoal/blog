@@ -66,7 +66,7 @@
 - `huashu-design`: 花叔Design（Huashu-Design） —— 用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
     - https://github.com/alchaincyf/huashu-design
     
-### 产业、行业、上市公司深度分析
+### 产业、行业、上市公司、产品深度分析
 产业/行业分析(面向"投行"视角)  
 - `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出 markdown 格式文件, 保存到当前项目 markdown 目录中. 
   
@@ -76,6 +76,9 @@
   
 企业财报分析  
 - `financial-report-analysis`: 财报分析, 输入公司财报文件或URL, 输出专业的财报解读文章.  
+  
+产品深度分析  
+- `product-multi-role-analysis`: 分别扮演“用户、投资人、产品经理、市场运营、品牌运营、友商、合作伙伴”这7个角色, 分析这个产品.  
   
 ### 未来规划
 根据个人情况、综合大环境与趋势, 给出人生规划建议书   
@@ -267,6 +270,11 @@ PostgreSQL 问答助手
 - `podcast-script`: 将文章转换成播客脚本. 输入为文章的 markdown 文件 以及 播客人数(1到4人).  
   
 - `bug-hunter`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
+    
+产品经理, 根据上面发现的BUG和商机, 编写 BRD, MRD, PRD.  
+- `write-brd`: 输入 idea, 将 BRD 以 markdown 格式保存到当前项目 markdown 目录中. 
+- `write-mrd`: 输入 idea, 将 MRD 以 markdown 格式保存到当前项目 markdown 目录中. 
+- `write-prd`: 输入 idea, 将 PRD 以 markdown 格式保存到当前项目 markdown 目录中. 
   
 - `article-rewriter`: 消化内容后, 从更高维度重写. 输入URL或原始内容, 输出markdown到当前项目markdown目录中.  
   

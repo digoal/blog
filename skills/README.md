@@ -173,7 +173,7 @@ PostgreSQL 问答助手
     postgres/postgres
   ```
   
-### [日常] 写作, PPT, 原型设计
+### [日常] 写作素材、播客、公众号 
 消化已有文章后, 从更高维度发现价值并重写  
 - `higher-order-article-writer`: 给出 url 或文章内容, 仔细阅读并消化后, 写一篇更高层次的博弈文章. 
   
@@ -189,7 +189,7 @@ PostgreSQL 问答助手
 将文章改写成公众号爆款文章  
 - `marketing-wechat-operator`: `微信公众号运营`, 编写爆款文章.  
   
-### 造人与进化
+### skill 蒸馏造人 与 skill 进化
 女娲 skill, 造人(蒸馏角色)   
 - `huashu-nuwa`: 女娲 skill, 造人(蒸馏) 
   

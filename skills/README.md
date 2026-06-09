@@ -57,6 +57,11 @@
 抓取行业新闻, 分析并发现BUG和商机, 设计解决方案、产品与商业模式
 - `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
   
+产品经理, 根据上面发现的BUG和商机, 编写BRD,MRD,PRD.
+- `write-brd`: 输入 idea, 将 BRD 以 markdown 格式保存到当前项目 markdown 目录中. 
+- `write-mrd`: 输入 idea, 将 MRD 以 markdown 格式保存到当前项目 markdown 目录中. 
+- `write-prd`: 输入 idea, 将 PRD 以 markdown 格式保存到当前项目 markdown 目录中. 
+  
 ### 产业、行业、上市公司深度分析
 产业/行业分析(面向"投行"视角)  
 - `industry-chain-investment-analysis`: 输入一个行业或产业名称, 根据这个行业产业链条的各个节点, 列出各个节点中具有代表性的上市公司, 分析这些企业的商业模式、上下游、核心竞争力, 护城河、风险揭露、竞争情况等. 图文并茂(svg/mermaid/ascii text等图形)的输出 markdown 格式文件, 保存到当前项目 markdown 目录中. 

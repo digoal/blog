@@ -113,6 +113,12 @@ digoal德哥(根据 blog 蒸馏, 更像 RAG 角色)
    - [《TradingAgents: 多 Agent 股票分析与交易决策系统试用》](../202603/20260327_03.md)  
    - [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](../202603/20260325_01.md)  
   
+张仲景  
+- `zhang-zhongjing-perspective`: 用女娲.skill 蒸馏的医圣张仲景   
+  
+孙思邈  
+- `sun-simiao-perspective`: 用女娲.skill 蒸馏的药王孙思邈  
+  
 ### [日常] 前沿跟进
 开源项目排行榜解读  
 - `github-weekly-trending`: 输入从 `https://github.com/trending?since=weekly&spoken_language_code=` 拷贝的内容, 编写本周热门开源项目文章, 输出到当前项目 markdown 目录中.   

@@ -83,7 +83,7 @@
 ### 未来规划
 大国N年规划、结合个人特点给出顺势而为的分析报告  
 - `state-trend-advisor`: 输入询问者的特点: 擅长的领域、特长、爱好等. 如果没有给出询问者的特点, 就认为你是普通人. 首先抓取并分析国家最近的五年规划、政策文件或近期相关的重大新闻. 面向询问者以“投资、创业方向、商业思路、产品思路、就业择业、学习规划”为目的输出分析报告.   
-    - [西邮CS专业本科生顺势规划](skill_used_example/state-trend-multi-20260611.md)  
+    - [西邮CS专业本科生顺势规划](skill_used_example/example1/state-trend-multi-20260611.md)  
   
 根据个人情况、综合大环境与趋势, 给出人生规划建议书   
 - `future-planning-advisor`: 基于提问者提供的背景、资源等信息. 编写符合提问者的未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中.  
@@ -277,7 +277,8 @@ PostgreSQL 问答助手
 - `personal-planner`: 基于提问者提供的背景、资源等信息. 编写符合提问者的未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中.  
   
 - `state-trend-advisor`: 输入询问者的特点: 擅长的领域、特长、爱好等. 如果没有给出询问者的特点, 就认为你是普通人. 首先抓取并分析国家最近的五年规划、政策文件或近期相关的重大新闻. 面向询问者以“投资、创业方向、商业思路、产品思路、就业择业、学习规划”为目的输出分析报告.   
-    - [软件工程师顺势而为例子](skills_for_claude_web/skill_used_example/state_trend_report_20260611_engineer.md)  
+    - [软件工程师顺势而为例子](skills_for_claude_web/skill_used_example/example1/state_trend_report_20260611_engineer.md)  
+    - [西邮计算机相关专业本科生顺势而为例子](skills_for_claude_web/skill_used_example/example2/state_trend_report_20260611_cs_xupt.md)  
   
 - `enterprise-planner`: 基于用户提供的企业名、企业简介、公司网站等信息, 给这家企业编写未来规划与建议书. 以 markdown 格式保存到当前项目的 markdown 目录中. 
   

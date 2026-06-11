@@ -119,6 +119,9 @@ digoal德哥(根据 blog 蒸馏, 更像 RAG 角色)
 孙思邈  
 - `sun-simiao-perspective`: 用女娲.skill 蒸馏的药王孙思邈  
   
+倪海厦  
+- `ni-haixia-perspective`: 用女娲.skill 蒸馏的倪海厦  
+  
 ### [日常] 前沿跟进
 开源项目排行榜解读  
 - `github-weekly-trending`: 输入从 `https://github.com/trending?since=weekly&spoken_language_code=` 拷贝的内容, 编写本周热门开源项目文章, 输出到当前项目 markdown 目录中.   

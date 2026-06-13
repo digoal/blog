@@ -53,7 +53,7 @@
 - `finance-beginner-explainer`: 基于 `finance-explosive-article` 的文案, 面向小白进行更细致的解读, 必要时会用到 `daily-finance` 和 `finance-core-analysis` 增加证据链完整性.  
 - `finance-weekly-outlook`: 根据daily-finance , finance-core-analysis , finance-explosive-article的产出, 再综合搜索其他相关的关键且权威的高质量数据. 分析未来一周极大概率看涨以及看空的行业和股票.  
   
-### [日常] 发现世界 bug  
+### [日常] 发现世界 bug、商机  
 抓取行业新闻, 分析并发现BUG和**商机**, 设计解决方案、产品与商业模式
 - `world-bug-opportunity-finder`: 根据我给出的行业名称抓对应行业的热点新闻, 如果我没有给出, 则默认抓热点社会新闻, 找“bug”, 并给解决思路. 将结果整理成图文并茂(包含svg/mermaid/ascii text等图形)的markdown文件保存到当前项目markdown目录中.
   
@@ -62,9 +62,18 @@
 - `write-mrd`: 输入 idea, 将 MRD 以 markdown 格式保存到当前项目 markdown 目录中. 
 - `write-prd`: 输入 idea, 将 PRD 以 markdown 格式保存到当前项目 markdown 目录中. 
   
+产品实现
+- `待补充`: 从单agent到复杂agent协作到loop团队协作. 参考 claude,codex,ruflo,loop.   
+  
+市场营销
+- `待补充`  
+  
 用HTML做高保真**产品原型**、交互Demo、幻灯片、动画  
 - `huashu-design`: 花叔Design（Huashu-Design） —— 用HTML做高保真原型、交互Demo、幻灯片、动画、设计变体探索+设计方向顾问+专家评审的一体化设计能力。  
     - https://github.com/alchaincyf/huashu-design
+  
+抓取咸鱼、boss直聘、或其他与招聘相关平台发布的内容, 与输入者的特征进行匹配, 给出接活的报告.  
+- `待补充`
     
 ### 产业、行业、上市公司、产品深度分析
 产业/行业分析(面向"投行"视角)  
@@ -132,6 +141,9 @@ digoal德哥(根据 blog 蒸馏, 更像 RAG 角色)
   
 指定开源项目深度分析  
 - `open-source-project-article`: 输入开源项目地址, 深度分析该开源项目, 输出到当前项目 markdown 目录中.  
+  
+数据库行业新闻
+- `待补充`, 收集我个人经常看的网站的新闻. 根据我的需求挑出进行解读. 例如 https://postgresweekly.com/ planet. .... 
   
 论文解读  
 - `paper-interpretation`: 输入论文 PDF 或论文 URL , 通俗易懂解读论文. 例如用于解读 AI 论文 https://arxiv.org/abs/2604.14141 https://arxiv.org/abs/2508.02739 
@@ -219,6 +231,17 @@ PostgreSQL 问答助手
   cp -r nuwa-skill ~/.claude/skills/
   cp -r darwin-skill ~/.claude/skills/
   ```
+  
+-----
+  
+思考:  
+```
+是不是可以包装成一个搞钱专属Claw，实践中逐步完善。
+从发现bug, 到分析商机, 形成产品, 销售闭环。
+发现机会，投资。
+发现匹配的活。
+未来 AI 自己接活干.
+```
   
 -----
   

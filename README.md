@@ -113,6 +113,9 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202607/20260725_03.md   [《我在腾讯云架构师成都同盟群被打脸了 - 先出发, 还是“准备好”再出发?》](202607/20260725_03.md)  
+##### 202607/20260725_02.md   [《Anthropic 推出 Claude Managed Agents : 云端"数字员工"现雏形》](202607/20260725_02.md)  
+##### 202607/20260725_01.md   [《AI论文解读 | DataFlow-Harness — 让 LLM 直接搭建可编辑的数据流水线》](202607/20260725_01.md)  
 ##### 202607/20260724_09.md   [《爆炸新闻: Anthropic 推出 ant, Claude 往 CS 架构演进》](202607/20260724_09.md)  
 ##### 202607/20260724_08.md   [《有人用 pg_turbovec 掀桌子, PG 向量检索省 20 倍内存》](202607/20260724_08.md)  
 ##### 202607/20260724_07.md   [《AI论文解读 | 谷歌向量压缩器 TurboQuant 在 Snowflake 的工业落地 TurboVec: A Case Study in Cost-Efficient Private Retrieval for Enterprise RAG via Codebook-Oblivious Quantization》](202607/20260724_07.md)  

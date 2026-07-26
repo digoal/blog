@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20260725_11.md   [《AI论文解读 | Cognee , Optimizing the Interface Between Knowledge Graphs and LLMs for Complex Reasoning》](20260725_11.md)  
 ##### 20260725_10.md   [《Cognee 实战：用 PostgreSQL 19 + pgvector + SQL/PGQ 打造 AI 持久记忆》](20260725_10.md)  
 ##### 20260725_09.md   [《手把手玩转 PowerMem: 给 AI 智能体装一个会思考的大脑》](20260725_09.md)  
 ##### 20260725_08.md   [《AI 记忆层，我该用哪个？Mem0 vs Cognee》](20260725_08.md)  

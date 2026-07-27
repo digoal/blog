@@ -113,6 +113,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202607/20260727_01.md   [《德说-第528期, 在 AI 时代做产品, 拼的到底是什么?》](202607/20260727_01.md)  
 ##### 202607/20260725_11.md   [《AI论文解读 | Cognee , Optimizing the Interface Between Knowledge Graphs and LLMs for Complex Reasoning》](202607/20260725_11.md)  
 ##### 202607/20260725_10.md   [《Cognee 实战：用 PostgreSQL 19 + pgvector + SQL/PGQ 打造 AI 持久记忆》](202607/20260725_10.md)  
 ##### 202607/20260725_09.md   [《手把手玩转 PowerMem: 给 AI 智能体装一个会思考的大脑》](202607/20260725_09.md)  

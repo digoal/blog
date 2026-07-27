@@ -113,6 +113,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202607/20260727_03.md   [《2 个国产 AI 记忆层开源项目 Cortrix 与 PowerMem PK 与选型》](202607/20260727_03.md)  
+##### 202607/20260727_02.md   [《Agent 语义存储开源项目: Cortrix 一手解说》](202607/20260727_02.md)  
 ##### 202607/20260727_01.md   [《德说-第528期, 在 AI 时代做产品, 拼的到底是什么?》](202607/20260727_01.md)  
 ##### 202607/20260725_11.md   [《AI论文解读 | Cognee , Optimizing the Interface Between Knowledge Graphs and LLMs for Complex Reasoning》](202607/20260725_11.md)  
 ##### 202607/20260725_10.md   [《Cognee 实战：用 PostgreSQL 19 + pgvector + SQL/PGQ 打造 AI 持久记忆》](202607/20260725_10.md)  

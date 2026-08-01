@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20260801_09.md   [《德说-第532期, AI 时代，公网内容就是产品的第二张脸》](20260801_09.md)  
 ##### 20260801_08.md   [《AI论文解读 | Kronos: A Foundation Model for the Language of Financial Markets》](20260801_08.md)  
 ##### 20260801_07.md   [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](20260801_07.md)  
 ##### 20260801_06.md   [《AI论文解读 | Unlimited OCR Works — Welcome the Era of One-shot Long-horizon Parsing》](20260801_06.md)  

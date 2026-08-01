@@ -113,6 +113,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202608/20260801_09.md   [《德说-第532期, AI 时代，公网内容就是产品的第二张脸》](202608/20260801_09.md)  
 ##### 202608/20260801_08.md   [《AI论文解读 | Kronos: A Foundation Model for the Language of Financial Markets》](202608/20260801_08.md)  
 ##### 202608/20260801_07.md   [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](202608/20260801_07.md)  
 ##### 202608/20260801_06.md   [《AI论文解读 | Unlimited OCR Works — Welcome the Era of One-shot Long-horizon Parsing》](202608/20260801_06.md)  

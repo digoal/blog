@@ -2,4 +2,11 @@
   
 ### 文章列表  
 ----  
-##### 20260801_01.md   [《我的 AI “屠龙刀”来了》](20260801_01.md)  
+##### 20260801_08.md   [《AI论文解读 | Kronos: A Foundation Model for the Language of Financial Markets》](20260801_08.md)  
+##### 20260801_07.md   [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](20260801_07.md)  
+##### 20260801_06.md   [《AI论文解读 | Unlimited OCR Works — Welcome the Era of One-shot Long-horizon Parsing》](20260801_06.md)  
+##### 20260801_05.md   [《AI论文解读 | Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory》](20260801_05.md)  
+##### 20260801_04.md   [《AI论文解读 | EverMemOS: A Self-Organizing Memory Operating System for Structured Long-Horizon Reasoning》](20260801_04.md)  
+##### 20260801_03.md   [《AI论文解读 | SkillOpt: Executive Strategy for Self-Evolving Agent Skills》](20260801_03.md)  
+##### 20260801_02.md   [《AI论文解读 | Kimi K3: Open Frontier Intelligence》](20260801_02.md)  
+##### 20260801_01.md   [《德说-第531期, 我的 AI “屠龙刀”来了》](20260801_01.md)  

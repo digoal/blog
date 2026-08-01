@@ -113,7 +113,14 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
-##### 202608/20260801_01.md   [《我的 AI “屠龙刀”来了》](202608/20260801_01.md)  
+##### 202608/20260801_08.md   [《AI论文解读 | Kronos: A Foundation Model for the Language of Financial Markets》](202608/20260801_08.md)  
+##### 202608/20260801_07.md   [《AI论文解读 | TradingAgents: Multi-Agents LLM Financial Trading Framework》](202608/20260801_07.md)  
+##### 202608/20260801_06.md   [《AI论文解读 | Unlimited OCR Works — Welcome the Era of One-shot Long-horizon Parsing》](202608/20260801_06.md)  
+##### 202608/20260801_05.md   [《AI论文解读 | Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory》](202608/20260801_05.md)  
+##### 202608/20260801_04.md   [《AI论文解读 | EverMemOS: A Self-Organizing Memory Operating System for Structured Long-Horizon Reasoning》](202608/20260801_04.md)  
+##### 202608/20260801_03.md   [《AI论文解读 | SkillOpt: Executive Strategy for Self-Evolving Agent Skills》](202608/20260801_03.md)  
+##### 202608/20260801_02.md   [《AI论文解读 | Kimi K3: Open Frontier Intelligence》](202608/20260801_02.md)  
+##### 202608/20260801_01.md   [《德说-第531期, 我的 AI “屠龙刀”来了》](202608/20260801_01.md)  
 ----  
 ##### 202607/20260730_02.md   [《我的“屠龙刀” | “AI Agent + 数据库 + Skills + 记忆层” Docker 镜像及制作过程》](202607/20260730_02.md)  
 ##### 202607/20260730_01.md   [《德说-第530期, 昨天见了 2 位老友, 不约而同的展示了 AI 的上乘武功, 他们都有一把“屠龙刀”》](202607/20260730_01.md)  

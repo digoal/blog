@@ -113,6 +113,10 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202608/20260810_05.md   [《AI论文解读 | Ontology Generation using Large Language Models》](202608/20260810_05.md)  
+##### 202608/20260810_04.md   [《AI论文解读 | The Artificial Intelligence Ontology: LLM-assisted construction of AI concept hierarchies》](202608/20260810_04.md)  
+##### 202608/20260810_03.md   [《AI 本体论系列文章: 无名天地之始, 有名万物之母》](202608/20260810_03.md)  
+##### 202608/20260810_02.md   [《AI 本体论系列文章: AI 认识世界的哲学奠基理论》](202608/20260810_02.md)  
 ##### 202608/20260810_01.md   [《OpenAI 的 Codex 被 DeepSeek 架空了?》](202608/20260810_01.md)  
 ##### 202608/20260809_02.md   [《PostgreSQL 必须使用 HugePages 的场景及原因》](202608/20260809_02.md)  
 ##### 202608/20260809_01.md   [《纳斯达克推 23 小时交易制, 谁受益谁担风险》](202608/20260809_01.md)  

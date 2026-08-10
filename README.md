@@ -113,6 +113,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202608/20260810_06.md   [《阿里千问“劫富济贫”背后: 开源大模型的商业模式》](202608/20260810_06.md)  
 ##### 202608/20260810_05.md   [《AI论文解读 | Ontology Generation using Large Language Models》](202608/20260810_05.md)  
 ##### 202608/20260810_04.md   [《AI论文解读 | The Artificial Intelligence Ontology: LLM-assisted construction of AI concept hierarchies》](202608/20260810_04.md)  
 ##### 202608/20260810_03.md   [《AI 本体论系列文章: 无名天地之始, 有名万物之母》](202608/20260810_03.md)  

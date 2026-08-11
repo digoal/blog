@@ -112,7 +112,7 @@ echo "### 五、已归类文档(大部分文章未归类, 请看第六部分 ...
 sed 's/](/](class\//g' class/README.md >> ./README.md
 echo "  "  >> ./README.md
 echo "### Star History  "  >> ./README.md 
-echo "[![Star History Chart](https://api.star-history.com/svg?repos=digoal/blog&type=Date)](https://star-history.com/#digoal/blog&Date)  "   >> ./README.md
+echo "[![Star History Chart](https://star-history.dera.page/svg?repos=digoal/blog&type=Date)](https://star-history.dera.page/#digoal/blog&Date)  "   >> ./README.md
 echo "  "  >> ./README.md
 echo "### 六、所有文档如下  " >> ./README.md
 

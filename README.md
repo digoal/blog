@@ -113,6 +113,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202608/20260811_01.md   [《AI 安全沙箱使用思路, 参考 Freebuff Docker 容器使用最佳实践》](202608/20260811_01.md)  
 ##### 202608/20260810_06.md   [《阿里千问“劫富济贫”背后: 开源大模型的商业模式》](202608/20260810_06.md)  
 ##### 202608/20260810_05.md   [《AI论文解读 | Ontology Generation using Large Language Models》](202608/20260810_05.md)  
 ##### 202608/20260810_04.md   [《AI论文解读 | The Artificial Intelligence Ontology: LLM-assisted construction of AI concept hierarchies》](202608/20260810_04.md)  

@@ -109,7 +109,7 @@ digoal's|PostgreSQL|文章|归类
   
   
 ### Star History  
-[![Star History Chart](https://api.star-history.com/svg?repos=digoal/blog&type=Date)](https://star-history.com/#digoal/blog&Date)  
+[![Star History Chart](https://star-history.dera.page/svg?repos=digoal/blog&type=Date)](https://star-history.dera.page/#digoal/blog&Date)  
   
 ### 六、所有文档如下  
 ----  

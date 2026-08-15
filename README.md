@@ -113,6 +113,7 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202608/20260815_01.md   [《AI论文解读 | Spatiotemporal Composability 编程范式》](202608/20260815_01.md)  
 ##### 202608/20260814_05.md   [《Oracle → KingbaseES 迁移实操手册（KFS 全量+增量同步）》](202608/20260814_05.md)  
 ##### 202608/20260814_04.md   [《The Librarian 解决 SKILL 过多带来的问题思路》](202608/20260814_04.md)  
 ##### 202608/20260814_03.md   [《Pi vs DeepSeek Harness: 编码 Agent 框架对比报告》](202608/20260814_03.md)  

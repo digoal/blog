@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20260815_01.md   [《AI论文解读 | Spatiotemporal Composability 编程范式》](20260815_01.md)  
 ##### 20260814_05.md   [《Oracle → KingbaseES 迁移实操手册（KFS 全量+增量同步）》](20260814_05.md)  
 ##### 20260814_04.md   [《The Librarian 解决 SKILL 过多带来的问题思路》](20260814_04.md)  
 ##### 20260814_03.md   [《Pi vs DeepSeek Harness: 编码 Agent 框架对比报告》](20260814_03.md)  

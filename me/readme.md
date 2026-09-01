@@ -30,6 +30,8 @@ PostgreSQL 中国社区发起人之一
 中国开源软件推进联盟PostgreSQL分会特聘资深领域专家
 中国开源软件推进联盟PostgreSQL分会ACED
 数据库开源发展联盟(简称 COSDA)理事成员
+腾讯云架构师同盟成员
+开放原子OpenTenBase ACE 专家委员会成员
 IvorySQL 数据库顾问团成员
 HaloDB 数据库顾问团成员
 海量数据库顾问团成员

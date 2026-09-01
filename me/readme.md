@@ -52,19 +52,22 @@ SKIMOBI数据库团队负责人
 B站, 4600+
 - https://space.bilibili.com/310191812
 
-阿里云开发者社区, 20700+
+阿里云开发者社区, 20800+
 - https://developer.aliyun.com/profile/3x5dm5sgv4yq6
+  
+腾讯云开发者社区
+- https://cloud.tencent.com/developer/user/4035096
 
 知乎, LV8
 - https://www.zhihu.com/people/digoal
 
-微信公众号“digoal德哥”, 11000+
+微信公众号“digoal德哥”, 14000+
 - https://mp.weixin.qq.com/s/G-KusBPYxbC2A4erZgC0gQ
 
-微信视频号“digoal德哥”, 2100+
+微信视频号“digoal德哥”, 3600+
 - https://weixin.qq.com/sph/AdoKKWKJl
 
-Github, 8.3k
+Github, 8.6k
 - https://github.com/digoal/blog
 ```
   

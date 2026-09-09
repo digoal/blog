@@ -2,6 +2,15 @@
   
 ### 文章列表  
 ----  
+##### 20260909_09.md   [《你写的 AI 技能，为什么总是不触发？》](20260909_09.md)  
+##### 20260909_08.md   [《为什么 2026 年还不用 SQLite 当 session 后端: JSONL 的 5 个隐性赌注 + 实测反驳》](20260909_08.md)  
+##### 20260909_07.md   [《把"agent 框架"做成可替换内核": DeepSeek Harness 是怎么想的》](20260909_07.md)  
+##### 20260909_06.md   [《zheap vs heap vacuum 深度对比》](20260909_06.md)  
+##### 20260909_05.md   [《zheap undo 日志增长分析》](20260909_05.md)  
+##### 20260909_04.md   [《zheap: PostgreSQL 的「Undo 堆表」实验 —— 用 30KB 源码读懂 EnterpriseDB 如何重写 MVCC》](20260909_04.md)  
+##### 20260909_03.md   [《PG 18 ReadStream 实现 + OrioleDB TableAmRoutine 适配分析》](20260909_03.md)  
+##### 20260909_02.md   [《PG 13 到 18 TableAmRoutine 接口演进分析: 为什么 undam 无法编译,API 变化的 10 个细节》](20260909_02.md)  
+##### 20260909_01.md   [《undam: PG In-Place Update + Undo Chain 深度剖析》](20260909_01.md)  
 ##### 20260908_31.md   [《zedstore vs OrioleDB pgbench 标准 benchmark 实测》](20260908_31.md)  
 ##### 20260908_30.md   [《zedstore vs OrioleDB 的真实 WAL 流量是 1-3× 不是 130×》](20260908_30.md)  
 ##### 20260908_29.md   [《OrioleDB S3 归档及检查点跨 region 实测》](20260908_29.md)  

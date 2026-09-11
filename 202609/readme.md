@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20260911_05.md   [《斯坦福Google等60位学者撕开真相：别再把“向量检索”当记忆了，Agent 的下半场刚刚开始！》](20260911_05.md)  
 ##### 20260911_04.md   [《AI论文解读 | A Survey of Agent Memory in the Second Half: Towards Self-Evolving and Long-Horizon Agents》](20260911_04.md)  
 ##### 20260911_03.md   [《Agent 在 Demo 阶段看着惊艳全场，为什么一进生产环境就漏洞百出？》](20260911_03.md)  
 ##### 20260911_02.md   [《9.12 TiDB 杭州站 AI Agent 圆桌讨论》](20260911_02.md)  

@@ -113,6 +113,8 @@ digoal's|PostgreSQL|文章|归类
   
 ### 六、所有文档如下  
 ----  
+##### 202609/20260911_04.md   [《AI论文解读 | A Survey of Agent Memory in the Second Half: Towards Self-Evolving and Long-Horizon Agents》](202609/20260911_04.md)  
+##### 202609/20260911_03.md   [《Agent 在 Demo 阶段看着惊艳全场，为什么一进生产环境就漏洞百出？》](202609/20260911_03.md)  
 ##### 202609/20260911_02.md   [《9.12 TiDB 杭州站 AI Agent 圆桌讨论》](202609/20260911_02.md)  
 ##### 202609/20260911_01.md   [《IvorySQL 的 PG & Oracle 双 Parser 架构揭秘 之 “VARCHAR2 怎么变成 VARCHAR”》](202609/20260911_01.md)  
 ##### 202609/20260910_04.md   [《AI论文解读 | DeepSeek-V4.1-Flash Technical Report》](202609/20260910_04.md)  

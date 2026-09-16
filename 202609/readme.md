@@ -2,6 +2,7 @@
   
 ### 文章列表  
 ----  
+##### 20260916_01.md   [《PG 30 周年直播, 第八期 收官之作》](20260916_01.md)  
 ##### 20260915_01.md   [《德说-第534期, AI 无意识, 但我打算给它注入“意识”》](20260915_01.md)  
 ##### 20260911_05.md   [《斯坦福Google等60位学者撕开真相：别再把“向量检索”当记忆了，Agent 的下半场刚刚开始！》](20260911_05.md)  
 ##### 20260911_04.md   [《AI论文解读 | A Survey of Agent Memory in the Second Half: Towards Self-Evolving and Long-Horizon Agents》](20260911_04.md)  

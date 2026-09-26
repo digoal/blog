@@ -38,6 +38,8 @@ HaloDB 数据库顾问团成员
 2018届OSCAR开源尖峰人物
 “digoal德哥”公众号与视频号主理人
 “https://github.com/digoal/blog”项目主理人
+IF-Club 星衍联盟成员
+龙蜥AIOS社区成员
 曾任阿里云数据库首席专家团队成员
 阿里巴巴麒麟布道师
 阿里云RDS PostgreSQL数据库架构师

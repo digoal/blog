@@ -40,13 +40,13 @@ HaloDB 数据库顾问团成员
 “https://github.com/digoal/blog”项目主理人
 IF-Club 星衍联盟成员
 龙蜥AIOS社区成员
-曾任阿里云数据库首席专家团队成员
-阿里巴巴麒麟布道师
-阿里云RDS PostgreSQL数据库架构师
-阿里云RDS PostgreSQL数据库高级产品专家
-阿里云PolarDB数据库高级产品专家
-阿里云开源数据库社区高级运营专家
-SKIMOBI数据库团队负责人
+前阿里云数据库首席专家团队成员
+前阿里巴巴麒麟布道师
+前阿里云RDS PostgreSQL数据库架构师
+前阿里云RDS PostgreSQL数据库高级产品专家
+前阿里云PolarDB数据库高级产品专家
+前阿里云开源数据库社区高级运营专家
+前SKIMOBI数据库团队负责人
 ```
    
 经过坚持更新, 全网粉丝已4.6万+, 文章及视频传播量超2000万人次.    

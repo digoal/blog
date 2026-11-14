@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>行存之 heap 表组织结构 · 数据库筑基课</title>
+<!--
+  设计说明 / assumptions
+  · 交付形态：单文件、离线可用、16:9（1600×900 舞台等比缩放），无外部字体/图片/CDN 依赖。
+  · 内容来源：用户提供文稿 20260422_01.md（数据库筑基课 · 行存之 heap 表组织结构）。
+  · 事实核验：PostgreSQL 17 官方文档 §65.6 Database Page Layout（24B 页头、4B 行指针、23B 元组头、8KB 页）。
+  · 视觉母题：一个 8KB 的块里，line pointer 从头部向后、tuple 从尾部向前「两端相向生长」。
+    这个母题贯穿封面、结构页、章节编号与进度线，是从内容本身长出来的形式，不是套用风格模板。
+  · 交互原则：只在能帮助理解结构/状态变化处加交互（悬停解剖、寻址、FSM 搜索、MVCC 时间轴、HOT 对比、代码 tab、FAQ 折叠）。
+-->
+<style>
+:root{
+  --paper:#F7F4EC; --card:#FFFDF8; --ink:#1B262C; --ink2:#3E4C54; --muted:#6F7C7C;
+  --line:#DCD5C6; --rule:#C4BCA9; --red:#C2492F; --red-soft:#F5E7E0;
+  --teal:#2C6E73; --teal-soft:#E3EEEC; --gold:#A9812F; --green:#4B7A58;
+  --serif:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",Georgia,serif;
+  --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:"SF Mono","JetBrains Mono","Menlo","Consolas",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:#E9E3D7;font-family:var(--sans);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+#stage{position:absolute;width:1600px;height:900px;transform-origin:0 0;background:var(--paper);box-shadow:0 26px 90px rgba(35,38,30,.20);overflow:hidden}
+.slide{position:absolute;inset:0;padding:56px 92px 70px;opacity:0;visibility:hidden;transform:translateY(12px);transition:opacity .34s ease,transform .34s ease;background:var(--paper)}
+.slide.active{opacity:1;visibility:visible;transform:none;z-index:2}
+.slide::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(110,100,78,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(110,100,78,.035) 1px,transparent 1px);background-size:40px 40px}
+.slide>*{position:relative;z-index:1}
+.slide::after{content:"数据库筑基课 · PostgreSQL";position:absolute;right:92px;top:30px;font:13px var(--mono);letter-spacing:.14em;color:var(--muted);z-index:1}
+.slide.cover::after{display:none}
+.eyebrow{display:flex;align-items:center;gap:18px;font:600 15px var(--mono);letter-spacing:.20em;color:var(--teal);text-transform:uppercase;margin-bottom:22px}
+.eyebrow .no{font-size:32px;line-height:1;color:var(--red);font-weight:700;letter-spacing:0}
+.eyebrow .bar{width:54px;height:2px;background:var(--rule)}
+h1,h2,h3,h4{margin:0;font-weight:400}
+h1{font:400 76px/1.16 var(--serif);letter-spacing:.01em}
+h2{font:400 50px/1.2 var(--serif);letter-spacing:.01em}
+h3{font:500 25px/1.35 var(--sans)}
+h4{font:600 19px/1.4 var(--sans)}
+p{margin:0}
+.lead{font:400 24px/1.65 var(--sans);color:var(--ink2)}
+.small{font:400 18px/1.62 var(--sans)}
+.tiny{font:400 15px/1.55 var(--sans)}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+.red{color:var(--red)}
+.teal{color:var(--teal)}
+.gold{color:var(--gold)}
+.green{color:var(--green)}
+.content{height:618px;margin-top:16px}
+.box{border:1px solid var(--line);background:var(--card);padding:22px 26px}
+.box.flat{background:transparent}
+.box.tred{border-top:2px solid var(--red)}
+.box.tteal{border-top:2px solid var(--teal)}
+.note{font:400 17px/1.6 var(--mono);color:var(--muted)}
+.tag{display:inline-block;font:600 14px var(--mono);letter-spacing:.12em;color:var(--teal);text-transform:uppercase}
+.rule{height:1px;background:var(--line);width:100%}
+.dash{border-top:1px dashed var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:18px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 14px var(--mono);letter-spacing:.10em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+td.k{font-family:var(--mono);color:var(--ink);white-space:nowrap}
+pre{margin:0;font:18px/1.6 var(--mono);color:#26333A;background:#F1EDE3;border:1px solid var(--line);padding:20px 24px;white-space:pre;overflow:hidden}
+pre .k{color:var(--red);font-weight:600}
+pre .c{color:#8C8D80}
+pre .s{color:var(--teal)}
+pre .n{color:var(--gold)}
+.btn{font:600 15px var(--mono);letter-spacing:.04em;border:1px solid var(--rule);background:transparent;color:var(--ink);padding:10px 18px;cursor:pointer;transition:background .2s,color .2s,border-color .2s}
+.btn:hover{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.btn.on{background:var(--red);border-color:var(--red);color:#fff}
+.btn.sm{padding:7px 13px;font-size:14px}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap}
+svg{display:block;overflow:visible}
+svg text{font-family:var(--sans)}
+svg .m{font-family:var(--mono)}
+svg .lbl{font-size:15px;fill:var(--muted)}
+svg .val{font-size:18px;fill:var(--ink)}
+svg .wht{fill:#FFFDF8}
+.lit{transition:opacity .35s,fill .35s,stroke .35s}
+/* HUD 外壳 */
+#hud{position:fixed;left:0;right:0;bottom:0;height:54px;display:flex;align-items:center;gap:20px;padding:0 26px;background:rgba(233,227,215,.94);border-top:1px solid #D2CBBB;z-index:20;font:13px var(--mono);color:#4A514B;backdrop-filter:blur(8px)}
+#hud .pn{font-size:15px;color:var(--ink);white-space:nowrap;min-width:76px}
+#hud .pn b{color:var(--red);font-size:19px}
+#hudTitle{flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6A7169}
+#bar{flex:1;height:2px;background:#CFC7B6;position:relative;min-width:60px}
+#bar i{display:block;height:100%;width:0;background:var(--red);transition:width .34s ease}
+#bar::after{content:"";position:absolute;right:0;top:-3px;width:2px;height:8px;background:var(--teal)}
+#hud button{font:13px var(--mono);border:1px solid #C4BCA9;background:transparent;color:#3E4C54;padding:7px 12px;cursor:pointer;white-space:nowrap}
+#hud button:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+#hud button.nav{font-size:19px;line-height:1;padding:3px 13px}
+#menu{position:fixed;inset:0;background:rgba(247,244,236,.98);z-index:30;display:none;padding:52px 9vw;overflow:auto}
+#menu.open{display:block}
+#menu h2{font-size:44px}
+#menu ol{columns:2;column-gap:76px;list-style:none;counter-reset:mm;padding:0;margin:28px 0 0}
+#menu li{counter-increment:mm;break-inside:avoid;padding:11px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:20px;color:var(--ink2)}
+#menu li::before{content:counter(mm,decimal-leading-zero);font:15px var(--mono);color:var(--red);margin-right:16px}
+#menu li:hover{color:var(--red);padding-left:8px;transition:padding-left .18s}
+#menu .close{float:right;margin-top:-56px}
+@media print{
+  body{background:#fff;overflow:visible}#hud,#menu{display:none!important}
+  #stage{position:static;transform:none!important;box-shadow:none;width:1600px;height:auto}
+  .slide{position:relative;opacity:1!important;visibility:visible!important;transform:none!important;page-break-after:always;height:900px}
+}
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- ============ 01 封面 ============ -->
+<section class="slide cover active" data-title="封面 · 行存之 heap 表组织结构">
+  <div style="display:flex;height:100%">
+    <div style="width:56%;padding-top:66px;display:flex;flex-direction:column">
+      <div class="eyebrow"><span class="no">01</span><span class="bar"></span><span>DATABASE FOUNDATIONS / 存储引擎</span></div>
+      <div style="font:400 30px var(--serif);color:var(--teal);margin:34px 0 6px">数据库筑基课 · 行存系列</div>
+      <h1 style="font-size:82px;margin-top:6px">行存之<br><span style="font-family:var(--mono);font-weight:600;letter-spacing:-.04em">heap</span> 表组织结构</h1>
+      <div style="width:88px;height:3px;background:var(--red);margin:30px 0 24px"></div>
+      <p class="lead" style="max-width:700px">从 <span class="mono">ctid</span> 到 <span class="mono">vacuum</span>，<br>读懂 PostgreSQL 最经典的行存储引擎，<br>以及它为什么天生适合 OLTP。</p>
+      <div style="margin-top:auto;padding-bottom:34px">
+        <div class="dash" style="margin-bottom:22px"></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+          <div><div class="tag">难度</div><div style="font-size:20px;margin-top:6px">★★☆☆☆</div></div>
+          <div><div class="tag">适合角色</div><div class="small" style="margin-top:6px">架构师 / DBA<br>业务开发者</div></div>
+          <div><div class="tag">作者</div><div style="font-size:20px;margin-top:6px">digoal</div></div>
+          <div><div class="tag">日期</div><div class="mono" style="font-size:19px;margin-top:8px">2026-04-22</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="width:44%;position:relative">
+      <svg viewBox="0 0 620 620" width="620" style="margin-top:104px;margin-left:10px" aria-label="8KB 数据块结构示意">
+        <rect x="30" y="30" width="540" height="470" fill="#FFFDF8" stroke="#C4BCA9" stroke-width="1.5"/>
+        <text x="30" y="18" class="m lbl" font-size="14">ONE BLOCK / 8 KB</text>
+        <rect x="30" y="30" width="540" height="66" fill="#2C6E73"/>
+        <text x="50" y="70" class="m" font-size="19" fill="#FFFDF8">PageHeaderData</text>
+        <text x="380" y="70" class="m" font-size="16" fill="#CFE3E0">24 bytes</text>
+        <g>
+          <rect x="52" y="122" width="76" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+          <rect x="136" y="122" width="76" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+          <rect x="220" y="122" width="76" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+          <rect x="304" y="122" width="76" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+          <text x="72" y="149" class="m" font-size="16" fill="#2C6E73">lp1</text>
+          <text x="156" y="149" class="m" font-size="16" fill="#2C6E73">lp2</text>
+          <text x="240" y="149" class="m" font-size="16" fill="#2C6E73">lp3</text>
+          <text x="324" y="149" class="m" font-size="16" fill="#2C6E73">…</text>
+        </g>
+        <path d="M52 180 L470 180" stroke="#2C6E73" stroke-width="1.5" marker-end="url(#arT)"/>
+        <text x="52" y="205" class="lbl" font-size="15" fill="#2C6E73">line pointers 从头部向后生长 →</text>
+        <rect x="52" y="222" width="496" height="112" fill="none" stroke="#C4BCA9" stroke-dasharray="6 6"/>
+        <text x="300" y="285" text-anchor="middle" class="m" font-size="21" fill="#8A8C80">Free Space</text>
+        <g>
+          <rect x="404" y="356" width="144" height="62" fill="#F5E7E0" stroke="#C2492F"/>
+          <rect x="252" y="356" width="144" height="62" fill="#F5E7E0" stroke="#C2492F"/>
+          <rect x="100" y="356" width="144" height="62" fill="#F5E7E0" stroke="#C2492F"/>
+          <text x="476" y="393" text-anchor="middle" class="m" font-size="16" fill="#C2492F">Tuple 1</text>
+          <text x="324" y="393" text-anchor="middle" class="m" font-size="16" fill="#C2492F">Tuple 2</text>
+          <text x="172" y="393" text-anchor="middle" class="m" font-size="16" fill="#C2492F">Tuple 3</text>
+        </g>
+        <path d="M548 440 L100 440" stroke="#C2492F" stroke-width="1.5" marker-end="url(#arR)"/>
+        <text x="548" y="466" text-anchor="end" font-size="15" fill="#C2492F">← tuples 从尾部向前生长</text>
+        <text x="30" y="536" class="lbl" font-size="15">两端相向，中间留白：写入快，代价是「无序」。</text>
+        <defs>
+          <marker id="arT" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2C6E73"/></marker>
+          <marker id="arR" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C2492F"/></marker>
+        </defs>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 导读 ============ -->
+<section class="slide" data-title="导读 · 这堂课你能带走什么">
+  <div class="eyebrow"><span class="no">02</span><span class="bar"></span><span>ORIENTATION / 导读</span></div>
+  <h2>这堂课，读完你能做到三件事</h2>
+  <div class="content" style="display:grid;grid-template-columns:1.35fr .85fr;gap:76px">
+    <div style="display:flex;flex-direction:column;gap:20px;padding-top:16px">
+      <div class="box tteal" style="display:flex;gap:26px;align-items:flex-start;padding:26px 30px">
+        <span style="font:600 46px var(--mono);color:var(--teal);line-height:1">01</span>
+        <div><h3>读懂 <span class="mono">ctid=(3,9)</span> 这样的物理行号</h3><p class="small muted">知道它指向哪个 Block、哪个 line pointer，理解一次 O(1) 寻址背后的逻辑。</p></div>
+      </div>
+      <div class="box tteal" style="display:flex;gap:26px;align-items:flex-start;padding:26px 30px">
+        <span style="font:600 46px var(--mono);color:var(--teal);line-height:1">02</span>
+        <div><h3>配得对 <span class="mono">vacuum / fillfactor / HOT</span></h3><p class="small muted">明白表为什么会膨胀、HOT 为什么能省掉索引维护，以及该改哪个参数。</p></div>
+      </div>
+      <div class="box tteal" style="display:flex;gap:26px;align-items:flex-start;padding:26px 30px">
+        <span style="font:600 46px var(--mono);color:var(--teal);line-height:1">03</span>
+        <div><h3>判断业务是否该用 heap</h3><p class="small muted">在 OLTP、OLAP、HTAP、写密集之间，说清楚什么时候该换引擎。</p></div>
+      </div>
+      <p class="small" style="margin-top:8px;color:var(--red)">前提认知：heap 不是「一张表」，而是一套关于「怎么放、怎么找、怎么回收」的约定。</p>
+    </div>
+    <div style="padding-top:10px">
+      <div class="tag">学习路径 / 点击跳转</div>
+      <div style="margin-top:20px;border-left:1px solid var(--rule);padding-left:26px;display:flex;flex-direction:column;gap:0">
+        <div data-go="4" class="journey"><span class="mono red">01</span> 三层物理结构 <span class="muted tiny">File → Block → Tuple</span></div>
+        <div data-go="6" class="journey"><span class="mono red">02</span> ctid 与寻址 <span class="muted tiny">物理行号</span></div>
+        <div data-go="7" class="journey"><span class="mono red">03</span> 两张辅助地图 <span class="muted tiny">FSM / VM</span></div>
+        <div data-go="10" class="journey"><span class="mono red">04</span> 版本与清理 <span class="muted tiny">MVCC / HOT / vacuum</span></div>
+        <div data-go="14" class="journey"><span class="mono red">05</span> 场景与取舍 <span class="muted tiny">优劣 / 竞品</span></div>
+        <div data-go="16" class="journey"><span class="mono red">06</span> 上手实操 <span class="muted tiny">SQL / 调优 / FAQ</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 背景与痛点 ============ -->
+<section class="slide" data-title="背景与痛点 · 从零设计存储层">
+  <div class="eyebrow"><span class="no">03</span><span class="bar"></span><span>PROBLEM / 背景与痛点</span></div>
+  <h2>最基础的问题：数据放哪里，怎么找回来？</h2>
+  <p class="lead">如果从零设计存储层，最直觉的方案是「所有记录顺序追加进一个大文件」——然后会撞上四堵墙。</p>
+  <div class="content" style="margin-top:26px;height:592px;display:grid;grid-template-columns:1.1fr .9fr;gap:56px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:18px;padding-top:12px">
+      <div class="box tred"><div class="tag" style="color:var(--red)">01 / 查</div><h3 style="margin-top:12px">查一条记录要扫全表</h3><p class="small muted">没有位置信息，SELECT 变成线性扫描，性能灾难。</p></div>
+      <div class="box tred"><div class="tag" style="color:var(--red)">02 / 删</div><h3 style="margin-top:12px">删除留下空洞</h3><p class="small muted">文件不会自己收缩，磁盘空间被白白占住。</p></div>
+      <div class="box tred"><div class="tag" style="color:var(--red)">03 / 改</div><h3 style="margin-top:12px">更新要移动数据</h3><p class="small muted">行长度变了就得搬家，写放大，索引跟着失效。</p></div>
+      <div class="box tred"><div class="tag" style="color:var(--red)">04 / 并发</div><h3 style="margin-top:12px">写入争抢同一位置</h3><p class="small muted">所有会话都往文件尾部挤，形成单点热点。</p></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px;padding-top:12px">
+      <div class="tag">heap 的答案 / 两条链路</div>
+      <div class="box" style="padding:24px 26px">
+        <div class="tag">WRITE</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <span class="step">写入请求</span><span class="arw">→</span><span class="step">FSM 找空闲 Block</span><span class="arw">→</span><span class="step">空闲位写入</span><span class="arw">→</span><span class="step">更新 FSM</span>
+        </div>
+        <p class="small muted" style="margin-top:16px">不排序、不搬家，找一个放得下的位置直接写。</p>
+      </div>
+      <div class="box" style="padding:24px 26px">
+        <div class="tag">READ</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <span class="step">读取请求</span><span class="arw">→</span><span class="step">ctid 直接寻址</span><span class="arw">→</span><span class="step">读 Block 中对应记录</span>
+        </div>
+        <p class="small muted" style="margin-top:16px">物理行号就是地址，不需要遍历。</p>
+      </div>
+      <div style="border-left:3px solid var(--red);padding:12px 0 12px 18px;margin-top:4px">
+        <p class="small"><b>无序存储的代价：</b>UPDATE 不原地修改，<span style="white-space:nowrap">旧版本变成 <span class="red">dead tuple</span> 与 live tuple 混存</span>；不及时清理就越写越胖。这就是 vacuum 存在的理由。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 三层物理结构 ============ -->
+<section class="slide" data-title="核心原理 · 三层物理结构">
+  <div class="eyebrow"><span class="no">04</span><span class="bar"></span><span>STRUCTURE / 文件组织总览</span></div>
+  <h2>三层物理结构：文件 → 块 → 行</h2>
+  <div class="content" style="height:610px">
+    <svg viewBox="0 0 1400 400" width="1400" aria-label="heap 三层物理结构">
+      <text x="0" y="18" class="m" font-size="14" fill="#2C6E73">LAYER 1 · FILE</text>
+      <rect x="0" y="30" width="1320" height="62" fill="#FFFDF8" stroke="#C4BCA9"/>
+      <rect x="0" y="30" width="440" height="62" fill="#E3EEEC" stroke="#2C6E73"/>
+      <rect x="440" y="30" width="440" height="62" fill="#EFF4F1" stroke="#2C6E73"/>
+      <rect x="880" y="30" width="440" height="62" fill="none" stroke="#C4BCA9" stroke-dasharray="5 5"/>
+      <text x="220" y="68" text-anchor="middle" class="m" font-size="18" fill="#1B262C">Segment 0 · ≤ 1 GB</text>
+      <text x="660" y="68" text-anchor="middle" class="m" font-size="18" fill="#1B262C">Segment 1 · ≤ 1 GB</text>
+      <text x="1100" y="68" text-anchor="middle" class="m" font-size="18" fill="#8A8C80">.1 .2 … 自动续接</text>
+      <path d="M70 96 L70 132 L290 132 L290 152" fill="none" stroke="#A9812F" stroke-dasharray="4 4" marker-end="url(#arG)"/>
+      <text x="0" y="158" class="m" font-size="14" fill="#2C6E73">LAYER 2 · BLOCK / PAGE · 8 KB</text>
+      <g>
+        <rect x="0" y="170" width="150" height="58" fill="#FFFDF8" stroke="#2C6E73"/>
+        <rect x="158" y="170" width="150" height="58" fill="#FFFDF8" stroke="#2C6E73"/>
+        <rect x="316" y="170" width="150" height="58" fill="#FFFDF8" stroke="#2C6E73"/>
+        <rect x="474" y="170" width="150" height="58" fill="#FFFDF8" stroke="#2C6E73"/>
+        <text x="648" y="210" class="m" font-size="22" fill="#8A8C80">…</text>
+        <text x="75" y="205" text-anchor="middle" class="m" font-size="17">Block 0</text>
+        <text x="233" y="205" text-anchor="middle" class="m" font-size="17">Block 1</text>
+        <text x="391" y="205" text-anchor="middle" class="m" font-size="17">Block 2</text>
+        <text x="549" y="205" text-anchor="middle" class="m" font-size="17">Block 3</text>
+      </g>
+      <text x="800" y="160" class="m" font-size="14" fill="#2C6E73">LAYER 3 · TUPLE / 行记录　↳ 放大 Block 3</text>
+      <rect x="790" y="166" width="610" height="64" fill="none" stroke="#2C6E73" stroke-dasharray="4 4"/>
+      <rect x="800" y="170" width="600" height="58" fill="#FFFDF8" stroke="#C4BCA9"/>
+      <rect x="800" y="170" width="96" height="58" fill="#2C6E73"/>
+      <text x="848" y="204" text-anchor="middle" class="m" font-size="13" fill="#FFFDF8">Header 24B</text>
+      <g fill="#E3EEEC" stroke="#2C6E73">
+        <rect x="900" y="170" width="52" height="58"/><rect x="956" y="170" width="52" height="58"/><rect x="1012" y="170" width="52" height="58"/>
+      </g>
+      <text x="926" y="204" text-anchor="middle" class="m" font-size="13">lp1</text>
+      <text x="982" y="204" text-anchor="middle" class="m" font-size="13">lp2</text>
+      <text x="1038" y="204" text-anchor="middle" class="m" font-size="13">…</text>
+      <rect x="1068" y="170" width="140" height="58" fill="none" stroke="#C4BCA9" stroke-dasharray="5 5"/>
+      <text x="1138" y="204" text-anchor="middle" class="m" font-size="14" fill="#8A8C80">Free Space</text>
+      <g fill="#F5E7E0" stroke="#C2492F">
+        <rect x="1212" y="170" width="92" height="58"/><rect x="1308" y="170" width="92" height="58"/>
+      </g>
+      <text x="1258" y="204" text-anchor="middle" class="m" font-size="13" fill="#C2492F">Tuple 2</text>
+      <text x="1354" y="204" text-anchor="middle" class="m" font-size="13" fill="#C2492F">Tuple 1</text>
+      <path d="M900 245 L1064 245" stroke="#2C6E73" marker-end="url(#arT2)"/>
+      <path d="M1400 245 L1214 245" stroke="#C2492F" marker-end="url(#arR2)"/>
+      <text x="900" y="268" font-size="14" fill="#2C6E73">lp 向后长</text>
+      <text x="1400" y="268" text-anchor="end" font-size="14" fill="#C2492F">tuple 向前长</text>
+      <text x="0" y="330" class="m" font-size="15" fill="#6F7C7C">pg_relation_filepath('tbl') → base/16384/12345</text>
+      <line x1="0" y1="348" x2="1400" y2="348" stroke="#DCD5C6"/>
+      <text x="0" y="376" font-size="16" fill="#3E4C54">一个逻辑文件 = 主数据文件 + 三张「辅助地图」；每个 Segment 上限 1 GB，Block 默认 8 KB。</text>
+      <defs>
+        <marker id="arG" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#A9812F"/></marker>
+        <marker id="arT2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2C6E73"/></marker>
+        <marker id="arR2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C2492F"/></marker>
+      </defs>
+    </svg>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:34px">
+      <div class="box" style="padding:16px 20px"><div class="mono" style="font-size:17px;color:var(--teal)">12345</div><div class="small muted" style="margin-top:6px">main 数据文件</div></div>
+      <div class="box" style="padding:16px 20px"><div class="mono" style="font-size:17px;color:var(--teal)">12345_fsm</div><div class="small muted" style="margin-top:6px">空闲空间图</div></div>
+      <div class="box" style="padding:16px 20px"><div class="mono" style="font-size:17px;color:var(--teal)">12345_vm</div><div class="small muted" style="margin-top:6px">可见性图</div></div>
+      <div class="box" style="padding:16px 20px"><div class="mono" style="font-size:17px;color:var(--teal)">12345_init</div><div class="small muted" style="margin-top:6px">仅 unlogged table</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 Block 内部解剖（悬停交互） ============ -->
+<section class="slide" data-title="深度解析 · 一个 8KB Block 的内部">
+  <div class="eyebrow"><span class="no">05</span><span class="bar"></span><span>ANATOMY / Block 内部解剖</span></div>
+  <h2>一个 8KB Block：两端相向生长</h2>
+  <p class="small muted">把鼠标移到图的各个区域，右侧会展开对应的字段与作用。</p>
+  <div class="content" style="height:572px;display:grid;grid-template-columns:960px 1fr;gap:34px;margin-top:20px">
+    <svg id="anatomySvg" viewBox="0 0 940 470" width="940" aria-label="Block 内部结构可交互解剖图">
+      <text x="0" y="20" class="m" font-size="14" fill="#6F7C7C">pd_lower ↓ / pd_upper ↑ · 8 KB 固定大小</text>
+      <rect x="0" y="34" width="900" height="360" fill="#FFFDF8" stroke="#C4BCA9" stroke-width="1.5"/>
+      <g class="hotspot" data-key="hdr">
+        <rect class="zone" x="0" y="34" width="900" height="62" fill="#2C6E73"/>
+        <text x="22" y="72" class="m" font-size="19" fill="#FFFDF8">PageHeaderData · 24 bytes</text>
+        <text x="700" y="72" class="m" font-size="15" fill="#CFE3E0">hover / 页头</text>
+      </g>
+      <g class="hotspot" data-key="lp">
+        <rect class="zone" x="0" y="96" width="900" height="66" fill="#E3EEEC"/>
+        <g fill="#FFFDF8" stroke="#2C6E73">
+          <rect x="22" y="110" width="94" height="38"/><rect x="126" y="110" width="94" height="38"/>
+          <rect x="230" y="110" width="94" height="38"/><rect x="334" y="110" width="94" height="38"/>
+          <rect x="438" y="110" width="94" height="38"/><rect x="542" y="110" width="94" height="38"/>
+        </g>
+        <g class="m" font-size="15" fill="#2C6E73" text-anchor="middle">
+          <text x="69" y="135">lp[1]</text><text x="173" y="135">lp[2]</text><text x="277" y="135">lp[3]</text>
+          <text x="381" y="135">lp[4]</text><text x="485" y="135">lp[5]</text><text x="589" y="135">lp[6]</text>
+        </g>
+        <text x="660" y="135" class="m" font-size="15" fill="#2C6E73">… 每项 4 B</text>
+      </g>
+      <g class="hotspot" data-key="free">
+        <rect class="zone" x="0" y="162" width="900" height="106" fill="#F7F4EC" stroke="#C4BCA9" stroke-dasharray="6 6"/>
+        <text x="450" y="222" text-anchor="middle" class="m" font-size="20" fill="#8A8C80">Free Space · pd_lower ~ pd_upper</text>
+      </g>
+      <g class="hotspot" data-key="tuple">
+        <rect class="zone" x="0" y="268" width="900" height="126" fill="#F5E7E0"/>
+        <g fill="#FFFDF8" stroke="#C2492F">
+          <rect x="150" y="292" width="220" height="76"/><rect x="380" y="292" width="220" height="76"/><rect x="610" y="292" width="220" height="76"/>
+        </g>
+        <g class="m" font-size="16" fill="#C2492F" text-anchor="middle">
+          <text x="260" y="322">Tuple 3</text><text x="490" y="322">Tuple 2</text><text x="720" y="322">Tuple 1</text>
+        </g>
+        <g font-size="13" fill="#8A8C80" text-anchor="middle">
+          <text x="260" y="348">23B header + 用户数据</text><text x="490" y="348">23B header + 用户数据</text><text x="720" y="348">23B header + 用户数据</text>
+        </g>
+      </g>
+      <path d="M14 414 L470 414" stroke="#2C6E73" stroke-width="1.5" marker-end="url(#arA)"/>
+      <text x="14" y="440" font-size="15" fill="#2C6E73">line pointers 从头部向后增长 →</text>
+      <path d="M886 454 L430 454" stroke="#C2492F" stroke-width="1.5" marker-end="url(#arB)"/>
+      <text x="886" y="446" text-anchor="end" font-size="15" fill="#C2492F" transform="translate(0,-8)">← tuples 从尾部向前增长</text>
+      <defs>
+        <marker id="arA" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2C6E73"/></marker>
+        <marker id="arB" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C2492F"/></marker>
+      </defs>
+    </svg>
+    <div id="pageInfo" class="box tteal" style="padding:26px 26px;height:470px;overflow:hidden"></div>
+  </div>
+</section>
+
+<!-- ============ 06 ctid 寻址（交互） ============ -->
+<section class="slide" data-title="核心原理 · ctid 物理行号">
+  <div class="eyebrow"><span class="no">06</span><span class="bar"></span><span>ADDRESSING / ctid 物理行号</span></div>
+  <h2><span class="mono">ctid = (3, 9)</span>：两个数字定位一行</h2>
+  <div class="content" style="height:590px;display:grid;grid-template-columns:900px 1fr;gap:40px;margin-top:16px">
+    <div>
+      <svg id="ctidSvg" viewBox="0 0 900 400" width="900" aria-label="ctid 寻址示意">
+        <text x="0" y="18" class="m lbl">FILE · 数据块序列</text>
+        <g class="m" font-size="16" text-anchor="middle">
+          <rect x="0" y="32" width="118" height="52" fill="#FFFDF8" stroke="#C4BCA9"/><text x="59" y="64">Block 0</text>
+          <rect x="128" y="32" width="118" height="52" fill="#FFFDF8" stroke="#C4BCA9"/><text x="187" y="64">Block 1</text>
+          <rect x="256" y="32" width="118" height="52" fill="#FFFDF8" stroke="#C4BCA9"/><text x="315" y="64">Block 2</text>
+          <rect x="384" y="32" width="118" height="52" fill="#F5E7E0" stroke="#C2492F" stroke-width="2"/><text x="443" y="64" fill="#C2492F">Block 3</text>
+          <rect x="512" y="32" width="118" height="52" fill="#FFFDF8" stroke="#C4BCA9"/><text x="571" y="64">Block 4</text>
+          <rect x="640" y="32" width="118" height="52" fill="#FFFDF8" stroke="#C4BCA9"/><text x="699" y="64">…</text>
+        </g>
+        <path d="M443 88 L443 116" stroke="#C2492F" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="770" y="64" class="m" font-size="15" fill="#C2492F">① BlockNum = 3</text>
+        <rect x="0" y="124" width="900" height="234" fill="#FFFDF8" stroke="#C2492F" stroke-width="1.5"/>
+        <text x="18" y="150" class="m" font-size="15" fill="#C2492F">BLOCK 3 放大 · line pointer 数组</text>
+        <g id="lpGroup"></g>
+        <rect x="20" y="266" width="860" height="72" fill="#F7F4EC" stroke="#C4BCA9" stroke-dasharray="5 5"/>
+        <g id="tupleGroup"></g>
+        <text x="790" y="152" class="m" font-size="15" fill="#C2492F">② ItemIndex = 9</text>
+        <path id="ctidArrow" d="M0 0 L0 0" stroke="#C2492F" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arC)"/>
+        <defs><marker id="arC" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C2492F"/></marker></defs>
+      </svg>
+      <p class="small muted" style="margin-top:12px">悬停或点击任一 <span class="mono">lp[i]</span>：观察 line pointer 如何指向真实行数据。</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="box tred" style="padding:24px 26px">
+        <div class="tag" style="color:var(--red)">当前寻址</div>
+        <div id="ctidReadout" class="mono" style="font-size:42px;color:var(--red);margin:14px 0 8px;letter-spacing:-.02em">(3, 9)</div>
+        <p id="ctidDesc" class="small">第 <b>3</b> 号数据块中，第 <b>9</b> 条 line pointer 所指向的记录。</p>
+      </div>
+      <div class="box" style="padding:22px 24px">
+        <div class="tag">SQL 里直接用 ctid</div>
+        <pre style="font-size:16px;padding:16px;margin-top:14px;white-space:pre-wrap"><span class="k">SELECT</span> ctid, * <span class="k">FROM</span> tbl <span class="k">WHERE</span> ctid = <span class="s">'(0,1)'</span>;
+<span class="k">SELECT</span> ctid, * <span class="k">FROM</span> tbl
+ <span class="k">WHERE</span> ctid &gt;= <span class="s">'(0,1)'</span> <span class="k">AND</span> ctid &lt; <span class="s">'(11,0)'</span>;</pre>
+      </div>
+      <div style="border-left:3px solid var(--teal);padding-left:16px">
+        <p class="small"><b>为什么 lp 不移动？</b>官方定义：line pointer 一旦分配，直到被回收前索引号长期不变——行数据可以在页内挪动，索引里存的 ctid 却不用改。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+.step{font:600 16px var(--mono);border:1px solid var(--rule);padding:8px 10px;background:#FFFDF8;white-space:nowrap}
+.arw{color:var(--red);font:18px var(--mono)}
+.journey{position:relative;padding:15px 0 15px 4px;cursor:pointer;border-bottom:1px solid transparent;display:flex;align-items:baseline;gap:12px;font-size:20px}
+.journey .muted{margin-left:auto;font-size:14px}
+.journey::before{content:"";position:absolute;left:-31px;top:23px;width:9px;height:9px;background:var(--paper);border:1px solid var(--red);transform:rotate(45deg)}
+.journey:hover{color:var(--red);border-bottom-color:var(--line)}
+.hotspot .zone{transition:opacity .2s,stroke-width .2s}
+.hotspot:hover .zone{stroke:#1B262C;stroke-width:2.5}
+#anatomySvg .hotspot.active .zone{stroke:#1B262C;stroke-width:2.5}
+.fnode rect,.fnode circle{transition:fill .3s,stroke .3s}
+.fnode.fsel rect{fill:#C2492F;stroke:#C2492F}
+.fnode.fsel text{fill:#FFFDF8}
+.fedge{transition:stroke .3s,stroke-width .3s}
+.fedge.fsel{stroke:#C2492F;stroke-width:3}
+.fblk{transition:fill .3s}
+.fblk.fsel{fill:#C2492F}
+.lpcell{cursor:pointer}
+.lpcell rect{transition:fill .2s,stroke-width .2s}
+.lpcell:hover rect,.lpcell.on rect{fill:#C2492F;stroke:#C2492F}
+.lpcell text{fill:#2C6E73}
+.lpcell:hover text,.lpcell.on text{fill:#FFFDF8}
+.mvph{transition:opacity .3s}
+.pane{transition:opacity .3s,filter .3s}
+.pane.dim{opacity:.46}
+.pane.focus{opacity:1}
+.codepane{display:none}
+.codepane.on{display:block}
+.faq-a{display:none;padding:0 0 16px 0}
+.faq.open .faq-a{display:block}
+.faq-q{cursor:pointer;display:flex;gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line)}
+.faq-q:hover{color:var(--red)}
+.faq.open .faq-q{color:var(--red);border-bottom-color:transparent}
+.faq .pm{margin-left:auto;font:20px var(--mono);color:var(--red)}
+#cmp td,th{transition:background .18s}
+#cmp tbody tr:hover{background:#F1EDE3}
+.pill{display:inline-block;font:600 14px var(--mono);padding:3px 9px;border:1px solid var(--line);background:#FFFDF8}
+.score{display:inline-flex;gap:3px;vertical-align:middle}
+.score i{width:11px;height:11px;background:#DFD8C9;display:inline-block}
+.score i.f{background:var(--teal)}
+.score.hi i.f{background:var(--red)}
+</style>
+
+<!-- ============ 07 FSM ============ -->
+<section class="slide" data-title="深度解析 · FSM 空闲空间图">
+  <div class="eyebrow"><span class="no">07</span><span class="bar"></span><span>FREE SPACE MAP / 空闲空间管理</span></div>
+  <h2>FSM：停车场的「剩余车位显示牌」</h2>
+  <p class="lead">要写入一行，先要快速找到一个放得下它的 Block —— FSM 用一棵二叉树把「最大值查询」变成 O(log n)。</p>
+  <div class="content" style="height:540px;display:grid;grid-template-columns:820px 1fr;gap:44px;margin-top:22px">
+    <div>
+      <svg id="fsmSvg" viewBox="0 0 820 440" width="820" aria-label="FSM 二叉树">
+        <g stroke="#C4BCA9" stroke-width="1.5" fill="none">
+          <path id="fe1" class="fedge" d="M410 88 L220 148"/><path id="fe2" class="fedge" d="M410 88 L600 148"/>
+          <path id="fe3" class="fedge" d="M220 192 L110 258"/><path id="fe4" class="fedge" d="M220 192 L330 258"/>
+          <path id="fe5" class="fedge" d="M600 192 L490 258"/><path id="fe6" class="fedge" d="M600 192 L710 258"/>
+        </g>
+        <g class="fnode" id="fn1"><rect x="350" y="36" width="120" height="54" fill="#FFFDF8" stroke="#2C6E73" stroke-width="1.5"/><text x="410" y="69" text-anchor="middle" class="m" font-size="18">MAX = 8</text></g>
+        <g class="fnode" id="fn2"><rect x="160" y="148" width="120" height="48" fill="#FFFDF8" stroke="#2C6E73"/><text x="220" y="178" text-anchor="middle" class="m" font-size="16">MAX(8,4)</text></g>
+        <g class="fnode" id="fn3"><rect x="540" y="148" width="120" height="48" fill="#FFFDF8" stroke="#2C6E73"/><text x="600" y="178" text-anchor="middle" class="m" font-size="16">MAX(3,7)</text></g>
+        <g class="fnode" id="fn4"><rect x="60" y="258" width="100" height="46" fill="#E3EEEC" stroke="#2C6E73"/><text x="110" y="288" text-anchor="middle" class="m" font-size="19" fill="#2C6E73">8</text></g>
+        <g class="fnode" id="fn5"><rect x="280" y="258" width="100" height="46" fill="#E3EEEC" stroke="#2C6E73"/><text x="330" y="288" text-anchor="middle" class="m" font-size="19" fill="#2C6E73">4</text></g>
+        <g class="fnode" id="fn6"><rect x="440" y="258" width="100" height="46" fill="#E3EEEC" stroke="#2C6E73"/><text x="490" y="288" text-anchor="middle" class="m" font-size="19" fill="#2C6E73">3</text></g>
+        <g class="fnode" id="fn7"><rect x="660" y="258" width="100" height="46" fill="#E3EEEC" stroke="#2C6E73"/><text x="710" y="288" text-anchor="middle" class="m" font-size="19" fill="#2C6E73">7</text></g>
+        <g class="m" font-size="14" fill="#6F7C7C" text-anchor="middle">
+          <text x="110" y="330">叶节点值</text><text x="330" y="330">叶节点值</text><text x="490" y="330">叶节点值</text><text x="710" y="330">叶节点值</text>
+        </g>
+        <g>
+          <rect id="fb0" class="fblk" x="52" y="348" width="116" height="46" fill="#FFFDF8" stroke="#C4BCA9"/>
+          <rect id="fb1" class="fblk" x="272" y="348" width="116" height="46" fill="#FFFDF8" stroke="#C4BCA9"/>
+          <rect id="fb2" class="fblk" x="432" y="348" width="116" height="46" fill="#FFFDF8" stroke="#C4BCA9"/>
+          <rect id="fb3" class="fblk" x="652" y="348" width="116" height="46" fill="#FFFDF8" stroke="#C4BCA9"/>
+        </g>
+        <g class="m" font-size="16" text-anchor="middle" fill="#1B262C">
+          <text x="110" y="377">Block 0</text><text x="330" y="377">Block 1</text><text x="490" y="377">Block 2</text><text x="710" y="377">Block 3</text>
+        </g>
+        <text x="0" y="424" class="lbl" font-size="15">父节点 = 子节点最大值 · 叶节点 = 该 Block 剩余空间（1 字节，0–255）</text>
+      </svg>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="btn on" id="fsmGo">▶ 演示：找一个剩余空间 ≥ 6 的 Block</button>
+        <button class="btn" id="fsmReset">重置</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="box tred" style="padding:24px 26px;min-height:150px">
+        <div class="tag" style="color:var(--red)">搜索过程</div>
+        <div id="fsmReadout" style="font-size:20px;line-height:1.6;margin-top:14px">根值 8 ≥ 6，说明「一定存在」满足条件的 Block。点击左侧按钮，看路径如何被点亮。</div>
+      </div>
+      <div class="box" style="padding:22px 24px">
+        <div class="tag">精度与代价</div>
+        <p class="small" style="margin-top:12px">每个叶节点只用 <b>1 个字节</b>，把 8 KB 切成 256 档 → 每档约 <b>32 字节</b>。省空间，但不精确；写入后必须回写更新 FSM。</p>
+      </div>
+      <div class="box" style="padding:20px 24px">
+        <div class="tag">用插件亲眼看到</div>
+        <pre style="font-size:16px;padding:14px;margin-top:12px;white-space:pre-wrap"><span class="k">CREATE EXTENSION</span> pg_freespacemap;
+<span class="k">SELECT</span> * <span class="k">FROM</span> pg_freespace(<span class="s">'tbl'</span>) <span class="k">LIMIT</span> <span class="n">10</span>;
+<span class="c">-- blkno, avail（字节）</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 08 VM ============ -->
+<section class="slide" data-title="深度解析 · VM 可见性图">
+  <div class="eyebrow"><span class="no">08</span><span class="bar"></span><span>VISIBILITY MAP / 可见性图</span></div>
+  <h2>VM：每个 Block 只花 2 个 bit，省下大量回表</h2>
+  <div class="content" style="height:600px;display:grid;grid-template-columns:1fr 1fr;gap:52px;margin-top:20px">
+    <div>
+      <svg viewBox="0 0 700 420" width="700" aria-label="VM 位图">
+        <text x="0" y="20" class="m lbl">VM FILE · 2 bits / block</text>
+        <line x1="0" y1="32" x2="690" y2="32" stroke="#C4BCA9"/>
+        <g id="vmBlocks"></g>
+        <rect x="0" y="252" width="330" height="58" fill="#E3EEEC" stroke="#2C6E73"/>
+        <text x="18" y="288" font-size="18" fill="#2C6E73">bit 1 · all-visible</text>
+        <rect x="0" y="318" width="330" height="58" fill="#F5E7E0" stroke="#C2492F"/>
+        <text x="18" y="354" font-size="18" fill="#C2492F">bit 2 · all-frozen</text>
+        <text x="360" y="278" font-size="16" fill="#3E4C54">全页 tuple 对所有事务可见</text>
+        <text x="360" y="300" font-size="15" fill="#6F7C7C">→ 跳过可见性检查</text>
+        <text x="360" y="344" font-size="16" fill="#3E4C54">全页 xid 已冻结</text>
+        <text x="360" y="366" font-size="15" fill="#6F7C7C">→ vacuum freeze 后设置，防回卷</text>
+        <text x="0" y="410" class="lbl" font-size="15">两个 bit 都不是「数据」，而是关于整个 Block 的承诺。</text>
+      </svg>
+      <p class="small muted" style="margin-top:8px">悬停小方块：查看该 Block 的两个标志位。</p>
+      <div class="box tteal" style="padding:18px 22px;margin-top:18px">
+        <div class="tag">在 EXPLAIN 里验证</div>
+        <p class="small" style="margin-top:10px;line-height:1.7">Index Only Scan 的输出里 <span class="mono">Heap Fetches: 0</span> 表示完全没回表；这个数字开始增长，通常意味着相关 Block 的 all-visible 位被更新清掉了，等 vacuum 重新置位。</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="tag">INDEX ONLY SCAN / 有无 VM 的差别</div>
+      <div class="box" style="padding:22px 26px">
+        <div class="tag" style="color:var(--muted)">没有 all-visible</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap">
+          <span class="step">索引条目</span><span class="arw">→</span><span class="step">回表读 heap</span><span class="arw">→</span><span class="step">逐行判断可见性</span><span class="arw">→</span><span class="step">返回</span>
+        </div>
+        <p class="small muted" style="margin-top:14px">索引里拿到 ctid，仍必须访问 heap 页确认这行对当前快照是否可见。</p>
+      </div>
+      <div class="box tteal" style="padding:22px 26px">
+        <div class="tag">有 all-visible</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap">
+          <span class="step">索引条目</span><span class="arw">→</span><span class="step">查 VM 位</span><span class="arw">→</span><span class="step" style="border-color:var(--teal);color:var(--teal)">直接返回</span>
+        </div>
+        <p class="small muted" style="margin-top:14px">整页都可见，无需回表 —— 大范围扫描时省下的随机 IO 非常可观。</p>
+      </div>
+      <div style="border-left:3px solid var(--gold);padding-left:16px">
+        <p class="small"><b>维护成本：</b>一旦某个 tuple 被更新/删除，对应 Block 的 all-visible 位就要清掉；vacuum 再把它重新置上。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 09 写入流程 ============ -->
+<section class="slide" data-title="深度解析 · 一条 INSERT 的落地流程">
+  <div class="eyebrow"><span class="no">09</span><span class="bar"></span><span>WRITE PATH / 写入流程</span></div>
+  <h2>一条 INSERT 落地，经过谁的手</h2>
+  <div class="content" style="height:600px;display:grid;grid-template-columns:790px 1fr;gap:48px;margin-top:18px">
+    <svg viewBox="0 0 780 560" width="780" aria-label="INSERT 时序图">
+      <g class="m" font-size="15" text-anchor="middle" fill="#2C6E73">
+        <text x="70" y="24">Client</text><text x="230" y="24">Executor</text><text x="390" y="24">FSM</text><text x="550" y="24">Buffer</text><text x="710" y="24">WAL</text>
+      </g>
+      <g stroke="#DCD5C6" stroke-dasharray="4 5">
+        <line x1="70" y1="38" x2="70" y2="540"/><line x1="230" y1="38" x2="230" y2="540"/><line x1="390" y1="38" x2="390" y2="540"/><line x1="550" y1="38" x2="550" y2="540"/><line x1="710" y1="38" x2="710" y2="540"/>
+      </g>
+      <g stroke="#2C6E73" stroke-width="1.6" fill="none" marker-end="url(#arSeq)">
+        <path d="M70 78 L230 78"/><path d="M230 148 L390 148"/><path d="M390 218 L230 218" stroke-dasharray="5 4"/>
+        <path d="M230 288 L550 288"/><path d="M230 358 L550 358"/>
+        <path d="M550 428 L710 428"/><path d="M230 498 L390 498"/>
+      </g>
+      <path d="M230 540 L70 540" stroke="#C2492F" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#arSeqR)"/>
+      <g font-size="15" fill="#1B262C">
+        <text x="150" y="70" text-anchor="middle">INSERT INTO tbl VALUES (...)</text>
+        <text x="310" y="140" text-anchor="middle">查找满足行大小的空闲 Block</text>
+        <text x="310" y="210" text-anchor="middle">返回 BlockNum</text>
+        <text x="390" y="280" text-anchor="middle">在 Buffer Pool 中 pin 住该 Block</text>
+        <text x="390" y="350" text-anchor="middle">在空闲位置写入 tuple + lp</text>
+        <text x="630" y="420" text-anchor="middle">写 WAL（xlog）</text>
+        <text x="310" y="490" text-anchor="middle">更新该 Block 剩余空间</text>
+        <text x="150" y="532" text-anchor="middle" fill="#C2492F">成功，返回 ctid</text>
+      </g>
+      <g class="m" font-size="14" fill="#C2492F">
+        <text x="14" y="82">1</text><text x="14" y="152">2</text><text x="14" y="222">3</text><text x="14" y="292">4</text><text x="14" y="362">5</text><text x="14" y="432">6</text><text x="14" y="502">7</text>
+      </g>
+      <defs>
+        <marker id="arSeq" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2C6E73"/></marker>
+        <marker id="arSeqR" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C2492F"/></marker>
+      </defs>
+    </svg>
+    <div style="display:flex;flex-direction:column;gap:14px;padding-top:6px">
+      <div class="tag">为什么是这个顺序</div>
+      <div><h4>① FSM 先回答「写哪儿」</h4><p class="small muted">不扫描整表，只按树找满足行大小的位置；找不到就新分配 Block。</p></div>
+      <div class="dash"></div>
+      <div><h4>② Buffer 里改，不是直接改磁盘</h4><p class="small muted">页被 pin 住后，lp 与 tuple 在内存中同时相向生长。</p></div>
+      <div class="dash"></div>
+      <div><h4>③ WAL 先落，安全才有保障</h4><p class="small muted">日志记录变更，崩溃后可重放；这也是写入链路里不可省的一步。</p></div>
+      <div class="dash"></div>
+      <div><h4>④ 回写 FSM，再返回 ctid</h4><p class="small muted">剩余空间变了，下一次写入才能拿到正确的判断依据。</p></div>
+      <div class="box tred" style="margin-top:auto;padding:18px 22px"><p class="small"><b>一句话：</b>heap 的写入几乎没有排序成本，快就快在「找空位 + 直接放」。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10 MVCC / dead tuple（时间轴交互） ============ -->
+<section class="slide" data-title="深度解析 · MVCC 与 dead tuple">
+  <div class="eyebrow"><span class="no">10</span><span class="bar"></span><span>MVCC / 多版本与死元组</span></div>
+  <h2>UPDATE 不是覆盖：live 与 dead 会同时住在页里</h2>
+  <div class="content" style="height:590px;margin-top:16px">
+    <div class="btnrow" style="margin-bottom:18px">
+      <button class="btn mvbtn on" data-mv="1">t1 · INSERT</button>
+      <button class="btn mvbtn" data-mv="2">t2 · UPDATE</button>
+      <button class="btn mvbtn" data-mv="3">t3 · VACUUM</button>
+      <span class="note" style="margin-left:auto;align-self:center">点击时间轴，观察 lp 与 tuple 状态变化 →</span>
+    </div>
+    <div style="display:grid;grid-template-columns:900px 1fr;gap:40px">
+      <svg id="mvSvg" viewBox="0 0 900 380" width="900" aria-label="MVCC 三阶段状态">
+        <g class="m" font-size="16" text-anchor="middle" fill="#2C6E73">
+          <text x="225" y="24">lp[1]</text><text x="675" y="24">lp[2]</text>
+        </g>
+        <g fill="#E3EEEC" stroke="#2C6E73"><rect x="165" y="36" width="120" height="46"/><rect x="615" y="36" width="120" height="46"/></g>
+        <g class="m" font-size="16" text-anchor="middle" fill="#2C6E73"><text x="225" y="65">lp[1]</text><text x="675" y="65">lp[2]</text></g>
+        <line x1="225" y1="82" x2="225" y2="126" stroke="#C4BCA9"/><line x1="675" y1="82" x2="675" y2="126" stroke="#C4BCA9"/>
+        <!-- phase 1 -->
+        <g class="mvph" data-mv="1">
+          <rect x="75" y="126" width="300" height="112" fill="#FFFDF8" stroke="#4B7A58" stroke-width="1.5"/>
+          <text x="225" y="164" text-anchor="middle" class="m" font-size="19">Tuple(xmin=100, xmax=0)</text>
+          <text x="225" y="198" text-anchor="middle" font-size="18" fill="#4B7A58">● LIVE</text>
+          <rect x="525" y="126" width="300" height="112" fill="none" stroke="#C4BCA9" stroke-dasharray="6 6"/>
+          <text x="675" y="188" text-anchor="middle" font-size="17" fill="#8A8C80">（尚无新版本）</text>
+          <text x="450" y="288" text-anchor="middle" font-size="19" fill="#3E4C54">插入一个新版本，索引指向 lp[1]。</text>
+        </g>
+        <!-- phase 2 -->
+        <g class="mvph" data-mv="2" style="opacity:0">
+          <rect x="75" y="126" width="300" height="112" fill="#F5E7E0" stroke="#C2492F" stroke-width="1.5"/>
+          <text x="225" y="164" text-anchor="middle" class="m" font-size="18">Tuple(xmin=100, xmax=200)</text>
+          <text x="225" y="198" text-anchor="middle" font-size="18" fill="#C2492F">● DEAD after t2 commit</text>
+          <rect x="525" y="126" width="300" height="112" fill="#FFFDF8" stroke="#4B7A58" stroke-width="1.5"/>
+          <text x="675" y="164" text-anchor="middle" class="m" font-size="18">Tuple(xmin=200, xmax=0)</text>
+          <text x="675" y="198" text-anchor="middle" font-size="18" fill="#4B7A58">● LIVE</text>
+          <text x="450" y="288" text-anchor="middle" font-size="19" fill="#3E4C54">老读快照看 lp[1]，新读快照看 lp[2]：读写互不阻塞。</text>
+        </g>
+        <!-- phase 3 -->
+        <g class="mvph" data-mv="3" style="opacity:0">
+          <rect x="75" y="126" width="300" height="112" fill="none" stroke="#C4BCA9" stroke-dasharray="6 6"/>
+          <text x="225" y="164" text-anchor="middle" font-size="18" fill="#8A8C80">lp[1] 标记 DEAD</text>
+          <text x="225" y="196" text-anchor="middle" font-size="17" fill="#8A8C80">空间释放，可复用</text>
+          <rect x="525" y="126" width="300" height="112" fill="#FFFDF8" stroke="#4B7A58" stroke-width="1.5"/>
+          <text x="675" y="164" text-anchor="middle" class="m" font-size="18">Tuple(xmin=200, xmax=0)</text>
+          <text x="675" y="198" text-anchor="middle" font-size="18" fill="#4B7A58">● LIVE</text>
+          <text x="450" y="288" text-anchor="middle" font-size="19" fill="#3E4C54">vacuum 回收旧版本；文件一般不会变小，只是空间重新可用。</text>
+        </g>
+        <line x1="0" y1="330" x2="900" y2="330" stroke="#DCD5C6"/>
+        <text x="0" y="360" font-size="16" fill="#6F7C7C">MVCC 的收益是快照隔离；代价是必须有人负责清扫历史版本。</text>
+      </svg>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="box tred" style="padding:20px 22px;min-height:156px">
+          <div class="tag" style="color:var(--red)">谁会挡住 vacuum</div>
+          <div id="mvDesc" class="small" style="margin-top:12px;line-height:1.7">只有「所有活跃事务都不再需要」的旧版本才能回收。t1 时只有一条 live tuple，没有垃圾。</div>
+        </div>
+        <div class="box" style="padding:18px 20px"><h4>长事务 <span class="mono muted">backend_xmin</span></h4><p class="tiny muted" style="margin-top:6px">一个老快照钉住 xid 水位，之后产生的 dead tuple 全部无法回收。</p></div>
+        <div class="box" style="padding:18px 20px"><h4>复制槽 <span class="mono muted">xmin / catalog_xmin</span></h4><p class="tiny muted" style="margin-top:6px">下游没消费完，主库就得替它留着旧版本。</p></div>
+        <pre style="font-size:15px;padding:14px;white-space:pre-wrap"><span class="k">SELECT</span> pid, backend_xmin, state, query
+<span class="k">FROM</span> pg_stat_activity
+<span class="k">WHERE</span> backend_xmin <span class="k">IS NOT NULL</span>;</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 11 HOT Update（对比交互） ============ -->
+<section class="slide" data-title="深度解析 · HOT Update 关键优化">
+  <div class="eyebrow"><span class="no">11</span><span class="bar"></span><span>HOT UPDATE / 关键优化</span></div>
+  <h2>HOT Update：让索引「原地不动」</h2>
+  <div class="btnrow" style="margin:14px 0 8px">
+    <button class="btn hotbtn on" data-hot="normal">普通 UPDATE · 索引全要改</button>
+    <button class="btn hotbtn" data-hot="hot">HOT UPDATE · 只动 lp 链</button>
+    <span class="note" style="margin-left:auto;align-self:center">切换对比 →</span>
+  </div>
+  <div class="content" style="height:520px;margin-top:8px">
+    <svg viewBox="0 0 1400 330" width="1400" aria-label="普通 UPDATE 与 HOT UPDATE 对比">
+      <!-- normal -->
+      <g class="pane focus" id="hotNormal">
+        <rect x="0" y="0" width="670" height="316" fill="#FFFDF8" stroke="#C4BCA9"/>
+        <text x="22" y="32" class="m" font-size="16" fill="#C2492F">普通 UPDATE · 写放大</text>
+        <g>
+          <rect x="24" y="52" width="190" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+          <rect x="24" y="100" width="190" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+          <rect x="24" y="148" width="190" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+          <g class="m" font-size="14" fill="#2C6E73"><text x="38" y="79">idx_a → (5,3)</text><text x="38" y="127">idx_b → (5,3)</text><text x="38" y="175">idx_c → (5,3)</text></g>
+        </g>
+        <g stroke="#C2492F" stroke-width="1.6" fill="none" stroke-dasharray="5 4">
+          <path d="M214 73 L470 250"/><path d="M214 121 L470 250"/><path d="M214 169 L470 250"/>
+        </g>
+        <rect x="330" y="52" width="300" height="86" fill="#F5E7E0" stroke="#C2492F"/>
+        <text x="348" y="82" class="m" font-size="15">Block 5 · lp[3]</text>
+        <text x="348" y="112" font-size="17">旧 tuple（dead）</text>
+        <rect x="470" y="214" width="170" height="76" fill="#FFF4EE" stroke="#C2492F" stroke-width="2"/>
+        <text x="486" y="244" class="m" font-size="15" fill="#C2492F">Block 8 · 新 tuple</text>
+        <text x="486" y="270" font-size="15" fill="#C2492F">跨 Block 落位</text>
+        <text x="24" y="248" font-size="16" fill="#6F7C7C">每个索引都要</text>
+        <text x="24" y="274" font-size="16" fill="#C2492F">新增一条指向新版本的条目</text>
+        <text x="24" y="300" font-size="15" fill="#8A8C80">N 个索引 = N 份额外写入与 IO</text>
+      </g>
+      <!-- hot -->
+      <g class="pane dim" id="hotHot">
+        <rect x="720" y="0" width="670" height="316" fill="#FFFDF8" stroke="#2C6E73" stroke-width="1.5"/>
+        <text x="742" y="32" class="m" font-size="16" fill="#2C6E73">HOT UPDATE · Heap Only Tuple</text>
+        <rect x="744" y="52" width="190" height="42" fill="#E3EEEC" stroke="#2C6E73"/>
+        <text x="758" y="79" class="m" font-size="14" fill="#2C6E73">idx_a → (5,3) 不变</text>
+        <path d="M934 73 L974 73 L974 132 L1000 132" fill="none" stroke="#2C6E73" stroke-width="1.6" marker-end="url(#arH)"/>
+        <rect x="1000" y="106" width="366" height="184" fill="#FFFDF8" stroke="#C4BCA9"/>
+        <text x="1016" y="132" class="m" font-size="14" fill="#6F7C7C">同一个 Block 5</text>
+        <rect x="1020" y="148" width="112" height="46" fill="#F5E7E0" stroke="#C2492F"/>
+        <text x="1076" y="177" text-anchor="middle" class="m" font-size="14" fill="#C2492F">lp[3]</text>
+        <text x="1076" y="212" text-anchor="middle" font-size="13" fill="#8A8C80">redirect</text>
+        <path d="M1136 171 L1170 171" stroke="#C2492F" stroke-width="2" marker-end="url(#arHr)"/>
+        <rect x="1174" y="148" width="112" height="46" fill="#E3EEEC" stroke="#2C6E73"/>
+        <text x="1230" y="177" text-anchor="middle" class="m" font-size="14" fill="#2C6E73">lp[7]</text>
+        <path d="M1286 171 L1310 171" stroke="#2C6E73" stroke-width="2" marker-end="url(#arH2)"/>
+        <rect x="1174" y="224" width="176" height="48" fill="#FFFDF8" stroke="#4B7A58" stroke-width="1.5"/>
+        <text x="1262" y="254" text-anchor="middle" font-size="15" fill="#4B7A58">live tuple（新版本）</text>
+        <text x="744" y="248" font-size="16" fill="#6F7C7C">索引仍指 lp[3]，</text>
+        <text x="744" y="274" font-size="16" fill="#2C6E73">沿 lp 链找到新版本</text>
+        <text x="744" y="300" font-size="15" fill="#8A8C80">0 次索引写入</text>
+      </g>
+      <defs>
+        <marker id="arH" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2C6E73"/></marker>
+        <marker id="arHr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C2492F"/></marker>
+        <marker id="arH2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#2C6E73"/></marker>
+      </defs>
+    </svg>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:20px">
+      <div>
+        <div class="tag">两个条件必须同时满足</div>
+        <div style="display:flex;gap:16px;margin-top:12px">
+          <div class="box tteal" style="flex:1;padding:14px 18px"><span class="mono red">01</span><p class="small" style="margin-top:6px">更新的字段<b>不是任何索引的 key</b></p></div>
+          <div class="box tteal" style="flex:1;padding:14px 18px"><span class="mono red">02</span><p class="small" style="margin-top:6px">新 tuple 与旧 tuple <b>在同一个 Block</b> 内</p></div>
+        </div>
+        <p class="small muted" style="margin-top:10px">条件 2 靠 <span class="mono">fillfactor</span> 预留页内空间实现；这也是 HOT 率上不去时第一个该看的参数。</p>
+      </div>
+      <pre style="font-size:16px;padding:14px 18px"><span class="k">CREATE TABLE</span> orders (
+  id <span class="k">BIGINT PRIMARY KEY</span>,
+  status <span class="k">TEXT</span>,   <span class="c">-- 频繁更新，不在索引里</span>
+  amount <span class="k">NUMERIC</span>
+) <span class="k">WITH</span> (fillfactor = <span class="n">70</span>); <span class="c">-- 预留 30%</span>
+
+<span class="k">SELECT</span> n_tup_upd, n_tup_hot_upd <span class="k">FROM</span> pg_stat_user_tables;</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 12 Vacuum ============ -->
+<section class="slide" data-title="深度解析 · Vacuum 工作原理">
+  <div class="eyebrow"><span class="no">12</span><span class="bar"></span><span>VACUUM / 清理与空间复用</span></div>
+  <h2>Vacuum：把 dead tuple 变回「可复用空间」</h2>
+  <div class="content" style="height:600px;display:grid;grid-template-columns:1fr 1fr;gap:56px;margin-top:18px">
+    <div>
+      <svg viewBox="0 0 660 560" width="660" aria-label="Vacuum 流程">
+        <g class="m" font-size="15" fill="#1B262C">
+          <rect x="0" y="0" width="460" height="48" fill="#E3EEEC" stroke="#2C6E73"/><text x="18" y="30">① 触发：dead tuples &gt; threshold</text>
+          <rect x="0" y="66" width="460" height="48" fill="#FFFDF8" stroke="#C4BCA9"/><text x="18" y="96">② 扫描 heap 文件</text>
+          <rect x="0" y="132" width="460" height="48" fill="#FFFDF8" stroke="#C4BCA9"/><text x="18" y="162">③ 记录 dead tuple 的 ctid（TidStore / 内存）</text>
+          <rect x="0" y="198" width="460" height="48" fill="#FFFDF8" stroke="#C4BCA9"/><text x="18" y="228">④ 扫描相关索引，回收 dead entries</text>
+          <rect x="0" y="264" width="460" height="48" fill="#FFFDF8" stroke="#C4BCA9"/><text x="18" y="294">⑤ 回收 heap 中 dead tuple 的空间</text>
+          <rect x="0" y="330" width="460" height="48" fill="#FFFDF8" stroke="#C4BCA9"/><text x="18" y="360">⑥ 更新 FSM（下次写入可用）</text>
+          <rect x="0" y="396" width="460" height="48" fill="#F5E7E0" stroke="#C2492F"/><text x="18" y="426">⑦ 最后几个 Block 完全空？</text>
+        </g>
+        <g stroke="#C4BCA9" stroke-width="1.5" marker-end="url(#arV)">
+          <path d="M230 48 L230 64"/><path d="M230 114 L230 130"/><path d="M230 180 L230 196"/><path d="M230 246 L230 262"/><path d="M230 312 L230 328"/><path d="M230 378 L230 394"/>
+        </g>
+        <path d="M150 444 L150 476 L40 476" fill="none" stroke="#4B7A58" stroke-width="1.5" marker-end="url(#arVg)"/>
+        <path d="M330 444 L330 476 L490 476" fill="none" stroke="#C2492F" stroke-width="1.5" marker-end="url(#arVr)"/>
+        <rect x="0" y="480" width="320" height="46" fill="#FFFDF8" stroke="#4B7A58"/>
+        <text x="12" y="509" font-size="15" fill="#4B7A58">Yes → truncate 文件，真正释放磁盘</text>
+        <rect x="330" y="480" width="320" height="46" fill="#FFFDF8" stroke="#C2492F"/>
+        <text x="342" y="509" font-size="15" fill="#C2492F">No → 结束，空间仅标记为可复用</text>
+        <text x="0" y="552" class="lbl" font-size="15">注意顺序：先清索引，再回收 heap —— 否则索引会留下指向空位的悬空 ctid。</text>
+        <defs>
+          <marker id="arV" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C4BCA9"/></marker>
+          <marker id="arVg" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#4B7A58"/></marker>
+          <marker id="arVr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C2492F"/></marker>
+        </defs>
+      </svg>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="tag">AUTOVACUUM 关键参数</div>
+      <table>
+        <thead><tr><th>参数</th><th>默认</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td class="k">autovacuum_vacuum_threshold</td><td class="mono">50</td><td>触发的最少 dead tuple 数</td></tr>
+          <tr><td class="k">autovacuum_vacuum_scale_factor</td><td class="mono">0.2</td><td>触发的 dead tuple 占比</td></tr>
+          <tr><td class="k">autovacuum_vacuum_cost_delay</td><td class="mono">2ms</td><td>每次 sleep 时长（IO 限速）</td></tr>
+          <tr><td class="k">autovacuum_vacuum_cost_limit</td><td class="mono">200</td><td>sleep 前的 IO 消耗上限</td></tr>
+          <tr><td class="k">autovacuum_max_workers</td><td class="mono">3</td><td>并发 worker 数</td></tr>
+        </tbody>
+      </table>
+      <div class="box tred" style="padding:20px 24px">
+        <h4>VACUUM ≠ VACUUM FULL</h4>
+        <p class="small muted" style="margin-top:8px"><b>VACUUM</b> 在线、不锁表，空间只标记复用（末尾全空 Block 除外）；<b>VACUUM FULL</b> 重建整表、彻底缩小文件，但要锁表阻塞业务。生产环境优先 <span class="mono">pg_repack</span>。</p>
+      </div>
+      <pre style="font-size:16px;padding:16px 18px"><span class="k">ALTER TABLE</span> hot_table <span class="k">SET</span> (
+  autovacuum_vacuum_scale_factor = <span class="n">0.01</span>,
+  autovacuum_vacuum_threshold = <span class="n">100</span>,
+  autovacuum_vacuum_cost_delay = <span class="n">0</span>  <span class="c">-- NVMe 不限速</span>
+);</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 13 边界与本质取舍 ============ -->
+<section class="slide" data-title="思考与边界 · 三个值得带走的问题">
+  <div class="eyebrow"><span class="no">13</span><span class="bar"></span><span>BOUNDARIES / 思考与边界</span></div>
+  <h2>三个值得带走的问题</h2>
+  <div class="content" style="height:600px;margin-top:16px;display:flex;flex-direction:column;gap:18px">
+    <div style="display:grid;grid-template-columns:1.25fr .75fr;gap:40px;height:280px">
+      <div class="box" style="padding:18px 24px">
+        <h4>① 为什么 vacuum 只能回收文件<b>末尾</b>的完全空闲 Block？</h4>
+        <svg viewBox="0 0 760 190" width="760" style="margin-top:10px" aria-label="回收中间块与末尾块的差别">
+          <text x="0" y="18" font-size="15" fill="#C2492F">回收中间 Block · 不可以</text>
+          <g class="m" font-size="14" text-anchor="middle">
+            <rect x="0" y="28" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="46" y="52">B0</text>
+            <rect x="98" y="28" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="144" y="52">B1</text>
+            <rect x="196" y="28" width="92" height="38" fill="#F5E7E0" stroke="#C2492F"/><text x="242" y="52" fill="#C2492F">回收</text>
+            <rect x="294" y="28" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="340" y="52">B3</text>
+            <rect x="392" y="28" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="438" y="52">B4</text>
+          </g>
+          <text x="500" y="52" font-size="15" fill="#C2492F">→ 后续 BlockNum 全变，索引里的 ctid 集体失效</text>
+          <text x="0" y="112" font-size="15" fill="#4B7A58">回收末尾 Block · 可以</text>
+          <g class="m" font-size="14" text-anchor="middle">
+            <rect x="0" y="122" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="46" y="146">B0</text>
+            <rect x="98" y="122" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="144" y="146">B1</text>
+            <rect x="196" y="122" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="242" y="146">B2</text>
+            <rect x="294" y="122" width="92" height="38" fill="#FFFDF8" stroke="#C4BCA9"/><text x="340" y="146">B3</text>
+            <rect x="392" y="122" width="92" height="38" fill="#F5E7E0" stroke="#C2492F"/><text x="438" y="146" fill="#C2492F">回收</text>
+          </g>
+          <text x="500" y="146" font-size="15" fill="#4B7A58">→ 后面没有 Block 需要重新编号，安全</text>
+        </svg>
+      </div>
+      <div class="box" style="padding:18px 22px">
+        <h4>② 长事务为什么导致膨胀</h4>
+        <p class="small muted" style="margin-top:10px">一个老快照把 <span class="mono">backend_xmin</span> 钉住，此后产生的 dead tuple 谁都不能收，直到它结束。</p>
+        <pre style="font-size:14px;padding:12px;margin-top:12px;white-space:pre-wrap"><span class="k">SET</span> statement_timeout = <span class="s">'30min'</span>;
+<span class="k">SET</span> idle_in_transaction_session_timeout = <span class="s">'5min'</span>;</pre>
+      </div>
+    </div>
+    <div style="flex:1">
+      <div class="tag">③ 本质取舍 / 每个设计选择都在交换</div>
+      <table style="margin-top:10px;font-size:17px">
+        <thead><tr><th style="width:28%">设计选择</th><th style="width:36%">获得的</th><th>放弃的</th></tr></thead>
+        <tbody>
+          <tr><td class="k">无序存储（FSM 找空位）</td><td>写入极快、无热点</td><td>范围查询 IO 多（需 cluster 辅助）</td></tr>
+          <tr><td class="k">MVCC 多版本共存</td><td>读写不阻塞、快照隔离</td><td>需要 vacuum，有膨胀风险</td></tr>
+          <tr><td class="k">行存（整行为一体）</td><td>整行读取一次寻址</td><td>只读少列时 IO 浪费</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:14px;border-left:3px solid var(--red);padding:6px 0 6px 18px">
+        <p style="font:400 27px var(--serif);color:var(--ink)">一句话：heap 是「为 OLTP 写入性能极度优化，牺牲了 OLAP 分析性能与空间利用率」的设计。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 14 优势与劣势 ============ -->
+<section class="slide" data-title="场景判断 · 什么时候用 heap">
+  <div class="eyebrow"><span class="no">14</span><span class="bar"></span><span>FIT / 优势与不适合场景</span></div>
+  <h2>什么时候用 heap，什么时候换引擎</h2>
+  <div class="content" style="height:600px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr auto;gap:44px;margin-top:20px">
+    <div>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:2px solid var(--teal);padding-bottom:12px">
+        <span class="tag" style="color:var(--teal)">FITS WELL</span><h3 style="margin:0">优势与适合场景</h3>
+      </div>
+      <div class="fitrow"><span class="mono teal">01</span><div><h4>OLTP 高频小事务</h4><p class="small muted">按行存储，全行读取效率高 · 电商订单、用户账户</p></div></div>
+      <div class="fitrow"><span class="mono teal">02</span><div><h4>随机读写</h4><p class="small muted">ctid 直接寻址，O(1) 定位 · 用户信息更新</p></div></div>
+      <div class="fitrow"><span class="mono teal">03</span><div><h4>时序热数据写入</h4><p class="small muted">append-only + FSM 快速找位置 · IoT 传感器数据</p></div></div>
+      <div class="fitrow"><span class="mono teal">04</span><div><h4>需要整行大多数字段</h4><p class="small muted">一行物理上在一起，一次 IO 取全行 · 报表导出</p></div></div>
+      <div class="fitrow"><span class="mono teal">05</span><div><h4>中等数据量 HTAP</h4><p class="small muted">配合并行查询，兼顾写入与分析 · SaaS 多租户</p></div></div>
+    </div>
+    <div>
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:2px solid var(--red);padding-bottom:12px">
+        <span class="tag" style="color:var(--red)">NOT A FIT</span><h3 style="margin:0">劣势与替代方案</h3>
+      </div>
+      <div class="fitrow"><span class="mono red">01</span><div><h4>高频 UPDATE + 长事务</h4><p class="small muted">dead tuple 堆积、膨胀严重 → zheap / 分区表</p></div></div>
+      <div class="fitrow"><span class="mono red">02</span><div><h4>只读少数列的大规模扫描</h4><p class="small muted">读整行只用几列，IO 浪费 → Parquet 列存</p></div></div>
+      <div class="fitrow"><span class="mono red">03</span><div><h4>超宽表（单行 &gt; 8KB）</h4><p class="small muted">受 blocksize 限制 → TOAST + 适当拆表</p></div></div>
+      <div class="fitrow"><span class="mono red">04</span><div><h4>历史数据归档 / 高压缩</h4><p class="small muted">行存压缩比低 → Parquet + 对象存储</p></div></div>
+      <div class="fitrow"><span class="mono red">05</span><div><h4>时序历史数据 OLAP</h4><p class="small muted">列存更高效 → DuckDB + Parquet</p></div></div>
+    </div>
+    <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:20px;display:flex;align-items:baseline;gap:26px">
+      <span class="tag" style="white-space:nowrap">判断口诀</span>
+      <p style="font:400 26px var(--serif)">写多、点查多、要整行 → <span class="teal">heap</span>；少列大扫描、归档压缩 → <span class="red">列存</span>。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 15 竞品横向对比 ============ -->
+<section class="slide" data-title="竞品横向对比 · 四种存储引擎">
+  <div class="eyebrow"><span class="no">15</span><span class="bar"></span><span>LANDSCAPE / 竞品横向对比</span></div>
+  <h2>四种存储，四种取舍</h2>
+  <div class="content" style="height:590px;margin-top:16px">
+    <table id="cmp" style="font-size:18px">
+      <thead><tr>
+        <th style="width:22%">特性</th><th style="width:20%;color:var(--red)">heap · 行存</th><th style="width:19%">parquet · 列存</th><th style="width:20%">zedstore · 行列混存</th><th>LSM-Tree · RocksDB</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="k">写入速度</td><td><span class="score hi"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td></tr>
+        <tr><td class="k">点查速度</td><td><span class="score hi"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></span></td></tr>
+        <tr><td class="k">全列扫描</td><td><span class="score"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></td></tr>
+        <tr><td class="k">少列扫描</td><td><span class="score"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></td></tr>
+        <tr><td class="k">UPDATE 支持</td><td><span class="pill" style="color:var(--green)">✓ MVCC</span></td><td><span class="pill" style="color:var(--red)">✗ 需重写</span></td><td><span class="pill" style="color:var(--green)">✓ MVCC</span></td><td><span class="pill">✓ 追加写</span></td></tr>
+        <tr><td class="k">事务支持</td><td><span class="pill" style="color:var(--green)">✓ ACID</span></td><td><span class="pill" style="color:var(--red)">✗ 文件级</span></td><td><span class="pill" style="color:var(--green)">✓ ACID</span></td><td><span class="pill">有限</span></td></tr>
+        <tr><td class="k">压缩比</td><td><span class="score"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span></td><td><span class="score"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></span></td></tr>
+        <tr><td class="k">典型场景</td><td><b>OLTP</b></td><td>OLAP / 数据湖</td><td>HTAP</td><td>写密集型</td></tr>
+      </tbody>
+    </table>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:26px">
+      <div class="box tred" style="padding:16px 20px"><div class="tag" style="color:var(--red)">OLTP</div><p class="small" style="margin-top:8px">写多、点查多、要事务 → <b>heap</b></p></div>
+      <div class="box" style="padding:16px 20px"><div class="tag">OLAP</div><p class="small" style="margin-top:8px">少列大扫描、归档 → <b>parquet</b></p></div>
+      <div class="box" style="padding:16px 20px"><div class="tag">HTAP</div><p class="small" style="margin-top:8px">混合负载 → <b>zedstore</b></p></div>
+      <div class="box" style="padding:16px 20px"><div class="tag">写密集</div><p class="small" style="margin-top:8px">极致吞吐 → <b>LSM-Tree</b></p></div>
+    </div>
+    <p class="small muted" style="margin-top:18px">评分取自原课程文稿的相对定性比较，用于理解取舍方向，不代表具体硬件下的基准测试结果。</p>
+  </div>
+</section>
+
+<!-- ============ 16 实操（代码 tab 交互） ============ -->
+<section class="slide" data-title="实操与最佳实践 · 三组实验 SQL">
+  <div class="eyebrow"><span class="no">16</span><span class="bar"></span><span>HANDS-ON / 实操与最佳实践</span></div>
+  <h2>上手：用插件把内部结构「翻出来」</h2>
+  <div class="content" style="height:590px;margin-top:16px;display:grid;grid-template-columns:1.65fr .75fr;gap:38px">
+    <div>
+      <div class="btnrow" style="margin-bottom:14px">
+        <button class="btn tabbtn on" data-tab="1">① 观察 heap 结构</button>
+        <button class="btn tabbtn" data-tab="2">② 测 HOT 命中率</button>
+        <button class="btn tabbtn" data-tab="3">③ 诊断膨胀</button>
+      </div>
+      <div class="codepane on" data-pane="1">
+        <pre style="font-size:17px;line-height:1.55"><span class="k">CREATE EXTENSION IF NOT EXISTS</span> pageinspect;
+<span class="k">CREATE EXTENSION IF NOT EXISTS</span> pg_freespacemap;
+
+<span class="k">CREATE TABLE</span> heap_demo (
+  id <span class="k">BIGSERIAL</span>, name <span class="k">TEXT</span>, score <span class="k">FLOAT</span>, payload <span class="k">JSONB</span>
+) <span class="k">WITH</span> (fillfactor = <span class="n">80</span>);
+
+<span class="k">INSERT INTO</span> heap_demo (name, score, payload)
+<span class="k">SELECT</span> <span class="s">'user_'</span> || g, random()*<span class="n">100</span>,
+       jsonb_build_object(<span class="s">'level'</span>, (g % <span class="n">10</span>)+<span class="n">1</span>)
+<span class="k">FROM</span> generate_series(<span class="n">1</span>, <span class="n">10000</span>) g;
+
+<span class="c">-- 1 物理文件路径  2 ctid  3 页内结构  4 FSM</span>
+<span class="k">SELECT</span> pg_relation_filepath(<span class="s">'heap_demo'</span>);
+<span class="k">SELECT</span> ctid, id, name <span class="k">FROM</span> heap_demo <span class="k">LIMIT</span> <span class="n">5</span>;
+<span class="k">SELECT</span> lp, lp_flags, t_xmin, t_xmax, t_ctid, t_data
+  <span class="k">FROM</span> heap_page_items(get_raw_page(<span class="s">'heap_demo'</span>, <span class="n">0</span>)) <span class="k">LIMIT</span> <span class="n">5</span>;
+<span class="k">SELECT</span> blkno, avail <span class="k">FROM</span> pg_freespace(<span class="s">'heap_demo'</span>) <span class="k">LIMIT</span> <span class="n">10</span>;</pre>
+      </div>
+      <div class="codepane" data-pane="2">
+        <pre style="font-size:17px;line-height:1.55"><span class="c">-- 只在 id 上有索引；name / score 无索引</span>
+<span class="k">CREATE TABLE</span> hot_test (
+  id <span class="k">INT PRIMARY KEY</span>, name <span class="k">TEXT</span>, score <span class="k">INT</span>
+) <span class="k">WITH</span> (fillfactor = <span class="n">70</span>);
+
+<span class="k">INSERT INTO</span> hot_test
+<span class="k">SELECT</span> g, <span class="s">'user_'</span>||g, g <span class="k">FROM</span> generate_series(<span class="n">1</span>,<span class="n">1000</span>) g;
+
+<span class="k">SELECT</span> ctid, id, name <span class="k">FROM</span> hot_test <span class="k">WHERE</span> id = <span class="n">1</span>;  <span class="c">-- (0,1)</span>
+<span class="k">UPDATE</span> hot_test <span class="k">SET</span> score = <span class="n">999</span> <span class="k">WHERE</span> id = <span class="n">1</span>;
+<span class="k">SELECT</span> ctid, id, name, score <span class="k">FROM</span> hot_test <span class="k">WHERE</span> id = <span class="n">1</span>;
+<span class="c">-- HOT 成功：(0,XX)，Block 号仍为 0</span>
+
+<span class="k">SELECT</span> n_tup_upd, n_tup_hot_upd,
+  round(n_tup_hot_upd::<span class="k">numeric</span> / nullif(n_tup_upd,<span class="n">0</span>)*<span class="n">100</span>, <span class="n">2</span>) <span class="k">AS</span> hot_ratio
+<span class="k">FROM</span> pg_stat_user_tables <span class="k">WHERE</span> relname = <span class="s">'hot_test'</span>;</pre>
+      </div>
+      <div class="codepane" data-pane="3">
+        <pre style="font-size:17px;line-height:1.55"><span class="c">-- 表膨胀：dead tuple 占比 + 最近 vacuum 时间</span>
+<span class="k">SELECT</span> schemaname, tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||<span class="s">'.'</span>||tablename)) <span class="k">AS</span> total_size,
+  n_dead_tup, n_live_tup,
+  round(n_dead_tup::<span class="k">numeric</span> /
+        nullif(n_live_tup + n_dead_tup, <span class="n">0</span>) * <span class="n">100</span>, <span class="n">2</span>) <span class="k">AS</span> dead_ratio,
+  last_vacuum, last_autovacuum
+<span class="k">FROM</span> pg_stat_user_tables <span class="k">ORDER BY</span> n_dead_tup <span class="k">DESC LIMIT</span> <span class="n">20</span>;
+
+<span class="c">-- 找出阻碍 vacuum 的长事务</span>
+<span class="k">SELECT</span> pid, age(backend_xmin) <span class="k">AS</span> xmin_age, state, left(query, <span class="n">100</span>)
+<span class="k">FROM</span> pg_stat_activity
+<span class="k">WHERE</span> backend_xmin <span class="k">IS NOT NULL ORDER BY</span> age(backend_xmin) <span class="k">DESC</span>;
+
+<span class="k">VACUUM VERBOSE ANALYZE</span> heap_demo;</pre>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="box tteal" style="padding:22px 24px;min-height:190px">
+        <div class="tag">观察要点</div>
+        <div id="tabNote" class="small" style="margin-top:12px;line-height:1.7">ctid 从 (0,1) 开始连续增长；<span class="mono">heap_page_items</span> 能直接看到 t_xmin / t_xmax / t_ctid，把前面讲的多版本机制坐实。</div>
+      </div>
+      <div class="box" style="padding:20px 22px">
+        <div class="tag">时序场景的配置反例</div>
+        <p class="small muted" style="margin-top:10px">几乎不更新的写入型表，<span class="mono">fillfactor = 100</span> 更省空间；按时间分区 + BRIN 索引，冷热分离、索引极小。</p>
+        <pre style="font-size:13px;padding:12px;margin-top:12px;white-space:pre-wrap"><span class="k">CREATE TABLE</span> iot_metrics (...)
+  <span class="k">WITH</span> (fillfactor = <span class="n">100</span>)
+  <span class="k">PARTITION BY RANGE</span> (ts);
+<span class="k">CREATE INDEX</span> <span class="k">ON</span> iot_metrics_2024_01
+  <span class="k">USING</span> brin (ts);</pre>
+      </div>
+      <p class="tiny muted">实验依赖插件：pageinspect / pg_freespacemap / pgstattuple / pg_repack。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 17 性能调优 ============ -->
+<section class="slide" data-title="性能调优 · 先定位再下药">
+  <div class="eyebrow"><span class="no">17</span><span class="bar"></span><span>TUNING / 性能调优</span></div>
+  <h2>性能调优：先用 EXPLAIN 定位，再动参数</h2>
+  <div class="content" style="height:590px;display:grid;grid-template-columns:.9fr 1.1fr;gap:46px;margin-top:18px">
+    <div>
+      <div class="tag">诊断分叉</div>
+      <svg viewBox="0 0 560 420" width="560" style="margin-top:14px" aria-label="调优诊断树">
+        <rect x="120" y="0" width="320" height="54" fill="#2C6E73"/>
+        <text x="280" y="33" text-anchor="middle" font-size="18" fill="#FFFDF8">查询变慢 / 表膨胀</text>
+        <path d="M280 54 L280 84" stroke="#C4BCA9" marker-end="url(#arT3)"/>
+        <rect x="120" y="86" width="320" height="48" fill="#FFFDF8" stroke="#C4BCA9"/>
+        <text x="280" y="116" text-anchor="middle" class="m" font-size="16">EXPLAIN ANALYZE</text>
+        <g stroke="#C4BCA9" stroke-width="1.5" fill="none" marker-end="url(#arT3)">
+          <path d="M280 134 L280 158 L70 158 L70 184"/><path d="M280 158 L210 184"/>
+          <path d="M280 158 L350 184"/><path d="M280 158 L490 158 L490 184"/>
+        </g>
+        <g font-size="13" fill="#1B262C">
+          <rect x="0" y="186" width="140" height="66" fill="#E3EEEC" stroke="#2C6E73"/><text x="10" y="212">Seq Scan</text><text x="10" y="236" fill="#6F7C7C">→ 考虑加索引</text>
+          <rect x="146" y="186" width="128" height="66" fill="#E3EEEC" stroke="#2C6E73"/><text x="154" y="212">回表 IO 高</text><text x="154" y="236" fill="#6F7C7C">→ cluster / include</text>
+          <rect x="280" y="186" width="128" height="66" fill="#F5E7E0" stroke="#C2492F"/><text x="288" y="212">dead tuple 多</text><text x="288" y="236" fill="#6F7C7C">→ 调 autovacuum</text>
+          <rect x="414" y="186" width="140" height="66" fill="#F5E7E0" stroke="#C2492F"/><text x="422" y="212">写入慢</text><text x="422" y="236" fill="#6F7C7C">→ fillfactor / HOT 率</text>
+        </g>
+        <text x="0" y="292" font-size="16" fill="#3E4C54">先看现象属于「读路径」还是「写路径」，</text>
+        <text x="0" y="318" font-size="16" fill="#3E4C54">再决定改索引、改参数还是改数据分布。</text>
+        <text x="0" y="360" class="m" font-size="14" fill="#8A8C80">切忌：一上来就 VACUUM FULL 或全局调大 worker。</text>
+        <defs><marker id="arT3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#C4BCA9"/></marker></defs>
+      </svg>
+    </div>
+    <div>
+      <div class="tag">TOP 5 调优手段</div>
+      <table style="margin-top:12px;font-size:17px">
+        <thead><tr><th>手段</th><th>场景</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td class="k">调整 fillfactor</td><td>频繁 UPDATE 非索引列</td><td class="mono">SET (fillfactor=70)</td></tr>
+          <tr><td class="k">加快 autovacuum</td><td>膨胀严重的大表</td><td>表级降低 scale_factor</td></tr>
+          <tr><td class="k">cluster 表</td><td>范围查询回表 IO 多</td><td class="mono">CLUSTER tbl USING idx</td></tr>
+          <tr><td class="k">分区表</td><td>超大表 vacuum 慢</td><td>按时间 / 业务分区</td></tr>
+          <tr><td class="k">pg_repack</td><td>不能停机但已膨胀</td><td class="mono">pg_repack -t tbl -j 4</td></tr>
+        </tbody>
+      </table>
+      <div class="box tred" style="padding:18px 22px;margin-top:20px">
+        <div class="tag" style="color:var(--red)">热表的表级覆盖</div>
+        <pre style="font-size:16px;padding:14px;margin-top:12px;white-space:pre-wrap"><span class="k">ALTER TABLE</span> hot_table <span class="k">SET</span> (
+  autovacuum_vacuum_scale_factor = <span class="n">0.01</span>,  <span class="c">-- 1% 就触发</span>
+  autovacuum_vacuum_threshold    = <span class="n">100</span>,
+  autovacuum_vacuum_cost_delay   = <span class="n">0</span>     <span class="c">-- NVMe SSD</span>
+);</pre>
+      </div>
+      <p class="small muted" style="margin-top:14px">全局默认值适合通用负载；高频更新的热表要单独设，别把整个实例一起拖进高频 vacuum。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 18 FAQ ============ -->
+<section class="slide" data-title="FAQ · 五个最常被问到的问题">
+  <div class="eyebrow"><span class="no">18</span><span class="bar"></span><span>FAQ / 常见问题</span></div>
+  <h2>五个最常被问到的问题</h2>
+  <div class="content" style="height:590px;display:grid;grid-template-columns:1.45fr .55fr;gap:48px;margin-top:18px">
+    <div>
+      <div class="faq open"><div class="faq-q"><span class="mono red">Q1</span><h4>fillfactor 设多少合适？</h4><span class="pm">−</span></div>
+        <div class="faq-a"><p class="small" style="padding-left:52px;line-height:1.7">频繁 UPDATE 非索引列的表，<b>70–80</b> 是常见选择；append-only 时序表和几乎不更新的历史表用 <b>100</b> 更省空间。预留空间是给 HOT update 用的，不更新就别白留。</p></div></div>
+      <div class="faq"><div class="faq-q"><span class="mono red">Q2</span><h4>vacuum 和 vacuum full 的区别？</h4><span class="pm">+</span></div>
+        <div class="faq-a"><p class="small" style="padding-left:52px;line-height:1.7"><b>VACUUM</b> 在线，只回收 dead tuple 空间供复用，一般不缩小文件（末尾全空 Block 除外）；<b>VACUUM FULL</b> 重建整表、彻底缩小，但锁表阻塞业务。生产环境优先考虑 <span class="mono">pg_repack</span>。</p></div></div>
+      <div class="faq"><div class="faq-q"><span class="mono red">Q3</span><h4>为什么 UPDATE 一行后，表文件反而变大了？</h4><span class="pm">+</span></div>
+        <div class="faq-a"><p class="small" style="padding-left:52px;line-height:1.7">heap 的 UPDATE 是「写新版本 + 标记旧版本为 dead」。HOT 条件不满足时，新旧版本都占空间，还可能新增索引条目；直到 vacuum 清理后，空间才被标记为可复用（文件不一定变小）。</p></div></div>
+      <div class="faq"><div class="faq-q"><span class="mono red">Q4</span><h4>TOAST 是什么？什么时候用到？</h4><span class="pm">+</span></div>
+        <div class="faq-a"><p class="small" style="padding-left:52px;line-height:1.7">行（含变长字段）超过 <span class="mono">toast_tuple_target</span>（默认约 2KB）时，大字段被移到独立 TOAST 表：Extended 先压缩、还大就搬走；External 不压缩直接搬走。heap 里只留一个 18 字节指针，可用 <span class="mono">SET STORAGE</span> 调整。</p></div></div>
+      <div class="faq"><div class="faq-q"><span class="mono red">Q5</span><h4>如何判断一张表是否严重膨胀？</h4><span class="pm">+</span></div>
+        <div class="faq-a"><p class="small" style="padding-left:52px;line-height:1.7">经验阈值：dead tuple 占比 &gt; 20%，或实际大小达到理论大小 2 倍以上。可用 <span class="mono">pgstattuple('your_table')</span> 精确诊断，重点看 <span class="mono">dead_tuple_percent</span>。</p></div></div>
+    </div>
+    <div>
+      <div class="tag">关键 GUC 速查</div>
+      <div style="margin-top:14px;font:15px/2.05 var(--mono);color:var(--ink2)">
+        fillfactor<br>toast_tuple_target<br>autovacuum_naptime<br>autovacuum_vacuum_threshold<br>autovacuum_vacuum_scale_factor<br>autovacuum_vacuum_cost_delay<br>autovacuum_vacuum_cost_limit<br>autovacuum_max_workers<br>enable_tidscan<br>default_table_access_method
+      </div>
+      <div class="dash" style="margin:18px 0"></div>
+      <div class="tag">常用插件</div>
+      <p class="small muted" style="margin-top:10px;line-height:1.8">pageinspect · 看页内结构<br>pg_freespacemap · 看 FSM<br>pgstattuple · 看膨胀比例<br>pg_repack · 在线收缩</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 19 结尾 ============ -->
+<section class="slide" data-title="结尾 · 把这张图带走">
+  <div class="eyebrow"><span class="no">19</span><span class="bar"></span><span>TAKEAWAY / 结语与扩展阅读</span></div>
+  <h2>把这张图带走</h2>
+  <div class="content" style="height:600px;display:grid;grid-template-columns:.95fr 1.05fr;gap:56px;margin-top:14px">
+    <div>
+      <p style="font:400 30px/1.55 var(--serif)">一个 8KB 的块，<br>两端相向生长；<br><span style="color:var(--red)">六个关键词</span>，串起整个存储引擎。</p>
+      <svg viewBox="0 0 620 360" width="620" style="margin-top:20px" aria-label="heap 核心概念图">
+        <rect x="90" y="40" width="440" height="250" fill="#FFFDF8" stroke="#C4BCA9" stroke-width="1.5"/>
+        <rect x="90" y="40" width="440" height="40" fill="#2C6E73"/>
+        <text x="108" y="66" class="m" font-size="15" fill="#FFFDF8">PageHeaderData · 24 B</text>
+        <g fill="#E3EEEC" stroke="#2C6E73"><rect x="108" y="96" width="66" height="30"/><rect x="182" y="96" width="66" height="30"/><rect x="256" y="96" width="66" height="30"/></g>
+        <g class="m" font-size="12" fill="#2C6E73" text-anchor="middle"><text x="141" y="116">lp1</text><text x="215" y="116">lp2</text><text x="289" y="116">lp3</text></g>
+        <rect x="108" y="140" width="404" height="56" fill="none" stroke="#C4BCA9" stroke-dasharray="5 5"/>
+        <text x="310" y="174" text-anchor="middle" font-size="14" fill="#8A8C80">Free Space · FSM 找这里</text>
+        <g fill="#F5E7E0" stroke="#C2492F"><rect x="370" y="210" width="142" height="56"/><rect x="220" y="210" width="142" height="56"/></g>
+        <g font-size="13" fill="#C2492F" text-anchor="middle"><text x="441" y="243">Tuple 1 · live</text><text x="291" y="243">Tuple 2 · dead</text></g>
+        <text x="90" y="320" class="m" font-size="14" fill="#6F7C7C">ctid → MVCC → HOT → vacuum</text>
+        <g font-size="14" fill="#2C6E73">
+          <text x="0" y="100">ctid</text><text x="0" y="140">FSM</text><text x="0" y="180">VM</text>
+          <text x="540" y="120">MVCC</text><text x="540" y="160">HOT</text><text x="540" y="200">VACUUM</text>
+        </g>
+        <g stroke="#C4BCA9" stroke-dasharray="3 3"><path d="M64 96 L88 96"/><path d="M64 136 L88 136"/><path d="M64 176 L88 176"/><path d="M532 116 L536 116"/><path d="M532 156 L536 156"/><path d="M532 196 L536 196"/></g>
+      </svg>
+      <p class="small muted" style="margin-top:6px">结构数据核验：PostgreSQL 17 Documentation §65.6 Database Page Layout。</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;padding-top:6px">
+      <div class="box tteal" style="padding:20px 24px">
+        <div class="tag">官方文档</div>
+        <p class="small mono" style="margin-top:10px;line-height:1.8">postgresql.org/docs/17/storage.html<br>postgresql.org/docs/17/mvcc.html</p>
+      </div>
+      <div class="box" style="padding:20px 24px">
+        <div class="tag">源码路径</div>
+        <p class="small mono" style="margin-top:10px;line-height:1.8">src/include/storage/bufpage.h<br>src/backend/access/heap/heapam.c<br>src/backend/storage/freespace/<br>src/include/access/heaptoast.h</p>
+      </div>
+      <div class="box" style="padding:20px 24px">
+        <div class="tag">延伸阅读</div>
+        <p class="small" style="margin-top:10px;line-height:1.8">《PostgreSQL 14 Internals》 · 《The Internals of PostgreSQL》<br>相关章节：列存之 Parquet / 行列混存之 zedstore / cluster 表 / LSM-Tree</p>
+      </div>
+      <div style="margin-top:auto;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end">
+        <div><div class="tag">THANK YOU</div><p style="font:400 30px var(--serif);margin-top:8px">看懂存储，才算看懂数据库。</p></div>
+        <div style="text-align:right"><p class="small">digoal</p><p class="tiny muted mono">2026-04-22 · 数据库筑基课</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+
+<div id="hud">
+  <div class="pn"><b id="pgNow">01</b> <span class="muted">/ <span id="pgAll">19</span></span></div>
+  <div id="hudTitle">封面 · 行存之 heap 表组织结构</div>
+  <div id="bar"><i id="barFill"></i></div>
+  <button id="btnMenu">目录 M</button>
+  <button class="nav" id="btnPrev" aria-label="上一页">‹</button>
+  <button class="nav" id="btnNext" aria-label="下一页">›</button>
+</div>
+<div id="menu">
+  <button class="btn close" id="btnClose">关闭 ESC</button>
+  <div class="eyebrow" style="margin-bottom:0"><span class="bar"></span><span>CONTENTS / 目录</span></div>
+  <h2 style="margin-top:16px">行存之 heap 表组织结构</h2>
+  <ol id="menuList"></ol>
+</div>
+<style>
+.fitrow{display:flex;gap:18px;padding:17px 4px 17px 0;border-bottom:1px solid var(--line)}
+.fitrow>span{font-size:17px;padding-top:2px;min-width:26px}
+.fitrow h4{margin-bottom:4px}
+.vmb{cursor:default}
+.vmb:hover>rect:first-of-type{stroke:#C2492F;stroke-width:2}
+.vmb text{font-family:var(--mono)}
+</style>
+<script>
+(function(){
+  'use strict';
+  var stage=document.getElementById('stage');
+  var slides=Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var cur=0, menu=document.getElementById('menu');
+  var $=function(id){return document.getElementById(id);};
+
+  /* ---------- 16:9 舞台等比缩放（含底部 HUD 的 letterboxing） ---------- */
+  function fit(){
+    var aw=window.innerWidth, ah=window.innerHeight-54;
+    var s=Math.min(aw/1600,ah/900);
+    stage.style.transform='translate('+((aw-1600*s)/2).toFixed(2)+'px,'+((ah-900*s)/2).toFixed(2)+'px) scale('+s+')';
+  }
+  window.addEventListener('resize',fit); fit();
+
+  /* ---------- 目录 ---------- */
+  var list=$('menuList');
+  slides.forEach(function(s,i){
+    var li=document.createElement('li');
+    li.textContent=s.dataset.title;
+    li.addEventListener('click',function(){go(i);});
+    list.appendChild(li);
+  });
+  function closeMenu(){menu.classList.remove('open');}
+  function toggleMenu(){menu.classList.toggle('open');}
+
+  /* ---------- 翻页 ---------- */
+  function go(n){
+    cur=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach(function(s,i){s.classList.toggle('active',i===cur);});
+    $('pgNow').textContent=('0'+(cur+1)).slice(-2);
+    $('pgAll').textContent=('0'+slides.length).slice(-2);
+    $('hudTitle').textContent=slides[cur].dataset.title;
+    $('barFill').style.width=((cur+1)/slides.length*100)+'%';
+    try{localStorage.setItem('heapDeckPage',String(cur));}catch(e){}
+    try{history.replaceState(null,'','#p='+(cur+1));}catch(e){}
+    closeMenu();
+  }
+  function next(){go(cur+1);} function prev(){go(cur-1);}
+  $('btnNext').addEventListener('click',next);
+  $('btnPrev').addEventListener('click',prev);
+  $('btnMenu').addEventListener('click',toggleMenu);
+  $('btnClose').addEventListener('click',closeMenu);
+  document.querySelectorAll('[data-go]').forEach(function(el){
+    el.addEventListener('click',function(){go(parseInt(el.dataset.go,10)-1);});
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){closeMenu();return;}
+    if(e.key==='m'||e.key==='M'){toggleMenu();return;}
+    if(e.key==='f'||e.key==='F'){
+      if(document.fullscreenElement){document.exitFullscreen();}else{document.documentElement.requestFullscreen();}
+      return;
+    }
+    if(e.code==='Space'&&e.target.tagName==='BUTTON'){return;}
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.code==='Space'){e.preventDefault();next();}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev();}
+    else if(e.key==='Home'){go(0);}
+    else if(e.key==='End'){go(slides.length-1);}
+  });
+  var start=0;
+  var m=location.hash.match(/p=(\d+)/);
+  if(m){start=parseInt(m[1],10)-1;}
+  else{try{start=parseInt(localStorage.getItem('heapDeckPage'),10)||0;}catch(e){}}
+  go(start);
+
+  /* ---------- P5 · Block 解剖悬停 ---------- */
+  var infoData={
+    def:['<span class="tag">HOW TO READ</span>','<p class="small" style="line-height:1.75;margin-top:14px;color:var(--muted)">把鼠标移到左侧图的四个区域，这里会展开对应的字节布局与作用。<br><br>整页的秩序只有一句话：<b style="color:var(--ink)">头部往后长指针，尾部往前长数据</b>，中间的空地就是还能写多少。</p><div class="dash" style="margin:18px 0"></div><p class="small">官方定义：页头固定 24 B；每个 line pointer 4 B；普通表的 special space 为空。</p><div style="display:flex;gap:10px;margin-top:22px"><div style="flex:1;border:1px solid var(--line);padding:12px 4px;text-align:center"><div class="mono" style="font-size:24px;color:var(--teal)">24 B</div><div class="tiny muted">页头</div></div><div style="flex:1;border:1px solid var(--line);padding:12px 4px;text-align:center"><div class="mono" style="font-size:24px;color:var(--teal)">4 B</div><div class="tiny muted">行指针</div></div><div style="flex:1;border:1px solid var(--line);padding:12px 4px;text-align:center"><div class="mono" style="font-size:24px;color:var(--red)">23 B</div><div class="tiny muted">元组头</div></div></div>'],
+    hdr:['<span class="tag">PAGEHEADER · 24 B</span>','<p class="small" style="line-height:1.7;margin-top:12px">页的元数据，记录空闲区的两个边界。</p><table style="margin-top:12px;font-size:16px"><tr><td class="k">pd_lsn</td><td>最近一次 WAL 位置（8B）</td></tr><tr><td class="k">pd_checksum</td><td>校验和（2B）</td></tr><tr><td class="k">pd_lower</td><td>空闲区起始偏移（2B）</td></tr><tr><td class="k">pd_upper</td><td>空闲区结束偏移（2B）</td></tr><tr><td class="k">pd_special</td><td>special area 起始（2B）</td></tr></table>'],
+    lp:['<span class="tag">LINE POINTERS · 4 B / 项</span>','<p class="small" style="line-height:1.7;margin-top:12px"><b>offset(15bit) + flags(2bit) + length(15bit)</b>。它是一层间接寻址：索引里存的是 lp 的编号（ctid 第二个数），而不是行的字节位置。</p><div class="dash" style="margin:16px 0"></div><p class="small">好处：行数据可以在页内被移动、压紧，只要 lp 不挪，索引就不必改。</p>'],
+    free:['<span class="tag">FREE SPACE</span>','<p class="small" style="line-height:1.7;margin-top:12px">pd_lower 与 pd_upper 之间的空地。新的 lp 从上方分配，新的 tuple 从下方分配，两边相遇就表示这页写满了。</p><div class="dash" style="margin:16px 0"></div><p class="small"><b>fillfactor</b> 的作用就是人为留一部分空地不写满，供后续 HOT update 在同页生成新版本。</p>'],
+    tuple:['<span class="tag">TUPLE · HEADER 23 B + 数据</span>','<p class="small" style="line-height:1.7;margin-top:12px">一条行的物理版本，头部记录它的生与死。</p><table style="margin-top:12px;font-size:16px"><tr><td class="k">t_xmin</td><td>插入该版本的事务 ID</td></tr><tr><td class="k">t_xmax</td><td>删除/更新它的事务 ID（0 = 存活）</td></tr><tr><td class="k">t_ctid</td><td>当前有效版本的 ctid（HOT 链指向新版本）</td></tr><tr><td class="k">t_infomask</td><td>提交/回滚状态标志位</td></tr><tr><td class="k">t_hoff</td><td>Header 长度（含空值位图）</td></tr></table>']
+  };
+  var infoBox=$('pageInfo');
+  function setInfo(k){
+    var d=infoData[k]||infoData.def;
+    infoBox.innerHTML='<h3 style="margin-bottom:6px">'+d[0]+'</h3>'+d[1];
+  }
+  setInfo('def');
+  document.querySelectorAll('#anatomySvg .hotspot').forEach(function(g){
+    g.addEventListener('mouseenter',function(){
+      document.querySelectorAll('#anatomySvg .hotspot').forEach(function(x){x.classList.remove('active');});
+      g.classList.add('active'); setInfo(g.dataset.key);
+    });
+  });
+  $('anatomySvg').addEventListener('mouseleave',function(){
+    document.querySelectorAll('#anatomySvg .hotspot').forEach(function(x){x.classList.remove('active');});
+    setInfo('def');
+  });
+
+  /* ---------- P6 · ctid 寻址 ---------- */
+  (function(){
+    var NS='http://www.w3.org/2000/svg';
+    var lg=$('lpGroup'), tg=$('tupleGroup'), arrow=$('ctidArrow');
+    var cells=[], tups=[];
+    for(var i=1;i<=9;i++){
+      var x=20+(i-1)*96;
+      var g=document.createElementNS(NS,'g'); g.setAttribute('class','lpcell'); g.setAttribute('data-i',i);
+      var r=document.createElementNS(NS,'rect'); r.setAttribute('x',x); r.setAttribute('y',176); r.setAttribute('width',88); r.setAttribute('height',50); r.setAttribute('fill','#E3EEEC'); r.setAttribute('stroke','#2C6E73');
+      var t=document.createElementNS(NS,'text'); t.setAttribute('x',x+44); t.setAttribute('y',207); t.setAttribute('text-anchor','middle'); t.setAttribute('class','m'); t.setAttribute('font-size','17'); t.textContent='lp['+i+']';
+      g.appendChild(r); g.appendChild(t); lg.appendChild(g); cells.push(g);
+      var tr=document.createElementNS(NS,'rect'); tr.setAttribute('x',x+6); tr.setAttribute('y',280); tr.setAttribute('width',76); tr.setAttribute('height',46); tr.setAttribute('fill','#FFFDF8'); tr.setAttribute('stroke','#DCD5C6');
+      var tt=document.createElementNS(NS,'text'); tt.setAttribute('x',x+44); tt.setAttribute('y',309); tt.setAttribute('text-anchor','middle'); tt.setAttribute('class','m'); tt.setAttribute('font-size','14'); tt.setAttribute('fill','#8A8C80'); tt.textContent='tuple '+i;
+      tg.appendChild(tr); tg.appendChild(tt); tups.push({r:tr,t:tt});
+      (function(idx,cx,cell){
+        function act(){
+          cells.forEach(function(c){c.classList.remove('on');});
+          tups.forEach(function(o){o.r.setAttribute('fill','#FFFDF8');o.r.setAttribute('stroke','#DCD5C6');o.t.setAttribute('fill','#8A8C80');});
+          cell.classList.add('on');
+          tups[idx-1].r.setAttribute('fill','#F5E7E0'); tups[idx-1].r.setAttribute('stroke','#C2492F'); tups[idx-1].t.setAttribute('fill','#C2492F');
+          arrow.setAttribute('d','M'+cx+' 230 L'+cx+' 276');
+          $('ctidReadout').textContent='(3, '+idx+')';
+          $('ctidDesc').innerHTML='第 <b>3</b> 号数据块中，第 <b>'+idx+'</b> 条 line pointer 所指向的记录。索引里保存的也是这个二元组。';
+        }
+        cell.addEventListener('mouseenter',act); cell.addEventListener('click',act);
+      })(i,x+44,g);
+    }
+    cells[8].dispatchEvent(new MouseEvent('mouseenter'));
+    var note=document.createElementNS(NS,'text');
+    note.setAttribute('x',20); note.setAttribute('y',386); note.setAttribute('font-size','14'); note.setAttribute('fill','#8A8C80');
+    note.textContent='示意：lp 中记录页内 offset，行数据可以位于任意位置；这里按编号对齐便于观察。';
+    tg.appendChild(note);
+  })();
+
+  /* ---------- P7 · FSM 搜索动画 ---------- */
+  (function(){
+    var timers=[];
+    function reset(){
+      timers.forEach(clearTimeout); timers=[];
+      document.querySelectorAll('.fsel').forEach(function(e){e.classList.remove('fsel');});
+      $('fsmReadout').innerHTML='根值 8 ≥ 6，说明「一定存在」满足条件的 Block。点击左侧按钮，看路径如何被点亮。';
+    }
+    $('fsmGo').addEventListener('click',function(){
+      reset();
+      var steps=[
+        ['fn1','① 读根：MAX = 8 ≥ 6，树里肯定有位置。'],
+        [null,'② 下探左子树 MAX(8,4) —— 优先找满足条件的一支。'],
+        ['fe1','② 下探左子树 MAX(8,4) —— 优先找满足条件的一支。'],
+        ['fn2','③ 左子树里 8 ≥ 6，而 4 &lt; 6，只能走左边。'],
+        ['fe3','③ 左子树里 8 ≥ 6，而 4 &lt; 6，只能走左边。'],
+        ['fn4','④ 命中叶节点：Block 0 剩余 8 档空间。'],
+        ['fb0','⑤ 返回 Block 0 → 写入后把它的剩余空间回写到 FSM。']
+      ];
+      steps.forEach(function(s,k){
+        timers.push(setTimeout(function(){
+          if(s[0]){$(s[0]).classList.add('fsel');}
+          $('fsmReadout').innerHTML=s[1];
+        },k*420));
+      });
+    });
+    $('fsmReset').addEventListener('click',reset);
+  })();
+
+  /* ---------- P8 · VM 位图 ---------- */
+  (function(){
+    var NS='http://www.w3.org/2000/svg', box=$('vmBlocks');
+    for(var i=0;i<10;i++){
+      var g=document.createElementNS(NS,'g');
+      g.setAttribute('class','vmb'); g.setAttribute('transform','translate('+(i*68)+',48)');
+      var vis=(i<7), fro=(i<3);
+      var title=document.createElementNS(NS,'title');
+      title.textContent='Block '+i+' · all-visible='+(vis?'1':'0')+' · all-frozen='+(fro?'1':'0');
+      g.appendChild(title);
+      var r=document.createElementNS(NS,'rect');
+      r.setAttribute('x',0);r.setAttribute('y',0);r.setAttribute('width',58);r.setAttribute('height',46);
+      r.setAttribute('fill',vis?'#E3EEEC':'#F7F4EC');r.setAttribute('stroke','#C4BCA9');
+      g.appendChild(r);
+      var bt=document.createElementNS(NS,'text');
+      bt.setAttribute('x',29);bt.setAttribute('y',29);bt.setAttribute('text-anchor','middle');bt.setAttribute('font-size','14');bt.setAttribute('fill','#2C6E73');bt.textContent='B'+i;
+      g.appendChild(bt);
+      var b1=document.createElementNS(NS,'rect');
+      b1.setAttribute('x',4);b1.setAttribute('y',54);b1.setAttribute('width',22);b1.setAttribute('height',16);
+      b1.setAttribute('fill',vis?'#2C6E73':'#DFD8C9'); g.appendChild(b1);
+      var b2=document.createElementNS(NS,'rect');
+      b2.setAttribute('x',32);b2.setAttribute('y',54);b2.setAttribute('width',22);b2.setAttribute('height',16);
+      b2.setAttribute('fill',fro?'#C2492F':'#DFD8C9'); g.appendChild(b2);
+      box.appendChild(g);
+    }
+    var lb=document.createElementNS(NS,'text');
+    lb.setAttribute('x',0);lb.setAttribute('y',158);lb.setAttribute('font-size','15');lb.setAttribute('fill','#6F7C7C');
+    lb.textContent='上格 = all-visible，下格 = all-frozen；深色为 1。悬停查看每个 Block 的状态。';
+    box.appendChild(lb);
+  })();
+
+  /* ---------- P10 · MVCC 三阶段 ---------- */
+  (function(){
+    var desc=[
+      '只有「所有活跃事务都不再需要」的旧版本才能回收。t1 时只有一条 live tuple，没有垃圾。',
+      'UPDATE 写入新版本 lp[2]，旧版本 lp[1] 变成 dead。两个版本同时占空间 —— 这就是表膨胀的起点。',
+      'vacuum 清理 lp[1]，空间回到 FSM 待复用。若此时存在老快照（backend_xmin），这一步会被推迟，垃圾继续堆积。'
+    ];
+    document.querySelectorAll('.mvbtn').forEach(function(b){
+      b.addEventListener('click',function(){
+        var k=parseInt(b.dataset.mv,10);
+        document.querySelectorAll('.mvbtn').forEach(function(x){x.classList.remove('on');});
+        b.classList.add('on');
+        document.querySelectorAll('#mvSvg .mvph').forEach(function(g){
+          g.style.opacity=(parseInt(g.dataset.mv,10)===k)?'1':'0';
+          g.style.pointerEvents=(parseInt(g.dataset.mv,10)===k)?'auto':'none';
+        });
+        $('mvDesc').textContent=desc[k-1];
+      });
+    });
+  })();
+
+  /* ---------- P11 · HOT 对比 ---------- */
+  (function(){
+    document.querySelectorAll('.hotbtn').forEach(function(b){
+      b.addEventListener('click',function(){
+        document.querySelectorAll('.hotbtn').forEach(function(x){x.classList.remove('on');});
+        b.classList.add('on');
+        var hot=b.dataset.hot==='hot';
+        $('hotNormal').setAttribute('class','pane '+(hot?'dim':'focus'));
+        $('hotHot').setAttribute('class','pane '+(hot?'focus':'dim'));
+      });
+    });
+  })();
+
+  /* ---------- P16 · 代码 tab ---------- */
+  (function(){
+    var notes=[
+      'ctid 从 (0,1) 开始连续增长；<span class="mono">heap_page_items</span> 能直接看到 t_xmin / t_xmax / t_ctid，把前面讲的多版本机制坐实。',
+      '更新非索引列后，若 ctid 的 Block 号不变且 <span class="mono">n_tup_hot_upd</span> 增长，说明 HOT 生效；否则检查 fillfactor 与索引列是否命中。',
+      '先算 dead_ratio 看严重程度，再查 pg_stat_activity 里最老的 backend_xmin —— 不解决长事务，调多大 vacuum 频率都收不回空间。'
+    ];
+    document.querySelectorAll('.tabbtn').forEach(function(b){
+      b.addEventListener('click',function(){
+        var k=parseInt(b.dataset.tab,10);
+        document.querySelectorAll('.tabbtn').forEach(function(x){x.classList.remove('on');});
+        b.classList.add('on');
+        document.querySelectorAll('.codepane').forEach(function(p){p.classList.toggle('on',parseInt(p.dataset.pane,10)===k);});
+        $('tabNote').innerHTML=notes[k-1];
+      });
+    });
+  })();
+
+  /* ---------- P18 · FAQ 折叠 ---------- */
+  document.querySelectorAll('.faq-q').forEach(function(q){
+    q.addEventListener('click',function(){
+      var f=q.parentNode, open=f.classList.toggle('open');
+      f.querySelector('.pm').textContent=open?'−':'+';
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>数据库筑基课 · 瓦片表存储 VOPS</title>
+<!--
+  ASSUMPTIONS / DESIGN REASONING
+  内容来源：/Users/digoal/blog/202605/20260524_13.md（只读引用，未改动）
+  事实核验：postgrespro 官方文档（vops deprecated / shared_preload_libraries 首次查询风险 / tuple deform ≈40% Q6）、
+            GitHub postgrespro/vops README（parse hook 改写、投影不自动同步、auto_substitute_projections 默认关闭）
+  设计方向：技术课件 = 冷静、权威、可投屏阅读。暖纸色底 + 墨色文字 + 单一深青主色 + 锈橙强调，
+            不用紫渐变 / emoji 图标 / 左边框强调卡片等通用 AI 视觉。
+  视觉母题（form 来自内容）：8×8 = 64 槽瓦片栅格与位图 —— 全文所有图、章节标记、封面都从它长出来。
+  尺寸：1920×1080 固定舞台，JS 等比缩放 + letterbox；单文件、零外部依赖、图形全部内联 SVG / CSS 绘制。
+  交互只用在「能解释机制」的地方：槽位悬停、populate 分步、位图与（AND）演算、顺序/并行切换、SQL 双方案对照。
+-->
+<style>
+:root{
+  --paper:#F7F5EF; --paper2:#FFFEFB; --ink:#17232C; --ink2:#41515C; --ink3:#74818A;
+  --line:#DAD5C8; --line2:#EBE7DC;
+  --teal:#0E5C69; --teal-soft:#E2EEED;
+  --rust:#B5502A; --rust-soft:#F8E9E0;
+  --green:#3C7A5E; --green-soft:#E5F0E8;
+  --blue:#346B9C; --blue-soft:#E5EEF6;
+  --ochre:#B2852C; --ochre-soft:#F6EEDB;
+  --code:#15232B;
+  --sans:"PingFang SC","Hiragino Sans GB","Source Han Sans SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  --serif:"Songti SC","STSong","Noto Serif CJK SC","Source Han Serif SC",Georgia,serif;
+  --mono:"SF Mono","JetBrains Mono","Menlo","Consolas",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#262B2B}
+body{font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+#viewport{position:fixed;inset:0;overflow:hidden}
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center center;background:var(--paper);overflow:hidden;box-shadow:0 24px 90px rgba(0,0,0,.35)}
+#progress{position:absolute;left:0;top:0;height:5px;width:0;background:var(--rust);z-index:60;transition:width .35s ease}
+
+/* ---------- slide shell ---------- */
+.slide{position:absolute;inset:0;background:var(--paper);padding:64px 108px 84px;display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .34s ease}
+.slide.active{opacity:1;visibility:visible;pointer-events:auto}
+.slide::before{content:"";position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;background-image:linear-gradient(90deg,rgba(23,35,44,.022) 1px,transparent 1px);background-size:120px 100%}
+.eyebrow{display:flex;align-items:center;gap:16px;font:500 18px/1 var(--mono);letter-spacing:.16em;color:var(--teal);text-transform:uppercase;margin-bottom:14px}
+.eyebrow .sep{width:30px;height:1px;background:var(--teal);opacity:.55}
+h1.title{font-size:62px;line-height:1.12;font-weight:650;letter-spacing:-.015em;margin-bottom:10px}
+h1.title em{font-style:normal;color:var(--rust)}
+.sub{font-size:24px;line-height:1.45;color:var(--ink2);font-weight:400}
+.body{flex:1;min-height:0;margin-top:26px;position:relative}
+.r{opacity:0}
+.slide.active .r{animation:rise .55s cubic-bezier(.2,.72,.24,1) both;animation-delay:calc(var(--d,0)*75ms)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.kicker{font:500 15px/1 var(--mono);letter-spacing:.12em;color:var(--ink3);text-transform:uppercase}
+.note{font-size:19px;line-height:1.6;color:var(--ink2)}
+.tiny{font-size:16px;line-height:1.55;color:var(--ink3)}
+.mono{font-family:var(--mono)}
+.strong{font-weight:650;color:var(--ink)}
+.rust{color:var(--rust)} .teal{color:var(--teal)} .green{color:var(--green)}
+
+/* ---------- primitives ---------- */
+.box{background:var(--paper2);border:1px solid var(--line);border-radius:4px}
+.hair{height:1px;background:var(--line);width:100%}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border:1px solid var(--line);border-radius:3px;background:var(--paper2);font-size:18px;color:var(--ink2);white-space:nowrap}
+.chip b{font-family:var(--mono);font-weight:500;color:var(--teal)}
+.pill{padding:6px 13px;border-radius:2px;font:500 16px/1 var(--mono);letter-spacing:.04em}
+.pill.t{background:var(--teal-soft);color:var(--teal)}
+.pill.r{background:var(--rust-soft);color:var(--rust)}
+.pill.g{background:var(--green-soft);color:var(--green)}
+.pill.b{background:var(--blue-soft);color:var(--blue)}
+.pill.o{background:var(--ochre-soft);color:var(--ochre)}
+.btn{cursor:pointer;background:var(--paper2);border:1px solid var(--line);border-radius:3px;padding:11px 20px;font:500 18px/1 var(--sans);color:var(--ink2);transition:.18s;white-space:nowrap}
+.btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-soft)}
+.btn.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn:disabled{opacity:.4;cursor:default}
+.card{background:var(--paper2);border:1px solid var(--line);border-radius:4px;padding:28px 30px;position:relative}
+.card h3{font-size:29px;font-weight:650;line-height:1.3;margin-bottom:12px}
+.card p{font-size:20px;line-height:1.62;color:var(--ink2)}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.flexrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.bignum{font:400 68px/1 var(--serif);color:var(--teal);opacity:.85}
+
+/* SVG shared */
+svg.dia{display:block;width:100%;height:auto;overflow:visible}
+svg text{font-family:var(--sans)}
+.sv-t{font-size:23px;font-weight:650;fill:var(--ink)}
+.sv-h{font-size:26px;font-weight:650;fill:var(--ink)}
+.sv-s{font-size:18px;fill:var(--ink2)}
+.sv-m{font-size:17px;font-family:var(--mono);fill:var(--ink2)}
+.sv-xs{font-size:15px;font-family:var(--mono);fill:var(--ink3)}
+.sv-box{fill:var(--paper2);stroke:var(--line);stroke-width:1.5}
+.sv-blue{fill:var(--blue-soft);stroke:var(--blue);stroke-width:1.4}
+.sv-green{fill:var(--green-soft);stroke:var(--green);stroke-width:1.4}
+.sv-rust{fill:var(--rust-soft);stroke:var(--rust);stroke-width:1.4}
+.sv-ochre{fill:var(--ochre-soft);stroke:var(--ochre);stroke-width:1.4}
+.sv-teal{fill:var(--teal-soft);stroke:var(--teal);stroke-width:1.4}
+.sv-plain{fill:#F1EFE8;stroke:var(--line2);stroke-width:1.2}
+.sv-arrow{stroke:var(--teal);stroke-width:2.2;fill:none}
+
+/* ---------- code ---------- */
+.code{background:var(--code);color:#DDE7E9;border-radius:4px;padding:16px 24px;font:17px/1.45 var(--mono);white-space:pre;overflow:hidden;letter-spacing:.01em}
+.code .k{color:#7FC8D6} .code .s{color:#E7B87C} .code .n{color:#E19A72}
+.code .c{color:#7E959D} .code .f{color:#9BD3A6} .code .t{color:#B9CFE0}
+
+/* ---------- 64-slot grid ---------- */
+.slots{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}
+.slot{border:1.5px solid var(--line);border-radius:3px;background:var(--paper2);display:flex;align-items:center;justify-content:center;font:500 15px/1 var(--mono);color:var(--ink3);transition:transform .16s,box-shadow .16s,background .2s;cursor:pointer;user-select:none}
+.slot.valid{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+.slot.null{background:var(--rust-soft);border-color:var(--rust);color:var(--rust)}
+.slot.empty{background:transparent;border-style:dashed;border-color:var(--ink3);color:var(--ink3);opacity:.7}
+.slot:hover{transform:scale(1.12);box-shadow:0 6px 18px rgba(23,35,44,.18);z-index:3;position:relative}
+.legend{display:flex;align-items:center;gap:10px;font-size:18px;color:var(--ink2)}
+.legend i{width:20px;height:20px;border-radius:2px;display:inline-block;border:1.5px solid}
+
+/* ---------- footer / chrome ---------- */
+#footer{position:absolute;left:0;bottom:0;width:1920px;height:70px;border-top:1px solid var(--line);display:flex;align-items:center;gap:30px;padding:0 108px;background:rgba(247,245,239,.96);z-index:50}
+#footer .fl{font-size:17px;color:var(--ink3);white-space:nowrap}
+#footer .fl b{color:var(--ink2);font-weight:550}
+#chapters{display:flex;align-items:center;gap:4px;margin-left:auto}
+.chbtn{border:0;background:transparent;font:500 16px/1 var(--sans);color:var(--ink3);padding:9px 13px;border-radius:2px;cursor:pointer;white-space:nowrap;transition:.18s}
+.chbtn:hover{color:var(--teal);background:var(--teal-soft)}
+.chbtn.on{color:var(--teal);background:var(--teal-soft);font-weight:650}
+#footer .fr{display:flex;align-items:center;gap:10px;margin-left:auto;white-space:nowrap}
+#footer .fr button{border:1px solid var(--line);background:var(--paper2);color:var(--ink2);border-radius:3px;height:36px;min-width:38px;padding:0 12px;font:500 16px/1 var(--sans);cursor:pointer}
+#footer .fr button:hover{border-color:var(--teal);color:var(--teal)}
+#counter{font:500 17px/1 var(--mono);color:var(--ink2);min-width:96px;text-align:center}
+
+/* ---------- TOC overlay ---------- */
+#toc{position:absolute;inset:0;background:rgba(23,35,44,.965);z-index:80;display:none;padding:76px 108px;color:#F4F1E8}
+#toc.show{display:block}
+#toc h2{font-size:44px;font-weight:600;margin-bottom:14px}
+#toc .hint{font:16px/1 var(--mono);letter-spacing:.1em;color:#8FA5AC;margin-bottom:38px}
+#tocGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.tocitem{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.14);border-radius:3px;padding:18px 20px;cursor:pointer;min-height:118px;transition:.18s}
+.tocitem:hover{background:rgba(127,200,214,.16);border-color:#7FC8D6}
+.tocitem .n{font:400 15px/1 var(--mono);color:#7FC8D6;letter-spacing:.1em}
+.tocitem .t{font-size:20px;line-height:1.4;margin-top:12px;color:#F4F1E8}
+.tocitem.cur{border-color:#E19A72;background:rgba(225,154,114,.12)}
+
+/* ---------- cover ---------- */
+.cover{padding:0}
+.cover .cleft{position:absolute;left:108px;top:118px;width:900px}
+.cover .wordmark{font-family:var(--serif);font-size:150px;line-height:.98;letter-spacing:.02em;color:var(--ink)}
+.cover .cn{font-size:82px;font-weight:650;letter-spacing:.01em;line-height:1.1;margin-bottom:6px}
+.cover .lead{font-size:29px;line-height:1.6;color:var(--ink2);margin-top:34px;max-width:830px}
+.cover .metabox{margin-top:46px;display:grid;grid-template-columns:170px 1fr;gap:12px 22px;font-size:20px;color:var(--ink2)}
+.cover .metabox .k{font-family:var(--mono);font-size:17px;color:var(--ink3);letter-spacing:.06em}
+.cover .notice{position:absolute;left:108px;bottom:118px;display:flex;align-items:center;gap:14px;font-size:19px;color:var(--rust)}
+.cover .notice span{width:9px;height:9px;background:var(--rust);border-radius:50%}
+.cover .cright{position:absolute;right:92px;top:128px;width:760px;height:800px}
+
+/* slide-specific */
+.tocCards{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.tocCards .card{height:318px;padding:30px 32px;display:flex;flex-direction:column}
+.tocCards .card .top{display:flex;justify-content:space-between;align-items:flex-start}
+.tocCards .card h3{margin-top:26px;font-size:32px}
+.agendaKeys{margin-top:auto;padding-top:18px;border-top:1px solid var(--line2);display:flex;gap:8px;flex-wrap:wrap}
+.agendaKeys span{font:500 14px/1 var(--mono);color:var(--ink3);border:1px solid var(--line);border-radius:2px;padding:7px 9px}
+.costrow{display:flex;align-items:center;gap:18px;padding:13px 20px;border:1px solid var(--line);background:var(--paper2);border-radius:3px;font-size:21px;color:var(--ink2)}
+.costrow .idx{font:500 17px/1 var(--mono);color:var(--teal);min-width:34px}
+.quote{border-left:3px solid var(--rust);padding:16px 0 16px 26px;font-size:27px;line-height:1.62;color:var(--ink)}
+.defbox{background:var(--teal-soft);border:1px solid var(--teal);border-radius:4px;padding:40px 44px}
+.defbox .q{font-size:31px;line-height:1.75;color:var(--ink)}
+.notrow{display:flex;gap:20px;align-items:flex-start;padding:22px 0;border-bottom:1px solid var(--line)}
+.notrow .x{font:400 34px/1 var(--serif);color:var(--rust);width:36px;flex:none}
+.notrow h4{font-size:25px;font-weight:650;margin-bottom:6px}
+.notrow p{font-size:19px;line-height:1.55;color:var(--ink2)}
+.readout{background:var(--paper2);border:1px solid var(--line);border-radius:4px;padding:22px 26px;min-height:150px}
+.readout .lbl{font:500 15px/1 var(--mono);letter-spacing:.12em;color:var(--ink3);margin-bottom:14px}
+.readout .big{font-size:30px;font-weight:650;color:var(--teal);margin-bottom:10px}
+.readout p{font-size:19px;line-height:1.6;color:var(--ink2)}
+.maskmini{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;width:190px}
+.maskmini .b{height:22px;border-radius:2px;background:#F0EDE5;border:1px solid var(--line2)}
+.maskmini .b.hit{background:var(--teal);border-color:var(--teal)}
+.maskmini .b.hit.b2{background:var(--ochre);border-color:var(--ochre)}
+.maskmini .b.hit.b3{background:var(--blue);border-color:var(--blue)}
+.maskbig{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;width:380px}
+.maskbig .b{height:38px;border-radius:3px;background:#F0EDE5;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font:500 12px/1 var(--mono);color:var(--ink3);transition:.2s}
+.maskbig .b.hit{background:var(--rust);border-color:var(--rust);color:#fff}
+.op{font:400 42px/1 var(--serif);color:var(--ink3)}
+table.cmp{width:100%;border-collapse:collapse;table-layout:fixed;background:var(--paper2);border:1px solid var(--line)}
+table.cmp th,table.cmp td{border:1px solid var(--line);padding:14px 16px;font-size:18px;line-height:1.45;vertical-align:top;text-align:left;color:var(--ink2)}
+table.cmp th{background:#EFECE3;font-size:19px;font-weight:650;color:var(--ink)}
+table.cmp col.c0{width:188px} table.cmp col.c1{width:392px} table.cmp col.c2{width:374px} table.cmp col.c3{width:374px} table.cmp col.c4{width:376px}
+table.cmp td:first-child{font-weight:650;color:var(--ink);background:#F6F4ED}
+table.cmp td.hl{background:var(--teal-soft);color:var(--ink)}
+.barlabel{font-size:19px;fill:var(--ink2)}
+.barval{font-size:19px;font-family:var(--mono);fill:var(--ink)}
+.zonetile{cursor:pointer}
+.zonetile:hover rect{stroke-width:3}
+.tabs{display:flex;gap:10px;margin-bottom:14px}
+.tabbody{display:none}
+.tabbody.on{display:block}
+.rolecard{height:100%;display:flex;flex-direction:column}
+.rolecard .lead{font-size:24px;line-height:1.5;color:var(--teal);font-weight:600;margin:18px 0 22px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.rolecard ul{list-style:none;display:flex;flex-direction:column;gap:18px}
+.rolecard li{font-size:19px;line-height:1.6;color:var(--ink2);padding-left:20px;position:relative}
+.rolecard li::before{content:"";position:absolute;left:0;top:11px;width:7px;height:7px;background:var(--rust)}
+.rolefoot{margin-top:auto;padding-top:18px;border-top:1px solid var(--line2);font-size:18px;line-height:1.5;color:var(--teal);font-weight:600}
+.fititem{display:flex;gap:16px;padding:17px 0;border-bottom:1px solid var(--line2);font-size:20px;line-height:1.55;color:var(--ink2)}
+.fititem .mk{width:10px;height:10px;flex:none;margin-top:10px;border-radius:2px}
+.pit{background:var(--paper2);border:1px solid var(--line);border-radius:4px;padding:22px 24px;height:300px;display:flex;flex-direction:column}
+.pitFix{margin-top:auto;padding-top:14px;border-top:1px solid var(--line2);font-size:17px;line-height:1.5;color:var(--teal)}
+.pit .n{font:500 15px/1 var(--mono);letter-spacing:.1em;color:var(--rust)}
+.pit h4{font-size:24px;font-weight:650;margin:16px 0 12px;line-height:1.35}
+.pit p{font-size:18px;line-height:1.6;color:var(--ink2)}
+.takeaway{display:flex;gap:22px;padding:18px 0;border-bottom:1px solid var(--line2)}
+.takeaway .n{font:400 40px/1 var(--serif);color:var(--teal);width:52px;flex:none}
+.takeaway p{font-size:22px;line-height:1.55;color:var(--ink)}
+</style>
+</head>
+<body>
+<div id="viewport">
+<div id="stage">
+<div id="progress"></div>
+
+<!-- ============ 01 封面 ============ -->
+<section class="slide cover active" data-title="封面 · 瓦片表存储 VOPS">
+  <div class="cleft">
+    <div class="eyebrow r" style="--d:0"><span>数据库筑基课</span><span class="sep"></span><span>Database Foundations</span></div>
+    <div class="cn r" style="--d:1">瓦片表存储</div>
+    <div class="wordmark r" style="--d:2">VOPS</div>
+    <div class="lead r" style="--d:3">不改 PostgreSQL 的 executor 与 heap page，<br>用扩展类型模拟「列式瓦片 + 向量化算子」。</div>
+    <div class="metabox r" style="--d:4">
+      <div class="k">AUTHOR</div><div>digoal</div>
+      <div class="k">DATE</div><div>2026-05-24</div>
+      <div class="k">SOURCE</div><div>postgrespro/vops · <span class="mono">8259b30</span> · v1.1</div>
+      <div class="k">TAGS</div><div>PostgreSQL · 表存储 · 向量化执行 · OLAP</div>
+    </div>
+  </div>
+  <div class="notice r" style="--d:5"><span></span>教学与机制验证案例 · 官方文档已将 vops 标记为 deprecated，不建议新系统采用</div>
+  <div class="cright r" style="--d:3">
+    <svg class="dia" viewBox="0 0 760 800" role="img" aria-label="64 槽瓦片示意：一个 tile 字段保存同一列最多 64 个值">
+      <text x="8" y="34" class="sv-m" style="fill:#74818A">TILE_SIZE = 64 · 8 × 8 SLOTS</text>
+      <text x="8" y="742" class="sv-s">一个字段 = 同一列最多 64 个值 + 位图元数据</text>
+      <text x="8" y="774" class="sv-xs">null_mask · empty_mask · payload[64]</text>
+      <text x="70" y="500" style="font:400 400px/1 Georgia,serif;fill:#0E5C69;opacity:.055">64</text>
+      <g id="coverGrid"></g>
+      <rect x="8" y="60" width="744" height="644" fill="none" stroke="#DAD5C8" stroke-width="1.5"/>
+      <line x1="8" y1="704" x2="752" y2="704" stroke="#DAD5C8" stroke-width="1.5"/>
+    </svg>
+  </div>
+</section>
+
+<!-- ============ 02 路线图 ============ -->
+<section class="slide" data-title="路线图 · 这一节课走六步">
+  <div class="eyebrow r" style="--d:0"><span>00 / ROADMAP</span><span class="sep"></span><span>表存储 × 执行模型</span></div>
+  <h1 class="title r" style="--d:1">这一节课走六步</h1>
+  <div class="sub r" style="--d:2">从工程问题切入，穿过源码结构，最后落到边界与可迁移实验。</div>
+  <div class="body">
+    <div class="tocCards r" style="--d:3">
+      <div class="card"><div class="top"><span class="bignum">01</span><span class="pill t">问题意识</span></div><h3>时间去哪了</h3><p>OLAP 查询的 CPU 开销落在哪里；行存模型在批量扫描下的三个放大。</p><div class="agendaKeys"><span>tuple deform</span><span>pull 模型</span><span>MVCC</span></div></div>
+      <div class="card"><div class="top"><span class="bignum">02</span><span class="pill t">结构定义</span></div><h3>瓦片是什么</h3><p>WOS → ROS 投影、tile 的 64 个槽位与两个 64 位掩码，以及它不是什么。</p><div class="agendaKeys"><span>64 槽</span><span>null / empty mask</span><span>扩展类型</span></div></div>
+      <div class="card"><div class="top"><span class="bignum">03</span><span class="pill t">核心原理</span></div><h3>算子怎么跑</h3><p>populate、filter_mask、向量聚合、parse hook 改写、FDW 展开与边界索引。</p><div class="agendaKeys"><span>位图</span><span>向量聚合</span><span>投影替换</span></div></div>
+      <div class="card"><div class="top"><span class="bignum">04</span><span class="pill o">定位与效果</span></div><h3>边界与数字</h3><p>四类方案横向对比；README 的 TPC-H Q1/Q6 数据与它的适用前提。</p><div class="agendaKeys"><span>横向对比</span><span>TPC-H</span><span>deprecated</span></div></div>
+      <div class="card"><div class="top"><span class="bignum">05</span><span class="pill b">上手实践</span></div><h3>怎么用才对</h3><p>最小 DEMO、混合投影、三种角色的最佳实践、适用边界与八个常见坑。</p><div class="agendaKeys"><span>DEMO SQL</span><span>混合投影</span><span>八个坑</span></div></div>
+      <div class="card"><div class="top"><span class="bignum">06</span><span class="pill g">收束</span></div><h3>带走什么</h3><p>三句话总结机制，五个扩展问题，以及可继续深入的源码与文档。</p><div class="agendaKeys"><span>三句话</span><span>五个问题</span><span>源码清单</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 背景 ============ -->
+<section class="slide" data-title="背景 · OLAP 的 CPU 时间去哪了">
+  <div class="eyebrow r" style="--d:0"><span>01 / 问题意识</span><span class="sep"></span><span>Motivation</span></div>
+  <h1 class="title r" style="--d:1">OLAP 的 CPU 时间，<em>去哪了</em>？</h1>
+  <div class="sub r" style="--d:2">heap 行存非常适合 OLTP；但大批量过滤、表达式计算、聚合是另一种负载。</div>
+  <div class="body">
+    <div class="grid2 r" style="--d:3;grid-template-columns:1fr 620px;height:100%">
+      <div style="display:flex;flex-direction:column;gap:20px;padding-right:34px">
+        <p class="note" style="font-size:23px;line-height:1.7">PostgreSQL 每行一个 tuple。执行器每拿到一行，都要把列值从 tuple 里解出来，再逐行执行表达式与聚合。这个模型通用、事务语义清楚、单行更新便宜 —— 代价则出现在扫描型查询里。</p>
+        <div style="display:flex;flex-direction:column;gap:11px;margin-top:4px">
+          <div class="costrow"><span class="idx">01</span><span>tuple deform：解包一行，取到目标列</span></div>
+          <div class="costrow"><span class="idx">02</span><span>表达式解释执行：递归求值计划树节点</span></div>
+          <div class="costrow"><span class="idx">03</span><span>函数调用：每个运算都要走一次函数约定</span></div>
+          <div class="costrow"><span class="idx">04</span><span>pull 模型：叶子节点反复保存 / 恢复上下文</span></div>
+          <div class="costrow"><span class="idx">05</span><span>MVCC：每行可见性判断与元组头开销</span></div>
+        </div>
+        <div class="quote" style="margin-top:14px">不改 executor、不改 heap page，<br>能不能先验证「向量化」这条路的收益？</div>
+      </div>
+      <div class="box" style="padding:18px 22px;display:flex;flex-direction:column;justify-content:space-between">
+        <div class="kicker" style="margin-bottom:8px">一行数据的旅程 · 每行重复一次</div>
+        <svg class="dia" viewBox="0 0 570 520" role="img" aria-label="逐行执行流水线：heap 取行、tuple deform、表达式、函数调用、聚合，每行重复">
+          <defs><marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#0E5C69"/></marker></defs>
+          <g>
+            <rect x="10" y="8" width="360" height="66" rx="3" class="sv-blue"/><text x="28" y="47" class="sv-t">heap 取一行 tuple</text>
+            <rect x="10" y="100" width="360" height="66" rx="3" class="sv-box"/><text x="28" y="139" class="sv-t">tuple deform 解包</text>
+            <rect x="10" y="192" width="360" height="66" rx="3" class="sv-box"/><text x="28" y="231" class="sv-t">表达式解释执行</text>
+            <rect x="10" y="284" width="360" height="66" rx="3" class="sv-box"/><text x="28" y="323" class="sv-t">函数调用 × N</text>
+            <rect x="10" y="376" width="360" height="66" rx="3" class="sv-teal"/><text x="28" y="415" class="sv-t">聚合 / 输出一行</text>
+            <line x1="190" y1="74" x2="190" y2="98" class="sv-arrow" marker-end="url(#a3)"/>
+            <line x1="190" y1="166" x2="190" y2="190" class="sv-arrow" marker-end="url(#a3)"/>
+            <line x1="190" y1="258" x2="190" y2="282" class="sv-arrow" marker-end="url(#a3)"/>
+            <line x1="190" y1="350" x2="190" y2="374" class="sv-arrow" marker-end="url(#a3)"/>
+            <path d="M388 20 C410 20 410 430 388 430" fill="none" stroke="#B5502A" stroke-width="2" stroke-dasharray="5 5"/>
+            <rect x="408" y="176" width="152" height="130" rx="3" class="sv-rust"/>
+            <text x="434" y="222" class="sv-h" style="fill:#B5502A">× N 行</text>
+            <text x="428" y="254" class="sv-s">整套流程</text><text x="428" y="280" class="sv-s">逐行重放</text>
+          </g>
+        </svg>
+        <div style="background:var(--ochre-soft);border:1px solid var(--ochre);border-radius:3px;padding:14px 18px;font-size:18px;line-height:1.5;color:var(--ink2)"><b>官方 docs 佐证：</b>TPC-H Q6 中 tuple deform 约占 <b>40%</b> 总执行时间。来源：Postgres Pro Enterprise vops 文档「Motivation」。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 三个放大 ============ -->
+<section class="slide" data-title="三个放大 · 行存在 OLAP 上的代价">
+  <div class="eyebrow r" style="--d:0"><span>01 / 问题意识</span><span class="sep"></span><span>Three Costs</span></div>
+  <h1 class="title r" style="--d:1">行存模型在 OLAP 上的<em>三个放大</em></h1>
+  <div class="sub r" style="--d:2">通用性换来的每行固定成本，在只读少量列、却要扫上百万行的场景里极难摊薄。</div>
+  <div class="body">
+    <div class="grid3 r" style="--d:3;height:100%">
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between"><span class="bignum" style="font-size:52px">01</span><span class="pill b">读取</span></div>
+        <h3 style="margin-top:18px">列读取放大</h3>
+        <p>查询只需要 4 个列，但 heap tuple 仍按行整体读出；宽表尤其吃亏。</p>
+        <svg class="dia" viewBox="0 0 500 220" style="margin-top:auto" role="img" aria-label="一行十列中只需四列，整行仍被读取">
+          <text x="6" y="24" class="sv-s">一行 10 列 · 查询只用到 4 列</text>
+          <g>
+            <rect x="6" y="52" width="44" height="52" rx="3" class="sv-plain"/><rect x="54" y="52" width="44" height="52" rx="3" class="sv-blue"/>
+            <rect x="102" y="52" width="44" height="52" rx="3" class="sv-blue"/><rect x="150" y="52" width="44" height="52" rx="3" class="sv-plain"/>
+            <rect x="198" y="52" width="44" height="52" rx="3" class="sv-blue"/><rect x="246" y="52" width="44" height="52" rx="3" class="sv-plain"/>
+            <rect x="294" y="52" width="44" height="52" rx="3" class="sv-plain"/><rect x="342" y="52" width="44" height="52" rx="3" class="sv-blue"/>
+            <rect x="390" y="52" width="44" height="52" rx="3" class="sv-plain"/><rect x="438" y="52" width="44" height="52" rx="3" class="sv-plain"/>
+            <text x="6" y="132" class="sv-xs">整个 tuple 都被读出、解包</text>
+            <rect x="6" y="152" width="20" height="20" rx="2" class="sv-blue"/><text x="34" y="168" class="sv-s">需要的列</text>
+            <rect x="160" y="152" width="20" height="20" rx="2" class="sv-plain"/><text x="188" y="168" class="sv-s">无关列也无法跳过</text>
+          </g>
+        </svg>
+        <div class="tiny" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line2)">代价：I/O 与解包时间与表宽成正比，而非与查询宽度成正比。</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between"><span class="bignum" style="font-size:52px">02</span><span class="pill o">CPU</span></div>
+        <h3 style="margin-top:18px">CPU 调用放大</h3>
+        <p>同一个表达式对每一行重复走解释执行与函数调用路径；解释执行约为原生代码的十分之一量级。</p>
+        <svg class="dia" viewBox="0 0 500 220" style="margin-top:auto" role="img" aria-label="同一表达式对每一行重复函数调用">
+          <text x="6" y="24" class="sv-s">price × discount · 每行一次</text>
+          <g>
+            <text x="6" y="62" class="sv-m">row 1</text><rect x="76" y="40" width="180" height="34" rx="3" class="sv-box"/><text x="90" y="63" class="sv-s">表达式求值</text><text x="270" y="63" class="sv-m">→ call()</text>
+            <text x="6" y="112" class="sv-m">row 2</text><rect x="76" y="90" width="180" height="34" rx="3" class="sv-box"/><text x="90" y="113" class="sv-s">表达式求值</text><text x="270" y="113" class="sv-m">→ call()</text>
+            <text x="6" y="162" class="sv-m">row 3</text><rect x="76" y="140" width="180" height="34" rx="3" class="sv-box"/><text x="90" y="163" class="sv-s">表达式求值</text><text x="270" y="163" class="sv-m">→ call()</text>
+            <line x1="6" y1="190" x2="470" y2="190" stroke="#B5502A" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <text x="6" y="214" class="sv-xs">× 每一行都在重复同一条路径</text>
+          </g>
+        </svg>
+        <div class="tiny" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line2)">代价：调用开销远大于运算本身，尤其在高成本谓词上。</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between"><span class="bignum" style="font-size:52px">03</span><span class="pill r">可见性</span></div>
+        <h3 style="margin-top:18px">可见性与解包放大</h3>
+        <p>每行都有 MVCC 头和 tuple deform 成本；读多写少的分析场景没有写入收益来抵消。</p>
+        <svg class="dia" viewBox="0 0 500 220" style="margin-top:auto" role="img" aria-label="每行都带有 MVCC 头与解包成本">
+          <text x="6" y="24" class="sv-s">每个 tuple 的固定前置成本</text>
+          <g>
+            <rect x="6" y="44" width="120" height="40" rx="3" class="sv-rust"/><text x="20" y="69" class="sv-s">MVCC 头</text>
+            <rect x="130" y="44" width="130" height="40" rx="3" class="sv-ochre"/><text x="144" y="69" class="sv-s">deform</text>
+            <rect x="264" y="44" width="212" height="40" rx="3" class="sv-plain"/><text x="278" y="69" class="sv-s">业务列值</text>
+            <rect x="6" y="94" width="120" height="40" rx="3" class="sv-rust"/><text x="20" y="119" class="sv-s">MVCC 头</text>
+            <rect x="130" y="94" width="130" height="40" rx="3" class="sv-ochre"/><text x="144" y="119" class="sv-s">deform</text>
+            <rect x="264" y="94" width="212" height="40" rx="3" class="sv-plain"/><text x="278" y="119" class="sv-s">业务列值</text>
+            <rect x="6" y="144" width="120" height="40" rx="3" class="sv-rust"/><text x="20" y="169" class="sv-s">MVCC 头</text>
+            <rect x="130" y="144" width="130" height="40" rx="3" class="sv-ochre"/><text x="144" y="169" class="sv-s">deform</text>
+            <rect x="264" y="144" width="212" height="40" rx="3" class="sv-plain"/><text x="278" y="169" class="sv-s">业务列值</text>
+            <text x="6" y="212" class="sv-xs">约 20 字节 / 行 的空间开销 + 每行一次可见性检查</text>
+          </g>
+        </svg>
+        <div class="tiny" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line2)">代价：只为事务一致性付账，却拿不到对应收益。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 WOS → ROS ============ -->
+<section class="slide" data-title="解法 · WOS 到 ROS 瓦片投影">
+  <div class="eyebrow r" style="--d:0"><span>02 / 结构定义</span><span class="sep"></span><span>WOS → ROS</span></div>
+  <h1 class="title r" style="--d:1">把 64 行同列值，<em>塞进一个字段</em></h1>
+  <div class="sub r" style="--d:2">业务上仍是一张普通表；物理上每个字段已经变成一个小向量。一次函数调用最多处理 64 个值。</div>
+  <div class="body">
+    <svg class="dia r" style="--d:3" viewBox="0 0 1704 480" role="img" aria-label="普通行表经 populate 批量打包成 VOPS 瓦片投影表">
+      <defs><marker id="a5" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0E5C69"/></marker></defs>
+      <!-- left: WOS -->
+      <rect x="0" y="0" width="470" height="470" rx="4" class="sv-box"/>
+      <text x="24" y="40" class="sv-h">普通行表 · WOS（写优化）</text>
+      <text x="24" y="72" class="sv-m">lineitem</text>
+      <text x="34" y="98" class="sv-xs">date</text><text x="138" y="98" class="sv-xs">qty</text><text x="242" y="98" class="sv-xs">price</text><text x="346" y="98" class="sv-xs">discount</text>
+      <g>
+        <rect x="24" y="106" width="422" height="46" rx="3" class="sv-blue"/><rect x="32" y="114" width="96" height="30" class="sv-box"/><rect x="136" y="114" width="96" height="30" class="sv-box"/><rect x="240" y="114" width="96" height="30" class="sv-box"/><rect x="344" y="114" width="94" height="30" class="sv-box"/>
+        <rect x="24" y="162" width="422" height="46" rx="3" class="sv-blue"/><rect x="32" y="170" width="96" height="30" class="sv-box"/><rect x="136" y="170" width="96" height="30" class="sv-box"/><rect x="240" y="170" width="96" height="30" class="sv-box"/><rect x="344" y="170" width="94" height="30" class="sv-box"/>
+        <rect x="24" y="218" width="422" height="46" rx="3" class="sv-blue"/><rect x="32" y="226" width="96" height="30" class="sv-box"/><rect x="136" y="226" width="96" height="30" class="sv-box"/><rect x="240" y="226" width="96" height="30" class="sv-box"/><rect x="344" y="226" width="94" height="30" class="sv-box"/>
+        <rect x="24" y="274" width="422" height="46" rx="3" class="sv-blue"/><rect x="32" y="282" width="96" height="30" class="sv-box"/><rect x="136" y="282" width="96" height="30" class="sv-box"/><rect x="240" y="282" width="96" height="30" class="sv-box"/><rect x="344" y="282" width="94" height="30" class="sv-box"/>
+        <rect x="24" y="330" width="422" height="46" rx="3" class="sv-blue"/><rect x="32" y="338" width="96" height="30" class="sv-box"/><rect x="136" y="338" width="96" height="30" class="sv-box"/><rect x="240" y="338" width="96" height="30" class="sv-box"/><rect x="344" y="338" width="94" height="30" class="sv-box"/>
+        <rect x="24" y="386" width="422" height="46" rx="3" class="sv-blue"/><rect x="32" y="394" width="96" height="30" class="sv-box"/><rect x="136" y="394" width="96" height="30" class="sv-box"/><rect x="240" y="394" width="96" height="30" class="sv-box"/><rect x="344" y="394" width="94" height="30" class="sv-box"/>
+      </g>
+      <text x="474" y="452" class="sv-xs" text-anchor="end">… 一行一条业务记录</text>
+      <!-- middle -->
+      <line x1="470" y1="235" x2="492" y2="235" class="sv-arrow" marker-end="url(#a5)"/>
+      <rect x="496" y="170" width="212" height="130" rx="4" class="sv-ochre"/>
+      <text x="530" y="216" class="sv-h">populate()</text>
+      <text x="530" y="250" class="sv-s">批量打包 · 逐列投影</text>
+      <text x="530" y="272" class="sv-xs">SPI: select …</text>
+      <text x="530" y="290" class="sv-xs">from source</text>
+      <line x1="708" y1="235" x2="732" y2="235" class="sv-arrow" marker-end="url(#a5)"/>
+      <text x="496" y="336" class="sv-xs">where predicate</text>
+      <text x="496" y="360" class="sv-xs">order by sort</text>
+      <text x="496" y="410" class="sv-xs">不改 heap / page 格式</text>
+      <!-- right: ROS -->
+      <rect x="734" y="0" width="970" height="470" rx="4" class="sv-box"/>
+      <text x="758" y="40" class="sv-h">VOPS 投影 · ROS（读优化）</text>
+      <text x="758" y="72" class="sv-m">vops_lineitem</text>
+      <rect x="758" y="100" width="440" height="112" rx="3" class="sv-green"/>
+      <text x="778" y="138" class="sv-t mono">vops_date</text><text x="778" y="172" class="sv-s">64 个 shipdate 值</text><text x="778" y="198" class="sv-xs">+ null_mask / empty_mask</text>
+      <rect x="1218" y="100" width="440" height="112" rx="3" class="sv-green"/>
+      <text x="1238" y="138" class="sv-t mono">vops_float4</text><text x="1238" y="172" class="sv-s">64 个 quantity 值</text><text x="1238" y="198" class="sv-xs">+ null_mask / empty_mask</text>
+      <rect x="758" y="226" width="440" height="112" rx="3" class="sv-green"/>
+      <text x="778" y="264" class="sv-t mono">vops_float4</text><text x="778" y="298" class="sv-s">64 个 price 值</text><text x="778" y="324" class="sv-xs">+ null_mask / empty_mask</text>
+      <rect x="1218" y="226" width="440" height="112" rx="3" class="sv-green"/>
+      <text x="1238" y="264" class="sv-t mono">vops_float4</text><text x="1238" y="298" class="sv-s">64 个 discount 值</text><text x="1238" y="324" class="sv-xs">+ null_mask / empty_mask</text>
+      <rect x="758" y="354" width="900" height="86" rx="3" class="sv-teal"/>
+      <text x="778" y="390" class="sv-t">可选：保留普通标量分组列（低基数）</text>
+      <text x="778" y="420" class="sv-s">→ 混合投影：PostgreSQL 负责 GROUP BY，VOPS 负责组内 tile 聚合</text>
+    </svg>
+    <div class="flexrow r" style="--d:4;margin-top:22px;gap:12px">
+      <span class="kicker" style="margin-right:8px">代价 / TRADE-OFFS</span>
+      <span class="chip">源表与投影<b>两份数据</b></span>
+      <span class="chip">投影需要<b>批量刷新</b></span>
+      <span class="chip">单行实时写入 → <b>大量未满瓦片</b></span>
+      <span class="chip">优化器<b>无法理解 tile 内选择性</b></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 定义 / 不是什么 ============ -->
+<section class="slide" data-title="定义 · VOPS 是什么，不是什么">
+  <div class="eyebrow r" style="--d:0"><span>02 / 结构定义</span><span class="sep"></span><span>Definition</span></div>
+  <h1 class="title r" style="--d:1">VOPS 是什么，<em>不是什么</em></h1>
+  <div class="sub r" style="--d:2">它的「vector」指分析执行中的批量标量处理，不是向量数据库里的 embedding。</div>
+  <div class="body">
+    <div class="grid2 r" style="--d:3;grid-template-columns:1.12fr .88fr;height:calc(100% - 150px)">
+      <div class="defbox" style="display:flex;flex-direction:column;justify-content:space-between">
+        <div><div class="kicker" style="color:var(--teal);margin-bottom:24px">定义 / DEFINITION</div>
+          <div class="q">VOPS 是一种通过 <b>PostgreSQL 扩展类型</b>实现的微型列向量投影：一个 tile 类型值保存同一列<b>最多 64 个标量值</b>，并配套<b>位图</b>记录 NULL、空槽和过滤结果；算子、聚合、<span class="mono">unnest</span> 和 FDW 都围绕这 64 个槽位工作。</div>
+        </div>
+        <div class="flexrow" style="gap:9px;margin-top:26px">
+          <span class="pill t">TILE_SIZE 64</span><span class="pill t">null_mask</span><span class="pill t">empty_mask</span>
+          <span class="pill o">filter_mask</span><span class="pill g">vector aggregate</span><span class="pill b">FDW</span><span class="pill r">parse hook</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:center">
+        <div class="notrow"><div class="x">×</div><div><h4>不是 Parquet 那样的独立文件格式</h4><p>数据仍存在普通 PostgreSQL heap 行里，只是字段类型被替换成扩展类型。</p></div></div>
+        <div class="notrow"><div class="x">×</div><div><h4>不是 DuckDB / HyPer 那样的向量化执行器</h4><p>executor、planner 与 SQL 类型系统保持原样，收益来自扩展函数内部的循环。</p></div></div>
+        <div class="notrow" style="border-bottom:0"><div class="x">×</div><div><h4>不是 pgvector 的相似搜索</h4><p>不解决 embedding ANN 检索；这里的向量是一批同列标量值。</p></div></div>
+      </div>
+    </div>
+    <div class="box r" style="--d:4;margin-top:22px;padding:20px 26px;display:flex;align-items:center;gap:30px;height:118px">
+      <div style="flex:none"><div class="kicker">VECTOR 的真实含义</div><div style="font-size:24px;font-weight:650;margin-top:8px">少函数调用 + tile 内批处理</div></div>
+      <div style="flex:1;border-left:1px solid var(--line);padding-left:28px;font-size:19px;line-height:1.7;color:var(--ink2)">
+        <span class="mono" style="color:var(--rust)">逐行</span>　price × discount → 每行一次解释 + 一次函数调用，重复 64 次<br>
+        <span class="mono" style="color:var(--green)">tile</span>　一次 tile 函数进入 → 内部循环 64 个槽位，返回一批结果
+      </div>
+      <div class="pill g" style="font-size:18px;padding:12px 18px">成本 ÷ 64</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 tile 结构（交互） ============ -->
+<section class="slide" data-title="tile 结构 · 64 槽与位图元数据">
+  <div class="eyebrow r" style="--d:0"><span>02 / 结构定义</span><span class="sep"></span><span>vops.h · vops_tile_hdr</span></div>
+  <h1 class="title r" style="--d:1">一个 tile = 固定批量 <em>+</em> 位图元数据</h1>
+  <div class="sub r" style="--d:2">悬停任意槽位，查看它对应的掩码语义。所有普通 tile 都带同一个 <span class="mono">vops_tile_hdr</span>。</div>
+  <div class="body">
+    <div class="grid2 r" style="--d:3;grid-template-columns:690px 1fr;height:100%;gap:30px">
+      <div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div class="box" style="padding:11px 16px;display:flex;align-items:center;gap:14px"><span class="pill t">vops_tile_hdr</span><span style="font-size:19px;color:var(--ink2)">两个 64 位字段</span></div>
+          <div class="box" style="padding:11px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--rust-soft);border-color:var(--rust)"><span class="mono" style="font-size:20px;color:var(--rust)">null_mask</span><span class="tiny mono">64 bit · 每位对应一个槽的 SQL NULL</span></div>
+          <div class="box" style="padding:11px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--ochre-soft);border-color:var(--ochre)"><span class="mono" style="font-size:20px;color:var(--ochre)">empty_mask</span><span class="tiny mono">64 bit · 每位对应一个未填槽位</span></div>
+          <div class="box" style="padding:11px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--green-soft);border-color:var(--green)"><span class="mono" style="font-size:20px;color:var(--green)">payload[64]</span><span class="tiny mono">int4 / float4 / date / timestamp / text …</span></div>
+        </div>
+        <div class="kicker" style="margin:16px 0 10px">vops_float4 · 末尾未满 tile 的示例</div>
+        <div class="slots" id="tileSlots" style="width:440px"></div>
+        <div class="flexrow" style="gap:26px;margin-top:14px">
+          <span class="legend"><i style="background:var(--green-soft);border-color:var(--green)"></i>有效值</span>
+          <span class="legend"><i style="background:var(--rust-soft);border-color:var(--rust)"></i>SQL NULL</span>
+          <span class="legend"><i style="background:transparent;border-color:var(--ink3);border-style:dashed"></i>空槽</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="readout" id="slotReadout"><div class="lbl">SLOT INSPECTOR · 悬停左侧槽位</div><div class="big">槽位 #0</div><p>指向一个槽位，查看该位置的 payload 与 null_mask / empty_mask 位如何对应。</p></div>
+        <div class="card" style="flex:none;padding:24px 28px"><h3 style="font-size:25px">为什么恰好是 64？</h3>
+          <p style="margin-top:14px"><b>① 位图刚好装得下：</b>一个 64 位整数正好表示每个槽位的 NULL / EMPTY / 过滤状态；<span class="mono">vops_bool</span> 的 payload 本身就是一个 64 位位图。</p>
+          <p style="margin-top:12px"><b>② cache 放得下：</b>tile 太大会让复杂表达式的多个操作数与中间结果挤不进 CPU cache。</p>
+        </div>
+        <div class="card" style="flex:1;padding:24px 28px;display:flex;flex-direction:column;justify-content:space-between">
+          <div><div class="kicker">空间直觉</div><p style="margin-top:12px"><span class="mono">vops_int4 / vops_float4</span> = 16 + 64×4 = <b>272 字节</b>；<span class="mono">vops_int8 / float8</span> = <b>528 字节</b>。</p></div>
+          <div><div class="kicker" style="margin-bottom:12px">vops--1.1.sql 注册的类型 / 函数</div>
+            <div class="flexrow" style="gap:8px">
+              <span class="pill t">vops_bool</span><span class="pill t">vops_int4</span><span class="pill t">vops_float4</span><span class="pill t">vops_date</span>
+              <span class="pill t">vops_timestamp</span><span class="pill t">vops_text</span><span class="pill o">filter</span><span class="pill o">populate</span>
+              <span class="pill o">import</span><span class="pill g">vops_unnest</span><span class="pill g">create_projection</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 08 populate（分步演示） ============ -->
+<section class="slide" data-title="原理 · populate 如何打包成 tile">
+  <div class="eyebrow r" style="--d:0"><span>03 / 核心原理</span><span class="sep"></span><span>vops.c · vops_populate</span></div>
+  <h1 class="title r" style="--d:1">从行表打包成 tile：<span class="mono" style="font-size:52px">populate()</span></h1>
+  <div class="sub r" style="--d:2">点「下一步」逐步观察：逐行取数 → 写槽 → 满 64 插入投影行 → 末尾瓦片如何处理。</div>
+  <div class="body">
+    <div class="grid2 r" style="--d:3;grid-template-columns:1fr 560px;height:100%;gap:30px">
+      <div class="box" style="padding:24px 28px;display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between;margin-bottom:18px">
+          <div class="kicker">TILE BUFFER · <span id="popCounter" class="mono" style="color:var(--teal)">0 / 64</span></div>
+          <div class="flexrow" style="gap:8px">
+            <button class="btn" id="popPrev">上一步</button><button class="btn" id="popNext">下一步 →</button><button class="btn" id="popPlay">自动播放</button><button class="btn" id="popReset">重置</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:26px;align-items:flex-start;flex:1;min-height:0">
+          <div style="flex:none;width:300px">
+            <div class="kicker" style="margin-bottom:12px">源表 lineitem</div>
+            <div id="popRows" style="display:flex;flex-direction:column;gap:6px"></div>
+          </div>
+          <div style="flex:none;display:flex;align-items:center;justify-content:center;width:70px;padding-top:120px">
+            <svg viewBox="0 0 70 40" width="70" height="40"><line x1="2" y1="20" x2="58" y2="20" stroke="#0E5C69" stroke-width="2.2"/><path d="M58 12 L68 20 L58 28 z" fill="#0E5C69"/></svg>
+          </div>
+          <div style="flex:1">
+            <div class="kicker" style="margin-bottom:12px">目标 tile 的 64 个槽位</div>
+            <div class="slots" id="popSlots" style="width:100%;max-width:430px"></div>
+            <div id="popEmit" style="margin-top:16px;padding:14px 18px;border:1px dashed var(--line);border-radius:3px;font-size:18px;color:var(--ink3);transition:.25s">投影行：等待瓦片填满 …</div>
+          </div>
+        </div>
+        <div class="readout" style="min-height:96px;margin-top:12px;padding:12px 22px"><div class="lbl">STEP <span id="popStepNo">01</span> / 05</div><div class="big" id="popStepTitle" style="font-size:25px;margin-bottom:8px">准备装载</div><p id="popStepText" style="font-size:18px">SPI 拼出 select … from source，可附加 where predicate 与 order by sort。</p></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card" style="flex:none"><div class="kicker">函数签名</div><div class="mono" style="font-size:19px;line-height:1.7;margin-top:14px;color:var(--teal)">populate(destination, source,<br>　predicate, sort)</div></div>
+        <div class="card" style="flex:1;display:flex;flex-direction:column;justify-content:space-between">
+          <div><h3 style="font-size:25px">为什么必须批量刷新？</h3><p style="margin-top:14px">单行插入会让大多数 tile 只有 1 个有效槽：既浪费空间，也失去「摊薄函数调用成本」的意义。</p></div>
+          <div id="fillCompare"></div>
+          <div style="background:var(--teal-soft);border:1px solid var(--teal);border-radius:3px;padding:16px 18px;font-size:18px;line-height:1.6;color:var(--ink2)"><b>混合投影的关键：</b>投影表同时含标量列与 tile 列时，源码会在标量列值变化时提前切断当前 tile —— 这是按标量分组列聚合的基础。</div>
+        </div>
+        <div class="card" style="flex:none;background:var(--ochre-soft);border-color:var(--ochre)"><p style="font-size:18px"><b>末尾瓦片：</b>不满 64 行时由 <span class="mono">empty_mask</span> 标出未填槽位，聚合与展开都会跳过它们。</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 09 filter_mask（位图 AND 交互） ============ -->
+<section class="slide" data-title="原理 · filter_mask 与向量聚合">
+  <div class="eyebrow r" style="--d:0"><span>03 / 核心原理</span><span class="sep"></span><span>vops_bool · filter()</span></div>
+  <h1 class="title r" style="--d:1">条件过滤不是普通 <em>WHERE</em></h1>
+  <div class="sub r" style="--d:2">开关三个谓词，观察 64 位位图如何做 AND、以及 <span class="mono">filter()</span> 的两副面孔。</div>
+  <div class="body">
+    <div class="box r" style="--d:3;padding:16px 24px;font:18px/1.5 var(--mono);color:#DDE7E9;background:var(--code);border:0;border-radius:4px;margin-bottom:18px">
+      <span style="color:#7FC8D6">select</span> <span style="color:#9BD3A6">sum</span>(l_extendedprice * l_discount) <span style="color:#7FC8D6">as</span> revenue <span style="color:#7FC8D6">from</span> vops_lineitem<br>
+      <span style="color:#7FC8D6">where</span> <span style="color:#9BD3A6">filter</span>( <span style="color:#9BD3A6">betwixt</span>(l_shipdate, <span style="color:#E7B87C">'1996-01-01'</span>, <span style="color:#E7B87C">'1997-01-01'</span>) &amp; <span style="color:#9BD3A6">betwixt</span>(l_discount, <span style="color:#E19A72">0.08</span>, <span style="color:#E19A72">0.1</span>) &amp; (l_quantity &lt; <span style="color:#E19A72">24</span>) );
+    </div>
+    <div class="flexrow r" style="--d:4;gap:10px;margin-bottom:18px">
+      <span class="kicker" style="margin-right:10px">谓词开关 / PREDICATES</span>
+      <button class="btn on" data-pred="0">① 日期区间</button>
+      <button class="btn on" data-pred="1">② 折扣区间</button>
+      <button class="btn on" data-pred="2">③ 数量 &lt; 24</button>
+      <span class="chip" style="margin-left:auto"><b id="hitCount">—</b> / 64 命中</span>
+    </div>
+    <div class="grid2 r" style="--d:5;grid-template-columns:1fr 430px;gap:26px;height:calc(100% - 250px)">
+      <div class="box" style="padding:20px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;overflow:hidden">
+        <div id="maskGroup0" style="flex:none"></div>
+        <div class="op">&amp;</div>
+        <div id="maskGroup1" style="flex:none"></div>
+        <div class="op">&amp;</div>
+        <div id="maskGroup2" style="flex:none"></div>
+        <div class="op">=</div>
+        <div id="maskFinal" style="flex:none"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="readout" style="flex:1"><div class="lbl">EXECUTOR 看见的</div><div class="big" id="execBool">bool = true</div><p>filter(vops_bool) 只回答「这个 tile 是否至少有一个命中槽位」，是 <b>tile 级</b>的判断。</p></div>
+        <div class="readout" style="flex:1"><div class="lbl">扩展内部看见的</div><div class="big" id="maskSum">Σ = —</div><p>精确位图写入全局 <span class="mono">filter_mask</span>；sum / unnest / FDW 只遍历命中且非空的槽位。</p></div>
+      </div>
+    </div>
+    <div class="r" style="--d:6;margin-top:16px;background:var(--rust-soft);border:1px solid var(--rust);border-radius:3px;padding:14px 20px;font-size:18px;line-height:1.55;color:var(--ink2)"><b>边界：</b>选择性从 executor 层搬进了扩展内部 —— 普通 planner 无法预知 filter_mask 最终留下多少元素，代价估算与通用 SQL 兼容性因此受限。</div>
+  </div>
+</section>
+
+<!-- ============ 10 聚合两条路径 ============ -->
+<section class="slide" data-title="原理 · 大聚合与分组聚合">
+  <div class="eyebrow r" style="--d:0"><span>03 / 核心原理</span><span class="sep"></span><span>Vector Aggregate</span></div>
+  <h1 class="title r" style="--d:1">聚合有<em>两条路径</em></h1>
+  <div class="sub r" style="--d:2">支持 sum / avg / min / max / count / 方差 / 标准差 / wavg；分组时选哪条路，结果差别很大。</div>
+  <div class="body">
+    <div class="grid2 r" style="--d:3;grid-template-columns:600px 1fr;height:100%;gap:26px">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="kicker">路径 A · 大聚合（直接对 tile 列）</div>
+        <div class="code" style="font-size:16px;line-height:1.6;padding:22px 24px">select sum(l_extendedprice * l_discount)
+       as revenue
+from vops_lineitem
+where filter(
+  betwixt(l_shipdate,
+    '1996-01-01', '1997-01-01')
+  & betwixt(l_discount, 0.08, 0.1)
+  & (l_quantity &lt; 24)
+);</div>
+        <div class="card" style="flex:1;display:flex;flex-direction:column;justify-content:center"><p>聚合函数拿到的是一个 tile，而不是一行；内部循环 64 个槽位、按 <span class="mono">filter_mask</span> 跳过不命中位置，一次函数调用产出一批中间值。</p>
+          <div class="flexrow" style="gap:8px;margin-top:18px"><span class="pill g">sum</span><span class="pill g">avg</span><span class="pill g">min / max</span><span class="pill g">count</span><span class="pill g">variance</span><span class="pill g">wavg</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="kicker">路径 B · 分组聚合的两种做法</div>
+        <div class="card" style="flex:1;display:flex;flex-direction:column;justify-content:space-between">
+          <div class="flexrow" style="justify-content:space-between"><h3 style="margin:0">① map / reduce</h3><span class="pill o">能工作，但不自然</span></div>
+          <p>把分组 key 与多个同类型聚合表达式交给 VOPS 的 hash table，再用 <span class="mono">reduce()</span> 展开结果。</p>
+          <svg class="dia" viewBox="0 0 900 96" role="img" aria-label="map reduce 流程：分组键与聚合表达式进入哈希表，再 reduce 展开">
+            <rect x="4" y="14" width="180" height="62" rx="3" class="sv-box"/><text x="22" y="52" class="sv-s">group key + expr</text>
+            <text x="196" y="56" class="sv-m">→</text>
+            <rect x="238" y="14" width="200" height="62" rx="3" class="sv-ochre"/><text x="256" y="52" class="sv-s">VOPS hash table</text>
+            <text x="450" y="56" class="sv-m">→</text>
+            <rect x="492" y="14" width="180" height="62" rx="3" class="sv-box"/><text x="510" y="52" class="sv-s">reduce()</text>
+            <text x="690" y="56" class="sv-m">→</text>
+            <rect x="732" y="14" width="164" height="62" rx="3" class="sv-plain"/><text x="750" y="52" class="sv-s">结果行</text>
+          </svg>
+          <p class="tiny">SQL 不自然；聚合表达式类型受 variadic array 限制（必须同类型）。</p>
+        </div>
+        <div class="card" style="flex:1;display:flex;flex-direction:column;justify-content:space-between;background:var(--teal-soft);border-color:var(--teal)">
+          <div class="flexrow" style="justify-content:space-between"><h3 style="margin:0">② 混合投影</h3><span class="pill t">README：Q1 通常更快 ★</span></div>
+          <p>低基数分组列保留为普通标量列，度量列做成 tile：<b>PostgreSQL 负责 GROUP BY，VOPS 负责每组内部的 tile 聚合。</b></p>
+          <svg class="dia" viewBox="0 0 900 96" role="img" aria-label="混合投影流程：标量分组列与 tile 度量列一起进入 PostgreSQL 分组，VOPS 做组内聚合">
+            <rect x="4" y="14" width="200" height="62" rx="3" class="sv-blue"/><text x="22" y="52" class="sv-s">标量列：returnflag</text>
+            <rect x="216" y="14" width="200" height="62" rx="3" class="sv-green"/><text x="234" y="52" class="sv-s">tile 列：度量值</text>
+            <text x="428" y="56" class="sv-m">→</text>
+            <rect x="470" y="14" width="190" height="62" rx="3" class="sv-teal"/><text x="488" y="52" class="sv-s">PG GROUP BY</text>
+            <text x="672" y="56" class="sv-m">→</text>
+            <rect x="714" y="14" width="182" height="62" rx="3" class="sv-green"/><text x="732" y="52" class="sv-s">VOPS 组内 sum</text>
+          </svg>
+          <p class="tiny">各司其职：标量语义交给优化器，批处理能力交给扩展。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 11 改写 & FDW ============ -->
+<section class="slide" data-title="原理 · parse hook 改写与 FDW 展开">
+  <div class="eyebrow r" style="--d:0"><span>03 / 核心原理</span><span class="sep"></span><span>_PG_init · vops_fdw.c</span></div>
+  <h1 class="title r" style="--d:1">让普通 SQL 也能跑：改写 <em>+</em> FDW</h1>
+  <div class="sub r" style="--d:2">后期版本提供两条「不必直接面对 tile 类型」的入口，但各有明确边界。</div>
+  <div class="body">
+    <div style="display:flex;flex-direction:column;gap:20px;height:100%">
+      <div class="box r" style="--d:3;padding:24px 28px;flex:1;display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between;margin-bottom:18px"><div class="kicker">LANE A · post_parse_analyze_hook 查询改写</div><span class="pill t">标准 SQL → 向量算子</span></div>
+        <div class="grid2" style="grid-template-columns:1fr 1.35fr;gap:26px">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div class="box" style="padding:14px 18px;font-size:19px">普通 SQL</div>
+            <div class="mono" style="color:var(--teal);font-size:24px">→</div>
+            <div class="box" style="padding:14px 18px;font-size:19px;background:var(--teal-soft)">mutator 改写</div>
+            <div class="mono" style="color:var(--teal);font-size:24px">→</div>
+            <div class="box" style="padding:14px 18px;font-size:19px;background:var(--green-soft)">VOPS 算子执行</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;font:17px/1.5 var(--mono);color:var(--ink2)">
+            <div><span style="color:var(--rust)">filter(o1) AND filter(o2)</span>　→　filter(vops_bool_and(o1, o2))</div>
+            <div><span style="color:var(--rust)">count(*)</span>　→　countall(*)</div>
+            <div><span style="color:var(--rust)">BETWEEN</span>　→　betwixt()（后者一次完成两次比较，更高效）</div>
+          </div>
+        </div>
+        <div style="margin-top:18px;background:var(--rust-soft);border:1px solid var(--rust);border-radius:3px;padding:14px 18px;font-size:18px;line-height:1.55;color:var(--ink2)"><b>坑：</b>未把 vops 放进 <span class="mono">shared_preload_libraries</span> 时，扩展可能在 parse analyze 之后才加载，首次向量化查询未被正确改写（官方文档指出可能返回错误结果）；可显式调用 <span class="mono">vops_initialize()</span> 触发初始化。</div>
+        <div style="margin-top:auto;border-top:1px solid var(--line);padding-top:14px;font-size:18px;line-height:1.55;color:var(--ink2)"><b class="teal">改写边界：</b>替换只覆盖过滤与聚合类表达式；所需列不在投影中、或查询形态不满足限制时，仍要走普通 SQL 或 FDW。</div>
+      </div>
+      <div class="box r" style="--d:4;padding:24px 28px;flex:1;display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between;margin-bottom:18px"><div class="kicker">LANE B · FDW 把瓦片还原成普通标量行</div><span class="pill b">兼容优先</span></div>
+        <div class="flexrow" style="gap:12px;flex-wrap:nowrap">
+          <div class="box" style="flex:1;padding:16px;text-align:center;font-size:19px">foreign table<br><span class="tiny">用户写普通 SQL</span></div>
+          <div class="mono" style="color:var(--blue);font-size:24px">→</div>
+          <div class="box" style="flex:1;padding:16px;text-align:center;font-size:19px;background:var(--blue-soft)">vops_fdw 取 tile<br><span class="tiny">下推过滤 / 聚合</span></div>
+          <div class="mono" style="color:var(--blue);font-size:24px">→</div>
+          <div class="box" style="flex:1;padding:16px;text-align:center;font-size:19px">按 filter_mask 展开<br><span class="tiny">只形成命中 tuple</span></div>
+          <div class="mono" style="color:var(--blue);font-size:24px">→</div>
+          <div class="box" style="flex:1;padding:16px;text-align:center;font-size:19px;background:var(--green-soft)">PG 上层节点<br><span class="tiny">处理不能下推的部分</span></div>
+        </div>
+        <div class="flexrow" style="gap:12px;margin-top:18px">
+          <span class="chip">能下推的过滤与聚合尽量用 VOPS 完成</span>
+          <span class="chip">不能下推的交还 PostgreSQL</span>
+          <span class="chip"><b class="rust">auto_substitute_projections</b> 默认关闭（避免投影滞后导致结果不一致）</span>
+        </div>
+        <div style="margin-top:auto;border-top:1px solid var(--line);padding-top:14px;font-size:18px;line-height:1.55;color:var(--ink2)"><b class="teal">下推边界：</b>一旦展开成普通标量行，向量化收益只保留在成功下推的那部分；不能下推的 join、窗口与复杂表达式仍由 PostgreSQL 逐行处理。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 12 投影 / 刷新 / 索引 ============ -->
+<section class="slide" data-title="原理 · 投影刷新与 BRIN 边界索引">
+  <div class="eyebrow r" style="--d:0"><span>03 / 核心原理</span><span class="sep"></span><span>create_projection()</span></div>
+  <h1 class="title r" style="--d:1">投影、刷新与<em>边界索引</em></h1>
+  <div class="sub r" style="--d:2">悬停下方任一 tile，查看它的 first / last 边界；索引只能粗定位候选，精确条件仍要复查。</div>
+  <div class="body">
+    <svg class="dia r" style="--d:3" viewBox="0 0 1704 250" role="img" aria-label="create_projection 生成投影表、刷新函数与边界索引">
+      <defs><marker id="a12" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0E5C69"/></marker></defs>
+      <rect x="0" y="40" width="300" height="112" rx="3" class="sv-blue"/><text x="22" y="82" class="sv-h">原始业务表</text><text x="22" y="116" class="sv-s">lineitem · 高频写入</text>
+      <line x1="300" y1="96" x2="368" y2="96" class="sv-arrow" marker-end="url(#a12)"/>
+      <rect x="372" y="40" width="320" height="112" rx="3" class="sv-ochre"/><text x="392" y="82" class="sv-h mono" style="font-size:23px">create_projection()</text><text x="392" y="116" class="sv-s">按 predicate + sort 批处理</text>
+      <line x1="692" y1="96" x2="760" y2="96" class="sv-arrow" marker-end="url(#a12)"/>
+      <rect x="764" y="40" width="400" height="112" rx="3" class="sv-green"/><text x="784" y="82" class="sv-h">VOPS 投影表 + 刷新函数</text><text x="784" y="116" class="sv-s">PNAME_refresh() · 不会自动同步</text>
+      <line x1="1164" y1="96" x2="1232" y2="96" class="sv-arrow" marker-end="url(#a12)"/>
+      <rect x="1236" y="40" width="468" height="112" rx="3" class="sv-teal"/><text x="1256" y="82" class="sv-h">BRIN 边界索引</text><text x="1256" y="116" class="sv-s">first() / last() / low() / high() · 粗过滤</text>
+      <text x="0" y="204" class="sv-s">与物化视图类似：投影不自动更新，一致性由刷新策略保证；按时间或批次刷新时可用 predicate 限制增量、用 sort 让同组数据集中。</text>
+    </svg>
+    <div class="kicker r" style="--d:4;margin:6px 0 12px">ZONE MAP · 排序列上每个 tile 的 [first, last] 边界</div>
+    <svg class="dia r" style="--d:4" viewBox="0 0 1704 210" role="img" aria-label="瓦片边界 zone map 与查询范围的粗过滤">
+      <rect x="630" y="8" width="620" height="168" fill="#B5502A" opacity=".07" stroke="#B5502A" stroke-width="1.5" stroke-dasharray="6 5" pointer-events="none"/>
+      <text x="640" y="196" class="sv-xs" style="fill:#B5502A">查询范围 → 落在候选 tile 3 / 4 / 5（粗过滤）</text>
+      <g id="zoneTiles"></g>
+    </svg>
+    <div class="grid2 r" style="--d:5;grid-template-columns:1fr 1fr;gap:20px;margin-top:10px">
+      <div class="readout" style="min-height:104px;padding:16px 22px"><div class="lbl">TILE INSPECTOR · 悬停上方瓦片</div><div class="big" id="zoneTitle" style="font-size:24px">tile #3</div><p id="zoneText" style="font-size:18px">查询区间与该 tile 的 [first, last] 有交集 → 保留为候选。</p></div>
+      <div class="readout" style="min-height:104px;padding:16px 22px;background:var(--rust-soft);border-color:var(--rust)"><div class="lbl">为什么只能粗过滤</div><p style="font-size:18px;color:var(--ink2)">边界索引只说明「这个瓦片里可能有命中行」；精确谓词必须在 tile 内部用 <span class="mono">filter()</span> 逐槽复查，不能据此下结论。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 13 横向对比 ============ -->
+<section class="slide" data-title="定位 · 四类方案横向对比">
+  <div class="eyebrow r" style="--d:0"><span>04 / 定位与效果</span><span class="sep"></span><span>Comparison</span></div>
+  <h1 class="title r" style="--d:1">关键不是「谁更快」，而是<em>边界不同</em></h1>
+  <div class="sub r" style="--d:2">VOPS 保留了 PostgreSQL 内的扩展可试验性，也因此受 executor、planner、heap 与类型系统约束。</div>
+  <div class="body r" style="--d:3;display:flex;flex-direction:column">
+    <table class="cmp">
+      <colgroup><col class="c0"><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+      <thead><tr><th>维度</th><th>VOPS 瓦片投影</th><th>PostgreSQL heap 行表</th><th>CStore FDW 类列存</th><th>DuckDB / HyPer 类引擎</th></tr></thead>
+      <tbody>
+        <tr><td>主要目标</td><td class="hl">在 PG 内用扩展类型验证向量化 OLAP</td><td>通用 OLTP 与事务一致性</td><td>列式读取、压缩、分析扫描</td><td>从执行器到存储都按向量批量设计</td></tr>
+        <tr><td>存储单位</td><td class="hl">heap 行里的 tile 字段，每字段 ≤ 64 值</td><td>一行一个 tuple</td><td>外部列式分片 / stripe</td><td>column / vector / chunk</td></tr>
+        <tr><td>写入代价</td><td class="hl">批量 populate 或 refresh，单行不划算</td><td>单行写入友好</td><td>通常偏批量装载</td><td>批量分析友好，事务模型视系统而定</td></tr>
+        <tr><td>读取代价</td><td class="hl">少函数调用、少 tuple deform，仍在 PG executor 内</td><td>逐行解包与表达式执行</td><td>只读需要列，压缩收益更强</td><td>原生批处理，算子融合更充分</td></tr>
+        <tr><td>事务 / MVCC</td><td class="hl">一致性由刷新策略保证</td><td>原生 MVCC</td><td>依 FDW / 外部存储实现</td><td>通常不是 PG heap MVCC</td></tr>
+        <tr><td>SQL 兼容</td><td class="hl">tile SQL 有特殊函数；FDW / parse hook 改善</td><td>最高</td><td>取决于 FDW 能力</td><td>系统自身 SQL 方言</td></tr>
+        <tr><td>适合场景</td><td class="hl">读多写少、批量刷新、过滤聚合、教学验证</td><td>OLTP、混合负载、频繁更新</td><td>大宽表列裁剪与压缩分析</td><td>专业 OLAP、嵌入式分析</td></tr>
+        <tr><td>不适合场景</td><td class="hl">强实时更新、复杂 join、任意字符串、投影滞后</td><td>大规模扫描聚合性能要求极高</td><td>需要 PG 原生事务细节</td><td>必须完整保留 PG 扩展生态与事务语义</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:auto;border-top:1px solid var(--line);padding-top:20px;display:flex;align-items:flex-start;gap:26px"><div class="kicker" style="flex:none;padding-top:6px">一句话结论</div><div style="font-size:21px;line-height:1.6;color:var(--ink2)">真正的向量化数据库，需要从存储、执行、优化器、统计信息到内存管理一起设计；<b class="strong">VOPS 是用最小代码量把这条链路压缩成一个可观察的实验</b> —— 它的价值在机制教学，不在生产替代。</div></div>
+  </div>
+</section>
+
+<!-- ============ 14 性能（交互） ============ -->
+<section class="slide" data-title="效果 · TPC-H Q1/Q6 的 README 数据">
+  <div class="eyebrow r" style="--d:0"><span>04 / 定位与效果</span><span class="sep"></span><span>TPC-H SF10 · README</span></div>
+  <h1 class="title r" style="--d:1">效果如何？<em>两个层次</em>的收益</h1>
+  <div class="sub r" style="--d:2">约 8GB 数据 / 16GB RAM / i7-4770 / warm cache / shared_buffers=8GB。以下为 README 结论性数据，非本文重跑。</div>
+  <div class="body" style="display:flex;flex-direction:column">
+    <div class="flexrow r" style="--d:3;justify-content:space-between;margin-bottom:10px;flex:none">
+      <div class="flexrow" style="gap:8px"><button class="btn on" data-mode="seq">顺序执行</button><button class="btn" data-mode="par">8 worker 并行</button></div>
+      <div class="flexrow" style="gap:18px">
+        <span class="legend"><i style="background:var(--blue);border-color:var(--blue)"></i>原始行表</span>
+        <span class="legend"><i style="background:var(--ochre);border-color:var(--ochre)"></i>普通列裁剪投影</span>
+        <span class="legend"><i style="background:var(--teal);border-color:var(--teal)"></i>VOPS tile</span>
+        <span class="legend"><i style="background:var(--green);border-color:var(--green)"></i>混合投影</span>
+        <span class="tiny">线性刻度 · 单位 ms · 越短越好</span>
+      </div>
+    </div>
+    <svg class="dia r" style="--d:4" id="perfChart" viewBox="0 0 1704 420" role="img" aria-label="TPC-H Q1 与 Q6 各方案执行耗时条形图"></svg>
+    <div class="grid3 r" style="--d:5;gap:16px;margin-top:12px">
+      <div class="card" style="padding:16px 20px"><div class="kicker">① 少读无关列本身就有效</div><p style="font-size:18px;margin-top:10px">Q6 顺序执行：16796 → <b>4279 ms</b>（仅做普通列裁剪投影）。</p></div>
+      <div class="card" style="padding:16px 20px"><div class="kicker">② 少函数调用继续有效</div><p style="font-size:18px;margin-top:10px">换成 VOPS tile：4279 → <b>875 ms</b>；并行下 4110 → <b>284 ms</b>。</p></div>
+      <div class="card" style="padding:16px 20px;background:var(--teal-soft);border-color:var(--teal)"><div class="kicker">③ 贴近系统边界最快</div><p style="font-size:18px;margin-top:10px">Q1 mixed projection <b>1490 / 396 ms</b>，快于 reduce(map(...))。</p></div>
+    </div>
+    <div class="r" style="--d:6;margin-top:22px;display:flex;gap:26px;align-items:flex-start;border-top:1px solid var(--line);padding-top:18px"><div class="kicker" style="flex:none;padding-top:4px">怎么读这张图</div><div style="font-size:19px;line-height:1.6;color:var(--ink2)">同一组查询里，先看蓝色（原始行表），再看浅棕（仅做列裁剪的普通投影）、青色（VOPS tile）与绿色（混合投影）。<b class="strong">每往下一层，减少的是不同的成本</b>：先是无关列的 I/O 与解包，再是逐行函数调用与解释执行。</div></div>
+    <p class="tiny r" style="--d:6;margin-top:auto;padding-top:10px;color:var(--rust)">不要机械外推到生产：数据来自特定硬件、数据规模、warm cache 与无 join 的 TPC-H 子集；Postgres Pro 17 官方文档已将模块标为 deprecated。</p>
+  </div>
+</section>
+
+<!-- ============ 15 DEMO（双方案 tab） ============ -->
+<section class="slide" data-title="实践 · 最小 DEMO 与混合投影">
+  <div class="eyebrow r" style="--d:0"><span>05 / 上手实践</span><span class="sep"></span><span>DEMO SCRIPT</span></div>
+  <h1 class="title r" style="--d:1">最小实践骨架</h1>
+  <div class="sub r" style="--d:2">SQL 来自 README 与扩展 SQL 定义，作为可迁移实验脚本参考；本文未在当前环境执行 DEMO。</div>
+  <div class="body">
+    <div class="tabs r" style="--d:3"><button class="btn on" data-tab="a">A · 基础 tile 用法</button><button class="btn" data-tab="b">B · 混合投影（更推荐）</button><span class="tiny" style="margin-left:auto">切换对照两种写法</span></div>
+    <div id="tabA" class="tabbody on r" style="--d:4"><div class="code" id="codeA"></div></div>
+    <div id="tabB" class="tabbody r" style="--d:4"><div class="code" id="codeB"></div></div>
+    <div class="grid3 r" style="--d:5;gap:16px;margin-top:16px">
+      <div class="card" style="padding:14px 20px"><div class="kicker">验证 ①</div><p style="font-size:18px;margin-top:8px">populate() 返回的装载行数</p></div>
+      <div class="card" style="padding:14px 20px"><div class="kicker">验证 ②</div><p style="font-size:18px;margin-top:8px">EXPLAIN 是否走到预期 VOPS 表 / FDW / 投影</p></div>
+      <div class="card" style="padding:14px 20px"><div class="kicker">验证 ③</div><p style="font-size:18px;margin-top:8px">原表与投影上的聚合结果是否一致</p></div>
+    </div>
+    <p class="tiny r" style="--d:6;margin-top:12px">环境说明：本地只有 vops 扩展源码，没有已编译的 PostgreSQL contrib 环境与 TPC-H 数据文件，因此脚本按原文保留、不声称已运行。</p>
+  </div>
+</section>
+
+<!-- ============ 16 最佳实践 ============ -->
+<section class="slide" data-title="实践 · 三种角色的最佳实践">
+  <div class="eyebrow r" style="--d:0"><span>05 / 上手实践</span><span class="sep"></span><span>Best Practice</span></div>
+  <h1 class="title r" style="--d:1">三种角色，<em>同一条底线</em></h1>
+  <div class="sub r" style="--d:2">把 VOPS 当成「读优化投影」，而不是主表。</div>
+  <div class="body">
+    <div class="grid3 r" style="--d:3;height:calc(100% - 96px)">
+      <div class="card rolecard"><span class="pill t">数据库架构师</span><div class="lead">先确认业务能否接受刷新延迟，再决定投影维度。</div>
+        <ul><li>分组列低基数且常出现在 GROUP BY → 优先保留为标量列</li><li>度量列与时间过滤列 → 适合做成 tile 列</li><li>把源表与投影的一致性责任写进架构约定，而不是默认信任</li></ul><div class="rolefoot">主表仍是 heap；投影只是读优化副本。</div></div>
+      <div class="card rolecard"><span class="pill o">DBA</span><div class="lead">不要逐行维护投影，用批量窗口刷新保证 tile 填充率。</div>
+        <ul><li>按时间 / 批次刷新：predicate 限制增量，sort 让同组数据集中</li><li>启用自动投影替换前，明确投影滞后风险</li><li>vops.auto_substitute_projections 默认关闭，正是为避免结果与源表不一致</li></ul><div class="rolefoot">刷新窗口，就是一致性契约。</div></div>
+      <div class="card rolecard"><span class="pill b">业务开发者</span><div class="lead">写直接 VOPS SQL 时，留意特殊函数与运算符。</div>
+        <ul><li>filter()、betwixt()、&amp; | ! 的语义与优先级不同于标准 SQL</li><li>字符串字面量常需显式转换，例如 '1998-12-01'::date</li><li>想写普通 SQL，请让 DBA 封装 FDW 或投影替换，但仍需知道哪些能下推</li></ul><div class="rolefoot">知道哪些谓词能下推，比会写 filter() 更重要。</div></div>
+    </div>
+    <div class="box r" style="--d:4;margin-top:20px;padding:18px 26px;display:flex;align-items:center;gap:24px;height:76px"><div class="kicker" style="flex:none">共同纲领</div><div style="font-size:23px;color:var(--ink)">读多写少 + 批量刷新 + 无 join 的过滤聚合 —— 这才是 tile 能摊薄成本的地方。</div></div>
+  </div>
+</section>
+
+<!-- ============ 17 适合 / 不适合 ============ -->
+<section class="slide" data-title="实践 · 适合与不适合的场景">
+  <div class="eyebrow r" style="--d:0"><span>05 / 上手实践</span><span class="sep"></span><span>When to use</span></div>
+  <h1 class="title r" style="--d:1">适合 与 <em>不适合</em></h1>
+  <div class="sub r" style="--d:2">先看负载形状，再看性能数字；边界比峰值更重要。</div>
+  <div class="body">
+    <div class="grid2 r" style="--d:3;height:calc(100% - 86px);gap:26px">
+      <div class="card" style="background:var(--green-soft);border-color:var(--green);padding:26px 32px;display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between"><h3 style="font-size:30px;margin:0">适合</h3><span class="pill g">GOOD FIT</span></div>
+        <div style="margin-top:22px">
+          <div class="fititem"><i class="mk" style="background:var(--green)"></i><span>大表批量扫描、过滤、聚合，尤其类似 TPC-H Q1/Q6 的无 join 或少 join 分析</span></div>
+          <div class="fititem"><i class="mk" style="background:var(--green)"></i><span>读多写少、可批量刷新、允许投影滞后的报表场景</span></div>
+          <div class="fititem"><i class="mk" style="background:var(--green)"></i><span>在 PostgreSQL 生态内教学、验证 tile / vector execution 机制</span></div>
+          <div class="fititem" style="border-bottom:0"><i class="mk" style="background:var(--green)"></i><span>度量列是数值 / 日期 / 时间戳，分组列基数不高</span></div>
+        </div>
+        <div style="margin-top:auto;border-top:1px solid var(--green);padding-top:18px"><div class="kicker" style="color:var(--green)">判定口诀</div><div style="font-size:21px;line-height:1.5;margin-top:8px;color:var(--ink)">单表过滤聚合 ＋ 可批量刷新 ＋ 允许投影滞后</div></div>
+      </div>
+      <div class="card" style="background:var(--rust-soft);border-color:var(--rust);padding:26px 32px;display:flex;flex-direction:column">
+        <div class="flexrow" style="justify-content:space-between"><h3 style="font-size:30px;margin:0">不适合</h3><span class="pill r">BAD FIT</span></div>
+        <div style="margin-top:22px">
+          <div class="fititem"><i class="mk" style="background:var(--rust)"></i><span>高频单行写入后要求投影实时一致</span></div>
+          <div class="fititem"><i class="mk" style="background:var(--rust)"></i><span>查询核心是复杂 join、窗口、排序与多表优化</span></div>
+          <div class="fititem"><i class="mk" style="background:var(--rust)"></i><span>大量变长字符串处理（README 建议标识优先字典化为整数）</span></div>
+          <div class="fititem"><i class="mk" style="background:var(--rust)"></i><span>需要优化器精确理解列统计、tile 内选择性与复杂代价模型</span></div>
+          <div class="fititem" style="border-bottom:0"><i class="mk" style="background:var(--rust)"></i><span>需要长期生产支持的新系统 —— 官方文档已标记 deprecated</span></div>
+        </div>
+        <div style="margin-top:auto;border-top:1px solid var(--rust);padding-top:18px"><div class="kicker" style="color:var(--rust)">判定口诀</div><div style="font-size:21px;line-height:1.5;margin-top:8px;color:var(--ink)">一旦要求实时一致 / 复杂 join / 精确统计 → 回到原生方案</div></div>
+      </div>
+    </div>
+    <div class="r" style="--d:4;margin-top:18px;background:var(--code);color:#DDE7E9;border-radius:3px;padding:16px 24px;font-size:19px;line-height:1.5"><b style="color:#E19A72">定位提醒：</b>这是一节数据库内核基础课案例，用来理解机制与历史探索，不是替代现代列存 / 向量化产品的选型建议。</div>
+  </div>
+</section>
+
+<!-- ============ 18 常见坑 ============ -->
+<section class="slide" data-title="实践 · 八个常见坑">
+  <div class="eyebrow r" style="--d:0"><span>05 / 上手实践</span><span class="sep"></span><span>Pitfalls</span></div>
+  <h1 class="title r" style="--d:1">八个<em>常见坑</em></h1>
+  <div class="sub r" style="--d:2">大多数问题不是性能问题，而是把「微型列向量投影」误当成了别的东西。</div>
+  <div class="body r" style="--d:3">
+    <div class="grid4" style="gap:18px">
+      <div class="pit"><div class="n">01 / CONCEPT</div><h4>把 VOPS 当 pgvector</h4><p>它不是向量相似搜索扩展，不能解决 embedding ANN 检索问题。</p><div class="pitFix">规避 · 先确认需求是批量标量聚合，而非相似度检索</div></div>
+      <div class="pit"><div class="n">02 / INIT</div><h4>第一次查询未改写</h4><p>缺 shared_preload_libraries 或 vops_initialize() 时 parse hook 加载太晚；官方文档指出首次查询可能返回错误结果。</p><div class="pitFix">规避 · 预加载 vops，或显式调用 vops_initialize()</div></div>
+      <div class="pit"><div class="n">03 / SYNC</div><h4>投影不自动同步</h4><p>create_projection() 只生成刷新函数，不保证源表与投影强一致。</p><div class="pitFix">规避 · 按批次调用生成的 PNAME_refresh()</div></div>
+      <div class="pit"><div class="n">04 / FILL</div><h4>tile 填充率太低</h4><p>单行维护让 64 槽只有少数有效值，空间与性能同时变差。</p><div class="pitFix">规避 · 批量窗口刷新，禁止逐行维护投影</div></div>
+      <div class="pit"><div class="n">05 / SQL</div><h4>布尔运算符优先级</h4><p>直接 VOPS SQL 用 &amp; | !，优先级不同于 AND OR NOT，复杂条件要加括号。</p><div class="pitFix">规避 · 复杂条件一律加括号，或改用改写后的标准 SQL</div></div>
+      <div class="pit"><div class="n">06 / INDEX</div><h4>索引只能粗过滤</h4><p>first() / last() / low() / high() 只定位候选 tile，精确条件必须复查。</p><div class="pitFix">规避 · 候选 tile 内仍执行 filter() 逐槽复查</div></div>
+      <div class="pit"><div class="n">07 / GROUP</div><h4>分组聚合类型限制</h4><p>map() 的 variadic 参数要求表达式类型一致，混合投影通常更实用。</p><div class="pitFix">规避 · 分组列留标量、度量列做 tile，交给 PG 分组</div></div>
+      <div class="pit"><div class="n">08 / BENCH</div><h4>性能数字不可外推</h4><p>README 的 10 倍级提升来自特定查询、硬件与 warm cache，不是普遍结论。</p><div class="pitFix">规避 · 在自己的硬件、数据规模与负载上重跑对照</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 19 收束 ============ -->
+<section class="slide" data-title="收束 · 三句话、五个问题、延伸阅读">
+  <div class="eyebrow r" style="--d:0"><span>06 / 收束</span><span class="sep"></span><span>Takeaways</span></div>
+  <h1 class="title r" style="--d:1">带走三句话，留下五个问题</h1>
+  <div class="sub r" style="--d:2">机制的收益与它的边界，往往来自同一个设计决定。</div>
+  <div class="body">
+    <div class="grid2 r" style="--d:3;grid-template-columns:1.18fr .82fr;height:100%;gap:36px">
+      <div style="display:flex;flex-direction:column">
+        <div class="kicker" style="margin-bottom:6px">三句话 / TAKEAWAYS</div>
+        <div class="takeaway"><span class="n">01</span><p>一次函数调用处理 64 个值，是把「解释 / 调用成本」摊薄的最小可观察实验。</p></div>
+        <div class="takeaway"><span class="n">02</span><p>filter_mask 把行级选择性藏进扩展内部 —— 收益与优化器盲区同源。</p></div>
+        <div class="takeaway" style="border-bottom:0"><span class="n">03</span><p>它是读优化投影而非主表：一致性靠刷新策略，不靠 MVCC。</p></div>
+        <div class="kicker" style="margin:26px 0 10px">五个扩展问题 / OPEN QUESTIONS</div>
+        <div style="display:flex;flex-direction:column;gap:9px;font-size:18px;line-height:1.45;color:var(--ink2)">
+          <div><span class="mono teal">Q1</span>　executor 原生支持 vector batch 后，filter_mask 还需要藏在全局变量里吗？</div>
+          <div><span class="mono teal">Q2</span>　tile size 改成 128 / 1024，位图、cache、tuple 大小与 page 局部性怎么变？</div>
+          <div><span class="mono teal">Q3</span>　投影一致性更接近物化视图、列存副本，还是 LSM 的 memtable / segment？</div>
+          <div><span class="mono teal">Q4</span>　为什么让 PostgreSQL 做 GROUP BY 反而比 reduce(map(...)) 更自然？</div>
+          <div><span class="mono teal">Q5</span>　要变成生产级列存，还缺统计信息、压缩、MVCC、WAL、自动刷新还是代价模型？</div>
+        </div>
+        <div style="margin-top:auto;border-top:1px solid var(--line);padding-top:18px;font-size:18px;line-height:1.55;color:var(--ink2)"><b class="teal">动手建议：</b>按 DEMO 脚本跑一次 populate，再用 EXPLAIN 对照原表与投影，观察瓦片填充率与聚合结果是否一致。</div>
+      </div>
+      <div class="card" style="padding:26px 30px;display:flex;flex-direction:column;justify-content:space-between">
+        <div><div class="kicker">延伸阅读 / SOURCES</div>
+          <div style="margin-top:18px;display:flex;flex-direction:column;gap:11px;font-size:18px;line-height:1.5;color:var(--ink2)">
+            <div><span class="mono teal">README.md</span>　动机、类型、算子、投影、TPC-H 与性能表</div>
+            <div><span class="mono teal">vops.h</span>　TILE_SIZE、vops_tile_hdr、tile 结构</div>
+            <div><span class="mono teal">vops.c</span>　populate、unnest、parse hook、投影替换</div>
+            <div><span class="mono teal">vops_fdw.c</span>　tile 展开与过滤路径</div>
+            <div><span class="mono teal">vops--1.1.sql</span>　类型 / 函数 / 算子 / 聚合定义</div>
+            <div><span class="mono teal">GitHub</span>　postgrespro/vops</div>
+            <div><span class="mono teal">官方文档</span>　Postgres Pro Enterprise 17 · vops</div>
+            <div><span class="mono teal">背景</span>　MonetDB/X100、HyPer、CStore FDW、IMCS</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:18px 0;font-size:19px;line-height:1.6;color:var(--ink2)">从「一行一个 tuple」到「一个字段 64 个值」—— 理解机制，比记住峰值数字更重要。</div>
+        <div style="border-top:0;padding-top:0">
+          <div style="font:400 42px/1 var(--serif);color:var(--teal)">谢谢</div>
+          <div class="tiny" style="margin-top:12px">digoal · 数据库筑基课 · 2026-05-24<br>本页内容依据原文与官方文档整理，性能数据均标注来源。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ chrome ============ -->
+<div id="footer">
+  <div class="fl"><b>数据库筑基课</b> · 瓦片表存储 VOPS　/　digoal · 2026-05-24</div>
+  <div id="chapters"></div>
+  <div class="fr"><button id="tocBtn" title="目录 (G)">目录</button><button id="prevBtn">←</button><span id="counter">01 / 19</span><button id="nextBtn">→</button></div>
+</div>
+<div id="toc"><h2>目录 · 19 页</h2><div class="hint">点击跳转 / 按 G 或 ESC 关闭 / ← → 翻页</div><div id="tocGrid"></div></div>
+
+</div><!-- /stage -->
+</div><!-- /viewport -->
+
+<script>
+(function(){
+"use strict";
+/* ---------- deck engine ---------- */
+const stage=document.getElementById('stage');
+const slides=[...document.querySelectorAll('.slide')];
+const total=slides.length;
+let cur=0;
+const chapters=[
+  {label:'序',start:0},{label:'问题意识',start:2},{label:'结构',start:4},{label:'核心原理',start:6},
+  {label:'定位与效果',start:12},{label:'上手实践',start:14},{label:'收束',start:18}
+];
+function fit(){const s=Math.min(innerWidth/1920,innerHeight/1080);stage.style.transform='translate(-50%,-50%) scale('+s+')';}
+addEventListener('resize',fit);fit();
+
+const chapterBar=document.getElementById('chapters');
+chapters.forEach(c=>{const b=document.createElement('button');b.className='chbtn';b.textContent=c.label;b.dataset.start=c.start;b.onclick=()=>go(c.start);chapterBar.appendChild(b);});
+const tocGrid=document.getElementById('tocGrid');
+slides.forEach((s,i)=>{const d=document.createElement('div');d.className='tocitem';d.innerHTML='<div class="n">'+String(i+1).padStart(2,'0')+'</div><div class="t">'+s.dataset.title+'</div>';d.onclick=()=>{go(i);toggleToc(false);};tocGrid.appendChild(d);});
+function go(n){
+  n=Math.max(0,Math.min(total-1,n));
+  slides[cur].classList.remove('active');
+  cur=n;
+  slides[cur].classList.add('active');
+  document.getElementById('counter').textContent=String(cur+1).padStart(2,'0')+' / '+total;
+  document.getElementById('progress').style.width=((cur+1)/total*100)+'%';
+  document.querySelectorAll('.chbtn').forEach(b=>{const st=+b.dataset.start;const next=chapters.find(c=>c.start>st);b.classList.toggle('on',cur>=st&&(!next||cur<next.start));});
+  document.querySelectorAll('.tocitem').forEach((d,i)=>d.classList.toggle('cur',i===cur));
+  document.getElementById('prevBtn').disabled=cur===0;
+  document.getElementById('nextBtn').disabled=cur===total-1;
+}
+function toggleToc(v){const t=document.getElementById('toc');t.classList.toggle('show',v===undefined?!t.classList.contains('show'):v);}
+document.getElementById('prevBtn').onclick=()=>go(cur-1);
+document.getElementById('nextBtn').onclick=()=>go(cur+1);
+document.getElementById('tocBtn').onclick=()=>toggleToc();
+addEventListener('keydown',e=>{
+  if(e.key==='Escape'){toggleToc(false);return;}
+  if(e.key==='g'||e.key==='G'){toggleToc();return;}
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '||e.key==='Enter'){e.preventDefault();go(cur+1);}
+  if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(cur-1);}
+  if(e.key==='Home')go(0); if(e.key==='End')go(total-1);
+});
+go(0);
+
+/* ---------- 01 cover: 64-slot motif ---------- */
+(function(){
+  const g=document.getElementById('coverGrid');
+  const x0=104,y0=96,cell=62,gap=8; // 8*62+7*8=552 -> fits frame 8..752 / 60..704
+  let html='';
+  for(let i=0;i<64;i++){
+    const cx=x0+(i%8)*(cell+gap), cy=y0+Math.floor(i/8)*(cell+gap);
+    const lit=[3,6,11,14,19,22,25,30,33,38,41,46,49,54,57,60].includes(i);
+    const warm=[8,17,28,43,52].includes(i);
+    const empty=[61,62,63].includes(i);
+    const fill=lit?(warm?'#F8E9E0':'#E5F0E8'):(empty?'transparent':'#F1EFE8');
+    const stroke=lit?(warm?'#B5502A':'#3C7A5E'):(empty?'#74818A':'#DAD5C8');
+    html+='<rect x="'+cx+'" y="'+cy+'" width="'+cell+'" height="'+cell+'" rx="4" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.6"'+(empty?' stroke-dasharray="5 4"':'')+' opacity="'+(lit?1:.9)+'"><animate attributeName="opacity" values="0.25;1" dur="0.7s" begin="'+(i*0.018)+'s" fill="freeze"/></rect>';
+    if(lit)html+='<text x="'+(cx+cell/2)+'" y="'+(cy+cell/2+7)+'" text-anchor="middle" font-family="Menlo,monospace" font-size="20" fill="'+(warm?'#B5502A':'#3C7A5E')+'">1</text>';
+  }
+  html+='<text x="104" y="86" font-family="Menlo,monospace" font-size="15" fill="#74818A">slot 0</text>';
+  html+='<text x="656" y="86" font-family="Menlo,monospace" font-size="15" fill="#74818A" text-anchor="end">slot 63</text>';
+  // 两条 64 位掩码带，置于栅格下方、边框以内
+  html+='<text x="32" y="678" font-family="Menlo,monospace" font-size="15" fill="#41515C">null_mask</text>';
+  for(let i=0;i<64;i++){const bx=150+i*9;const on=[8,17,28,43,52].includes(i);html+='<rect x="'+bx+'" y="664" width="7" height="16" rx="1" fill="'+(on?'#B5502A':'#E5E1D7')+'"/>';}
+  html+='<text x="32" y="698" font-family="Menlo,monospace" font-size="15" fill="#41515C">empty_mask</text>';
+  for(let i=0;i<64;i++){const bx=150+i*9;const on=i>=61;html+='<rect x="'+bx+'" y="684" width="7" height="16" rx="1" fill="'+(on?'#B2852C':'#E5E1D7')+'"/>';}
+  g.innerHTML=html;
+})();
+
+/* ---------- 07 tile slots inspector ---------- */
+(function(){
+  const box=document.getElementById('tileSlots');
+  const readout=document.getElementById('slotReadout');
+  let html='';
+  for(let i=0;i<64;i++){
+    const state=i<56?'valid':(i<59?'null':'empty');
+    const label=state==='valid'?'':(state==='null'?'N':'·');
+    html+='<div class="slot '+state+'" data-i="'+i+'" style="height:48px" aria-label="槽位 '+i+'">'+label+'</div>';
+  }
+  box.innerHTML=html;
+  function show(i){
+    const state=i<56?'valid':(i<59?'null':'empty');
+    const cfg={
+      valid:{t:'槽位 #'+i+' · 有效值',d:'payload['+i+'] 保存第 '+i+' 条原始行在该列的值；null_mask 与 empty_mask 的对应位都是 0。'},
+      null:{t:'槽位 #'+i+' · SQL NULL',d:'null_mask 第 '+i+' 位 = 1：这一行在该列上的值是 NULL，聚合与展开都会跳过它。'},
+      empty:{t:'槽位 #'+i+' · 空槽',d:'empty_mask 第 '+i+' 位 = 1：瓦片未装满（末尾 tile 或标量分组切断），这里没有真实行。'}
+    }[state];
+    readout.innerHTML='<div class="lbl">SLOT INSPECTOR · 64 槽中的第 '+i+' 位</div><div class="big">'+cfg.t+'</div><p>'+cfg.d+'</p>';
+  }
+  box.querySelectorAll('.slot').forEach(el=>{el.addEventListener('mouseenter',()=>show(+el.dataset.i));el.addEventListener('focus',()=>show(+el.dataset.i));el.tabIndex=0;});
+  show(0);
+})();
+
+/* ---------- 08 populate stepper ---------- */
+(function(){
+  const slots=document.getElementById('popSlots');
+  const rows=document.getElementById('popRows');
+  let html='';
+  for(let i=0;i<64;i++)html+='<div class="slot" data-i="'+i+'" style="height:44px;border-radius:2px;font-size:13px"></div>';
+  slots.innerHTML=html;
+  let rhtml='';
+  const labels=['row 1','row 2','row 3','row 4','row 5','row 6','row …','row 64'];
+  labels.forEach((t,i)=>{rhtml+='<div class="popRow" data-r="'+i+'" style="border:1px solid var(--line);border-radius:3px;padding:8px 12px;font:14px/1 var(--mono);color:var(--ink2);background:var(--paper2);display:flex;justify-content:space-between;gap:14px"><span>'+t+'</span><span style="color:var(--ink3)">date · qty · price</span></div>';});
+  rows.innerHTML=rhtml;
+  // 填充率对比：批量窗口 vs 逐行维护（每格代表 4 个槽位）
+  (function(){
+    const cells=n=>Array.from({length:16},(_,i)=>'<span style="height:16px;border-radius:2px;border:1px solid '+(i<n?'var(--green)':'var(--line2)')+';background:'+(i<n?'var(--green)':'#F1EFE8')+'"></span>').join('');
+    document.getElementById('fillCompare').innerHTML=
+      '<div style="margin-bottom:14px"><div class="kicker" style="margin-bottom:7px">批量窗口刷新 · 64 / 64 槽填满</div><div style="display:grid;grid-template-columns:repeat(16,1fr);gap:4px">'+cells(16)+'</div></div>'+
+      '<div><div class="kicker" style="margin-bottom:7px">逐行维护 · 约 1 / 64 槽有效</div><div style="display:grid;grid-template-columns:repeat(16,1fr);gap:4px">'+cells(1)+'</div></div>';
+  })();
+  const steps=[
+    {t:'准备装载',x:'SPI 拼出 select … from source，可附加 where predicate 与 order by sort；目标 tile 目前为空。',n:0},
+    {t:'第 j 行 → 第 j 槽',x:'逐行取源表数据：读到第 j 行，就把该列的第 j 个值写入目标 tile 的第 j 个 payload 槽。',n:12},
+    {t:'继续填充同一个瓦片',x:'同一个 tile 持续累积；函数调用成本被摊薄到多个槽位上，这正是批量装载的意义。',n:40},
+    {t:'j == 64 → 插入一条投影行',x:'瓦片装满即插入一条目标投影行；该行内每个 tile 字段各含 64 个同列值。',n:64},
+    {t:'末尾瓦片不满 64',x:'剩余 57 行：最后 7 个槽位由 empty_mask 标出；混合投影中，标量分组列变化也会提前切断 tile。',n:57}
+  ];
+  let st=0,timer=null;
+  function render(){
+    const n=steps[st].n;
+    document.getElementById('popCounter').textContent=n+' / 64';
+    document.getElementById('popStepNo').textContent=String(st+1).padStart(2,'0');
+    document.getElementById('popStepTitle').textContent=steps[st].t;
+    document.getElementById('popStepText').textContent=steps[st].x;
+    slots.querySelectorAll('.slot').forEach((el,i)=>{
+      let cls='slot';
+      if(st===4){cls+=i<n?' valid':' empty';el.textContent=i<n?'':'·';}
+      else {if(i<n)cls+=' valid';el.textContent='';}
+      el.className=cls;el.style.height='44px';el.style.borderRadius='2px';el.style.fontSize='13px';
+    });
+    rows.querySelectorAll('.popRow').forEach((el,i)=>{
+      const active=n>0&&i===Math.min(6,Math.max(0,Math.floor((n-1)/9)));
+      el.style.background=active?'var(--teal-soft)':'var(--paper2)';
+      el.style.borderColor=active?'var(--teal)':'var(--line)';
+      el.style.color=active?'var(--teal)':'var(--ink2)';
+    });
+    const emit=document.getElementById('popEmit');
+    if(st===3){emit.textContent='INSERT INTO vops_lineitem → 1 条投影行（4 个 tile 字段 × 64 值）';emit.style.background='var(--green-soft)';emit.style.borderColor='var(--green)';emit.style.color='var(--green)';}
+    else if(st===4){emit.textContent='最后一个 tile：57 个有效槽 + 7 个 empty_mask 位';emit.style.background='var(--ochre-soft)';emit.style.borderColor='var(--ochre)';emit.style.color='var(--ochre)';}
+    else {emit.textContent='投影行：等待瓦片填满 …';emit.style.background='transparent';emit.style.borderColor='var(--line)';emit.style.color='var(--ink3)';}
+  }
+  function stop(){if(timer){clearInterval(timer);timer=null;document.getElementById('popPlay').classList.remove('on');document.getElementById('popPlay').textContent='自动播放';}}
+  document.getElementById('popNext').onclick=()=>{stop();st=(st+1)%steps.length;render();};
+  document.getElementById('popPrev').onclick=()=>{stop();st=(st+steps.length-1)%steps.length;render();};
+  document.getElementById('popReset').onclick=()=>{stop();st=0;render();};
+  document.getElementById('popPlay').onclick=()=>{
+    if(timer){stop();return;}
+    document.getElementById('popPlay').classList.add('on');document.getElementById('popPlay').textContent='暂停';
+    st=0;render();
+    timer=setInterval(()=>{st=(st+1)%steps.length;render();},1900);
+  };
+  render();
+})();
+
+/* ---------- 09 mask AND interaction ---------- */
+(function(){
+  const N=64;
+  const pats=[
+    Array.from({length:N},(_,i)=>(i*7+3)%11<7),
+    Array.from({length:N},(_,i)=>(i*5+1)%13<6),
+    Array.from({length:N},(_,i)=>(i*3+2)%9<6)
+  ];
+  const vals=Array.from({length:N},(_,i)=>Math.round((10+(i*37)%90)*100)/100);
+  const enabled=[true,true,true];
+  function mini(id,p,cls,label){
+    const el=document.getElementById(id);
+    el.innerHTML='<div class="kicker" style="margin-bottom:8px;text-align:center">'+label+'</div><div class="maskmini">'+p.map(v=>'<div class="b'+(v?' hit '+cls:'')+'"></div>').join('')+'</div>';
+  }
+  mini('maskGroup0',pats[0],'b1','① 日期区间');
+  mini('maskGroup1',pats[1],'b2','② 折扣区间');
+  mini('maskGroup2',pats[2],'b3','③ 数量 &lt; 24');
+  function render(){
+    const final=Array.from({length:N},(_,i)=>enabled.every((on,k)=>!on||pats[k][i]));
+    const hit=final.filter(Boolean).length;
+    document.getElementById('maskFinal').innerHTML='<div class="kicker" style="margin-bottom:8px;text-align:center">filter_mask</div><div class="maskbig">'+final.map((v,i)=>'<div class="b'+(v?' hit':'')+'">'+(i%8===0?i:'')+'</div>').join('')+'</div>';
+    document.getElementById('hitCount').textContent=hit;
+    document.getElementById('execBool').textContent=hit>0?'bool = true':'bool = false';
+    document.getElementById('execBool').style.color=hit>0?'var(--green)':'var(--rust)';
+    const sum=final.reduce((a,v,i)=>a+(v?vals[i]:0),0);
+    document.getElementById('maskSum').textContent='Σ = '+sum.toFixed(2);
+    document.querySelectorAll('[data-pred]').forEach(b=>b.classList.toggle('on',enabled[+b.dataset.pred]));
+    ['maskGroup0','maskGroup1','maskGroup2'].forEach((id,k)=>{document.getElementById(id).style.opacity=enabled[k]?'1':'.32';});
+  }
+  document.querySelectorAll('[data-pred]').forEach(b=>b.onclick=()=>{const k=+b.dataset.pred;enabled[k]=!enabled[k];render();});
+  render();
+})();
+
+/* ---------- 12 zone map ---------- */
+(function(){
+  const g=document.getElementById('zoneTiles');
+  const ranges=[['1996-01-03','1996-02-18'],['1996-02-19','1996-04-02'],['1996-04-03','1996-05-21'],['1996-05-22','1996-07-09'],['1996-07-10','1996-08-26'],['1996-08-27','1996-10-14'],['1996-10-15','1996-12-01'],['1996-12-02','1997-01-18']];
+  let html='';
+  ranges.forEach((r,i)=>{
+    const x=20+i*208;
+    html+='<g class="zonetile" data-i="'+i+'"><rect x="'+x+'" y="30" width="188" height="122" rx="3" class="'+(i>=3&&i<=5?'sv-rust':'sv-box')+'"/>'
+      +'<text x="'+(x+14)+'" y="62" class="sv-m">tile #'+i+'</text>'
+      +'<text x="'+(x+14)+'" y="92" class="sv-xs">first '+r[0]+'</text>'
+      +'<text x="'+(x+14)+'" y="116" class="sv-xs">last  '+r[1]+'</text>'
+      +'<text x="'+(x+14)+'" y="140" class="sv-xs">'+(i>=3&&i<=5?'候选':'排除')+'</text></g>';
+  });
+  g.innerHTML=html;
+  const title=document.getElementById('zoneTitle'),text=document.getElementById('zoneText');
+  function show(i){
+    title.textContent='tile #'+i+' · '+ranges[i][0]+' → '+ranges[i][1];
+    text.textContent=i>=3&&i<=5
+      ?'查询区间与该 tile 的 [first, last] 有交集 → 保留为候选，仍需在 tile 内用 filter() 逐槽复查。'
+      :'边界与查询区间无交集 → 索引可直接跳过这个 tile，这是 BRIN / zone map 式粗过滤。';
+  }
+  g.querySelectorAll('.zonetile').forEach(el=>{el.addEventListener('mouseenter',()=>show(+el.dataset.i));});
+  show(3);
+})();
+
+/* ---------- 14 performance chart ---------- */
+(function(){
+  const data=[
+    {label:'Original Q1 · lineitem',seq:38028,par:10997,c:'var(--blue)'},
+    {label:'Original Q1 · lineitem_projection',seq:33872,par:9656,c:'var(--ochre)'},
+    {label:'Vectorized Q1 · vops_lineitem',seq:3372,par:951,c:'var(--teal)'},
+    {label:'Mixed Q1 · vops_lineitem_projection',seq:1490,par:396,c:'var(--green)'},
+    {label:'Original Q6 · lineitem',seq:16796,par:4110,c:'var(--blue)'},
+    {label:'Original Q6 · lineitem_projection',seq:4279,par:1171,c:'var(--ochre)'},
+    {label:'Vectorized Q6 · vops_lineitem',seq:875,par:284,c:'var(--teal)'}
+  ];
+  const svg=document.getElementById('perfChart');
+  const LX=430,X0=450,MAXW=1120,ROW=52,Y0=34;
+  let mode='seq';
+  function render(){
+    const max=mode==='seq'?38028:10997;
+    let h='<text x="'+X0+'" y="16" class="sv-xs">0</text><text x="'+(X0+MAXW/2)+'" y="16" class="sv-xs" text-anchor="middle">'+(mode==='seq'?'19 014 ms':'5 499 ms')+'</text><text x="'+(X0+MAXW)+'" y="16" class="sv-xs" text-anchor="end">'+(mode==='seq'?'38 028':'10 997')+' ms</text>';
+    [0,.25,.5,.75,1].forEach(f=>{const x=X0+MAXW*f;h+='<line x1="'+x+'" y1="24" x2="'+x+'" y2="'+(Y0+data.length*ROW)+'" stroke="#EBE7DC" stroke-width="1"/>';});
+    data.forEach((d,i)=>{
+      const y=Y0+i*ROW, v=d[mode], w=Math.max(3,v/max*MAXW);
+      h+='<text x="'+(LX-18)+'" y="'+(y+27)+'" text-anchor="end" class="barlabel">'+d.label+'</text>';
+      h+='<rect x="'+X0+'" y="'+(y+7)+'" width="'+w+'" height="30" rx="2" fill="'+d.c+'" opacity=".9" style="transition:width .55s cubic-bezier(.2,.7,.25,1)"/>';
+      h+='<text x="'+(X0+w+12)+'" y="'+(y+29)+'" class="barval">'+v.toLocaleString()+'</text>';
+    });
+    svg.innerHTML=h;
+  }
+  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('on',x===b));render();});
+  render();
+})();
+
+/* ---------- 15 SQL highlighter + tabs ---------- */
+(function(){
+  const sqlA=
+`create extension vops;
+-- 未配置 shared_preload_libraries 时，先显式初始化 parse hook
+select vops_initialize();
+
+create table lineitem(
+  l_quantity real, l_extendedprice real, l_discount real, l_tax real,
+  l_returnflag "char", l_linestatus "char", l_shipdate date
+);
+create table vops_lineitem(
+  l_shipdate vops_date not null, l_quantity vops_float4 not null,
+  l_extendedprice vops_float4 not null, l_discount vops_float4 not null,
+  l_tax vops_float4 not null, l_returnflag vops_char not null,
+  l_linestatus vops_char not null
+);
+select populate(destination := 'vops_lineitem'::regclass,
+                source := 'lineitem'::regclass);
+
+select sum(l_extendedprice * l_discount) as revenue
+from vops_lineitem
+where filter(betwixt(l_shipdate, '1996-01-01', '1997-01-01')
+  & betwixt(l_discount, 0.08, 0.1) & (l_quantity < 24));`;
+  const sqlB=
+`-- 推荐：混合投影 —— 分组列留标量，度量列做 tile
+create table vops_lineitem_projection(
+  l_shipdate vops_date not null, l_quantity vops_float4 not null,
+  l_extendedprice vops_float4 not null, l_discount vops_float4 not null,
+  l_tax vops_float4 not null, l_returnflag "char" not null,
+  l_linestatus "char" not null
+);
+select populate(destination := 'vops_lineitem_projection'::regclass,
+                source := 'lineitem'::regclass,
+                sort := 'l_returnflag,l_linestatus');
+
+select l_returnflag, l_linestatus,
+  sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price,
+  avg(l_discount) as avg_disc, countall(*) as count_order
+from vops_lineitem_projection
+where filter(l_shipdate <= '1998-12-01'::date)
+group by l_returnflag, l_linestatus
+order by l_returnflag, l_linestatus;`;
+  function hl(src){
+    const esc=src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const re=/(--[^\n]*)|('[^']*')|(\b(?:create|extension|table|select|from|where|group|by|order|as|not|null|and|or|between|distinct|insert|into|values)\b)|(\b(?:vops_initialize|populate|sum|avg|countall|filter|betwixt|create_projection|vops_unnest|reduce|map|refresh)\b)|(\b\d+(?:\.\d+)?\b)|(vops_(?:float4|date|char|bool|int4|timestamp|text))/g;
+    return esc.replace(re,(m,c,s,k,f,n,t)=>{
+      if(c)return '<span class="c">'+c+'</span>';
+      if(s)return '<span class="s">'+s+'</span>';
+      if(k)return '<span class="k">'+k+'</span>';
+      if(f)return '<span class="f">'+f+'</span>';
+      if(n)return '<span class="n">'+n+'</span>';
+      if(t)return '<span class="t">'+t+'</span>';
+      return m;
+    });
+  }
+  document.getElementById('codeA').innerHTML=hl(sqlA);
+  document.getElementById('codeB').innerHTML=hl(sqlB);
+  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('on',x===b));
+    document.getElementById('tabA').classList.toggle('on',b.dataset.tab==='a');
+    document.getElementById('tabB').classList.toggle('on',b.dataset.tab==='b');
+  });
+})();
+})();
+</script>
+</body>
+</html>

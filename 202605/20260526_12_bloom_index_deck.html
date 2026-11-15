@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>数据库筑基课 · Bloom 索引结构</title>
+<!--
+设计假设 / assumptions（写在前，便于审阅）
+1) 用户明确要求「单个 html 格式的演说文件、都放到一个文件中」，且要求当场交付 → 采用单文件 deck 架构，
+   不拆多文件、不另出三版方向稿；本文件即最终交付物。
+2) 视觉母题：定长 bit 签名格（16-bit word 网格）。它直接来自内容本身（signature 以 uint16 word 存储，
+   length 按 16 bit 上取整），不是通用装饰。蓝色=行签名置位，橙色=查询 bit，绿色=通过，红色=误判/排除。
+3) 事实来源：原文 + PostgreSQL 官方 bloom 文档（已核对 length 默认 80 bit / 最大 4096 / 16 上取整；
+   col1..col32 默认 2 bit / 最大 4095；内置 int4_ops、text_ops；示例 386 / 153 / 531 MB 与三组执行时间）。
+4) 交互演示里的 hash 是「确定性教学模型」，不是 PostgreSQL 内部 hash 函数；所有官方数值均标注
+   「官方文档示例，非本文本地执行结果」，SQL 不提供伪造输出。
+5) 画布 1600×900（16:9），JS 等比缩放 + letterbox，保证任何窗口下不出界。
+-->
+<style>
+:root{
+  --paper:#F7F5F0; --white:#FFFFFF; --ink:#16232E; --ink2:#4C5C68; --muted:#8A959C;
+  --line:#D8DDD9; --line2:#C9D2D2; --blue:#2C5F8A; --blue-bg:#EAF1F6;
+  --teal:#0E7A6B; --teal-bg:#E4F1EC; --amber:#B8711A; --amber-bg:#FBF0DE;
+  --rose:#AE433C; --rose-bg:#F8EAE7; --code:#122433;
+  --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --serif:"Songti SC","Noto Serif CJK SC","Source Han Serif SC",serif;
+  --mono:"SF Mono","JetBrains Mono",Menlo,Consolas,"PingFang SC",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#E6E3DC;font-family:var(--sans);-webkit-font-smoothing:antialiased;color:var(--ink)}
+#stage{position:fixed;inset:0;display:grid;place-items:center;overflow:hidden;padding-bottom:58px}
+#scaler{width:1600px;height:900px;position:relative;transform:scale(var(--s,1));transform-origin:center center;
+  background:var(--paper);box-shadow:0 26px 90px rgba(16,32,44,.24);overflow:hidden}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;padding:52px 72px 30px;
+  background:var(--paper);background-image:radial-gradient(rgba(44,95,138,.055) 1px,transparent 1px);
+  background-size:24px 24px}
+.slide.active{display:flex;animation:sIn .34s cubic-bezier(.2,.8,.2,1)}
+@keyframes sIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.s-head{flex:0 0 auto;min-height:126px;border-bottom:1px solid var(--line2);padding-bottom:14px;position:relative}
+.kicker{font-size:14px;letter-spacing:.2em;color:var(--blue);font-weight:800;display:flex;align-items:center;gap:10px}
+.kicker .bm{display:inline-flex;gap:3px;align-items:center}
+.kicker .bm i{width:9px;height:9px;display:block;border-radius:1px;background:#C6D4DE}
+.kicker .bm i.on{background:var(--blue)}
+.kicker .bm i.qa{background:var(--amber)}
+.sec{margin-left:auto;color:var(--muted);letter-spacing:.12em;font-weight:700;font-size:14px}
+.s-head h2{font-size:44px;line-height:1.16;font-weight:800;letter-spacing:-.012em;margin-top:11px}
+.s-head h2 .hl{color:var(--blue)}
+.s-head .sub{font-size:18px;color:var(--ink2);margin-top:8px;line-height:1.5}
+.s-body{flex:1 1 auto;min-height:0;position:relative;padding-top:18px;display:flex;flex-direction:column;gap:14px}
+.s-foot{flex:0 0 auto;height:28px;display:flex;align-items:center;justify-content:space-between;
+  font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:7px;letter-spacing:.02em}
+.s-foot b{color:var(--blue);font-weight:800}
+/* 通用组件 */
+.card{background:var(--white);border:1px solid var(--line);border-radius:9px;padding:16px 19px}
+.card h3{font-size:20px;font-weight:800;letter-spacing:.01em;margin-bottom:9px}
+.card p,.card li{font-size:16.5px;line-height:1.62;color:var(--ink2)}
+.card ul{padding-left:19px}
+.card li+li{margin-top:5px}
+.card .big{font-size:27px;font-weight:800;color:var(--blue);line-height:1.2}
+.mini{font-size:14px;color:var(--muted);letter-spacing:.06em;font-weight:700;text-transform:uppercase}
+.mono{font-family:var(--mono)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.fill{flex:1 1 auto;min-height:0}
+.row{display:flex;align-items:center;gap:12px}
+.band{background:var(--blue-bg);border:1px solid #CFDDE7;border-radius:8px;padding:12px 18px;font-size:16.5px;line-height:1.55;color:#24445E}
+.band.warn{background:var(--amber-bg);border-color:#E7C99A;color:#7A4A10}
+.band.ok{background:var(--teal-bg);border-color:#B9D9CC;color:#115A4E}
+.band.bad{background:var(--rose-bg);border-color:#E3BDB8;color:#8B322D}
+.band b{font-weight:800}
+.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:5px;font-size:15px;font-weight:700;
+  background:#EEF1F1;border:1px solid var(--line2);color:var(--ink2)}
+.chip.b{background:var(--blue-bg);border-color:#CFDDE7;color:#1E4E74}
+.chip.a{background:var(--amber-bg);border-color:#E7C99A;color:#8A5414}
+.chip.g{background:var(--teal-bg);border-color:#B9D9CC;color:#0C5F53}
+.chip.r{background:var(--rose-bg);border-color:#E3BDB8;color:#8B322D}
+.num{font-family:var(--mono);font-weight:800;color:var(--blue);font-size:19px}
+.line-list{display:flex;flex-direction:column;gap:9px}
+.line-item{display:flex;gap:12px;align-items:flex-start;font-size:16.5px;line-height:1.5;color:var(--ink2)}
+.line-item .n{flex:0 0 25px;height:25px;border-radius:5px;background:var(--blue);color:#fff;font:700 13px/25px var(--mono);text-align:center}
+.line-item b{color:var(--ink);font-weight:800}
+table.cmp{width:100%;border-collapse:collapse;font-size:15px;table-layout:fixed}
+table.cmp th,table.cmp td{border:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top;line-height:1.45}
+table.cmp th{background:#E9EFF3;color:#1D456A;font-weight:800;font-size:15px}
+table.cmp td:first-child{background:#F1F3F2;font-weight:800;color:var(--ink);width:120px}
+table.cmp tbody tr:nth-child(even) td{background:#FCFCFA}
+.code{background:var(--code);color:#DCE8EF;border-radius:9px;padding:16px 18px;font:15.5px/1.62 var(--mono);
+  white-space:pre;overflow:hidden;border:1px solid #24435A}
+.code .k{color:#8FC7EE;font-weight:700}
+.code .c{color:#7E9AA8}
+.code .s{color:#E6BE86}
+.code .t{color:#F2F5F4}
+/* SVG 通用 */
+svg{overflow:hidden}
+svg text{font-family:var(--sans)}
+svg .tt{font-size:22px;font-weight:800;fill:var(--ink)}
+svg .t{font-size:17px;fill:var(--ink)}
+svg .ts{font-size:14.5px;fill:var(--ink2)}
+svg .tn{font-family:var(--mono);font-size:15px;fill:var(--blue);font-weight:700}
+svg .box{fill:#FFFFFF;stroke:#D3DBDC;stroke-width:1.6}
+svg .boxb{fill:var(--blue-bg);stroke:#9AB9CE;stroke-width:1.6}
+svg .boxa{fill:var(--amber-bg);stroke:#DEB475;stroke-width:1.6}
+svg .boxg{fill:var(--teal-bg);stroke:#97C7B8;stroke-width:1.6}
+svg .boxr{fill:var(--rose-bg);stroke:#D9AA9F;stroke-width:1.6}
+svg .arr{stroke:#8496A1;stroke-width:2;fill:none}
+svg .dash{stroke:#AAB7B8;stroke-width:1.6;stroke-dasharray:6 5;fill:none}
+svg .b0{fill:#E7EBE9;stroke:#CFD6D3;stroke-width:1}
+svg .b1{fill:#2C5F8A;stroke:#1D456A;stroke-width:1}
+svg .bq{fill:#B8711A;stroke:#8F5510;stroke-width:1}
+svg .bg{fill:#0E7A6B;stroke:#0A5C51;stroke-width:1}
+svg .br{fill:#AE433C;stroke:#8B322D;stroke-width:1}
+svg .lbl{font-size:13px;font-weight:800;fill:var(--muted);letter-spacing:.1em}
+svg .diag{width:100%;height:100%;display:block}
+/* 封面 */
+.cover{background:#122A3B;background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1px);background-size:26px 26px;
+  color:#F4F1E9;padding:0;flex-direction:row}
+.cover .cleft{width:830px;padding:92px 60px 70px 84px;display:flex;flex-direction:column}
+.cover .ck{font-size:15px;letter-spacing:.28em;color:#8FB9D4;font-weight:800}
+.cover h1{font-family:var(--serif);font-size:70px;line-height:1.25;font-weight:800;margin-top:34px;letter-spacing:.01em}
+.cover h1 span{color:#E5AA5B}
+.cover .ct2{font-size:29px;font-weight:700;color:#B9D4E4;margin-top:26px;letter-spacing:.01em}
+.cover .ct2 em{font-style:normal;font-family:var(--mono);color:#E5AA5B}
+.cover .cd{font-size:20px;line-height:1.75;color:#B7C7D1;margin-top:24px;max-width:660px}
+.cover .cm{display:flex;gap:26px;margin-top:auto;font-size:16px;color:#8FA9B9;letter-spacing:.06em}
+.cover .cm b{color:#E9EFF1;font-weight:700}
+.cover .cright{width:770px;padding:92px 78px 70px 20px;display:flex;flex-direction:column;align-items:flex-end}
+.cover .cgrid{background:#0C2130;border:1px solid #2B4A5E;border-radius:12px;padding:26px 26px 20px}
+.cover .cgrid .gt{font-size:15px;color:#8FB9D4;letter-spacing:.14em;font-weight:700;margin-bottom:16px}
+.cover .legend{display:flex;gap:22px;margin-top:18px;font-size:14px;color:#9FB9C7}
+.cover .legend i{width:12px;height:12px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.cover .ccap{font-size:18px;color:#E5AA5B;margin-top:26px;font-weight:700;letter-spacing:.02em}
+.cover .cfoot{position:absolute;left:84px;bottom:44px;font-size:15px;color:#7794A6;letter-spacing:.08em}
+/* 交互控件 */
+.ctrl{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+button.btn{font-family:var(--sans);font-size:15px;font-weight:800;letter-spacing:.02em;padding:9px 15px;border-radius:6px;
+  border:1px solid #B9C9D2;background:#fff;color:#1D456A;cursor:pointer;transition:.16s}
+button.btn:hover{background:var(--blue-bg);border-color:var(--blue)}
+button.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button.btn.primary:hover{background:#1D456A}
+button.btn:disabled{opacity:.4;cursor:default}
+input[type=text],select{font-family:var(--mono);font-size:15px;padding:7px 9px;border:1px solid var(--line2);
+  border-radius:5px;background:#fff;color:var(--ink);outline:none}
+input[type=text]:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px #DCE9F1}
+input[type=range]{accent-color:var(--blue);width:100%;cursor:pointer}
+.fld{display:flex;flex-direction:column;gap:5px;font-size:14px;color:var(--ink2);font-weight:700}
+.fld .v{font-family:var(--mono);color:var(--blue);font-weight:800}
+.stepbar{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.stepbar .st{font-size:13px;font-weight:800;padding:5px 10px;border-radius:4px;background:#EDF0EF;color:#94A0A5;border:1px solid var(--line)}
+.stepbar .st.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.stepbar .st.done{background:var(--teal-bg);border-color:#B9D9CC;color:#0C5F53}
+.status{font-size:16px;color:var(--ink);font-weight:700;background:#EDF2F4;border:1px solid #D6E2E9;border-radius:6px;padding:9px 13px;min-height:40px}
+/* bit 网格（DOM 版，用于交互） */
+.bitgrid{display:flex;flex-direction:column;gap:5px}
+.bitrow{display:flex;align-items:center;gap:5px}
+.bitrow .wl{font:700 12px var(--mono);color:var(--muted);width:46px;flex:0 0 46px;text-align:right;margin-right:4px}
+.bitcell{width:25px;height:25px;border-radius:3px;background:#E7EBE9;border:1px solid #CFD6D3;flex:0 0 25px;transition:.2s}
+.bitcell.one{background:#2C5F8A;border-color:#1D456A}
+.bitcell.q{background:#B8711A;border-color:#8F5510}
+.bitcell.g{background:#0E7A6B;border-color:#0A5C51}
+.bitcell.r{background:#AE433C;border-color:#8B322D}
+.bitcell.pop{animation:pop .36s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes pop{from{transform:scale(.4);opacity:.2}to{transform:scale(1);opacity:1}}
+/* 实验 A 列卡片 */
+.colcards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.colcard{background:#fff;border:1px solid var(--line);border-radius:7px;padding:11px 12px;opacity:.32;transition:.3s}
+.colcard.on{opacity:1;border-color:#9AB9CE;background:var(--blue-bg)}
+.colcard .cn{font:800 13px var(--mono);color:var(--blue);letter-spacing:.06em}
+.colcard .cv{font:700 20px var(--mono);color:var(--ink);margin:6px 0 4px;word-break:break-all}
+.colcard .cb{font:700 13px var(--mono);color:var(--amber);min-height:18px}
+/* 实验 B 表 */
+.qtab{width:100%;border-collapse:collapse;font-size:15px}
+.qtab th{background:#E9EFF3;color:#1D456A;font-size:14px;font-weight:800;padding:8px 10px;border:1px solid var(--line);text-align:left}
+.qtab td{border:1px solid var(--line);padding:8px 10px;background:#fff;color:var(--ink2)}
+.qtab tr.hide td{opacity:.16}
+.qtab tr.show td{animation:fadeUp .3s both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.qtab td.rname{font-family:var(--mono);font-weight:800;color:var(--ink)}
+.qtab td.vals{font-family:var(--mono);font-size:14px}
+.qtab td.res{font-weight:800}
+.dots{display:flex;gap:5px}
+.dots i{width:17px;height:17px;border-radius:3px;background:#E7EBE9;border:1px solid #CFD6D3;display:block;font-style:normal}
+.dots i.y{background:#0E7A6B;border-color:#0A5C51}
+.dots i.n{background:#AE433C;border-color:#8B322D}
+.tag-ok{color:var(--teal);font-weight:800}
+.tag-no{color:var(--muted)}
+.tag-fp{color:var(--rose);font-weight:800}
+/* 扫描动画 */
+.scanpages{display:flex;gap:9px}
+.sp{flex:1;height:56px;border-radius:6px;border:1.6px solid #C9D6DE;background:#fff;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font:700 13px var(--mono);color:#7D8F9B;transition:.2s}
+.sp.on{background:var(--blue);border-color:#1D456A;color:#fff;transform:translateY(-4px)}
+.sp.done{background:var(--blue-bg);border-color:#9AB9CE;color:#1D456A}
+.sp .spt{font-size:11px;opacity:.8;margin-top:3px}
+.tidbox{border:1.6px solid #B9D9CC;background:var(--teal-bg);border-radius:7px;padding:10px 14px;min-height:52px;
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.tidbox .tid{width:22px;height:22px;border-radius:4px;background:var(--teal);color:#fff;font:700 11px var(--mono);
+  display:flex;align-items:center;justify-content:center;animation:pop .3s both}
+/* 全局 chrome */
+#chrome{position:fixed;left:50%;bottom:9px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:9px;
+  background:rgba(18,35,48,.92);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 12px;
+  box-shadow:0 8px 26px rgba(0,0,0,.24);color:#DCE7EC}
+#chrome button{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);color:#EAF2F5;
+  border-radius:6px;font:700 13px var(--sans);padding:7px 11px;cursor:pointer;transition:.15s}
+#chrome button:hover{background:rgba(255,255,255,.2)}
+#prog{width:190px;height:5px;border-radius:4px;background:rgba(255,255,255,.18);overflow:hidden}
+#progFill{height:100%;width:0;background:#E5AA5B;transition:width .3s}
+#counter{font:700 13px var(--mono);color:#E5AA5B;min-width:62px;text-align:center}
+/* 概览 / 帮助 */
+#overview,#help{position:fixed;inset:0;z-index:90;display:none;background:rgba(14,28,39,.95);padding:40px 56px;overflow:auto}
+#overview.on,#help.on{display:block}
+#overview h3,#help h3{color:#EAF2F5;font-size:27px;font-weight:800;letter-spacing:.04em}
+#overview .oh{color:#8FB9D4;font-size:15px;margin-top:7px;margin-bottom:24px}
+#ovgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+.ovcard{background:#1B3445;border:1px solid #31506A;border-radius:8px;padding:14px 15px;cursor:pointer;transition:.16s;min-height:96px}
+.ovcard:hover{background:#264961;border-color:#7FAAC5;transform:translateY(-3px)}
+.ovcard .onum{font:800 13px var(--mono);color:#E5AA5B}
+.ovcard .ot{font-size:16px;font-weight:800;color:#EAF2F5;margin-top:8px;line-height:1.35}
+.ovcard .os{font-size:12.5px;color:#8FA9B9;margin-top:6px}
+.ovcard.cur{border-color:#E5AA5B;box-shadow:0 0 0 1px #E5AA5B inset}
+#help .hpanel{max-width:760px;margin-top:22px;background:#1B3445;border:1px solid #31506A;border-radius:10px;padding:22px 26px}
+#help .hrow{display:flex;gap:20px;padding:9px 0;border-bottom:1px solid #2B465B;color:#D6E4EB;font-size:16px}
+#help .hrow:last-child{border-bottom:0}
+#help kbd{font:800 14px var(--mono);background:#0E2635;border:1px solid #4A6C85;border-radius:5px;padding:4px 9px;color:#E5AA5B;min-width:104px;text-align:center;flex:0 0 104px}
+#help .hint{color:#8FA9B9;font-size:14px;margin-top:16px}
+.closehint{color:#8FA9B9;font-size:14px;margin-top:20px}
+</style>
+</head>
+<body>
+
+<div id="stage"><div id="scaler">
+
+<!-- ============ 01 封面 ============ -->
+<section class="slide cover active" data-title="把一行的多个列压成一段有损签名" data-sec="封面">
+  <div class="cleft">
+    <div class="ck">数据库筑基课 / 索引结构 / 第 12 讲</div>
+    <h1>把一行的多个列<br>压成一段<span>有损签名</span></h1>
+    <div class="ct2">PostgreSQL <em>contrib/bloom</em> 索引结构</div>
+    <div class="cd">一个紧凑索引，支持任意列组合的等值过滤。<br>命中索引只表示「可能匹配」——结果正确，靠回表复查。</div>
+    <div class="cm"><span><b>digoal</b></span><span>2026-05-26</span><span>源码 · 官方文档 · 回归测试</span></div>
+  </div>
+  <div class="cright">
+    <div class="cgrid">
+      <div class="gt">SIGNATURE · 定长 bit 数组 / 16-bit word 存储</div>
+      <svg id="coverGrid" width="560" height="244" viewBox="0 0 560 244" aria-label="行签名位图示意图"></svg>
+      <div class="legend">
+        <span><i style="background:#2C5F8A"></i>行签名置位</span>
+        <span><i style="background:#E5AA5B"></i>查询 bit</span>
+        <span><i style="background:#0E7A6B"></i>通过包含测试</span>
+      </div>
+    </div>
+    <div class="ccap">一行 → 一条 (heap TID, Bloom signature)</div>
+  </div>
+  <div class="cfoot">按 → 翻页 · F 全屏 · G 目录 · ? 快捷键</div>
+</section>
+
+<!-- ============ 02 路线图 ============ -->
+<section class="slide" data-title="路线图：从问题到决策的六站" data-sec="导览">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> ROADMAP <span class="sec">导览 / 00</span></div>
+    <h2>六站走完 <span class="hl">bloom</span>：问题 → 定义 → 原理 → 对比 → 效果 → 决策</h2>
+    <p class="sub">先建立「一行一签名」的心智模型，再看它为什么只能走 Bitmap Scan。</p>
+  </header>
+  <div class="s-body">
+    <div class="fill">
+      <svg class="diag" viewBox="0 0 1460 420" aria-label="课程路线图">
+        <line x1="100" y1="168" x2="1360" y2="168" stroke="#C9D6DE" stroke-width="3"/>
+        <g id="roadNodes"></g>
+      </svg>
+    </div>
+    <div class="g3">
+      <div class="band"><b>主线</b>：PostgreSQL <span class="mono">contrib/bloom</span> 独立索引访问方法；BRIN bloom opclass 只作为相邻技术对比。</div>
+      <div class="band warn"><b>数值口径</b>：386 / 153 / 531 MB 与执行时间均来自 PostgreSQL 官方文档示例，<b>不是</b>本文本地执行结果。</div>
+      <div class="band ok"><b>诚实边界</b>：SQL 示例未在本地启动实例执行，文中不提供伪造输出；交互演示使用确定性教学 hash。</div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「背景」「本文校验记录」· PostgreSQL 官方 bloom 文档</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 03 背景 ============ -->
+<section class="slide" data-title="背景：宽表任意组合等值查询的困境" data-sec="01 / 背景">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 01 / 背景 <span class="sec">问题从哪里来</span></div>
+    <h2>字段很多、组合不固定、条件大多是<span class="hl">等值过滤</span></h2>
+    <p class="sub">四类典型业务表，和四种传统做法各自的代价。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2 fill">
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="mini" style="margin-bottom:12px">四类常见的宽表</div>
+        <div class="line-list">
+          <div class="line-item"><span class="n">1</span><div><b>用户画像表</b><br><span class="mono">city = ? · gender = ? · level = ? · tag = ?</span><br>组合经常变化</div></div>
+          <div class="line-item"><span class="n">2</span><div><b>订单宽表</b><br><span class="mono">buyer_id · seller_id · status · channel · warehouse</span><br>任意组合查</div></div>
+          <div class="line-item"><span class="n">3</span><div><b>设备资产表</b><br>型号、区域、固件版本、状态、责任人等字段都可能参与筛选</div></div>
+          <div class="line-item"><span class="n">4</span><div><b>风控明细表</b><br>很多低到中等选择性的枚举、文本、整数列需要临时组合查询</div></div>
+        </div>
+        <div class="band" style="margin-top:auto">共同点：<b>列多、组合不可预测、谓词以等值为主</b>。</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="mini" style="margin-bottom:12px">四种传统做法的矛盾</div>
+        <table class="cmp" style="font-size:15px">
+          <thead><tr><th style="width:150px">做法</th><th>好处</th><th>代价</th></tr></thead>
+          <tbody>
+            <tr><td>多个复合 B-tree</td><td>固定查询形态最快</td><td>组合多时索引数量爆炸，受 leading column 约束</td></tr>
+            <tr><td>每列一个 B-tree</td><td>任意组合可用 BitmapAnd</td><td>空间、写入、VACUUM 维护成本高</td></tr>
+            <tr><td>GIN / GiST</td><td>适合特定复杂类型与谓词</td><td>对普通多列等值宽表不是最直接模型</td></tr>
+            <tr><td>顺序扫描</td><td>无索引写入维护成本</td><td>宽表大表上延迟与 IO 不可控</td></tr>
+          </tbody>
+        </table>
+        <div class="band warn" style="margin-top:auto">N 列可能产生大量组合：为每种组合建复合索引 → <b>索引数量爆炸</b>；完全顺序扫描 → <b>大表延迟不可控</b>。</div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「背景」「一、它解决什么问题？」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 04 核心转换 ============ -->
+<section class="slide" data-title="核心转换：精确有序入口换成一行一签名" data-sec="01 / 背景">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 01 / 背景 <span class="sec">一句话讲清设计取舍</span></div>
+    <h2>不维护精确有序入口，改为<span class="hl">每行维护一段有损签名</span></h2>
+    <p class="sub">查询也生成签名：签名不包含查询 bit 的行一定不匹配；包含的行只是候选。</p>
+  </header>
+  <div class="s-body">
+    <div class="fill">
+      <svg class="diag" viewBox="0 0 1460 570" aria-label="精确索引与有损签名的对比">
+        <rect x="20" y="20" width="620" height="320" rx="10" class="box"/>
+        <text x="44" y="58" class="tt">传统：为每种组合维护精确有序入口</text>
+        <text x="44" y="84" class="ts">B-tree 复合索引 · 受 leading column 约束</text>
+        <g>
+          <rect x="44" y="106" width="568" height="48" rx="6" class="boxb"/>
+          <text x="62" y="136" class="tn">idx (c1, c2, c3)</text>
+          <rect x="44" y="162" width="568" height="48" rx="6" class="boxb"/>
+          <text x="62" y="192" class="tn">idx (c1, c2, c4)</text>
+          <rect x="44" y="218" width="568" height="48" rx="6" class="boxb"/>
+          <text x="62" y="248" class="tn">idx (c1, c3, c4)  ···</text>
+          <text x="44" y="300" class="ts">组合越多，索引越多；WHERE c3 = ? 未必能用到 (c1,c2,c3)。</text>
+        </g>
+
+        <line x1="648" y1="180" x2="748" y2="180" class="arr"/>
+        <text x="658" y="163" class="ts" style="font-weight:800;fill:#B8711A">换成</text>
+
+        <rect x="760" y="20" width="680" height="320" rx="10" class="box"/>
+        <text x="784" y="58" class="tt">bloom：所有索引列的 bit 落到同一个签名</text>
+        <text x="784" y="84" class="ts">每行一条 (heap TID, signature)，一个索引覆盖任意列组合</text>
+        <g id="s4chips"></g>
+        <g id="s4arrows"></g>
+        <g class="bitgroup" transform="translate(784,232)" data-len="16" data-cols="16" data-cell="36" data-gap="5"
+           data-one="1,4,6,9,11,14" data-mode="row"></g>
+        <text x="784" y="306" class="ts">16 bit 片段示意 · 实际默认 length = 80 bit，按 16-bit word 上取整</text>
+
+        <rect x="20" y="366" width="1420" height="86" rx="9" class="boxa"/>
+        <text x="44" y="398" class="tt" style="font-size:19px">牺牲</text>
+        <g id="s4sacrifice"></g>
+        <text x="44" y="436" class="ts">换来的不是「更快的 B-tree」，而是一个紧凑的多列等值过滤器。</text>
+
+        <rect x="20" y="468" width="1420" height="78" rx="9" class="boxg"/>
+        <text x="44" y="500" class="tt" style="font-size:19px">换来</text>
+        <text x="132" y="500" class="t" style="font-size:19px;font-weight:700">一个索引覆盖任意列组合 · 索引 tuple 只存 TID + 定长签名 · 能排除大量不匹配 TID</text>
+        <text x="44" y="528" class="ts">代价也很明确：签名有损，命中索引只表示「可能匹配」，执行器必须回表复查。</text>
+      </svg>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「一、它解决什么问题？」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 05 它是什么 ============ -->
+<section class="slide" data-title="定义与术语：BloomTuple 的解剖" data-sec="02 / 定义">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 02 / 定义 <span class="sec">先钉死概念</span></div>
+    <h2>每个 heap tuple 一条 <span class="hl">(TID, Bloom signature)</span> 的顺序存储有损索引</h2>
+    <p class="sub">contrib 扩展注册为独立索引访问方法；查询扫整个索引，把候选 TID 放进 bitmap，再回表复查。</p>
+  </header>
+  <div class="s-body">
+    <div style="height:214px;flex:0 0 214px">
+      <svg class="diag" viewBox="0 0 1460 214" aria-label="BloomTuple 结构解剖">
+        <text x="20" y="26" class="lbl">INDEX ENTRY · 固定大小</text>
+        <rect x="20" y="40" width="330" height="62" rx="6" class="boxa"/>
+        <text x="36" y="66" class="tt" style="font-size:18px">heapPtr</text>
+        <text x="36" y="89" class="ts">ItemPointerData · 指向 heap tuple 的 TID</text>
+        <rect x="358" y="40" width="1082" height="62" rx="6" class="boxb"/>
+        <text x="376" y="66" class="tt" style="font-size:18px">sign[ ]  ·  BloomSignatureWord 数组</text>
+        <text x="376" y="89" class="ts">uint16 word × N；length 以 bit 配置，存储时按 16 bit 上取整</text>
+        <g id="s5words"></g>
+        <text x="20" y="152" class="ts">放大一个 word（16 bit）：置位的 bit 就是该行各列值哈希后的落点，所有列 OR 进同一段签名。</text>
+        <g class="bitgroup" transform="translate(20,166)" data-len="16" data-cols="16" data-cell="28" data-gap="5"
+           data-one="2,5,9,13" data-mode="row"></g>
+        <text x="560" y="180" class="tn">typedef struct BloomTuple {</text>
+        <text x="560" y="200" class="tn">　ItemPointerData heapPtr; BloomSignatureWord sign[FLEXIBLE_ARRAY_MEMBER];</text>
+      </svg>
+    </div>
+    <div class="g4 fill">
+      <div class="card"><div class="mini">signature</div><h3>定长签名</h3><p>默认 <b>80 bit</b>，最大 <b>4096 bit</b>；源码以 <span class="mono">uint16</span> word 数组存储，长度按 16 bit 上取整。</p></div>
+      <div class="card"><div class="mini">col1 .. col32</div><h3>每列 bit 数</h3><p>默认每列 <b>2 bit</b>，最大 4095；官方文档暴露 <span class="mono">col1</span> 到 <span class="mono">col32</span> 参数。</p></div>
+      <div class="card"><div class="mini">false positive</div><h3>误判</h3><p>签名判断通过但真实列值不匹配。<b>不会造成错结果</b>，只会造成无用回表。</p></div>
+      <div class="card"><div class="mini">recheck</div><h3>回表复查</h3><p><span class="mono">tbm_add_tuples(..., recheck = true)</span> 强制堆表复查真实条件。</p></div>
+    </div>
+    <div class="band" style="flex:0 0 auto"><span class="mono">CREATE ACCESS METHOD bloom TYPE INDEX HANDLER blhandler;</span>　·　内置 opclass 只有 <b>int4_ops</b> 与 <b>text_ops</b>，都只需要等值操作符 + hash 函数；其他类型可按同样接口扩展。</div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「二、它是什么？」· bloom.sgml「Parameters / Operator Class Interface」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 06 图 1 重绘 ============ -->
+<section class="slide" data-title="核心图：多列值 → 签名 → 候选 → 复查" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 <span class="sec">一张图看懂主线</span></div>
+    <h2>同一行的多个列值，压成<span class="hl">同一段</span>定长签名</h2>
+    <p class="sub">查询条件也生成签名；只有当行签名包含全部查询 bit 时，这行才进入候选集。</p>
+  </header>
+  <div class="s-body">
+    <div class="fill">
+      <svg class="diag" viewBox="0 0 1460 590" aria-label="Bloom 索引把多列值压成定长签名">
+        <!-- 上层四步 -->
+        <rect x="20" y="16" width="300" height="116" rx="9" class="box"/>
+        <text x="40" y="46" class="lbl">① HEAP 行</text>
+        <text x="40" y="74" class="t" style="font-weight:800">c1=42 · c2=7</text>
+        <text x="40" y="99" class="t" style="font-weight:800">c3='SH' · c4='af'</text>
+        <text x="40" y="122" class="ts">同时记下 heap TID</text>
+
+        <rect x="360" y="16" width="300" height="116" rx="9" class="boxb"/>
+        <text x="380" y="46" class="lbl">② signValue()</text>
+        <text x="380" y="74" class="t">先用列号 attno 初始化种子</text>
+        <text x="380" y="99" class="t">再调 opclass hash 函数</text>
+        <text x="380" y="122" class="ts">按该列 bitSize 设置若干 bit</text>
+
+        <rect x="700" y="16" width="300" height="116" rx="9" class="boxb"/>
+        <text x="720" y="46" class="lbl">③ BloomFormTuple()</text>
+        <text x="720" y="74" class="t">分配固定大小 BloomTuple</text>
+        <text x="720" y="99" class="t">保存 TID · 跳过 NULL</text>
+        <text x="720" y="122" class="ts">各列 bit 全部 OR 进同一签名</text>
+
+        <rect x="1040" y="16" width="400" height="116" rx="9" class="boxg"/>
+        <text x="1060" y="46" class="lbl">④ INDEX TUPLE</text>
+        <text x="1060" y="76" class="tt">heapPtr + signature</text>
+        <text x="1060" y="104" class="ts">有损、定长、页内连续存放</text>
+        <text x="1060" y="124" class="ts">不是每列一个 filter，也不是每页一个 filter</text>
+
+        <line x1="322" y1="74" x2="358" y2="74" class="arr"/>
+        <line x1="662" y1="74" x2="698" y2="74" class="arr"/>
+        <line x1="1002" y1="74" x2="1038" y2="74" class="arr"/>
+
+        <!-- 位级面板 -->
+        <rect x="20" y="152" width="1420" height="282" rx="9" class="box"/>
+        <text x="40" y="182" class="lbl">BIT-LEVEL 包含测试 · 32 bit 片段示意（截取 2 个 16-bit word）</text>
+
+        <text x="40" y="228" class="t" style="font-weight:800">行 A 签名</text>
+        <g class="bitgroup" transform="translate(180,207)" data-len="32" data-cols="32" data-cell="34" data-gap="5"
+           data-one="2,5,11,14,19,23,27,30" data-mode="row"></g>
+
+        <text x="40" y="310" class="t" style="font-weight:800">查询签名</text>
+        <text x="40" y="330" class="ts">两个等值条件</text>
+        <g class="bitgroup" transform="translate(180,289)" data-len="32" data-cols="32" data-cell="34" data-gap="5"
+           data-q="5,14,23,30" data-mode="query"></g>
+
+        <text x="40" y="392" class="t" style="font-weight:800">行 B 签名</text>
+        <g class="bitgroup" transform="translate(180,371)" data-len="32" data-cols="32" data-cell="34" data-gap="5"
+           data-one="1,5,9,14,20,26,29" data-q="5,14,23,30" data-miss="23,30" data-mode="test"></g>
+
+        <text x="180" y="450" class="ts">判定式：<tspan class="tn">(itup-&gt;sign[i] &amp; scan_sign[i]) == scan_sign[i]</tspan>　·　红格 = 缺少的查询 bit → 一定不匹配</text>
+
+        <!-- 结果三框 -->
+        <rect x="20" y="458" width="430" height="106" rx="9" class="boxr"/>
+        <text x="42" y="490" class="tt" style="font-size:19px">行 B · 签名缺少查询 bit</text>
+        <text x="42" y="518" class="t">一定不匹配 → 索引侧直接排除</text>
+        <text x="42" y="544" class="ts">不需要访问 heap</text>
+
+        <rect x="515" y="458" width="430" height="106" rx="9" class="boxa"/>
+        <text x="537" y="490" class="tt" style="font-size:19px">行 A · 签名包含查询 bit</text>
+        <text x="537" y="518" class="t">只是「候选」，加入 TIDBitmap</text>
+        <text x="537" y="544" class="ts">标记 recheck = true</text>
+
+        <rect x="1010" y="458" width="430" height="106" rx="9" class="boxg"/>
+        <text x="1032" y="490" class="tt" style="font-size:19px">Bitmap Heap Scan 回表</text>
+        <text x="1032" y="518" class="t">读真实 tuple，按 SQL 条件复查</text>
+        <text x="1032" y="544" class="ts">真命中保留 · 误判被剔除</text>
+        <line x1="452" y1="511" x2="513" y2="511" class="arr"/>
+        <line x1="947" y1="511" x2="1008" y2="511" class="arr"/>
+      </svg>
+    </div>
+  </div>
+  <footer class="s-foot"><span>图 1 重绘自原文配图；判定式来自 blscan.c 的 bit 包含测试</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 07 交互实验 A ============ -->
+<section class="slide" data-title="交互实验 A：亲手生成一段行签名" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 · 交互 <span class="sec">改参数 → 播放</span></div>
+    <h2>实验 A：一行四列，怎么变成<span class="hl">一段定长签名</span>？</h2>
+    <p class="sub">输入列值与参数，按「播放」逐步观察：列相关哈希 → 逐列置位 → 16-bit word 定长存储。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2" style="flex:1 1 auto;min-height:0">
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;overflow:hidden">
+        <div class="mini">输入 / INPUT</div>
+        <div class="g2" style="gap:9px">
+          <label class="fld">c1 (int4)<input type="text" id="a_c1" value="42"></label>
+          <label class="fld">c2 (int4)<input type="text" id="a_c2" value="7"></label>
+          <label class="fld">c3 (text)<input type="text" id="a_c3" value="SH"></label>
+          <label class="fld">c4 (text)<input type="text" id="a_c4" value="af"></label>
+        </div>
+        <label class="fld">签名长度 length：<span class="v" id="a_len_v">64 bit（4 words）</span>
+          <input type="range" id="a_len" min="32" max="128" step="16" value="64"></label>
+        <label class="fld">每列 bit 数 colN：<span class="v" id="a_bit_v">2 bit</span>
+          <input type="range" id="a_bit" min="1" max="4" step="1" value="2"></label>
+        <div class="ctrl" style="margin-top:2px">
+          <button class="btn primary" id="a_play">▶ 播放</button>
+          <button class="btn" id="a_pause">⏸ 暂停</button>
+          <button class="btn" id="a_step">⏭ 单步</button>
+          <button class="btn" id="a_reset">↺ 重置</button>
+        </div>
+        <div class="stepbar" id="a_steps"></div>
+        <div class="band" style="margin-top:auto;font-size:14.5px;line-height:1.5">
+          教学模型说明：这里的 hash 是<b>确定性演示函数</b>（列号改种子 + FNV 风格混合 + 线性同余取位），
+          <b>不是</b> PostgreSQL 内部的 <span class="mono">hashtext / hashint4</span>；用于讲清「同值不同列落不同 bit」与「按 word 定长」。
+        </div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:11px;overflow:hidden">
+        <div class="mini">输出 / SIGNATURE</div>
+        <div class="status" id="a_status">等待播放：按「▶ 播放」或「⏭ 单步」开始。</div>
+        <div class="colcards" id="a_cards"></div>
+        <div class="bitgrid" id="a_grid"></div>
+        <div class="g3" style="gap:9px;margin-top:auto">
+          <div class="band ok" id="a_summary" style="font-size:13.5px;line-height:1.45;padding:10px 12px">签名尚未生成。</div>
+          <div class="band" style="font-size:13.5px;line-height:1.45;padding:10px 12px">一行只生成<b>一条</b>索引项：所有索引列的 bit 都 OR 进同一段签名，所以一个索引能覆盖任意列组合。</div>
+          <div class="band warn" style="font-size:13.5px;line-height:1.45;padding:10px 12px">NULL 列会被跳过；length 越大，索引 tuple 越大，扫描索引本身也越慢。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>交互演示 · 依据原文 3.1 签名生成与 BloomFormTuple() 五步</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 07B 交互实验 B：误判与复查 ============ -->
+<section class="slide" data-title="交互实验 B：候选不等于命中" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 · 交互 <span class="sec">改查询 → 播放</span></div>
+    <h2>实验 B：<span class="hl">签名通过 ≠ 真实命中</span>，误判靠回表复查剔除</h2>
+    <p class="sub">五行样本、两个等值条件：先看包含测试产生几个候选，再看 Bitmap Heap Scan 复查留下谁。</p>
+  </header>
+  <div class="s-body">
+    <div class="card" style="flex:0 0 auto;display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:11px 15px">
+      <div class="mini">查询条件</div>
+      <select id="b_col1" aria-label="条件一列">
+        <option value="0">c1</option><option value="1" selected>c2</option>
+        <option value="2">c3</option><option value="3">c4</option>
+      </select>
+      <span style="font-family:var(--mono);font-weight:800">=</span>
+      <input type="text" id="b_val1" value="7" style="width:82px">
+      <span class="chip">AND</span>
+      <select id="b_col2" aria-label="条件二列">
+        <option value="0">c1</option><option value="1">c2</option>
+        <option value="2">c3</option><option value="3" selected>c4</option>
+      </select>
+      <span style="font-family:var(--mono);font-weight:800">=</span>
+      <input type="text" id="b_val2" value="af" style="width:82px">
+      <label class="fld" style="min-width:158px;margin-left:auto">签名长度 <span class="v" id="b_len_v">64 bit</span>
+        <input type="range" id="b_len" min="16" max="128" step="16" value="64"></label>
+      <div class="ctrl">
+        <button class="btn primary" id="b_play">▶ 播放</button>
+        <button class="btn" id="b_pause">⏸ 暂停</button>
+        <button class="btn" id="b_step">⏭ 单步</button>
+        <button class="btn" id="b_reset">↺ 重置</button>
+        <button class="btn" id="b_fp">⚡ 演示误判</button>
+      </div>
+    </div>
+
+    <div class="card fill" style="display:flex;flex-direction:column;gap:9px;min-height:0;padding:12px 16px">
+      <div class="row" style="justify-content:space-between">
+        <div class="mini">逐行 bit 包含测试 · 5 行索引项顺序扫过</div>
+        <div class="stepbar" id="b_steps"></div>
+      </div>
+      <div class="status" id="b_status">等待播放。</div>
+      <div class="band" id="b_qbits" style="padding:7px 12px;font-size:14px">查询签名：—</div>
+      <div style="flex:1 1 auto;min-height:0;overflow:hidden">
+        <table class="qtab">
+          <thead><tr>
+            <th style="width:78px">行</th>
+            <th style="width:290px">真实列值（查询涉及的两列）</th>
+            <th>查询 bit 是否都在行签名里</th>
+            <th style="width:150px">包含测试结论</th>
+          </tr></thead>
+          <tbody id="b_body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="g3" style="flex:0 0 auto">
+      <div class="band warn" id="b_cand" style="font-size:15px">候选 TID：扫描中…</div>
+      <div class="band ok" id="b_hits" style="font-size:15px">真实命中：—</div>
+      <div class="band bad" id="b_removed" style="font-size:15px">误判剔除：—</div>
+    </div>
+    <div class="band" style="flex:0 0 auto;font-size:13.5px;padding:8px 14px">
+      教学模型：hash 为确定性演示函数，<b>不是</b> PostgreSQL 内部 hash；样本 R5 是特意挑选的碰撞行，
+      用于呈现 <span class="mono">Rows Removed by Index Recheck</span> 的来源。真实误判率取决于值分布与参数。
+    </div>
+  </div>
+  <footer class="s-foot"><span>交互演示 · 依据原文 3.5 blgetbitmap() 与官方示例的 Recheck / Rows Removed by Index Recheck</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 08 signValue 与误判直觉 ============ -->
+<section class="slide" data-title="signValue：同值不同列，落不同 bit" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 <span class="sec">3.1 签名生成</span></div>
+    <h2>列号参与种子：避免<span class="hl">不同列中的相同值</span>映射到同一 bit 序列</h2>
+    <p class="sub">下方 bit 编号为教学模型在 length=64 下的示意结果，用来说明「列相关」这件事。</p>
+  </header>
+  <div class="s-body">
+    <div style="height:250px;flex:0 0 250px">
+      <svg class="diag" viewBox="0 0 1460 250" aria-label="同值不同列映射到不同 bit">
+        <rect x="20" y="14" width="690" height="222" rx="9" class="box"/>
+        <text x="42" y="44" class="tt" style="font-size:20px">列相关哈希：同一个值 42，落在两个不同列</text>
+
+        <rect x="42" y="58" width="300" height="40" rx="6" class="boxb"/>
+        <text x="58" y="84" class="tn">c1 = 42　·　attno = 0</text>
+        <text x="42" y="118" class="ts">seed(attno=0) → opclass hash → <tspan class="tn">bit 6, 45</tspan></text>
+        <g class="bitgroup" transform="translate(42,128)" data-len="64" data-cols="16" data-cell="17" data-gap="3"
+           data-one="6,45" data-mode="row"></g>
+
+        <rect x="380" y="58" width="300" height="40" rx="6" class="boxa"/>
+        <text x="396" y="84" class="tn">c2 = 42　·　attno = 1</text>
+        <text x="380" y="118" class="ts">同一 hash 函数，不同种子 → <tspan class="tn">bit 37, 0</tspan></text>
+        <g class="bitgroup" transform="translate(380,128)" data-len="64" data-cols="16" data-cell="17" data-gap="3"
+           data-one="37,0" data-mode="row"></g>
+        <text x="42" y="228" class="ts">bit 编号为教学模型在 length = 64 下的示意值，用于说明「列号改变落点」。</text>
+
+        <rect x="730" y="14" width="710" height="222" rx="9" class="box"/>
+        <text x="752" y="44" class="tt" style="font-size:20px">BloomFormTuple() 形成行签名</text>
+        <g id="s8steps"></g>
+        <text x="752" y="216" class="ts">所以不是每列一个 filter、也不是每页一个 filter，而是每行一个多列组合签名。</text>
+      </svg>
+    </div>
+    <div class="g2 fill">
+      <div class="band" style="font-size:17px;display:flex;flex-direction:column;justify-content:center;gap:8px">
+        <div><b>理想化误判估算</b>（调参直觉，<b>不是</b> PostgreSQL 成本公式）</div>
+        <div style="font:800 30px var(--mono);color:var(--blue);letter-spacing:.01em">p ≈ (1 − e<sup>−K/m</sup>)<sup>Q</sup></div>
+        <div style="font-size:15px;line-height:1.55">m = 签名长度；K ≈ 一行所有索引列累计设置的 bit 数；Q = 查询条件累计检查的 bit 数。
+          length 太小或索引列太多 → 签名变满；查询列越少 → Q 越小 → 误判越容易上升。</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;justify-content:center">
+        <div class="mini" style="margin-bottom:10px">从公式读出的三条调参直觉</div>
+        <div class="line-list">
+          <div class="line-item"><span class="n">1</span><div><b>调大 length</b>：同样 bit 更稀疏 → 误判下降，但索引更大、扫描更慢。</div></div>
+          <div class="line-item"><span class="n">2</span><div><b>调大某个 colN</b>：该列查询检查更多 bit → 单列过滤更强，但行签名更容易变满。</div></div>
+          <div class="line-item"><span class="n">3</span><div><b>目标不是「精确索引」</b>：而是在可接受空间内减少无用 heap visit。</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文 3.1 · blutils.c signValue() 源码注释 · 官方 bloom 文档</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 09 物理结构 ============ -->
+<section class="slide" data-title="物理结构：metapage + 顺序数据页" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 <span class="sec">3.2 物理布局</span></div>
+    <h2>没有根、内部页和叶页，也没有 revmap：<span class="hl">只有 meta + 平铺数据页</span></h2>
+    <p class="sub">查询从第一个数据页顺序扫到索引文件末尾；省 IO 靠「索引条目更短 + 签名能排除候选 TID」。</p>
+  </header>
+  <div class="s-body">
+    <div class="fill">
+      <svg class="diag" viewBox="0 0 1460 590" aria-label="bloom 索引物理布局与三种索引布局对比">
+        <text x="20" y="24" class="lbl">索引文件布局</text>
+        <rect x="20" y="36" width="250" height="116" rx="8" class="boxb"/>
+        <text x="40" y="64" class="tt">Block 0 · metapage</text>
+        <text x="40" y="90" class="ts">magic number · 索引参数</text>
+        <text x="40" y="112" class="ts">opts.length / col1..colN</text>
+        <text x="40" y="134" class="ts">notFullPage[]（插入提示）</text>
+        <g id="s9pages"></g>
+        <line x1="20" y1="184" x2="1440" y2="184" class="arr"/>
+        <text x="700" y="172" class="ts" style="font-weight:800;fill:#2C5F8A">查询方向：block 1 → 文件末尾，顺序读完全部 index tuple</text>
+
+        <rect x="20" y="196" width="700" height="180" rx="9" class="box"/>
+        <text x="40" y="224" class="lbl">放大一个 DATA PAGE</text>
+        <rect x="40" y="238" width="660" height="34" rx="4" class="boxg"/>
+        <text x="56" y="260" class="tn">BloomTuple 1 : heapPtr + sign[]</text>
+        <rect x="40" y="278" width="660" height="34" rx="4" class="boxg"/>
+        <text x="56" y="300" class="tn">BloomTuple 2 : heapPtr + sign[]</text>
+        <rect x="40" y="318" width="660" height="34" rx="4" class="boxg"/>
+        <text x="56" y="340" class="tn">··· 固定大小条目连续存放 ···</text>
+        <rect x="40" y="356" width="660" height="18" rx="3" class="boxa"/>
+        <text x="436" y="369" class="ts" style="font-size:12px;fill:#8A5414">页尾 opaque：maxoff、页标记、bloom page id</text>
+
+        <rect x="740" y="196" width="700" height="180" rx="9" class="box"/>
+        <text x="760" y="224" class="lbl">固定条目大小</text>
+        <text x="760" y="254" class="tn">BLOOMTUPLEHDRSZ + bloomLength × sizeof(uint16)</text>
+        <text x="760" y="284" class="t">length 以 bit 配置，存储时上取整到 16-bit word 数组。</text>
+        <text x="760" y="314" class="t">页内没有树形导航，扫描时只能顺序读。</text>
+        <text x="760" y="346" class="ts">notFullPage[] 只是插入时找剩余空间的提示，<tspan style="font-weight:800;fill:#AE433C">不是查询入口</tspan>。</text>
+
+        <text x="20" y="410" class="lbl">三种布局的差别：粒度与导航能力</text>
+        <g id="s9lanes"></g>
+        <text x="20" y="574" class="ts">bloom 的页面结构更「平」，代价是查询没有导航能力：必须访问所有 index tuple。</text>
+      </svg>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文 3.2 · bloom.h / BloomMetaPageData / BloomPageOpaqueData</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 10 构建路径 ============ -->
+<section class="slide" data-title="构建路径：顺序扫 heap，攒满数据页" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 <span class="sec">3.3 构建</span></div>
+    <h2><span class="mono">blbuild()</span> 没有排序阶段，也不构造树</h2>
+    <p class="sub">构建成本更接近「读 heap + 顺序写紧凑签名页」。</p>
+  </header>
+  <div class="s-body">
+    <div class="fill">
+      <svg class="diag" viewBox="0 0 1460 480" aria-label="bloom 索引构建流程">
+        <g id="s10steps"></g>
+        <path d="M 500 236 C 500 300, 1010 300, 1010 236" class="dash"/>
+        <text x="700" y="316" class="ts" style="font-weight:800;fill:#B8711A">每个 heap tuple 重复 ③ → ④ → ⑤，直到扫完整个 heap</text>
+
+        <rect x="20" y="348" width="1420" height="106" rx="9" class="boxg"/>
+        <text x="44" y="380" class="tt" style="font-size:19px">产物：block 0 是 meta，block 1..N 是紧凑签名数据页</text>
+        <text x="44" y="410" class="t">构建过程不排序、不分裂、不建树：每行形成一条固定大小 BloomTuple，缓存页满就 flush 成一个新数据页。</text>
+        <text x="44" y="436" class="ts">对照 B-tree 构建：需要排序键、组织树形层级；bloom 只是把「更短的索引项」顺序铺进页里。</text>
+      </svg>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文 3.3 · blinsert.c / blbuild() / bloomBuildCallback() / flushCachedPage()</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 11 插入与 VACUUM ============ -->
+<section class="slide" data-title="插入与 VACUUM：空间复用与页面回收" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 <span class="sec">3.4 插入 / 3.6 VACUUM</span></div>
+    <h2>不是严格 append-only：<span class="hl">半空页与 deleted page 都会被复用</span></h2>
+    <p class="sub">插入靠 notFullPage[] 与 FSM；VACUUM 删 dead TID、压缩页、把空页交给 FSM。</p>
+  </header>
+  <div class="s-body">
+    <div class="fill">
+      <svg class="diag" viewBox="0 0 1460 570" aria-label="插入与 VACUUM 生命周期">
+        <text x="20" y="24" class="lbl">插入路径 · blinsert()</text>
+        <rect x="20" y="38" width="270" height="94" rx="8" class="boxb"/>
+        <text x="40" y="66" class="tt" style="font-size:18px">形成 BloomTuple</text>
+        <text x="40" y="92" class="ts">新 heap tuple → 行签名</text>
+        <text x="40" y="116" class="ts">TID + sign[]</text>
+
+        <rect x="340" y="38" width="270" height="94" rx="8" class="boxb"/>
+        <text x="360" y="66" class="tt" style="font-size:18px">先试 notFullPage[0]</text>
+        <text x="360" y="92" class="ts">能放下 → 直接插入</text>
+        <text x="360" y="116" class="ts">不必修改 metapage</text>
+
+        <rect x="660" y="38" width="270" height="94" rx="8" class="boxg"/>
+        <text x="680" y="66" class="tt" style="font-size:18px">插入完成</text>
+        <text x="680" y="92" class="ts">写入一条固定大小条目</text>
+        <text x="680" y="116" class="ts">页内 maxoff + 1</text>
+        <line x1="292" y1="85" x2="338" y2="85" class="arr"/>
+        <line x1="612" y1="85" x2="658" y2="85" class="arr"/>
+        <text x="618" y="72" class="ts" style="fill:#0E7A6B;font-weight:800">能放下</text>
+
+        <rect x="340" y="176" width="270" height="94" rx="8" class="boxa"/>
+        <text x="360" y="204" class="tt" style="font-size:18px">放不下</text>
+        <text x="360" y="230" class="ts">拿 metapage 独占锁</text>
+        <text x="360" y="254" class="ts">继续尝试后续候选页</text>
+
+        <rect x="660" y="176" width="270" height="94" rx="8" class="boxa"/>
+        <text x="680" y="204" class="tt" style="font-size:18px">BloomNewBuffer()</text>
+        <text x="680" y="230" class="ts">先从索引 FSM 找可复用页</text>
+        <text x="680" y="254" class="ts">找不到再扩展索引文件</text>
+
+        <rect x="980" y="176" width="270" height="94" rx="8" class="boxa"/>
+        <text x="1000" y="204" class="tt" style="font-size:18px">新页插入成功</text>
+        <text x="1000" y="230" class="ts">把 notFullPage[]</text>
+        <text x="1000" y="254" class="ts">重置为这个新页</text>
+        <line x1="475" y1="134" x2="475" y2="174" class="arr"/>
+        <text x="486" y="160" class="ts" style="fill:#B8711A;font-weight:800">候选页都放不下</text>
+        <line x1="612" y1="223" x2="658" y2="223" class="arr"/>
+        <line x1="932" y1="223" x2="978" y2="223" class="arr"/>
+
+        <line x1="20" y1="298" x2="1440" y2="298" stroke="#D8DDD9" stroke-width="1.6"/>
+        <text x="20" y="324" class="lbl">VACUUM 路径 · blbulkdelete() / blvacuumcleanup()</text>
+        <g id="s11vac"></g>
+        <rect x="20" y="468" width="1420" height="76" rx="9" class="box"/>
+        <text x="44" y="498" class="t" style="font-weight:800">这和 B-tree 的页面分裂、合并、半死页生命周期不同：bloom 页面结构更平，但查询没有导航能力，仍要读完整个索引。</text>
+        <text x="44" y="526" class="ts">实务提示：大量删除后执行 VACUUM，让 dead TID 对应的 BloomTuple 被清理，空页进入 FSM 供后续插入复用。</text>
+      </svg>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文 3.4 / 3.6 · blinsert.c / blvacuum.c</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 12 查询路径（动画） ============ -->
+<section class="slide" data-title="查询路径：只能 Bitmap Index Scan（含动画）" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 · 动画 <span class="sec">3.5 查询</span></div>
+    <h2>索引侧是<span class="hl">全索引扫描</span>，不是树查找</h2>
+    <p class="sub">把「全表扫 heap」换成「扫更小的索引签名文件 + 只访问候选 heap TID」。</p>
+  </header>
+  <div class="s-body">
+    <div style="height:208px;flex:0 0 208px">
+      <svg class="diag" viewBox="0 0 1460 208" aria-label="bloom 扫描六步路径">
+        <g id="s12flow"></g>
+      </svg>
+    </div>
+    <div class="card" style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:12px">
+      <div class="row" style="justify-content:space-between">
+        <div class="mini">扫描演示 · 8 个数据页顺序读，候选 TID 落入 bitmap</div>
+        <div class="ctrl">
+          <button class="btn primary" id="s_play">▶ 播放扫描</button>
+          <button class="btn" id="s_pause">⏸ 暂停</button>
+          <button class="btn" id="s_reset">↺ 重置</button>
+          <select id="s_speed" aria-label="速度">
+            <option value="620">速度：正常</option>
+            <option value="340">速度：快</option>
+            <option value="950">速度：慢</option>
+          </select>
+        </div>
+      </div>
+      <div class="scanpages" id="s_pages"></div>
+      <div class="row" style="align-items:flex-start;gap:16px">
+        <div style="flex:1">
+          <div class="mini" style="margin-bottom:6px">TIDBitmap（recheck = true）</div>
+          <div class="tidbox" id="s_tid"><span style="font-size:14px;color:#5D8C7E">尚无候选 · 等待扫描</span></div>
+        </div>
+        <div style="flex:1">
+          <div class="mini" style="margin-bottom:6px">Bitmap Heap Scan 回表复查</div>
+          <div class="status" id="s_status" style="min-height:52px">按「▶ 播放扫描」观察全过程。</div>
+        </div>
+      </div>
+    </div>
+    <div class="band warn" style="flex:0 0 auto">如果误判很多，优势会被无用回表吃掉：<span class="mono">Rows Removed by Index Recheck</span> 越高，说明签名碰撞越严重。</div>
+  </div>
+  <footer class="s-foot"><span>来源：原文 3.5 · blscan.c / blgetbitmap() · 动画为流程示意，不代表真实页数比例</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 13 能力表 ============ -->
+<section class="slide" data-title="访问方法声明：能做什么、不能做什么" data-sec="03 / 原理">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 03 / 原理 <span class="sec">IndexAmRoutine</span></div>
+    <h2><span class="mono">blhandler()</span> 的九个声明，决定了它的能力边界</h2>
+    <p class="sub">不能逐条返回有序 TID，不能 index-only scan，不能唯一约束，也不能并行扫描 / 并行构建。</p>
+  </header>
+  <div class="s-body">
+    <div class="g3 fill" id="amGrid"></div>
+    <div class="band" style="flex:0 0 auto"><b>结论</b>：扫描入口只有 <span class="mono">blgetbitmap()</span> → 计划形态只能是
+      <b>Bitmap Index Scan + Bitmap Heap Scan</b>；scan key 为 NULL 时直接返回 0（不支持搜索 NULL）。</div>
+  </div>
+  <footer class="s-foot"><span>来源：原文 3.5 · blutils.c / blhandler() · 官方 bloom 文档「Limitations」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 14 横向对比 ============ -->
+<section class="slide" data-title="横向对比：粒度决定能力" data-sec="04 / 对比">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 04 / 对比 <span class="sec">五种索引放一起看</span></div>
+    <h2>核心差别是<span class="hl">索引粒度</span>：行级签名 / 行级有序键 / range 级摘要 / 倒排 key</h2>
+    <p class="sub">B-tree 用精确有序入口换定位能力；bloom 用有损签名换空间和多列组合能力。</p>
+  </header>
+  <div class="s-body">
+    <table class="cmp" style="flex:1 1 auto">
+      <thead><tr>
+        <th style="width:112px">维度</th><th>PostgreSQL bloom</th><th>多列 B-tree</th>
+        <th>多个单列 B-tree + BitmapAnd</th><th>BRIN bloom opclass</th><th>GIN</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>主要目标</td><td>一个紧凑索引支持多列任意组合等值过滤</td><td>固定列序的精确查找、排序、范围</td><td>每列精确过滤后做 bitmap 交集</td><td>每个 page range 保存 Bloom 摘要</td><td>复合值、数组、JSONB、全文倒排</td></tr>
+        <tr><td>索引粒度</td><td><b>每 heap tuple 一个有损签名</b></td><td>每 heap tuple 一个有序键入口</td><td>每列每 heap tuple 一个入口</td><td><b>每 block range 一个摘要</b></td><td>value/key 到 posting list/tree</td></tr>
+        <tr><td>读取路径</td><td>扫完整 bloom 索引，返回 bitmap</td><td>树搜索，可返回有序 TID</td><td>多个 bitmap index scan 再合并</td><td>扫 BRIN 摘要，返回 range bitmap</td><td>查 key，再合并 posting</td></tr>
+        <tr><td>支持谓词</td><td><b>仅等值</b></td><td>等值、范围、排序相关谓词</td><td>等值、范围视 opclass 而定</td><td>等值摘要，仍按 range 返回</td><td>取决于 opclass</td></tr>
+        <tr><td>误判 / 复查</td><td><b>有误判，必须 recheck</b></td><td>通常精确，MVCC 仍需可见性检查</td><td>通常精确，bitmap heap 仍复查</td><td>range 级有损，必须 recheck</td><td>取决于 opclass，常见 recheck</td></tr>
+        <tr><td>空间成本</td><td>通常小于多个 B-tree</td><td>单个复合索引中等</td><td>多列时较高</td><td>极小</td><td>可能较高</td></tr>
+        <tr><td>写入维护</td><td>每行一条固定签名</td><td>每个相关索引维护树</td><td>每列索引都要维护</td><td>每 range 摘要维护</td><td>一行可能生成多个 key</td></tr>
+        <tr><td>不适合</td><td>范围、排序、唯一、NULL、极高选择性点查</td><td>任意组合且不满足 leading column</td><td>列很多且写入重</td><td>随机数据点查</td><td>简单标量多列等值宽表未必划算</td></tr>
+      </tbody>
+    </table>
+    <div class="band ok" style="flex:0 0 auto"><b>别混淆</b>：<span class="mono">contrib/bloom</span> 是<b>行级签名索引访问方法</b>；
+      <span class="mono">src/backend/access/brin/brin_bloom.c</span> 是 <b>BRIN 某个 page range 的摘要类型</b>。两者读写路径与调参目标都不同。</div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「四、横向对比」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 15 效果 ============ -->
+<section class="slide" data-title="官方示例：空间省三倍，但不是最快" data-sec="05 / 效果">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 05 / 效果 <span class="sec">数值来自官方文档示例</span></div>
+    <h2>1000 万行、6 个 int 列，查非 leading 列的两个等值条件</h2>
+    <p class="sub"><span class="mono">WHERE i2 = 898732 AND i5 = 123451</span> · 官方示例数值，不是本文本地执行结果。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2" style="flex:1 1 auto;min-height:0">
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="mini" style="margin-bottom:6px">索引空间对比（MB）</div>
+        <svg id="sizeChart" class="diag" viewBox="0 0 690 340" style="flex:1 1 auto;min-height:0" aria-label="索引空间柱状图"></svg>
+        <div class="band warn" style="margin-top:auto;font-size:14.5px">6 个单列 B-tree 每个约 88.5 MB，合计 531 MB，
+          是 bloom 索引的 <b>3 倍以上</b>；但它们通过 BitmapAnd 把查询压到了 0.047 ms。</div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:9px">
+        <div class="mini">同一查询的三种计划（官方示例）</div>
+        <div class="line-list">
+          <div class="line-item"><span class="n">A</span><div><b>无索引 / 6 列单 B-tree：Seq Scan</b><br><span class="mono">357.076 ms / 351.035 ms</span>　·　6 列 B-tree 因 leading column 未约束仍走顺序扫描</div></div>
+          <div class="line-item"><span class="n">B</span><div><b>bloom：Bitmap Index Scan + Bitmap Heap Scan</b><br><span class="mono">22.632 ms</span>　·　<span class="mono">Rows Removed by Index Recheck: 2300</span></div></div>
+          <div class="line-item"><span class="n">C</span><div><b>6 个单列 B-tree：BitmapAnd</b><br><span class="mono">0.047 ms</span>　·　最快，但总空间明显更大</div></div>
+        </div>
+        <div class="band" style="font-size:14.5px">bloom 示例还给出 <span class="mono">Heap Blocks: exact=2256</span>、
+          <span class="mono">Buffers: shared hit=21864</span>；<b>Heap Blocks 越少，说明排除能力越强</b>。</div>
+        <div class="g2" style="gap:10px;margin-top:auto">
+          <div class="band ok" style="font-size:14px;line-height:1.5"><b>收益三处</b><br>① 索引 tuple 短：只存 TID + 定长签名<br>② 多列共用一条索引项<br>③ 回表数量可控时省 heap 随机访问</div>
+          <div class="band bad" style="font-size:14px;line-height:1.5"><b>成本六项</b><br>全索引扫描 · 误判回表 · 不能消除排序 · 不能唯一约束 · 不支持 NULL 搜索 · 并行能力有限</div>
+        </div>
+      </div>
+    </div>
+    <div class="band" style="flex:0 0 auto"><b>读法</b>：bloom 不是「比 B-tree 更快」，而是「用一个更小的索引，换掉大量组合索引」；
+      是否划算取决于总空间、写入 TPS、recheck 移除行数与 heap block 访问数。</div>
+  </div>
+  <footer class="s-foot"><span>来源：PostgreSQL 官方 bloom 文档「Examples」（已核对原文数值）· 原文「五、效果如何？」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 16 参数沙盘 ============ -->
+<section class="slide" data-title="交互实验 C：参数与误判代价沙盘" data-sec="05 / 效果">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 05 / 效果 · 交互 <span class="sec">拖动滑块 → 播放</span></div>
+    <h2>实验 C：四个旋钮，怎么影响<span class="hl">签名密度与误判率</span></h2>
+    <p class="sub">length、索引列数、每列 bit 数、查询列数共同决定签名有多满。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2" style="flex:1 1 auto;min-height:0">
+      <div class="card" style="display:flex;flex-direction:column;gap:13px">
+        <div class="mini">输入 / PARAMETERS</div>
+        <label class="fld">签名长度 length：<span class="v" id="p_len_v">64 bit</span>
+          <input type="range" id="p_len" min="32" max="256" step="16" value="64"></label>
+        <label class="fld">索引列数：<span class="v" id="p_cols_v">6 列</span>
+          <input type="range" id="p_cols" min="2" max="12" step="1" value="6"></label>
+        <label class="fld">每列 bit 数 colN：<span class="v" id="p_bit_v">2 bit</span>
+          <input type="range" id="p_bit" min="1" max="6" step="1" value="2"></label>
+        <label class="fld">查询涉及的列数：<span class="v" id="p_q_v">2 列</span>
+          <input type="range" id="p_q" min="1" max="4" step="1" value="2"></label>
+        <div class="ctrl">
+          <button class="btn primary" id="p_play">▶ 播放调参</button>
+          <button class="btn" id="p_reset">↺ 重置</button>
+        </div>
+        <div class="band warn" style="margin-top:auto;font-size:14px;line-height:1.5">
+          曲线是<b>教学估算</b> <span class="mono">p ≈ (1 − e<sup>−K/m</sup>)<sup>Q</sup></span>，
+          K ≈ 列数 × 每列 bit，Q = 查询列数 × 每列 bit。<b>不是</b> PostgreSQL 的成本公式；
+          真实误判还取决于值分布、列相关性与 hash 质量。
+        </div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <div class="mini">输出 / 估算</div>
+        <div class="g3" style="gap:9px">
+          <div class="band ok" style="text-align:center;font-size:14px">误判概率 p<br><b id="p_pv" style="font:800 24px var(--mono);color:#0E7A6B">—</b></div>
+          <div class="band" style="text-align:center;font-size:14px">签名期望置位比例<br><b id="p_fv" style="font:800 24px var(--mono);color:#2C5F8A">—</b></div>
+          <div class="band warn" style="text-align:center;font-size:14px">K / m<br><b id="p_kv" style="font:800 24px var(--mono);color:#B8711A">—</b></div>
+        </div>
+        <svg id="pChart" class="diag" viewBox="0 0 690 250" style="flex:1 1 auto;min-height:0" aria-label="误判概率随签名长度变化"></svg>
+        <div>
+          <div class="mini" style="margin-bottom:6px">签名密度示意（128 bit 片段，按期望比例置位）</div>
+          <div class="bitgrid" id="p_density" style="transform:scale(.82);transform-origin:left top"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>图 5 重绘：调参目标不是让 bloom 变精确，而是在可接受空间内减少无用 heap visit</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 17 实操 DEMO ============ -->
+<section class="slide" data-title="实操 DEMO：看见三个事实" data-sec="06 / 实操">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 06 / 实操 <span class="sec">最小验证路径</span></div>
+    <h2>SQL 只验证三件事：<span class="hl">只支持等值</span>、走 bitmap scan、需要 recheck</h2>
+    <p class="sub">以下为原文脚本节选（列定义与表达式略有缩排）；完整脚本见原文第六节。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2" style="flex:1 1 auto;min-height:0">
+      <div class="code" style="overflow:hidden;font-size:15px;line-height:1.55">
+<span class="k">CREATE EXTENSION</span> IF NOT EXISTS bloom;
+
+<span class="k">CREATE TABLE</span> tbloom_demo (
+  id bigserial <span class="k">PRIMARY KEY</span>,
+  c1 int, c2 int, c3 int, c4 text, payload text
+);
+
+<span class="k">INSERT INTO</span> tbloom_demo (c1,c2,c3,c4,payload)
+<span class="k">SELECT</span> (random()*100000)::int,
+       (random()*100000)::int,
+       (random()*100000)::int,
+       substr(md5(g::text),1,2), md5((g*17)::text)
+<span class="k">FROM</span> generate_series(1, 1000000) <span class="k">AS</span> g;
+
+<span class="k">ANALYZE</span> tbloom_demo;
+
+<span class="k">CREATE INDEX</span> tbloom_demo_bloom_idx
+<span class="k">ON</span> tbloom_demo <span class="k">USING bloom</span> (c1,c2,c3,c4)
+<span class="k">WITH</span> (length=128, col1=2, col2=2, col3=2, col4=4);
+
+<span class="k">EXPLAIN</span> (ANALYZE, BUFFERS)
+<span class="k">SELECT</span> * <span class="k">FROM</span> tbloom_demo
+<span class="k">WHERE</span> c2 = 12345 <span class="k">AND</span> c4 = <span class="s">'af'</span>;
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+        <div class="card fill">
+          <div class="mini" style="margin-bottom:10px">预期观察点</div>
+          <div class="line-list">
+            <div class="line-item"><span class="n">1</span><div>计划通常应是 <span class="mono">Bitmap Index Scan</span> + <span class="mono">Bitmap Heap Scan</span>；是否选用取决于统计信息、表大小与成本参数。</div></div>
+            <div class="line-item"><span class="n">2</span><div><span class="mono">Recheck Cond</span> 会出现——bloom 返回的是有损候选。</div></div>
+            <div class="line-item"><span class="n">3</span><div><span class="mono">Rows Removed by Index Recheck</span> 越高 → 签名误判越多。</div></div>
+            <div class="line-item"><span class="n">4</span><div><span class="mono">Heap Blocks</span> 越少 → 排除能力越强。</div></div>
+          </div>
+        </div>
+        <div class="code" style="font-size:13.5px;line-height:1.5;padding:12px 14px">
+<span class="k">CREATE INDEX</span> tbloom_demo_c2_idx <span class="k">ON</span> tbloom_demo (c2);
+<span class="k">CREATE INDEX</span> tbloom_demo_c4_idx <span class="k">ON</span> tbloom_demo (c4);
+<span class="c">-- 用 pg_relation_size() 比较 bloom 与两个单列 B-tree 的大小</span>
+        </div>
+        <div class="band bad" style="flex:0 0 auto;font-size:14.5px"><b>诚实边界</b>：本文没有在本地启动 PostgreSQL 实例执行，
+          <b>不提供伪造输出</b>。想学源码行为可直接看回归测试 <span class="mono">contrib/bloom/sql/bloom.sql</span>。</div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「六、实操 DEMO」「本文校验记录」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 18 最佳实践 ============ -->
+<section class="slide" data-title="最佳实践：三类角色各自的检查单" data-sec="07 / 实践">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 07 / 实践 <span class="sec">架构师 / DBA / 开发者</span></div>
+    <h2>把 bloom 定位成「<span class="hl">宽表多列等值过滤的空间折中</span>」</h2>
+    <p class="sub">不要把它当作 B-tree 替代品；评估时同时看空间、写入、recheck 与 heap 访问。</p>
+  </header>
+  <div class="s-body">
+    <div class="g3 fill">
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="chip b">面向数据库架构师</div>
+        <div class="line-list" style="margin-top:14px">
+          <div class="line-item"><span class="n">1</span><div>定位为宽表多列等值过滤的<b>空间折中</b>，不是 B-tree 替代品。</div></div>
+          <div class="line-item"><span class="n">2</span><div>高频、强选择性、固定列序查询优先 B-tree；<b>组合多且每个组合频率不稳定</b>时 bloom 才有价值。</div></div>
+          <div class="line-item"><span class="n">3</span><div>范围、排序、唯一约束、外键支撑索引、<span class="mono">IS NULL</span> 不要选 bloom。</div></div>
+          <div class="line-item"><span class="n">4</span><div>评估同时看<b>索引总空间、写入 TPS、recheck 移除行数、heap block 访问数</b>。</div></div>
+        </div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="chip g">面向 DBA</div>
+        <div class="line-list" style="margin-top:14px">
+          <div class="line-item"><span class="n">1</span><div>用 <span class="mono">CREATE EXTENSION bloom</span> 管理；确认目标列类型有 bloom opclass，内置只有 <b>int4</b> 和 <b>text</b>。</div></div>
+          <div class="line-item"><span class="n">2</span><div>从默认参数起步；列多、误判高时<b>先调大 length</b>，再考虑给更常用、更高选择性列增加 <span class="mono">colN</span>。</div></div>
+          <div class="line-item"><span class="n">3</span><div>压测不要只测空缓存：优势依赖「索引更小、heap 回表更少」，缓存状态会影响结论。</div></div>
+          <div class="line-item"><span class="n">4</span><div>大量删除后执行 <b>VACUUM</b>，让 dead TID 对应条目被清理、空页进入 FSM。</div></div>
+        </div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="chip a">面向业务开发者</div>
+        <div class="line-list" style="margin-top:14px">
+          <div class="line-item"><span class="n">1</span><div>条件必须是 opclass 支持的<b>等值</b>操作，例如 <span class="mono">c1 = ?</span>、<span class="mono">c4 = ?</span>。</div></div>
+          <div class="line-item"><span class="n">2</span><div>不要期待 <span class="mono">c1 &gt; ?</span>、<span class="mono">ORDER BY c1</span>、<span class="mono">c1 IS NULL</span> 达到 B-tree 效果。</div></div>
+          <div class="line-item"><span class="n">3</span><div>查询列越少越容易误判；一个条件命中 bloom 不一定比顺序扫描划算。</div></div>
+          <div class="line-item"><span class="n">4</span><div>看到 <span class="mono">Recheck Cond</span> 是<b>正常现象</b>，不是 bug；关注 recheck 移除了多少行。</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「七、最佳实践」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 19 适合 / 不适合 ============ -->
+<section class="slide" data-title="适合与不适合：边界要划清" data-sec="08 / 边界">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 08 / 边界 <span class="sec">选型清单</span></div>
+    <h2>什么时候值得用，什么时候<span class="hl">直接换索引</span></h2>
+    <p class="sub">判断顺序：先看谓词形态，再看组合数量与列数，最后看实际 heap 访问是否明显少于顺序扫描。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2 fill">
+      <div class="card" style="background:var(--teal-bg);border-color:#B9D9CC;display:flex;flex-direction:column">
+        <div class="chip g">适合</div>
+        <div class="line-list" style="margin-top:14px">
+          <div class="line-item"><span class="n" style="background:var(--teal)">✓</span><div>一张表有很多可过滤列，<b>查询组合不可预测</b>。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--teal)">✓</span><div>条件主要是等值，且可以接受 Bitmap Heap Scan 回表。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--teal)">✓</span><div>不想为大量组合或大量单列维护 B-tree。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--teal)">✓</span><div>查询目标是过滤候选行，<b>不要求索引提供排序</b>。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--teal)">✓</span><div>列值分布使误判率可控，实际 heap 访问明显少于顺序扫描。</div></div>
+        </div>
+        <div class="band ok" style="margin-top:auto">一句话：<b>多列、任意组合、等值、可回表、少建索引</b>。</div>
+      </div>
+      <div class="card" style="background:var(--rose-bg);border-color:#E3BDB8;display:flex;flex-direction:column">
+        <div class="chip r">不适合</div>
+        <div class="line-list" style="margin-top:14px">
+          <div class="line-item"><span class="n" style="background:var(--rose)">×</span><div>需要唯一约束、主键、外键支撑索引。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--rose)">×</span><div>需要范围查询、前缀查询、排序输出或 <b>index-only scan</b>。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--rose)">×</span><div>查询大量 <span class="mono">IS NULL</span>（scan key 为 NULL 直接返回 0）。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--rose)">×</span><div>表很小，顺序扫描已经足够快。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--rose)">×</span><div>极高选择性点查有稳定列，单列 B-tree 明显更快。</div></div>
+          <div class="line-item"><span class="n" style="background:var(--rose)">×</span><div>列太多、每行设置 bit 太多、length 太短 → 签名接近全 1。</div></div>
+        </div>
+        <div class="band bad" style="margin-top:auto">一句话：<b>要精确、要定位、要排序、要唯一</b>，就别用 bloom。</div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「八、适合与不适合场景」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 20 常见坑 ============ -->
+<section class="slide" data-title="七个常见坑：别把有损当精确" data-sec="09 / 避坑">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 09 / 避坑 <span class="sec">误用清单</span></div>
+    <h2>七个最常见的误读，其中三个会<span class="hl">直接导致错误结论</span></h2>
+    <p class="sub">尤其注意：比较基准、opclass 限制、以及 contrib/bloom 与 BRIN bloom 的区别。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2 fill">
+      <div class="card" style="display:flex;flex-direction:column;gap:11px">
+        <div class="line-item"><span class="n">1</span><div><b>把 bloom 当成精确索引</b>：只能返回候选 TID，结果正确依赖回表复查，误判越高性能越差。</div></div>
+        <div class="line-item"><span class="n">2</span><div><b>只建一个默认参数索引就下结论</b>：默认 <span class="mono">length=80</span>、每列 2 bit 只是通用起点。</div></div>
+        <div class="line-item"><span class="n">3</span><div><b>忘记 leading column 比较基准</b>：单个 <span class="mono">(c1,c2,c3,c4)</span> B-tree 对 <span class="mono">WHERE c3 = ?</span> 未必有效；但单列 B-tree 或合适复合 B-tree 仍可能更快。</div></div>
+        <div class="line-item"><span class="n">4</span><div><b>忽略 operator class 限制</b>：内置 <span class="mono">int4</span> 和 <span class="mono">text</span>；其他类型需提供等值操作符和 hash 函数。</div></div>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:11px">
+        <div class="line-item"><span class="n">5</span><div><b>用 bloom 支撑排序或唯一性</b>：访问方法声明不支持 order、orderbyop、unique。</div></div>
+        <div class="line-item"><span class="n">6</span><div><b>误读官方示例性能数值</b>：那是特定数据规模、分布与查询条件下的对比，不是通用结论。</div></div>
+        <div class="line-item"><span class="n">7</span><div><b>混淆 contrib/bloom 和 BRIN bloom</b>：前者是行级签名访问方法，后者是 block range 摘要；读写路径与调参目标不同。</div></div>
+        <div class="band warn" style="margin-top:auto">验证方法：用 <span class="mono">EXPLAIN (ANALYZE, BUFFERS)</span> 同时比较
+          bloom、单列 B-tree、合适复合 B-tree 三者的 <b>空间 / 时间 / recheck / heap blocks</b>，别只看单一指标。</div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"><span>来源：原文「九、常见坑」</span><span class="pageno"></span></footer>
+</section>
+
+<!-- ============ 21 收尾 ============ -->
+<section class="slide" data-title="收尾：扩展问题、来源与一句话结论" data-sec="10 / 收尾">
+  <header class="s-head">
+    <div class="kicker"><span class="bm"></span> 10 / 收尾 <span class="sec">带走什么</span></div>
+    <h2>一句话结论 + 五个值得继续追的问题</h2>
+    <p class="sub">bloom 是一个紧凑的多列等值过滤器，不是 B-tree 的替代品。</p>
+  </header>
+  <div class="s-body">
+    <div class="g2" style="flex:1 1 auto;min-height:0">
+      <div class="card" style="display:flex;flex-direction:column">
+        <div class="mini" style="margin-bottom:12px">扩展问题</div>
+        <div class="line-list">
+          <div class="line-item"><span class="n">1</span><div>20 列宽表只有 3 列常被查，bloom 还比 3 个单列 B-tree 更合适吗？如何用 <span class="mono">EXPLAIN (ANALYZE, BUFFERS)</span> 证明？</div></div>
+          <div class="line-item"><span class="n">2</span><div>什么时候该增加 <span class="mono">length</span>，什么时候该增加某个 <span class="mono">colN</span>？各自对索引大小和误判率的影响？</div></div>
+          <div class="line-item"><span class="n">3</span><div>查询总是固定 <span class="mono">(tenant_id, status, created_at range)</span>，为什么 bloom 不是首选？</div></div>
+          <div class="line-item"><span class="n">4</span><div>为什么 PostgreSQL bloom 查询必须扫完整索引，而 B-tree 可以只走一小段路径？</div></div>
+          <div class="line-item"><span class="n">5</span><div>BRIN bloom 与 contrib/bloom 都用 Bloom 思想，为什么一个是 range 级摘要、一个是 tuple 级签名？</div></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+        <div class="card fill">
+          <div class="mini" style="margin-bottom:10px">关键来源</div>
+          <div class="line-list" style="gap:7px;font-size:15px">
+            <div class="line-item">· 官方文档 <span class="mono">doc/src/sgml/bloom.sgml</span> / postgresql.org/docs/current/bloom.html</div>
+            <div class="line-item">· 源码 <span class="mono">bloom.h</span>（结构/参数上限）、<span class="mono">blutils.c</span>（reloptions/签名）、<span class="mono">blinsert.c</span>（构建与插入）</div>
+            <div class="line-item">· 源码 <span class="mono">blscan.c</span>（blgetbitmap 全索引扫描）、<span class="mono">blvacuum.c</span>（删除/压缩/FSM）</div>
+            <div class="line-item">· 回归测试 <span class="mono">contrib/bloom/sql/bloom.sql</span></div>
+            <div class="line-item">· 思想来源：Bloom 1970「Space/Time Trade-offs in Hash Coding with Allowable Errors」；signature file 文献；PostgreSQL bloom 论文题名</div>
+          </div>
+        </div>
+        <div class="band" style="font-size:14px;line-height:1.5"><b>校验记录</b>：主线为 contrib/bloom；BRIN bloom 仅作相邻对比；
+          SQL 未本地执行、不编造输出；官方数值标明来自文档示例；DeepWiki 查询失败，未作为事实来源。</div>
+      </div>
+    </div>
+    <div class="band ok" style="flex:0 0 auto;font-size:19px;text-align:center;font-weight:800">
+      每行一段有损签名 · 一个索引覆盖任意列组合 · 命中只是候选 · 正确靠回表复查
+    </div>
+  </div>
+  <footer class="s-foot"><span>数据库筑基课 · 索引结构 · digoal · 2026-05-26</span><span class="pageno"></span></footer>
+</section>
+
+</div></div>
+
+<!-- 全局控制条 -->
+<div id="chrome">
+  <button id="btnPrev" title="上一页 (←)">← 上一页</button>
+  <button id="btnNext" title="下一页 (→)">下一页 →</button>
+  <div id="prog"><div id="progFill"></div></div>
+  <span id="counter">01 / 21</span>
+  <button id="btnGrid" title="目录 (G)">目录</button>
+  <button id="btnFull" title="全屏 (F)">全屏</button>
+  <button id="btnHelp" title="快捷键 (?)">?</button>
+</div>
+
+<div id="overview">
+  <h3>目录 · <span id="ovTotal">—</span> 页</h3>
+  <div class="oh">点击任意卡片跳转，或按 Esc 关闭。</div>
+  <div id="ovgrid"></div>
+  <div class="closehint">当前页以金色边框标出。</div>
+</div>
+
+<div id="help">
+  <h3>快捷键与操作</h3>
+  <div class="hpanel">
+    <div class="hrow"><kbd>→ / 空格</kbd><span>下一页</span></div>
+    <div class="hrow"><kbd>←</kbd><span>上一页</span></div>
+    <div class="hrow"><kbd>Home / End</kbd><span>第一页 / 最后一页</span></div>
+    <div class="hrow"><kbd>F</kbd><span>进入 / 退出全屏</span></div>
+    <div class="hrow"><kbd>G / O</kbd><span>打开 / 关闭目录概览</span></div>
+    <div class="hrow"><kbd>1 – 9</kbd><span>跳到第 1 – 9 页</span></div>
+    <div class="hrow"><kbd>?</kbd><span>显示 / 隐藏本帮助</span></div>
+    <div class="hrow"><kbd>Esc</kbd><span>关闭目录或帮助</span></div>
+    <div class="hint">在输入框里编辑时，方向键与空格不会触发翻页；交互页内的「播放 / 单步 / 重置」按钮可独立控制演示。</div>
+  </div>
+  <div class="closehint">按 Esc 或 ? 关闭。</div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const NS='http://www.w3.org/2000/svg';
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const slides=$$('.slide');
+const total=slides.length;
+let cur=0;
+
+/* ---------- 缩放与页码 ---------- */
+function fit(){
+  const s=Math.min(window.innerWidth/1600, (window.innerHeight-58)/900);
+  document.getElementById('scaler').style.setProperty('--s',s);
+}
+window.addEventListener('resize',fit); fit();
+slides.forEach((s,i)=>{
+  const el=s.querySelector('.pageno');
+  if(el) el.innerHTML='<b>'+String(i+1).padStart(2,'0')+'</b> / '+total;
+});
+
+/* ---------- kicker 里的 bit 母题 ---------- */
+$$('.kicker .bm').forEach((el,i)=>{
+  for(let j=0;j<9;j++){
+    const b=document.createElement('i');
+    if((i*3+j*5)%7<2) b.className='on';
+    if((i+j*2)%11===3) b.className='qa';
+    el.appendChild(b);
+  }
+});
+
+/* ---------- 箭头标记 + 静态 bit 组 ---------- */
+$$('svg').forEach((svg,i)=>{
+  const id='arw'+i;
+  if(svg.querySelectorAll('.arr').length){
+    const defs=document.createElementNS(NS,'defs');
+    const mk=document.createElementNS(NS,'marker');
+    mk.setAttribute('id',id); mk.setAttribute('markerWidth','9'); mk.setAttribute('markerHeight','9');
+    mk.setAttribute('refX','7.5'); mk.setAttribute('refY','4.5'); mk.setAttribute('orient','auto');
+    const p=document.createElementNS(NS,'path');
+    p.setAttribute('d','M0,0 L8,4.5 L0,9 Z'); p.setAttribute('fill','#8496A1');
+    mk.appendChild(p); defs.appendChild(mk); svg.insertBefore(defs,svg.firstChild);
+    svg.querySelectorAll('.arr').forEach(l=>l.setAttribute('marker-end','url(#'+id+')'));
+  }
+});
+function parseSet(s){return new Set((s||'').split(',').filter(x=>x!=='').map(Number));}
+$$('g.bitgroup').forEach(g=>{
+  const len=+(g.dataset.len||32), cols=+(g.dataset.cols||Math.min(len,32));
+  const cell=+(g.dataset.cell||30), gap=+(g.dataset.gap||5), step=cell+gap;
+  const one=parseSet(g.dataset.one), q=parseSet(g.dataset.q), miss=parseSet(g.dataset.miss);
+  const mode=g.dataset.mode||'row';
+  for(let i=0;i<len;i++){
+    let cls='b0';
+    if(mode==='query') cls=q.has(i)?'bq':'b0';
+    else if(mode==='test') cls=miss.has(i)?'br':(q.has(i)?'bg':(one.has(i)?'b1':'b0'));
+    else cls=one.has(i)?'b1':'b0';
+    const r=document.createElementNS(NS,'rect');
+    r.setAttribute('x',(i%cols)*step); r.setAttribute('y',Math.floor(i/cols)*step);
+    r.setAttribute('width',cell); r.setAttribute('height',cell); r.setAttribute('rx','3');
+    r.setAttribute('class',cls); g.appendChild(r);
+  }
+});
+function svgEl(tag,attrs,text,parent){
+  const e=document.createElementNS(NS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]);
+  if(text!==undefined&&text!==null) e.textContent=text;
+  if(parent) parent.appendChild(e);
+  return e;
+}
+
+/* ---------- 封面 bit 网格 ---------- */
+(function(){
+  const svg=$('#coverGrid'); if(!svg) return;
+  const cols=16,rows=7,cell=27,gap=6,step=cell+gap;
+  const one=new Set([1,5,8,12,15,18,22,25,29,33,36,40,44,47,51,54,58,61,65,69,72,76,80,83,87,90,94,98,101,105,109]);
+  const q=new Set([5,22,44,80]);
+  for(let i=0;i<cols*rows;i++){
+    const x=(i%cols)*step, y=Math.floor(i/cols)*step;
+    let fill='#1B3A4E',stroke='#2C4E61';
+    if(one.has(i)){fill='#4A8FBE';stroke='#6FA9CC';}
+    if(q.has(i)){fill='#E5AA5B';stroke='#F0C184';}
+    if(q.has(i)&&one.has(i)){fill='#54B49F';stroke='#7FD0BC';}
+    svgEl('rect',{x:x,y:y,width:cell,height:cell,rx:3,fill:fill,stroke:stroke,'stroke-width':1},null,svg);
+  }
+})();
+
+/* ---------- 02 路线图节点 ---------- */
+(function(){
+  const g=$('#roadNodes'); if(!g) return;
+  const items=[
+    ['01','问题','宽表任意组合','组合爆炸 · 索引太多'],
+    ['02','定义','一行一签名','heapPtr + sign[]'],
+    ['03','原理','签名 / 页 / 读写','哈希 · 构建 · 插入 · 扫描 · VACUUM'],
+    ['04','对比','粒度决定能力','B-tree · BRIN · GIN'],
+    ['05','效果','空间与误判','官方示例 · 调参直觉'],
+    ['06','决策','SQL 与边界','DEMO · 适用 / 不适用']
+  ];
+  const xs=[130,374,618,862,1106,1350];
+  items.forEach((it,i)=>{
+    const x=xs[i];
+    svgEl('circle',{cx:x,cy:168,r:31,fill:i%2?'#EAF1F6':'#FBF0DE',stroke:i%2?'#2C5F8A':'#B8711A','stroke-width':2.4},null,g);
+    svgEl('text',{x:x,y:176,'text-anchor':'middle',style:'font:800 19px var(--mono);fill:#16232E'},it[0],g);
+    svgEl('text',{x:x,y:106,'text-anchor':'middle',style:'font:800 25px var(--sans);fill:#16232E'},it[1],g);
+    svgEl('text',{x:x,y:236,'text-anchor':'middle',style:'font:800 17px var(--sans);fill:#2C5F8A'},it[2],g);
+    svgEl('text',{x:x,y:264,'text-anchor':'middle',style:'font:14.5px var(--sans);fill:#4C5C68'},it[3],g);
+    svgEl('line',{x1:x,y1:290,x2:x,y2:330,stroke:'#C9D6DE','stroke-width':1.4},null,g);
+    svgEl('text',{x:x,y:352,'text-anchor':'middle',style:'font:800 13px var(--mono);fill:#8A959C'},'STEP '+it[0],g);
+  });
+})();
+
+/* ---------- 04 页：列 chip / 箭头 / 牺牲 chip ---------- */
+(function(){
+  const g=$('#s4chips'), a=$('#s4arrows'); if(!g) return;
+  const vals=['c1 = 42','c2 = 7',"c3 = 'SH'","c4 = 'af'"];
+  const centers=[893,1045,1197,1349];
+  vals.forEach((v,i)=>{
+    const x=centers[i]-76;
+    svgEl('rect',{x:x,y:112,width:152,height:52,rx:6,class:'boxb'},null,g);
+    svgEl('text',{x:centers[i],y:145,'text-anchor':'middle',style:'font:700 17px var(--mono);fill:#1D456A'},v,g);
+    svgEl('line',{x1:centers[i],y1:166,x2:centers[i],y2:226,class:'arr'},null,a);
+  });
+  const sacG=$('#s4sacrifice');
+  const sac=['精确定位','范围查询','排序输出','唯一约束','index-only scan'];
+  sac.forEach((s,i)=>{
+    const x=132+i*252;
+    svgEl('rect',{x:x,y:382,width:232,height:38,rx:5,fill:'#FFFFFF',stroke:'#DEB475','stroke-width':1.4},null,sacG);
+    svgEl('text',{x:x+116,y:407,'text-anchor':'middle',style:'font:800 16px var(--sans);fill:#8A5414'},s,sacG);
+  });
+})();
+
+/* ---------- 05 页：word 标注 ---------- */
+(function(){
+  const g=$('#s5words'); if(!g) return;
+  for(let i=0;i<5;i++){
+    const x=358+i*216;
+    svgEl('line',{x1:x,y1:40,x2:x,y2:102,stroke:'#9AB9CE','stroke-width':1.4},null,g);
+    svgEl('text',{x:x+8,y:118,style:'font:700 13px var(--mono);fill:#8A959C'},'word '+(i+1),g);
+  }
+})();
+
+/* ---------- 08 页：BloomFormTuple 五步 ---------- */
+(function(){
+  const g=$('#s8steps'); if(!g) return;
+  const steps=['① 分配固定大小 BloomTuple','② 保存 heap TID','③ 遍历索引列','④ 跳过 NULL','⑤ signValue() → bit OR 进同一签名'];
+  steps.forEach((s,i)=>{
+    const y=62+i*29;
+    svgEl('rect',{x:752,y:y-19,width:666,height:26,rx:4,fill:i%2?'#F4F7F8':'#EAF1F6',stroke:'#D3DBDC','stroke-width':1},null,g);
+    svgEl('text',{x:766,y:y,style:'font:16px var(--sans);fill:#16232E'},s,g);
+  });
+})();
+
+/* ---------- 09 页：数据页 / 三栏对比 ---------- */
+(function(){
+  const g=$('#s9pages'); if(!g) return;
+  ['Block 1','Block 2','Block 3','···','Block N'].forEach((t,i)=>{
+    const x=290+i*225;
+    svgEl('rect',{x:x,y:36,width:200,height:116,rx:8,class:'box'},null,g);
+    svgEl('text',{x:x+18,y:64,class:'tt'},t,g);
+    svgEl('text',{x:x+18,y:92,class:'ts'},'BloomTuple × n',g);
+    svgEl('text',{x:x+18,y:114,class:'ts'},'heapPtr + sign[]',g);
+    if(i<4) svgEl('text',{x:x+207,y:100,style:'font:800 20px var(--mono);fill:#8496A1'},'›',g);
+  });
+  const lanes=$('#s9lanes'); if(!lanes) return;
+  const L=[
+    ['B-tree','root → internal → leaf','树路径定位，只读少量页',['#EAF1F6','#9AB9CE']],
+    ['bloom','meta → 平铺 data pages','全索引顺序扫描，无导航',['#FBF0DE','#DEB475']],
+    ['BRIN','revmap → range 摘要','按 page range 返回有损 bitmap',['#E4F1EC','#97C7B8']]
+  ];
+  L.forEach((l,i)=>{
+    const y=424+i*48;
+    svgEl('rect',{x:20,y:y,width:1420,height:42,rx:6,fill:'#FFFFFF',stroke:'#D3DBDC','stroke-width':1.3},null,lanes);
+    svgEl('rect',{x:20,y:y,width:112,height:42,rx:6,fill:l[3][0],stroke:l[3][1],'stroke-width':1.3},null,lanes);
+    svgEl('text',{x:76,y:y+27,'text-anchor':'middle',style:'font:800 17px var(--sans);fill:#16232E'},l[0],lanes);
+    svgEl('text',{x:152,y:y+27,style:'font:16px var(--mono);fill:#2C5F8A'},l[1],lanes);
+    svgEl('text',{x:690,y:y+27,style:'font:16px var(--sans);fill:#4C5C68'},l[2],lanes);
+  });
+})();
+
+/* ---------- 10 页：构建六步 ---------- */
+(function(){
+  const g=$('#s10steps'); if(!g) return;
+  const S=[
+    ['① 初始化 metapage','blbuild()','boxb'],
+    ['② 顺序扫 heap','table_index_build_scan()','boxb'],
+    ['③ 形成 BloomTuple','bloomBuildCallback()','boxb'],
+    ['④ 追加到缓存页','BloomPageAddItem()','boxa'],
+    ['⑤ 页满就落盘','flushCachedPage()','boxa'],
+    ['⑥ 新数据页','block 1 .. N','boxg']
+  ];
+  S.forEach((s,i)=>{
+    const x=20+i*240;
+    svgEl('rect',{x:x,y:56,width:220,height:176,rx:9,class:s[2]},null,g);
+    svgEl('text',{x:x+16,y:92,style:'font:800 18px var(--sans);fill:#16232E'},s[0],g);
+    svgEl('text',{x:x+16,y:128,style:'font:700 13px var(--mono);fill:#2C5F8A'},s[1],g);
+    svgEl('line',{x1:x+16,y1:146,x2:x+204,y2:146,stroke:'#C9D6DE','stroke-width':1.2},null,g);
+    const notes=['写 magic / 参数 / notFullPage','每个 heap tuple 进入回调','TID + 各列 bit OR 成签名','固定大小条目连续存放','缓存页满 → 写新 bloom 数据页','索引文件顺序增长'];
+    svgEl('text',{x:x+16,y:174,style:'font:14px var(--sans);fill:#4C5C68'},notes[i],g);
+    if(i<5) svgEl('line',{x1:x+222,y1:144,x2:x+238,y2:144,class:'arr'},null,g);
+  });
+  svgEl('text',{x:20,y:272,style:'font:800 15px var(--sans);fill:#8A959C'},'无排序阶段 · 无树形构造 · 无页面分裂',g);
+})();
+
+/* ---------- 11 页：VACUUM 四步 ---------- */
+(function(){
+  const g=$('#s11vac'); if(!g) return;
+  const S=[
+    ['blbulkdelete()','扫描所有数据页'],
+    ['回调判断 dead TID','该 heapPtr 是否要删'],
+    ['memmove() 压缩','保留条目前移，maxoff 减少'],
+    ['空页 → FSM','BLOOM_DELETED / blvacuumcleanup()']
+  ];
+  S.forEach((s,i)=>{
+    const x=20+i*360;
+    svgEl('rect',{x:x,y:340,width:330,height:106,rx:8,class:i===3?'boxg':'box'},null,g);
+    svgEl('text',{x:x+18,y:372,style:'font:800 18px var(--sans);fill:#16232E'},s[0],g);
+    svgEl('text',{x:x+18,y:402,style:'font:15px var(--sans);fill:#4C5C68'},s[1],g);
+    svgEl('text',{x:x+18,y:430,style:'font:800 15px var(--mono);fill:#8A959C'},'STEP '+(i+1),g);
+    if(i<3) svgEl('line',{x1:x+332,y1:393,x2:x+358,y2:393,class:'arr'},null,g);
+  });
+})();
+
+/* ---------- 12 页：六步流程 + 动画 DOM ---------- */
+(function(){
+  const g=$('#s12flow'); if(!g) return;
+  const S=[
+    ['① WHERE 条件','c2=? AND c4=?','NULL 查询直接无候选'],
+    ['② 查询签名','对每个 scan key','调 signValue()'],
+    ['③ 顺序扫索引','block 1 → 文件末尾','bulk read 策略'],
+    ['④ 包含测试','(sign & qsign)','== qsign'],
+    ['⑤ TIDBitmap','候选 TID 加入','recheck = true'],
+    ['⑥ 回表复查','Bitmap Heap Scan','按 SQL 条件复查']
+  ];
+  S.forEach((s,i)=>{
+    const x=20+i*240;
+    svgEl('rect',{x:x,y:36,width:220,height:132,rx:8,class:i<3?'boxb':(i===5?'boxg':'boxa')},null,g);
+    svgEl('text',{x:x+14,y:66,style:'font:800 18px var(--sans);fill:#16232E'},s[0],g);
+    svgEl('text',{x:x+14,y:98,style:'font:15px var(--mono);fill:#2C5F8A'},s[1],g);
+    svgEl('text',{x:x+14,y:126,style:'font:14px var(--sans);fill:#4C5C68'},s[2],g);
+    if(i<5) svgEl('line',{x1:x+222,y1:102,x2:x+238,y2:102,class:'arr'},null,g);
+  });
+  svgEl('text',{x:20,y:194,style:'font:800 15px var(--sans);fill:#B8711A'},'索引侧 = 全索引扫描（必须访问所有 index tuple），不是树查找；靠「索引更短 + 签名排除」省 IO。',g);
+  const wrap=$('#s_pages');
+  for(let i=0;i<8;i++){
+    const d=document.createElement('div');
+    d.className='sp'; d.id='sp'+i;
+    d.innerHTML='block '+(i+1)+'<span class="spt">data page</span>';
+    wrap.appendChild(d);
+  }
+})();
+
+/* ---------- 13 页：IndexAmRoutine 九宫格 ---------- */
+(function(){
+  const wrap=$('#amGrid'); if(!wrap) return;
+  const A=[
+    ['amgettuple = NULL','不能逐条返回 TID',false],
+    ['amgetbitmap = blgetbitmap','扫描入口：返回 bitmap',true],
+    ['amcanorder = false','不能提供排序输出',false],
+    ['amcanunique = false','不能做唯一约束',false],
+    ['amcanmulticol = true','支持多列索引',true],
+    ['amoptionalkey = true','允许首列无约束 / 无 scan key 扫描',true],
+    ['amsearchnulls = false','不支持搜索 NULL',false],
+    ['amcanparallel = false','不支持并行扫描',false],
+    ['amcanbuildparallel = false','不支持并行构建',false]
+  ];
+  A.forEach(a=>{
+    const d=document.createElement('div');
+    d.className='card';
+    d.style.cssText='display:flex;flex-direction:column;justify-content:center;gap:8px;padding:14px 18px';
+    d.innerHTML='<div class="mono" style="font-size:16px;font-weight:800;color:'+(a[2]?'#0E7A6B':'#AE433C')+'">'
+      +(a[2]?'✓ ':'✗ ')+a[0]+'</div>'
+      +'<div style="font-size:15px;color:#4C5C68">'+a[1]+'</div>';
+    wrap.appendChild(d);
+  });
+})();
+
+/* ---------- 15 页：空间柱状图 ---------- */
+(function(){
+  const svg=$('#sizeChart'); if(!svg) return;
+  const bars=[['6 列单 B-tree',386,'#8FA9BE'],['bloom（默认）',153,'#B8711A'],['6 个单列 B-tree',531,'#2C5F8A']];
+  const base=280, max=560, h=210;
+  svgEl('line',{x1:60,y1:base,x2:660,y2:base,stroke:'#8A959C','stroke-width':1.6},null,svg);
+  [0,100,200,300,400,500].forEach(v=>{
+    const y=base-v/max*h;
+    svgEl('line',{x1:60,y1:y,x2:660,y2:y,stroke:'#E1E6E4','stroke-width':1},null,svg);
+    svgEl('text',{x:52,y:y+5,'text-anchor':'end',style:'font:12px var(--mono);fill:#8A959C'},String(v),svg);
+  });
+  bars.forEach((b,i)=>{
+    const x=120+i*195, bh=b[1]/max*h, y=base-bh;
+    svgEl('rect',{x:x,y:y,width:120,height:bh,rx:5,fill:b[2],stroke:'#FFFFFF','stroke-width':1},null,svg);
+    svgEl('text',{x:x+60,y:y-12,'text-anchor':'middle',style:'font:800 24px var(--mono);fill:#16232E'},b[1]+' MB',svg);
+    svgEl('text',{x:x+60,y:base+22,'text-anchor':'middle',style:'font:700 14px var(--sans);fill:#4C5C68'},b[0],svg);
+  });
+  svgEl('text',{x:60,y:24,style:'font:700 14px var(--sans);fill:#8A959C'},'MB · 索引大小（官方示例）',svg);
+  svgEl('text',{x:120,y:base+48,style:'font:13px var(--sans);fill:#8A959C'},'仍走 Seq Scan',svg);
+  svgEl('text',{x:315,y:base+48,style:'font:13px var(--sans);fill:#B8711A'},'最小',svg);
+  svgEl('text',{x:510,y:base+48,style:'font:13px var(--sans);fill:#2C5F8A'},'最快，但空间最大',svg);
+})();
+})();
+</script>
+
+<script>
+/* ============ 交互逻辑 ============ */
+(function(){
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+
+/* 教学 hash（明确不是 PostgreSQL 内部 hash） */
+function hashBits(val,col,n,m){
+  let h=(2166136261 ^ ((col*0x9E3779B9)>>>0))>>>0;
+  const s=String(val);
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  let x=h; const pos=[];
+  for(let i=0;i<n;i++){
+    x=(Math.imul(x,1664525)+1013904223)>>>0;
+    let p=x%m;
+    while(pos.indexOf(p)>=0) p=(p+1)%m;
+    pos.push(p);
+  }
+  return pos;
+}
+function rowSet(vals,n,m){
+  const s=new Set();
+  vals.forEach((v,i)=>hashBits(v,i,n,m).forEach(p=>s.add(p)));
+  return s;
+}
+function makeCells(host,len,cols,set,cls,animate){
+  host.innerHTML='';
+  const words=Math.ceil(len/cols);
+  for(let w=0;w<words;w++){
+    const row=document.createElement('div'); row.className='bitrow';
+    const lab=document.createElement('span'); lab.className='wl'; lab.textContent='w'+w;
+    row.appendChild(lab);
+    for(let j=0;j<cols;j++){
+      const idx=w*cols+j;
+      if(idx>=len) break;
+      const c=document.createElement('span');
+      c.className='bitcell'+(set.has(idx)?' '+cls:'')+(animate&&set.has(idx)?' pop':'');
+      if(animate&&set.has(idx)) c.style.animationDelay=(idx*11)+'ms';
+      row.appendChild(c);
+    }
+    host.appendChild(row);
+  }
+}
+
+/* ---------- 实验 A ---------- */
+const A={step:0,timer:null,playing:false,labels:['读取输入','列相关哈希','逐列 OR 置位','word 定长存储','完成']};
+function aParams(){
+  return {vals:[$('#a_c1').value,$('#a_c2').value,$('#a_c3').value,$('#a_c4').value],
+    m:+$('#a_len').value, n:+$('#a_bit').value};
+}
+function aRefreshLabels(){
+  $('#a_len_v').textContent=A.m+' bit（'+(A.m/16)+' words）';
+  $('#a_bit_v').textContent=A.n+' bit';
+}
+function aCompute(){
+  const p=aParams(); A.m=p.m; A.n=p.n; A.vals=p.vals;
+  A.colBits=p.vals.map((v,i)=>hashBits(v,i,p.n,p.m));
+  A.set=new Set(); A.colBits.forEach(a=>a.forEach(b=>A.set.add(b)));
+  aRefreshLabels();
+}
+function aRender(){
+  // 步骤条
+  const sb=$('#a_steps'); sb.innerHTML='';
+  A.labels.forEach((t,i)=>{
+    const s=document.createElement('span');
+    s.className='st'+(i===A.step-1?' on':(i<A.step-1?' done':''));
+    s.textContent=(i+1)+' '+t; sb.appendChild(s);
+  });
+  // 列卡片
+  const cards=$('#a_cards'); cards.innerHTML='';
+  const names=['c1','c2','c3','c4'];
+  A.vals.forEach((v,i)=>{
+    const d=document.createElement('div');
+    d.className='colcard'+(A.step>=2?' on':'');
+    d.innerHTML='<div class="cn">'+names[i]+' · attno '+(i+1)+'</div>'
+      +'<div class="cv">'+String(v).replace(/</g,'&lt;')+'</div>'
+      +'<div class="cb">'+(A.step>=2?'bit '+A.colBits[i].join(', '):'—')+'</div>';
+    cards.appendChild(d);
+  });
+  // 签名格
+  const grid=$('#a_grid');
+  let visible=new Set();
+  if(A.step>=3) visible=A.set;
+  makeCells(grid,A.m,16,visible,'one',A.step===3);
+  if(A.step>=4){
+    grid.querySelectorAll('.bitcell.one').forEach(c=>{c.style.outline='2px solid rgba(44,95,138,.18)';});
+  }
+  // 状态
+  const msg=[
+    '等待播放：按「▶ 播放」或「⏭ 单步」开始。',
+    '① 读取四个列值与 reloptions：length = '+A.m+' bit，每列 '+A.n+' bit。',
+    '② 列相关哈希：先用列号 attno 初始化种子，再调 opclass hash；同值落在不同列会得到不同 bit。',
+    '③ 逐列把 bit OR 进同一段签名；NULL 列会被跳过。',
+    '④ 按 uint16 word 定长存储：length 按 16 bit 上取整，一行只生成一条固定大小 BloomTuple。',
+    '⑤ 完成：共置位 '+A.set.size+' / '+A.m+' bit，签名密度 '+Math.round(A.set.size/A.m*100)+'%。'
+  ];
+  $('#a_status').textContent=msg[A.step];
+  $('#a_summary').innerHTML=A.step>=4
+    ? '本行签名：<b>'+A.set.size+' / '+A.m+' bit</b> 置位，密度 <b>'+Math.round(A.set.size/A.m*100)+'%</b>。<br>'
+      +'若签名接近全 1，不同列 / 值会互相碰撞，候选 TID 激增。'
+    : '签名尚未生成。';
+}
+function aStop(){clearInterval(A.timer);A.timer=null;A.playing=false;}
+function aGo(){
+  if(A.step>=5){aStop();return;}
+  A.step++; aRender();
+  if(A.step>=5) aStop();
+}
+function aPlay(){ if(A.playing)return; aCompute(); if(A.step>=5){A.step=0;aRender();} A.playing=true; aGo(); A.timer=setInterval(aGo,1000); }
+function aReset(){aStop();A.step=0;aCompute();aRender();}
+['#a_c1','#a_c2','#a_c3','#a_c4','#a_len','#a_bit'].forEach(s=>{
+  $(s).addEventListener('input',()=>{aReset();});
+});
+$('#a_play').addEventListener('click',aPlay);
+$('#a_pause').addEventListener('click',aStop);
+$('#a_step').addEventListener('click',()=>{aStop();aCompute();aGo();});
+$('#a_reset').addEventListener('click',aReset);
+aReset();
+
+/* ---------- 实验 B：查询签名 → 候选 → 回表复查 ---------- */
+const B={step:0,timer:null,playing:false,q:[],rows:[],cand:[],hits:[],removed:[]};
+const B_SRC=[
+  {tag:'R1',vals:[42,7,'SH','af']},
+  {tag:'R2',vals:[42,19,'BJ','af']},
+  {tag:'R3',vals:[88,7,'SH','zz']},
+  {tag:'R4',vals:[5,31,'GZ','af']},
+  {tag:'R5',vals:[39,7,'SH','zz']}
+];
+const B_LABELS=['生成签名','R1','R2','R3','R4','R5','回表复查'];
+function bCompute(){
+  const m=+$('#b_len').value, n=2;
+  const c1=+$('#b_col1').value, c2=+$('#b_col2').value;
+  const v1=$('#b_val1').value, v2=$('#b_val2').value;
+  const q1=hashBits(v1,c1,n,m), q2=hashBits(v2,c2,n,m);
+  B.q=Array.from(new Set(q1.concat(q2))).sort((a,b)=>a-b);
+  B.c1=c1; B.c2=c2; B.m=m;
+  B.rows=B_SRC.map(r=>{
+    const set=rowSet(r.vals,n,m);
+    const present=B.q.every(p=>set.has(p));
+    const truth=(String(r.vals[c1])===String(v1))&&(String(r.vals[c2])===String(v2));
+    return {tag:r.tag,vals:r.vals,has:set,pass:present,truth:truth};
+  });
+  B.cand=B.rows.filter(r=>r.pass);
+  B.hits=B.cand.filter(r=>r.truth);
+  B.removed=B.cand.filter(r=>!r.truth);
+}
+function bRender(){
+  const sb=$('#b_steps'); sb.innerHTML='';
+  B_LABELS.forEach((t,i)=>{
+    const s=document.createElement('span');
+    s.className='st'+(i===B.step-1?' on':(i<B.step-1?' done':''));
+    s.textContent=(i+1)+' '+t; sb.appendChild(s);
+  });
+  $('#b_len_v').textContent=B.m+' bit';
+  $('#b_qbits').innerHTML='查询签名需要检查 <b>'+B.q.length+'</b> 个 bit：'
+    +B.q.map(p=>'<span class="chip a" style="padding:1px 7px;font-family:var(--mono)">'+p+'</span>').join(' ')
+    +'　·　判定式 <span class="mono">(row_sign &amp; q_sign) == q_sign</span>';
+
+  const body=$('#b_body'); body.innerHTML='';
+  B.rows.forEach((r,i)=>{
+    const tr=document.createElement('tr');
+    tr.className=(B.step>=i+2)?'show':'hide';
+    const dots=B.q.map(p=>'<i class="'+(r.has.has(p)?'y':'n')+'"></i>').join('');
+    const conclusion=r.pass?'<span class="tag-ok">通过 → 候选</span>':'<span class="tag-no">排除</span>';
+    tr.innerHTML='<td class="rname">'+r.tag+'</td>'
+      +'<td class="vals">c'+(B.c1+1)+' = '+r.vals[B.c1]+'　·　c'+(B.c2+1)+' = '+r.vals[B.c2]+'</td>'
+      +'<td><div class="dots">'+dots+'</div></td>'
+      +'<td class="res">'+conclusion+'</td>';
+    body.appendChild(tr);
+  });
+
+  const msgs=[
+    '等待播放：按「▶ 播放」或「⏭ 单步」开始。',
+    '① 查询条件生成查询签名：两个等值条件各自哈希，合计需要检查 '+B.q.length+' 个 bit。'
+  ];
+  B.rows.forEach((r,i)=>{
+    msgs.push('顺序检查 '+r.tag+'：'+(r.pass
+      ?'签名包含全部查询 bit → 进入候选集（只是「可能匹配」）'
+      :'签名缺少查询 bit → 一定不匹配，索引侧直接排除'));
+  });
+  msgs.push('⑦ Bitmap Heap Scan 回表复查：读真实 tuple 按 SQL 条件复查，误判行被剔除。');
+  $('#b_status').textContent=msgs[B.step]||'';
+
+  const done=B.step>=7;
+  $('#b_cand').innerHTML=done
+    ? '候选 TID：<b>'+B.cand.length+' 行</b>（'+(B.cand.map(r=>r.tag).join('、')||'无')+'）'
+    : '候选 TID：<b>扫描中…</b>';
+  $('#b_hits').innerHTML=done
+    ? '真实命中：<b>'+B.hits.length+' 行</b>（'+(B.hits.map(r=>r.tag).join('、')||'无')+'）'
+    : '真实命中：等待复查';
+  $('#b_removed').innerHTML=done
+    ? '误判剔除：<b>'+B.removed.length+' 行</b>（'+(B.removed.map(r=>r.tag).join('、')||'无')+'）'
+    : '误判剔除：等待复查';
+}
+function bStop(){clearInterval(B.timer);B.timer=null;B.playing=false;}
+function bGo(){
+  if(B.step>=7){bStop();return;}
+  B.step++; bRender();
+  if(B.step>=7) bStop();
+}
+function bPlay(){
+  if(B.playing)return;
+  bCompute();
+  if(B.step>=7){B.step=0;bRender();}
+  B.playing=true; bGo(); B.timer=setInterval(bGo,780);
+}
+function bReset(){bStop();B.step=0;bCompute();bRender();}
+['#b_col1','#b_col2','#b_val1','#b_val2','#b_len'].forEach(s=>{
+  $(s).addEventListener('input',bReset);
+  $(s).addEventListener('change',bReset);
+});
+$('#b_play').addEventListener('click',bPlay);
+$('#b_pause').addEventListener('click',bStop);
+$('#b_step').addEventListener('click',()=>{bStop();bCompute();bGo();});
+$('#b_reset').addEventListener('click',bReset);
+$('#b_fp').addEventListener('click',()=>{
+  bStop(); $('#b_len').value=16; B.step=0; bCompute(); bRender(); bPlay();
+});
+bReset();
+
+/* ---------- 12 页扫描动画 ---------- */
+const S={i:-1,timer:null,playing:false};
+const candidatePages=new Set([1,4,6]);
+function sReset(){
+  clearInterval(S.timer);S.timer=null;S.playing=false;S.i=-1;
+  $$('.sp').forEach(p=>p.className='sp');
+  $('#s_tid').innerHTML='<span style="font-size:14px;color:#5D8C7E">尚无候选 · 等待扫描</span>';
+  $('#s_status').textContent='按「▶ 播放扫描」观察全过程。';
+}
+function sTick(){
+  if(S.i>=0&&S.i<8){
+    const prev=$('#sp'+S.i); if(prev) prev.className='sp done';
+  }
+  S.i++;
+  if(S.i>=8){
+    clearInterval(S.timer);S.timer=null;S.playing=false;
+    $('#s_status').innerHTML='扫描完成：共读 <b>8 个数据页</b>；候选 TID 进入 bitmap，'
+      +'<b>Bitmap Heap Scan 回表复查</b> → 真实命中保留，误判被剔除（Rows Removed by Index Recheck）。';
+    return;
+  }
+  const p=$('#sp'+S.i); if(p) p.className='sp on';
+  if(candidatePages.has(S.i)){
+    const box=$('#s_tid');
+    if(box.querySelector('span')&&box.children.length===1&&box.textContent.indexOf('尚无候选')>=0) box.innerHTML='';
+    const d=document.createElement('span'); d.className='tid'; d.textContent='T'+(S.i+1);
+    box.appendChild(d);
+    $('#s_status').innerHTML='正在读 block '+(S.i+1)+'：某个 BloomTuple 通过 bit 包含测试 → '
+      +'候选 TID 加入 bitmap（<b>recheck = true</b>）。';
+  }else{
+    $('#s_status').textContent='正在读 block '+(S.i+1)+'：签名不包含全部查询 bit → 该行一定不匹配，直接排除。';
+  }
+}
+function sPlay(){
+  if(S.playing)return;
+  if(S.i>=7) sReset();
+  S.playing=true; sTick();
+  S.timer=setInterval(sTick,+$('#s_speed').value);
+}
+$('#s_play').addEventListener('click',sPlay);
+$('#s_pause').addEventListener('click',()=>{clearInterval(S.timer);S.timer=null;S.playing=false;});
+$('#s_reset').addEventListener('click',sReset);
+$('#s_speed').addEventListener('change',()=>{if(S.playing){clearInterval(S.timer);S.timer=setInterval(sTick,+$('#s_speed').value);}});
+sReset();
+
+/* ---------- 实验 C：参数沙盘 ---------- */
+const P={timer:null,playing:false};
+function pVals(){
+  const m=+$('#p_len').value, cols=+$('#p_cols').value, n=+$('#p_bit').value, q=+$('#p_q').value;
+  const K=cols*n, Q=q*n, fill=1-Math.exp(-K/m), p=Math.pow(fill,Q);
+  return {m,cols,n,q,K,Q,fill,p};
+}
+function pLabels(v){
+  $('#p_len_v').textContent=v.m+' bit'; $('#p_cols_v').textContent=v.cols+' 列';
+  $('#p_bit_v').textContent=v.n+' bit'; $('#p_q_v').textContent=v.q+' 列';
+  $('#p_pv').textContent=(v.p*100).toFixed(2)+'%';
+  $('#p_fv').textContent=(v.fill*100).toFixed(1)+'%';
+  $('#p_kv').textContent=v.K+' / '+v.m;
+}
+function pChart(v){
+  const svg=$('#pChart'); svg.innerHTML='';
+  const NS='http://www.w3.org/2000/svg';
+  const el=(t,a,txt)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;svg.appendChild(e);return e;};
+  const L=60,R=660,T=18,B=205;
+  el('line',{x1:L,y1:B,x2:R,y2:B,stroke:'#8A959C','stroke-width':1.5});
+  el('line',{x1:L,y1:T,x2:L,y2:B,stroke:'#8A959C','stroke-width':1.5});
+  [0,.25,.5,.75,1].forEach(f=>{
+    const y=B-f*(B-T);
+    el('line',{x1:L,y1:y,x2:R,y2:y,stroke:'#E1E6E4','stroke-width':1});
+    el('text',{x:L-8,y:y+5,'text-anchor':'end',style:'font:12px var(--mono);fill:#8A959C'},Math.round(f*100)+'%');
+  });
+  [32,96,160,224,256].forEach(m=>{
+    const x=L+(m-32)/(256-32)*(R-L);
+    el('text',{x:x,y:B+18,'text-anchor':'middle',style:'font:12px var(--mono);fill:#8A959C'},m);
+  });
+  el('text',{x:L,y:T-3,style:'font:700 13px var(--sans);fill:#8A959C'},'估算误判率 p');
+  el('text',{x:R-160,y:B+40,style:'font:12px var(--sans);fill:#8A959C'},'签名长度 length (bit) →');
+  const pts=[];
+  for(let m=32;m<=256;m+=4){
+    const fill=1-Math.exp(-v.K/m), p=Math.pow(fill,v.Q);
+    const x=L+(m-32)/224*(R-L), y=B-p*(B-T);
+    pts.push(x.toFixed(1)+','+y.toFixed(1));
+  }
+  el('polyline',{points:pts.join(' '),fill:'none',stroke:'#2C5F8A','stroke-width':2.6});
+  const px=L+(v.m-32)/224*(R-L), py=B-v.p*(B-T);
+  el('line',{x1:px,y1:T,x2:px,y2:B,stroke:'#B8711A','stroke-width':1.6,'stroke-dasharray':'5 4'});
+  el('circle',{cx:px,cy:py,r:7,fill:'#B8711A',stroke:'#FFFFFF','stroke-width':2});
+  el('text',{x:Math.min(px+10,R-120),y:Math.max(py-12,T+14),style:'font:800 13px var(--mono);fill:#B8711A'},(v.p*100).toFixed(2)+'%');
+}
+function pDensity(v){
+  const host=$('#p_density'); host.innerHTML='';
+  const count=Math.min(128,Math.round(v.fill*128));
+  const set=new Set(); for(let i=0;i<count;i++) set.add(i);
+  makeCells(host,128,32,set,'one',false);
+  host.querySelectorAll('.bitcell').forEach(c=>{c.style.width='17px';c.style.height='17px';c.style.flex='0 0 17px';});
+}
+function pRender(){const v=pVals();pLabels(v);pChart(v);pDensity(v);}
+function pStop(){clearInterval(P.timer);P.timer=null;P.playing=false;}
+['#p_len','#p_cols','#p_bit','#p_q'].forEach(s=>$(s).addEventListener('input',()=>{pStop();pRender();}));
+$('#p_play').addEventListener('click',()=>{
+  if(P.playing)return;
+  P.playing=true; $('#p_len').value=32; pRender();
+  P.timer=setInterval(()=>{
+    let m=+$('#p_len').value;
+    if(m>=256){pStop();return;}
+    $('#p_len').value=m+16; pRender();
+  },260);
+});
+$('#p_reset').addEventListener('click',()=>{
+  pStop();$('#p_len').value=64;$('#p_cols').value=6;$('#p_bit').value=2;$('#p_q').value=2;pRender();
+});
+pRender();
+
+/* 供全局调用：切换页面时暂停所有演示 */
+window.__pauseDemos=function(){
+  clearInterval(A.timer);A.timer=null;A.playing=false;
+  clearInterval(B.timer);B.timer=null;B.playing=false;
+  clearInterval(S.timer);S.timer=null;S.playing=false;
+  clearInterval(P.timer);P.timer=null;P.playing=false;
+};
+})();
+</script>
+
+<script>
+/* ============ 导航 / 快捷键 / 概览 / 全屏 ============ */
+(function(){
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const slides=$$('.slide'), total=slides.length;
+$('#ovTotal').textContent=total;
+let cur=0;
+try{const v=parseInt(localStorage.getItem('bloomDeckSlide')||'0',10);if(!isNaN(v)&&v>=0&&v<total)cur=v;}catch(e){}
+
+function show(n,force){
+  n=Math.max(0,Math.min(total-1,n));
+  if(n===cur&&!force)return;
+  cur=n;
+  slides.forEach((s,i)=>s.classList.toggle('active',i===cur));
+  $('#counter').textContent=String(cur+1).padStart(2,'0')+' / '+total;
+  $('#progFill').style.width=((cur+1)/total*100)+'%';
+  if(window.__pauseDemos) window.__pauseDemos();
+  try{localStorage.setItem('bloomDeckSlide',String(cur));}catch(e){}
+  $$('.ovcard').forEach((c,i)=>c.classList.toggle('cur',i===cur));
+}
+function next(){show(cur+1);} function prev(){show(cur-1);}
+$('#btnNext').addEventListener('click',next);
+$('#btnPrev').addEventListener('click',prev);
+
+/* 概览 */
+const ov=$('#overview'), grid=$('#ovgrid');
+slides.forEach((s,i)=>{
+  const c=document.createElement('div');
+  c.className='ovcard';
+  c.innerHTML='<div class="onum">'+String(i+1).padStart(2,'0')+' · '+s.dataset.sec+'</div>'
+    +'<div class="ot">'+s.dataset.title+'</div>';
+  c.addEventListener('click',()=>{show(i,true);ov.classList.remove('on');});
+  grid.appendChild(c);
+});
+function toggleOv(force){
+  const on=force!==undefined?force:!ov.classList.contains('on');
+  ov.classList.toggle('on',on);
+  if(on){$('#help').classList.remove('on');$$('.ovcard').forEach((c,i)=>c.classList.toggle('cur',i===cur));}
+}
+/* 帮助 */
+function toggleHelp(force){
+  const h=$('#help'); const on=force!==undefined?force:!h.classList.contains('on');
+  h.classList.toggle('on',on); if(on) ov.classList.remove('on');
+}
+/* 全屏 */
+function toggleFull(){
+  if(!document.fullscreenElement){
+    const r=document.documentElement.requestFullscreen;
+    if(r){ try{ const p=r.call(document.documentElement); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
+  }else if(document.exitFullscreen){
+    try{ const p=document.exitFullscreen(); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
+  }
+}
+$('#btnGrid').addEventListener('click',()=>toggleOv());
+$('#btnHelp').addEventListener('click',()=>toggleHelp());
+$('#btnFull').addEventListener('click',toggleFull);
+ov.addEventListener('click',e=>{if(e.target===ov)toggleOv(false);});
+$('#help').addEventListener('click',e=>{if(e.target===$('#help'))toggleHelp(false);});
+
+document.addEventListener('keydown',e=>{
+  const tag=(e.target&&e.target.tagName)||'';
+  const typing=(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA');
+  const k=e.key;
+  if(k==='Escape'){toggleOv(false);toggleHelp(false);return;}
+  if(k==='f'||k==='F'){e.preventDefault();toggleFull();return;}
+  if(k==='g'||k==='G'||k==='o'||k==='O'){e.preventDefault();toggleOv();return;}
+  if(k==='?'||(k==='/'&&e.shiftKey)){e.preventDefault();toggleHelp();return;}
+  if(typing) return;
+  if(k==='ArrowRight'||k==='ArrowDown'||k===' '||k==='PageDown'){e.preventDefault();next();}
+  else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'){e.preventDefault();prev();}
+  else if(k==='Home'){e.preventDefault();show(0,true);}
+  else if(k==='End'){e.preventDefault();show(total-1,true);}
+  else if(/^[1-9]$/.test(k)){e.preventDefault();show(parseInt(k,10)-1,true);}
+});
+show(cur,true);
+})();
+</script>
+</body>
+</html>

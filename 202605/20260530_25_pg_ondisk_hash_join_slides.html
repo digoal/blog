@@ -1,0 +1,2886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 - On-Disk Hash Join | PostgreSQL 执行器深度剖析</title>
+<style>
+  :root {
+    --bg: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-letterbox: #EAE6DC;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --border: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --orange: #BE653B;
+    --orange-light: #F7E9DE;
+    --green: #2F7A66;
+    --green-light: #E4F1EC;
+    --gold: #AE8A3E;
+    --gold-light: #F7F1E1;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "STSong", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+
+    --drawer-w: 440px;
+    --bar-h: 44px;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: text;
+  }
+
+  /* 整体布局：上区(左侧舞台容器 + 右侧讲稿窗)，下区(常驻控制条) */
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #workspace {
+    position: relative;
+    flex: 1 1 auto;
+    display: flex;
+    width: 100%;
+    height: calc(100vh - var(--bar-h));
+    overflow: hidden;
+  }
+
+  #stage-viewport {
+    position: relative;
+    flex: 1 1 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-letterbox);
+    overflow: hidden;
+    transition: width 0.22s ease;
+  }
+
+  /* 16:9 固定舞台 1600x900，严禁响应式重排 */
+  #stage {
+    width: 1600px;
+    height: 900px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    transform-origin: center center;
+    flex-shrink: 0;
+  }
+
+  /* 单页容器 */
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 40px 64px 30px 64px;
+    display: none;
+    flex-direction: column;
+    justify-content: flex-start;
+    background: var(--bg);
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* 舞台顶部工程微格纹装饰（极浅、克制） */
+  .slide::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg,
+      var(--strata-1) 0%, var(--strata-1) 14%,
+      var(--strata-2) 14%, var(--strata-2) 28%,
+      var(--strata-3) 28%, var(--strata-3) 42%,
+      var(--strata-4) 42%, var(--strata-4) 56%,
+      var(--strata-5) 56%, var(--strata-5) 70%,
+      var(--strata-6) 70%, var(--strata-6) 85%,
+      var(--strata-7) 85%, var(--strata-7) 100%);
+  }
+
+  .slide-header {
+    flex-shrink: 0;
+  }
+
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .eyebrow .tag-accent {
+    color: var(--orange);
+    font-family: var(--font-mono);
+    letter-spacing: 1.5px;
+    font-size: 12px;
+    border: 1px solid var(--orange);
+    background: var(--orange-light);
+    padding: 1px 8px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.18;
+    color: var(--ink);
+    margin-bottom: 10px;
+    letter-spacing: -0.3px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.48;
+    color: var(--ink-sub);
+    max-width: 1440px;
+    margin-bottom: 14px;
+  }
+
+  .slide-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 18px;
+    flex-shrink: 0;
+  }
+
+  /* 图形与核心内容舞台：严格对齐 1400x430+ 留有控制栏空间 */
+  .diagram-zone {
+    width: 1472px;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
+  }
+
+  .svg-frame {
+    width: 1400px;
+    height: 430px;
+    border: 1px solid var(--border);
+    background: var(--bg-sub);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .svg-frame svg {
+    display: block;
+    width: 1400px;
+    height: 430px;
+  }
+
+  /* 带交互按钮的动画条（紧贴图区下方，严格控制在剩余空白内） */
+  .anim-controls {
+    width: 1400px;
+    height: 42px;
+    margin-top: 8px;
+    padding: 0 14px;
+    background: var(--bg-sub);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--ink-sub);
+  }
+
+  .anim-controls .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ctrl-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border: 1px solid var(--indigo);
+    background: var(--bg);
+    color: var(--indigo);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .ctrl-btn:hover {
+    background: var(--indigo-light);
+  }
+
+  .ctrl-btn.primary {
+    background: var(--indigo);
+    color: var(--bg);
+  }
+
+  .ctrl-btn.primary:hover {
+    background: var(--strata-1);
+  }
+
+  .ctrl-btn.active {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: var(--bg);
+  }
+
+  .ctrl-input, .ctrl-select {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  .ctrl-range {
+    width: 130px;
+    accent-color: var(--indigo);
+    cursor: pointer;
+  }
+
+  .ctrl-status {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+  }
+
+  /* 底部承接区 & 页脚 */
+  .slide-footer-wrap {
+    margin-top: auto;
+    padding-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .next-takeaway {
+    border-left: 3px solid var(--orange);
+    padding: 6px 0 6px 16px;
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.4;
+    color: var(--ink);
+    background: linear-gradient(90deg, var(--orange-light) 0%, rgba(247, 233, 222, 0) 68%);
+  }
+
+  .next-takeaway .next-label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--orange);
+    margin-right: 12px;
+  }
+
+  .slide-meta-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+
+  .slide-meta-footer .page-num {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* 右侧页内讲稿窗（非弹窗） */
+  #notes-drawer {
+    width: 0;
+    height: 100%;
+    background: var(--bg);
+    border-left: 0 solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.22s ease;
+    flex-shrink: 0;
+  }
+
+  #notes-drawer.open {
+    width: var(--drawer-w);
+    border-left: 1px solid var(--border);
+  }
+
+  .drawer-header {
+    padding: 14px 20px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .drawer-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .drawer-mode-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    background: var(--indigo-light);
+    color: var(--indigo);
+    border: 1px solid var(--indigo);
+  }
+
+  .drawer-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 18px 20px 28px 20px;
+    scroll-behavior: smooth;
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-left: 3px solid var(--strata-4);
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .note-block.current {
+    border-left: 4px solid var(--orange);
+    background: var(--bg-sub);
+  }
+
+  .note-block-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+
+  .note-page-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+  }
+
+  .note-block.current .note-page-tag {
+    color: var(--orange);
+  }
+
+  .note-block-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+
+  .note-text {
+    font-size: 14.5px;
+    line-height: 1.75;
+    color: var(--ink-sub);
+  }
+
+  .note-text p {
+    margin-bottom: 10px;
+  }
+
+  .note-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-logic-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--green);
+    border: 1px solid var(--green);
+    background: var(--green-light);
+    padding: 0 5px;
+    margin-right: 6px;
+  }
+
+  /* 底部控制栏（全屏下依然可见） */
+  #bottom-bar {
+    height: var(--bar-h);
+    width: 100%;
+    background: var(--strata-1);
+    color: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    flex-shrink: 0;
+    z-index: 1000;
+    border-top: 1px solid var(--strata-2);
+  }
+
+  .bar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bar-btn {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: var(--bg);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    padding: 4px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .bar-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .bar-btn.active {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: #fff;
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 0 5px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--strata-6);
+  }
+
+  .bar-progress {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--strata-6);
+    padding: 0 8px;
+  }
+
+  /* 目录页内覆盖层（按 G 循环开闭） */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(27, 43, 51, 0.42);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 900;
+  }
+
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  #toc-panel {
+    width: 1160px;
+    max-width: 92vw;
+    max-height: 82vh;
+    background: var(--bg);
+    border: 2px solid var(--indigo);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toc-head {
+    padding: 16px 24px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toc-head h2 {
+    font-family: var(--font-serif);
+    font-size: 24px;
+    color: var(--ink);
+  }
+
+  .toc-grid {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 18px;
+    overflow-y: auto;
+  }
+
+  .toc-item {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 10px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    transition: background 0.14s, border-color 0.14s;
+  }
+
+  .toc-item:hover {
+    background: var(--indigo-light);
+    border-color: var(--indigo);
+  }
+
+  .toc-item.current {
+    background: var(--orange-light);
+    border-color: var(--orange);
+    border-left: 4px solid var(--orange);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--indigo);
+    padding-top: 2px;
+  }
+
+  .toc-item.current .toc-num {
+    color: var(--orange);
+  }
+
+  .toc-info-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 3px;
+  }
+
+  .toc-info-sub {
+    font-size: 12.5px;
+    color: var(--ink-sub);
+    line-height: 1.35;
+  }
+
+  /* 14页思考题展开交互样式 */
+  .q-interactive-hint {
+    font-size: 12.5px;
+    color: var(--indigo);
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="workspace">
+    <!-- 左侧矢量缩放舞台视口 -->
+    <div id="stage-viewport">
+      <div id="stage">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-index="0">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>数据库筑基课 · POSTGRESQL 执行算法</span>
+              <span class="tag-accent">01 / 现象与破题</span>
+            </div>
+            <h1 class="slide-title">On-Disk Hash Join：当内存算子被迫落盘之后</h1>
+            <p class="slide-lead">看到执行计划写着「Hash Join」，千万别本能以为它跑在纯内存里——出现 <code>Batches: 32 (originally 8)</code> 时，真正的战场已经转移到临时文件 I/O、内存预算与倾斜控制。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- 网格底纹 -->
+                <defs>
+                  <pattern id="grid1" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#E5E1D6" stroke-width="0.8"/>
+                  </pattern>
+                  <marker id="arr-indigo" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                    <path d="M0,1 L7,4 L0,7 Z" fill="#245A6B"/>
+                  </marker>
+                  <marker id="arr-orange" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                    <path d="M0,1 L7,4 L0,7 Z" fill="#BE653B"/>
+                  </marker>
+                  <marker id="arr-green" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                    <path d="M0,1 L7,4 L0,7 Z" fill="#2F7A66"/>
+                  </marker>
+                </defs>
+                <rect width="1400" height="430" fill="url(#grid1)"/>
+
+                <!-- 上部：真实 EXPLAIN 现场信号面板 -->
+                <rect x="30" y="20" width="1340" height="92" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+                <text x="52" y="47" fill="#CFE0DC" font-family="SF Mono, Consolas, monospace" font-size="13" letter-spacing="1.5">OBSERVED IN PRODUCTION :: EXPLAIN (ANALYZE, BUFFERS)</text>
+                <text x="52" y="75" fill="#F7F6F2" font-family="SF Mono, Consolas, monospace" font-size="17">Hash  (actual time=... rows=... loops=1)</text>
+                <text x="52" y="100" fill="#F7E9DE" font-family="SF Mono, Consolas, monospace" font-size="17" font-weight="bold">  Buckets: 65536 (originally 32768)   Batches: 32 (originally 8)   Memory Usage: 4096kB</text>
+
+                <!-- 指示标注线（正交竖直线指向下方三个解剖模块） -->
+                <path d="M 210 112 L 210 156" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+                <path d="M 700 112 L 700 156" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-orange)"/>
+                <path d="M 1180 112 L 1180 156" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <!-- 模块1：Buckets -->
+                <rect x="30" y="160" width="410" height="156" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="30" y="160" width="410" height="32" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <text x="48" y="181" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="14" font-weight="bold">SIGNAL 01 · BUCKETS 翻倍</text>
+                <text x="48" y="218" fill="#1B2B33" font-family="PingFang SC, sans-serif" font-size="15" font-weight="bold">32768 → 65536 桶槽扩容</text>
+                <text x="48" y="246" fill="#46585F" font-family="PingFang SC, sans-serif" font-size="13.5">单 batch 内 tuple 密度过高，执行期</text>
+                <text x="48" y="268" fill="#46585F" font-family="PingFang SC, sans-serif" font-size="13.5">自动扩桶以压低 HashJoinTuple 链长。</text>
+                <text x="48" y="296" fill="#245A6B" font-family="SF Mono, monospace" font-size="12.5">bucketno = hashvalue MOD nbuckets</text>
+
+                <!-- 模块2：Batches (核心矛盾) -->
+                <rect x="495" y="160" width="410" height="156" fill="#F7F6F2" stroke="#BE653B" stroke-width="2"/>
+                <rect x="495" y="160" width="410" height="32" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="513" y="181" fill="#BE653B" font-family="SF Mono, monospace" font-size="14" font-weight="bold">SIGNAL 02 · BATCHES 爆炸 (核心矛盾)</text>
+                <text x="513" y="218" fill="#1B2B33" font-family="PingFang SC, sans-serif" font-size="15" font-weight="bold">8 → 32 批次 · 已触发磁盘落盘</text>
+                <text x="513" y="246" fill="#46585F" font-family="PingFang SC, sans-serif" font-size="13.5">Batches &gt; 1 代表不再是纯内存算法；</text>
+                <text x="513" y="268" fill="#46585F" font-family="PingFang SC, sans-serif" font-size="13.5">实际值大于 originally 说明估算偏低。</text>
+                <text x="513" y="296" fill="#BE653B" font-family="SF Mono, monospace" font-size="12.5">ExecHashIncreaseNumBatches() 已触发</text>
+
+                <!-- 模块3：Memory Usage -->
+                <rect x="960" y="160" width="410" height="156" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="960" y="160" width="410" height="32" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1"/>
+                <text x="978" y="181" fill="#2F7A66" font-family="SF Mono, monospace" font-size="14" font-weight="bold">SIGNAL 03 · MEMORY USAGE 边界</text>
+                <text x="978" y="218" fill="#1B2B33" font-family="PingFang SC, sans-serif" font-size="15" font-weight="bold">4096kB 只是单批峰值内存表</text>
+                <text x="978" y="246" fill="#46585F" font-family="PingFang SC, sans-serif" font-size="13.5">受 work_mem * hash_mem_multiplier</text>
+                <text x="978" y="268" fill="#46585F" font-family="PingFang SC, sans-serif" font-size="13.5">约束，但并未包含 32 批临时盘总量。</text>
+                <text x="978" y="296" fill="#2F7A66" font-family="SF Mono, monospace" font-size="12.5">get_hash_memory_limit() 决定上限</text>
+
+                <!-- 底部地层七阶隐喻带 -->
+                <rect x="30" y="344" width="1340" height="62" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="30" y="344" width="191" height="62" fill="#1E4B5A"/>
+                <rect x="221" y="344" width="191" height="62" fill="#2E6373"/>
+                <rect x="412" y="344" width="191" height="62" fill="#47808D"/>
+                <rect x="603" y="344" width="191" height="62" fill="#74A5AD"/>
+                <rect x="794" y="344" width="191" height="62" fill="#A4C4C6"/>
+                <rect x="985" y="344" width="191" height="62" fill="#CFE0DC"/>
+                <rect x="1176" y="344" width="194" height="62" fill="#EBF1EE"/>
+
+                <text x="125" y="370" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">EXPLAIN 观测</text>
+                <text x="125" y="390" text-anchor="middle" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="11">explain.c</text>
+
+                <text x="316" y="370" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">预算与 Sizing</text>
+                <text x="316" y="390" text-anchor="middle" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="11">work_mem × mult</text>
+
+                <text x="507" y="370" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">Hybrid 状态机</text>
+                <text x="507" y="390" text-anchor="middle" fill="#EBF1EE" font-family="SF Mono, monospace" font-size="11">nodeHashjoin.c</text>
+
+                <text x="698" y="370" text-anchor="middle" fill="#1B2B33" font-size="13" font-weight="bold">动态翻倍重分区</text>
+                <text x="698" y="390" text-anchor="middle" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="11">U-curve control</text>
+
+                <text x="889" y="370" text-anchor="middle" fill="#1B2B33" font-size="13" font-weight="bold">Skew 热点过滤</text>
+                <text x="889" y="390" text-anchor="middle" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="11">MCV 2% budget</text>
+
+                <text x="1080" y="370" text-anchor="middle" fill="#1B2B33" font-size="13" font-weight="bold">Parallel Barrier</text>
+                <text x="1080" y="390" text-anchor="middle" fill="#245A6B" font-family="SF Mono, monospace" font-size="11">SharedTuplestore</text>
+
+                <text x="1273" y="370" text-anchor="middle" fill="#1B2B33" font-size="13" font-weight="bold">BufFile 临时盘</text>
+                <text x="1273" y="390" text-anchor="middle" fill="#46585F" font-family="SF Mono, monospace" font-size="11">Temp I/O &amp; 调优</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>既然 <code>Batches &gt; 1</code> 这么麻烦，PostgreSQL 为什么不干脆禁止超内存的 Hash Join？下一页看它究竟在解决什么死结。</div>
+            <div class="slide-meta-footer">
+              <span>作者：digoal · 日期：2026-05-30 · 源码依据：postgres/src/backend/executor/nodeHashjoin.c</span>
+              <span class="page-num">01 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-index="1">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>01 · 问题本质与工程权衡</span>
+              <span class="tag-accent">分而治之的代价</span>
+            </div>
+            <h1 class="slide-title">为什么不得不落盘？拆解大 Join 的输入失真与伴生代价</h1>
+            <p class="slide-lead">数据库面对的是运行期事实，不是优化器估算。On-Disk Hash Join 解决的核心命题是：在 build 侧放不进内存时，依然保住等值分区的吞吐底线。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F1EFE9"/>
+
+                <!-- 左柱：5大现实触发诱因 -->
+                <rect x="24" y="20" width="380" height="390" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="20" width="380" height="36" fill="#245A6B"/>
+                <text x="42" y="43" fill="#F7F6F2" font-size="14" font-weight="bold">一、运行期现实击穿预算的 5 大诱因</text>
+
+                <rect x="40" y="70" width="348" height="54" fill="#E5EFF0" stroke="#A4C4C6"/>
+                <text x="54" y="92" fill="#1E4B5A" font-size="14" font-weight="bold">1. build 侧行数被低估</text>
+                <text x="54" y="112" fill="#46585F" font-size="12.5">统计信息陈旧、多条件相关性估算失准</text>
+
+                <rect x="40" y="136" width="348" height="54" fill="#E5EFF0" stroke="#A4C4C6"/>
+                <text x="54" y="158" fill="#1E4B5A" font-size="14" font-weight="bold">2. 平均行宽被低估</text>
+                <text x="54" y="178" fill="#46585F" font-size="12.5">宽列投影、表达式计算、TOAST 展开后暴涨</text>
+
+                <rect x="40" y="202" width="348" height="54" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="54" y="224" fill="#BE653B" font-size="14" font-weight="bold">3. Join Key 分布倾斜</text>
+                <text x="54" y="244" fill="#46585F" font-size="12.5">少数热点 hash value 挤爆单个 batch</text>
+
+                <rect x="40" y="268" width="348" height="54" fill="#E5EFF0" stroke="#A4C4C6"/>
+                <text x="54" y="290" fill="#1E4B5A" font-size="14" font-weight="bold">4. 并发与节点数放大</text>
+                <text x="54" y="310" fill="#46585F" font-size="12.5">单 SQL 预算 × 多算子 × Worker × 并发会话</text>
+
+                <rect x="40" y="334" width="348" height="54" fill="#E5EFF0" stroke="#A4C4C6"/>
+                <text x="54" y="356" fill="#1E4B5A" font-size="14" font-weight="bold">5. 绝对体量大于内存</text>
+                <text x="54" y="376" fill="#46585F" font-size="12.5">完全拒绝 Hash 会退化为更慢的 NL / 大排序</text>
+
+                <!-- 箭头：左 -> 中 -->
+                <path d="M 404 215 L 452 215" stroke="#245A6B" stroke-width="2.5" marker-end="url(#arr-indigo)"/>
+
+                <!-- 中柱：问题转化 -->
+                <rect x="458" y="20" width="468" height="390" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="458" y="20" width="468" height="36" fill="#1E4B5A"/>
+                <text x="476" y="43" fill="#F7F6F2" font-size="14" font-weight="bold">二、核心转化：把一次大 Join 拆成 N 批小 Join</text>
+
+                <rect x="478" y="72" width="428" height="62" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="494" y="97" fill="#BE653B" font-size="13.5" font-weight="bold">原问题（单轮预算失守）：</text>
+                <text x="494" y="120" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13.5">inner 全部建表 (OOM风险) + outer 全部探测</text>
+
+                <path d="M 692 134 L 692 166" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <rect x="478" y="170" width="428" height="222" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="494" y="196" fill="#2F7A66" font-size="14" font-weight="bold">转化后（同构 Hash 分区 · 逐批内存建表）：</text>
+
+                <rect x="496" y="212" width="392" height="36" fill="#F7F6F2" stroke="#2F7A66"/>
+                <text x="512" y="235" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13.5">batch 0 : inner[0] 建表 ──▶ outer[0] 探测 (当前内存)</text>
+
+                <rect x="496" y="256" width="392" height="36" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="512" y="279" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13.5">batch 1 : inner[1] 落盘 ──▶ outer[1] 落盘 (下一轮)</text>
+
+                <rect x="496" y="300" width="392" height="36" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="512" y="323" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13.5">batch N : inner[N] 落盘 ──▶ outer[N] 落盘 (逐批加载)</text>
+
+                <text x="496" y="370" fill="#1E4B5A" font-size="13" font-weight="bold">成立前提：两侧必须使用完全相同的 hash 分区函数</text>
+
+                <!-- 箭头：中 -> 右 -->
+                <path d="M 926 215 L 974 215" stroke="#BE653B" stroke-width="2.5" marker-end="url(#arr-orange)"/>
+
+                <!-- 右柱：5项明确代价 -->
+                <rect x="980" y="20" width="396" height="390" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="980" y="20" width="396" height="36" fill="#BE653B"/>
+                <text x="998" y="43" fill="#F7F6F2" font-size="14" font-weight="bold">三、等价转化的 5 项明确工程代价</text>
+
+                <rect x="996" y="70" width="364" height="54" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1010" y="92" fill="#BE653B" font-size="14" font-weight="bold">1. 临时文件读写 I/O 剧增</text>
+                <text x="1010" y="112" fill="#46585F" font-size="12.5">未来批的 inner/outer tuple 都要写盘再读回</text>
+
+                <rect x="996" y="136" width="364" height="54" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1010" y="158" fill="#BE653B" font-size="14" font-weight="bold">2. 批次文件缓冲反噬内存</text>
+                <text x="1010" y="178" fill="#46585F" font-size="12.5">每个 batch 需 BLCKSZ 缓冲，batch 过多反耗内存</text>
+
+                <rect x="996" y="202" width="364" height="54" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1010" y="224" fill="#BE653B" font-size="14" font-weight="bold">3. 运行期搬迁已入表 Tuple</text>
+                <text x="1010" y="244" fill="#46585F" font-size="12.5">触发扩批时要扫描旧 chunk 复制或外溢</text>
+
+                <rect x="996" y="268" width="364" height="54" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1010" y="290" fill="#BE653B" font-size="14" font-weight="bold">4. 极端倾斜无法靠拆批治愈</text>
+                <text x="1010" y="310" fill="#46585F" font-size="12.5">同一 hash value 永远落进同一 batch</text>
+
+                <rect x="996" y="334" width="364" height="54" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1010" y="356" fill="#BE653B" font-size="14" font-weight="bold">5. 并行状态同步开销</text>
+                <text x="1010" y="376" fill="#46585F" font-size="12.5">引入 Barrier 与 SharedTuplestore 协调成本</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>理解了「分批换存活」的交易，接下来切开 PostgreSQL 源码剖面，看它用哪 7 层结构支撑这套机制。</div>
+            <div class="slide-meta-footer">
+              <span>核心逻辑：预算失守 → 同构分批 → 伴生 I/O 与缓冲代价</span>
+              <span class="page-num">02 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-index="2">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>02 · 内核架构与核心术语</span>
+              <span class="tag-accent">地层 7 阶源码映射</span>
+            </div>
+            <h1 class="slide-title">不是独立计划节点：PostgreSQL 中的七层执行剖面</h1>
+            <p class="slide-lead">在源码里没有叫作「On-Disk Hash Join」的算子，它只是 <code>Hash Join</code> 在 <code>nbatch &gt; 1</code> 时的多批运行形态；看懂它必须先分清四组术语。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左侧：地层七阶源码映射表 (x: 24..936) -->
+                <text x="24" y="28" fill="#1B2B33" font-size="14" font-weight="bold">A. PostgreSQL 内核七层代码映射（由上层计划到物理落盘）</text>
+
+                <!-- 7 行阶梯色带 -->
+                <rect x="24" y="42" width="900" height="50" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <rect x="24" y="42" width="140" height="50" fill="#1E4B5A"/>
+                <text x="94" y="72" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">1. 计划选择</text>
+                <text x="180" y="64" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13" font-weight="bold">HashPath · initial_cost_hashjoin() · final_cost_hashjoin()</text>
+                <text x="180" y="83" fill="#46585F" font-size="12.5">根据行数、行宽、hash clause 与 I/O 成本估算 hash join 与 batch 代价</text>
+
+                <rect x="24" y="95" width="900" height="50" fill="#CFE0DC" stroke="#D9D5CB"/>
+                <rect x="24" y="95" width="140" height="50" fill="#2E6373"/>
+                <text x="94" y="125" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">2. 内存预算</text>
+                <text x="180" y="117" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13" font-weight="bold">get_hash_memory_limit()</text>
+                <text x="180" y="136" fill="#46585F" font-size="12.5">计算硬预算上限：work_mem * hash_mem_multiplier * 1024</text>
+
+                <rect x="24" y="148" width="900" height="50" fill="#A4C4C6" stroke="#D9D5CB"/>
+                <rect x="24" y="148" width="140" height="50" fill="#47808D"/>
+                <text x="94" y="178" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">3. 初始 Sizing</text>
+                <text x="180" y="170" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13" font-weight="bold">ExecChooseHashTableSize()</text>
+                <text x="180" y="189" fill="#1B2B33" font-size="12.5">初始化 nbuckets、nbatch、space_allowed 与 skew MCV 槽位数</text>
+
+                <rect x="24" y="201" width="900" height="50" fill="#74A5AD" stroke="#D9D5CB"/>
+                <rect x="24" y="201" width="140" height="50" fill="#245A6B"/>
+                <text x="94" y="231" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">4. 执行状态机</text>
+                <text x="180" y="223" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="13" font-weight="bold">ExecHashJoinImpl()</text>
+                <text x="180" y="242" fill="#F7F6F2" font-size="12.5">驱动 build、probe、补全 outer/full/right 连接语义、以及批次切换</text>
+
+                <rect x="24" y="254" width="900" height="50" fill="#47808D" stroke="#D9D5CB"/>
+                <rect x="24" y="254" width="140" height="50" fill="#BE653B"/>
+                <text x="94" y="284" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">5. 运行期增长</text>
+                <text x="180" y="276" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="13" font-weight="bold">ExecHashIncreaseNumBatches() / ExecHashIncreaseBatchSize()</text>
+                <text x="180" y="295" fill="#F7E9DE" font-size="12.5">超预算时决定「nbatch 翻倍重分区」或「权衡缓冲后扩大预算」</text>
+
+                <rect x="24" y="307" width="900" height="50" fill="#2E6373" stroke="#D9D5CB"/>
+                <rect x="24" y="307" width="140" height="50" fill="#1E4B5A"/>
+                <text x="94" y="337" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">6. 串行/并行落盘</text>
+                <text x="180" y="329" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="12.5">ExecHashJoinSaveTuple() / BufFile  |  ParallelHashJoinBatch / SharedTuplestore</text>
+                <text x="180" y="348" fill="#CFE0DC" font-size="12.5">串行用私有 BufFile；并行用 SharedFileSet + SharedTuplestore 共享读写</text>
+
+                <rect x="24" y="360" width="900" height="50" fill="#1E4B5A" stroke="#1B2B33"/>
+                <rect x="24" y="360" width="140" height="50" fill="#2F7A66"/>
+                <text x="94" y="390" text-anchor="middle" fill="#F7F6F2" font-size="13" font-weight="bold">7. 外部观测</text>
+                <text x="180" y="382" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="13" font-weight="bold">show_hash_info() in explain.c</text>
+                <text x="180" y="401" fill="#E4F1EC" font-size="12.5">向开发者输出 Buckets、Batches、Memory Usage 与 originally 变化值</text>
+
+                <!-- 右侧：4组必清术语卡 (x: 950..1376) -->
+                <text x="950" y="28" fill="#1B2B33" font-size="14" font-weight="bold">B. 必须严格区分的四组术语</text>
+
+                <rect x="950" y="42" width="426" height="82" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="950" y="42" width="110" height="82" fill="#E5EFF0"/>
+                <text x="1005" y="79" text-anchor="middle" fill="#245A6B" font-family="SF Mono, monospace" font-size="15" font-weight="bold">bucket</text>
+                <text x="1005" y="99" text-anchor="middle" fill="#46585F" font-size="11.5">内存层概念</text>
+                <text x="1076" y="72" fill="#1B2B33" font-size="13.5" font-weight="bold">内存 Hash Table 的桶槽</text>
+                <text x="1076" y="94" fill="#46585F" font-size="12.5">每个桶内挂的是 HashJoinTuple 链表，</text>
+                <text x="1076" y="112" fill="#46585F" font-size="12.5">决定单批探测时的链表查找冲突长度。</text>
+
+                <rect x="950" y="138" width="426" height="82" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="950" y="138" width="110" height="82" fill="#F7E9DE"/>
+                <text x="1005" y="175" text-anchor="middle" fill="#BE653B" font-family="SF Mono, monospace" font-size="15" font-weight="bold">batch</text>
+                <text x="1005" y="195" text-anchor="middle" fill="#BE653B" font-size="11.5">逻辑分片层</text>
+                <text x="1076" y="168" fill="#1B2B33" font-size="13.5" font-weight="bold">按 hash value 切分的执行批次</text>
+                <text x="1076" y="190" fill="#46585F" font-size="12.5">nbatch &gt; 1 通常意味着触发 on-disk 落盘，</text>
+                <text x="1076" y="208" fill="#46585F" font-size="12.5">总批数保持为 2 的整数次幂。</text>
+
+                <rect x="950" y="234" width="426" height="82" fill="#F1EFE9" stroke="#47808D" stroke-width="1.5"/>
+                <rect x="950" y="234" width="110" height="82" fill="#CFE0DC"/>
+                <text x="1005" y="271" text-anchor="middle" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="14" font-weight="bold">spill file</text>
+                <text x="1005" y="291" text-anchor="middle" fill="#1E4B5A" font-size="11.5">串行物理文件</text>
+                <text x="1076" y="264" fill="#1B2B33" font-size="13.5" font-weight="bold">串行模式私有 BufFile 临时文件</text>
+                <text x="1076" y="286" fill="#46585F" font-size="12.5">保存尚未处理的未来 batch 的 inner/outer</text>
+                <text x="1076" y="304" fill="#46585F" font-size="12.5">tuple，用完即关闭释放缓冲。</text>
+
+                <rect x="950" y="330" width="426" height="80" fill="#F1EFE9" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="950" y="330" width="110" height="80" fill="#E4F1EC"/>
+                <text x="1005" y="361" text-anchor="middle" fill="#2F7A66" font-family="SF Mono, monospace" font-size="13" font-weight="bold">shared</text>
+                <text x="1005" y="378" text-anchor="middle" fill="#2F7A66" font-family="SF Mono, monospace" font-size="13" font-weight="bold">tuplestore</text>
+                <text x="1005" y="396" text-anchor="middle" fill="#2F7A66" font-size="11">并行共享存储</text>
+                <text x="1076" y="360" fill="#1B2B33" font-size="13.5" font-weight="bold">Parallel Hash Join 共享临时区</text>
+                <text x="1076" y="382" fill="#46585F" font-size="12.5">多 worker 共同写入与消费同一 batch 数据，</text>
+                <text x="1076" y="400" fill="#46585F" font-size="12.5">底层由 SharedFileSet 统一管理。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>架构地图铺好了，下一张进入核心原理：Hybrid Hash Join 到底怎么用公式同时管住「内存建表」与「磁盘落盘」？</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：第二章 · 核心结构、函数映射与四组术语边界</span>
+              <span class="page-num">03 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 (交互动画 1) ==================== -->
+        <section class="slide" data-index="3">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>03 · 核心原理 I · HYBRID HASH JOIN</span>
+              <span class="tag-accent">交互模拟演示</span>
+            </div>
+            <h1 class="slide-title">当前批在内存，未来批在磁盘：<code>2^k</code> 分区的单向推进</h1>
+            <p class="slide-lead">On-Disk Hash Join 并非把 Hash Table 搬上磁盘随机寻址，而是通过同一规则先写批、再逐批载入内存。<code>nbatch</code> 恒为 2 的幂，保证了任何扩容都绝不倒退。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="svg-hybrid" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左侧输入流区 -->
+                <rect x="24" y="24" width="230" height="170" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="139" y="48" text-anchor="middle" fill="#1E4B5A" font-size="14" font-weight="bold">BUILD 阶段：Inner 侧输入</text>
+                <rect x="40" y="64" width="198" height="32" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text id="h-in-0" x="139" y="85" text-anchor="middle" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">tuple A · hash=0x10 (b=0)</text>
+                <rect x="40" y="104" width="198" height="32" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text id="h-in-1" x="139" y="125" text-anchor="middle" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">tuple B · hash=0x21 (b=1)</text>
+                <rect x="40" y="144" width="198" height="32" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text id="h-in-2" x="139" y="165" text-anchor="middle" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">tuple C · hash=0x32 (b=2)</text>
+
+                <rect x="24" y="236" width="230" height="170" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="139" y="260" text-anchor="middle" fill="#BE653B" font-size="14" font-weight="bold">PROBE 阶段：Outer 侧输入</text>
+                <rect x="40" y="276" width="198" height="32" fill="#F7F6F2" stroke="#BE653B"/>
+                <text id="h-out-0" x="139" y="297" text-anchor="middle" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">tuple X · hash=0x10 (b=0)</text>
+                <rect x="40" y="316" width="198" height="32" fill="#F7F6F2" stroke="#BE653B"/>
+                <text id="h-out-1" x="139" y="337" text-anchor="middle" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">tuple Y · hash=0x21 (b=1)</text>
+                <rect x="40" y="356" width="198" height="32" fill="#F7F6F2" stroke="#BE653B"/>
+                <text id="h-out-2" x="139" y="377" text-anchor="middle" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">tuple Z · hash=0x32 (b=2)</text>
+
+                <!-- 路由连线到中心路由器 -->
+                <path d="M 254 109 L 330 109 L 330 175 L 368 175" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+                <path d="M 254 321 L 330 321 L 330 255 L 368 255" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-orange)"/>
+
+                <!-- 中央计算盒：ExecHashGetBucketAndBatch -->
+                <rect x="374" y="110" width="330" height="210" fill="#1E4B5A" stroke="#1B2B33" stroke-width="2"/>
+                <text x="539" y="138" text-anchor="middle" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="12.5">ExecHashGetBucketAndBatch()</text>
+                <rect x="394" y="154" width="290" height="64" fill="#2E6373" stroke="#74A5AD"/>
+                <text x="539" y="178" text-anchor="middle" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="13">bucketno = hashvalue MOD nbuckets</text>
+                <text x="539" y="202" text-anchor="middle" fill="#F7E9DE" font-family="SF Mono, monospace" font-size="13">batchno = rotated_bits MOD nbatch</text>
+
+                <rect x="394" y="232" width="290" height="72" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text id="h-cur-batch-label" x="539" y="256" text-anchor="middle" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13.5" font-weight="bold">当前状态：curbatch = 0 (nbatch = 4)</text>
+                <text id="h-rule-label" x="539" y="280" text-anchor="middle" fill="#2F7A66" font-size="13" font-weight="bold">batchno == curbatch → 直接进内存！</text>
+                <text id="h-step-desc" x="539" y="298" text-anchor="middle" fill="#BE653B" font-size="12">等待播放或单步推进...</text>
+
+                <!-- 路由输出正交连线 -->
+                <!-- 1. 进内存 Hash Table (上路) -->
+                <path d="M 704 155 L 770 155 L 770 98 L 814 98" fill="none" stroke="#2F7A66" stroke-width="2.2" marker-end="url(#arr-green)"/>
+                <text x="742" y="88" fill="#2F7A66" font-size="12" font-weight="bold">== curbatch</text>
+
+                <!-- 2. 写磁盘 Batch Files (下路) -->
+                <path d="M 704 275 L 770 275 L 770 315 L 814 315" fill="none" stroke="#BE653B" stroke-width="2.2" marker-end="url(#arr-orange)"/>
+                <text x="738" y="340" fill="#BE653B" font-size="12" font-weight="bold">&gt; curbatch</text>
+
+                <!-- 右上：当前批内存 Hash Table -->
+                <rect x="820" y="24" width="554" height="164" fill="#E4F1EC" stroke="#2F7A66" stroke-width="2"/>
+                <text x="840" y="50" fill="#2F7A66" font-size="14" font-weight="bold">内存 Hash Table (BatchCxt · 仅驻留当前批)</text>
+                <text id="h-mem-badge" x="1356" y="50" text-anchor="end" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="13">Active: Batch 0</text>
+
+                <rect x="840" y="66" width="240" height="106" fill="#F7F6F2" stroke="#2F7A66"/>
+                <text x="960" y="86" text-anchor="middle" fill="#1E4B5A" font-size="12.5" font-weight="bold">Inner Hash Buckets</text>
+                <text id="h-mem-inner" x="854" y="112" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">[空，等待 Build]</text>
+                <text id="h-mem-inner2" x="854" y="136" font-family="SF Mono, monospace" font-size="12.5" fill="#46585F"> </text>
+
+                <path d="M 1080 119 L 1118 119" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <rect x="1124" y="66" width="232" height="106" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="1240" y="86" text-anchor="middle" fill="#245A6B" font-size="12.5" font-weight="bold">Outer Probe 匹配输出</text>
+                <text id="h-mem-probe" x="1138" y="112" font-family="SF Mono, monospace" font-size="12.5" fill="#1B2B33">[等待 curbatch probe]</text>
+                <text id="h-mem-probe2" x="1138" y="136" font-family="SF Mono, monospace" font-size="12.5" fill="#2F7A66"> </text>
+
+                <!-- 右下：磁盘 BufFile Batch 存储区 -->
+                <rect x="820" y="212" width="554" height="194" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="840" y="238" fill="#BE653B" font-size="14" font-weight="bold">磁盘临时存储 (SpillCxt · 未来 Batch 的 BufFile)</text>
+                <text x="1356" y="238" text-anchor="end" fill="#46585F" font-family="SF Mono, monospace" font-size="12">2 的幂次：只进更晚批，绝不倒退</text>
+
+                <!-- Batch 1 / 2 / 3 槽位 -->
+                <rect id="box-b1" x="840" y="254" width="166" height="136" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1.5"/>
+                <text x="923" y="276" text-anchor="middle" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="13" font-weight="bold">Batch 1 Files</text>
+                <text id="h-disk-1i" x="852" y="302" font-family="SF Mono, monospace" font-size="12" fill="#245A6B">inner[1]: (空)</text>
+                <text id="h-disk-1o" x="852" y="326" font-family="SF Mono, monospace" font-size="12" fill="#BE653B">outer[1]: (空)</text>
+                <text id="h-disk-1s" x="852" y="366" font-size="11.5" fill="#89938F">状态：等待轮次</text>
+
+                <rect id="box-b2" x="1018" y="254" width="166" height="136" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1.5"/>
+                <text x="1101" y="276" text-anchor="middle" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="13" font-weight="bold">Batch 2 Files</text>
+                <text id="h-disk-2i" x="1030" y="302" font-family="SF Mono, monospace" font-size="12" fill="#245A6B">inner[2]: (空)</text>
+                <text id="h-disk-2o" x="1030" y="326" font-family="SF Mono, monospace" font-size="12" fill="#BE653B">outer[2]: (空)</text>
+                <text id="h-disk-2s" x="1030" y="366" font-size="11.5" fill="#89938F">状态：等待轮次</text>
+
+                <rect id="box-b3" x="1196" y="254" width="160" height="136" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1.5"/>
+                <text x="1276" y="276" text-anchor="middle" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="13" font-weight="bold">Batch 3 Files</text>
+                <text x="1208" y="302" font-family="SF Mono, monospace" font-size="12" fill="#245A6B">inner[3]: (空)</text>
+                <text x="1208" y="326" font-family="SF Mono, monospace" font-size="12" fill="#BE653B">outer[3]: (空)</text>
+                <text id="h-disk-3s" x="1208" y="366" font-size="11.5" fill="#89938F">状态：备选溢写</text>
+
+                <!-- Batch 轮转回环箭头（从磁盘到内存） -->
+                <path d="M 1101 212 L 1101 196" stroke="#2F7A66" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-green)"/>
+              </svg>
+            </div>
+            <!-- 配套控制条 -->
+            <div class="anim-controls">
+              <div class="ctrl-group">
+                <span>测试输入自定义 Key Hash：</span>
+                <select id="hybrid-custom-batch" class="ctrl-select">
+                  <option value="0">0x10 → Batch 0</option>
+                  <option value="1" selected>0x21 → Batch 1</option>
+                  <option value="2">0x32 → Batch 2</option>
+                  <option value="3">0x43 → Batch 3</option>
+                </select>
+                <button class="ctrl-btn primary" id="btn-hybrid-play">▶ 播放完整流转</button>
+                <button class="ctrl-btn" id="btn-hybrid-step">单步推进</button>
+                <button class="ctrl-btn" id="btn-hybrid-reset">重置 (R)</button>
+              </div>
+              <div class="ctrl-status" id="hybrid-status">STEP 0 / 6 · 就绪：点击播放或单步查看 4-batch 流转</div>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>既然未来 batch 写到了盘上，它们在磁盘里长什么样？那些维持文件的内存缓冲又该记在谁的账上？</div>
+            <div class="slide-meta-footer">
+              <span>关键性质：nbatch = 2^k · 运行期扩容时 tuple 只能留在当前批或推入更晚批</span>
+              <span class="page-num">04 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 ==================== -->
+        <section class="slide" data-index="4">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>03 · 核心原理 II · 临时文件格式与内存账本</span>
+              <span class="tag-accent">HASHJOIN.H 生命周期</span>
+            </div>
+            <h1 class="slide-title">临时文件存什么？为什么 <code>spillCxt</code> 会反噬内存预算</h1>
+            <p class="slide-lead"><code>BufFile</code> 记录不仅存行数据还带着 <code>hashvalue</code> 以免重算；而支撑落盘文件的 <code>spillCxt</code> 必须跨批次存活，它直接把成本写进总内存账本。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左半区：BufFile 磁盘记录格式与生命周期 (x: 24..644) -->
+                <rect x="24" y="20" width="620" height="390" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="20" width="620" height="36" fill="#245A6B"/>
+                <text x="42" y="43" fill="#F7F6F2" font-size="14" font-weight="bold">A. 串行临时文件记录结构与 BufFile 管理机制</text>
+
+                <!-- 二进制结构框 -->
+                <text x="44" y="84" fill="#1B2B33" font-size="13.5" font-weight="bold">ExecHashJoinSaveTuple() 写入的每条记录布局：</text>
+
+                <rect x="44" y="98" width="160" height="72" fill="#1E4B5A" stroke="#1B2B33"/>
+                <text x="124" y="128" text-anchor="middle" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="14" font-weight="bold">uint32</text>
+                <text x="124" y="150" text-anchor="middle" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="13">hashvalue</text>
+
+                <rect x="204" y="98" width="140" height="72" fill="#BE653B" stroke="#1B2B33"/>
+                <text x="274" y="128" text-anchor="middle" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="14" font-weight="bold">uint32</text>
+                <text x="274" y="150" text-anchor="middle" fill="#F7E9DE" font-family="SF Mono, monospace" font-size="12.5">t_len (长度)</text>
+
+                <rect x="344" y="98" width="280" height="72" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="484" y="128" text-anchor="middle" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="14" font-weight="bold">MinimalTuple Body</text>
+                <text x="484" y="150" text-anchor="middle" fill="#46585F" font-size="12.5">已去掉冗余系统头的紧凑行载荷</text>
+
+                <!-- 读回说明 -->
+                <rect x="44" y="190" width="580" height="94" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="60" y="216" fill="#245A6B" font-family="SF Mono, monospace" font-size="13.5" font-weight="bold">读取优化：ExecHashJoinGetSavedTuple()</text>
+                <text x="60" y="240" fill="#1B2B33" font-size="13">1. 每次先读 2 个 uint32：第 1 个拿到 hashvalue，第 2 个刚好是 MinimalTuple 长度。</text>
+                <text x="60" y="264" fill="#1B2B33" font-size="13">2. 直接拿保存的 hashvalue 重插 bucket，无需再对 Join Key 做一次昂贵的 hash 计算。</text>
+
+                <!-- 懒创建与早释放 -->
+                <rect x="44" y="300" width="580" height="92" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="60" y="326" fill="#2F7A66" font-size="13.5" font-weight="bold">BufFile 虚拟临时文件生命周期策略</text>
+                <text x="60" y="350" fill="#1B2B33" font-size="13">• 懒创建（Lazy Create）：某个 batch 真正写入第 1 条 tuple 时才创建对应文件。</text>
+                <text x="60" y="374" fill="#1B2B33" font-size="13">• 尽早释放：某个 batch 处理结束，立刻调用 BufFileClose() 回收文件描述符与缓冲。</text>
+
+                <!-- 右半区：三大 MemoryContext 地层嵌套图 (x: 668..1376) -->
+                <rect x="668" y="20" width="708" height="390" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="668" y="20" width="708" height="36" fill="#1E4B5A"/>
+                <text x="686" y="43" fill="#F7F6F2" font-size="14" font-weight="bold">B. 三大内存上下文（src/include/executor/hashjoin.h）与存活周期</text>
+
+                <!-- 父上下文 hashCxt -->
+                <rect x="690" y="72" width="664" height="320" fill="#EBF1EE" stroke="#1E4B5A" stroke-width="2"/>
+                <text x="708" y="98" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="14" font-weight="bold">HashTableContext (hashCxt) — 存活期：整个 Hash Join 生命周期</text>
+                <text x="708" y="120" fill="#46585F" font-size="12.5">存放 HashJoinTable 元数据、文件指针数组，作为父节点保证异常中止时随语句整块释放。</text>
+
+                <!-- 竖直分支线 -->
+                <path d="M 730 132 L 730 175 L 760 175" fill="none" stroke="#245A6B" stroke-width="2"/>
+                <path d="M 730 175 L 730 296 L 760 296" fill="none" stroke="#BE653B" stroke-width="2"/>
+
+                <!-- 子上下文 1：batchCxt -->
+                <rect x="760" y="142" width="574" height="108" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="778" y="168" fill="#2F7A66" font-family="SF Mono, monospace" font-size="14" font-weight="bold">HashBatchContext (batchCxt) — 存活期：仅当前 Batch</text>
+                <text x="778" y="192" fill="#1B2B33" font-size="13">• 内容：bucket 数组、当前批的 HashMemoryChunk、HashJoinTuple 链表。</text>
+                <text x="778" y="216" fill="#2F7A66" font-size="13" font-weight="bold">• 优势：每轮 batch 结束直接 MemoryContextReset() 一键清零，无碎片。</text>
+                <text x="778" y="236" fill="#46585F" font-size="12">注：EXPLAIN 的 Memory Usage 主要反映此处峰值。</text>
+
+                <!-- 子上下文 2：spillCxt -->
+                <rect x="760" y="266" width="574" height="110" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="778" y="292" fill="#BE653B" font-family="SF Mono, monospace" font-size="14" font-weight="bold">HashSpillContext (spillCxt) — 存活期：跨 Batch 直至读取完毕</text>
+                <text x="778" y="316" fill="#1B2B33" font-size="13">• 内容：innerBatchFile / outerBatchFile 数组、BufFile 读写缓冲区 (BLCKSZ/file)。</text>
+                <text x="778" y="340" fill="#BE653B" font-size="13" font-weight="bold">• 陷阱：batch 越多，这里常驻的 2 * nbatch * BLCKSZ 文件缓冲越大！</text>
+                <text x="778" y="360" fill="#46585F" font-size="12">因此批次数不能无限切碎，否则文件缓冲本身就会击穿内存限制。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>既然「分批太多」也会因为 <code>spillCxt</code> 文件缓冲反噬内存，那么运行期估算错了到底怎么优雅刹车？</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：3.2 临时文件格式 &amp; 3.3 内存上下文生命周期</span>
+              <span class="page-num">05 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 (交互动画 2：U形曲线与扩批) ==================== -->
+        <section class="slide" data-index="5">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>03 · 核心原理 III · U 形曲线与运行期增长</span>
+              <span class="tag-accent">交互计算与动态重分区</span>
+            </div>
+            <h1 class="slide-title">U 形内存拐点与运行期扩批：自救的数学边界</h1>
+            <p class="slide-lead">当 <code>spaceUsed + nbuckets * sizeof(HashJoinTuple) &gt; spaceAllowed</code> 时，执行器不仅会重分区内存，还会先权衡 U 形总内存曲线——拆得太碎反而更费内存时，会直接刹车。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="svg-ucurve" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左半区：U形内存曲线 (x: 24..674) -->
+                <rect x="24" y="18" width="650" height="394" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="42" y="44" fill="#1E4B5A" font-size="14" font-weight="bold">A. 总内存近似公式与 U 形曲线拐点（ExecChooseHashTableSize）</text>
+                <text x="42" y="66" fill="#245A6B" font-family="SF Mono, monospace" font-size="13">Total Mem ≈ (inner_rel_bytes / nbatch) + (2 * nbatch * BLCKSZ)</text>
+
+                <!-- 坐标轴 -->
+                <line x1="90" y1="330" x2="640" y2="330" stroke="#1B2B33" stroke-width="1.5"/>
+                <line x1="90" y1="90" x2="90" y2="330" stroke="#1B2B33" stroke-width="1.5"/>
+                <text x="78" y="102" text-anchor="end" fill="#46585F" font-size="11.5">内存</text>
+                <text x="78" y="118" text-anchor="end" fill="#46585F" font-size="11.5">(MB)</text>
+                <text x="640" y="352" text-anchor="end" fill="#46585F" font-family="SF Mono, monospace" font-size="11.5">nbatch (2^k)</text>
+
+                <!-- 两条分解虚线 + 一条U形实线（由JS动态重绘路径） -->
+                <path id="curve-table" d="M 110 120 Q 220 260 610 318" fill="none" stroke="#245A6B" stroke-width="1.5" stroke-dasharray="5,4"/>
+                <path id="curve-buf" d="M 110 324 L 610 190" fill="none" stroke="#BE653B" stroke-width="1.5" stroke-dasharray="5,4"/>
+                <path id="curve-total" d="M 110 116 Q 290 315 610 180" fill="none" stroke="#1E4B5A" stroke-width="3"/>
+
+                <!-- 最优拐点标注 -->
+                <circle id="curve-opt-dot" cx="350" cy="252" r="6" fill="#2F7A66" stroke="#F7F6F2" stroke-width="2"/>
+                <line id="curve-opt-line" x1="350" y1="252" x2="350" y2="330" stroke="#2F7A66" stroke-width="1.5" stroke-dasharray="3,3"/>
+                <text id="curve-opt-text" x="350" y="238" text-anchor="middle" fill="#2F7A66" font-family="SF Mono, monospace" font-size="12" font-weight="bold">最优拐点</text>
+
+                <!-- 图例说明 -->
+                <rect x="108" y="362" width="530" height="38" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="122" y="385" fill="#245A6B" font-size="12">--- hash table (随批降)</text>
+                <text x="292" y="385" fill="#BE653B" font-size="12">--- 2*nbatch*BLCKSZ (随批升)</text>
+                <text x="488" y="385" fill="#1E4B5A" font-size="12" font-weight="bold">━━ 总内存曲线</text>
+
+                <!-- 右半区：运行期扩批重分区演示 (x: 696..1376) -->
+                <rect x="696" y="18" width="680" height="394" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="714" y="44" fill="#BE653B" font-size="14" font-weight="bold">B. 运行期自救与刹车机制（ExecHashIncreaseNumBatches）</text>
+
+                <!-- 触发条件框 -->
+                <rect x="714" y="58" width="644" height="44" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="730" y="85" fill="#1B2B33" font-family="SF Mono, monospace" font-size="13">触发：spaceUsed + nbuckets * sizeof(HashJoinTuple) &gt; spaceAllowed</text>
+
+                <!-- 上旧 Chunk 盒 -->
+                <rect x="714" y="116" width="644" height="90" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="730" y="138" fill="#1E4B5A" font-size="13" font-weight="bold">旧 Chunk 扫描重算（原 nbatch = 2，当前 Batch 0 内包含 4 个 tuple）：</text>
+                <rect id="chunk-t0" x="730" y="150" width="142" height="40" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="801" y="175" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">T1 (new b=0)</text>
+
+                <rect id="chunk-t1" x="886" y="150" width="142" height="40" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="957" y="175" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">T2 (new b=2)</text>
+
+                <rect id="chunk-t2" x="1042" y="150" width="142" height="40" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="1113" y="175" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">T3 (new b=0)</text>
+
+                <rect id="chunk-t3" x="1198" y="150" width="142" height="40" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="1269" y="175" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">T4 (new b=2)</text>
+
+                <!-- 分流箭头 -->
+                <path d="M 880 206 L 880 242" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+                <path d="M 1190 206 L 1190 242" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-orange)"/>
+
+                <!-- 下左右两个去向盒 -->
+                <rect id="repart-stay" x="714" y="246" width="310" height="82" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="730" y="270" fill="#2F7A66" font-size="13" font-weight="bold">仍属 Batch 0 → 复制到新 Chunk</text>
+                <text id="repart-stay-txt" x="730" y="294" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">等待扩批演练...</text>
+                <text x="730" y="314" font-size="11.5" fill="#46585F">重新挂入当前内存 bucket 链表</text>
+
+                <rect id="repart-spill" x="1048" y="246" width="310" height="82" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="1064" y="270" fill="#BE653B" font-size="13" font-weight="bold">属更晚 Batch 2 → 写出磁盘并释放</text>
+                <text id="repart-spill-txt" x="1064" y="294" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">等待扩批演练...</text>
+                <text x="1064" y="314" font-size="11.5" fill="#46585F">写入 innerBatchFile[2] 后释放内存</text>
+
+                <!-- 两条刹车条件提示 -->
+                <rect x="714" y="340" width="644" height="58" fill="#F7F1E1" stroke="#AE8A3E"/>
+                <text x="730" y="362" fill="#1B2B33" font-size="12.5" font-weight="bold">两大刹车机制（防止无效空转）：</text>
+                <text x="730" y="384" fill="#46585F" font-size="12">① 若新增文件缓冲比扩预算更贵 → ExecHashIncreaseBatchSize() 宁愿扩 spaceAllowed；② 若全保留或全外溢(极端倾斜) → 关闭增长！</text>
+              </svg>
+            </div>
+            <!-- 配套控制条 -->
+            <div class="anim-controls">
+              <div class="ctrl-group">
+                <span>Inner 数据量: <strong id="lbl-inner-mb">64 MB</strong></span>
+                <input type="range" id="range-inner-mb" class="ctrl-range" min="16" max="512" step="16" value="64">
+                <span>模拟分布：</span>
+                <select id="sel-skew-mode" class="ctrl-select">
+                  <option value="normal">均匀分布（正常拆分）</option>
+                  <option value="skew">极端倾斜（全部同 Hash Value）</option>
+                </select>
+                <button class="ctrl-btn primary" id="btn-repart-play">▶ 触发运行期扩批演练</button>
+                <button class="ctrl-btn" id="btn-repart-reset">重置</button>
+              </div>
+              <div class="ctrl-status" id="repart-status">建议最优 nbatch ≈ 64 (U形拐点) · 点击演练观察重分区或刹车</div>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>当当前 batch 彻底处理完毕，进入下一批切换时还有什么暗礁？以及 PostgreSQL 那个著名的 Skew 热点表真的能救命吗？</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：3.4 运行期 batch 增长与损害控制</span>
+              <span class="page-num">06 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 ==================== -->
+        <section class="slide" data-index="6">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>03 · 核心原理 IV · 批次切换与 SKEW 热点优化</span>
+              <span class="tag-accent">递归陷阱与 2% 硬上限</span>
+            </div>
+            <h1 class="slide-title">切换 Batch 的六步状态流转，与 Skew 优化的硬边界</h1>
+            <p class="slide-lead">不要以为写进磁盘的未来 batch 在加载时就一定「老实」；也不要指望基于 MCV 的 Skew 表能兜住所有数据倾斜——它的预算上限只有 <code>2%</code>。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 上层横向主流程：HJ_NEED_NEW_BATCH (y: 22..224) -->
+                <rect x="24" y="20" width="1352" height="206" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="20" width="1352" height="32" fill="#245A6B"/>
+                <text x="42" y="41" fill="#F7F6F2" font-size="13.5" font-weight="bold">A. 串行状态机切换批次：HJ_NEED_NEW_BATCH → ExecHashJoinNewBatch() 六步流程</text>
+
+                <!-- 6 个等距节点框 -->
+                <rect x="42" y="72" width="194" height="96" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="54" y="94" fill="#245A6B" font-family="SF Mono, monospace" font-size="12" font-weight="bold">STEP 1</text>
+                <text x="54" y="118" fill="#1B2B33" font-size="13" font-weight="bold">关旧 Outer 文件</text>
+                <text x="54" y="140" fill="#46585F" font-size="11.5">上一轮 outer batch 文件</text>
+                <text x="54" y="156" fill="#46585F" font-size="11.5">已探测完，立刻关闭释放</text>
+
+                <path d="M 236 120 L 260 120" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="266" y="72" width="194" height="96" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="278" y="94" fill="#245A6B" font-family="SF Mono, monospace" font-size="12" font-weight="bold">STEP 2</text>
+                <text x="278" y="118" fill="#1B2B33" font-size="13" font-weight="bold">关闭 Skew 状态</text>
+                <text x="278" y="140" fill="#46585F" font-size="11.5">第一批结束后立即停用</text>
+                <text x="278" y="156" fill="#46585F" font-size="11.5">Skew 仅在 Batch 0 生效</text>
+
+                <path d="M 460 120 L 484 120" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="490" y="72" width="194" height="96" fill="#F7F6F2" stroke="#AE8A3E"/>
+                <text x="502" y="94" fill="#AE8A3E" font-family="SF Mono, monospace" font-size="12" font-weight="bold">STEP 3</text>
+                <text x="502" y="118" fill="#1B2B33" font-size="13" font-weight="bold">跳空批(受语义约束)</text>
+                <text x="502" y="140" fill="#46585F" font-size="11.5">双侧空跳过；outer/full/</text>
+                <text x="502" y="156" fill="#46585F" font-size="11.5">right 或曾扩批不能随便跳</text>
+
+                <path d="M 684 120 L 708 120" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="714" y="72" width="194" height="96" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="726" y="94" fill="#2F7A66" font-family="SF Mono, monospace" font-size="12" font-weight="bold">STEP 4</text>
+                <text x="726" y="118" fill="#1B2B33" font-size="13" font-weight="bold">Reset 内存表</text>
+                <text x="726" y="140" fill="#46585F" font-size="11.5">Reset batchCxt 快速清空</text>
+                <text x="726" y="156" fill="#46585F" font-size="11.5">准备装载当前新一批</text>
+
+                <path d="M 908 120 L 932 120" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-orange)"/>
+
+                <rect x="938" y="72" width="206" height="96" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="950" y="94" fill="#BE653B" font-family="SF Mono, monospace" font-size="12" font-weight="bold">STEP 5 (暗礁)</text>
+                <text x="950" y="118" fill="#1B2B33" font-size="13" font-weight="bold">Rewind 载入 Inner</text>
+                <text x="950" y="140" fill="#46585F" font-size="11.5">重插仍可能再次超预算！</text>
+                <text x="950" y="156" fill="#BE653B" font-size="11.5">触发二次扩批并推向更晚批</text>
+
+                <path d="M 1144 120 L 1168 120" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="1174" y="72" width="184" height="96" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="1186" y="94" fill="#245A6B" font-family="SF Mono, monospace" font-size="12" font-weight="bold">STEP 6</text>
+                <text x="1186" y="118" fill="#1B2B33" font-size="13" font-weight="bold">Rewind Outer 探测</text>
+                <text x="1186" y="140" fill="#46585F" font-size="11.5">从 outerBatchFile 读取</text>
+                <text x="1186" y="156" fill="#46585F" font-size="11.5">并进入新一轮 Probe</text>
+
+                <!-- 递归回环提醒条 -->
+                <text x="42" y="206" fill="#BE653B" font-size="12.5" font-weight="bold">关键认知：因为 STEP 5 读取后续 inner 文件时仍调用 ExecHashTableInsert()，所以「磁盘 batch 文件里的 tuple 一定全属于本批」并不绝对成立！</text>
+
+                <!-- 下层：Skew 优化原理与 4 大硬边界 (y: 244..414) -->
+                <rect x="24" y="244" width="1352" height="168" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="24" y="244" width="1352" height="32" fill="#1E4B5A"/>
+                <text x="42" y="265" fill="#F7F6F2" font-size="13.5" font-weight="bold">B. Skew 热点优化机制与四大刚性约束（它是「已知热点的 I/O 减免」，绝非「倾斜免疫」）</text>
+
+                <!-- 左：预算条 -->
+                <rect x="44" y="292" width="440" height="104" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="60" y="316" fill="#1E4B5A" font-size="13.5" font-weight="bold">Skew Hash Table 内存占比极小：</text>
+                <rect x="60" y="330" width="408" height="24" fill="#E5EFF0" stroke="#245A6B"/>
+                <rect x="60" y="330" width="20" height="24" fill="#BE653B"/>
+                <text x="88" y="347" fill="#BE653B" font-family="SF Mono, monospace" font-size="12" font-weight="bold">2% (SKEW_HASH_MEM_PERCENT = 2) · 余下 98% 给常规批</text>
+                <text x="60" y="380" fill="#46585F" font-size="12">机制：依据 Outer 侧 MCV 统计建表，命中热点免写盘在 Batch 0 直查。</text>
+
+                <!-- 右：4条硬约束 -->
+                <rect x="506" y="292" width="416" height="46" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="520" y="313" fill="#1E4B5A" font-size="13" font-weight="bold">1. 预算只有 2% 且会动态削减</text>
+                <text x="520" y="330" fill="#46585F" font-size="12">Skew 表超预算时，执行器会主动剔除部分特殊处理的 MCV</text>
+
+                <rect x="940" y="292" width="416" height="46" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="954" y="313" fill="#1E4B5A" font-size="13" font-weight="bold">2. 仅限 Batch 0，仅认统计信息已知热点</text>
+                <text x="954" y="330" fill="#46585F" font-size="12">统计未覆盖的运行期突发倾斜或连接后产生热点无法识别</text>
+
+                <rect x="506" y="350" width="416" height="46" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="520" y="371" fill="#BE653B" font-size="13" font-weight="bold">3. 单一 Hash Value 超内存无解</text>
+                <text x="520" y="388" fill="#46585F" font-size="12">同一 hash value 无论怎么拆 batch 永远落在同一个批里</text>
+
+                <rect x="940" y="350" width="416" height="46" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="954" y="371" fill="#2F7A66" font-size="13" font-weight="bold">4. 正确心态：依赖 ANALYZE 而不是兜底幻想</text>
+                <text x="954" y="388" fill="#46585F" font-size="12">超级热点必须靠拆 SQL、预聚合或数据模型改造解决</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>串行世界里的状态机与 Skew 已经理清，如果开启了多核并行呢？<code>Parallel Hash Join</code> 又是怎么协作成百上千个批次的？</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：3.5 切换 batch &amp; 3.6 Skew 优化</span>
+              <span class="page-num">07 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-index="7">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>03 · 核心原理 V · PARALLEL HASH JOIN</span>
+              <span class="tag-accent">双级 Barrier 与共享临时区</span>
+            </div>
+            <h1 class="slide-title">共享协作的代价：<code>Parallel Hash Join</code> 多批状态机</h1>
+            <p class="slide-lead">不同于各建各表的 parallel-oblivious 模式，<code>Parallel Hash</code> 让多个 Worker 共同构建共享表；为了能让 Worker 独立认领 batch，在构建阶段就必须先把 Outer 预分区。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左：Parallel-Oblivious 对照区 (x: 24..434) -->
+                <rect x="24" y="20" width="400" height="390" fill="#F1EFE9" stroke="#74A5AD" stroke-width="1.5"/>
+                <rect x="24" y="20" width="400" height="34" fill="#47808D"/>
+                <text x="42" y="42" fill="#F7F6F2" font-size="13.5" font-weight="bold">对照：Parallel-Oblivious Hash Join</text>
+
+                <rect x="44" y="74" width="166" height="120" fill="#F7F6F2" stroke="#47808D"/>
+                <text x="127" y="98" text-anchor="middle" fill="#1E4B5A" font-weight="bold" font-size="13">Worker 1 私有</text>
+                <text x="127" y="124" text-anchor="middle" fill="#46585F" font-size="12">完整读 Inner</text>
+                <text x="127" y="144" text-anchor="middle" fill="#46585F" font-size="12">建 1 份私有表</text>
+                <text x="127" y="164" text-anchor="middle" fill="#46585F" font-size="12">私有 BufFile</text>
+
+                <rect x="236" y="74" width="166" height="120" fill="#F7F6F2" stroke="#47808D"/>
+                <text x="319" y="98" text-anchor="middle" fill="#1E4B5A" font-weight="bold" font-size="13">Worker 2 私有</text>
+                <text x="319" y="124" text-anchor="middle" fill="#46585F" font-size="12">再完整读 Inner</text>
+                <text x="319" y="144" text-anchor="middle" fill="#46585F" font-size="12">再建 1 份私有表</text>
+                <text x="319" y="164" text-anchor="middle" fill="#46585F" font-size="12">私有 BufFile</text>
+
+                <rect x="44" y="216" width="358" height="174" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="60" y="242" fill="#BE653B" font-size="13.5" font-weight="bold">特征与短板</text>
+                <text x="60" y="268" fill="#1B2B33" font-size="12.5">• 优点：无跨进程同步与 Barrier 开销</text>
+                <text x="60" y="292" fill="#1B2B33" font-size="12.5">• 致命伤：Build 侧 CPU 与内存按 Worker 数</text>
+                <text x="60" y="312" fill="#1B2B33" font-size="12.5">  倍增重复！N 个进程就有 N 份冗余表。</text>
+                <text x="60" y="346" fill="#46585F" font-size="12">适用：build 极小、内存充裕、不需共享时。</text>
+
+                <!-- 右：Parallel-Aware Hash Join 主区 (x: 446..1376) -->
+                <rect x="446" y="20" width="930" height="390" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="446" y="20" width="930" height="34" fill="#1E4B5A"/>
+                <text x="464" y="42" fill="#F7F6F2" font-size="13.5" font-weight="bold">正主：Parallel-Aware Hash Join（EXPLAIN 显示 Parallel Hash Join + Parallel Hash）</text>
+
+                <!-- 阶段1：Build Barrier -->
+                <rect x="466" y="70" width="890" height="110" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="484" y="92" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="13" font-weight="bold">PHASE 1 · BUILD BARRIER（全局构建栅栏协调多 Worker）</text>
+
+                <rect x="484" y="106" width="160" height="58" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="564" y="130" text-anchor="middle" fill="#1B2B33" font-size="12.5" font-weight="bold">Allocate</text>
+                <text x="564" y="150" text-anchor="middle" fill="#46585F" font-size="11.5">分配共享 DSA 状态</text>
+
+                <path d="M 644 135 L 672 135" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="678" y="106" width="210" height="58" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="783" y="130" text-anchor="middle" fill="#1B2B33" font-size="12.5" font-weight="bold">Hash Inner (并行写批)</text>
+                <text x="783" y="150" text-anchor="middle" fill="#46585F" font-size="11.5">必要时同步 grow batches/buckets</text>
+
+                <path d="M 888 135 L 916 135" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-orange)"/>
+
+                <rect x="922" y="106" width="414" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="1129" y="128" text-anchor="middle" fill="#BE653B" font-family="SF Mono, monospace" font-size="12.5" font-weight="bold">PHJ_BUILD_HASH_OUTER（关键差异！）</text>
+                <text x="1129" y="150" text-anchor="middle" fill="#1B2B33" font-size="12">多 batch 时必须提前把 Outer 预分区进 SharedTuplestore！</text>
+
+                <!-- 连接两阶段的竖直正交线 -->
+                <path d="M 910 180 L 910 208" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <!-- 阶段2：Per-Batch Barrier + SharedTuplestore -->
+                <rect x="466" y="212" width="890" height="106" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="484" y="234" fill="#2F7A66" font-family="SF Mono, monospace" font-size="13" font-weight="bold">PHASE 2 · PER-BATCH BARRIER（按 Batch 领任务，每批独立状态机）</text>
+
+                <rect x="484" y="248" width="144" height="54" fill="#F7F6F2" stroke="#2F7A66"/>
+                <text x="556" y="271" text-anchor="middle" fill="#1B2B33" font-size="12.5" font-weight="bold">Allocate</text>
+                <text x="556" y="290" text-anchor="middle" fill="#46585F" font-size="11">准备批次共享表</text>
+
+                <path d="M 628 275 L 652 275" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <rect x="658" y="248" width="144" height="54" fill="#F7F6F2" stroke="#2F7A66"/>
+                <text x="730" y="271" text-anchor="middle" fill="#1B2B33" font-size="12.5" font-weight="bold">Load Inner</text>
+                <text x="730" y="290" text-anchor="middle" fill="#46585F" font-size="11">多 Worker 并发建表</text>
+
+                <path d="M 802 275 L 826 275" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <rect x="832" y="248" width="154" height="54" fill="#F7F6F2" stroke="#2F7A66"/>
+                <text x="909" y="271" text-anchor="middle" fill="#1B2B33" font-size="12.5" font-weight="bold">Probe Outer</text>
+                <text x="909" y="290" text-anchor="middle" fill="#46585F" font-size="11">并行探测与输出</text>
+
+                <path d="M 986 275 L 1010 275" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <rect x="1016" y="248" width="154" height="54" fill="#F7F6F2" stroke="#2F7A66"/>
+                <text x="1093" y="271" text-anchor="middle" fill="#1B2B33" font-size="12.5" font-weight="bold">Scan Unmatched</text>
+                <text x="1093" y="290" text-anchor="middle" fill="#46585F" font-size="11">补全 Right/Full 语义</text>
+
+                <path d="M 1170 275 L 1194 275" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-green)"/>
+
+                <rect x="1200" y="248" width="136" height="54" fill="#F7F6F2" stroke="#2F7A66"/>
+                <text x="1268" y="271" text-anchor="middle" fill="#1B2B33" font-size="12.5" font-weight="bold">Free Batch</text>
+                <text x="1268" y="290" text-anchor="middle" fill="#46585F" font-size="11">释放批内存与文件</text>
+
+                <!-- 底层共享存储基座 -->
+                <rect x="466" y="330" width="890" height="64" fill="#1E4B5A" stroke="#1B2B33"/>
+                <text x="484" y="356" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="13" font-weight="bold">共享基座：ParallelHashJoinBatch  +  SharedTuplestore  +  SharedFileSet</text>
+                <text x="484" y="378" fill="#F7F6F2" font-size="12.5">权衡：消除重复 Build，批次多时可并行消化；但数据量小、并发内存足时，同步与共享写读开销未必划算。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>串行与并行的底牌都掀开了，落地到每天的线上运维，拿着一份 <code>EXPLAIN</code> 报告到底该按什么顺序一步步排查？</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：3.7 Parallel Hash Join 共享批次与 Barrier 协作</span>
+              <span class="page-num">08 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 (交互动画 3：EXPLAIN 诊断沙盘) ==================== -->
+        <section class="slide" data-index="8">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>03 · 核心原理 VI · EXPLAIN 诊断路径</span>
+              <span class="tag-accent">交互诊断决策沙盘</span>
+            </div>
+            <h1 class="slide-title">读懂 <code>show_hash_info()</code>：线上落盘四步诊断决策树</h1>
+            <p class="slide-lead">第一眼看 <code>Batches</code>，第二眼看 <code>originally</code>，第三眼查 <code>BUFFERS</code> 与 <code>log_temp_files</code>——点击下方典型工况，实时演练排查分支。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="svg-diag" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左侧 5 步正交决策树 (x: 24..880) -->
+                <rect x="24" y="18" width="860" height="394" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="42" y="44" fill="#1E4B5A" font-size="14" font-weight="bold">A. EXPLAIN (ANALYZE, BUFFERS) 正交排查流（explain.c: show_hash_info）</text>
+
+                <!-- 节点1：入口 -->
+                <rect id="d-n1" x="48" y="66" width="240" height="66" fill="#1E4B5A" stroke="#1B2B33" stroke-width="2"/>
+                <text x="168" y="92" text-anchor="middle" fill="#F7F6F2" font-size="13.5" font-weight="bold">1. 检查 Hash 节点 Batches</text>
+                <text id="d-n1-sub" x="168" y="114" text-anchor="middle" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="12">Batches = ? (originally ?)</text>
+
+                <!-- 分支线：Batches == 1 vs > 1 -->
+                <path id="d-e-mem" d="M 288 86 L 440 86" fill="none" stroke="#2F7A66" stroke-width="2.5" marker-end="url(#arr-green)"/>
+                <text x="364" y="78" text-anchor="middle" fill="#2F7A66" font-family="SF Mono, monospace" font-size="12" font-weight="bold">Batches = 1</text>
+
+                <path id="d-e-disk" d="M 168 132 L 168 182" fill="none" stroke="#BE653B" stroke-width="2.5" marker-end="url(#arr-orange)"/>
+                <text x="215" y="162" fill="#BE653B" font-family="SF Mono, monospace" font-size="12" font-weight="bold">Batches &gt; 1 (已落盘)</text>
+
+                <!-- 节点2：纯内存安全 -->
+                <rect id="d-n2" x="446" y="66" width="414" height="66" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="466" y="92" fill="#2F7A66" font-size="13.5" font-weight="bold">健康：纯内存或至少无多 Batch 落盘</text>
+                <text x="466" y="114" fill="#46585F" font-size="12">仍可关注 Buckets 链长与 Memory Usage 峰值</text>
+
+                <!-- 节点3：对比 originally -->
+                <rect id="d-n3" x="48" y="186" width="240" height="72" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="168" y="212" text-anchor="middle" fill="#1B2B33" font-size="13.5" font-weight="bold">2. 对比 Batches 与 originally</text>
+                <text x="168" y="236" text-anchor="middle" fill="#46585F" font-size="12">计划时是否已预料到落盘？</text>
+
+                <!-- 分支：相等 vs 大于 -->
+                <path id="d-e-eq" d="M 288 214 L 440 214" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+                <text x="364" y="206" text-anchor="middle" fill="#245A6B" font-size="12">actual == originally</text>
+
+                <path id="d-e-grow" d="M 168 258 L 168 310" fill="none" stroke="#BE653B" stroke-width="2.5" marker-end="url(#arr-orange)"/>
+                <text x="242" y="290" fill="#BE653B" font-size="12" font-weight="bold">actual &gt; originally (扩批)</text>
+
+                <!-- 节点4：预算不足但估算准 -->
+                <rect id="d-n4" x="446" y="180" width="414" height="78" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="466" y="206" fill="#1E4B5A" font-size="13.5" font-weight="bold">估算准确，纯属预算小于真实 Build 体量</text>
+                <text x="466" y="228" fill="#46585F" font-size="12">评估并发总内存后，适度调大 work_mem /</text>
+                <text x="466" y="246" fill="#46585F" font-size="12">hash_mem_multiplier 或提前裁剪宽列</text>
+
+                <!-- 节点5：运行期翻倍扩批 -->
+                <rect id="d-n5" x="48" y="314" width="380" height="82" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="66" y="340" fill="#BE653B" font-size="13.5" font-weight="bold">3. 估算偏低：检查统计信息与数据分布</text>
+                <text x="66" y="362" fill="#1B2B33" font-size="12">• 先查是否漏做 ANALYZE（尤其临时表）或行宽低估</text>
+                <text x="66" y="382" fill="#1B2B33" font-size="12">• 若停涨且单批仍爆：排查超级热点 Key 倾斜</text>
+
+                <path id="d-e-io" d="M 428 355 L 456 355" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <!-- 节点6：临时 I/O 量化 -->
+                <rect id="d-n6" x="462" y="314" width="398" height="82" fill="#1E4B5A" stroke="#1B2B33"/>
+                <text x="480" y="340" fill="#F7F6F2" font-size="13.5" font-weight="bold">4. 量化临时盘代价（不可只靠猜）</text>
+                <text x="480" y="362" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="12">• EXPLAIN (ANALYZE, BUFFERS) → temp read/written</text>
+                <text x="480" y="382" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="12">• log_temp_files &amp; temp_tablespaces 盘阵隔离</text>
+
+                <!-- 右侧：当前选中工况详情面板 (x: 902..1376) -->
+                <rect x="902" y="18" width="474" height="394" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="902" y="18" width="474" height="36" fill="#1E4B5A"/>
+                <text x="920" y="41" fill="#F7F6F2" font-size="14" font-weight="bold">B. 现场工况解剖面板</text>
+
+                <rect x="920" y="70" width="438" height="78" fill="#1B2B33"/>
+                <text x="936" y="92" fill="#74A5AD" font-family="SF Mono, monospace" font-size="11.5">EXPLAIN 输出样本：</text>
+                <text id="diag-sample-1" x="936" y="114" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="13">Buckets: 65536 (originally 32768)</text>
+                <text id="diag-sample-2" x="936" y="135" fill="#F7E9DE" font-family="SF Mono, monospace" font-size="13">Batches: 32 (originally 8)  Memory Usage: 4096kB</text>
+
+                <rect x="920" y="164" width="438" height="114" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="936" y="188" fill="#BE653B" font-size="13.5" font-weight="bold">根因推演：</text>
+                <text id="diag-cause-1" x="936" y="212" fill="#1B2B33" font-size="13">1. 优化器按 8 批估算，但运行期 Build 侧行数/行宽远超预期。</text>
+                <text id="diag-cause-2" x="936" y="236" fill="#1B2B33" font-size="13">2. 触发多次 ExecHashIncreaseNumBatches()，8 → 16 → 32。</text>
+                <text id="diag-cause-3" x="936" y="260" fill="#1B2B33" font-size="13">3. 伴有重分区搬迁 CPU 消耗及 32 批临时文件写读 I/O。</text>
+
+                <rect x="920" y="294" width="438" height="102" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="936" y="318" fill="#2F7A66" font-size="13.5" font-weight="bold">工程纠偏动作：</text>
+                <text id="diag-fix-1" x="936" y="342" fill="#1B2B33" font-size="13">✓ 对连接表（尤其临时表）及时执行 ANALYZE。</text>
+                <text id="diag-fix-2" x="936" y="364" fill="#1B2B33" font-size="13">✓ 提前过滤行、裁剪 Build 侧大字段，压低平均行宽。</text>
+                <text id="diag-fix-3" x="936" y="386" fill="#1B2B33" font-size="13">✓ 按并发算清总账后再评估调高 hash 内存上限。</text>
+              </svg>
+            </div>
+            <!-- 配套场景切换按钮 -->
+            <div class="anim-controls">
+              <div class="ctrl-group">
+                <span>选择现场 EXPLAIN 工况：</span>
+                <button class="ctrl-btn" data-diag="mem">工况 1：Batches: 1 (纯内存)</button>
+                <button class="ctrl-btn" data-diag="planned">工况 2：Batches: 8 (originally 8)</button>
+                <button class="ctrl-btn active" data-diag="grown">工况 3：Batches: 32 (originally 8)</button>
+                <button class="ctrl-btn" data-diag="skew">工况 4：极端倾斜停涨</button>
+              </div>
+              <div class="ctrl-status" id="diag-status">当前高亮：工况 3（运行期扩批型）</div>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>诊断完 Hash Join 自身，跳出这个算子放眼全局：在 PostgreSQL 四大 Join 算法家族里，它到底站在什么生态位？</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：3.8 EXPLAIN 暴露了什么 &amp; 官方 perform.sgml 观测规范</span>
+              <span class="page-num">09 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-index="9">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>04 · 横向对比</span>
+              <span class="tag-accent">退化防线而非加速神器</span>
+            </div>
+            <h1 class="slide-title">四大 Join 物理算子横向对比：为什么需要这道退化防线</h1>
+            <p class="slide-lead">On-Disk Hash Join 绝不是比内存 Hash Join 更快的「高级算法」，而是当内存装不下时，避免优化器坠入全表 Nested Loop 或天价大排序的稳定防线。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 表头行 -->
+                <rect x="20" y="16" width="176" height="42" fill="#1E4B5A" stroke="#1B2B33"/>
+                <text x="108" y="42" text-anchor="middle" fill="#F7F6F2" font-size="14" font-weight="bold">比较维度</text>
+
+                <rect x="196" y="16" width="320" height="42" fill="#BE653B" stroke="#1B2B33"/>
+                <text x="356" y="42" text-anchor="middle" fill="#F7F6F2" font-size="14.5" font-weight="bold">On-Disk Hash Join (主角)</text>
+
+                <rect x="516" y="16" width="288" height="42" fill="#2F7A66" stroke="#1B2B33"/>
+                <text x="660" y="42" text-anchor="middle" fill="#F7F6F2" font-size="14" font-weight="bold">In-Memory Hash Join</text>
+
+                <rect x="804" y="16" width="288" height="42" fill="#245A6B" stroke="#1B2B33"/>
+                <text x="948" y="42" text-anchor="middle" fill="#F7F6F2" font-size="14" font-weight="bold">Merge Join</text>
+
+                <rect x="1092" y="16" width="288" height="42" fill="#47808D" stroke="#1B2B33"/>
+                <text x="1236" y="42" text-anchor="middle" fill="#F7F6F2" font-size="14" font-weight="bold">Nested Loop</text>
+
+                <!-- 8 行规整数据网格 (每行高 43px: 58..402) -->
+                <!-- Row 1: 主要目标 -->
+                <rect x="20" y="58" width="176" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="84" fill="#1E4B5A" font-size="13" font-weight="bold">1. 主要目标</text>
+                <rect x="196" y="58" width="320" height="42" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="84" fill="#1B2B33" font-size="12.5">build 超内存时仍可完成 hash join</text>
+                <rect x="516" y="58" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="528" y="84" fill="#1B2B33" font-size="12.5">build 放入内存后极速 probe</text>
+                <rect x="804" y="58" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="816" y="84" fill="#1B2B33" font-size="12.5">两侧有序流同步双指针合并</text>
+                <rect x="1092" y="58" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="1104" y="84" fill="#1B2B33" font-size="12.5">outer 行驱动 inner 参数化重扫</text>
+
+                <!-- Row 2: 核心结构 -->
+                <rect x="20" y="100" width="176" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="126" fill="#1E4B5A" font-size="13" font-weight="bold">2. 核心结构</text>
+                <rect x="196" y="100" width="320" height="42" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="126" fill="#1B2B33" font-size="12.5">batch 临时文件 + 当前批 hash table</text>
+                <rect x="516" y="100" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="528" y="126" fill="#1B2B33" font-size="12.5">单个内存 hash table</text>
+                <rect x="804" y="100" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="816" y="126" fill="#1B2B33" font-size="12.5">Sort / 索引有序流 + mark/restore</text>
+                <rect x="1092" y="100" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="1104" y="126" fill="#1B2B33" font-size="12.5">参数化 inner path（如 Index Scan）</text>
+
+                <!-- Row 3: 启动成本 -->
+                <rect x="20" y="142" width="176" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="168" fill="#1E4B5A" font-size="13" font-weight="bold">3. 启动成本</text>
+                <rect x="196" y="142" width="320" height="42" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="168" fill="#BE653B" font-size="12.5" font-weight="bold">高（build + 分批写盘）</text>
+                <rect x="516" y="142" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="528" y="168" fill="#1B2B33" font-size="12.5">中（build hash table）</text>
+                <rect x="804" y="142" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="816" y="168" fill="#1B2B33" font-size="12.5">若需显式 Sort 则非常高</text>
+                <rect x="1092" y="142" width="288" height="42" fill="#E4F1EC" stroke="#D9D5CB"/>
+                <text x="1104" y="168" fill="#2F7A66" font-size="12.5" font-weight="bold">通常低（首行返回极快）</text>
+
+                <!-- Row 4: I/O 形态 -->
+                <rect x="20" y="184" width="176" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="210" fill="#1E4B5A" font-size="13" font-weight="bold">4. I/O 形态</text>
+                <rect x="196" y="184" width="320" height="42" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="210" fill="#BE653B" font-size="12.5">临时文件频繁写读，可能很多</text>
+                <rect x="516" y="184" width="288" height="42" fill="#E4F1EC" stroke="#D9D5CB"/>
+                <text x="528" y="210" fill="#2F7A66" font-size="12.5">仅顺序读输入，无临时盘</text>
+                <rect x="804" y="184" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="816" y="210" fill="#1B2B33" font-size="12.5">外排序归并阶段可能落盘</text>
+                <rect x="1092" y="184" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="1104" y="210" fill="#1B2B33" font-size="12.5">取决于 inner 索引/堆表访问</text>
+
+                <!-- Row 5: 内存压力 -->
+                <rect x="20" y="226" width="176" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="252" fill="#1E4B5A" font-size="13" font-weight="bold">5. 内存压力</text>
+                <rect x="196" y="226" width="320" height="42" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="252" fill="#1B2B33" font-size="12.5">当前批表 + batch 文件缓冲</text>
+                <rect x="516" y="226" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="528" y="252" fill="#1B2B33" font-size="12.5">整张 hash table 常驻内存</text>
+                <rect x="804" y="226" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="816" y="252" fill="#1B2B33" font-size="12.5">sort / materialize 缓冲区</text>
+                <rect x="1092" y="226" width="288" height="42" fill="#E4F1EC" stroke="#D9D5CB"/>
+                <text x="1104" y="252" fill="#2F7A66" font-size="12.5">通常很低</text>
+
+                <!-- Row 6: 对倾斜敏感性 -->
+                <rect x="20" y="268" width="176" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="294" fill="#1E4B5A" font-size="13" font-weight="bold">6. 对倾斜敏感</text>
+                <rect x="196" y="268" width="320" height="42" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="294" fill="#BE653B" font-size="12.5">高：同 hash value 无法靠拆批解</text>
+                <rect x="516" y="268" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="528" y="294" fill="#1B2B33" font-size="12.5">高：单个 bucket 链表急剧拉长</text>
+                <rect x="804" y="268" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="816" y="294" fill="#1B2B33" font-size="12.5">重复 key 触发 mark/restore 重扫</text>
+                <rect x="1092" y="268" width="288" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="1104" y="294" fill="#1B2B33" font-size="12.5">outer 行数膨胀放大内表次数</text>
+
+                <!-- Row 7: 输出顺序 -->
+                <rect x="20" y="310" width="176" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="336" fill="#1E4B5A" font-size="13" font-weight="bold">7. 输出顺序</text>
+                <rect x="196" y="310" width="320" height="42" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="336" fill="#1B2B33" font-size="12.5">不保序（按批乱序输出）</text>
+                <rect x="516" y="310" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="528" y="336" fill="#1B2B33" font-size="12.5">不保序</text>
+                <rect x="804" y="310" width="288" height="42" fill="#E4F1EC" stroke="#D9D5CB"/>
+                <text x="816" y="336" fill="#2F7A66" font-size="12.5" font-weight="bold">可天然保留 Join Key 有序</text>
+                <rect x="1092" y="310" width="288" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="1104" y="336" fill="#1B2B33" font-size="12.5">通常跟 outer 扫描序相关</text>
+
+                <!-- Row 8: 适合场景 -->
+                <rect x="20" y="352" width="176" height="62" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="34" y="380" fill="#1E4B5A" font-size="13" font-weight="bold">8. 适用 / 忌讳</text>
+                <rect x="196" y="352" width="320" height="62" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="208" y="375" fill="#2F7A66" font-size="12">✓ 大等值连接、略超内存、无序</text>
+                <text x="208" y="399" fill="#BE653B" font-size="12">✗ 极端倾斜、慢临时盘、高并发</text>
+                <rect x="516" y="352" width="288" height="62" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="528" y="375" fill="#2F7A66" font-size="12">✓ build 可控的大等值 join</text>
+                <text x="528" y="399" fill="#BE653B" font-size="12">✗ build 远超可用内存</text>
+                <rect x="804" y="352" width="288" height="62" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="816" y="375" fill="#2F7A66" font-size="12">✓ 两侧已有序或下游需有序</text>
+                <text x="816" y="399" fill="#BE653B" font-size="12">✗ 无序大输入且外排序昂贵</text>
+                <rect x="1092" y="352" width="288" height="62" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="1104" y="375" fill="#2F7A66" font-size="12">✓ 小 outer + inner 高效索引</text>
+                <text x="1104" y="399" fill="#BE653B" font-size="12">✗ outer 大且 inner 无索引</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>清楚了它在算子家族的位置，接下来把「收益 vs 成本」放到天平上，并给出一个零伪造数字、人人可本地跑通的复现 DEMO。</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：第四章 · 四大连接算子横向对比矩阵</span>
+              <span class="page-num">10 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-index="10">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>05 &amp; 06 · 效果权衡与实操 DEMO</span>
+              <span class="tag-accent">拒绝编造倍速数字</span>
+            </div>
+            <h1 class="slide-title">收益与成本天平，以及最小可复现控制变量实验</h1>
+            <p class="slide-lead">绝不编造「<code>Batches=32</code> 一定慢几倍」的伪结论——真实代价取决于临时盘、页面缓存、行宽与过滤率，正确的做法是用 50 万行对照实验亲自观测。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左区：4收益 vs 5成本 (x: 24..604) -->
+                <rect x="24" y="18" width="580" height="190" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="24" y="18" width="580" height="32" fill="#2F7A66"/>
+                <text x="42" y="39" fill="#F7F6F2" font-size="13.5" font-weight="bold">一、收益（为什么它不可或缺？）</text>
+                <text x="42" y="74" fill="#1B2B33" font-size="13"><tspan font-weight="bold" fill="#2F7A66">1. 避免内存硬失败：</tspan>build 超预算时仍能完成等值 Join</text>
+                <text x="42" y="102" fill="#1B2B33" font-size="13"><tspan font-weight="bold" fill="#2F7A66">2. 保持候选集缩小：</tspan>单批内依旧按 bucket 定位而非全量比对</text>
+                <text x="42" y="130" fill="#1B2B33" font-size="13"><tspan font-weight="bold" fill="#2F7A66">3. 运行期自适应：</tspan>估算偏小可翻倍 nbatch 重分区自救</text>
+                <text x="42" y="158" fill="#1B2B33" font-size="13"><tspan font-weight="bold" fill="#2F7A66">4. 并行可协作：</tspan>Parallel Hash 可共享表并将批分给多 Worker</text>
+                <text x="42" y="190" fill="#2F7A66" font-size="12" font-weight="bold">底线原则：真实代价需实测，不虚构任何「慢多少倍」的经验口号。</text>
+
+                <rect x="24" y="220" width="580" height="192" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="24" y="220" width="580" height="32" fill="#BE653B"/>
+                <text x="42" y="241" fill="#F7F6F2" font-size="13.5" font-weight="bold">二、成本（必须付出的五笔账）</text>
+                <text x="42" y="274" fill="#1B2B33" font-size="12.5"><tspan font-weight="bold" fill="#BE653B">1. 临时文件 I/O：</tspan>未来批 inner/outer 都需落盘再读回</text>
+                <text x="42" y="300" fill="#1B2B33" font-size="12.5"><tspan font-weight="bold" fill="#BE653B">2. 文件缓冲占内存：</tspan>2 * nbatch * BLCKSZ 在多批时成主导</text>
+                <text x="42" y="326" fill="#1B2B33" font-size="12.5"><tspan font-weight="bold" fill="#BE653B">3. CPU 重分区开销：</tspan>扫描旧 chunk、复制保留项、写外溢项</text>
+                <text x="42" y="352" fill="#1B2B33" font-size="12.5"><tspan font-weight="bold" fill="#BE653B">4. 倾斜失灵风险：</tspan>同 hash value 挤爆批导致扩批被禁用</text>
+                <text x="42" y="378" fill="#1B2B33" font-size="12.5"><tspan font-weight="bold" fill="#BE653B">5. 观测天然滞后：</tspan>普通 EXPLAIN 看不到，必须 ANALYZE 或日志</text>
+
+                <!-- 右区：标准化最小复现 DEMO (x: 626..1376) -->
+                <rect x="626" y="18" width="750" height="394" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="626" y="18" width="750" height="32" fill="#1E4B5A"/>
+                <text x="644" y="39" fill="#F7F6F2" font-size="13.5" font-weight="bold">三、本地最小可验证实验流程（PostgreSQL 原生 SQL 对照组）</text>
+
+                <!-- Step 1 造表与统计 -->
+                <rect x="644" y="64" width="714" height="108" fill="#1B2B33"/>
+                <text x="660" y="84" fill="#74A5AD" font-family="SF Mono, monospace" font-size="11.5">-- 1. 构造 50 万行宽表并强制更新统计信息</text>
+                <text x="660" y="104" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="12">CREATE TEMP TABLE hj_inner AS SELECT g AS id, repeat('x',200) AS payload FROM generate_series(1,500000) g;</text>
+                <text x="660" y="122" fill="#F7F6F2" font-family="SF Mono, monospace" font-size="12">CREATE TEMP TABLE hj_outer AS SELECT g AS id, repeat('y',50)  AS payload FROM generate_series(1,500000) g;</text>
+                <text x="660" y="140" fill="#CFE0DC" font-family="SF Mono, monospace" font-size="12">ANALYZE hj_inner; ANALYZE hj_outer;</text>
+                <text x="660" y="158" fill="#F7E9DE" font-family="SF Mono, monospace" font-size="12">SET enable_nestloop = off; SET enable_mergejoin = off; SET enable_hashjoin = on;</text>
+
+                <!-- Step 2 两组对照 -->
+                <rect x="644" y="184" width="348" height="106" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="660" y="206" fill="#BE653B" font-size="13" font-weight="bold">实验组 A：压低单节点 Hash 预算</text>
+                <text x="660" y="228" fill="#1B2B33" font-family="SF Mono, monospace" font-size="12">SET work_mem = '1MB';</text>
+                <text x="660" y="246" fill="#1B2B33" font-family="SF Mono, monospace" font-size="12">SET hash_mem_multiplier = 1.0;</text>
+                <text x="660" y="268" fill="#46585F" font-size="12">配合 EXPLAIN (ANALYZE, BUFFERS, SUMMARY)</text>
+                <text x="660" y="284" fill="#BE653B" font-size="11.5">预期：Batches &gt; 1，可配合 log_temp_files = 0 观测</text>
+
+                <path d="M 992 237 L 1018 237" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="1024" y="184" width="334" height="106" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="1040" y="206" fill="#2F7A66" font-size="13" font-weight="bold">对照组 B：放大 Hash 预算</text>
+                <text x="1040" y="228" fill="#1B2B33" font-family="SF Mono, monospace" font-size="12">SET work_mem = '64MB';</text>
+                <text x="1040" y="246" fill="#1B2B33" font-family="SF Mono, monospace" font-size="12">SET hash_mem_multiplier = 2.0;</text>
+                <text x="1040" y="268" fill="#46585F" font-size="12">执行同条 JOIN count(*)</text>
+                <text x="1040" y="284" fill="#2F7A66" font-size="11.5">预期：Batches 回落至 1 或显著减少</text>
+
+                <!-- Step 3 正确观察清单 -->
+                <rect x="644" y="304" width="714" height="94" fill="#F7F6F2" stroke="#245A6B"/>
+                <text x="660" y="328" fill="#1E4B5A" font-size="13.5" font-weight="bold">实验观察 4 维度（切忌只盯「耗时是不是必然变快」）：</text>
+                <text x="660" y="352" fill="#1B2B33" font-size="12.5">1. Batches 是否降至 1（及 originally 是否变化）；      2. 临时文件写入日志规模是否同步收窄；</text>
+                <text x="660" y="376" fill="#1B2B33" font-size="12.5">3. 总耗时受 CPU、I/O 与并行调度综合影响；         4. 生产并发放大下，该内存峰值是否依然安全。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>实验证明了内存、I/O 与并发是一体三面——回到真实生产线，架构师、DBA 与业务开发者分别该守住哪几条动作清单？</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：第五章 · 效果评估 &amp; 第六章 · 实操 DEMO（生产勿长期设 log_temp_files = 0）</span>
+              <span class="page-num">11 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-index="11">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>07 · 工程最佳实践</span>
+              <span class="tag-accent">三重视角协同治理</span>
+            </div>
+            <h1 class="slide-title">从并发总账到 SQL 瘦身：架构师、DBA 与开发者动作清单</h1>
+            <p class="slide-lead">最常见的误区是把 <code>work_mem</code> 当单条 SQL 玩具调大，却忘了它乘以并发与 Worker 后的爆炸效应；解决落盘最治本的手段往往不在调参，而在前置过滤与裁剪。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 三大工程泳道 -->
+                <!-- 泳道 1：数据库架构师 -->
+                <rect x="24" y="18" width="436" height="394" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="24" y="18" width="436" height="40" fill="#1E4B5A"/>
+                <text x="44" y="43" fill="#F7F6F2" font-size="15" font-weight="bold">一、面向数据库架构师（顶层容量与模型）</text>
+
+                <rect x="40" y="72" width="404" height="86" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="54" y="94" fill="#BE653B" font-size="13.5" font-weight="bold">1. 按并发预算核定内存，非单 SQL 拍脑袋</text>
+                <text x="54" y="116" fill="#1B2B33" font-family="SF Mono, monospace" font-size="11.5">总预算 ≥ 活跃连接 × 节点数 × workers</text>
+                <text x="54" y="134" fill="#1B2B33" font-family="SF Mono, monospace" font-size="11.5">         × (work_mem * hash_mem_multiplier)</text>
+
+                <rect x="40" y="168" width="404" height="72" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="54" y="191" fill="#1E4B5A" font-size="13.5" font-weight="bold">2. 物理隔离临时 I/O</text>
+                <text x="54" y="213" fill="#46585F" font-size="12">ETL/报表库规划 temp_tablespaces 与监控，</text>
+                <text x="54" y="230" fill="#46585F" font-size="12">严禁与 WAL、主数据文件争抢同一慢盘。</text>
+
+                <rect x="40" y="250" width="404" height="72" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="54" y="273" fill="#1E4B5A" font-size="13.5" font-weight="bold">3. 数据模型瘦身 build 侧</text>
+                <text x="54" y="295" fill="#46585F" font-size="12">Hash Table 存的是投影后 tuple，避免大 JSON/</text>
+                <text x="54" y="312" fill="#46585F" font-size="12">text 带入 build 侧可直接成倍削减 batch。</text>
+
+                <rect x="40" y="332" width="404" height="68" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="54" y="355" fill="#1E4B5A" font-size="13.5" font-weight="bold">4. 超级热点 Key 显式建模</text>
+                <text x="54" y="377" fill="#46585F" font-size="12">默认租户/未知用户热点靠拆 SQL、分区或预聚合。</text>
+
+                <!-- 泳道 2：DBA -->
+                <rect x="482" y="18" width="436" height="394" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="482" y="18" width="436" height="40" fill="#245A6B"/>
+                <text x="502" y="43" fill="#F7F6F2" font-size="15" font-weight="bold">二、面向 DBA（观测、统计与稳健调优）</text>
+
+                <rect x="498" y="72" width="404" height="60" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="512" y="94" fill="#245A6B" font-size="13.5" font-weight="bold">1. 先看 Batches，再调内存</text>
+                <text x="512" y="116" fill="#46585F" font-size="12">Batches &gt; 1 是落盘线索；originally 变大查估算。</text>
+
+                <rect x="498" y="140" width="404" height="62" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="512" y="162" fill="#245A6B" font-size="13.5" font-weight="bold">2. 维护高质量统计信息</text>
+                <text x="512" y="184" fill="#46585F" font-size="12">对 Join Key 及时 ANALYZE，必要时调高列统计目标。</text>
+
+                <rect x="498" y="210" width="404" height="62" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="512" y="232" fill="#245A6B" font-size="13.5" font-weight="bold">3. 联合指标定位临时盘</text>
+                <text x="512" y="254" fill="#46585F" font-size="12">log_temp_files + pg_stat_statements temp blocks。</text>
+
+                <rect x="498" y="280" width="404" height="60" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="512" y="302" fill="#BE653B" font-size="13.5" font-weight="bold">4. 极其谨慎调大 work_mem</text>
+                <text x="512" y="324" fill="#46585F" font-size="12">单会话测试通过不代表生产多 Worker 并发安全。</text>
+
+                <rect x="498" y="348" width="404" height="52" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="512" y="370" fill="#2F7A66" font-size="13" font-weight="bold">5. enable_hashjoin=off 仅限诊断，严禁充当修复</text>
+                <text x="512" y="388" fill="#46585F" font-size="11.5">长期修复必须回到统计、索引、SQL、内存与数据分布。</text>
+
+                <!-- 泳道 3：业务开发者 -->
+                <rect x="940" y="18" width="436" height="394" fill="#F1EFE9" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="940" y="18" width="436" height="40" fill="#2F7A66"/>
+                <text x="960" y="43" fill="#F7F6F2" font-size="15" font-weight="bold">三、面向业务开发者（SQL 与源头瘦身）</text>
+
+                <rect x="956" y="72" width="404" height="74" fill="#E4F1EC" stroke="#2F7A66"/>
+                <text x="970" y="96" fill="#2F7A66" font-size="13.5" font-weight="bold">1. 禁止把多余大列带入 Join 中间态</text>
+                <text x="970" y="118" fill="#46585F" font-size="12">先连接 Key 与最小必要列，最后再回表/取宽字段，</text>
+                <text x="970" y="135" fill="#46585F" font-size="12">比把整行宽载荷塞进内存或 batch 临时文件稳得多。</text>
+
+                <rect x="956" y="156" width="404" height="74" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="970" y="180" fill="#1E4B5A" font-size="13.5" font-weight="bold">2. 让过滤条件尽可能早地下推</text>
+                <text x="970" y="202" fill="#46585F" font-size="12">避免把筛选条件写到 Join 之后才生效，让优化器有</text>
+                <text x="970" y="219" fill="#46585F" font-size="12">机会在 build 建表前先筛掉无效行。</text>
+
+                <rect x="956" y="240" width="404" height="74" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="970" y="264" fill="#1E4B5A" font-size="13.5" font-weight="bold">3. 高度警惕 NULL 与特殊默认值</text>
+                <text x="970" y="286" fill="#46585F" font-size="12">大量 NULL 或占位默认值不仅埋下结果语义陷阱，</text>
+                <text x="970" y="303" fill="#46585F" font-size="12">也是引发统计偏差和单点热点的常见元凶。</text>
+
+                <rect x="956" y="324" width="404" height="76" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="970" y="348" fill="#1E4B5A" font-size="13.5" font-weight="bold">4. 分页与报表切忌无限放大中间集</text>
+                <text x="970" y="370" fill="#46585F" font-size="12">大宽表 Join + 无选择性条件 + count(*)，</text>
+                <text x="970" y="387" fill="#46585F" font-size="12">是把 Hash Join 推入临时文件泥潭的经典组合。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>最佳实践教会我们「该怎么做好」，但工程上同样重要的是知道「什么时候不该用」以及「前人踩过的 8 个深坑」。</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：第七章 · 架构师 / DBA / 业务开发者最佳实践</span>
+              <span class="page-num">12 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-index="12">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>08 &amp; 09 · 适用边界与常见工程坑</span>
+              <span class="tag-accent">避坑手册</span>
+            </div>
+            <h1 class="slide-title">适用边界矩阵与工程现场 8 大经典误判</h1>
+            <p class="slide-lead">看懂算法不是为了强行让它跑在所有查询上，而是识别出它什么时候是良药、什么时候是毒药，并一眼避开那 8 个反复出现的配置与观测误区。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左区：适用 vs 不适合 (x: 24..514) -->
+                <rect x="24" y="18" width="490" height="170" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="24" y="18" width="490" height="32" fill="#2F7A66"/>
+                <text x="40" y="39" fill="#F7F6F2" font-size="13.5" font-weight="bold">适合 On-Disk Hash Join 的 4 类场景</text>
+                <text x="40" y="72" fill="#1B2B33" font-size="12.5">1. 大规模等值 Join，且无现成有序索引可用</text>
+                <text x="40" y="98" fill="#1B2B33" font-size="12.5">2. build 侧略超内存，临时盘够快且 batch 可控</text>
+                <text x="40" y="124" fill="#1B2B33" font-size="12.5">3. 报表 / ETL / 批处理（吞吐优先于首行延迟）</text>
+                <text x="40" y="150" fill="#1B2B33" font-size="12.5">4. 并行环境中 build 可共享、batch 可分派多 Worker</text>
+
+                <rect x="24" y="200" width="490" height="212" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="24" y="200" width="490" height="32" fill="#BE653B"/>
+                <text x="40" y="221" fill="#F7F6F2" font-size="13.5" font-weight="bold">不适合的 6 类高危场景</text>
+                <text x="40" y="252" fill="#1B2B33" font-size="12.5">1. Join Key 极端倾斜，单热点值对应海量 tuple</text>
+                <text x="40" y="278" fill="#1B2B33" font-size="12.5">2. 临时文件目录挂载在慢盘或空间极度紧张</text>
+                <text x="40" y="304" fill="#1B2B33" font-size="12.5">3. OLTP 高频小查询（首行延迟与抖动极敏感）</text>
+                <text x="40" y="330" fill="#1B2B33" font-size="12.5">4. build 侧极宽且无法提前投影导致文件巨大</text>
+                <text x="40" y="356" fill="#1B2B33" font-size="12.5">5. 系统极高并发，调大 work_mem 直接打穿整机内存</text>
+                <text x="40" y="382" fill="#1B2B33" font-size="12.5">6. 非等值 Join 或主要谓词不是 hashable equality</text>
+
+                <!-- 右区：8 大常见坑对照 (x: 536..1376) -->
+                <rect x="536" y="18" width="840" height="394" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="536" y="18" width="840" height="32" fill="#1E4B5A"/>
+                <text x="554" y="39" fill="#F7F6F2" font-size="13.5" font-weight="bold">工程现场 8 大常见坑 → 正向纠偏动作</text>
+
+                <!-- 2列 x 4行 卡片格 -->
+                <rect x="552" y="64" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="566" y="86" fill="#BE653B" font-size="13" font-weight="bold">坑 1：见 Hash Join 就当内存执行</text>
+                <text x="566" y="108" fill="#2F7A66" font-size="12">→ 必须看 Hash 节点 Batches，&gt;1 即已落盘。</text>
+                <text x="566" y="126" fill="#46585F" font-size="11.5">普通 EXPLAIN 看不到真实运行期扩批。</text>
+
+                <rect x="964" y="64" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="978" y="86" fill="#BE653B" font-size="13" font-weight="bold">坑 2：只调 work_mem，忘 hash_mem_multiplier</text>
+                <text x="978" y="108" fill="#2F7A66" font-size="12">→ 源码 get_hash_memory_limit() 按二者乘积算。</text>
+                <text x="978" y="126" fill="#46585F" font-size="11.5">hash 操作预算实际可能是 sort 的数倍。</text>
+
+                <rect x="552" y="150" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="566" y="172" fill="#BE653B" font-size="13" font-weight="bold">坑 3：忽略并发乘数盲目加内存</text>
+                <text x="566" y="194" fill="#2F7A66" font-size="12">→ 单会话 256MB 爽，100 并发立刻 OOM。</text>
+                <text x="566" y="212" fill="#46585F" font-size="11.5">并行 Worker 还会按进程独立应用限额。</text>
+
+                <rect x="964" y="150" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="978" y="172" fill="#BE653B" font-size="13" font-weight="bold">坑 4：把 enable_hashjoin = off 当修复</text>
+                <text x="978" y="194" fill="#2F7A66" font-size="12">→ 禁用后往往换来更差的归并大排序或嵌套循环。</text>
+                <text x="978" y="212" fill="#46585F" font-size="11.5">该开关只能做 AB 诊断，切勿进上线配置。</text>
+
+                <rect x="552" y="236" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="566" y="258" fill="#BE653B" font-size="13" font-weight="bold">坑 5：不更新临时表统计信息</text>
+                <text x="566" y="280" fill="#2F7A66" font-size="12">→ CREATE TEMP TABLE AS 后务必主动 ANALYZE。</text>
+                <text x="566" y="298" fill="#46585F" font-size="11.5">autovacuum 不会及时替批处理临时表采样。</text>
+
+                <rect x="964" y="236" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="978" y="258" fill="#BE653B" font-size="13" font-weight="bold">坑 6：误读 Memory Usage 为总消耗</text>
+                <text x="978" y="280" fill="#2F7A66" font-size="12">→ 它只是单 Hash 节点内存表峰值，不含临时盘。</text>
+                <text x="978" y="298" fill="#46585F" font-size="11.5">也不等于整条复杂查询全部节点的内存总和。</text>
+
+                <rect x="552" y="322" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="566" y="344" fill="#BE653B" font-size="13" font-weight="bold">坑 7：放任 Batches 扩批不深究</text>
+                <text x="566" y="366" fill="#2F7A66" font-size="12">→ 64 (originally 8) 比直接 64 更值得追查。</text>
+                <text x="566" y="384" fill="#46585F" font-size="11.5">它暴露了计划阶段严重低估，可能选错了内外表。</text>
+
+                <rect x="964" y="322" width="396" height="76" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="978" y="344" fill="#BE653B" font-size="13" font-weight="bold">坑 8：寄望拆批消化超级热点 Key</text>
+                <text x="978" y="366" fill="#2F7A66" font-size="12">→ 某租户占 80% 数据时，拆 1024 批也救不了。</text>
+                <text x="978" y="384" fill="#46585F" font-size="11.5">必须把热点值从业务/SQL 层面单独剥离处理。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">承接 · NEXT</span>最后留给你 6 个直击底层原理的检验问题与一份 PostgreSQL 源码溯源地图——能全部讲透，这一课才算真正筑基完成。</div>
+            <div class="slide-meta-footer">
+              <span>对应原文：第八章 · 适合与不适合场景 &amp; 第九章 · 常见坑</span>
+              <span class="page-num">13 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-index="13">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>10 &amp; 11 · 深度思考与源码溯源</span>
+              <span class="tag-accent">点击问题查看破题思路</span>
+            </div>
+            <h1 class="slide-title">第一性原理检验：六大思考题与源码溯源地图</h1>
+            <p class="slide-lead">真正吃透一个算子，不是记住参数名，而是能看着现象反推源码里究竟哪条机制触发了动作。点击左侧问题可核对破题核心线索。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="svg-summary" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect width="1400" height="430" fill="#F7F6F2"/>
+
+                <!-- 左区：6大思考题列表 (x: 24..834) -->
+                <rect x="24" y="18" width="810" height="394" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="18" width="810" height="34" fill="#245A6B"/>
+                <text x="42" y="40" fill="#F7F6F2" font-size="13.5" font-weight="bold">A. 六大高价值思考题（点击下方卡片展开第一性原理破题提示）</text>
+
+                <!-- 6 个可点击 SVG 问题组 -->
+                <g class="q-item" data-q="0" style="cursor:pointer;">
+                  <rect id="q-box-0" x="40" y="64" width="778" height="44" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="54" y="91" fill="#1B2B33" font-size="13" font-weight="bold">Q1. work_mem 从 4MB 调到 64MB，为什么某些 Hash Join 仍然 Batches &gt; 1？</text>
+                </g>
+
+                <g class="q-item" data-q="1" style="cursor:pointer;">
+                  <rect id="q-box-1" x="40" y="114" width="778" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+                  <text x="54" y="141" fill="#1B2B33" font-size="13" font-weight="bold">Q2. 为什么 batch 数必须是 2 的幂？这和运行期「只把 tuple 推到未来批」有何关系？</text>
+                </g>
+
+                <g class="q-item" data-q="2" style="cursor:pointer;">
+                  <rect id="q-box-2" x="40" y="164" width="778" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+                  <text x="54" y="191" fill="#1B2B33" font-size="13" font-weight="bold">Q3. Batches 没变，但 Buckets 从 originally 翻倍了，说明什么？</text>
+                </g>
+
+                <g class="q-item" data-q="3" style="cursor:pointer;">
+                  <rect id="q-box-3" x="40" y="214" width="778" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+                  <text x="54" y="241" fill="#1B2B33" font-size="13" font-weight="bold">Q4. Parallel Hash 在多 batch 时为何要先预分区 Outer，而串行可边 Probe 边写盘？</text>
+                </g>
+
+                <g class="q-item" data-q="4" style="cursor:pointer;">
+                  <rect id="q-box-4" x="40" y="264" width="778" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+                  <text x="54" y="291" fill="#1B2B33" font-size="13" font-weight="bold">Q5. 某 Key 极端热点时，调内存 / 建索引 / 拆 SQL / 预聚合 / 改模型，如何选型与验证？</text>
+                </g>
+
+                <g class="q-item" data-q="5" style="cursor:pointer;">
+                  <rect id="q-box-5" x="40" y="314" width="778" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+                  <text x="54" y="341" fill="#1B2B33" font-size="13" font-weight="bold">Q6. 测试库 Batches: 1，生产库 Batches: 32，排查优先级：统计信息、参数、分布还是并发？</text>
+                </g>
+
+                <!-- 破题提示栏 -->
+                <rect x="40" y="366" width="778" height="36" fill="#1E4B5A"/>
+                <text id="q-hint-text" x="54" y="389" fill="#F7E9DE" font-size="12.5">提示 Q1：乘以 hash_mem_multiplier 后仍小于实际 build 行数 × 宽列投影/TOAST 展开体积，或受 U 形缓冲限制。</text>
+
+                <!-- 右区：本地源码与文档溯源地图 (x: 856..1376) -->
+                <rect x="856" y="18" width="520" height="394" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="856" y="18" width="520" height="34" fill="#1E4B5A"/>
+                <text x="874" y="40" fill="#F7F6F2" font-size="13.5" font-weight="bold">B. 源码与权威文档溯源索引（零虚构基准）</text>
+
+                <rect x="874" y="64" width="484" height="46" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="888" y="84" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="12" font-weight="bold">src/backend/executor/nodeHashjoin.c</text>
+                <text x="888" y="102" fill="#46585F" font-size="11.5">Hybrid 状态机、batch 切换、串行与并行执行总入口</text>
+
+                <rect x="874" y="118" width="484" height="46" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="888" y="138" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="12" font-weight="bold">src/backend/executor/nodeHash.c</text>
+                <text x="888" y="156" fill="#46585F" font-size="11.5">sizing、batch/bucket 动态增长、Parallel Hash 构建</text>
+
+                <rect x="874" y="172" width="484" height="46" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="888" y="192" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="12" font-weight="bold">src/include/executor/hashjoin.h</text>
+                <text x="888" y="210" fill="#46585F" font-size="11.5">HashJoinTableData、hashCxt/batchCxt/spillCxt、Skew 结构</text>
+
+                <rect x="874" y="226" width="484" height="46" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="888" y="246" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="12" font-weight="bold">src/backend/commands/explain.c</text>
+                <text x="888" y="264" fill="#46585F" font-size="11.5">show_hash_info() 输出 Buckets / Batches / Memory Usage</text>
+
+                <rect x="874" y="280" width="484" height="46" fill="#F7F6F2" stroke="#74A5AD"/>
+                <text x="888" y="300" fill="#1E4B5A" font-family="SF Mono, monospace" font-size="12" font-weight="bold">doc/src/sgml/config.sgml &amp; perform.sgml</text>
+                <text x="888" y="318" fill="#46585F" font-size="11.5">work_mem / hash_mem_multiplier / temp_tablespaces / EXPLAIN 示例</text>
+
+                <rect x="874" y="336" width="484" height="64" fill="#EBF1EE" stroke="#2F7A66"/>
+                <text x="888" y="358" fill="#2F7A66" font-size="12.5" font-weight="bold">历史概念背景文献（无本地原文故不引实验数）：</text>
+                <text x="888" y="376" fill="#46585F" font-size="11">• Database Processor Oriented to Relational Operations / Buffer Management</text>
+                <text x="888" y="392" fill="#46585F" font-size="11">• Dynamic Hash Clustering / Dynamic Memory Allocation for Hash Joins</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-takeaway"><span class="next-label">收官 · SUMMARY</span>读懂 On-Disk Hash Join，本质就是读懂「内存预算、2^k 分区、临时盘缓冲与数据分布倾斜」四者之间的动态博弈。</div>
+            <div class="slide-meta-footer">
+              <span>数据库筑基课 · PostgreSQL 执行算法 · GitHub: digoal/blog</span>
+              <span class="page-num">14 / 14</span>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /#stage -->
+
+      <!-- 页内目录覆盖层 (按 G 开关) -->
+      <div id="toc-overlay">
+        <div id="toc-panel">
+          <div class="toc-head">
+            <h2>演说目录 · On-Disk Hash Join (14 页工程蓝图)</h2>
+            <button class="ctrl-btn" id="btn-toc-close">关闭 (G / Esc)</button>
+          </div>
+          <div class="toc-grid" id="toc-grid"></div>
+        </div>
+      </div>
+
+    </div><!-- /#stage-viewport -->
+
+    <!-- 右侧页内讲稿开窗 (非弹窗，按 N / T 循环开闭) -->
+    <aside id="notes-drawer">
+      <div class="drawer-header">
+        <span class="drawer-title" id="drawer-title">本页演说讲稿</span>
+        <span class="drawer-mode-badge" id="drawer-mode-badge">N · 单页</span>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+    </aside>
+  </div><!-- /#workspace -->
+
+  <!-- 常驻底部按键栏 (全屏下依然可见) -->
+  <footer id="bottom-bar">
+    <div class="bar-group">
+      <button class="bar-btn" id="btn-toc" title="目录 (G)">目录 <span class="kbd">G</span></button>
+      <button class="bar-btn" id="btn-prev" title="上一页 (←)">◀ 上页</button>
+      <span class="bar-progress" id="bar-progress">01 / 14</span>
+      <button class="bar-btn" id="btn-next" title="下一页 (→ / Space)">下页 ▶</button>
+    </div>
+    <div class="bar-group">
+      <button class="bar-btn" id="btn-note" title="本页讲稿 (N)">本页讲稿 <span class="kbd">N</span></button>
+      <button class="bar-btn" id="btn-all-notes" title="全文讲稿并联动定位 (T)">全文讲稿 <span class="kbd">T</span></button>
+      <button class="bar-btn" id="btn-autoplay" title="自动播放 (P)">自动播放 <span class="kbd">P</span></button>
+      <button class="bar-btn" id="btn-fullscreen" title="全屏切换 (F)">全屏 <span class="kbd">F</span></button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ==================== 1. 全 14 页元数据与口语化逻辑推演讲稿 ==================== */
+  const SLIDES_DATA = [
+    {
+      num: '01',
+      eyebrow: '现象与破题',
+      title: 'On-Disk Hash Join：当内存算子被迫落盘之后',
+      sub: '从 EXPLAIN 中的 Batches: 32 (originally 8) 撕开假象',
+      notes: [
+        '<span class="note-logic-tag">现象切入</span>各位同学好，今天我们聊数据库筑基课里一个非常容易让应用开发者产生错觉的算子——On-Disk Hash Join。为什么说它容易让人产生错觉呢？因为你在线上抓慢 SQL，拉出 EXPLAIN ANALYZE 的时候，执行计划里明明写着「Hash Join」，名字看起来跟内存操作一模一样。',
+        '<span class="note-logic-tag">反推矛盾</span>但你往下看一行，看到 Hash 节点底下印着 <code>Buckets: 65536 (originally 32768)  Batches: 32 (originally 8)  Memory Usage: 4096kB</code>，这时候真相就藏不住了。只要 <code>Batches</code> 大于 1，它就已经不是纯粹的内存算法了，而是把 build 侧和 probe 侧拆成了 32 批，当前这一批留在内存，剩下 31 批全写进了临时文件。更致命的是括号里的 <code>originally 8</code>——说明优化器原本以为拆 8 批就够，结果跑到半路发现内存根本兜不住，临时把批次数翻了倍。',
+        '<span class="note-logic-tag">推演终点</span>一旦走到这一步，整个 SQL 的性能瓶颈就彻底变天了：从原本极快的 CPU 内存哈希探测，变成了临时文件 I/O、批次数爆炸、数据倾斜和并发内存放大的混合战场。下面我们就沿着源码剖面，一层层把它的机制拆透。'
+      ]
+    },
+    {
+      num: '02',
+      eyebrow: '问题本质与代价',
+      title: '为什么不得不落盘？拆解大 Join 的输入失真与伴生代价',
+      sub: '把一次大 Join 拆成 N 批同构小 Join 的工程权衡',
+      notes: [
+        '<span class="note-logic-tag">第一性前提</span>先问一个根本问题：既然写磁盘这么慢，PostgreSQL 为什么不在 build 侧装不下内存的时候直接报错，或者直接换别的算法呢？这就得从数据库面对的客观现实说起——优化器在计划阶段算的是「静态估计」，执行器在运行期面对的是「真实数据」。',
+        '<span class="note-logic-tag">5大诱因链</span>预算被击穿通常有五个躲不开的原因：第一，统计信息陈旧或条件相关，build 侧行数被严重低估；第二，虽然行数估对了，但宽列投影、表达式计算或者 TOAST 展开后，平均行宽暴涨；第三，Join Key 分布倾斜，少数几个热值把某一个批次直接挤爆；第四，单条 SQL 看似合理，但乘上多个算子、Parallel Worker 和高并发连接，总体内存吃紧；第五，数据体量本来就远超内存，如果直接禁用 Hash Join，优化器只能退而求其次选嵌套循环或天价外排序 Merge Join，死得更惨。',
+        '<span class="note-logic-tag">转化与代价</span>所以 On-Disk Hash Join 做了一个非常聪明的工程妥协：既然整张表建不进内存，那我就用同一个哈希分区规则，把 inner 和 outer 切成 batch 0 到 batch N，每次只拿一组同号小块进内存做等值连接。但天下没有免费午餐，代价立刻跟上来五笔：读写临时文件的 I/O、每个批文件都要占缓冲内存、运行期扩批要搬迁已入表的 tuple、相同 hash value 导致的倾斜照样拆不开，以及并行模式下的同步成本。'
+      ]
+    },
+    {
+      num: '03',
+      eyebrow: '内核架构与术语',
+      title: '不是独立计划节点：PostgreSQL 中的七层执行剖面',
+      sub: '7 层代码映射与 bucket / batch / spill file / shared tuplestore',
+      notes: [
+        '<span class="note-logic-tag">源码视角</span>很多朋友翻 PostgreSQL 源码时会去搜有没有一个叫 OnDiskHashJoin 的节点——搜不到的。在 PostgreSQL 里，它不是独立算子，而是 <code>Hash Join</code> 在多 batch 形态下的自然演化。从上到下，正好对应地层一样严谨的七个层次：计划选择估算、内存硬预算计算、初始表规模 sizing、执行状态机驱动、运行期扩批控制、串行或并行落盘存储，最后通过 <code>explain.c</code> 里的 <code>show_hash_info()</code> 把结果汇报给你。',
+        '<span class="note-logic-tag">术语澄清</span>在深入细节前，我们必须把四组极易混为一谈的术语拧清楚：第一，<code>bucket</code> 是内存哈希表的槽位，桶里挂着 <code>HashJoinTuple</code> 链表，管的是冲突链长；第二，<code>batch</code> 是逻辑分片批次，<code>nbatch &gt; 1</code> 就标志着进入了 on-disk 行为；第三，<code>spill file</code> 是串行模式下每个 backend 私有的 <code>BufFile</code> 临时文件；第四，<code>shared tuplestore</code> 则是并行 Hash Join 里多 worker 共享的临时数据区。分清这四个词，看后面源码就不迷路。'
+      ]
+    },
+    {
+      num: '04',
+      eyebrow: '核心原理 I',
+      title: '当前批在内存，未来批在磁盘：2^k 分区的单向推进',
+      sub: 'Hybrid Hash Join 流转机制与交互演示',
+      notes: [
+        '<span class="note-logic-tag">机制拆解</span>接下来看最核心的 Hybrid Hash Join 原理。很多人一听「On-Disk Hash Join」，脑子里浮现的是把一张巨大的哈希表写到硬盘上，然后随机去磁盘里跳着找链表——千万别这么想，如果真那么干，随机磁盘寻址早就慢成蜗牛了。PostgreSQL 的做法是：第一轮读 inner 时，<code>ExecHashGetBucketAndBatch()</code> 会同时算出这行数据的 <code>bucketno</code> 和 <code>batchno</code>。如果它正好属于当前批（比如 batch 0），直接进内存哈希表；如果不是，就先顺手写进对应编号的临时文件 <code>innerBatchFile[batchno]</code>。',
+        '<span class="note-logic-tag">为什么不倒退</span>第一轮扫 outer 探测时也完全对称：属于 batch 0 的当场拿去内存表里匹配输出；属于未来 batch 的，直接顺手写进 <code>outerBatchFile[batchno]</code>。大家可以点击屏幕上方的「播放完整流转」按钮看这个过程。',
+        '<span class="note-logic-tag">数学约束</span>这里面藏着一个极为精妙的设计：<code>nbatch</code> 永远是 2 的幂。因为取模位宽是倍增的，当运行期不得不扩大 <code>nbatch</code> 时，一个原本在 batch 0 里的 tuple，重新算完以后要么还留在 batch 0，要么去到编号更大的未来 batch，绝不可能倒流回已经处理完的更早批次！这就保证了执行器可以单向往前推进，永远不需要回头翻旧账。'
+      ]
+    },
+    {
+      num: '05',
+      eyebrow: '核心原理 II',
+      title: '临时文件存什么？为什么 spillCxt 会反噬内存预算',
+      sub: 'MinimalTuple 磁盘布局与三大 MemoryContext',
+      notes: [
+        '<span class="note-logic-tag">磁盘格式</span>现在顺着刚才的逻辑往下推：写到 <code>BufFile</code> 里的记录到底长什么样？答案非常务实——每条记录前面先写两个 32 位整数：第一个是算好的 <code>hashvalue</code>，第二个恰好是紧跟其后的 <code>MinimalTuple</code> 的长度。为什么要多存 4 个字节的 hash value 呢？因为等下一轮把这个批从磁盘读回来重新建表时，<code>ExecHashJoinGetSavedTuple()</code> 读完头两个整数，直接拿着现成的 hash value 就能插进 bucket，省掉了对 Join Key 再算一遍哈希函数的 CPU 开销。而且这些 <code>BufFile</code> 是懒创建的，某个批真写第一条才建文件，处理完就立刻 <code>BufFileClose()</code> 关掉。',
+        '<span class="note-logic-tag">内存三层帐</span>再来看右半张图，为什么说「拆批太多反而更费内存」？这就要看 <code>hashjoin.h</code> 里的三个内存上下文了：父节点 <code>hashCxt</code> 管元数据，保证异常中断能整块清理；<code>batchCxt</code> 只活在当前批，每批结束直接 reset 释放，干净利落；但唯独 <code>spillCxt</code> 必须跨批次存活，因为后面批的文件还没读完！而每个打开的批文件都要占一块 <code>BLCKSZ</code> 读写缓冲，你的 <code>nbatch</code> 越多，<code>spillCxt</code> 里常驻的缓冲区就越膨胀。这就自然引出了下一页那个至关重要的 U 形拐点。'
+      ]
+    },
+    {
+      num: '06',
+      eyebrow: '核心原理 III',
+      title: 'U 形内存拐点与运行期扩批：自救的数学边界',
+      sub: '动态重分区流程与 ExecHashIncreaseBatchSize 刹车机制',
+      notes: [
+        '<span class="note-logic-tag">公式推演</span>请看左侧这张图，这是 <code>ExecChooseHashTableSize()</code> 源码注释里给出的一条极其经典的近似公式：总内存约等于 <code>(inner_rel_bytes / nbatch) + (2 * nbatch * BLCKSZ)</code>。第一项是随批数增加而下降的内存表大小，第二项是随批数增加而线性上升的读写文件缓冲——一降一升，必然画出一条 U 形曲线！你可以试着拖动下方滑块并点击「触发运行期扩批演练」。',
+        '<span class="note-logic-tag">重分区过程</span>当执行器往内存插数据时，一旦发现已用空间加上桶数组指针超过了 <code>spaceAllowed</code>，就会进入 <code>ExecHashIncreaseNumBatches()</code>：它不是简单改个数字，而是要把当前内存旧 chunk 里的每一条 tuple 扫出来重算批号——留在本批的复制到新 chunk 重挂链表，属于更晚批的立刻写出磁盘并释放内存。',
+        '<span class="note-logic-tag">双重刹车</span>但 PostgreSQL 在这里加了两道极其理性的刹车：第一道是先调 <code>ExecHashIncreaseBatchSize()</code> 算笔账，如果发现翻倍批数新增的文件缓冲开销，比直接放大当前预算还要贵，那就不扩批了，宁可扩大 <code>spaceAllowed</code>；第二道是如果重算后发现几乎所有 tuple 全留在了原批、或者全外溢了，说明遇到了相同 hash value 的极端倾斜，再怎么扩批也没救，执行器会直接关闭后续增长。'
+      ]
+    },
+    {
+      num: '07',
+      eyebrow: '核心原理 IV',
+      title: '切换 Batch 的六步状态流转，与 Skew 优化的硬边界',
+      sub: 'HJ_NEED_NEW_BATCH 递归暗礁与 2% 预算真相',
+      notes: [
+        '<span class="note-logic-tag">状态切换暗礁</span>当当前批探测干净，状态机切入 <code>HJ_NEED_NEW_BATCH</code>，按六步走：先关掉上一批的 outer 临时文件，再在 Batch 0 结束后彻底关闭 Skew 状态，接着检查能否跳过两侧都空的批——注意如果遇到 outer/full/right join 或者之前运行期扩过批，单侧为空也不能随便跳；然后 reset 当前内存表，再分别 rewind 载入新一批的 inner 和 outer。这里要特别提醒第 5 步的暗礁：从磁盘把下一批 inner 读回来重新插表时，依然有可能再次触发超预算而扩批！所以别以为磁盘里一个文件对应的一定全是这一批的数据。',
+        '<span class="note-logic-tag">看清 Skew 真相</span>顺便我们把很多人神话了的 Skew 优化讲透：PostgreSQL 确实会利用 outer 侧的 MCV 统计信息建一张 Skew 表，让热点值尽量在 Batch 0 直接匹配完，免得来回落盘。但它有两个硬边界：第一，它的预算常量 <code>SKEW_HASH_MEM_PERCENT</code> 只有区区 2%，超了就会主动踢掉部分 MCV；第二，它只认统计信息已知的热点，一旦碰到运行期突发倾斜或者单一 hash value 本身就比内存大，Skew 表一样束手无策。记住：它是已知热点的 I/O 减免，不是倾斜免死金牌。'
+      ]
+    },
+    {
+      num: '08',
+      eyebrow: '核心原理 V',
+      title: '共享协作的代价：Parallel Hash Join 多批状态机',
+      sub: 'Parallel-Oblivious vs Parallel-Aware 与双级 Barrier',
+      notes: [
+        '<span class="note-logic-tag">两种并行差异</span>到了多核并行时代，PostgreSQL 有两种完全不同的并行姿势。左边是 parallel-oblivious，本质是每个 Worker 自己建一张完整的私有哈希表、写私有临时文件，好处是没有同步开销，坏处是 Build 侧 CPU 和内存按 Worker 数乘倍浪费。右边才是真正的 <code>Parallel Hash Join</code>，多个 Worker 通过共享动态内存协同建同一份表。',
+        '<span class="note-logic-tag">为什么先分区 Outer</span>但是当 Parallel Hash 进入多 batch 落盘模式时，有一个和串行算法截然不同的动作：在构建阶段的 Build Barrier 末尾，多了一个 <code>PHJ_BUILD_HASH_OUTER</code> 状态——它必须提前把 outer 侧也先分区写进 <code>SharedTuplestore</code>！为什么串行可以边 probe 边写未来批，并行却要先预分区呢？想通第一性原理就明白了：只有提前把 outer 分好批存进共享存储，后面多个 Worker 才能各自认领不同的 batch，互不干扰地走完每个批的 Allocate、Load、Probe、Scan Unmatched 和 Free 生命周期。这背后是由 <code>SharedFileSet</code> 和两级 Barrier 撑起来的同步成本，所以小表或单批场景开并行未必划算。'
+      ]
+    },
+    {
+      num: '09',
+      eyebrow: '线上诊断路径',
+      title: '读懂 show_hash_info()：线上落盘四步诊断决策树',
+      sub: 'EXPLAIN ANALYZE 实操排查流与 4 种工况沙盘',
+      notes: [
+        '<span class="note-logic-tag">诊断顺序</span>理论落地成排障能力，其实就浓缩成屏幕左侧这四步正交决策流。大家可以点击下方不同的工况按钮，观察高亮路径的变化。第一步永远先看 <code>Batches</code>：等于 1 说明没发生多批落盘，警报解除；一旦大于 1，立刻进入第二步，对比实际 <code>Batches</code> 和括号里的 <code>originally</code>。',
+        '<span class="note-logic-tag">分叉研判</span>如果两者相等，说明优化器算得很准，就是纯粹的内存预算小于 Build 侧真实大小，在算清并发总账的前提下可以考虑优化投影或适度调大预算。但如果实际值大于 <code>originally</code>，说明执行期被迫扩批了——这时候就要追查是不是漏了 <code>ANALYZE</code>（临时表极其高发）、平均行宽低估，还是遭遇了热点倾斜停涨。最后第四步，别靠拍脑袋猜慢了多少，一定打开 <code>EXPLAIN (ANALYZE, BUFFERS)</code> 看 temp read/written 块数，并用 <code>log_temp_files</code> 量化落盘总量。'
+      ]
+    },
+    {
+      num: '10',
+      eyebrow: '算子家族定位',
+      title: '四大 Join 物理算子横向对比：为什么需要这道退化防线',
+      sub: 'On-Disk Hash / In-Memory Hash / Merge / Nested Loop 生态位',
+      notes: [
+        '<span class="note-logic-tag">生态位判断</span>这张八维度对比表把 PostgreSQL 四大连接物理算子摆在了同一张桌子上。我想传递一个核心认知：On-Disk Hash Join 从来不是用来「超越」In-Memory Hash Join 的加速神器，它存在的意义，是在内存失守的极端情况下，保住等值连接吞吐的最后一道退化防线。',
+        '<span class="note-logic-tag">横向权衡</span>你想想看，当两侧都没有索引、数据又无序、体量又超过了 <code>work_mem</code> 时：如果走 Nested Loop，outer 每多一行内表就重扫一遍，时间复杂度直接崩盘；如果强行走 Merge Join，把两张无序大表先做外部归并排序，光排序落盘的 I/O 和 CPU 代价往往比 Hash 分区还要沉重。所以 On-Disk Hash Join 付出了随机转批、写临时盘的代价，换回的是在批内依旧享受桶定位的高效候选集缩小能力。但它也天生不保序、极怕同键倾斜，该让位给索引 Nested Loop 或有序 Merge Join 时绝不硬撑。'
+      ]
+    },
+    {
+      num: '11',
+      eyebrow: '效果与复现实验',
+      title: '收益与成本天平，以及最小可复现控制变量实验',
+      sub: '零编造数字，用 50 万行对照实验观测真实表现',
+      notes: [
+        '<span class="note-logic-tag">拒绝伪数据</span>做技术分享最忌讳的一件事，就是张口就来「Batches 变成 32 会慢 10 倍」。真实的工程性能取决于你的临时盘是不是 NVMe、操作系统页缓存命中率高不高、行宽多宽、并行度几路——没有实测环境的数字全都是编造。',
+        '<span class="note-logic-tag">可复现方案</span>所以我给大家在右侧写好了一套完全标准、零依赖的本地实验 SQL：建两张 50 万行的宽临时表，做完 <code>ANALYZE</code> 后暂时屏蔽其他两个 Join 算子以控制变量。第一组把 <code>work_mem</code> 压到 1MB、倍率为 1.0，逼出多批落盘；第二组把 <code>work_mem</code> 抬到 64MB、倍率为 2.0 做对照。去观察四个维度：<code>Batches</code> 有没有降下来？<code>log_temp_files</code> 临时写入少了多少？总耗时是受到 CPU 还是 I/O 主导？最后再反问自己：把这个单会话配置乘以生产并发，整台机器扛得住吗？'
+      ]
+    },
+    {
+      num: '12',
+      eyebrow: '三重视角治理',
+      title: '从并发总账到 SQL 瘦身：架构师、DBA 与开发者动作清单',
+      sub: '顶层预算模型、稳健观测与业务代码源头减负',
+      notes: [
+        '<span class="note-logic-tag">架构师账本</span>如果把今天的内容浓缩成落地清单，不同角色各守一摊。架构师最该算清一笔并发账：活跃连接数 × 每条 SQL 的 Hash/Sort 节点数 × Parallel Worker 数 × (<code>work_mem * hash_mem_multiplier</code>)。同时在硬件拓扑上给报表、ETL 规划独立的 <code>temp_tablespaces</code>，别让临时文件去跟 WAL 抢同一块慢盘；并在数据模型上把大 JSON、大 text 剥离出 build 侧。',
+        '<span class="note-logic-tag">DBA 与开发者</span>DBA 拿到慢 SQL 先盯 <code>Batches</code> 和 <code>originally</code>，盯紧统计信息与 <code>pg_stat_statements</code> 的临时块指标，绝不把 <code>enable_hashjoin=off</code> 当作线上修复手段。而业务开发者其实拥有性价比最高的优化权：别随手 <code>SELECT *</code> 把无用大字段带进 Join 中间过程，尽量把过滤条件早早下推，同时对海量 NULL 和特殊默认值保持高度警惕——源头少塞进 build 侧一半字节，比事后调任何参数都管用。'
+      ]
+    },
+    {
+      num: '13',
+      eyebrow: '边界与避坑指南',
+      title: '适用边界矩阵与工程现场 8 大经典误判',
+      sub: '什么时候该用，什么时候该绕行，以及 8 个常踩的坑',
+      notes: [
+        '<span class="note-logic-tag">边界划分</span>左半边划清了界限：大等值连接、无序输入、吞吐优先的批处理场景，如果临时盘够快且批次数可控，On-Disk Hash Join 是稳妥的；但如果碰上极端数据倾斜、慢盘、空间告急、高频低延迟 OLTP 小查询、高并发内存紧张，或者根本是非等值连接，那就要果断绕行。',
+        '<span class="note-logic-tag">8大经典坑</span>右半边总结了生产上最容易栽跟头的八个坑：比如把 Hash Join 一律当内存操作；调参只改 <code>work_mem</code> 忘了还有 <code>hash_mem_multiplier</code>；单会话跑得飞快直接推上百并发 OOM；写完批处理临时表从不做 <code>ANALYZE</code>；把 <code>Memory Usage</code> 误读成整条查询的总内存或临时文件总量；以及遇到某个租户占 80% 数据还指望靠翻倍 batch 去拆散它——记住，同 hash value 永远锁在同一批，必须靠 SQL 拆分或业务建模单独解耦。'
+      ]
+    },
+    {
+      num: '14',
+      eyebrow: '思考检验与溯源',
+      title: '第一性原理检验：六大思考题与源码溯源地图',
+      sub: '用 6 个底层拷问完成知识内化，附上全套核对源码路径',
+      notes: [
+        '<span class="note-logic-tag">自我检验</span>最后这一页，我留了六个极具含金量的思考题给你——你可以在图上直接点击每一个问题核对破题核心线索。比如：为什么 <code>work_mem</code> 抬到 64MB 依然 <code>Batches &gt; 1</code>？为什么 <code>Batches</code> 没变但 <code>Buckets</code> 翻倍了？为什么测试库好好的，上了生产就变成 32 批？这些问题的答案全都就藏在我们前面推演过的每一个机制里。',
+        '<span class="note-logic-tag">收官总结</span>右侧列出了本次课程全部可核验的 PostgreSQL 源码与 SGML 文档路径。如果你能不看笔记，把「内存预算、2^k 单向分批、spillCxt 文件缓冲 U 形拐点、极端倾斜刹车、以及 Parallel 双级 Barrier 协作」这一整条因果链顺畅讲出来，那么 On-Disk Hash Join 这块数据库基石，你就真正筑牢了。谢谢大家！'
+      ]
+    }
+  ];
+
+  /* ==================== 2. 全局状态与核心元素 ==================== */
+  let currentIndex = 0;
+  let notesMode = 'closed'; // 'closed' | 'single' | 'all'
+  let tocOpen = false;
+  let autoplayTimer = null;
+
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  const stage = document.getElementById('stage');
+  const stageViewport = document.getElementById('stage-viewport');
+  const notesDrawer = document.getElementById('notes-drawer');
+  const drawerBody = document.getElementById('drawer-body');
+  const drawerTitle = document.getElementById('drawer-title');
+  const drawerBadge = document.getElementById('drawer-mode-badge');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const tocGrid = document.getElementById('toc-grid');
+  const barProgress = document.getElementById('bar-progress');
+
+  const btnToc = document.getElementById('btn-toc');
+  const btnNote = document.getElementById('btn-note');
+  const btnAllNotes = document.getElementById('btn-all-notes');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+
+  /* ==================== 3. 16:9 固定舞台矢量等比缩放引擎 ==================== */
+  function resizeStage() {
+    const rect = stageViewport.getBoundingClientRect();
+    const availW = Math.max(200, rect.width - 20);
+    const availH = Math.max(120, rect.height - 16);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stage.style.transform = `scale(${scale.toFixed(5)})`;
+  }
+
+  window.addEventListener('resize', resizeStage);
+  // ResizeObserver 监听右侧讲稿窗开关带来的舞台可用宽度渐变
+  if (window.ResizeObserver) {
+    new ResizeObserver(resizeStage).observe(stageViewport);
+  }
+
+  /* ==================== 4. 目录与幻灯片跳转 ==================== */
+  function buildToc() {
+    tocGrid.innerHTML = SLIDES_DATA.map((item, idx) => `
+      <div class="toc-item ${idx === currentIndex ? 'current' : ''}" data-idx="${idx}">
+        <div class="toc-num">${item.num}</div>
+        <div>
+          <div class="toc-info-title">${item.title}</div>
+          <div class="toc-info-sub">${item.eyebrow} · ${item.sub}</div>
+        </div>
+      </div>
+    `).join('');
+
+    tocGrid.querySelectorAll('.toc-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.getAttribute('data-idx'), 10);
+        goToSlide(idx);
+        toggleToc(false);
+      });
+    });
+  }
+
+  function toggleToc(forceState) {
+    tocOpen = typeof forceState === 'boolean' ? forceState : !tocOpen;
+    tocOverlay.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+    if (tocOpen) buildToc();
+  }
+
+  function goToSlide(idx) {
+    const target = Math.max(0, Math.min(totalSlides - 1, idx));
+    slides[currentIndex].classList.remove('active');
+    currentIndex = target;
+    slides[currentIndex].classList.add('active');
+
+    const padNum = String(currentIndex + 1).padStart(2, '0');
+    barProgress.textContent = `${padNum} / ${totalSlides}`;
+
+    if (tocOpen) buildToc();
+    syncNotesOnSlideChange();
+  }
+
+  /* ==================== 5. 页内右侧开窗讲稿与自动联动定位 ==================== */
+  function renderNotesDrawer() {
+    if (notesMode === 'closed') {
+      notesDrawer.classList.remove('open');
+      btnNote.classList.remove('active');
+      btnAllNotes.classList.remove('active');
+      setTimeout(resizeStage, 230);
+      return;
+    }
+
+    notesDrawer.classList.add('open');
+    btnNote.classList.toggle('active', notesMode === 'single');
+    btnAllNotes.classList.toggle('active', notesMode === 'all');
+
+    if (notesMode === 'single') {
+      const s = SLIDES_DATA[currentIndex];
+      drawerTitle.textContent = `第 ${s.num} 页讲稿`;
+      drawerBadge.textContent = 'N · 本页讲稿';
+      drawerBody.innerHTML = `
+        <div class="note-block current">
+          <div class="note-block-head">
+            <span class="note-page-tag">PAGE ${s.num} / 14 · ${s.eyebrow}</span>
+          </div>
+          <div class="note-block-title">${s.title}</div>
+          <div class="note-text">${s.notes.map(p => `<p>${p}</p>`).join('')}</div>
+        </div>
+      `;
+      drawerBody.scrollTop = 0;
+    } else if (notesMode === 'all') {
+      drawerTitle.textContent = '全文连贯讲稿 (14页)';
+      drawerBadge.textContent = 'T · 全文联动';
+      drawerBody.innerHTML = SLIDES_DATA.map((s, idx) => `
+        <div class="note-block ${idx === currentIndex ? 'current' : ''}" id="note-page-${idx}" data-idx="${idx}">
+          <div class="note-block-head" title="点击跳转到该页">
+            <span class="note-page-tag">PAGE ${s.num} / 14 · ${s.eyebrow}</span>
+          </div>
+          <div class="note-block-title">${s.title}</div>
+          <div class="note-text">${s.notes.map(p => `<p>${p}</p>`).join('')}</div>
+        </div>
+      `).join('');
+
+      // 点击右侧全文某一段可反向跳转对应页
+      drawerBody.querySelectorAll('.note-block-head').forEach(head => {
+        head.addEventListener('click', () => {
+          const idx = parseInt(head.parentElement.getAttribute('data-idx'), 10);
+          goToSlide(idx);
+        });
+      });
+
+      scrollNoteToCurrent(false);
+    }
+
+    setTimeout(resizeStage, 50);
+    setTimeout(resizeStage, 240);
+  }
+
+  function scrollNoteToCurrent(smooth = true) {
+    if (notesMode !== 'all') return;
+    const blocks = drawerBody.querySelectorAll('.note-block');
+    blocks.forEach((b, i) => b.classList.toggle('current', i === currentIndex));
+    const target = document.getElementById(`note-page-${currentIndex}`);
+    if (target) {
+      target.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+    }
+  }
+
+  function syncNotesOnSlideChange() {
+    if (notesMode === 'single') {
+      renderNotesDrawer();
+    } else if (notesMode === 'all') {
+      scrollNoteToCurrent(true);
+    }
+  }
+
+  function toggleNotesMode(mode) {
+    // 按一下显示，再按一下关闭，循环
+    if (notesMode === mode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = mode;
+    }
+    renderNotesDrawer();
+  }
+
+  /* ==================== 6. 自动播放与全屏 ==================== */
+  function toggleAutoplay() {
+    if (autoplayTimer) {
+      clearInterval(autoplayTimer);
+      autoplayTimer = null;
+      btnAutoplay.classList.remove('active');
+      btnAutoplay.innerHTML = '自动播放 <span class="kbd">P</span>';
+    } else {
+      btnAutoplay.classList.add('active');
+      btnAutoplay.innerHTML = '暂停播放 <span class="kbd">P</span>';
+      autoplayTimer = setInterval(() => {
+        if (currentIndex < totalSlides - 1) {
+          goToSlide(currentIndex + 1);
+        } else {
+          goToSlide(0);
+        }
+      }, 8000);
+    }
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    btnFullscreen.classList.toggle('active', !!document.fullscreenElement);
+    setTimeout(resizeStage, 100);
+  });
+
+  /* ==================== 7. 绑定全局按键与按钮 ==================== */
+  btnToc.addEventListener('click', () => toggleToc());
+  document.getElementById('btn-toc-close').addEventListener('click', () => toggleToc(false));
+  btnNote.addEventListener('click', () => toggleNotesMode('single'));
+  btnAllNotes.addEventListener('click', () => toggleNotesMode('all'));
+  btnAutoplay.addEventListener('click', toggleAutoplay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+  document.getElementById('btn-prev').addEventListener('click', () => goToSlide(currentIndex - 1));
+  document.getElementById('btn-next').addEventListener('click', () => goToSlide(currentIndex + 1));
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+    const k = e.key.toLowerCase();
+    if (k === 'g') {
+      e.preventDefault();
+      toggleToc();
+    } else if (k === 'n') {
+      e.preventDefault();
+      toggleNotesMode('single');
+    } else if (k === 't') {
+      e.preventDefault();
+      toggleNotesMode('all');
+    } else if (k === 'p') {
+      e.preventDefault();
+      toggleAutoplay();
+    } else if (k === 'f') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (k === 'r') {
+      if (currentIndex === 3) resetHybridAnim();
+      if (currentIndex === 5) resetRepartAnim();
+    } else if (e.key === 'Escape') {
+      if (tocOpen) toggleToc(false);
+    } else if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+      e.preventDefault();
+      if (tocOpen) toggleToc(false);
+      goToSlide(currentIndex + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      if (tocOpen) toggleToc(false);
+      goToSlide(currentIndex - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    }
+  });
+
+  /* ==================== 8. 交互动画 1：Slide 04 Hybrid Hash Join ==================== */
+  let hybridStep = 0;
+  let hybridTimer = null;
+  const selHybridBatch = document.getElementById('hybrid-custom-batch');
+  const hStatus = document.getElementById('hybrid-status');
+
+  function applyHybridStep(step) {
+    const customB = parseInt(selHybridBatch.value, 10);
+    const curLabel = document.getElementById('h-cur-batch-label');
+    const ruleLabel = document.getElementById('h-rule-label');
+    const stepDesc = document.getElementById('h-step-desc');
+    const memBadge = document.getElementById('h-mem-badge');
+    const memIn = document.getElementById('h-mem-inner');
+    const memIn2 = document.getElementById('h-mem-inner2');
+    const memPr = document.getElementById('h-mem-probe');
+    const memPr2 = document.getElementById('h-mem-probe2');
+
+    const d1i = document.getElementById('h-disk-1i');
+    const d1o = document.getElementById('h-disk-1o');
+    const d1s = document.getElementById('h-disk-1s');
+    const d2i = document.getElementById('h-disk-2i');
+    const d2o = document.getElementById('h-disk-2o');
+    const d2s = document.getElementById('h-disk-2s');
+    const d3s = document.getElementById('h-disk-3s');
+
+    // Reset default
+    d1i.textContent = 'inner[1]: (空)'; d1o.textContent = 'outer[1]: (空)'; d1s.textContent = '状态：等待轮次';
+    d2i.textContent = 'inner[2]: (空)'; d2o.textContent = 'outer[2]: (空)'; d2s.textContent = '状态：等待轮次';
+    document.getElementById('h-disk-3i') && (document.getElementById('h-disk-3i').textContent = 'inner[3]: (空)');
+    d3s.textContent = customB === 3 ? '状态：准备接收 Batch 3' : '状态：按需懒创建';
+
+    if (step === 0) {
+      curLabel.textContent = '当前状态：curbatch = 0 (nbatch = 4)';
+      ruleLabel.textContent = 'batchno == curbatch → 直接进内存！';
+      stepDesc.textContent = '等待播放或单步推进...';
+      memBadge.textContent = 'Active: Batch 0';
+      memIn.textContent = '[空，等待 Build]'; memIn2.textContent = '';
+      memPr.textContent = '[等待 curbatch probe]'; memPr2.textContent = '';
+      hStatus.textContent = 'STEP 0 / 6 · 就绪：点击播放或单步查看 4-batch 流转';
+    } else if (step === 1) {
+      curLabel.textContent = 'BUILD 阶段 · 扫 Inner (curbatch = 0)';
+      ruleLabel.textContent = 'tuple A (b=0) == 0 → 留内存表！';
+      stepDesc.textContent = 'tuple B(b=1), C(b=2) → 懒创建并写入 BufFile';
+      memIn.textContent = 'Bucket[0]: tuple A (0x10)';
+      memIn2.textContent = customB === 0 ? '+ 自定义输入 tuple (b=0)' : '';
+      d1i.textContent = 'inner[1]: tuple B'; d1s.textContent = '状态：已懒创建并写入';
+      d2i.textContent = 'inner[2]: tuple C'; d2s.textContent = '状态：已懒创建并写入';
+      if (customB === 1) d1i.textContent = 'inner[1]: B + 自定义';
+      if (customB === 2) d2i.textContent = 'inner[2]: C + 自定义';
+      if (customB === 3) d3s.textContent = '已接收自定义 tuple (b=3)';
+      hStatus.textContent = 'STEP 1 / 6 · Build Batch 0，未来批 inner 落盘';
+    } else if (step === 2) {
+      curLabel.textContent = 'PROBE 阶段 · 扫 Outer (curbatch = 0)';
+      ruleLabel.textContent = 'tuple X (b=0) 当场查内存输出！';
+      stepDesc.textContent = 'tuple Y(b=1), Z(b=2) → 写入 outerBatchFile';
+      memIn.textContent = 'Bucket[0]: tuple A (0x10)';
+      memPr.textContent = '探测 X(0x10) → 命中 A！输出';
+      memPr2.textContent = '当前 Batch 0 全部处理完成';
+      d1i.textContent = 'inner[1]: tuple B'; d1o.textContent = 'outer[1]: tuple Y'; d1s.textContent = '状态：双侧就绪';
+      d2i.textContent = 'inner[2]: tuple C'; d2o.textContent = 'outer[2]: tuple Z'; d2s.textContent = '状态：双侧就绪';
+      hStatus.textContent = 'STEP 2 / 6 · Probe Batch 0，未来批 outer 落盘';
+    } else if (step === 3) {
+      curLabel.textContent = 'HJ_NEED_NEW_BATCH → 切换 Batch 1';
+      ruleLabel.textContent = 'Reset batchCxt，加载 inner[1]！';
+      stepDesc.textContent = '读 saved hashvalue 免重算，直接插桶';
+      memBadge.textContent = 'Active: Batch 1';
+      memIn.textContent = 'Bucket[1]: tuple B (0x21)';
+      memIn2.textContent = 'Batch 0 内存已彻底 reset 清空';
+      memPr.textContent = '[准备 rewind outer[1]]'; memPr2.textContent = '';
+      d1i.textContent = 'inner[1]: 加载中'; d1o.textContent = 'outer[1]: tuple Y'; d1s.textContent = '状态：正在处理 Batch 1';
+      d2i.textContent = 'inner[2]: tuple C'; d2o.textContent = 'outer[2]: tuple Z';
+      hStatus.textContent = 'STEP 3 / 6 · 切换 Batch 1：Reset 内存表 + 加载 inner[1]';
+    } else if (step === 4) {
+      curLabel.textContent = 'PROBE 阶段 · Batch 1 (curbatch = 1)';
+      ruleLabel.textContent = '读 outer[1] 探测 Batch 1 内存表';
+      stepDesc.textContent = '处理完后立刻 BufFileClose() 释放 Batch 1';
+      memBadge.textContent = 'Active: Batch 1';
+      memIn.textContent = 'Bucket[1]: tuple B (0x21)';
+      memPr.textContent = '探测 Y(0x21) → 命中 B！输出';
+      memPr2.textContent = '关闭 inner[1]/outer[1] 释放缓冲';
+      d1i.textContent = 'inner[1]: 已关闭'; d1o.textContent = 'outer[1]: 已关闭'; d1s.textContent = '状态：BufFileClose()';
+      d2i.textContent = 'inner[2]: tuple C'; d2o.textContent = 'outer[2]: tuple Z';
+      hStatus.textContent = 'STEP 4 / 6 · Batch 1 探测完成并关闭释放文件';
+    } else if (step === 5) {
+      curLabel.textContent = '切换 Batch 2 (curbatch = 2)';
+      ruleLabel.textContent = '载入 inner[2] → 探测 outer[2]';
+      stepDesc.textContent = '单向往前推进，绝不会倒回 Batch 0/1';
+      memBadge.textContent = 'Active: Batch 2';
+      memIn.textContent = 'Bucket[2]: tuple C (0x32)';
+      memPr.textContent = '探测 Z(0x32) → 命中 C！输出';
+      memPr2.textContent = '所有非空批依次推进完结';
+      d1i.textContent = '已释放'; d1o.textContent = '已释放'; d1s.textContent = '已完成';
+      d2i.textContent = 'inner[2]: 已关闭'; d2o.textContent = 'outer[2]: 已关闭'; d2s.textContent = '状态：已完成';
+      hStatus.textContent = 'STEP 5 / 6 · Batch 2 探测完成，2^k 保证绝不倒退';
+    } else {
+      curLabel.textContent = 'ALL BATCHES COMPLETE';
+      ruleLabel.textContent = '释放 hashCxt / spillCxt 全部资源';
+      stepDesc.textContent = '点击重置可更换自定义 Hash 再次演练';
+      memBadge.textContent = 'Done';
+      hStatus.textContent = 'STEP 6 / 6 · Hybrid Hash Join 全部批次执行完结';
+    }
+  }
+
+  function resetHybridAnim() {
+    if (hybridTimer) { clearInterval(hybridTimer); hybridTimer = null; }
+    hybridStep = 0;
+    applyHybridStep(0);
+  }
+
+  document.getElementById('btn-hybrid-step').addEventListener('click', () => {
+    hybridStep = (hybridStep + 1) % 7;
+    applyHybridStep(hybridStep);
+  });
+
+  document.getElementById('btn-hybrid-reset').addEventListener('click', resetHybridAnim);
+
+  document.getElementById('btn-hybrid-play').addEventListener('click', () => {
+    if (hybridTimer) { clearInterval(hybridTimer); hybridTimer = null; return; }
+    if (hybridStep >= 6) hybridStep = 0;
+    hybridTimer = setInterval(() => {
+      hybridStep++;
+      applyHybridStep(hybridStep);
+      if (hybridStep >= 6) {
+        clearInterval(hybridTimer);
+        hybridTimer = null;
+      }
+    }, 1250);
+  });
+
+  /* ==================== 9. 交互动画 2：Slide 06 U 形曲线与扩批演练 ==================== */
+  const rangeInnerMb = document.getElementById('range-inner-mb');
+  const lblInnerMb = document.getElementById('lbl-inner-mb');
+  const selSkew = document.getElementById('sel-skew-mode');
+  const repartStatus = document.getElementById('repart-status');
+
+  function updateUCurve() {
+    const innerMB = parseInt(rangeInnerMb.value, 10);
+    lblInnerMb.textContent = `${innerMB} MB`;
+
+    // 计算 U 形曲线最优批数：d/d(nbatch) (innerBytes/n + 2*n*8192) = 0 => n = sqrt(innerBytes / 16384)
+    const innerBytes = innerMB * 1024 * 1024;
+    const optRaw = Math.sqrt(innerBytes / (2 * 8192));
+    // 对齐最接近的 2 的幂
+    let optPow = 1;
+    while (optPow * 2 <= optRaw) optPow *= 2;
+    if (Math.abs(optPow * 2 - optRaw) < Math.abs(optPow - optRaw)) optPow *= 2;
+    optPow = Math.max(2, Math.min(256, optPow));
+
+    const minMemMB = ((innerBytes / optPow + 2 * optPow * 8192) / (1024 * 1024)).toFixed(2);
+
+    // 动态挪动 SVG 上的最优点坐标以直观体现随数据量增大的最优批数右移
+    const normX = 160 + (Math.log2(optPow) / 8) * 380;
+    const dotY = 230 + (innerMB > 256 ? -20 : 18);
+    document.getElementById('curve-opt-dot').setAttribute('cx', normX.toFixed(0));
+    document.getElementById('curve-opt-dot').setAttribute('cy', dotY.toFixed(0));
+    document.getElementById('curve-opt-line').setAttribute('x1', normX.toFixed(0));
+    document.getElementById('curve-opt-line').setAttribute('x2', normX.toFixed(0));
+    document.getElementById('curve-opt-line').setAttribute('y1', dotY.toFixed(0));
+    document.getElementById('curve-opt-text').setAttribute('x', normX.toFixed(0));
+    document.getElementById('curve-opt-text').setAttribute('y', (dotY - 14).toFixed(0));
+    document.getElementById('curve-opt-text').textContent = `拐点 nbatch=${optPow} (约 ${minMemMB}MB)`;
+
+    repartStatus.textContent = `Inner=${innerMB}MB 时 U 形拐点最优 nbatch = ${optPow} (总账≈${minMemMB}MB)`;
+  }
+
+  function resetRepartAnim() {
+    ['chunk-t0','chunk-t1','chunk-t2','chunk-t3'].forEach(id => {
+      document.getElementById(id).setAttribute('fill', '#E5EFF0');
+      document.getElementById(id).setAttribute('stroke', '#245A6B');
+    });
+    document.getElementById('repart-stay-txt').textContent = '等待扩批演练...';
+    document.getElementById('repart-spill-txt').textContent = '等待扩批演练...';
+    updateUCurve();
+  }
+
+  document.getElementById('btn-repart-play').addEventListener('click', () => {
+    const mode = selSkew.value;
+    if (mode === 'normal') {
+      document.getElementById('chunk-t0').setAttribute('fill', '#E4F1EC');
+      document.getElementById('chunk-t0').setAttribute('stroke', '#2F7A66');
+      document.getElementById('chunk-t2').setAttribute('fill', '#E4F1EC');
+      document.getElementById('chunk-t2').setAttribute('stroke', '#2F7A66');
+
+      document.getElementById('chunk-t1').setAttribute('fill', '#F7E9DE');
+      document.getElementById('chunk-t1').setAttribute('stroke', '#BE653B');
+      document.getElementById('chunk-t3').setAttribute('fill', '#F7E9DE');
+      document.getElementById('chunk-t3').setAttribute('stroke', '#BE653B');
+
+      document.getElementById('repart-stay-txt').textContent = '复制 T1, T3 入新 Chunk (50%保留)';
+      document.getElementById('repart-spill-txt').textContent = '写出 T2, T4 至 Batch[2] 文件并释放';
+      repartStatus.textContent = '正常扩批：nbatch 2 → 4，50% tuple 成功外溢，内存压力减半';
+    } else {
+      ['chunk-t0','chunk-t1','chunk-t2','chunk-t3'].forEach(id => {
+        document.getElementById(id).setAttribute('fill', '#F7E9DE');
+        document.getElementById(id).setAttribute('stroke', '#BE653B');
+      });
+      document.getElementById('repart-stay-txt').textContent = 'T1,T2,T3,T4 全同 Hash → 100% 留下！';
+      document.getElementById('repart-spill-txt').textContent = '外溢 0 条！检测到极端倾斜 → 触发刹车';
+      repartStatus.textContent = '刹车生效：所有 tuple 全留当前批，源码关闭后续 batch 增长！';
+    }
+  });
+
+  document.getElementById('btn-repart-reset').addEventListener('click', resetRepartAnim);
+  rangeInnerMb.addEventListener('input', updateUCurve);
+  updateUCurve();
+
+  /* ==================== 10. 交互动画 3：Slide 09 EXPLAIN 诊断沙盘 ==================== */
+  const DIAG_PRESETS = {
+    mem: {
+      label: '工况 1（健康纯内存型）',
+      s1: 'Buckets: 16384  Batches: 1',
+      s2: 'Memory Usage: 820kB  (Buffers: shared hit=1240)',
+      c1: '1. Batches = 1，Inner 侧完全装入预算内，零临时文件落盘。',
+      c2: '2. Buckets 未扩容，说明哈希桶冲突链长处于健康水平。',
+      c3: '3. 当前 Hash Join 处于最高效的 In-Memory 状态。',
+      f1: '✓ 无需针对 Hash 节点调大 work_mem 或做降批处理。',
+      f2: '✓ 若整体仍慢，应把目光移向扫描节点或下游算子。',
+      f3: '✓ 保持日常定期 ANALYZE 即可。'
+    },
+    planned: {
+      label: '工况 2（估算准确但预算略小）',
+      s1: 'Buckets: 32768  Batches: 8 (originally 8)',
+      s2: 'Memory Usage: 4096kB  (temp read=18200 written=18220)',
+      c1: '1. Batches = 8 > 1，明确已发生多批落盘 I/O。',
+      c2: '2. 实际 8 与 originally 8 一致，证明统计与行数估算很准。',
+      c3: '3. 单纯因为 Build 侧绝对体量大于当前 hash 内存上限。',
+      f1: '✓ 先算清「连接数 × 算子 × Worker」并发内存总账。',
+      f2: '✓ 在安全余量内可调大 work_mem 或 hash_mem_multiplier。',
+      f3: '✓ 优先考虑提前投影裁剪大列，减少 Build 侧字节数。'
+    },
+    grown: {
+      label: '工况 3（运行期扩批型）',
+      s1: 'Buckets: 65536 (originally 32768)',
+      s2: 'Batches: 32 (originally 8)  Memory Usage: 4096kB',
+      c1: '1. 优化器按 8 批估算，但运行期 Build 侧行数/行宽远超预期。',
+      c2: '2. 触发多次 ExecHashIncreaseNumBatches()，8 → 16 → 32。',
+      c3: '3. 伴有重分区搬迁 CPU 消耗及 32 批临时文件写读 I/O。',
+      f1: '✓ 对连接表（尤其临时表）及时执行 ANALYZE。',
+      f2: '✓ 提前过滤行、裁剪 Build 侧大字段，压低平均行宽。',
+      f3: '✓ 配合 log_temp_files 核查临时盘写入总量。'
+    },
+    skew: {
+      label: '工况 4（极端倾斜停涨型）',
+      s1: 'Buckets: 65536 (originally 16384)',
+      s2: 'Batches: 16 (originally 8)  Memory Usage: 98400kB (!)',
+      c1: '1. 某单一 Join Key（如 NULL/默认租户）占据海量数据。',
+      c2: '2. 相同 hash value 无法被拆批分开，扩批到 16 后触发停涨刹车。',
+      c3: '3. Memory Usage 远超 4MB 预算暴涨，Skew 2% 预算早已失效。',
+      f1: '✓ 严禁靠继续调大批数解决——同键永远在同一批！',
+      f2: '✓ 必须改写 SQL：把热点 Key / NULL 单独剥离或提前过滤。',
+      f3: '✓ 或从数据模型上做预聚合 / 分区拆分处理。'
+    }
+  };
+
+  document.querySelectorAll('[data-diag]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-diag]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const d = DIAG_PRESETS[btn.getAttribute('data-diag')];
+      document.getElementById('diag-sample-1').textContent = d.s1;
+      document.getElementById('diag-sample-2').textContent = d.s2;
+      document.getElementById('diag-cause-1').textContent = d.c1;
+      document.getElementById('diag-cause-2').textContent = d.c2;
+      document.getElementById('diag-cause-3').textContent = d.c3;
+      document.getElementById('diag-fix-1').textContent = d.f1;
+      document.getElementById('diag-fix-2').textContent = d.f2;
+      document.getElementById('diag-fix-3').textContent = d.f3;
+      document.getElementById('diag-status').textContent = `当前高亮：${d.label}`;
+    });
+  });
+
+  /* ==================== 11. Slide 14 思考题点击破题线索 ==================== */
+  const Q_HINTS = [
+    '提示 Q1：乘以 hash_mem_multiplier 后仍小于实际 build 行数 × 宽列投影/TOAST 展开体积，或受 U 形缓冲限制。',
+    '提示 Q2：因为取模等价于按二进制低位掩码切片；nbatch 翻倍只是多看 1 个高位 bit，tuple 只能留在原批或进入更高 bit 位批，绝不倒退。',
+    '提示 Q3：总批数没超预算，但单批内 tuple 数量高于初始桶预设密度，触发扩桶以压短 HashJoinTuple 碰撞链长。',
+    '提示 Q4：串行只要一个进程单向推进；并行需要多 Worker 各自领不同 Batch 独立消化，必须先把 Outer 按批存进 SharedTuplestore。',
+    '提示 Q5：同一 hash value 调内存/拆批都无效；优先核查 NULL 或业务默认值，靠拆 SQL（热点与常规分离）、预聚合或业务建模治本。',
+    '提示 Q6：优先核对数据分布体量与统计信息（ANALYZE），再查生产参数（work_mem / multiplier），最后核验并发与工作进程放大效应。'
+  ];
+
+  document.querySelectorAll('.q-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const qi = parseInt(el.getAttribute('data-q'), 10);
+      for (let i = 0; i < 6; i++) {
+        const box = document.getElementById(`q-box-${i}`);
+        box.setAttribute('fill', i === qi ? '#E5EFF0' : '#F7F6F2');
+        box.setAttribute('stroke', i === qi ? '#245A6B' : '#D9D5CB');
+        box.setAttribute('stroke-width', i === qi ? '1.5' : '1');
+      }
+      document.getElementById('q-hint-text').textContent = Q_HINTS[qi];
+    });
+  });
+
+  /* ==================== 12. 初始启动 ==================== */
+  resizeStage();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,3082 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课：最佳实践之相似搜索 — pg_similarity 工程剖面</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --teal: #245A6B;
+    --teal-light: #E5EFF0;
+    --terra: #BE653B;
+    --terra-light: #F7E9DE;
+    --green: #2F7A66;
+    --green-light: #E4F0EC;
+    --gold: #AE8A3E;
+    --gold-light: #F5EFE1;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "STSong", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #172227;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app-root {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #172227;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Left: Fixed 16:9 Stage Viewport with Letterbox */
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    background: #172227;
+  }
+
+  #stage-scaler {
+    width: 1600px;
+    height: 900px;
+    flex-shrink: 0;
+    transform-origin: center center;
+    position: relative;
+    background: var(--bg-paper);
+    border: 1px solid #2E424B;
+    overflow: hidden;
+  }
+
+  /* Individual Fixed 1600x900 Slide */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    background: var(--bg-paper);
+    padding: 40px 64px 28px 64px;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Subtle blueprint grid lines on background */
+  .slide::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(36, 90, 107, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(36, 90, 107, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .slide > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .slide-header {
+    width: 1472px;
+    flex-shrink: 0;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--teal);
+    text-transform: uppercase;
+    line-height: 18px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .eyebrow-tag {
+    color: var(--ink-muted);
+    letter-spacing: 2px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 54px;
+    color: var(--ink);
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 28px;
+    color: var(--ink-sub);
+    margin-bottom: 16px;
+  }
+
+  .divider {
+    width: 1472px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 18px;
+    flex-shrink: 0;
+  }
+
+  /* Diagram Stage Area */
+  .diagram-zone {
+    width: 1472px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    min-height: 0;
+  }
+
+  .svg-frame {
+    width: 1400px;
+    height: 430px;
+    background: #FAF9F6;
+    border: 1px solid var(--stroke);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .svg-frame svg {
+    display: block;
+    width: 1400px;
+    height: 430px;
+  }
+
+  /* Interactive Control Strip (Blueprint Style) */
+  .demo-toolbar {
+    width: 1400px;
+    height: 44px;
+    margin-top: 10px;
+    padding: 0 14px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    font-size: 14px;
+    color: var(--ink-sub);
+  }
+
+  .demo-toolbar label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--teal);
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+
+  .demo-input {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--stroke);
+    background: #FFFFFF;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+    width: 150px;
+  }
+
+  .demo-input:focus {
+    border-color: var(--teal);
+  }
+
+  .demo-input.wide {
+    width: 240px;
+  }
+
+  .demo-btn {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--teal);
+    background: var(--bg-paper);
+    color: var(--teal);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .demo-btn:hover {
+    background: var(--teal-light);
+  }
+
+  .demo-btn.primary {
+    background: var(--teal);
+    color: #FFFFFF;
+  }
+
+  .demo-btn.primary:hover {
+    background: #1E4B5A;
+  }
+
+  .demo-btn.active-preset {
+    background: var(--terra-light);
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+
+  .demo-btn.subtle {
+    border-color: var(--stroke);
+    color: var(--ink-sub);
+  }
+
+  .demo-btn.subtle:hover {
+    border-color: var(--teal);
+    color: var(--teal);
+  }
+
+  .demo-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--stroke);
+  }
+
+  .demo-slider {
+    width: 160px;
+    accent-color: var(--teal);
+    cursor: pointer;
+  }
+
+  .demo-readout {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 600;
+    margin-left: auto;
+  }
+
+  /* Bottom Next Bridge & Footer */
+  .slide-bottom {
+    width: 1472px;
+    margin-top: 16px;
+    flex-shrink: 0;
+  }
+
+  .next-bridge {
+    border-left: 3px solid var(--terra);
+    padding: 6px 0 6px 16px;
+    margin-bottom: 14px;
+    background: linear-gradient(to right, rgba(247, 233, 222, 0.45), transparent 65%);
+  }
+
+  .next-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2.4px;
+    color: var(--terra);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 28px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .slide-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--stroke);
+    padding-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+  }
+
+  .footer-page {
+    color: var(--teal);
+    font-weight: 700;
+  }
+
+  /* Right: In-Page Docked Speaker Notes Panel */
+  #notes-panel {
+    width: 0;
+    flex-shrink: 0;
+    height: 100%;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+    z-index: 20;
+  }
+
+  #notes-panel.open {
+    width: 440px;
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    height: 52px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-tabs {
+    display: flex;
+    gap: 8px;
+  }
+
+  .notes-tab {
+    padding: 5px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-tab.active {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #FFFFFF;
+  }
+
+  .notes-close {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .notes-close:hover {
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+
+  #notes-body {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 32px 22px;
+    line-height: 1.85;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .note-slide-meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1.6px;
+    color: var(--teal);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .note-slide-title {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--stroke);
+  }
+
+  .note-paragraph {
+    margin-bottom: 14px;
+    text-align: justify;
+    color: var(--ink);
+  }
+
+  .note-logic-cue {
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: var(--terra-light);
+    border-left: 3px solid var(--terra);
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  .transcript-item {
+    padding: 16px 16px 18px 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--stroke);
+    background: #FAF9F6;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .transcript-item:hover {
+    border-color: var(--teal);
+  }
+
+  .transcript-item.active {
+    border-color: var(--teal);
+    border-left: 4px solid var(--teal);
+    background: #FFFFFF;
+  }
+
+  .transcript-item .note-slide-title {
+    font-size: 17px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+  }
+
+  .transcript-item .note-paragraph {
+    font-size: 14px;
+    line-height: 1.8;
+    margin-bottom: 10px;
+  }
+
+  /* Bottom Control Bar (Visible in normal AND fullscreen) */
+  #control-bar {
+    height: 48px;
+    flex-shrink: 0;
+    background: #1B2B33;
+    color: #EBF1EE;
+    border-top: 1px solid #2E6373;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 40;
+    user-select: none;
+  }
+
+  .bar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bar-btn {
+    height: 30px;
+    padding: 0 11px;
+    background: #233842;
+    border: 1px solid #3B5A68;
+    color: #EBF1EE;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .bar-btn:hover {
+    background: #2E4B58;
+    border-color: #74A5AD;
+  }
+
+  .bar-btn.active {
+    background: var(--teal);
+    border-color: #A4C4C6;
+    color: #FFFFFF;
+  }
+
+  .bar-btn.autoplay-on {
+    background: var(--terra);
+    border-color: #F7E9DE;
+    color: #FFFFFF;
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: #CFE0DC;
+  }
+
+  .bar-counter {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #CFE0DC;
+    min-width: 64px;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+
+  .bar-progress-wrap {
+    width: 140px;
+    height: 4px;
+    background: #2B424D;
+    overflow: hidden;
+    margin-left: 6px;
+  }
+
+  .bar-progress-fill {
+    height: 100%;
+    background: var(--terra);
+    width: 8.33%;
+    transition: width 0.2s ease;
+  }
+
+  /* In-Page Directory (TOC) Overlay */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    bottom: 48px;
+    background: rgba(23, 34, 39, 0.94);
+    z-index: 50;
+    display: none;
+    flex-direction: column;
+    padding: 28px 40px;
+    overflow-y: auto;
+  }
+
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  .toc-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #3B5A68;
+  }
+
+  .toc-heading {
+    font-family: var(--font-serif);
+    font-size: 24px;
+    color: #F7F6F2;
+    letter-spacing: 1px;
+  }
+
+  .toc-sub {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #A4C4C6;
+    letter-spacing: 2px;
+  }
+
+  .toc-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    max-width: 1360px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .toc-card {
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    border-top: 3px solid var(--teal);
+    padding: 16px 18px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toc-card:hover {
+    background: #FFFFFF;
+    border-top-color: var(--terra);
+  }
+
+  .toc-card.current {
+    border: 2px solid var(--terra);
+    background: #FFFFFF;
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--teal);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .toc-badge {
+    font-size: 11px;
+    padding: 1px 6px;
+    background: var(--terra-light);
+    color: var(--terra);
+    border: 1px solid var(--terra);
+  }
+
+  .toc-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  .toc-desc {
+    font-size: 12px;
+    color: var(--ink-sub);
+    line-height: 1.5;
+  }
+
+  /* Toast notification (replaces alert) */
+  #toast {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1B2B33;
+    color: #F7F6F2;
+    border: 1px solid var(--terra);
+    padding: 8px 18px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    z-index: 80;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  #toast.show {
+    opacity: 1;
+  }
+
+  /* SVG Text defaults */
+  svg text {
+    font-family: var(--font-sans);
+  }
+  svg .svg-serif {
+    font-family: var(--font-serif);
+  }
+  svg .svg-mono {
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+<div id="app-root">
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <div id="workspace">
+    <!-- Fixed 16:9 Vector-Scaled Stage -->
+    <div id="stage-viewport">
+      <div id="stage-scaler">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-slide="0">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>POSTGRESQL DATABASE FOUNDATIONS · 01 / 12</span>
+              <span class="eyebrow-tag">作者：digoal · 2026-06-01</span>
+            </div>
+            <h1 class="slide-title">数据库筑基课：相似搜索的工程本质</h1>
+            <p class="slide-lead">以 pg_similarity 为地层剖面，推演从数学口径、分词模型、GIN 候选收缩到生产落地的完整链路</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left axis: Geological Depth Scale -->
+                <rect x="24" y="20" width="210" height="390" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="52" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">STRATA PROFILE</text>
+                <text x="42" y="76" font-size="18" fill="#1B2B33" font-weight="700" class="svg-serif">相似搜索七阶地层</text>
+                <line x1="42" y1="92" x2="216" y2="92" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="122" font-size="14" fill="#46585F">表层：面向业务决策</text>
+                <text x="42" y="146" font-size="13" fill="#89938F">主数据归并、灰区审核</text>
+                <line x1="60" y1="168" x2="60" y2="310" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="60,320 54,306 66,306" fill="#245A6B"/>
+                <text x="78" y="218" font-size="13" fill="#245A6B" font-weight="700">越深 = 越底层</text>
+                <text x="78" y="242" font-size="12" fill="#46585F">每一层能力都建立在</text>
+                <text x="78" y="262" font-size="12" fill="#46585F">下层约束与代价之上</text>
+                <text x="42" y="346" font-size="14" fill="#1E4B5A" font-weight="700">基岩：字符与数学模型</text>
+                <text x="42" y="370" font-size="12" fill="#46585F">Levenshtein (1966)</text>
+                <text x="42" y="388" font-size="12" fill="#46585F">Maron &amp; Kuhns (1960)</text>
+
+                <!-- 7 Geological Strata Horizontal Bands (Shallow -> Deep) -->
+                <!-- Band 7 (Shallowest) -->
+                <rect x="260" y="20" width="840" height="50" fill="#EBF1EE" stroke="#CFE0DC" stroke-width="1"/>
+                <text x="280" y="51" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">L7 · 业务治理层</text>
+                <text x="450" y="51" font-size="15" fill="#1B2B33" font-weight="600">主数据去重、审核留证、灰区人工确认（严禁盲目自动合并）</text>
+
+                <!-- Band 6 -->
+                <rect x="260" y="76" width="840" height="50" fill="#CFE0DC" stroke="#A4C4C6" stroke-width="1"/>
+                <text x="280" y="107" font-size="13" fill="#1E4B5A" font-weight="700" class="svg-mono">L6 · 样本校准层</text>
+                <text x="450" y="107" font-size="15" fill="#1B2B33" font-weight="600">基于标注正负样本评估 TP / FP / FN，替代默认阈值 0.7</text>
+
+                <!-- Band 5 -->
+                <rect x="260" y="132" width="840" height="50" fill="#A4C4C6" stroke="#74A5AD" stroke-width="1"/>
+                <text x="280" y="163" font-size="13" fill="#1B2B33" font-weight="700" class="svg-mono">L5 · 重检排序层</text>
+                <text x="450" y="163" font-size="15" fill="#1B2B33" font-weight="600">Bitmap Heap Scan 逐行 Recheck + 业务热度与可信度融合排序</text>
+
+                <!-- Band 4 -->
+                <rect x="260" y="188" width="840" height="50" fill="#74A5AD" stroke="#47808D" stroke-width="1"/>
+                <text x="280" y="219" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">L4 · 候选索引层</text>
+                <text x="450" y="219" font-size="15" fill="#FFFFFF" font-weight="600">GIN 倒排索引 (gin_similarity_ops) 仅服务 8 个 Token 类操作符</text>
+
+                <!-- Band 3 -->
+                <rect x="260" y="244" width="840" height="50" fill="#47808D" stroke="#2E6373" stroke-width="1"/>
+                <text x="280" y="275" font-size="13" fill="#EBF1EE" font-weight="700" class="svg-mono">L3 · 操作符与GUC</text>
+                <text x="450" y="275" font-size="15" fill="#FFFFFF" font-weight="600">~== / ~~~ / ~## 布尔谓词 + 会话级 threshold / tokenizer / normalized</text>
+
+                <!-- Band 2 -->
+                <rect x="260" y="300" width="840" height="50" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="280" y="331" font-size="13" fill="#CFE0DC" font-weight="700" class="svg-mono">L2 · 分词与特征层</text>
+                <text x="450" y="331" font-size="15" fill="#FFFFFF" font-weight="600">tokenizer.c 四种切分：alnum（默认）/ word / gram / camelcase</text>
+
+                <!-- Band 1 (Deepest) -->
+                <rect x="260" y="356" width="840" height="54" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+                <text x="280" y="389" font-size="13" fill="#A4C4C6" font-weight="700" class="svg-mono">L1 · 算法基岩层</text>
+                <text x="450" y="389" font-size="15" fill="#F7F6F2" font-weight="600">17 种经典算法（编辑距离、集合/向量、N-Gram、语音、局部序列）</text>
+
+                <!-- Right Engineering Callout Panel -->
+                <rect x="1126" y="20" width="250" height="390" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1126" y="20" width="250" height="34" fill="#245A6B"/>
+                <text x="1144" y="42" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">CORE METADATA</text>
+
+                <text x="1144" y="84" font-size="12" fill="#89938F" class="svg-mono">EXTENSION</text>
+                <text x="1144" y="106" font-size="16" fill="#1B2B33" font-weight="700" class="svg-mono">pg_similarity (C)</text>
+
+                <line x1="1144" y1="124" x2="1358" y2="124" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1144" y="150" font-size="12" fill="#89938F" class="svg-mono">HARD LIMITS</text>
+                <text x="1144" y="174" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">PGS_MAX_STR_LEN=1024</text>
+                <text x="1144" y="196" font-size="13" fill="#46585F">默认忽略大小写比较</text>
+
+                <line x1="1144" y1="214" x2="1358" y2="214" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1144" y="240" font-size="12" fill="#89938F" class="svg-mono">ESSENCE</text>
+                <text x="1144" y="264" font-size="14" fill="#1B2B33" font-weight="600">先定义「相似」口径</text>
+                <text x="1144" y="286" font-size="14" fill="#1B2B33" font-weight="600">再落到索引与重检</text>
+                <text x="1144" y="308" font-size="14" fill="#2F7A66" font-weight="600">最终用样本与计划验证</text>
+
+                <line x1="1144" y1="328" x2="1358" y2="328" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1144" y="354" font-size="12" fill="#89938F" class="svg-mono">INTERACTIVE DEMOS</text>
+                <text x="1144" y="378" font-size="13" fill="#245A6B">含 4 组现场可推演动画</text>
+                <text x="1144" y="398" font-size="12" fill="#89938F">第 04 / 05 / 07 / 09 页</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">为什么日常最熟悉的 =、LIKE 与全文检索，都解决不了业务里「看起来像」的查询？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">01 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-slide="1">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>PROBLEM DEFINITION · 02 / 12</span>
+              <span class="eyebrow-tag">一、它解决什么问题？</span>
+            </div>
+            <h1 class="slide-title">业务里的「看起来像」，不能只靠等值与模糊包含</h1>
+            <p class="slide-lead">面对姓名错拼、标题缩写、词序重排与主数据归并，真正的相似搜索必须回答四个核心工程问题</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Column: Traditional SQL Blindspots -->
+                <rect x="24" y="20" width="560" height="36" fill="#BE653B"/>
+                <text x="42" y="43" font-size="14" fill="#FFFFFF" font-weight="700">传统 SQL 写法的三大盲区（矛盾与代价）</text>
+
+                <!-- Card 1 -->
+                <rect x="24" y="68" width="560" height="86" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="42" y="94" font-size="15" fill="#1B2B33" font-weight="700">1. 精确匹配 (=) —— 太硬，召回极低</text>
+                <text x="42" y="118" font-size="13" fill="#46585F" class="svg-mono">WHERE name = 'Euler Taveira de Oliveira'</text>
+                <text x="42" y="140" font-size="13" fill="#BE653B">错拼一个字母（如 Euller）或大小写/标点差异即完全漏掉</text>
+
+                <!-- Card 2 -->
+                <rect x="24" y="168" width="560" height="86" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="42" y="194" font-size="15" fill="#1B2B33" font-weight="700">2. 模糊包含 (LIKE / ILIKE) —— 只能匹配连续子串</text>
+                <text x="42" y="218" font-size="13" fill="#46585F" class="svg-mono">WHERE name ILIKE '%Euler%Oliveira%'</text>
+                <text x="42" y="240" font-size="13" fill="#BE653B">无法解释编辑错误、缩写差异，且词序倒置（Oliveira, Euler）即失效</text>
+
+                <!-- Card 3 -->
+                <rect x="24" y="268" width="560" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="294" font-size="15" fill="#1B2B33" font-weight="700">3. 全文检索 (tsvector / tsquery) —— 偏词项存在与排序</text>
+                <text x="42" y="320" font-size="13" fill="#46585F">擅长文档关键词召回，不能直接量化「两个字符串到底有多相似」</text>
+
+                <!-- Bottom Trade-off Bar on Left -->
+                <rect x="24" y="354" width="560" height="56" fill="#1E4B5A"/>
+                <text x="42" y="378" font-size="13" fill="#A4C4C6" font-weight="700" class="svg-mono">ENGINEERING TRADE-OFF</text>
+                <text x="42" y="398" font-size="14" fill="#FFFFFF">牺牲精确确定性换取高召回；引入索引以写入/维护成本换更小候选集</text>
+
+                <!-- Orthogonal Connectors (Left -> Right) -->
+                <path d="M 584 204 H 644" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="654,204 640,197 640,211" fill="#245A6B"/>
+                <rect x="596" y="168" width="46" height="24" fill="#F7F6F2"/>
+                <text x="619" y="185" font-size="12" fill="#245A6B" font-weight="700" text-anchor="middle">破局</text>
+
+                <!-- Right Column: Four Engineering Questions -->
+                <rect x="664" y="20" width="712" height="36" fill="#245A6B"/>
+                <text x="682" y="43" font-size="14" fill="#FFFFFF" font-weight="700">真正相似搜索必须回答的四个工程问题</text>
+
+                <!-- Q1 -->
+                <rect x="664" y="68" width="348" height="162" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1"/>
+                <rect x="664" y="68" width="44" height="32" fill="#245A6B"/>
+                <text x="686" y="89" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">Q1</text>
+                <text x="720" y="90" font-size="16" fill="#1B2B33" font-weight="700">相似的定义是什么？</text>
+                <text x="682" y="124" font-size="14" fill="#46585F">• 编辑距离小（插入/删除/替换）</text>
+                <text x="682" y="150" font-size="14" fill="#46585F">• 共享 Token 多 / 向量夹角近</text>
+                <text x="682" y="176" font-size="14" fill="#46585F">• 发音近似 或 局部片段相似</text>
+                <text x="682" y="210" font-size="13" fill="#245A6B" font-weight="600">→ 先定数学口径，再选算法</text>
+
+                <!-- Q2 -->
+                <rect x="1028" y="68" width="348" height="162" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1"/>
+                <rect x="1028" y="68" width="44" height="32" fill="#BE653B"/>
+                <text x="1050" y="89" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">Q2</text>
+                <text x="1084" y="90" font-size="16" fill="#1B2B33" font-weight="700">阈值是多少？</text>
+                <text x="1046" y="124" font-size="14" fill="#46585F">• 默认值 0.7 不是自然规律</text>
+                <text x="1046" y="150" font-size="14" fill="#46585F">• 主数据归并怕漏召回（偏低）</text>
+                <text x="1046" y="176" font-size="14" fill="#46585F">• 严格审核怕误匹配（偏高）</text>
+                <text x="1046" y="210" font-size="13" fill="#BE653B" font-weight="600">→ 必须由业务标注样本校准</text>
+
+                <!-- Q3 -->
+                <rect x="664" y="246" width="348" height="164" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1"/>
+                <rect x="664" y="246" width="44" height="32" fill="#2E6373"/>
+                <text x="686" y="267" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">Q3</text>
+                <text x="720" y="268" font-size="16" fill="#1B2B33" font-weight="700">候选集怎么收缩？</text>
+                <text x="682" y="302" font-size="14" fill="#46585F">• 逐行跑动态规划或集合计算</text>
+                <text x="682" y="328" font-size="14" fill="#46585F">• 表大以后退化为全表 CPU 扫描</text>
+                <text x="682" y="354" font-size="14" fill="#46585F">• 需 GIN / 租户 / 类别前置过滤</text>
+                <text x="682" y="388" font-size="13" fill="#2E6373" font-weight="600">→ 缩小候选，再做精确打分</text>
+
+                <!-- Q4 -->
+                <rect x="1028" y="246" width="348" height="164" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+                <rect x="1028" y="246" width="44" height="32" fill="#2F7A66"/>
+                <text x="1050" y="267" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">Q4</text>
+                <text x="1084" y="268" font-size="16" fill="#1B2B33" font-weight="700">结果怎么验证？</text>
+                <text x="1046" y="302" font-size="14" fill="#46585F">• 查询快 ≠ 结果准</text>
+                <text x="1046" y="328" font-size="14" fill="#46585F">• 命中多 ≠ 召回好（可能噪声大）</text>
+                <text x="1046" y="354" font-size="14" fill="#46585F">• 结合标注样本 + EXPLAIN 证据</text>
+                <text x="1046" y="388" font-size="13" fill="#2F7A66" font-weight="600">→ 实证驱动，拒绝凭感觉上线</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">明确了这四个工程问题，pg_similarity 在数据库内部究竟是如何分层建模并串联执行的？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">02 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-slide="2">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>ARCHITECTURE &amp; PIPELINE · 03 / 12</span>
+              <span class="eyebrow-tag">二、它是什么？</span>
+            </div>
+            <h1 class="slide-title">pg_similarity 三层能力封装与全链路执行剖面</h1>
+            <p class="slide-lead">相似搜索不是一个孤立函数，而是由打分函数、阈值操作符与 GUC 参数共同驱动的六段检索流水线</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top Section: 6-Stage End-to-End Pipeline -->
+                <text x="28" y="34" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">PIPELINE · 从输入到结果的六段工程链路</text>
+
+                <!-- Stage 1 -->
+                <rect x="28" y="50" width="194" height="96" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1"/>
+                <rect x="28" y="50" width="194" height="26" fill="#47808D"/>
+                <text x="125" y="68" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">01 · 输入规范化</text>
+                <text x="125" y="100" font-size="14" fill="#1B2B33" font-weight="600" text-anchor="middle">大小写 / 长度校验</text>
+                <text x="125" y="124" font-size="12" fill="#46585F" text-anchor="middle">≤ 1024 字节 · 默认忽略大小写</text>
+
+                <path d="M 222 98 H 254" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="260,98 249,93 249,103" fill="#245A6B"/>
+
+                <!-- Stage 2 -->
+                <rect x="260" y="50" width="194" height="96" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1"/>
+                <rect x="260" y="50" width="194" height="26" fill="#2E6373"/>
+                <text x="357" y="68" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">02 · 分词切分</text>
+                <text x="357" y="100" font-size="14" fill="#1B2B33" font-weight="600" text-anchor="middle">Tokenizer 特征提取</text>
+                <text x="357" y="124" font-size="12" fill="#46585F" text-anchor="middle">alnum / word / gram / camel</text>
+
+                <path d="M 454 98 H 486" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="492,98 481,93 481,103" fill="#245A6B"/>
+
+                <!-- Stage 3 -->
+                <rect x="492" y="50" width="194" height="96" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1"/>
+                <rect x="492" y="50" width="194" height="26" fill="#245A6B"/>
+                <text x="589" y="68" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">03 · 候选集控制</text>
+                <text x="589" y="100" font-size="14" fill="#1B2B33" font-weight="600" text-anchor="middle">GIN 倒排 / 业务硬过滤</text>
+                <text x="589" y="124" font-size="12" fill="#46585F" text-anchor="middle">收缩扫描行数，避免全表扫</text>
+
+                <path d="M 686 98 H 718" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="724,98 713,93 713,103" fill="#245A6B"/>
+
+                <!-- Stage 4 -->
+                <rect x="724" y="50" width="194" height="96" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <rect x="724" y="50" width="194" height="26" fill="#1E4B5A"/>
+                <text x="821" y="68" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">04 · 相似度计算</text>
+                <text x="821" y="100" font-size="14" fill="#1B2B33" font-weight="600" text-anchor="middle">打分函数 → float8</text>
+                <text x="821" y="124" font-size="12" fill="#46585F" text-anchor="middle">强制归一化至 [0, 1] 口径</text>
+
+                <path d="M 918 98 H 950" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="956,98 945,93 945,103" fill="#245A6B"/>
+
+                <!-- Stage 5 -->
+                <rect x="956" y="50" width="194" height="96" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <rect x="956" y="50" width="194" height="26" fill="#BE653B"/>
+                <text x="1053" y="68" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">05 · 阈值与重检</text>
+                <text x="1053" y="100" font-size="14" fill="#1B2B33" font-weight="600" text-anchor="middle">Heap Recheck 判定</text>
+                <text x="1053" y="124" font-size="12" fill="#BE653B" text-anchor="middle">score &gt;= threshold → bool</text>
+
+                <path d="M 1150 98 H 1182" stroke="#2F7A66" stroke-width="2"/>
+                <polygon points="1188,98 1177,93 1177,103" fill="#2F7A66"/>
+
+                <!-- Stage 6 -->
+                <rect x="1188" y="50" width="184" height="96" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+                <rect x="1188" y="50" width="184" height="26" fill="#2F7A66"/>
+                <text x="1280" y="68" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">06 · 排序与限量</text>
+                <text x="1280" y="100" font-size="14" fill="#1B2B33" font-weight="600" text-anchor="middle">业务精排 + LIMIT</text>
+                <text x="1280" y="124" font-size="12" fill="#2F7A66" text-anchor="middle">返回分数与审核证据</text>
+
+                <!-- Divider inside SVG -->
+                <line x1="28" y1="170" x2="1372" y2="170" stroke="#D9D5CB" stroke-width="1" stroke-dasharray="4 4"/>
+
+                <!-- Bottom Section: Three-Layer Abstraction -->
+                <text x="28" y="198" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">THREE-LAYER ARCHITECTURE · pg_similarity 在 PostgreSQL 中的三层形态</text>
+
+                <!-- Layer 1: Scoring Functions -->
+                <rect x="28" y="214" width="428" height="194" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="28" y="214" width="428" height="34" fill="#1E4B5A"/>
+                <text x="46" y="236" font-size="14" fill="#FFFFFF" font-weight="700">第一层：打分函数（返回 float8）</text>
+                <text x="46" y="274" font-size="14" fill="#245A6B" font-weight="700" class="svg-mono">lev(text, text) · qgram() · cosine()</text>
+                <text x="46" y="302" font-size="14" fill="#46585F">• 给两段文本计算相似度分值</text>
+                <text x="46" y="328" font-size="14" fill="#46585F">• 统一口径：分数越高越相似</text>
+                <text x="46" y="354" font-size="14" fill="#46585F">• 适合 SELECT 观测、精排与样本评估</text>
+                <text x="46" y="388" font-size="12" fill="#89938F" class="svg-mono">pg_similarity--1.0.sql: IMMUTABLE STRICT</text>
+
+                <!-- Layer 2: Threshold Operators -->
+                <rect x="486" y="214" width="428" height="194" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="486" y="214" width="428" height="34" fill="#2E6373"/>
+                <text x="504" y="236" font-size="14" fill="#FFFFFF" font-weight="700">第二层：阈值操作符（返回 bool）</text>
+                <text x="504" y="274" font-size="14" fill="#245A6B" font-weight="700" class="svg-mono">~== (lev) · ~~~ (qgram) · ~## (cosine)</text>
+                <text x="504" y="302" font-size="14" fill="#46585F">• 写入 WHERE 子句充当布尔过滤谓词</text>
+                <text x="504" y="328" font-size="14" fill="#46585F">• 包装函数 *_op 临时强制归一化为 true</text>
+                <text x="504" y="354" font-size="14" fill="#46585F">• 与对应算法阈值 GUC 比较决定命中</text>
+                <text x="504" y="388" font-size="12" fill="#89938F" class="svg-mono">pg_similarity--1.0.sql: STABLE STRICT</text>
+
+                <!-- Layer 3: GUC Parameters -->
+                <rect x="944" y="214" width="428" height="194" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="944" y="214" width="428" height="34" fill="#47808D"/>
+                <text x="962" y="236" font-size="14" fill="#FFFFFF" font-weight="700">第三层：GUC 参数控制面</text>
+                <text x="962" y="274" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">pg_similarity.&lt;algo&gt;_threshold</text>
+                <text x="962" y="298" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">pg_similarity.&lt;algo&gt;_tokenizer</text>
+                <text x="962" y="322" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">pg_similarity.&lt;algo&gt;_is_normalized</text>
+                <text x="962" y="354" font-size="14" fill="#46585F">• 在 similarity.c _PG_init() 中注册</text>
+                <text x="962" y="388" font-size="12" fill="#BE653B" font-weight="600">注意：会话级生效，连接池复用务必显式 SET</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">进入最底层的算法基岩：Levenshtein 如何用动态规划把「编辑距离」变成 [0, 1] 分数？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">03 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 (INTERACTIVE: LEVENSHTEIN DP) ==================== -->
+        <section class="slide" data-slide="3">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>CORE MECHANISM I · 04 / 12</span>
+              <span class="eyebrow-tag">三、核心原理 · 3.1 相似度函数与归一化 [交互演示]</span>
+            </div>
+            <h1 class="slide-title">Levenshtein：把「编辑距离」统一为「分数越高越相似」</h1>
+            <p class="slide-lead">levenshtein.c 通过动态规划求插入、删除、替换的最小编辑代价，再经归一化统一至 [0, 1] 阈值口径</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="lev-svg" viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <div class="demo-toolbar">
+              <label for="lev-a">STR A</label>
+              <input id="lev-a" class="demo-input" type="text" value="Euler" maxlength="10" aria-label="字符串 A">
+              <label for="lev-b">STR B</label>
+              <input id="lev-b" class="demo-input" type="text" value="Euller" maxlength="10" aria-label="字符串 B">
+              <div class="demo-sep"></div>
+              <button id="lev-play" class="demo-btn primary" type="button">▶ 播放推演</button>
+              <button id="lev-step" class="demo-btn" type="button">单步</button>
+              <button id="lev-reset" class="demo-btn subtle" type="button">↺ 重置</button>
+              <div class="demo-sep"></div>
+              <button class="demo-btn subtle lev-preset" data-a="Euler" data-b="Euller" type="button">Euler / Euller</button>
+              <button class="demo-btn subtle lev-preset" data-a="Oliveira" data-b="Oliviera" type="button">Oliveira 换位</button>
+              <button class="demo-btn subtle lev-preset" data-a="Euler" data-b="EULER" type="button">大小写忽略</button>
+              <span id="lev-status" class="demo-readout">d=1 · score=0.8333</span>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">短串错拼靠字符编辑距离很直观，但遇到长标题与词序重排时，Tokenizer 如何重塑比较对象？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">04 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE: TOKENIZER) ==================== -->
+        <section class="slide" data-slide="4">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>CORE MECHANISM II · 05 / 12</span>
+              <span class="eyebrow-tag">三、核心原理 · 3.2 Tokenizer 分词机制 [交互演示]</span>
+            </div>
+            <h1 class="slide-title">Tokenizer 决定「两段文本被比较成什么对象」</h1>
+            <p class="slide-lead">tokenizer.c 提供四种切分策略；例如 qgram.c 就是临时切到 gram 分词器并复用 block() 的 L1 距离计算</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="tok-svg" viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <div class="demo-toolbar">
+              <label for="tok-input">INPUT</label>
+              <input id="tok-input" class="demo-input wide" type="text" value="Euler T. de Oliveira" maxlength="32" aria-label="分词输入文本">
+              <button id="tok-play" class="demo-btn primary" type="button">▶ 播放切分动画</button>
+              <div class="demo-sep"></div>
+              <button class="demo-btn subtle tok-preset" data-val="Euler T. de Oliveira" type="button">英文人名</button>
+              <button class="demo-btn subtle tok-preset" data-val="pgSimilarity_v1Test" type="button">驼峰标识符</button>
+              <button class="demo-btn subtle tok-preset" data-val="数据库相似搜索" type="button">中文连续文本</button>
+              <span id="tok-status" class="demo-readout">当前展示：4 种分词器实时对比</span>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">看清了字符与 Token 两种视角，面对 pg_similarity 内置的十七种算法，该如何按字段选型？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">05 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 ==================== -->
+        <section class="slide" data-slide="5">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>ALGORITHM SELECTION · 06 / 12</span>
+              <span class="eyebrow-tag">三、核心原理 · 3.3 算法族选择矩阵</span>
+            </div>
+            <h1 class="slide-title">字段变形决定算法族，不要反过来套算法</h1>
+            <p class="slide-lead">先观察业务数据是如何变脏的，再匹配对应的数学模型；特征空间相似并不等于 B-tree 能直接定位</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Table Header Band -->
+                <rect x="24" y="18" width="290" height="36" fill="#1E4B5A"/>
+                <text x="42" y="41" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">01 · 业务字段与主要变形</text>
+
+                <rect x="330" y="18" width="320" height="36" fill="#2E6373"/>
+                <text x="348" y="41" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">02 · 优先算法族</text>
+
+                <rect x="666" y="18" width="440" height="36" fill="#47808D"/>
+                <text x="684" y="41" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">03 · 工程原因与索引特性</text>
+
+                <rect x="1122" y="18" width="254" height="36" fill="#BE653B"/>
+                <text x="1140" y="41" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">工程铁律</text>
+
+                <!-- Row 1 -->
+                <rect x="24" y="64" width="290" height="62" fill="#EBF1EE" stroke="#CFE0DC"/>
+                <text x="40" y="88" font-size="15" fill="#1B2B33" font-weight="700">人名、短编码</text>
+                <text x="40" y="112" font-size="13" fill="#46585F">插入、删除、替换、字符换位</text>
+                <path d="M 314 95 H 330" stroke="#245A6B" stroke-width="2"/>
+                <rect x="330" y="64" width="320" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="346" y="92" font-size="14" fill="#245A6B" font-weight="700">Levenshtein / Jaro / Jaro-Winkler</text>
+                <text x="346" y="114" font-size="12" fill="#89938F" class="svg-mono">操作符：~==  ~%%  ~@@</text>
+                <path d="M 650 95 H 666" stroke="#245A6B" stroke-width="2"/>
+                <rect x="666" y="64" width="440" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="682" y="90" font-size="14" fill="#1B2B33">对字符级错拼最敏感，适合短串精排</text>
+                <text x="682" y="114" font-size="12" fill="#BE653B">不支持 GIN 倒排索引，切忌全表逐行扫描</text>
+
+                <!-- Row 2 -->
+                <rect x="24" y="136" width="290" height="62" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="40" y="160" font-size="15" fill="#1B2B33" font-weight="700">商品标题、地址</text>
+                <text x="40" y="184" font-size="13" fill="#46585F">标点差异、词项重排、部分词相同</text>
+                <path d="M 314 167 H 330" stroke="#2F7A66" stroke-width="2"/>
+                <rect x="330" y="136" width="320" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="346" y="164" font-size="14" fill="#2F7A66" font-weight="700">Jaccard / Dice / Cosine / Overlap</text>
+                <text x="346" y="186" font-size="12" fill="#2F7A66" class="svg-mono">GIN 支持：~??  ~-~  ~##  ~**</text>
+                <path d="M 650 167 H 666" stroke="#2F7A66" stroke-width="2"/>
+                <rect x="666" y="136" width="440" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="682" y="162" font-size="14" fill="#1B2B33">Token 集合或向量空间对词序重排更稳定</text>
+                <text x="682" y="186" font-size="12" fill="#2F7A66">支持 GIN 候选过滤（仍需 Heap Recheck）</text>
+
+                <!-- Row 3 -->
+                <rect x="24" y="208" width="290" height="62" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="40" y="232" font-size="15" fill="#1B2B33" font-weight="700">短文本错漏</text>
+                <text x="40" y="256" font-size="13" fill="#46585F">连续片段相同，但局部有增删改</text>
+                <path d="M 314 239 H 330" stroke="#2F7A66" stroke-width="2"/>
+                <rect x="330" y="208" width="320" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="346" y="236" font-size="14" fill="#2F7A66" font-weight="700">Q-Gram / Block (L1) / Euclidean</text>
+                <text x="346" y="258" font-size="12" fill="#2F7A66" class="svg-mono">GIN 支持：~~~  ~++  ~!!</text>
+                <path d="M 650 239 H 666" stroke="#2F7A66" stroke-width="2"/>
+                <rect x="666" y="208" width="440" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="682" y="234" font-size="14" fill="#1B2B33">n-gram 滑窗对局部小编辑有良好召回能力</text>
+                <text x="682" y="258" font-size="12" fill="#46585F">Token 数量上升会增加索引体积与 CPU 成本</text>
+
+                <!-- Row 4 -->
+                <rect x="24" y="280" width="290" height="62" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="40" y="304" font-size="15" fill="#1B2B33" font-weight="700">英文姓名发音近似</text>
+                <text x="40" y="328" font-size="13" fill="#46585F">拼写不同但读音接近</text>
+                <path d="M 314 311 H 330" stroke="#89938F" stroke-width="2"/>
+                <rect x="330" y="280" width="320" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="346" y="308" font-size="14" fill="#245A6B" font-weight="700">Soundex</text>
+                <text x="346" y="330" font-size="12" fill="#89938F" class="svg-mono">操作符：~*! （语音编码降维）</text>
+                <path d="M 650 311 H 666" stroke="#89938F" stroke-width="2"/>
+                <rect x="666" y="280" width="440" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="682" y="306" font-size="14" fill="#1B2B33">通过英文语音规则先降维再比较</text>
+                <text x="682" y="330" font-size="12" fill="#89938F">不适用于中文拼音或非英语语系发音</text>
+
+                <!-- Row 5 -->
+                <rect x="24" y="352" width="290" height="62" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="40" y="376" font-size="15" fill="#1B2B33" font-weight="700">生物序列 / 局部片段</text>
+                <text x="40" y="400" font-size="13" fill="#46585F">局部子序列高度相似或全局比对</text>
+                <path d="M 314 383 H 330" stroke="#89938F" stroke-width="2"/>
+                <rect x="330" y="352" width="320" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="346" y="380" font-size="14" fill="#245A6B" font-weight="700">Smith-Waterman / Needleman-Wunsch</text>
+                <text x="346" y="402" font-size="12" fill="#89938F" class="svg-mono">含 Smith-Waterman-Gotoh 变体</text>
+                <path d="M 650 383 H 666" stroke="#89938F" stroke-width="2"/>
+                <rect x="666" y="352" width="440" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="682" y="378" font-size="14" fill="#1B2B33">经典序列动态规划比对模型，计算开销高</text>
+                <text x="682" y="402" font-size="12" fill="#BE653B">不支持 GIN，必须严格限制候选规模</text>
+
+                <!-- Right Engineering Rules Box -->
+                <rect x="1122" y="64" width="254" height="350" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="1140" y="96" font-size="15" fill="#1B2B33" font-weight="700">一、不可混用跨算法分数</text>
+                <text x="1140" y="122" font-size="13" fill="#46585F">Levenshtein 的 0.8 与</text>
+                <text x="1140" y="142" font-size="13" fill="#46585F">Jaccard 的 0.8 物理含义</text>
+                <text x="1140" y="162" font-size="13" fill="#46585F">完全不同，不能当成「同一</text>
+                <text x="1140" y="182" font-size="13" fill="#46585F">对象概率」直接比较。</text>
+
+                <line x1="1140" y1="204" x2="1358" y2="204" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1140" y="234" font-size="15" fill="#1B2B33" font-weight="700">二、访问路径决定上限</text>
+                <text x="1140" y="260" font-size="13" fill="#46585F">向量与集合空间里的相似，</text>
+                <text x="1140" y="280" font-size="13" fill="#46585F">不等于 B-tree 能直接定位。</text>
+                <text x="1140" y="300" font-size="13" fill="#46585F">上线前必须确认是否存在合</text>
+                <text x="1140" y="320" font-size="13" fill="#46585F">理的候选收缩路径。</text>
+
+                <line x1="1140" y1="342" x2="1358" y2="342" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1140" y="368" font-size="12" fill="#BE653B" font-weight="700" class="svg-mono">THEORETICAL ROOT</text>
+                <text x="1140" y="390" font-size="12" fill="#46585F">Maron &amp; Kuhns (1960)</text>
+                <text x="1140" y="406" font-size="12" fill="#46585F">文本映射至特征空间再度量</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">既然 B-tree 无法直接定位相似字符串，PostgreSQL 的 GIN 倒排索引究竟能做到哪一步？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">06 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 (INTERACTIVE: GIN + RECHECK) ==================== -->
+        <section class="slide" data-slide="6">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>INDEX &amp; RECHECK · 07 / 12</span>
+              <span class="eyebrow-tag">三、核心原理 · 3.5 GIN 候选集与重检机制 [交互演示]</span>
+            </div>
+            <h1 class="slide-title">GIN 只能缩小候选集，不能替代真实相似度判断</h1>
+            <p class="slide-lead">similarity_gin.c 仅开放 8 个 token 类操作符，且 gin_token_consistent() 强制 *recheck = true 回表重算</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="gin-svg" viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <div class="demo-toolbar">
+              <label for="gin-thresh">THRESHOLD</label>
+              <input id="gin-thresh" class="demo-slider" type="range" min="0.4" max="0.9" step="0.1" value="0.7" aria-label="GIN 重检阈值">
+              <span id="gin-thresh-val" class="svg-mono" style="font-family:var(--font-mono);font-weight:700;color:var(--terra);min-width:36px;">0.7</span>
+              <div class="demo-sep"></div>
+              <button id="gin-play" class="demo-btn primary" type="button">▶ 播放执行链路</button>
+              <button id="gin-step" class="demo-btn" type="button">单步</button>
+              <button id="gin-reset" class="demo-btn subtle" type="button">↺ 重置</button>
+              <span id="gin-status" class="demo-readout">步骤 0 / 4 · 就绪（查询：'Euler Oliveira'）</span>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">看透了 GIN 与 Recheck 的代价，放眼 PostgreSQL 生态，pg_similarity 和 pg_trgm、全文检索怎么选？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">07 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-slide="7">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>ECOSYSTEM COMPARISON · 08 / 12</span>
+              <span class="eyebrow-tag">四、横向对比</span>
+            </div>
+            <h1 class="slide-title">生态选型：不要为了「算法多」而忽略访问路径</h1>
+            <p class="slide-lead">横向对比 PostgreSQL 四类文本检索工具的能力边界：通用生产模糊匹配优先 pg_trgm，多算法实验选 pg_similarity</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Column Headers -->
+                <rect x="20" y="18" width="150" height="42" fill="#1E4B5A"/>
+                <text x="95" y="44" font-size="13" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">对比维度</text>
+
+                <rect x="176" y="18" width="300" height="42" fill="#245A6B"/>
+                <text x="326" y="44" font-size="15" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">pg_similarity</text>
+
+                <rect x="482" y="18" width="290" height="42" fill="#47808D"/>
+                <text x="627" y="44" font-size="15" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">fuzzystrmatch</text>
+
+                <rect x="778" y="18" width="296" height="42" fill="#2F7A66"/>
+                <text x="926" y="44" font-size="15" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">pg_trgm（生产优先）</text>
+
+                <rect x="1080" y="18" width="300" height="42" fill="#2E6373"/>
+                <text x="1230" y="44" font-size="15" fill="#FFFFFF" font-weight="700" text-anchor="middle">全文检索 (FTS)</text>
+
+                <!-- Row 1: 目标 -->
+                <rect x="20" y="66" width="150" height="60" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <text x="95" y="101" font-size="14" fill="#1B2B33" font-weight="700" text-anchor="middle">主要目标</text>
+                <rect x="176" y="66" width="300" height="60" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="192" y="92" font-size="13" fill="#1B2B33">多算法相似度函数与</text>
+                <text x="192" y="112" font-size="13" fill="#1B2B33">阈值布尔操作符工具箱</text>
+                <rect x="482" y="66" width="290" height="60" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="498" y="92" font-size="13" fill="#1B2B33">官方 contrib 距离与发音函数</text>
+                <text x="498" y="112" font-size="13" fill="#46585F">（Soundex、Metaphone 等）</text>
+                <rect x="778" y="66" width="296" height="60" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="794" y="92" font-size="13" fill="#1B2B33" font-weight="600">Trigram 三元组相似与</text>
+                <text x="794" y="112" font-size="13" fill="#1B2B33" font-weight="600">LIKE / ILIKE 查询加速</text>
+                <rect x="1080" y="66" width="300" height="60" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1096" y="92" font-size="13" fill="#1B2B33">文档词项检索、相关性排名与</text>
+                <text x="1096" y="112" font-size="13" fill="#1B2B33">自然语言词干处理</text>
+
+                <!-- Row 2: 算法覆盖 -->
+                <rect x="20" y="132" width="150" height="60" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <text x="95" y="167" font-size="14" fill="#1B2B33" font-weight="700" text-anchor="middle">算法覆盖</text>
+                <rect x="176" y="132" width="300" height="60" fill="#E5EFF0" stroke="#74A5AD"/>
+                <text x="192" y="158" font-size="13" fill="#245A6B" font-weight="700">极广（17 种经典算法）</text>
+                <text x="192" y="178" font-size="13" fill="#46585F">适合教学对比与多场景试验</text>
+                <rect x="482" y="132" width="290" height="60" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="498" y="158" font-size="13" fill="#1B2B33">较聚焦（编辑距离与语音）</text>
+                <text x="498" y="178" font-size="13" fill="#46585F">官方内置，运维门槛极低</text>
+                <rect x="778" y="132" width="296" height="60" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="794" y="158" font-size="13" fill="#2F7A66" font-weight="700">聚焦 trigram 切分</text>
+                <text x="794" y="178" font-size="13" fill="#46585F">工程成熟度与社区验证极高</text>
+                <rect x="1080" y="132" width="300" height="60" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1096" y="158" font-size="13" fill="#1B2B33">关注词项匹配与文档排序</text>
+                <text x="1096" y="178" font-size="13" fill="#46585F">而非量化两段字符串相似度</text>
+
+                <!-- Row 3: 索引支持 -->
+                <rect x="20" y="198" width="150" height="62" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <text x="95" y="234" font-size="14" fill="#1B2B33" font-weight="700" text-anchor="middle">索引支持</text>
+                <rect x="176" y="198" width="300" height="62" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="192" y="224" font-size="13" fill="#1B2B33">仅 8 个 Token 操作符支持 GIN</text>
+                <text x="192" y="244" font-size="13" fill="#BE653B">且强制 Heap Recheck</text>
+                <rect x="482" y="198" width="290" height="62" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="498" y="224" font-size="13" fill="#BE653B" font-weight="600">无通用相似搜索索引方案</text>
+                <text x="498" y="244" font-size="13" fill="#46585F">通常配合函数索引或小表使用</text>
+                <rect x="778" y="198" width="296" height="62" fill="#E4F0EC" stroke="#2F7A66"/>
+                <text x="794" y="224" font-size="13" fill="#2F7A66" font-weight="700">GIN / GiST 索引非常成熟</text>
+                <text x="794" y="244" font-size="13" fill="#46585F">支持 KNN 距离排序加速</text>
+                <rect x="1080" y="198" width="300" height="62" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="1096" y="224" font-size="13" fill="#2F7A66" font-weight="700">GIN / GiST tsquery 成熟</text>
+                <text x="1096" y="244" font-size="13" fill="#46585F">配合 dictionary / parser</text>
+
+                <!-- Row 4: 适合场景 -->
+                <rect x="20" y="266" width="150" height="68" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="95" y="305" font-size="14" fill="#2F7A66" font-weight="700" text-anchor="middle">适合场景</text>
+                <rect x="176" y="266" width="300" height="68" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="192" y="294" font-size="13" fill="#1B2B33">理解算法差异、主数据去重、</text>
+                <text x="192" y="316" font-size="13" fill="#1B2B33">候选生成、中小规模相似过滤</text>
+                <rect x="482" y="266" width="290" height="68" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="498" y="294" font-size="13" fill="#1B2B33">只需要官方 contrib 提供的</text>
+                <text x="498" y="316" font-size="13" fill="#1B2B33">基础编辑距离或英文发音函数</text>
+                <rect x="778" y="266" width="296" height="68" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="794" y="294" font-size="13" fill="#2F7A66" font-weight="700">生产级英文/通用模糊匹配</text>
+                <text x="794" y="316" font-size="13" fill="#1B2B33">高并发模糊查找的首选方案</text>
+                <rect x="1080" y="266" width="300" height="68" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1096" y="294" font-size="13" fill="#1B2B33">文章/长文档关键词召回、</text>
+                <text x="1096" y="316" font-size="13" fill="#1B2B33">布尔检索与相关性排名</text>
+
+                <!-- Row 5: 不适合 -->
+                <rect x="20" y="340" width="150" height="72" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="95" y="381" font-size="14" fill="#BE653B" font-weight="700" text-anchor="middle">不适合</text>
+                <rect x="176" y="340" width="300" height="72" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="192" y="368" font-size="13" fill="#BE653B">超大规模语义检索、复杂中文</text>
+                <text x="192" y="390" font-size="13" fill="#BE653B">分词、不经样本校准直接上线</text>
+                <rect x="482" y="340" width="290" height="72" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="498" y="368" font-size="13" fill="#46585F">多算法横向对比、需要阈值</text>
+                <text x="498" y="390" font-size="13" fill="#46585F">操作符直接走索引的场景</text>
+                <rect x="778" y="340" width="296" height="72" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="794" y="368" font-size="13" fill="#46585F">语音发音近似、需要精确解释</text>
+                <text x="794" y="390" font-size="13" fill="#46585F">字符编辑距离的场景</text>
+                <rect x="1080" y="340" width="300" height="72" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1096" y="368" font-size="13" fill="#46585F">字符错拼容错、短字符串</text>
+                <text x="1096" y="390" font-size="13" fill="#46585F">编辑相似度度量</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">工具选对只是起点：真正上线时，阈值调高还是调低会带来怎样的召回与成本震荡？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">08 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 (INTERACTIVE: THRESHOLD CALIBRATION) ==================== -->
+        <section class="slide" data-slide="8">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>THRESHOLD CALIBRATION · 09 / 12</span>
+              <span class="eyebrow-tag">五、效果如何？ · 召回、误匹配与成本权衡 [交互演示]</span>
+            </div>
+            <h1 class="slide-title">0.7 不是自然规律，最佳阈值必须来自标注样本</h1>
+            <p class="slide-lead">基于原文 customer_name 7 条真实样本现场计算分数，直观观测阈值变动对 TP / FP / FN 与成本的影响</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg id="cal-svg" viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <div class="demo-toolbar">
+              <label for="cal-thresh">THRESHOLD</label>
+              <input id="cal-thresh" class="demo-slider" type="range" min="0.50" max="0.90" step="0.05" value="0.70" aria-label="校准阈值">
+              <span id="cal-thresh-val" style="font-family:var(--font-mono);font-weight:700;color:var(--terra);min-width:42px;">0.70</span>
+              <div class="demo-sep"></div>
+              <button id="cal-algo-lev" class="demo-btn active-preset" type="button">Levenshtein</button>
+              <button id="cal-algo-qgram" class="demo-btn subtle" type="button">Q-Gram (3-gram)</button>
+              <div class="demo-sep"></div>
+              <button id="cal-play" class="demo-btn primary" type="button">▶ 自动扫描阈值</button>
+              <button id="cal-reset" class="demo-btn subtle" type="button">↺ 重置 0.70</button>
+              <span id="cal-status" class="demo-readout">TP=3 · FP=0 · FN=2</span>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">理解了样本校准的逻辑，在 PostgreSQL 实战里，一整套从建表到 EXPLAIN 的验证流程怎么落地？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">09 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-slide="9">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>HANDS-ON WORKFLOW · 10 / 12</span>
+              <span class="eyebrow-tag">六、实操 DEMO · 四步验证闭环</span>
+            </div>
+            <h1 class="slide-title">工程实操四步法：打分对比 → 阈值过滤 → GIN 剖析 → 样本回归</h1>
+            <p class="slide-lead">验证重点绝不是只看有没有 Index Scan，而是核验 Bitmap Scan、Recheck 保留行与 Buffers 真实下降</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Step 1 -->
+                <rect x="20" y="20" width="322" height="390" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="20" y="20" width="322" height="40" fill="#1E4B5A"/>
+                <text x="36" y="45" font-size="14" fill="#FFFFFF" font-weight="700" class="svg-mono">STEP 01 · 同台观测分数</text>
+                <text x="36" y="84" font-size="13" fill="#46585F">对比多算法口径差异，不把单一分数</text>
+                <text x="36" y="104" font-size="13" fill="#46585F">当成业务真理：</text>
+                <rect x="34" y="120" width="294" height="176" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="44" y="144" font-size="12" fill="#245A6B" class="svg-mono">CREATE EXTENSION pg_similarity;</text>
+                <text x="44" y="168" font-size="12" fill="#1B2B33" class="svg-mono">SELECT name,</text>
+                <text x="44" y="188" font-size="12" fill="#1B2B33" class="svg-mono">  lev(name, 'Euler ...'),</text>
+                <text x="44" y="208" font-size="12" fill="#1B2B33" class="svg-mono">  qgram(name, 'Euler ...'),</text>
+                <text x="44" y="228" font-size="12" fill="#1B2B33" class="svg-mono">  cosine(name, 'Euler ...')</text>
+                <text x="44" y="248" font-size="12" fill="#1B2B33" class="svg-mono">FROM customer_name</text>
+                <text x="44" y="268" font-size="12" fill="#1B2B33" class="svg-mono">ORDER BY lev_score DESC;</text>
+                <rect x="34" y="314" width="294" height="80" fill="#EBF1EE" stroke="#A4C4C6"/>
+                <text x="46" y="338" font-size="13" fill="#245A6B" font-weight="700">观测要点</text>
+                <text x="46" y="360" font-size="12" fill="#46585F">• 短串错拼：Levenshtein 更敏感</text>
+                <text x="46" y="380" font-size="12" fill="#46585F">• 词序重排：Cosine / Jaccard 更稳</text>
+
+                <!-- Arrow 1->2 -->
+                <path d="M 342 215 H 360" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="366,215 356,210 356,220" fill="#245A6B"/>
+
+                <!-- Step 2 -->
+                <rect x="366" y="20" width="322" height="390" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="366" y="20" width="322" height="40" fill="#2E6373"/>
+                <text x="382" y="45" font-size="14" fill="#FFFFFF" font-weight="700" class="svg-mono">STEP 02 · 阈值操作符过滤</text>
+                <text x="382" y="84" font-size="13" fill="#46585F">显式设定会话阈值，再使用布尔操作符</text>
+                <text x="382" y="104" font-size="13" fill="#46585F">放进 WHERE 谓词：</text>
+                <rect x="380" y="120" width="294" height="176" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="390" y="146" font-size="12" fill="#245A6B" class="svg-mono">SET pg_similarity</text>
+                <text x="390" y="164" font-size="12" fill="#245A6B" class="svg-mono">  .levenshtein_threshold TO 0.7;</text>
+                <text x="390" y="194" font-size="12" fill="#1B2B33" class="svg-mono">SELECT id, name,</text>
+                <text x="390" y="214" font-size="12" fill="#1B2B33" class="svg-mono">  lev(name, 'Euller') AS score</text>
+                <text x="390" y="234" font-size="12" fill="#1B2B33" class="svg-mono">FROM customer_name</text>
+                <text x="390" y="254" font-size="12" fill="#BE653B" font-weight="700" class="svg-mono">WHERE name ~== 'Euller'</text>
+                <text x="390" y="274" font-size="12" fill="#1B2B33" class="svg-mono">ORDER BY score DESC;</text>
+                <rect x="380" y="314" width="294" height="80" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="392" y="338" font-size="13" fill="#BE653B" font-weight="700">内部机制</text>
+                <text x="392" y="360" font-size="12" fill="#46585F">• ~== 调用 lev_op，返回 bool</text>
+                <text x="392" y="380" font-size="12" fill="#46585F">• 内部自动开启归一化口径比对</text>
+
+                <!-- Arrow 2->3 -->
+                <path d="M 688 215 H 706" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="712,215 702,210 702,220" fill="#245A6B"/>
+
+                <!-- Step 3 -->
+                <rect x="712" y="20" width="322" height="390" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="712" y="20" width="322" height="40" fill="#47808D"/>
+                <text x="728" y="45" font-size="14" fill="#FFFFFF" font-weight="700" class="svg-mono">STEP 03 · GIN 与计划剖析</text>
+                <text x="728" y="84" font-size="13" fill="#46585F">为 token 类操作符建立 GIN 索引，并用</text>
+                <text x="728" y="104" font-size="13" fill="#46585F">ANALYZE + BUFFERS 验明真伪：</text>
+                <rect x="726" y="120" width="294" height="176" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="736" y="144" font-size="12" fill="#245A6B" class="svg-mono">CREATE INDEX ... USING gin</text>
+                <text x="736" y="162" font-size="12" fill="#245A6B" class="svg-mono">  (name gin_similarity_ops);</text>
+                <text x="736" y="190" font-size="12" fill="#BE653B" font-weight="700" class="svg-mono">EXPLAIN (ANALYZE, BUFFERS)</text>
+                <text x="736" y="210" font-size="12" fill="#1B2B33" class="svg-mono">SELECT id, name,</text>
+                <text x="736" y="230" font-size="12" fill="#1B2B33" class="svg-mono">  qgram(name, 'Euler Oliveira')</text>
+                <text x="736" y="250" font-size="12" fill="#1B2B33" class="svg-mono">FROM customer_name</text>
+                <text x="736" y="270" font-size="12" fill="#2F7A66" font-weight="700" class="svg-mono">WHERE name ~~~ 'Euler Oliveira';</text>
+                <rect x="726" y="314" width="294" height="80" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="738" y="338" font-size="13" fill="#245A6B" font-weight="700">四项必检指标</text>
+                <text x="738" y="360" font-size="12" fill="#46585F">• Bitmap Scan 是否命中 · Buffers 降幅</text>
+                <text x="738" y="380" font-size="12" fill="#46585F">• Recheck 保留行 · 降阈值后膨胀度</text>
+
+                <!-- Arrow 3->4 -->
+                <path d="M 1034 215 H 1052" stroke="#2F7A66" stroke-width="2"/>
+                <polygon points="1058,215 1048,210 1048,220" fill="#2F7A66"/>
+
+                <!-- Step 4 -->
+                <rect x="1058" y="20" width="322" height="390" fill="#FAF9F6" stroke="#2F7A66"/>
+                <rect x="1058" y="20" width="322" height="40" fill="#2F7A66"/>
+                <text x="1074" y="45" font-size="14" fill="#FFFFFF" font-weight="700" class="svg-mono">STEP 04 · 标注样本校准</text>
+                <text x="1074" y="84" font-size="13" fill="#46585F">构建人工标注正负样本对表，用 SQL</text>
+                <text x="1074" y="104" font-size="13" fill="#46585F">批量扫描 0.5 ~ 0.9 阈值效果：</text>
+                <rect x="1072" y="120" width="294" height="176" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="1082" y="144" font-size="12" fill="#1B2B33" class="svg-mono">SELECT threshold,</text>
+                <text x="1082" y="164" font-size="12" fill="#2F7A66" class="svg-mono">  count(*) FILTER (s&gt;=t AND same)</text>
+                <text x="1082" y="182" font-size="12" fill="#2F7A66" class="svg-mono">    AS true_positive,</text>
+                <text x="1082" y="202" font-size="12" fill="#BE653B" class="svg-mono">  count(*) FILTER (s&gt;=t AND !same)</text>
+                <text x="1082" y="220" font-size="12" fill="#BE653B" class="svg-mono">    AS false_positive,</text>
+                <text x="1082" y="240" font-size="12" fill="#AE8A3E" class="svg-mono">  count(*) FILTER (s&lt;t AND same)</text>
+                <text x="1082" y="258" font-size="12" fill="#AE8A3E" class="svg-mono">    AS false_negative</text>
+                <text x="1082" y="278" font-size="12" fill="#1B2B33" class="svg-mono">FROM name_pair_label CROSS JOIN t;</text>
+                <rect x="1072" y="314" width="294" height="80" fill="#E4F0EC" stroke="#2F7A66"/>
+                <text x="1084" y="338" font-size="13" fill="#2F7A66" font-weight="700">业务决策准则</text>
+                <text x="1084" y="360" font-size="12" fill="#46585F">• 主数据归并：宁多给候选，严防漏召回</text>
+                <text x="1084" y="380" font-size="12" fill="#46585F">• 自动风控审核：严控 FP 误匹配成本</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">单条 SQL 跑通不代表生产无忧：架构师、DBA 与业务开发者各自必须守住哪些防线？</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">10 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="10">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>BEST PRACTICES · 11 / 12</span>
+              <span class="eyebrow-tag">七、最佳实践 · 三角色协同防御矩阵</span>
+            </div>
+            <h1 class="slide-title">把相似搜索做稳：架构师、DBA 与开发者的职责切面</h1>
+            <p class="slide-lead">规范化前置、两阶段候选收缩、连接池 GUC 治理与灰区审核机制，共同决定系统线上稳定性</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Band 1: Architect -->
+                <rect x="20" y="18" width="190" height="122" fill="#1E4B5A"/>
+                <text x="115" y="64" font-size="12" fill="#A4C4C6" font-weight="700" text-anchor="middle" class="svg-mono">ROLE 01</text>
+                <text x="115" y="92" font-size="18" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-serif">数据库架构师</text>
+                <text x="115" y="116" font-size="12" fill="#CFE0DC" text-anchor="middle">定边界 · 做前置</text>
+
+                <rect x="220" y="18" width="222" height="122" fill="#EBF1EE" stroke="#A4C4C6"/>
+                <text x="236" y="46" font-size="14" fill="#1E4B5A" font-weight="700">1. 先定业务损失函数</text>
+                <text x="236" y="72" font-size="13" fill="#46585F">明确漏召回与误匹配谁更</text>
+                <text x="236" y="92" font-size="13" fill="#46585F">贵；去重、风控、联想的</text>
+                <text x="236" y="112" font-size="13" fill="#46585F">答案完全不同。</text>
+
+                <rect x="452" y="18" width="222" height="122" fill="#EBF1EE" stroke="#A4C4C6"/>
+                <text x="468" y="46" font-size="14" fill="#1E4B5A" font-weight="700">2. 把规范化前置</text>
+                <text x="468" y="72" font-size="13" fill="#46585F">大小写、全半角、标点、</text>
+                <text x="468" y="92" font-size="13" fill="#46585F">公司后缀与行政区划尽早</text>
+                <text x="468" y="112" font-size="13" fill="#46585F">在入库或生成列中清洗。</text>
+
+                <rect x="684" y="18" width="222" height="122" fill="#EBF1EE" stroke="#A4C4C6"/>
+                <text x="700" y="46" font-size="14" fill="#1E4B5A" font-weight="700">3. 两阶段检索架构</text>
+                <text x="700" y="72" font-size="13" fill="#46585F">一阶段用 GIN/前缀/租户</text>
+                <text x="700" y="92" font-size="13" fill="#46585F">类别/时间收缩候选；二阶</text>
+                <text x="700" y="112" font-size="13" fill="#46585F">段用相似度函数精排。</text>
+
+                <rect x="916" y="18" width="222" height="122" fill="#EBF1EE" stroke="#A4C4C6"/>
+                <text x="932" y="46" font-size="14" fill="#1E4B5A" font-weight="700">4. 中文不裸用 alnum</text>
+                <text x="932" y="72" font-size="13" fill="#46585F">alnum 依赖 C locale 概念，</text>
+                <text x="932" y="92" font-size="13" fill="#46585F">中文连续文本需先分词、</text>
+                <text x="932" y="112" font-size="13" fill="#46585F">切字 n-gram 或建辅助列。</text>
+
+                <rect x="1148" y="18" width="232" height="122" fill="#EBF1EE" stroke="#A4C4C6"/>
+                <text x="1164" y="46" font-size="14" fill="#1E4B5A" font-weight="700">5. 为人工审核留证据</text>
+                <text x="1164" y="72" font-size="13" fill="#46585F">对外返回分数、命中算法、</text>
+                <text x="1164" y="92" font-size="13" fill="#46585F">阈值与关键 Token，确保</text>
+                <text x="1164" y="112" font-size="13" fill="#46585F">「为何相似」可解释。</text>
+
+                <!-- Band 2: DBA -->
+                <rect x="20" y="154" width="190" height="122" fill="#2E6373"/>
+                <text x="115" y="200" font-size="12" fill="#CFE0DC" font-weight="700" text-anchor="middle" class="svg-mono">ROLE 02</text>
+                <text x="115" y="228" font-size="18" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-serif">数据库 DBA</text>
+                <text x="115" y="252" font-size="12" fill="#EBF1EE" text-anchor="middle">控成本 · 守稳态</text>
+
+                <rect x="220" y="154" width="222" height="122" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="236" y="182" font-size="14" fill="#2E6373" font-weight="700">1. EXPLAIN 验候选集</text>
+                <text x="236" y="208" font-size="13" fill="#46585F">紧盯扫描行数、heap blocks</text>
+                <text x="236" y="228" font-size="13" fill="#46585F">与 Recheck 剩余行，不能</text>
+                <text x="236" y="248" font-size="13" fill="#46585F">只看是否走了索引。</text>
+
+                <rect x="452" y="154" width="222" height="122" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="468" y="182" font-size="14" fill="#2E6373" font-weight="700">2. 监控 GIN 写入代价</text>
+                <text x="468" y="208" font-size="13" fill="#46585F">单条文本拆出多个 Key，</text>
+                <text x="468" y="228" font-size="13" fill="#46585F">持续关注写入放大、</text>
+                <text x="468" y="248" font-size="13" fill="#46585F">pending list 与 vacuum。</text>
+
+                <rect x="684" y="154" width="222" height="122" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="700" y="182" font-size="14" fill="#2E6373" font-weight="700">3. 阈值变更走发布流</text>
+                <text x="700" y="208" font-size="13" fill="#46585F">GUC 为会话/用户级参数，</text>
+                <text x="700" y="228" font-size="13" fill="#46585F">连接池复用必须显式初始</text>
+                <text x="700" y="248" font-size="13" fill="#46585F">化或固化角色级配置。</text>
+
+                <rect x="916" y="154" width="222" height="122" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="932" y="182" font-size="14" fill="#BE653B" font-weight="700">4. 核验索引分词口径</text>
+                <text x="932" y="208" font-size="13" fill="#46585F">源码 GIN 分词为编译期</text>
+                <text x="932" y="228" font-size="13" fill="#46585F">默认 alnum，不等同于</text>
+                <text x="932" y="248" font-size="13" fill="#46585F">运行时 GUC，须实测回归。</text>
+
+                <rect x="1148" y="154" width="232" height="122" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1164" y="182" font-size="14" fill="#2E6373" font-weight="700">5. 拆分超长文本字段</text>
+                <text x="1164" y="208" font-size="13" fill="#46585F">超 1024 字节会直接报错；</text>
+                <text x="1164" y="228" font-size="13" fill="#46585F">即使未报错，长文本相似</text>
+                <text x="1164" y="248" font-size="13" fill="#46585F">计算也会引发 CPU 放大。</text>
+
+                <!-- Band 3: Application Developer -->
+                <rect x="20" y="290" width="190" height="122" fill="#2F7A66"/>
+                <text x="115" y="336" font-size="12" fill="#E4F0EC" font-weight="700" text-anchor="middle" class="svg-mono">ROLE 03</text>
+                <text x="115" y="364" font-size="18" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-serif">业务开发者</text>
+                <text x="115" y="388" font-size="12" fill="#E4F0EC" text-anchor="middle">写对 SQL · 留兜底</text>
+
+                <rect x="220" y="290" width="222" height="122" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="236" y="318" font-size="14" fill="#2F7A66" font-weight="700">1. 不混用算法分数</text>
+                <text x="236" y="344" font-size="13" fill="#46585F">0.8 的 Levenshtein 与</text>
+                <text x="236" y="364" font-size="13" fill="#46585F">0.8 的 Jaccard 不可直接</text>
+                <text x="236" y="384" font-size="13" fill="#46585F">拉齐对比或简单相加。</text>
+
+                <rect x="452" y="290" width="222" height="122" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="468" y="318" font-size="14" fill="#2F7A66" font-weight="700">2. 先硬过滤再打分</text>
+                <text x="468" y="344" font-size="13" fill="#46585F">查询务必带租户、类别、</text>
+                <text x="468" y="364" font-size="13" fill="#46585F">状态、区域等硬条件，避</text>
+                <text x="468" y="384" font-size="13" fill="#46585F">免对全表逐行算相似度。</text>
+
+                <rect x="684" y="290" width="222" height="122" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="700" y="318" font-size="14" fill="#2F7A66" font-weight="700">3. 阈值写进实验里</text>
+                <text x="700" y="344" font-size="13" fill="#46585F">拒绝凭感觉拍脑袋定阈值，</text>
+                <text x="700" y="364" font-size="13" fill="#46585F">用标注样本量化误匹配与</text>
+                <text x="700" y="384" font-size="13" fill="#46585F">漏召回边界。</text>
+
+                <rect x="916" y="290" width="222" height="122" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="932" y="318" font-size="14" fill="#2F7A66" font-weight="700">4. 叠加业务维度排序</text>
+                <text x="932" y="344" font-size="13" fill="#46585F">结果页不只按相似度排序，</text>
+                <text x="932" y="364" font-size="13" fill="#46585F">可叠加业务热度、更新时</text>
+                <text x="932" y="384" font-size="13" fill="#46585F">间、来源可信度与确认态。</text>
+
+                <rect x="1148" y="290" width="232" height="122" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="1164" y="318" font-size="14" fill="#2F7A66" font-weight="700">5. 为「不确定」建流程</text>
+                <text x="1164" y="344" font-size="13" fill="#46585F">相似搜索天然存在灰区，</text>
+                <text x="1164" y="364" font-size="13" fill="#46585F">高风险归并应走候选审核</text>
+                <text x="1164" y="384" font-size="13" fill="#46585F">队列，而非静默自动合并。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">最后收口：把适合边界、禁区清单与七大生产高频坑装进上线前的最终核对单。</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索</span>
+              <span class="footer-page">11 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="11">
+          <div class="slide-header">
+            <div class="eyebrow">
+              <span>BOUNDARIES &amp; PITFALLS · 12 / 12</span>
+              <span class="eyebrow-tag">八 ~ 十一、适用边界、七大常见坑与扩展阅读</span>
+            </div>
+            <h1 class="slide-title">知所适用，避其深坑：相似搜索生产上线核对单</h1>
+            <p class="slide-lead">划清适用场景与明确禁区，逐项排雷七大高频工程误区，回到业务表用样本与执行计划做实证</p>
+          </div>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Top: Suitable -->
+                <rect x="20" y="18" width="560" height="34" fill="#2F7A66"/>
+                <text x="36" y="40" font-size="14" fill="#FFFFFF" font-weight="700">适用场景（推荐落地）</text>
+                <rect x="20" y="52" width="560" height="142" fill="#E4F0EC" stroke="#A4C4C6"/>
+                <text x="36" y="80" font-size="14" fill="#1B2B33" font-weight="600">• 主数据去重：客户 / 供应商 / 机构名归并</text>
+                <text x="36" y="108" font-size="14" fill="#1B2B33" font-weight="600">• 脏数据候选生成：英文名、短编码、SKU、标题、地址</text>
+                <text x="36" y="136" font-size="14" fill="#1B2B33" font-weight="600">• 小中规模表上的交互式模糊查找</text>
+                <text x="36" y="164" font-size="14" fill="#1B2B33" font-weight="600">• 教学、算法对比验证与主数据规则实验</text>
+
+                <!-- Left Bottom: Not Suitable -->
+                <rect x="20" y="208" width="560" height="34" fill="#BE653B"/>
+                <text x="36" y="230" font-size="14" fill="#FFFFFF" font-weight="700">明确禁区（切勿硬套）</text>
+                <rect x="20" y="242" width="560" height="170" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="36" y="268" font-size="13" fill="#1B2B33">• 自然语言语义搜索 → 应选 Embedding + 向量索引 + Rerank</text>
+                <text x="36" y="296" font-size="13" fill="#1B2B33">• 超大规模高并发开放检索 → 优先 pg_trgm / FTS / 专用搜索引擎</text>
+                <text x="36" y="324" font-size="13" fill="#1B2B33">• 零容错自动写操作（如自动合并客户、静默改归属）</text>
+                <text x="36" y="352" font-size="13" fill="#1B2B33">• 未经预处理的多字节长文本直接相似计算</text>
+                <text x="36" y="380" font-size="13" fill="#1B2B33">• 指望 GIN 索引直接给出精确相似命中（当前必须 Recheck）</text>
+
+                <!-- Right: 7 Common Pitfalls -->
+                <rect x="604" y="18" width="776" height="34" fill="#1E4B5A"/>
+                <text x="620" y="40" font-size="14" fill="#FFFFFF" font-weight="700">七大高频生产坑排雷清单</text>
+                <rect x="604" y="52" width="776" height="278" fill="#FAF9F6" stroke="#D9D5CB"/>
+
+                <text x="622" y="82" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">01</text>
+                <text x="652" y="82" font-size="14" fill="#1B2B33" font-weight="700">把默认 0.7 当标准</text>
+                <text x="810" y="82" font-size="13" fill="#46585F">—— 不同字段、语言与算法口径完全不同，须样本校准</text>
+
+                <text x="622" y="118" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">02</text>
+                <text x="652" y="118" font-size="14" fill="#1B2B33" font-weight="700">把分数当成概率</text>
+                <text x="810" y="118" font-size="13" fill="#46585F">—— 只是特定算法归一化结果，不可跨算法直接等同</text>
+
+                <text x="622" y="154" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">03</text>
+                <text x="652" y="154" font-size="14" fill="#1B2B33" font-weight="700">忘初始化连接池 GUC</text>
+                <text x="810" y="154" font-size="13" fill="#46585F">—— 连接复用会串参数，必须显式 SET 或固化角色配置</text>
+
+                <text x="622" y="190" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">04</text>
+                <text x="652" y="190" font-size="14" fill="#1B2B33" font-weight="700">索引与查询分词错位</text>
+                <text x="810" y="190" font-size="13" fill="#46585F">—— GIN 编译默认 alnum，改运行时 GUC 需回归验召回</text>
+
+                <text x="622" y="226" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">05</text>
+                <text x="652" y="226" font-size="14" fill="#1B2B33" font-weight="700">全表逐行跑编辑距离</text>
+                <text x="810" y="226" font-size="13" fill="#46585F">—— 动态规划仅适合短串与小候选集，严禁无界扫大表</text>
+
+                <text x="622" y="262" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">06</text>
+                <text x="652" y="262" font-size="14" fill="#1B2B33" font-weight="700">中文拼音别名混一列</text>
+                <text x="810" y="262" font-size="13" fill="#46585F">—— 应拆规范名、别名、拼音、行政区划分别打分融合</text>
+
+                <text x="622" y="298" font-size="14" fill="#BE653B" font-weight="700" class="svg-mono">07</text>
+                <text x="652" y="298" font-size="14" fill="#1B2B33" font-weight="700">只看命中不看标签</text>
+                <text x="810" y="298" font-size="13" fill="#46585F">—— 命中多往往只是阈值过低，缺标签就看不见噪声</text>
+
+                <!-- Bottom Right: References -->
+                <rect x="604" y="344" width="776" height="68" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="622" y="368" font-size="12" fill="#245A6B" font-weight="700" class="svg-mono">REFERENCES · 扩展阅读与理论出处</text>
+                <text x="622" y="392" font-size="12" fill="#46585F">pg_similarity (eulerto/pg_similarity) · PostgreSQL Docs (GIN / fuzzystrmatch) · Levenshtein (1966) · Maron &amp; Kuhns (1960)</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <div class="next-label">承接 · END</div>
+              <div class="next-text">回到你的业务表：先标一批正负样本，再定算法与阈值，最后用 EXPLAIN (ANALYZE, BUFFERS) 说话。</div>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 最佳实践之相似搜索 · 完</span>
+              <span class="footer-page">12 / 12</span>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /stage-scaler -->
+    </div><!-- /stage-viewport -->
+
+    <!-- Right: In-Page Docked Speaker Notes Panel -->
+    <aside id="notes-panel" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div class="notes-tabs">
+          <button id="tab-current" class="notes-tab" type="button">本页讲稿 [N]</button>
+          <button id="tab-all" class="notes-tab" type="button">全文讲稿 [T]</button>
+        </div>
+        <button id="btn-close-notes" class="notes-close" type="button" title="关闭讲稿">×</button>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+  </div><!-- /workspace -->
+
+  <!-- Bottom Persistent Shortcut & Navigation Bar (Visible in Normal & Fullscreen) -->
+  <footer id="control-bar">
+    <div class="bar-group">
+      <button id="btn-prev" class="bar-btn" type="button" title="上一页">← 上一页</button>
+      <span id="bar-counter" class="bar-counter">01 / 12</span>
+      <button id="btn-next" class="bar-btn" type="button" title="下一页">下一页 →</button>
+      <div class="bar-progress-wrap" aria-hidden="true">
+        <div id="bar-progress-fill" class="bar-progress-fill"></div>
+      </div>
+    </div>
+    <div class="bar-group">
+      <button id="btn-toc" class="bar-btn" type="button">目录 <span class="kbd">G</span></button>
+      <button id="btn-note-cur" class="bar-btn" type="button">本页讲稿 <span class="kbd">N</span></button>
+      <button id="btn-note-all" class="bar-btn" type="button">全文讲稿 <span class="kbd">T</span></button>
+      <button id="btn-autoplay" class="bar-btn" type="button">自动播放 <span class="kbd">A</span></button>
+      <button id="btn-fullscreen" class="bar-btn" type="button">全屏 <span class="kbd">F</span></button>
+    </div>
+  </footer>
+
+  <!-- In-Page Directory Overlay (G) -->
+  <div id="toc-overlay" role="dialog" aria-label="幻灯片目录">
+    <div class="toc-top">
+      <div>
+        <div class="toc-sub">DIRECTORY · 按 G 或 ESC 关闭</div>
+        <div class="toc-heading">数据库筑基课：相似搜索全篇目录（12 页）</div>
+      </div>
+      <button id="btn-close-toc" class="bar-btn" type="button">关闭目录 <span class="kbd">G</span></button>
+    </div>
+    <div id="toc-grid" class="toc-grid"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== SLIDE METADATA & SPEAKER NOTES ==================== */
+  const SLIDES_DATA = [
+    {
+      num: '01',
+      eyebrow: 'POSTGRESQL DATABASE FOUNDATIONS',
+      title: '数据库筑基课：相似搜索的工程本质',
+      desc: '七阶地层总览与 pg_similarity 工程剖面',
+      hasDemo: false,
+      notes: [
+        '大家好，今天我们一起拆解「数据库筑基课」里一个非常实用、但也特别容易被用偏的基础能力——相似搜索。很多人一听到相似搜索，第一反应是「装个扩展、调个函数、给个 0.7 阈值不就完了吗？」但如果真这么干，线上往往不是查得慢，就是把不该合并的客户给误合并了。',
+        '所以今天我们换一个视角，像看地质剖面一样，把 pg_similarity 这个 PostgreSQL C 扩展从底向上切开成七层：最底层是 17 种经典算法的数学基岩，往上是分词器、操作符与 GUC 参数、GIN 候选索引、Heap Recheck 重检、标注样本校准，直到最上层的主数据治理与人工审核。',
+        '记住一个核心判断：越往底层走，约束越硬——比如源码里写死的 PGS_MAX_STR_LEN = 1024 字节上限。每一层上层能力，都建立在下层的数学口径和执行代价之上。接下来我们先从最根本的问题切入：为什么日常用的等号和 LIKE 解决不了这件事？'
+      ],
+      cue: '过渡衔接：从总览切入第 02 页——剖析传统 SQL 匹配的三大盲区。'
+    },
+    {
+      num: '02',
+      eyebrow: 'PROBLEM DEFINITION',
+      title: '业务里的「看起来像」，不能只靠等值与模糊包含',
+      desc: '传统 SQL 盲区与相似搜索必须回答的四个工程问题',
+      hasDemo: false,
+      notes: [
+        '我们先看业务里最真实的痛点：客户姓名多敲了一个字母，比如把 Euler 敲成了 Euller；或者商品标题、机构名称里多了缩写、换了标点、词序倒了过来，比如把 Euler T. de Oliveira 写成 Oliveira, Euler T.。这时候业务希望数据库能把「看起来像同一个对象」的记录捞出来。',
+        '为什么传统 SQL 搞不定？你看左边这三个对比：等号太硬，错一个字母召回率直接归零；LIKE 或 ILIKE 只能匹配连续子串，一旦遇到字符替换或者词序倒置，百分号再多也救不了；而全文检索虽然强大，但它关心的是「词项存不存在、文档相关性怎么排」，并不能直接回答「这两个字符串到底有多像」。',
+        '所以真正的相似搜索，必须正面回答右边的四个工程问题：第一，你定义「相似」的数学口径是什么？第二，阈值定多少才不是拍脑袋？第三，表大了之后候选集怎么收缩，避免全表跑 CPU？第四，结果上线前怎么用标注样本和 EXPLAIN 做实证？搞清楚这四问，我们再来看 pg_similarity 是怎么落地封装的。'
+      ],
+      cue: '过渡衔接：由四个工程问题引出第 03 页——pg_similarity 的三层架构与六段流水线。'
+    },
+    {
+      num: '03',
+      eyebrow: 'ARCHITECTURE & PIPELINE',
+      title: 'pg_similarity 三层能力封装与全链路执行剖面',
+      desc: '六段检索流水线 + 打分函数 / 操作符 / GUC 三层',
+      hasDemo: false,
+      notes: [
+        '理解 pg_similarity 最好的方式，是不要把它看成一堆零散函数，而是看成上下两张图：上面是一条六段式的工程流水线，下面是它在 PostgreSQL 里的三层封装。',
+        '从流水线看，一段查询进来，绝不是直接算个分就完事了：它要先过输入规范化（包括长度校验和默认转小写），再经由 Tokenizer 切分特征，接着靠 GIN 索引或业务硬条件收缩候选集，然后对候选行计算归一化相似度，再经过 Heap Recheck 和阈值布尔判断，最后才进入业务排序与限量输出。',
+        '落到数据库对象上，pg_similarity 把这套链路拆成三层：第一层是返回 float8 的打分函数，比如 lev()、qgram()、cosine()，统一成「分数越高越相似」；第二层是返回 bool 的阈值操作符，比如 ~==、~~~，专门写进 WHERE 子句；第三层则是 similarity.c 在 _PG_init() 里注册的三大类 GUC 参数——threshold、tokenizer 和 is_normalized。特别提醒一句，这些参数是会话级的，连接池复用时如果忘了显式 SET，不同请求就会互相串参数。下面我们潜入最底层，现场推演一下编辑距离是怎么算出来的。'
+      ],
+      cue: '过渡衔接：由三层模型潜入第 04 页——现场动态推演 Levenshtein 编辑距离与归一化。'
+    },
+    {
+      num: '04',
+      eyebrow: 'CORE MECHANISM I',
+      title: 'Levenshtein：把「编辑距离」统一为「分数越高越相似」',
+      desc: '动态规划矩阵、归一化公式与源码硬约束 [交互动画]',
+      hasDemo: true,
+      notes: [
+        '我们现在来看第一种最经典的字符级算法——Levenshtein 编辑距离，它的理论根源是 1966 年 Levenshtein 的经典论文，核心思想特别朴素：把字符串 A 变成字符串 B，最少需要多少次插入、删除或替换操作。',
+        '大家可以点击下面的「播放推演」或者直接改输入框里的词。默认我们用原文里的例子：Euler 和 Euller。动态规划矩阵一格一格填过去，右下角算出来的最小编辑距离 d 是 1。但在 SQL 里，距离越小越相似其实反直觉，而且不同长度的字符串没法直接比。',
+        '所以 levenshtein.c 在归一化模式下做了统一转换：similarity = 1.0 - edit_distance / max(len(a), len(b))。这里 1 - 1/6 等于 0.8333，大于默认阈值 0.7，所以 ~== 操作符返回 true。注意看右边源码里的两个硬约束：超过 1024 字节直接报错，且默认 PGS_IGNORE_CASE 开启会转小写。这也解释了为什么编辑距离只适合短串——遇到长文本或者词序重排，字符级编辑就不灵了，必须请出下一层的 Tokenizer。'
+      ],
+      cue: '过渡衔接：短串编辑距离遇到词序重排会失效，引出第 05 页——Tokenizer 切分机制。'
+    },
+    {
+      num: '05',
+      eyebrow: 'CORE MECHANISM II',
+      title: 'Tokenizer 决定「两段文本被比较成什么对象」',
+      desc: 'alnum / word / gram / camelcase 四种分词实时对比 [交互动画]',
+      hasDemo: true,
+      notes: [
+        '很多工程师以为相似搜索的差异全在数学公式，其实源码告诉我们一个更深刻的事实：差异往往先发生在「输入被切成了什么 Token」。比如 qgram.c 的实现非常直接——它只是临时把分词器切到 gram，然后直接复用 block() 算法的 L1 距离计算。',
+        '大家看图里的交互演示，点击「播放切分动画」或者切换顶部的三个预设样本。tokenizer.c 一共提供了四种策略：第一条 alnum 是默认值，用非字母数字当分隔符，切英文人名 Euler T. de Oliveira 非常干净；第二条 word 按空白切分，标点会粘在词尾；第三条 gram 按固定滑窗切 n-gram 并默认带首尾填充，对局部错拼很友好，但你看生成的 Token 数量明显膨胀，索引和 CPU 成本都会跟着涨；第四条 camelcase 专门按大小写边界切代码标识符。',
+        '重点点一下第三个预设「中文连续文本」！你会立刻看到一个生产大坑：在默认 alnum 分词器下，没有空格的中文连续文本会被当成一整块 Token，完全切不开！这就是为什么中文业务绝对不能裸用默认 tokenizer，必须先做分词、切字 n-gram 或生成检索辅助列。搞懂了分词，我们就能系统地把十七种算法归类选型了。'
+      ],
+      cue: '过渡衔接：基于字符与 Token 两种特征空间，引出第 06 页——字段变形到算法族的选型矩阵。'
+    },
+    {
+      num: '06',
+      eyebrow: 'ALGORITHM SELECTION',
+      title: '字段变形决定算法族，不要反过来套算法',
+      desc: '五类业务字段变形与对应算法族决策矩阵',
+      hasDemo: false,
+      notes: [
+        '面对 pg_similarity 里的十七种算法，千万不要看着哪个名字高级就用哪个，正确的工程顺序是反过来的：先看你的业务字段到底是怎么「变脏」的，再倒推算法族。',
+        '你看这张矩阵从上到下分成五类：如果是人名、短编码，主要是手抖导致的插删替或相邻字符换位，首选 Levenshtein、Jaro、Jaro-Winkler；如果是商品标题、地址，常见的是标点差异和词序重排，那就该用 Jaccard、Dice、Cosine、Overlap 这类集合或向量算法；如果是短文本局部错漏，Q-Gram 和 Block/L1 召回更稳；英文姓名同音异拼才用 Soundex；生物序列或局部片段比对才轮到 Smith-Waterman。',
+        '这里有两条工程铁律必须钉死在墙上：第一，千万别把不同算法的分数混在一起比较，0.8 的 Levenshtein 和 0.8 的 Jaccard 完全不是一回事；第二，就像 Maron 与 Kuhns 在 1960 年的检索模型里启发的那样，把文本映射到特征空间算相似很优雅，但落到数据库里，特征空间的相似不等于 B-tree 能直接定位。那么数据库里到底怎么给相似搜索加索引？我们来看下一页。'
+      ],
+      cue: '过渡衔接：B-tree 无法定位相似文本，引出第 07 页——GIN 倒排索引与 Heap Recheck 推演。'
+    },
+    {
+      num: '07',
+      eyebrow: 'INDEX & RECHECK',
+      title: 'GIN 只能缩小候选集，不能替代真实相似度判断',
+      desc: 'GIN 倒排候选过滤、*recheck=true 与编译期分词陷阱 [交互动画]',
+      hasDemo: true,
+      notes: [
+        '这是整篇课程最硬核、也最容易踩坑的一页。很多人建完 GIN 索引就以为查询一劳永逸变精确变快了，但我们翻开 similarity_gin.c 源码会看到两个残酷的真相。',
+        '第一个真相：gin_similarity_ops 只开放了 8 个 Token 类操作符，像 Levenshtein、Jaro、Soundex 这些算法压根没进 GIN；而且哪怕走上了 GIN，点击「播放执行链路」看全过程——GIN 只是先把查询词拆成 Token，通过倒排表找出「可能共享 Token 的候选行」，紧接着 gin_token_consistent() 会明确把 *recheck 设为 true，强制 PostgreSQL 回表执行 Bitmap Heap Scan，逐行重新算一遍真实的相似度并比对阈值。大家可以拖动上面的阈值滑块，看看阈值调低后，最终放行的行和成本怎么变化。',
+        '第二个真相藏在源码顶部：目前 GIN 提取索引 Key 用的是编译期宏开关，默认 #define PGS_BY_ALNUM 1。源码里还留着 TODO 说以后想按 GUC 建索引，但当前版本并没有实现！这意味着如果你会话里把算法 tokenizer 改成了 gram 或 word，而索引底层还是按 alnum 存的 Key，计划和召回边界就可能出现错位，必须用回归测试验证。理解了这套机制，我们再跳出 pg_similarity，看看整个 PostgreSQL 生态怎么选型。'
+      ],
+      cue: '过渡衔接：看透 pg_similarity 的索引边界后，进入第 08 页——PostgreSQL 四大文本检索方案横向对比。'
+    },
+    {
+      num: '08',
+      eyebrow: 'ECOSYSTEM COMPARISON',
+      title: '生态选型：不要为了「算法多」而忽略访问路径',
+      desc: 'pg_similarity vs fuzzystrmatch vs pg_trgm vs 全文检索',
+      hasDemo: false,
+      notes: [
+        '在真实架构评审里，我们不能只盯着手里这把锤子。把 PostgreSQL 生态里最常用的四种方案拉到同一张工程表里对比，各自的定位就一目了然了。',
+        '如果你的生产系统只需要通用文本或英文的模糊匹配、加速 LIKE/ILIKE，或者需要成熟稳定的 GIN/GiST 索引和高并发能力，pg_trgm 往往是更直接、更省心的生产首选；如果你只需要几个官方 contrib 内置的编辑距离或发音函数，fuzzystrmatch 零外部扩展依赖就够了；如果你做的是长文档关键词搜索和相关性排名，那自然该用全文检索。',
+        '那 pg_similarity 的独特价值在哪？它更像一座「多算法工程实验台」——当你做主数据去重、需要横向验证多种经典相似度算法口径、或者在中小规模表上做精细候选生成时，它非常趁手。但请记住，千万不要因为「它算法多」就忽略访问路径和维护成本。选定工具后，下一个决定成败的问题就是：阈值怎么定？'
+      ],
+      cue: '过渡衔接：选定工具后，进入第 09 页——用真实样本推演阈值校准的收益与代价。'
+    },
+    {
+      num: '09',
+      eyebrow: 'THRESHOLD CALIBRATION',
+      title: '0.7 不是自然规律，最佳阈值必须来自标注样本',
+      desc: '原文 7 条样本实时计算与 TP/FP/FN 权衡曲线 [交互动画]',
+      hasDemo: true,
+      notes: [
+        '为什么我们反复强调「默认值 0.7 不是自然规律」？这一页我们不做任何编造的数字，直接拿原文 DEMO 里的 7 条真实 customer_name 记录，和目标查询串现场实时计算 Levenshtein 与 Q-Gram 分数。',
+        '大家可以点击「自动扫描阈值」，或者手动左右拖动滑块，同时切换 Levenshtein 和 Q-Gram 两种算法。观察左边的权衡剖面图和右边的样本判定表：当你把阈值往 0.50 拉低，召回率上去了，像词序倒置的 Oliveira, Euler T. 也能捞回来，但误匹配风险和 GIN 的候选集成本也在同步飙升；反过来，当你把阈值往 0.85 拉高，误匹配几乎清零，但像缩写 Euler T. de Oliveira 或省略中间名的 Euler Oliveira 就会变成漏召回 FN。',
+        '所以，主数据归并和自动风控审核的最佳阈值往往截然不同：前者更怕漏掉疑似重复项，宁可多给候选交给人工复核；后者更怕误杀，宁可收紧阈值。唯一靠谱的方法，就是拉一批业务正负标注样本，用数据说话。下一节我们看这套流程怎么用四段 SQL 直接跑通。'
+      ],
+      cue: '过渡衔接：从交互推演落到代码实战，进入第 10 页——四步实操 DEMO 闭环。'
+    },
+    {
+      num: '10',
+      eyebrow: 'HANDS-ON WORKFLOW',
+      title: '工程实操四步法：打分对比 → 阈值过滤 → GIN 剖析 → 样本回归',
+      desc: '从 CREATE EXTENSION 到 EXPLAIN (ANALYZE, BUFFERS) 与样本校准 SQL',
+      hasDemo: false,
+      notes: [
+        '这一页把原文里的实操 DEMO 浓缩成了四个环环相扣的工程步骤，大家回到自己的测试库里可以照着这个节奏一步步验。',
+        '第一步，装好扩展、灌入样本后，先别急着写 WHERE，把 lev、qgram、cosine 放进同一个 SELECT 里并排观测，亲眼看看同一批脏数据在不同算法下分数长什么样；第二步，显式 SET 会话阈值，再用 ~== 这样的布尔操作符做过滤，确认归一化逻辑符合预期；第三步，对 token 类操作符建上 gin_similarity_ops 索引，立刻跑 EXPLAIN (ANALYZE, BUFFERS)。',
+        '这里划个重点：看执行计划绝对不能只看「有没有走索引」这几个字，你要盯紧四件事——是不是 Bitmap Index Scan 加 Bitmap Heap Scan、Heap Recheck 后实际保留了多少行、Buffers 相比全表扫描到底降没降、以及把阈值调低后候选行会不会瞬间膨胀。最后第四步，建一张人工标注的 name_pair_label 表，用 CROSS JOIN 一次性扫出 0.5 到 0.9 的 TP、FP、FN，把阈值定在实证之上。单条 SQL 跑通后，推向生产还需要团队协同。'
+      ],
+      cue: '过渡衔接：从单机实操迈向团队生产治理，进入第 11 页——三角色协同最佳实践。'
+    },
+    {
+      num: '11',
+      eyebrow: 'BEST PRACTICES',
+      title: '把相似搜索做稳：架构师、DBA 与开发者的职责切面',
+      desc: '架构师、DBA、业务开发者三层协同防御矩阵',
+      hasDemo: false,
+      notes: [
+        '一个技术方案能不能在生产环境长期稳住，靠的从来不是某一个人的技巧，而是架构师、DBA 和业务开发者三层防线的严密咬合。',
+        '最上层，数据库架构师要先把大方向定死：先定义业务损失函数，把大小写、全半角、标点、公司后缀这些脏数据在入库或生成列里前置清洗掉；架构上坚持两阶段检索——先用 GIN、租户、类别、时间把候选框住，再做精排；中文场景绝不裸用 alnum；并且设计好返回分数和关键 Token 的审核证据链。',
+        '中间层，DBA 要守住性能与稳态底线：靠 EXPLAIN (ANALYZE, BUFFERS) 盯紧候选集与回表代价，监控 GIN 倒排索引的写入放大、pending list 和 vacuum，把阈值变更纳入发布流并管好连接池 GUC，核验编译期分词口径，同时把超过 1024 字节的长文本拆字段。',
+        '最下层，业务开发者写每一条查询时要守住五条纪律：绝不混用跨算法分数，先加硬条件过滤再打分，用实验样本定阈值，结果页叠加业务热度与可信度排序，更重要的是——为相似搜索天然存在的「灰区」设计人工审核流程，而不是静默自动合并。'
+      ],
+      cue: '过渡衔接：最后收口到第 12 页——适用边界、明确禁区与七大生产坑终极核对单。'
+    },
+    {
+      num: '12',
+      eyebrow: 'BOUNDARIES & PITFALLS',
+      title: '知所适用，避其深坑：相似搜索生产上线核对单',
+      desc: '适用与禁区对照、七大高频坑排雷与扩展阅读',
+      hasDemo: false,
+      notes: [
+        '最后这一页，我们把整场分享浓缩成一张上线前的「终极核对单」。左边先看边界：pg_similarity 最擅长主数据去重、短编码和英文名的脏数据候选生成、中小规模模糊查找以及多算法规则实验；但它明确不适合自然语言语义检索（那是向量 Embedding 加 Rerank 的战场），不适合超大高并发开放文本搜索，更绝对不能用于零容错的自动合并或未经预处理的超长多字节文本。',
+        '右边是七个最容易在生产环境里栽跟头的高频坑：第一，把默认 0.7 当标准；第二，把相似度分数当成「同一对象的概率」；第三，忘了在连接池里初始化会话 GUC；第四，没注意 GIN 编译期默认 alnum 与运行时分词器错位；第五，拿编辑距离去无界扫大表；第六，把中文、拼音、别名全揉在一个字段里裸算；第七，只看查出了多少条命中，却不拿人工标签核对噪声。',
+        '如果大家听完今天的内容准备回去改造自己的业务表，不妨带着一个最小闭环行动：先标一批正负样本，再定算法与预处理，最后用 EXPLAIN (ANALYZE, BUFFERS) 拿数据说话。右下角也列出了源码、PostgreSQL 官方文档和两篇奠基论文供大家深挖。感谢聆听！'
+      ],
+      cue: '全篇收束：以「标样本 → 定算法 → 看 EXPLAIN」实证闭环作结。'
+    }
+  ];
+
+  /* ==================== GLOBAL STATE ==================== */
+  let currentSlide = 0;
+  let notesMode = 'closed'; // 'closed' | 'current' | 'all'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+  let toastTimer = null;
+
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  const stageViewport = document.getElementById('stage-viewport');
+  const stageScaler = document.getElementById('stage-scaler');
+  const notesPanel = document.getElementById('notes-panel');
+  const notesBody = document.getElementById('notes-body');
+  const tabCurrent = document.getElementById('tab-current');
+  const tabAll = document.getElementById('tab-all');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const tocGrid = document.getElementById('toc-grid');
+  const barCounter = document.getElementById('bar-counter');
+  const barProgress = document.getElementById('bar-progress-fill');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNoteCur = document.getElementById('btn-note-cur');
+  const btnNoteAll = document.getElementById('btn-note-all');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const toastEl = document.getElementById('toast');
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  /* ==================== FIXED 16:9 VECTOR SCALING ==================== */
+  function fitStage() {
+    const rect = stageViewport.getBoundingClientRect();
+    const pad = 20;
+    const availW = Math.max(120, rect.width - pad * 2);
+    const availH = Math.max(80, rect.height - pad * 2);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageScaler.style.transform = `scale(${scale.toFixed(5)})`;
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => fitStage());
+    ro.observe(stageViewport);
+  }
+  window.addEventListener('resize', fitStage);
+
+  /* ==================== SLIDE NAVIGATION ==================== */
+  function goToSlide(idx) {
+    const target = Math.max(0, Math.min(totalSlides - 1, idx));
+    currentSlide = target;
+    slides.forEach((s, i) => s.classList.toggle('active', i === currentSlide));
+    const numStr = String(currentSlide + 1).padStart(2, '0');
+    barCounter.textContent = `${numStr} / ${totalSlides}`;
+    barProgress.style.width = `${((currentSlide + 1) / totalSlides) * 100}%`;
+
+    // Sync TOC highlight
+    Array.from(tocGrid.children).forEach((card, i) => {
+      card.classList.toggle('current', i === currentSlide);
+    });
+
+    // Sync Notes panel
+    if (notesMode === 'current') {
+      renderNotesCurrent();
+    } else if (notesMode === 'all') {
+      syncFullTranscriptScroll(true);
+    }
+  }
+
+  /* ==================== SPEAKER NOTES (IN-PAGE RIGHT DOCK) ==================== */
+  function renderNotesCurrent() {
+    const d = SLIDES_DATA[currentSlide];
+    notesBody.innerHTML = `
+      <div class="note-slide-meta">PAGE ${d.num} / ${totalSlides} · ${d.eyebrow}</div>
+      <div class="note-slide-title">${d.title}</div>
+      ${d.notes.map(p => `<p class="note-paragraph">${p}</p>`).join('')}
+      <div class="note-logic-cue">${d.cue}</div>
+    `;
+    notesBody.scrollTop = 0;
+  }
+
+  function renderNotesAll() {
+    notesBody.innerHTML = SLIDES_DATA.map((d, i) => `
+      <article class="transcript-item ${i === currentSlide ? 'active' : ''}" data-slide="${i}" id="transcript-slide-${i}">
+        <div class="note-slide-meta">PAGE ${d.num} / ${totalSlides} · ${d.eyebrow}</div>
+        <div class="note-slide-title">${d.title}</div>
+        ${d.notes.map(p => `<p class="note-paragraph">${p}</p>`).join('')}
+        <div class="note-logic-cue">${d.cue}</div>
+      </article>
+    `).join('');
+
+    notesBody.querySelectorAll('.transcript-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const sIdx = Number(el.getAttribute('data-slide'));
+        goToSlide(sIdx);
+      });
+    });
+
+    // Immediately locate current slide
+    syncFullTranscriptScroll(false);
+  }
+
+  function syncFullTranscriptScroll(smooth) {
+    const items = notesBody.querySelectorAll('.transcript-item');
+    items.forEach((el, i) => el.classList.toggle('active', i === currentSlide));
+    const activeEl = document.getElementById(`transcript-slide-${currentSlide}`);
+    if (activeEl) {
+      const top = Math.max(0, activeEl.offsetTop - 16);
+      if (smooth) {
+        notesBody.scrollTo({ top, behavior: 'smooth' });
+      } else {
+        notesBody.scrollTop = top;
+      }
+    }
+  }
+
+  function setNotesMode(mode) {
+    notesMode = mode;
+    const isOpen = notesMode !== 'closed';
+    notesPanel.classList.toggle('open', isOpen);
+    btnNoteCur.classList.toggle('active', notesMode === 'current');
+    btnNoteAll.classList.toggle('active', notesMode === 'all');
+    tabCurrent.classList.toggle('active', notesMode === 'current');
+    tabAll.classList.toggle('active', notesMode === 'all');
+
+    if (notesMode === 'current') {
+      renderNotesCurrent();
+    } else if (notesMode === 'all') {
+      renderNotesAll();
+    }
+    // Re-fit stage immediately and after CSS transition, and re-align transcript scroll
+    fitStage();
+    setTimeout(() => {
+      fitStage();
+      if (notesMode === 'all') syncFullTranscriptScroll(false);
+    }, 250);
+  }
+
+  function toggleCurrentNotes() {
+    setNotesMode(notesMode === 'current' ? 'closed' : 'current');
+  }
+
+  function toggleAllNotes() {
+    setNotesMode(notesMode === 'all' ? 'closed' : 'all');
+  }
+
+  /* ==================== DIRECTORY (TOC) ==================== */
+  function buildToc() {
+    tocGrid.innerHTML = SLIDES_DATA.map((d, i) => `
+      <button class="toc-card ${i === currentSlide ? 'current' : ''}" data-slide="${i}" type="button">
+        <div class="toc-num">
+          <span>PAGE ${d.num}</span>
+          ${d.hasDemo ? '<span class="toc-badge">交互动画</span>' : ''}
+        </div>
+        <div class="toc-title">${d.title}</div>
+        <div class="toc-desc">${d.desc}</div>
+      </button>
+    `).join('');
+
+    tocGrid.querySelectorAll('.toc-card').forEach(btn => {
+      btn.addEventListener('click', () => {
+        goToSlide(Number(btn.getAttribute('data-slide')));
+        toggleToc(false);
+      });
+    });
+  }
+
+  function toggleToc(forceState) {
+    tocOpen = typeof forceState === 'boolean' ? forceState : !tocOpen;
+    tocOverlay.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  /* ==================== AUTOPLAY ==================== */
+  function toggleAutoplay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+      btnAutoplay.classList.remove('autoplay-on');
+      btnAutoplay.innerHTML = '自动播放 <span class="kbd">A</span>';
+      showToast('已停止自动播放');
+    } else {
+      btnAutoplay.classList.add('autoplay-on');
+      btnAutoplay.innerHTML = '停止播放 <span class="kbd">A</span>';
+      showToast('已开启自动播放（每 8 秒翻页）');
+      autoPlayTimer = setInterval(() => {
+        if (currentSlide < totalSlides - 1) {
+          goToSlide(currentSlide + 1);
+        } else {
+          goToSlide(0);
+        }
+      }, 8000);
+    }
+  }
+
+  /* ==================== FULLSCREEN ==================== */
+  function toggleFullscreen() {
+    const root = document.getElementById('app-root');
+    if (!document.fullscreenElement) {
+      if (root.requestFullscreen) {
+        root.requestFullscreen().catch(() => {
+          showToast('当前预览容器限制浏览器全屏，已保持满屏布局');
+        });
+      } else {
+        showToast('当前环境不支持原生全屏接口');
+      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = Boolean(document.fullscreenElement);
+    btnFullscreen.classList.toggle('active', isFs);
+    btnFullscreen.innerHTML = isFs
+      ? '退出全屏 <span class="kbd">F</span>'
+      : '全屏 <span class="kbd">F</span>';
+    fitStage();
+    setTimeout(fitStage, 120);
+  });
+
+  /* ==================== CONTROLS & KEYBOARD SHORTCUTS ==================== */
+  document.getElementById('btn-prev').addEventListener('click', () => goToSlide(currentSlide - 1));
+  document.getElementById('btn-next').addEventListener('click', () => goToSlide(currentSlide + 1));
+  btnToc.addEventListener('click', () => toggleToc());
+  document.getElementById('btn-close-toc').addEventListener('click', () => toggleToc(false));
+  btnNoteCur.addEventListener('click', toggleCurrentNotes);
+  btnNoteAll.addEventListener('click', toggleAllNotes);
+  tabCurrent.addEventListener('click', () => setNotesMode('current'));
+  tabAll.addEventListener('click', () => setNotesMode('all'));
+  document.getElementById('btn-close-notes').addEventListener('click', () => setNotesMode('closed'));
+  btnAutoplay.addEventListener('click', toggleAutoplay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') {
+      if (e.key === 'Escape') {
+        e.target.blur();
+      }
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const k = e.key.toLowerCase();
+    if (k === 'arrowright' || k === 'pagedown') {
+      e.preventDefault();
+      goToSlide(currentSlide + 1);
+    } else if (k === 'arrowleft' || k === 'pageup') {
+      e.preventDefault();
+      goToSlide(currentSlide - 1);
+    } else if (k === 'home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (k === 'end') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (k === 'g') {
+      e.preventDefault();
+      toggleToc();
+    } else if (k === 'n') {
+      e.preventDefault();
+      if (tocOpen) toggleToc(false);
+      toggleCurrentNotes();
+    } else if (k === 't') {
+      e.preventDefault();
+      if (tocOpen) toggleToc(false);
+      toggleAllNotes();
+    } else if (k === 'a') {
+      e.preventDefault();
+      toggleAutoplay();
+    } else if (k === 'f') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (k === 'escape') {
+      if (tocOpen) toggleToc(false);
+      else if (notesMode !== 'closed') setNotesMode('closed');
+    }
+  });
+
+  /* ==================== SHARED SIMILARITY MATH ==================== */
+  function escapeXml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function computeLevenshteinMatrix(rawA, rawB) {
+    const a = rawA.toLowerCase();
+    const b = rawB.toLowerCase();
+    const m = a.length;
+    const n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + cost
+        );
+      }
+    }
+    const maxLen = Math.max(m, n);
+    const dist = dp[m][n];
+    const score = maxLen === 0 ? 1.0 : (1.0 - dist / maxLen);
+    return { a, b, m, n, dp, dist, maxLen, score };
+  }
+
+  function tokenizeAlnum(str) {
+    const m = str.toLowerCase().match(/[a-z0-9]+|[\u4e00-\u9fa5]+/g);
+    return m ? m : [];
+  }
+
+  function tokenizeWord(str) {
+    const t = str.trim();
+    return t ? t.split(/\s+/) : [];
+  }
+
+  function tokenizeGram(str, n = 3) {
+    const s = str.toLowerCase().trim();
+    if (!s) return [];
+    const padded = ' '.repeat(n - 1) + s + ' '.repeat(n - 1);
+    const out = [];
+    for (let i = 0; i <= padded.length - n; i++) {
+      out.push(padded.slice(i, i + n));
+    }
+    return out;
+  }
+
+  function tokenizeCamel(str) {
+    const parts = str.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(/[^A-Za-z0-9\u4e00-\u9fa5]+/).filter(Boolean);
+    return parts;
+  }
+
+  function computeQgramScore(strA, strB) {
+    // qgram.c uses gram tokenizer + block/L1 normalized similarity
+    const gramsA = tokenizeGram(strA, 3);
+    const gramsB = tokenizeGram(strB, 3);
+    const freqA = new Map();
+    const freqB = new Map();
+    gramsA.forEach(g => freqA.set(g, (freqA.get(g) || 0) + 1));
+    gramsB.forEach(g => freqB.set(g, (freqB.get(g) || 0) + 1));
+    const keys = new Set([...freqA.keys(), ...freqB.keys()]);
+    let l1 = 0;
+    let total = gramsA.length + gramsB.length;
+    keys.forEach(k => {
+      l1 += Math.abs((freqA.get(k) || 0) - (freqB.get(k) || 0));
+    });
+    return total === 0 ? 1.0 : Math.max(0, 1.0 - l1 / total);
+  }
+
+  /* ==================== DEMO 1: SLIDE 04 LEVENSHTEIN DP ==================== */
+  const levSvg = document.getElementById('lev-svg');
+  const levInputA = document.getElementById('lev-a');
+  const levInputB = document.getElementById('lev-b');
+  const levStatus = document.getElementById('lev-status');
+  const levPlayBtn = document.getElementById('lev-play');
+  let levTimer = null;
+  let levStepIdx = 999; // show full by default
+
+  function renderLevDemo() {
+    const rawA = (levInputA.value || 'Euler').slice(0, 10);
+    const rawB = (levInputB.value || 'Euller').slice(0, 10);
+    const res = computeLevenshteinMatrix(rawA, rawB);
+    const totalCells = res.m * res.n;
+    const shown = Math.min(levStepIdx, totalCells);
+    const isDone = shown >= totalCells;
+
+    // Matrix geometry (left area: x 24..770, y 20..410)
+    const cols = res.n + 2;
+    const rows = res.m + 2;
+    const maxW = 720;
+    const maxH = 356;
+    const cellW = Math.min(58, Math.floor(maxW / cols));
+    const cellH = Math.min(44, Math.floor(maxH / rows));
+    const startX = 36;
+    const startY = 50;
+
+    let svg = '';
+    svg += `<text x="36" y="34" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">DP MATRIX · levenshtein.c 最小编辑代价推演 (忽略大小写)</text>`;
+
+    // Draw column headers (B)
+    for (let j = 0; j <= res.n; j++) {
+      const cx = startX + (j + 1) * cellW;
+      const label = j === 0 ? 'ε' : res.b[j - 1];
+      svg += `<rect x="${cx}" y="${startY}" width="${cellW}" height="${cellH}" fill="#2E6373" stroke="#1E4B5A"/>`;
+      svg += `<text x="${cx + cellW / 2}" y="${startY + cellH / 2 + 5}" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">${escapeXml(label)}</text>`;
+    }
+    // Corner cell
+    svg += `<rect x="${startX}" y="${startY}" width="${cellW}" height="${cellH}" fill="#1E4B5A" stroke="#1B2B33"/>`;
+    svg += `<text x="${startX + cellW / 2}" y="${startY + cellH / 2 + 5}" font-size="12" fill="#CFE0DC" text-anchor="middle" class="svg-mono">A\\B</text>`;
+
+    // Draw row headers (A) & cells
+    for (let i = 0; i <= res.m; i++) {
+      const cy = startY + (i + 1) * cellH;
+      const rLabel = i === 0 ? 'ε' : res.a[i - 1];
+      svg += `<rect x="${startX}" y="${cy}" width="${cellW}" height="${cellH}" fill="#2E6373" stroke="#1E4B5A"/>`;
+      svg += `<text x="${startX + cellW / 2}" y="${cy + cellH / 2 + 5}" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">${escapeXml(rLabel)}</text>`;
+
+      for (let j = 0; j <= res.n; j++) {
+        const cx = startX + (j + 1) * cellW;
+        const innerIdx = (i - 1) * res.n + j; // 1-based for i>=1, j>=1
+        let fill = '#FAF9F6';
+        let textColor = '#1B2B33';
+        let valStr = '';
+
+        if (i === 0 || j === 0) {
+          fill = '#EBF1EE';
+          textColor = '#46585F';
+          valStr = String(res.dp[i][j]);
+        } else if (innerIdx <= shown) {
+          valStr = String(res.dp[i][j]);
+          if (innerIdx === shown && !isDone) {
+            fill = '#F7E9DE';
+            textColor = '#BE653B';
+          } else if (i === res.m && j === res.n && isDone) {
+            fill = '#245A6B';
+            textColor = '#FFFFFF';
+          } else if (res.a[i - 1] === res.b[j - 1]) {
+            fill = '#E4F0EC';
+            textColor = '#2F7A66';
+          }
+        }
+        svg += `<rect x="${cx}" y="${cy}" width="${cellW}" height="${cellH}" fill="${fill}" stroke="#D9D5CB"/>`;
+        if (valStr !== '') {
+          svg += `<text x="${cx + cellW / 2}" y="${cy + cellH / 2 + 5}" font-size="14" fill="${textColor}" font-weight="700" text-anchor="middle" class="svg-mono">${valStr}</text>`;
+        }
+      }
+    }
+
+    // Orthogonal connector from matrix right edge to formula panel
+    const rightX = 804;
+    const matRight = Math.min(768, startX + (res.n + 2) * cellW + 18);
+    svg += `<path d="M ${matRight} 215 H 796" stroke="#245A6B" stroke-width="2"/>`;
+    svg += `<polygon points="804,215 793,210 793,220" fill="#245A6B"/>`;
+
+    // Right Panel: Formula + Live Score + Hard Constraints
+    svg += `<rect x="${rightX}" y="20" width="572" height="196" fill="#F1EFE9" stroke="#D9D5CB"/>`;
+    svg += `<rect x="${rightX}" y="20" width="572" height="34" fill="#245A6B"/>`;
+    svg += `<text x="${rightX + 18}" y="42" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">NORMALIZATION &amp; OPERATOR JUDGMENT</text>`;
+
+    svg += `<text x="${rightX + 18}" y="82" font-size="14" fill="#1B2B33" font-weight="700" class="svg-mono">similarity = 1.0 - edit_distance / max(len(a), len(b))</text>`;
+
+    const scoreText = isDone ? res.score.toFixed(4) : '推演中...';
+    const hit = res.score >= 0.7;
+    const hitBg = isDone ? (hit ? '#E4F0EC' : '#F7E9DE') : '#EBF1EE';
+    const hitStroke = isDone ? (hit ? '#2F7A66' : '#BE653B') : '#74A5AD';
+    const hitText = isDone ? (hit ? '~== 命中 (TRUE, >= 0.7)' : '~== 未命中 (FALSE, < 0.7)') : `正在计算第 ${shown} / ${totalCells} 格`;
+
+    svg += `<text x="${rightX + 18}" y="114" font-size="14" fill="#46585F" class="svg-mono">edit_distance = ${isDone ? res.dist : '?'}   |   max_len = ${res.maxLen}</text>`;
+    svg += `<text x="${rightX + 18}" y="142" font-size="18" fill="#245A6B" font-weight="700" class="svg-mono">lev('${escapeXml(rawA)}', '${escapeXml(rawB)}') = ${scoreText}</text>`;
+    svg += `<rect x="${rightX + 18}" y="158" width="536" height="40" fill="${hitBg}" stroke="${hitStroke}"/>`;
+    svg += `<text x="${rightX + 34}" y="183" font-size="14" fill="${hitStroke}" font-weight="700" class="svg-mono">${hitText}</text>`;
+
+    // Bottom Right Panel: Source Engineering Constraints
+    svg += `<rect x="${rightX}" y="232" width="572" height="178" fill="#FAF9F6" stroke="#D9D5CB"/>`;
+    svg += `<rect x="${rightX}" y="232" width="572" height="32" fill="#BE653B"/>`;
+    svg += `<text x="${rightX + 18}" y="253" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">SOURCE CONSTRAINTS · similarity.h &amp; pg_similarity--1.0.sql</text>`;
+
+    svg += `<text x="${rightX + 18}" y="290" font-size="14" fill="#1B2B33" font-weight="600">1. 最大长度硬上限：PGS_MAX_STR_LEN = 1024 字节</text>`;
+    svg += `<text x="${rightX + 36}" y="312" font-size="13" fill="#46585F">超限直接报错；长文本或多字节文本必须先拆分建模。</text>`;
+    svg += `<text x="${rightX + 18}" y="344" font-size="14" fill="#1B2B33" font-weight="600">2. 默认大小写忽略：PGS_IGNORE_CASE 默认开启</text>`;
+    svg += `<text x="${rightX + 36}" y="366" font-size="13" fill="#46585F">比较前转小写；操作符 *_op 内部临时强制归一化为 true。</text>`;
+    svg += `<text x="${rightX + 18}" y="396" font-size="12" fill="#89938F" class="svg-mono">绿色格 = 字符相同(代价0)  |  陶橙格 = 当前推演格  |  靛青格 = 最终编辑距离</text>`;
+
+    levSvg.innerHTML = svg;
+    levStatus.textContent = isDone
+      ? `d=${res.dist} · score=${res.score.toFixed(4)} (${hit ? '命中' : '未命中'})`
+      : `推演进度 ${shown}/${totalCells}`;
+  }
+
+  function stopLevAnim() {
+    if (levTimer) {
+      clearInterval(levTimer);
+      levTimer = null;
+    }
+    levPlayBtn.textContent = '▶ 播放推演';
+  }
+
+  levPlayBtn.addEventListener('click', () => {
+    if (levTimer) {
+      stopLevAnim();
+      return;
+    }
+    const res = computeLevenshteinMatrix(levInputA.value || 'Euler', levInputB.value || 'Euller');
+    const total = res.m * res.n;
+    if (levStepIdx >= total) levStepIdx = 0;
+    levPlayBtn.textContent = '❚❚ 暂停';
+    levTimer = setInterval(() => {
+      levStepIdx++;
+      renderLevDemo();
+      if (levStepIdx >= total) stopLevAnim();
+    }, 110);
+  });
+
+  document.getElementById('lev-step').addEventListener('click', () => {
+    stopLevAnim();
+    const res = computeLevenshteinMatrix(levInputA.value || 'Euler', levInputB.value || 'Euller');
+    const total = res.m * res.n;
+    if (levStepIdx >= total) levStepIdx = 1;
+    else levStepIdx++;
+    renderLevDemo();
+  });
+
+  document.getElementById('lev-reset').addEventListener('click', () => {
+    stopLevAnim();
+    levStepIdx = 0;
+    renderLevDemo();
+  });
+
+  [levInputA, levInputB].forEach(inp => {
+    inp.addEventListener('input', () => {
+      stopLevAnim();
+      levStepIdx = 999;
+      renderLevDemo();
+    });
+  });
+
+  document.querySelectorAll('.lev-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stopLevAnim();
+      levInputA.value = btn.getAttribute('data-a');
+      levInputB.value = btn.getAttribute('data-b');
+      levStepIdx = 0;
+      renderLevDemo();
+      // Auto play preset
+      levPlayBtn.click();
+    });
+  });
+
+  /* ==================== DEMO 2: SLIDE 05 TOKENIZER ==================== */
+  const tokSvg = document.getElementById('tok-svg');
+  const tokInput = document.getElementById('tok-input');
+  const tokPlayBtn = document.getElementById('tok-play');
+  const tokStatus = document.getElementById('tok-status');
+  let tokTimer = null;
+  let tokRevealCount = 99;
+
+  function renderTokDemo() {
+    const raw = tokInput.value || 'Euler T. de Oliveira';
+    const rows = [
+      {
+        name: 'alnum',
+        tag: '默认 · 非字母数字分隔',
+        tokens: tokenizeAlnum(raw),
+        risk: '中文连续文本会被当成整体，需预处理',
+        bg: '#1E4B5A',
+        chipBg: '#E5EFF0',
+        chipStroke: '#245A6B'
+      },
+      {
+        name: 'word',
+        tag: '空白字符分隔',
+        tokens: tokenizeWord(raw),
+        risk: '标点、下划线不会自动切开',
+        bg: '#2E6373',
+        chipBg: '#EBF1EE',
+        chipStroke: '#47808D'
+      },
+      {
+        name: 'gram (3-gram)',
+        tag: '滑窗 n-gram + 首尾填充',
+        tokens: tokenizeGram(raw, 3),
+        risk: 'Token 数暴增，索引体积与 CPU 上升',
+        bg: '#47808D',
+        chipBg: '#F5EFE1',
+        chipStroke: '#AE8A3E'
+      },
+      {
+        name: 'camelcase',
+        tag: '大小写边界切分',
+        tokens: tokenizeCamel(raw),
+        risk: '强依赖大小写形态，适合代码标识符',
+        bg: '#2F7A66',
+        chipBg: '#E4F0EC',
+        chipStroke: '#2F7A66'
+      }
+    ];
+
+    let svg = '';
+    svg += `<text x="24" y="30" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">TOKENIZER.C · 输入文本：「${escapeXml(raw)}」</text>`;
+
+    rows.forEach((r, idx) => {
+      const y = 44 + idx * 94;
+      // Left Label Box
+      svg += `<rect x="24" y="${y}" width="218" height="82" fill="${r.bg}"/>`;
+      svg += `<text x="40" y="${y + 32}" font-size="16" fill="#FFFFFF" font-weight="700" class="svg-mono">${r.name}</text>`;
+      svg += `<text x="40" y="${y + 56}" font-size="12" fill="#EBF1EE">${r.tag}</text>`;
+      svg += `<text x="40" y="${y + 73}" font-size="11" fill="#CFE0DC" class="svg-mono">COUNT: ${r.tokens.length}</text>`;
+
+      // Orthogonal arrow
+      svg += `<path d="M 242 ${y + 41} H 264" stroke="#245A6B" stroke-width="2"/>`;
+      svg += `<polygon points="270,${y + 41} 260,${y + 36} 260,${y + 46}" fill="#245A6B"/>`;
+
+      // Token Strip Area (x 270..1084 -> width 814)
+      svg += `<rect x="270" y="${y}" width="814" height="82" fill="#FAF9F6" stroke="#D9D5CB"/>`;
+
+      let cx = 284;
+      const maxChipRight = 1072;
+      const maxVisible = Math.min(r.tokens.length, tokRevealCount);
+      let truncated = false;
+
+      for (let t = 0; t < maxVisible; t++) {
+        const displayTok = r.tokens[t].replace(/ /g, '·');
+        // Estimate width safely
+        let estW = 24;
+        for (const ch of displayTok) {
+          estW += /[\u4e00-\u9fa5]/.test(ch) ? 14 : 8.5;
+        }
+        const chipW = Math.max(44, Math.ceil(estW));
+        if (cx + chipW > maxChipRight - 72 && t < r.tokens.length - 1) {
+          truncated = true;
+          const remain = r.tokens.length - t;
+          svg += `<rect x="${cx}" y="${y + 24}" width="64" height="34" fill="#F1EFE9" stroke="#89938F"/>`;
+          svg += `<text x="${cx + 32}" y="${y + 46}" font-size="12" fill="#46585F" font-weight="700" text-anchor="middle" class="svg-mono">+${remain}</text>`;
+          break;
+        }
+        svg += `<rect x="${cx}" y="${y + 24}" width="${chipW}" height="34" fill="${r.chipBg}" stroke="${r.chipStroke}"/>`;
+        svg += `<text x="${cx + chipW / 2}" y="${y + 46}" font-size="13" fill="#1B2B33" font-weight="600" text-anchor="middle" class="svg-mono">${escapeXml(displayTok)}</text>`;
+        cx += chipW + 8;
+      }
+
+      if (!truncated && maxVisible === 0) {
+        svg += `<text x="290" y="${y + 46}" font-size="13" fill="#89938F" class="svg-mono">等待切分...</text>`;
+      }
+
+      // Right Risk Box
+      const isChineseWarning = r.name === 'alnum' && /[\u4e00-\u9fa5]{4,}/.test(raw) && r.tokens.length <= 1;
+      svg += `<rect x="1098" y="${y}" width="278" height="82" fill="${isChineseWarning ? '#F7E9DE' : '#F1EFE9'}" stroke="${isChineseWarning ? '#BE653B' : '#D9D5CB'}"/>`;
+      svg += `<text x="1114" y="${y + 28}" font-size="12" fill="${isChineseWarning ? '#BE653B' : '#89938F'}" font-weight="700" class="svg-mono">${isChineseWarning ? 'WARNING · 未切分' : 'ENGINEERING RISK'}</text>`;
+      svg += `<text x="1114" y="${y + 56}" font-size="13" fill="${isChineseWarning ? '#BE653B' : '#46585F'}" font-weight="${isChineseWarning ? '700' : '400'}">${r.risk}</text>`;
+    });
+
+    tokSvg.innerHTML = svg;
+    tokStatus.textContent = `alnum:${rows[0].tokens.length} · word:${rows[1].tokens.length} · gram:${rows[2].tokens.length} · camel:${rows[3].tokens.length}`;
+  }
+
+  function playTokAnim() {
+    if (tokTimer) clearInterval(tokTimer);
+    tokRevealCount = 0;
+    renderTokDemo();
+    tokTimer = setInterval(() => {
+      tokRevealCount++;
+      renderTokDemo();
+      if (tokRevealCount >= 16) {
+        clearInterval(tokTimer);
+        tokTimer = null;
+      }
+    }, 110);
+  }
+
+  tokPlayBtn.addEventListener('click', playTokAnim);
+  tokInput.addEventListener('input', () => {
+    if (tokTimer) { clearInterval(tokTimer); tokTimer = null; }
+    tokRevealCount = 99;
+    renderTokDemo();
+  });
+  document.querySelectorAll('.tok-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      tokInput.value = btn.getAttribute('data-val');
+      playTokAnim();
+    });
+  });
+
+  /* ==================== DEMO 3: SLIDE 07 GIN + RECHECK ==================== */
+  const ginSvg = document.getElementById('gin-svg');
+  const ginSlider = document.getElementById('gin-thresh');
+  const ginThreshVal = document.getElementById('gin-thresh-val');
+  const ginPlayBtn = document.getElementById('gin-play');
+  const ginStatus = document.getElementById('gin-status');
+  let ginStep = 4; // 0..4 (4 = full completed view initially)
+  let ginTimer = null;
+
+  const GIN_SAMPLES = [
+    { id: 1, name: 'Euler Taveira de Oliveira' },
+    { id: 2, name: 'Euler T. de Oliveira' },
+    { id: 3, name: 'Oliveira, Euler T.' },
+    { id: 4, name: 'Euler Oliveira' },
+    { id: 5, name: 'Sr. Oliveira' },
+    { id: 6, name: 'Euller' }
+  ];
+  const GIN_QUERY = 'Euler Oliveira';
+
+  function renderGinDemo() {
+    const th = parseFloat(ginSlider.value);
+    ginThreshVal.textContent = th.toFixed(1);
+
+    // Compute real qgram scores & alnum overlap
+    const qTokens = new Set(tokenizeAlnum(GIN_QUERY)); // {'euler', 'oliveira'}
+    const evaluated = GIN_SAMPLES.map(row => {
+      const rToks = tokenizeAlnum(row.name);
+      const shared = rToks.filter(t => qTokens.has(t));
+      const inGin = shared.length > 0;
+      const score = computeQgramScore(row.name, GIN_QUERY);
+      const pass = inGin && score >= th;
+      return { ...row, shared, inGin, score, pass };
+    });
+
+    const candCount = evaluated.filter(r => r.inGin).length;
+    const passCount = evaluated.filter(r => r.pass).length;
+
+    const s1 = ginStep >= 1;
+    const s2 = ginStep >= 2;
+    const s3 = ginStep >= 3;
+    const s4 = ginStep >= 4;
+
+    let svg = '';
+    // Top Flow Boxes (y 18..246)
+    // Box 1: SQL Query
+    svg += `<rect x="20" y="18" width="246" height="226" fill="${s1 ? '#E5EFF0' : '#FAF9F6'}" stroke="${s1 ? '#245A6B' : '#D9D5CB'}" stroke-width="${s1 ? 2 : 1}"/>`;
+    svg += `<rect x="20" y="18" width="246" height="34" fill="#1E4B5A"/>`;
+    svg += `<text x="34" y="40" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">1. 查询与 Token 提取</text>`;
+    svg += `<text x="34" y="76" font-size="12" fill="#245A6B" font-weight="700" class="svg-mono">WHERE name ~~~</text>`;
+    svg += `<text x="34" y="96" font-size="13" fill="#1B2B33" font-weight="700" class="svg-mono">'Euler Oliveira'</text>`;
+    svg += `<line x1="34" y1="114" x2="250" y2="114" stroke="#D9D5CB"/>`;
+    svg += `<text x="34" y="138" font-size="12" fill="#46585F">GIN 默认编译分词 (alnum)：</text>`;
+    svg += `<rect x="34" y="152" width="82" height="30" fill="#FFFFFF" stroke="#245A6B"/>`;
+    svg += `<text x="75" y="172" font-size="13" fill="#1B2B33" font-weight="700" text-anchor="middle" class="svg-mono">euler</text>`;
+    svg += `<rect x="126" y="152" width="96" height="30" fill="#FFFFFF" stroke="#245A6B"/>`;
+    svg += `<text x="174" y="172" font-size="13" fill="#1B2B33" font-weight="700" text-anchor="middle" class="svg-mono">oliveira</text>`;
+    svg += `<text x="34" y="214" font-size="12" fill="#89938F">跳过无共享 Token 的行</text>`;
+    svg += `<text x="34" y="232" font-size="12" fill="#89938F">(如 'Euller' 不进候选)</text>`;
+
+    // Connector 1->2
+    svg += `<path d="M 266 131 H 294" stroke="${s2 ? '#245A6B' : '#D9D5CB'}" stroke-width="2"/>`;
+    svg += `<polygon points="302,131 291,126 291,136" fill="${s2 ? '#245A6B' : '#D9D5CB'}"/>`;
+
+    // Box 2: GIN Inverted Index
+    svg += `<rect x="302" y="18" width="280" height="226" fill="${s2 ? '#EBF1EE' : '#FAF9F6'}" stroke="${s2 ? '#2E6373' : '#D9D5CB'}" stroke-width="${s2 ? 2 : 1}"/>`;
+    svg += `<rect x="302" y="18" width="280" height="34" fill="#2E6373"/>`;
+    svg += `<text x="316" y="40" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">2. GIN 倒排 Posting List</text>`;
+    svg += `<text x="316" y="74" font-size="12" fill="#46585F" class="svg-mono">Bitmap Index Scan:</text>`;
+    svg += `<rect x="316" y="88" width="252" height="36" fill="#FFFFFF" stroke="#74A5AD"/>`;
+    svg += `<text x="326" y="111" font-size="12" fill="#1B2B33" class="svg-mono">euler    → [1, 2, 3, 4]</text>`;
+    svg += `<rect x="316" y="132" width="252" height="36" fill="#FFFFFF" stroke="#74A5AD"/>`;
+    svg += `<text x="326" y="155" font-size="12" fill="#1B2B33" class="svg-mono">oliveira → [1, 2, 3, 4, 5]</text>`;
+    svg += `<rect x="316" y="182" width="252" height="48" fill="#F7E9DE" stroke="#BE653B"/>`;
+    svg += `<text x="326" y="202" font-size="12" fill="#BE653B" font-weight="700" class="svg-mono">gin_token_consistent()</text>`;
+    svg += `<text x="326" y="220" font-size="12" fill="#1B2B33" class="svg-mono">*recheck = true (候选 ${candCount} 行)</text>`;
+
+    // Connector 2->3
+    svg += `<path d="M 582 131 H 610" stroke="${s3 ? '#BE653B' : '#D9D5CB'}" stroke-width="2"/>`;
+    svg += `<polygon points="618,131 607,126 607,136" fill="${s3 ? '#BE653B' : '#D9D5CB'}"/>`;
+
+    // Box 3: Bitmap Heap Scan Recheck
+    svg += `<rect x="618" y="18" width="464" height="226" fill="${s3 ? '#FAF9F6' : '#FAF9F6'}" stroke="${s3 ? '#BE653B' : '#D9D5CB'}" stroke-width="${s3 ? 2 : 1}"/>`;
+    svg += `<rect x="618" y="18" width="464" height="34" fill="#BE653B"/>`;
+    svg += `<text x="632" y="40" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">3. Bitmap Heap Scan 逐行 Recheck (阈值 ${th.toFixed(1)})</text>`;
+
+    evaluated.filter(r => r.inGin).forEach((r, idx) => {
+      const ry = 62 + idx * 34;
+      const rowFill = s3 ? (r.pass ? '#E4F0EC' : '#F7E9DE') : '#F1EFE9';
+      const badgeColor = r.pass ? '#2F7A66' : '#BE653B';
+      svg += `<rect x="632" y="${ry}" width="436" height="28" fill="${rowFill}" stroke="#D9D5CB"/>`;
+      svg += `<text x="642" y="${ry + 19}" font-size="12" fill="#1B2B33" class="svg-mono">#${r.id} ${escapeXml(r.name)}</text>`;
+      if (s3) {
+        svg += `<text x="938" y="${ry + 19}" font-size="12" fill="#46585F" class="svg-mono">${r.score.toFixed(2)}</text>`;
+        svg += `<text x="1056" y="${ry + 19}" font-size="12" fill="${badgeColor}" font-weight="700" text-anchor="end">${r.pass ? '保留' : '剔除'}</text>`;
+      }
+    });
+
+    // Connector 3->4
+    svg += `<path d="M 1082 131 H 1110" stroke="${s4 ? '#2F7A66' : '#D9D5CB'}" stroke-width="2"/>`;
+    svg += `<polygon points="1118,131 1107,126 1107,136" fill="${s4 ? '#2F7A66' : '#D9D5CB'}"/>`;
+
+    // Box 4: Final Output
+    svg += `<rect x="1118" y="18" width="262" height="226" fill="${s4 ? '#E4F0EC' : '#FAF9F6'}" stroke="${s4 ? '#2F7A66' : '#D9D5CB'}" stroke-width="${s4 ? 2 : 1}"/>`;
+    svg += `<rect x="1118" y="18" width="262" height="34" fill="#2F7A66"/>`;
+    svg += `<text x="1132" y="40" font-size="13" fill="#FFFFFF" font-weight="700" class="svg-mono">4. 最终命中 (${s4 ? passCount : '?'} 行)</text>`;
+    if (s4) {
+      const passed = evaluated.filter(r => r.pass).sort((a, b) => b.score - a.score);
+      if (passed.length === 0) {
+        svg += `<text x="1134" y="96" font-size="13" fill="#BE653B">当前阈值过高，0 行通过</text>`;
+      } else {
+        passed.forEach((r, idx) => {
+          const py = 66 + idx * 32;
+          svg += `<text x="1132" y="${py + 16}" font-size="12" fill="#1B2B33" font-weight="600" class="svg-mono">${r.score.toFixed(2)} · ${escapeXml(r.name.slice(0, 18))}</text>`;
+        });
+      }
+    } else {
+      svg += `<text x="1134" y="130" font-size="13" fill="#89938F">等待 Heap Recheck 完成...</text>`;
+    }
+
+    // Bottom Strata Warning Bar (y 264..412)
+    svg += `<rect x="20" y="264" width="668" height="148" fill="#F1EFE9" stroke="#D9D5CB"/>`;
+    svg += `<rect x="20" y="264" width="668" height="30" fill="#245A6B"/>`;
+    svg += `<text x="36" y="284" font-size="12" fill="#FFFFFF" font-weight="700" class="svg-mono">GIN 支持矩阵 · gin_similarity_ops</text>`;
+    svg += `<text x="36" y="320" font-size="14" fill="#2F7A66" font-weight="700">已打开（8 个 Token 类）：</text>`;
+    svg += `<text x="218" y="320" font-size="14" fill="#1B2B33" font-weight="700" class="svg-mono">~++  ~##  ~-~  ~!!  ~??  ~^^  ~**  ~~~</text>`;
+    svg += `<text x="36" y="352" font-size="14" fill="#BE653B" font-weight="700">未打开（编辑/序列类）：</text>`;
+    svg += `<text x="218" y="352" font-size="13" fill="#46585F">Levenshtein、Jaro、Jaro-Winkler、Monge-Elkan、</text>`;
+    svg += `<text x="218" y="374" font-size="13" fill="#46585F">Needleman-Wunsch、Smith-Waterman、Soundex 等</text>`;
+    svg += `<text x="36" y="400" font-size="12" fill="#89938F">原因：字符编辑与全局序列比对无法靠 Token 倒排项证明命中。</text>`;
+
+    svg += `<rect x="708" y="264" width="672" height="148" fill="#F7E9DE" stroke="#BE653B"/>`;
+    svg += `<rect x="708" y="264" width="672" height="30" fill="#BE653B"/>`;
+    svg += `<text x="724" y="284" font-size="12" fill="#FFFFFF" font-weight="700" class="svg-mono">SOURCE GOTCHA · 编译期分词开关隐患</text>`;
+    svg += `<text x="724" y="320" font-size="14" fill="#1B2B33" font-weight="700">similarity_gin.c 默认编译开关：#define PGS_BY_ALNUM 1</text>`;
+    svg += `<text x="724" y="348" font-size="13" fill="#46585F">当前实现未按 GUC 建索引，也未保存 tokenizer 元信息。若会话中</text>`;
+    svg += `<text x="724" y="370" font-size="13" fill="#46585F">将算法 tokenizer 改为 gram 或 word，而索引仍按 alnum 提 Key，</text>`;
+    svg += `<text x="724" y="394" font-size="13" fill="#BE653B" font-weight="700">计划选择与召回边界必须用实测验证，切忌想当然！</text>`;
+
+    ginSvg.innerHTML = svg;
+    const stepLabels = ['就绪', '1/4 Token 提取', '2/4 GIN 倒排候选', '3/4 Heap Recheck', `4/4 输出 ${passCount} 行`];
+    ginStatus.textContent = `步骤 ${stepLabels[ginStep]} · 候选 ${candCount} 行 → 保留 ${passCount} 行`;
+  }
+
+  function stopGinAnim() {
+    if (ginTimer) { clearInterval(ginTimer); ginTimer = null; }
+    ginPlayBtn.textContent = '▶ 播放执行链路';
+  }
+
+  ginPlayBtn.addEventListener('click', () => {
+    if (ginTimer) { stopGinAnim(); return; }
+    ginStep = 0;
+    renderGinDemo();
+    ginPlayBtn.textContent = '❚❚ 暂停';
+    ginTimer = setInterval(() => {
+      ginStep++;
+      renderGinDemo();
+      if (ginStep >= 4) stopGinAnim();
+    }, 850);
+  });
+
+  document.getElementById('gin-step').addEventListener('click', () => {
+    stopGinAnim();
+    ginStep = ginStep >= 4 ? 1 : ginStep + 1;
+    renderGinDemo();
+  });
+
+  document.getElementById('gin-reset').addEventListener('click', () => {
+    stopGinAnim();
+    ginStep = 0;
+    renderGinDemo();
+  });
+
+  ginSlider.addEventListener('input', () => {
+    if (ginStep < 3) ginStep = 4;
+    renderGinDemo();
+  });
+
+  /* ==================== DEMO 4: SLIDE 09 THRESHOLD CALIBRATION ==================== */
+  const calSvg = document.getElementById('cal-svg');
+  const calSlider = document.getElementById('cal-thresh');
+  const calVal = document.getElementById('cal-thresh-val');
+  const calStatus = document.getElementById('cal-status');
+  const calBtnLev = document.getElementById('cal-algo-lev');
+  const calBtnQgram = document.getElementById('cal-algo-qgram');
+  const calPlayBtn = document.getElementById('cal-play');
+  let calAlgo = 'lev'; // 'lev' | 'qgram'
+  let calTimer = null;
+
+  // Exact 7 samples from article section 6.2 compared against target 'Euler Taveira de Oliveira'
+  const CAL_TARGET = 'Euler Taveira de Oliveira';
+  const CAL_SAMPLES = [
+    { name: 'Euler Taveira de Oliveira', isSame: true },
+    { name: 'EULER TAVEIRA DE OLIVEIRA', isSame: true },
+    { name: 'Euler T. de Oliveira', isSame: true },
+    { name: 'Oliveira, Euler T.', isSame: true },
+    { name: 'Euler Oliveira', isSame: true },
+    { name: 'Euller', isSame: false },
+    { name: 'Sr. Oliveira', isSame: false }
+  ];
+
+  function evalCalAt(threshold, algo) {
+    let tp = 0, fp = 0, fn = 0, tn = 0;
+    const rows = CAL_SAMPLES.map(s => {
+      const score = algo === 'lev'
+        ? computeLevenshteinMatrix(s.name, CAL_TARGET).score
+        : computeQgramScore(s.name, CAL_TARGET);
+      const pred = score >= threshold;
+      let label = 'TN';
+      if (pred && s.isSame) { tp++; label = 'TP'; }
+      else if (pred && !s.isSame) { fp++; label = 'FP'; }
+      else if (!pred && s.isSame) { fn++; label = 'FN'; }
+      else { tn++; label = 'TN'; }
+      return { ...s, score, pred, label };
+    });
+    const recall = (tp + fn) ? tp / (tp + fn) : 0;
+    const prec = (tp + fp) ? tp / (tp + fp) : 1;
+    return { rows, tp, fp, fn, tn, recall, prec };
+  }
+
+  function renderCalDemo() {
+    const th = parseFloat(calSlider.value);
+    calVal.textContent = th.toFixed(2);
+    const cur = evalCalAt(th, calAlgo);
+
+    // Chart area on left: x 66..620, y 56..330
+    const chartX = 72;
+    const chartY = 70;
+    const chartW = 540;
+    const chartH = 252;
+    const thresholds = [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90];
+
+    const ptsRecall = [];
+    const ptsCost = []; // Normalized candidate/hit rate (proxy for scan/review cost)
+    thresholds.forEach((t, i) => {
+      const ev = evalCalAt(t, calAlgo);
+      const px = chartX + (i / (thresholds.length - 1)) * chartW;
+      const pyRec = chartY + chartH - ev.recall * chartH;
+      const hitRate = (ev.tp + ev.fp) / CAL_SAMPLES.length;
+      const pyCost = chartY + chartH - hitRate * chartH;
+      ptsRecall.push(`${px.toFixed(1)},${pyRec.toFixed(1)}`);
+      ptsCost.push(`${px.toFixed(1)},${pyCost.toFixed(1)}`);
+    });
+
+    const curRatio = (th - 0.50) / 0.40;
+    const scanX = chartX + curRatio * chartW;
+
+    let svg = '';
+    svg += `<text x="24" y="32" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">TRADE-OFF CURVE · 阈值 vs 召回率与命中占比 (${calAlgo === 'lev' ? 'Levenshtein' : 'Q-Gram'})</text>`;
+
+    // Grid & axes
+    svg += `<rect x="${chartX}" y="${chartY}" width="${chartW}" height="${chartH}" fill="#FAF9F6" stroke="#D9D5CB"/>`;
+    [0, 0.25, 0.5, 0.75, 1.0].forEach(v => {
+      const gy = chartY + chartH - v * chartH;
+      svg += `<line x1="${chartX}" y1="${gy}" x2="${chartX + chartW}" y2="${gy}" stroke="#E5E2DA" stroke-dasharray="3 3"/>`;
+      svg += `<text x="${chartX - 10}" y="${gy + 4}" font-size="11" fill="#89938F" text-anchor="end" class="svg-mono">${Math.round(v * 100)}%</text>`;
+    });
+
+    thresholds.filter((_, i) => i % 2 === 0).forEach((t, idx) => {
+      const gx = chartX + (idx / 4) * chartW;
+      svg += `<line x1="${gx}" y1="${chartY}" x2="${gx}" y2="${chartY + chartH}" stroke="#E5E2DA" stroke-dasharray="3 3"/>`;
+      svg += `<text x="${gx}" y="${chartY + chartH + 20}" font-size="12" fill="#46585F" text-anchor="middle" class="svg-mono">${t.toFixed(1)}</text>`;
+    });
+
+    // Orthogonal step-like polylines
+    svg += `<polyline points="${ptsRecall.join(' ')}" fill="none" stroke="#2F7A66" stroke-width="3"/>`;
+    svg += `<polyline points="${ptsCost.join(' ')}" fill="none" stroke="#BE653B" stroke-width="2.5" stroke-dasharray="6 4"/>`;
+
+    // Active vertical scanline
+    svg += `<line x1="${scanX}" y1="${chartY - 6}" x2="${scanX}" y2="${chartY + chartH}" stroke="#245A6B" stroke-width="2"/>`;
+    svg += `<rect x="${scanX - 34}" y="${chartY - 24}" width="68" height="20" fill="#245A6B"/>`;
+    svg += `<text x="${scanX}" y="${chartY - 10}" font-size="11" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">t=${th.toFixed(2)}</text>`;
+
+    // Legend under chart
+    svg += `<rect x="72" y="362" width="16" height="4" fill="#2F7A66"/>`;
+    svg += `<text x="96" y="368" font-size="13" fill="#2F7A66" font-weight="700">正样本召回率 Recall (${Math.round(cur.recall * 100)}%)</text>`;
+    svg += `<rect x="330" y="362" width="16" height="4" fill="#BE653B"/>`;
+    svg += `<text x="354" y="368" font-size="13" fill="#BE653B" font-weight="700">命中候选占比 (${cur.tp + cur.fp}/${CAL_SAMPLES.length})</text>`;
+
+    svg += `<rect x="72" y="384" width="540" height="30" fill="#F1EFE9" stroke="#D9D5CB"/>`;
+    svg += `<text x="86" y="404" font-size="12" fill="#46585F">结论：阈值越低，召回越高但候选膨胀；阈值越高，噪声越小但漏召回上升。</text>`;
+
+    // Right Panel: Exact 7 Sample Rows Evaluation Table
+    const rx = 648;
+    svg += `<text x="${rx}" y="32" font-size="13" fill="#245A6B" font-weight="700" class="svg-mono">SAMPLE EVALUATION · 目标串：'${CAL_TARGET}'</text>`;
+
+    // Table header
+    svg += `<rect x="${rx}" y="46" width="728" height="32" fill="#1E4B5A"/>`;
+    svg += `<text x="${rx + 14}" y="67" font-size="12" fill="#FFFFFF" font-weight="700" class="svg-mono">样本 name (原文 customer_name)</text>`;
+    svg += `<text x="${rx + 360}" y="67" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">人工标签</text>`;
+    svg += `<text x="${rx + 480}" y="67" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">实算分数</text>`;
+    svg += `<text x="${rx + 600}" y="67" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle" class="svg-mono">判定结果</text>`;
+
+    cur.rows.forEach((r, idx) => {
+      const ry = 82 + idx * 38;
+      let bg = '#FAF9F6';
+      let badgeFill = '#46585F';
+      if (r.label === 'TP') { bg = '#E4F0EC'; badgeFill = '#2F7A66'; }
+      else if (r.label === 'FP') { bg = '#F7E9DE'; badgeFill = '#BE653B'; }
+      else if (r.label === 'FN') { bg = '#F5EFE1'; badgeFill = '#AE8A3E'; }
+
+      svg += `<rect x="${rx}" y="${ry}" width="728" height="34" fill="${bg}" stroke="#D9D5CB"/>`;
+      svg += `<text x="${rx + 14}" y="${ry + 22}" font-size="13" fill="#1B2B33" class="svg-mono">${escapeXml(r.name)}</text>`;
+      svg += `<text x="${rx + 360}" y="${ry + 22}" font-size="12" fill="${r.isSame ? '#245A6B' : '#89938F'}" font-weight="700" text-anchor="middle">${r.isSame ? '正样本(同人)' : '负/短干扰'}</text>`;
+      svg += `<text x="${rx + 480}" y="${ry + 22}" font-size="13" fill="#1B2B33" font-weight="700" text-anchor="middle" class="svg-mono">${r.score.toFixed(4)}</text>`;
+      svg += `<text x="${rx + 600}" y="${ry + 22}" font-size="13" fill="${badgeFill}" font-weight="700" text-anchor="middle" class="svg-mono">${r.label} (${r.pred ? '命中' : '未命中'})</text>`;
+    });
+
+    // Summary KPI strip at bottom right
+    const sy = 356;
+    svg += `<rect x="${rx}" y="${sy}" width="234" height="58" fill="#E4F0EC" stroke="#2F7A66"/>`;
+    svg += `<text x="${rx + 16}" y="${sy + 24}" font-size="12" fill="#2F7A66" font-weight="700" class="svg-mono">TRUE POSITIVE (TP)</text>`;
+    svg += `<text x="${rx + 16}" y="${sy + 48}" font-size="20" fill="#1B2B33" font-weight="700" class="svg-mono">${cur.tp} / 5 正样本命中</text>`;
+
+    svg += `<rect x="${rx + 247}" y="${sy}" width="234" height="58" fill="#F7E9DE" stroke="#BE653B"/>`;
+    svg += `<text x="${rx + 263}" y="${sy + 24}" font-size="12" fill="#BE653B" font-weight="700" class="svg-mono">FALSE POSITIVE (FP)</text>`;
+    svg += `<text x="${rx + 263}" y="${sy + 48}" font-size="20" fill="#1B2B33" font-weight="700" class="svg-mono">${cur.fp} 条误匹配</text>`;
+
+    svg += `<rect x="${rx + 494}" y="${sy}" width="234" height="58" fill="#F5EFE1" stroke="#AE8A3E"/>`;
+    svg += `<text x="${rx + 510}" y="${sy + 24}" font-size="12" fill="#AE8A3E" font-weight="700" class="svg-mono">FALSE NEGATIVE (FN)</text>`;
+    svg += `<text x="${rx + 510}" y="${sy + 48}" font-size="20" fill="#1B2B33" font-weight="700" class="svg-mono">${cur.fn} 条漏召回</text>`;
+
+    calSvg.innerHTML = svg;
+    calStatus.textContent = `TP=${cur.tp} · FP=${cur.fp} · FN=${cur.fn} · Recall=${Math.round(cur.recall * 100)}%`;
+  }
+
+  function stopCalAnim() {
+    if (calTimer) { clearInterval(calTimer); calTimer = null; }
+    calPlayBtn.textContent = '▶ 自动扫描阈值';
+  }
+
+  calSlider.addEventListener('input', () => {
+    stopCalAnim();
+    renderCalDemo();
+  });
+
+  calBtnLev.addEventListener('click', () => {
+    calAlgo = 'lev';
+    calBtnLev.classList.add('active-preset');
+    calBtnLev.classList.remove('subtle');
+    calBtnQgram.classList.remove('active-preset');
+    calBtnQgram.classList.add('subtle');
+    renderCalDemo();
+  });
+
+  calBtnQgram.addEventListener('click', () => {
+    calAlgo = 'qgram';
+    calBtnQgram.classList.add('active-preset');
+    calBtnQgram.classList.remove('subtle');
+    calBtnLev.classList.remove('active-preset');
+    calBtnLev.classList.add('subtle');
+    renderCalDemo();
+  });
+
+  calPlayBtn.addEventListener('click', () => {
+    if (calTimer) { stopCalAnim(); return; }
+    let v = 0.50;
+    calSlider.value = v.toFixed(2);
+    renderCalDemo();
+    calPlayBtn.textContent = '❚❚ 暂停扫描';
+    calTimer = setInterval(() => {
+      v = Math.round((v + 0.05) * 100) / 100;
+      if (v > 0.90) {
+        stopCalAnim();
+        return;
+      }
+      calSlider.value = v.toFixed(2);
+      renderCalDemo();
+    }, 650);
+  });
+
+  document.getElementById('cal-reset').addEventListener('click', () => {
+    stopCalAnim();
+    calSlider.value = '0.70';
+    renderCalDemo();
+  });
+
+  /* ==================== INITIALIZATION ==================== */
+  buildToc();
+  renderLevDemo();
+  renderTokDemo();
+  renderGinDemo();
+  renderCalDemo();
+  goToSlide(0);
+  fitStage();
+})();
+</script>
+</body>
+</html>

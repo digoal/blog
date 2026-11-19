@@ -1,0 +1,2434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL 自定义统计信息最佳实践</title>
+<style>
+  :root {
+    --bg-base: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-letterbox: #E6E3DA;
+    --ink-main: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --primary: #245A6B;
+    --primary-light: #E5EFF0;
+    --accent: #BE653B;
+    --accent-light: #F7E9DE;
+    --benefit: #2F7A66;
+    --benefit-light: #E4F0EC;
+    --gold: #AE8A3E;
+    --gold-light: #F5EFE0;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+    color: var(--ink-main);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+  }
+
+  .main-workspace {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Left: 16:9 letterboxed stage viewport */
+  .stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+    transition: width 0.2s ease;
+  }
+
+  .stage-frame {
+    width: 1600px;
+    height: 900px;
+    flex-shrink: 0;
+    position: relative;
+    background: var(--bg-base);
+    border: 1px solid var(--stroke);
+    transform-origin: center center;
+    overflow: hidden;
+    user-select: text;
+  }
+
+  /* Subtle blueprint grid background on stage */
+  .stage-frame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(217, 213, 203, 0.28) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.28) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    padding: 46px 64px 36px 64px;
+    z-index: 1;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Slide Header */
+  .slide-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    text-transform: uppercase;
+    color: var(--primary);
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .slide-eyebrow .tag-right {
+    color: var(--ink-muted);
+    letter-spacing: 1.8px;
+    font-weight: 400;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    line-height: 1.22;
+    font-weight: 700;
+    color: var(--ink-main);
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-sub);
+    margin-bottom: 16px;
+    max-width: 1400px;
+  }
+
+  .slide-divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 18px;
+    flex-shrink: 0;
+  }
+
+  /* Diagram Area: strictly 1400 x 430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    position: relative;
+    background: var(--bg-base);
+    border: 1px solid var(--stroke);
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .diagram-zone svg {
+    display: block;
+    width: 1400px;
+    height: 430px;
+  }
+
+  /* Interactive bar overlaid cleanly at top-right or bottom of diagram when needed */
+  .interactive-strip {
+    width: 1400px;
+    height: 42px;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .interactive-strip.empty {
+    height: 12px;
+    margin-top: 8px;
+  }
+
+  .bp-btn {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    padding: 6px 14px;
+    background: var(--bg-sub);
+    color: var(--ink-main);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .bp-btn:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
+  .bp-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #F7F6F2;
+  }
+
+  .bp-btn.warn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .bp-btn.warn.active {
+    background: var(--accent);
+    color: #F7F6F2;
+  }
+
+  .slider-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-sub);
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    padding: 5px 12px;
+  }
+
+  .slider-group input[type="range"] {
+    width: 100px;
+    accent-color: var(--primary);
+    cursor: pointer;
+  }
+
+  .slider-val {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--primary);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* Bottom Transition: 承接 · NEXT */
+  .slide-next-box {
+    width: 1400px;
+    margin-top: auto;
+    padding: 10px 0 10px 18px;
+    border-left: 3px solid var(--accent);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+
+  .slide-next-label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .slide-next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink-main);
+    line-height: 1.4;
+  }
+
+  /* Slide Footer */
+  .slide-footer {
+    width: 1400px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--stroke);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .slide-footer .page-num {
+    color: var(--ink-main);
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  /* Right-Side In-Page Notes Drawer */
+  .notes-drawer {
+    width: 0;
+    height: 100%;
+    background: var(--bg-base);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .notes-drawer.open {
+    width: 440px;
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    padding: 14px 20px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink-main);
+  }
+
+  .notes-mode-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .notes-tab {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-base);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-tab.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #F7F6F2;
+  }
+
+  .notes-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px 40px 20px;
+    scroll-behavior: smooth;
+  }
+
+  .note-card {
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-sub);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .note-card.current {
+    background: var(--bg-base);
+    border-color: var(--primary);
+    border-left: 4px solid var(--primary);
+  }
+
+  .note-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .note-card-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink-main);
+    margin-bottom: 10px;
+  }
+
+  .note-card-text {
+    font-family: var(--font-sans);
+    font-size: 14.5px;
+    line-height: 1.75;
+    color: var(--ink-sub);
+  }
+
+  .note-card-text p {
+    margin-bottom: 10px;
+  }
+
+  .note-card-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Bottom Control Bar (always visible, including in Fullscreen) */
+  .control-bar {
+    height: 48px;
+    flex-shrink: 0;
+    background: var(--bg-sub);
+    border-top: 1px solid var(--stroke);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    z-index: 50;
+  }
+
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ctrl-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 5px 11px;
+    background: var(--bg-base);
+    color: var(--ink-main);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-light);
+  }
+
+  .ctrl-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #F7F6F2;
+  }
+
+  .ctrl-btn.playing {
+    background: var(--benefit);
+    border-color: var(--benefit);
+    color: #F7F6F2;
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    opacity: 0.78;
+  }
+
+  .progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-sub);
+  }
+
+  .progress-track {
+    width: 140px;
+    height: 4px;
+    background: var(--stroke);
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--primary);
+    width: 8.33%;
+    transition: width 0.2s ease;
+  }
+
+  /* Table of Contents Overlay (Shortcut G) */
+  .toc-overlay {
+    position: fixed;
+    inset: 0 0 48px 0;
+    background: rgba(247, 246, 242, 0.96);
+    z-index: 40;
+    display: none;
+    flex-direction: column;
+    padding: 36px 56px;
+    overflow-y: auto;
+  }
+
+  .toc-overlay.open {
+    display: flex;
+  }
+
+  .toc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--stroke);
+    margin-bottom: 24px;
+  }
+
+  .toc-head h2 {
+    font-family: var(--font-serif);
+    font-size: 28px;
+    color: var(--ink-main);
+  }
+
+  .toc-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  .toc-item {
+    border: 1px solid var(--stroke);
+    background: var(--bg-base);
+    padding: 16px 18px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .toc-item:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+
+  .toc-item.current {
+    border-color: var(--accent);
+    border-left: 4px solid var(--accent);
+    background: var(--accent-light);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink-main);
+    line-height: 1.35;
+  }
+
+  .toc-item-sub {
+    font-size: 12.5px;
+    color: var(--ink-sub);
+    line-height: 1.45;
+  }
+
+  /* SVG animation helpers */
+  .svg-node {
+    transition: opacity 0.25s ease, stroke 0.25s ease, fill 0.25s ease;
+  }
+  .svg-dim {
+    opacity: 0.28;
+  }
+  .svg-highlight-stroke {
+    stroke: #BE653B !important;
+    stroke-width: 2.5px !important;
+  }
+  .svg-highlight-teal {
+    stroke: #2F7A66 !important;
+    stroke-width: 2.5px !important;
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none" aria-hidden="true">
+  <defs>
+    <marker id="arr-primary" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+    </marker>
+    <marker id="arr-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#BE653B"/>
+    </marker>
+    <marker id="arr-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#2F7A66"/>
+    </marker>
+  </defs>
+</svg>
+<div class="app-shell" id="appShell">
+  <div class="main-workspace" id="mainWorkspace">
+    <!-- Left: 16:9 Fixed Stage with proportional vector scaling -->
+    <div class="stage-viewport" id="stageViewport">
+      <div class="stage-frame" id="stageFrame">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-slide="0" data-title="自定义统计信息：校准优化器的世界观" data-eyebrow="DATABASE FOUNDATION">
+          <div class="slide-eyebrow">
+            <span>DATABASE FOUNDATION · 01 / 12</span>
+            <span class="tag-right">PostgreSQL 应用开发者筑基课 · digoal</span>
+          </div>
+          <h1 class="slide-title">自定义统计信息：校准优化器的世界观</h1>
+          <p class="slide-lead">很多慢 SQL 并非执行器慢，而是优化器在一开始就看错了数据分布——本文基于 PostgreSQL 源码与官方文档，拆解自定义统计信息的四层能力与工程边界。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+
+              <!-- Left Column Title: 四类典型失真现象 -->
+              <rect x="24" y="20" width="540" height="36" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="42" y="43" font-size="15" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">表层症状：优化器「看错世界」的四类高频场景</text>
+
+              <!-- 4 symptom boxes -->
+              <rect x="24" y="72" width="540" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="72" width="6" height="72" fill="#BE653B"/>
+              <text x="46" y="99" font-size="14" font-weight="600" fill="#1B2B33" font-family="SF Mono, monospace">WHERE tenant_id = ? AND status = ?</text>
+              <text x="46" y="126" font-size="14" fill="#46585F" font-family="PingFang SC, sans-serif">实际返回几十万行，优化器按独立性估成几十行，误选 Nested Loop</text>
+
+              <rect x="24" y="158" width="540" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="158" width="6" height="72" fill="#BE653B"/>
+              <text x="46" y="185" font-size="14" font-weight="600" fill="#1B2B33" font-family="SF Mono, monospace">GROUP BY province, city</text>
+              <text x="46" y="212" font-size="14" fill="#46585F" font-family="PingFang SC, sans-serif">实际只有几百组，优化器估成几万组，错误放大内存与排序成本</text>
+
+              <rect x="24" y="244" width="540" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="244" width="6" height="72" fill="#BE653B"/>
+              <text x="46" y="271" font-size="14" font-weight="600" fill="#1B2B33" font-family="SF Mono, monospace">WHERE lower(email) = ?</text>
+              <text x="46" y="298" font-size="14" fill="#46585F" font-family="PingFang SC, sans-serif">缺少表达式统计，优化器无法感知转换后分布，只能按默认选择率猜</text>
+
+              <rect x="24" y="330" width="540" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="330" width="6" height="72" fill="#AE8A3E"/>
+              <text x="46" y="357" font-size="14" font-weight="600" fill="#1B2B33" font-family="PingFang SC, sans-serif">数据刚恢复 / 批量导入完成，尚未及执行 ANALYZE</text>
+              <text x="46" y="384" font-size="14" fill="#46585F" font-family="PingFang SC, sans-serif">目录统计信息空白或陈旧，上线初期执行计划出现临时剧烈抖动</text>
+
+              <!-- Orthogonal connector from left column to right strata -->
+              <path d="M 564 215 H 644" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <rect x="578" y="182" width="52" height="24" fill="#F7F6F2"/>
+              <text x="604" y="199" font-size="12" font-weight="700" fill="#245A6B" text-anchor="middle" font-family="PingFang SC, sans-serif">四层校准</text>
+
+              <!-- Right Column: 地层剖面四层能力 (浅 -> 深 = 运维 -> 底层采样) -->
+              <rect x="652" y="20" width="724" height="36" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="670" y="43" font-size="15" font-weight="700" fill="#245A6B" font-family="PingFang SC, sans-serif">底层剖面：PostgreSQL 自定义统计信息的四层能力体系（浅→深）</text>
+
+              <!-- Layer 4 (Shallowest) -->
+              <rect x="652" y="72" width="724" height="72" fill="#CFE0DC" stroke="#47808D" stroke-width="1"/>
+              <text x="672" y="99" font-size="15" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">L4 · 运维应急恢复层（临时手段）</text>
+              <text x="672" y="126" font-size="13.5" fill="#1B2B33" font-family="SF Mono, monospace">pg_restore_relation_stats / attribute_stats / extended_stats（会被 ANALYZE 覆盖）</text>
+
+              <!-- Layer 3 -->
+              <rect x="652" y="158" width="724" height="72" fill="#74A5AD" stroke="#2E6373" stroke-width="1"/>
+              <text x="672" y="185" font-size="15" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">L3 · 可观测与核验视图层</text>
+              <text x="672" y="212" font-size="13.5" fill="#F7F6F2" font-family="SF Mono, monospace">pg_stats · pg_stats_ext · pg_stats_ext_exprs · pg_mcv_list_items()</text>
+
+              <!-- Layer 2 -->
+              <rect x="652" y="244" width="724" height="72" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="672" y="271" font-size="15" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">L2 · 扩展统计对象层（核心能力）</text>
+              <text x="672" y="298" font-size="13.5" fill="#EBF1EE" font-family="SF Mono, monospace">CREATE STATISTICS：dependencies · ndistinct · mcv · 表达式统计</text>
+
+              <!-- Layer 1 (Deepest) -->
+              <rect x="652" y="330" width="724" height="72" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="672" y="357" font-size="15" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">L1 · 普通单列统计目标层（采样基石）</text>
+              <text x="672" y="384" font-size="13.5" fill="#CFE0DC" font-family="SF Mono, monospace">ALTER TABLE ... ALTER COLUMN ... SET STATISTICS（局部调高采样粒度）</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">为什么优化器会「看错世界」？先看统计信息如何驱动整个计划选择闭环。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 地层剖面工程蓝图</span>
+            <span class="page-num">01 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-slide="1" data-title="统计信息驱动优化器估算闭环" data-eyebrow="PROBLEM STATEMENT">
+          <div class="slide-eyebrow">
+            <span>PROBLEM STATEMENT · 02 / 12</span>
+            <span class="tag-right">一、它解决什么问题？</span>
+          </div>
+          <h1 class="slide-title">统计信息驱动优化器估算闭环</h1>
+          <p class="slide-lead">优化器选计划前先答三问：单条件留几行、多条件组合留几行、聚合与连接中间结果有多大；行数估错，后续算子全部连带失真。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top row: 4 main closed-loop blocks -->
+              <!-- Block 1 -->
+              <rect x="30" y="36" width="280" height="196" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="30" y="36" width="280" height="36" fill="#1E4B5A"/>
+              <text x="48" y="60" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">1. 业务表真实分布</text>
+              <text x="48" y="102" font-size="14" fill="#1B2B33" font-family="PingFang SC, sans-serif">多列天然强相关：</text>
+              <text x="48" y="130" font-size="13.5" fill="#245A6B" font-family="SF Mono, monospace">tenant_id / country</text>
+              <text x="48" y="156" font-size="13.5" fill="#245A6B" font-family="SF Mono, monospace">currency / status</text>
+              <text x="48" y="196" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">非独立、非均匀分布</text>
+
+              <!-- Arrow 1->2 -->
+              <path d="M 310 134 H 362" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <text x="336" y="122" font-size="12" fill="#245A6B" text-anchor="middle" font-family="SF Mono, monospace">ANALYZE</text>
+
+              <!-- Block 2 -->
+              <rect x="370" y="36" width="290" height="196" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="370" y="36" width="290" height="36" fill="#2E6373"/>
+              <text x="388" y="60" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">2. 单列统计信息（默认）</text>
+              <text x="388" y="102" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">按单列独立采集：</text>
+              <text x="388" y="128" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">· null 比例、平均宽度</text>
+              <text x="388" y="154" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">· distinct 估计、MCV</text>
+              <text x="388" y="180" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">· histogram、correlation</text>
+              <text x="388" y="210" font-size="13" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">盲区：不知列间业务关系</text>
+
+              <!-- Arrow 2->3 -->
+              <path d="M 660 134 H 712" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <text x="686" y="122" font-size="12" fill="#245A6B" text-anchor="middle" font-family="PingFang SC, sans-serif">估算</text>
+
+              <!-- Block 3 -->
+              <rect x="720" y="36" width="300" height="196" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="720" y="36" width="300" height="36" fill="#BE653B"/>
+              <text x="738" y="60" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">3. 优化器代价估算失真</text>
+              <text x="738" y="102" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">独立性假设直接相乘：</text>
+              <text x="738" y="130" font-size="13" fill="#BE653B" font-family="SF Mono, monospace">P(tenant=1) × P(curr='CNY')</text>
+              <text x="738" y="164" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">导致返回行数严重低估或高估</text>
+              <text x="738" y="196" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">源头误差沿计划树逐层放大</text>
+
+              <!-- Arrow 3->4 -->
+              <path d="M 1020 134 H 1072" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-accent)"/>
+              <text x="1046" y="122" font-size="12" fill="#BE653B" text-anchor="middle" font-family="PingFang SC, sans-serif">连带</text>
+
+              <!-- Block 4 -->
+              <rect x="1080" y="36" width="290" height="196" fill="#F1EFE9" stroke="#1B2B33" stroke-width="1.5"/>
+              <rect x="1080" y="36" width="290" height="36" fill="#47808D"/>
+              <text x="1098" y="60" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">4. 计划算子全链路受损</text>
+              <text x="1098" y="100" font-size="13.5" fill="#1B2B33" font-family="SF Mono, monospace">· Index Scan / Bitmap Scan</text>
+              <text x="1098" y="128" font-size="13.5" fill="#1B2B33" font-family="SF Mono, monospace">· Nested Loop / Hash Join</text>
+              <text x="1098" y="156" font-size="13.5" fill="#1B2B33" font-family="SF Mono, monospace">· HashAggregate / Sort</text>
+              <text x="1098" y="196" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">表现为慢 SQL 或内存溢出</text>
+
+              <!-- Feedback loop line (orthogonal bottom return) -->
+              <path d="M 1225 232 V 286 H 515 V 240" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+              <rect x="650" y="266" width="440" height="38" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="870" y="290" font-size="14" font-weight="700" fill="#2F7A66" text-anchor="middle" font-family="PingFang SC, sans-serif">诊断闭环：EXPLAIN (ANALYZE) 对比 estimated rows vs actual rows</text>
+
+              <!-- Bottom Cost & Boundary Strip -->
+              <rect x="30" y="330" width="1340" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <rect x="30" y="330" width="8" height="74" fill="#BE653B"/>
+              <text x="56" y="358" font-size="15" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">工程边界与代价提醒</text>
+              <text x="56" y="386" font-size="14" fill="#1B2B33" font-family="PingFang SC, sans-serif">更细的统计会增加 ANALYZE 采样成本、系统目录存储与规划期计算；它是优化器「认知层」的校准工具，不是替代索引、分区与 SQL 改写的万能药。</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">要校准优化器的认知，先摸清 PostgreSQL 统计信息的三层目录结构。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 问题与闭环</span>
+            <span class="page-num">02 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-slide="2" data-title="三类统计信息与核心定位：只管估算，不建路径" data-eyebrow="ARCHITECTURE">
+          <div class="slide-eyebrow">
+            <span>ARCHITECTURE · 03 / 12</span>
+            <span class="tag-right">二、它是什么？</span>
+          </div>
+          <h1 class="slide-title">三类统计信息与核心定位：只管估算，不建路径</h1>
+          <p class="slide-lead">CREATE STATISTICS 只写入统计对象定义，不创建索引访问路径；它帮助优化器「看得准」，而不像索引那样负责「走得快」。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left 920px: Three Strata Bands -->
+              <rect x="24" y="20" width="910" height="36" fill="#1E4B5A"/>
+              <text x="44" y="43" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">统计类型</text>
+              <text x="190" y="43" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">系统目录与观测视图</text>
+              <text x="530" y="43" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">主要来源</text>
+              <text x="700" y="43" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">解决的核心问题</text>
+
+              <!-- Band 1: 扩展统计 -->
+              <rect x="24" y="64" width="910" height="106" fill="#EBF1EE" stroke="#47808D" stroke-width="1"/>
+              <rect x="24" y="64" width="10" height="106" fill="#2E6373"/>
+              <text x="48" y="106" font-size="16" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">扩展统计</text>
+              <text x="48" y="132" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">多列 / 表达式</text>
+
+              <text x="190" y="96" font-size="13" fill="#1B2B33" font-family="SF Mono, monospace">定义：pg_statistic_ext</text>
+              <text x="190" y="120" font-size="13" fill="#1B2B33" font-family="SF Mono, monospace">数据：pg_statistic_ext_data</text>
+              <text x="190" y="144" font-size="13" fill="#245A6B" font-family="SF Mono, monospace">视图：pg_stats_ext / _exprs</text>
+
+              <text x="530" y="108" font-size="13" font-weight="600" fill="#245A6B" font-family="SF Mono, monospace">CREATE STATISTICS</text>
+              <text x="530" y="132" font-size="13" font-weight="600" fill="#245A6B" font-family="SF Mono, monospace">+ ANALYZE</text>
+
+              <text x="700" y="98" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 多列相关性与热门组合</text>
+              <text x="700" y="124" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 多列 distinct 组合数</text>
+              <text x="700" y="150" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 表达式结果分布</text>
+
+              <!-- Band 2: 单列统计 -->
+              <rect x="24" y="182" width="910" height="104" fill="#CFE0DC" stroke="#2E6373" stroke-width="1"/>
+              <rect x="24" y="182" width="10" height="104" fill="#245A6B"/>
+              <text x="48" y="224" font-size="16" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">单列统计</text>
+              <text x="48" y="250" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">列级分布基石</text>
+
+              <text x="190" y="222" font-size="13" fill="#1B2B33" font-family="SF Mono, monospace">存储：pg_statistic</text>
+              <text x="190" y="248" font-size="13" fill="#245A6B" font-family="SF Mono, monospace">视图：pg_stats</text>
+
+              <text x="530" y="236" font-size="13.5" font-weight="600" fill="#1B2B33" font-family="SF Mono, monospace">ANALYZE</text>
+
+              <text x="700" y="216" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 单列选择率、平均宽度</text>
+              <text x="700" y="242" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 单列 MCV、直方图</text>
+              <text x="700" y="268" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 物理存储相关性</text>
+
+              <!-- Band 3: 表级统计 -->
+              <rect x="24" y="298" width="910" height="106" fill="#A4C4C6" stroke="#1E4B5A" stroke-width="1"/>
+              <rect x="24" y="298" width="10" height="106" fill="#1E4B5A"/>
+              <text x="48" y="340" font-size="16" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">表级统计</text>
+              <text x="48" y="366" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">物理规模底层</text>
+
+              <text x="190" y="346" font-size="13.5" fill="#1B2B33" font-family="SF Mono, monospace">存储：pg_class</text>
+              <text x="190" y="372" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">relpages / reltuples / relallvisible</text>
+
+              <text x="530" y="346" font-size="13.5" font-weight="600" fill="#1B2B33" font-family="SF Mono, monospace">VACUUM /</text>
+              <text x="530" y="370" font-size="13.5" font-weight="600" fill="#1B2B33" font-family="SF Mono, monospace">ANALYZE</text>
+
+              <text x="700" y="336" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 表数据页数与总行数估算</text>
+              <text x="700" y="364" font-size="13.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· all-visible / all-frozen 页数</text>
+
+              <!-- Right 420px: 4 Extended Stat Types Card -->
+              <rect x="960" y="20" width="416" height="384" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="960" y="20" width="416" height="36" fill="#245A6B"/>
+              <text x="978" y="43" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">扩展统计支持的四种类型</text>
+
+              <rect x="978" y="72" width="380" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="994" y="96" font-size="14" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">dependencies</text>
+              <text x="994" y="122" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">函数依赖统计：修正多列等值独立性误判</text>
+
+              <rect x="978" y="150" width="380" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="994" y="174" font-size="14" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">ndistinct</text>
+              <text x="994" y="200" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">多列组合去重数：改善 GROUP BY 聚合估算</text>
+
+              <rect x="978" y="228" width="380" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="994" y="252" font-size="14" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">mcv</text>
+              <text x="994" y="278" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">多列常见值组合：覆盖等值/不等值/NULL/部分 OR</text>
+
+              <rect x="978" y="306" width="380" height="80" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="994" y="330" font-size="14" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">表达式统计（单变量）</text>
+              <text x="994" y="354" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">对 lower(email) / date_trunc / 生成列采样；</text>
+              <text x="994" y="374" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">无索引维护开销，也无索引访问能力。</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">定义写进目录之后，统计值从哪里来、优化器又是怎么读进去的？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 三层架构定位</span>
+            <span class="page-num">03 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 (INTERACTIVE #1: LIFECYCLE) ==================== -->
+        <section class="slide" data-slide="3" data-title="从 CREATE STATISTICS 到优化器估算的源码生命周期" data-eyebrow="INTERNAL MECHANISM">
+          <div class="slide-eyebrow">
+            <span>INTERNAL MECHANISM · 04 / 12</span>
+            <span class="tag-right">三、核心原理 · 构建与读取源码路径</span>
+          </div>
+          <h1 class="slide-title">从 CREATE STATISTICS 到优化器估算的源码生命周期</h1>
+          <p class="slide-lead">扩展统计并非实时维护，而是复用 ANALYZE 采样构建；若创建后忘记 ANALYZE，pg_statistic_ext_data 为空，优化器无数据可用。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg id="svg-lifecycle" viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Stage 1 -->
+              <g id="lc-stage-1" class="svg-node">
+                <rect x="24" y="30" width="286" height="250" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="30" width="286" height="36" fill="#1E4B5A"/>
+                <text x="42" y="54" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">STAGE 01 · 定义登记</text>
+                <text x="42" y="96" font-size="13.5" font-weight="700" fill="#1B2B33" font-family="SF Mono, monospace">CREATE STATISTICS</text>
+                <text x="42" y="124" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">仅写入统计对象元数据定义：</text>
+                <rect x="42" y="140" width="250" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+                <text x="167" y="167" font-size="13.5" font-weight="700" fill="#245A6B" text-anchor="middle" font-family="SF Mono, monospace">pg_statistic_ext</text>
+                <text x="42" y="212" font-size="13" fill="#BE653B" font-weight="600" font-family="PingFang SC, sans-serif">此时尚无任何统计分布数据</text>
+                <text x="42" y="242" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">不建索引结构，不拦截写入</text>
+              </g>
+
+              <!-- Arrow 1 -> 2 -->
+              <path id="lc-arr-12" d="M 310 155 H 356" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+
+              <!-- Stage 2 -->
+              <g id="lc-stage-2" class="svg-node">
+                <rect x="364" y="30" width="332" height="250" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="364" y="30" width="332" height="36" fill="#2E6373"/>
+                <text x="382" y="54" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">STAGE 02 · 复用样本构建</text>
+                <text x="382" y="92" font-size="12.5" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">extended_stats.c</text>
+                <text x="382" y="114" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">BuildRelationExtStatistics()</text>
+                <text x="382" y="142" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">复用 ANALYZE 采样 rows，按启用类型调用：</text>
+                <text x="382" y="170" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">· statext_ndistinct_build()</text>
+                <text x="382" y="194" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">· statext_dependencies_build()</text>
+                <text x="382" y="218" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">· statext_mcv_build()</text>
+                <text x="382" y="242" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">· compute_expr_stats()</text>
+                <text x="382" y="266" font-size="12" fill="#46585F" font-family="PingFang SC, sans-serif">注：stxstattarget = 0 时不重建</text>
+              </g>
+
+              <!-- Arrow 2 -> 3 -->
+              <path id="lc-arr-23" d="M 696 155 H 742" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+
+              <!-- Stage 3 -->
+              <g id="lc-stage-3" class="svg-node">
+                <rect x="750" y="30" width="256" height="250" fill="#CFE0DC" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="750" y="30" width="256" height="36" fill="#47808D"/>
+                <text x="768" y="54" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">STAGE 03 · 统计落盘</text>
+                <text x="768" y="96" font-size="13" font-weight="700" fill="#1B2B33" font-family="SF Mono, monospace">statext_store()</text>
+                <text x="768" y="124" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">将构建结果持久化写入：</text>
+                <rect id="lc-data-box" x="768" y="142" width="220" height="54" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <text id="lc-data-label" x="878" y="166" font-size="13" font-weight="700" fill="#245A6B" text-anchor="middle" font-family="SF Mono, monospace">pg_statistic_ext_data</text>
+                <text id="lc-data-status" x="878" y="186" font-size="12" fill="#2F7A66" text-anchor="middle" font-family="PingFang SC, sans-serif">已就绪（含有效分布值）</text>
+                <text x="768" y="226" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">数据变更后需再次 ANALYZE</text>
+                <text x="768" y="250" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">才能刷新目录中的旧快照</text>
+              </g>
+
+              <!-- Arrow 3 -> 4 -->
+              <path id="lc-arr-34" d="M 1006 155 H 1052" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+
+              <!-- Stage 4 -->
+              <g id="lc-stage-4" class="svg-node">
+                <rect x="1060" y="30" width="316" height="250" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="1060" y="30" width="316" height="36" fill="#2F7A66"/>
+                <text x="1078" y="54" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">STAGE 04 · 优化器读取与估算</text>
+                <text x="1078" y="92" font-size="12.5" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">plancat.c</text>
+                <text x="1078" y="114" font-size="12" fill="#1B2B33" font-family="SF Mono, monospace">get_relation_statistics_worker()</text>
+                <text x="1078" y="138" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">检查已构建 kind 并挂载至 relation</text>
+                <line x1="1078" y1="154" x2="1358" y2="154" stroke="#A4C4C6" stroke-width="1"/>
+                <text x="1078" y="178" font-size="12.5" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">clausesel.c</text>
+                <text x="1078" y="200" font-size="12" fill="#1B2B33" font-family="SF Mono, monospace">clauselist_selectivity_ext()</text>
+                <text x="1078" y="224" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">→ statext_clauselist_selectivity()</text>
+                <text x="1078" y="250" font-size="12.5" fill="#2F7A66" font-weight="600" font-family="PingFang SC, sans-serif">优先用扩展统计，剩余条件回退普通估算</text>
+              </g>
+
+              <!-- Missing ANALYZE bypass path (hidden unless triggered) -->
+              <g id="lc-bypass-group" opacity="0">
+                <path d="M 167 280 V 314 H 1218 V 288" stroke="#BE653B" stroke-width="2.5" stroke-dasharray="8 4" fill="none" marker-end="url(#arr-accent)"/>
+                <rect x="480" y="298" width="440" height="30" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="700" y="318" font-size="13" font-weight="700" fill="#BE653B" text-anchor="middle" font-family="PingFang SC, sans-serif">漏做 ANALYZE：跳过构建与落盘，优化器直接回退单列独立估算！</text>
+              </g>
+
+              <!-- Live Status Narrative Banner inside SVG -->
+              <rect x="24" y="344" width="1352" height="62" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect id="lc-status-bar" x="24" y="344" width="8" height="62" fill="#245A6B"/>
+              <text id="lc-caption-title" x="48" y="369" font-size="14" font-weight="700" fill="#245A6B" font-family="PingFang SC, sans-serif">全流程总览：点击下方按钮可逐步演示源码执行路径，或模拟「忘记 ANALYZE」的后果</text>
+              <text id="lc-caption-desc" x="48" y="393" font-size="13.5" fill="#46585F" font-family="PingFang SC, sans-serif">核心规律：CREATE STATISTICS 只写定义，ANALYZE 复用样本计算并写入 pg_statistic_ext_data，规划期优先覆盖单表多条件子句。</text>
+            </svg>
+          </div>
+          <div class="interactive-strip">
+            <button class="bp-btn" id="lcPlayBtn">▶ 播放全流程</button>
+            <button class="bp-btn" id="lcStepBtn">⏭ 单步推进</button>
+            <button class="bp-btn warn" id="lcSkipBtn">模拟漏做 ANALYZE</button>
+            <button class="bp-btn" id="lcResetBtn">↺ 重置总览</button>
+            <span style="margin-left:auto;font-family:var(--font-mono);font-size:12.5px;color:var(--ink-muted);" id="lcStepReadout">STATE: OVERVIEW</span>
+          </div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">单表多条件已经打通，那多表 JOIN 呢？先看清扩展统计的作用边界，再深入四种类型原理。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 源码生命周期演示</span>
+            <span class="page-num">04 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE #2: DEPENDENCIES FORMULA) ==================== -->
+        <section class="slide" data-slide="4" data-title="单表边界与 dependencies 软函数依赖模型" data-eyebrow="CORE PRINCIPLE">
+          <div class="slide-eyebrow">
+            <span>CORE PRINCIPLE · 05 / 12</span>
+            <span class="tag-right">三、核心原理 · 作用边界与函数依赖</span>
+          </div>
+          <h1 class="slide-title">单表边界与 dependencies 软函数依赖模型</h1>
+          <p class="slide-lead">扩展统计当前不用于表连接 selectivity 估算；在单表内，dependencies 通过有效度 d 修正多列等值条件的独立性相乘偏差。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg id="svg-dep" viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left 520px: Scope Boundary -->
+              <rect x="24" y="20" width="516" height="390" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="20" width="516" height="36" fill="#1E4B5A"/>
+              <text x="42" y="43" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">作用边界：单表受益 vs 跨表 JOIN 盲区</text>
+
+              <!-- Single Table (Green) -->
+              <rect x="42" y="74" width="480" height="142" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="58" y="98" font-size="14" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">✓ 受益场景：单表多条件过滤</text>
+              <text x="58" y="126" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">SELECT * FROM orders</text>
+              <text x="58" y="148" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">WHERE tenant_id = 10</text>
+              <text x="58" y="170" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">  AND currency = 'CNY' AND status = 'paid';</text>
+              <text x="58" y="198" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">条件仅引用单个普通 relation，可直接命中扩展统计</text>
+
+              <!-- Join Boundary (Terracotta) -->
+              <rect x="42" y="232" width="480" height="160" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="58" y="256" font-size="14" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">✕ 当前边界：跨表 JOIN selectivity 估算</text>
+              <text x="58" y="284" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">SELECT * FROM orders o</text>
+              <text x="58" y="306" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">JOIN tenants t ON o.tenant_id = t.id</text>
+              <text x="58" y="328" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">WHERE t.region = 'cn';</text>
+              <text x="58" y="356" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">官方文档明确说明：扩展统计目前不用于表连接</text>
+              <text x="58" y="376" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">selectivity 估算，需改 SQL / 索引 / 模型配合。</text>
+
+              <!-- Right 820px: Interactive dependencies Formula Explorer -->
+              <rect x="560" y="20" width="816" height="390" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="560" y="20" width="816" height="36" fill="#245A6B"/>
+              <text x="578" y="43" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">dependencies 软函数依赖公式推演（依据 README.dependencies）</text>
+
+              <!-- Formula Box -->
+              <rect x="580" y="72" width="776" height="52" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="968" y="104" font-size="18" font-weight="700" fill="#1E4B5A" text-anchor="middle" font-family="SF Mono, monospace">P(a=?, b=?) = P(a=?) × ( d + (1 - d) × P(b=?) )</text>
+
+              <!-- Bar 1: Independent Assumption (d=0) -->
+              <text x="580" y="156" font-size="13.5" font-weight="600" fill="#BE653B" font-family="PingFang SC, sans-serif">无扩展统计（独立假设 d = 0）：P(a) × P(b)</text>
+              <text id="dep-indep-val" x="1356" y="156" font-size="14" font-weight="700" fill="#BE653B" text-anchor="end" font-family="SF Mono, monospace">0.0100 (1.00%)</text>
+              <rect x="580" y="166" width="776" height="28" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect id="dep-indep-bar" x="580" y="166" width="78" height="28" fill="#BE653B"/>
+
+              <!-- Bar 2: With dependencies (d) -->
+              <text x="580" y="226" font-size="13.5" font-weight="600" fill="#245A6B" font-family="PingFang SC, sans-serif">启用 dependencies（当前依赖强度 d）：修正后估算选择率</text>
+              <text id="dep-adj-val" x="1356" y="226" font-size="14" font-weight="700" fill="#245A6B" text-anchor="end" font-family="SF Mono, monospace">0.1000 (10.00%)</text>
+              <rect x="580" y="236" width="776" height="28" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect id="dep-adj-bar" x="580" y="236" width="776" height="28" fill="#2F7A66"/>
+
+              <!-- Comparison Readout -->
+              <rect x="580" y="280" width="776" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text id="dep-summary" x="598" y="307" font-size="13.5" font-weight="600" fill="#1B2B33" font-family="PingFang SC, sans-serif">当 P(a)=0.10、P(b)=0.10、d=1.00 时：独立假设低估为 1/10，启用 dependencies 后估算恢复至真实量级。</text>
+
+              <!-- Suitable / Unsuitable Footer inside right box -->
+              <rect x="580" y="338" width="378" height="56" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="594" y="360" font-size="12.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">适合：zip_code =&gt; city、tenant_id =&gt; currency 等</text>
+              <text x="594" y="381" font-size="12" fill="#46585F" font-family="PingFang SC, sans-serif">强业务依赖、等值条件常一起出现且值组合一致</text>
+
+              <rect x="974" y="338" width="382" height="56" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="988" y="360" font-size="12.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">不适合：冲突组合、具体热门组合、大量范围条件</text>
+              <text x="988" y="381" font-size="12" fill="#46585F" font-family="PingFang SC, sans-serif">例：zip_code='100000' AND city='Shanghai' 会高估</text>
+            </svg>
+          </div>
+          <div class="interactive-strip">
+            <label class="slider-group">P(a=?) <input type="range" id="slPa" min="0.02" max="0.50" step="0.02" value="0.10"><span class="slider-val" id="valPa">0.10</span></label>
+            <label class="slider-group">P(b=?) <input type="range" id="slPb" min="0.02" max="0.50" step="0.02" value="0.10"><span class="slider-val" id="valPb">0.10</span></label>
+            <label class="slider-group">依赖度 d <input type="range" id="slD" min="0" max="1" step="0.05" value="1.00"><span class="slider-val" id="valD">1.00</span></label>
+            <button class="bp-btn" id="depAnimBtn">▶ 演示 d: 0→1</button>
+            <button class="bp-btn" id="depPresetWeak">弱依赖 d=0.2</button>
+            <button class="bp-btn" id="depPresetStrong">强依赖 d=1.0</button>
+          </div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">当需求从「多列等值过滤」转向「多列分组聚合」或「热门偏斜组合」，就需要 ndistinct 与 MCV 接棒。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 作用边界与函数依赖</span>
+            <span class="page-num">05 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 ==================== -->
+        <section class="slide" data-slide="5" data-title="ndistinct、MCV 与表达式统计：能力与代价权衡" data-eyebrow="STATISTICS TYPES">
+          <div class="slide-eyebrow">
+            <span>STATISTICS TYPES · 06 / 12</span>
+            <span class="tag-right">三、核心原理 · 四种扩展统计选型</span>
+          </div>
+          <h1 class="slide-title">ndistinct、MCV 与表达式统计：能力与代价权衡</h1>
+          <p class="slide-lead">选统计类型切忌贪多——四种扩展统计各司其职，表达力越强，ANALYZE 构建、目录存储与规划期匹配代价也越高。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- 4 Equal Columns (328px each, gap 16px, margins 20px) -->
+              <!-- Col 1: dependencies -->
+              <rect x="20" y="20" width="328" height="390" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+              <rect x="20" y="20" width="328" height="46" fill="#47808D"/>
+              <text x="38" y="49" font-size="16" font-weight="700" fill="#F7F6F2" font-family="SF Mono, monospace">01 · dependencies</text>
+              <text x="38" y="92" font-size="13.5" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">核心机制</text>
+              <text x="38" y="116" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">计算列间软函数依赖有效度 d</text>
+              <text x="38" y="138" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">（0~1），只表达全局依赖关系。</text>
+              <line x1="38" y1="158" x2="330" y2="158" stroke="#CFE0DC" stroke-width="1"/>
+              <text x="38" y="182" font-size="13.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">典型适用场景</text>
+              <text x="38" y="206" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· zip_code =&gt; city 等值联查</text>
+              <text x="38" y="228" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· tenant_id =&gt; region/currency</text>
+              <line x1="38" y1="248" x2="330" y2="248" stroke="#CFE0DC" stroke-width="1"/>
+              <text x="38" y="272" font-size="13.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">局限与代价</text>
+              <text x="38" y="296" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">不记录具体热门值组合；</text>
+              <text x="38" y="318" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">冲突组合与范围查询不适用。</text>
+              <rect x="38" y="352" width="292" height="38" fill="#F7F6F2" stroke="#47808D" stroke-width="1"/>
+              <text x="184" y="376" font-size="13" font-weight="700" fill="#245A6B" text-anchor="middle" font-family="PingFang SC, sans-serif">开销评级：低（最轻量）</text>
+
+              <!-- Col 2: ndistinct -->
+              <rect x="364" y="20" width="328" height="390" fill="#E5EFF0" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="364" y="20" width="328" height="46" fill="#2E6373"/>
+              <text x="382" y="49" font-size="16" font-weight="700" fill="#F7F6F2" font-family="SF Mono, monospace">02 · ndistinct</text>
+              <text x="382" y="92" font-size="13.5" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">核心机制（mvdistinct.c）</text>
+              <text x="382" y="116" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">为列组合 (a,b)、(a,c)、(a,b,c)</text>
+              <text x="382" y="138" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">存储多变量 distinct 组合数估算。</text>
+              <line x1="382" y1="158" x2="674" y2="158" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="382" y="182" font-size="13.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">典型适用场景</text>
+              <text x="382" y="206" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 多列 GROUP BY / DISTINCT</text>
+              <text x="382" y="228" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 改善 HashAggregate 内存估算</text>
+              <line x1="382" y1="248" x2="674" y2="248" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="382" y="272" font-size="13.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">局限与代价</text>
+              <text x="382" y="296" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">只知道「大约有多少组」，</text>
+              <text x="382" y="318" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">不能告诉优化器哪组值最热。</text>
+              <rect x="382" y="352" width="292" height="38" fill="#F7F6F2" stroke="#2E6373" stroke-width="1"/>
+              <text x="528" y="376" font-size="13" font-weight="700" fill="#245A6B" text-anchor="middle" font-family="PingFang SC, sans-serif">开销评级：低至中（专注聚合）</text>
+
+              <!-- Col 3: mcv -->
+              <rect x="708" y="20" width="328" height="390" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="708" y="20" width="328" height="46" fill="#BE653B"/>
+              <text x="726" y="49" font-size="16" font-weight="700" fill="#F7F6F2" font-family="SF Mono, monospace">03 · mcv（最常见组合）</text>
+              <text x="726" y="92" font-size="13.5" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">核心机制（README.mcv）</text>
+              <text x="726" y="116" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">记录热门值组合的实际 frequency</text>
+              <text x="726" y="138" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">与独立估算 base_frequency。</text>
+              <line x1="726" y1="158" x2="1018" y2="158" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="726" y="182" font-size="13.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">典型适用场景</text>
+              <text x="726" y="206" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 状态/租户/渠道等偏斜组合</text>
+              <text x="726" y="228" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 识别极低频或「不可能组合」</text>
+              <line x1="726" y1="248" x2="1018" y2="248" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="726" y="272" font-size="13.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">局限与代价</text>
+              <text x="726" y="296" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">ANALYZE 计算重、目录占用大，</text>
+              <text x="726" y="318" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">规划期需逐项匹配并合计频率。</text>
+              <rect x="726" y="352" width="292" height="38" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="872" y="376" font-size="13" font-weight="700" fill="#BE653B" text-anchor="middle" font-family="PingFang SC, sans-serif">开销评级：高（表达力最强）</text>
+
+              <!-- Col 4: Expression Stats -->
+              <rect x="1052" y="20" width="328" height="390" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="1052" y="20" width="328" height="46" fill="#1E4B5A"/>
+              <text x="1070" y="49" font-size="16" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">04 · 表达式统计</text>
+              <text x="1070" y="92" font-size="13.5" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">核心机制（单变量采样）</text>
+              <text x="1070" y="116" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">对 lower(email)、date_trunc、</text>
+              <text x="1070" y="138" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">虚拟生成列收集单变量统计。</text>
+              <line x1="1070" y1="158" x2="1362" y2="158" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1070" y="182" font-size="13.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">典型适用场景</text>
+              <text x="1070" y="206" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 优化器只需知晓表达式分布</text>
+              <text x="1070" y="228" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 避免表达式索引的写入代价</text>
+              <line x1="1070" y1="248" x2="1362" y2="248" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1070" y="272" font-size="13.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">与表达式索引的边界</text>
+              <text x="1070" y="296" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">不提供访问路径、不减少 IO；</text>
+              <text x="1070" y="318" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">需要快速定位行仍须建索引。</text>
+              <rect x="1070" y="352" width="292" height="38" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="1216" y="376" font-size="13" font-weight="700" fill="#1E4B5A" text-anchor="middle" font-family="PingFang SC, sans-serif">开销评级：低（无写入维护）</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">除了建对象等 ANALYZE，迁移恢复窗口还有一类特殊工具——手工恢复统计函数，但必须看清它的红线。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 四类扩展统计权衡</span>
+            <span class="page-num">06 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 ==================== -->
+        <section class="slide" data-slide="6" data-title="横向对比与运维边界：统计信息不能替代索引与建模" data-eyebrow="TRADE-OFF MATRIX">
+          <div class="slide-eyebrow">
+            <span>TRADE-OFF MATRIX · 07 / 12</span>
+            <span class="tag-right">三(3.8) &amp; 四、手工恢复与横向对比</span>
+          </div>
+          <h1 class="slide-title">横向对比与运维边界：统计信息不能替代索引与建模</h1>
+          <p class="slide-lead">统计信息解决「看得准」，索引解决「走得快」；而手工恢复统计仅属于迁移恢复窗口的临时预热手段，绝非日常调参。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left 920px: 4-Lever Comparison Matrix -->
+              <rect x="20" y="20" width="920" height="390" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <!-- Header Row -->
+              <rect x="20" y="20" width="920" height="42" fill="#1E4B5A"/>
+              <text x="36" y="46" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">对比维度</text>
+              <text x="150" y="46" font-size="13.5" font-weight="700" fill="#CFE0DC" font-family="PingFang SC, sans-serif">自定义统计信息</text>
+              <text x="360" y="46" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">建索引</text>
+              <text x="550" y="46" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">改 SQL / 改模型</text>
+              <text x="755" y="46" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">表分区</text>
+
+              <!-- Highlight column for 自定义统计信息 -->
+              <rect x="138" y="62" width="210" height="348" fill="#E5EFF0" opacity="0.65"/>
+
+              <!-- Row 1: 主要目标 -->
+              <line x1="20" y1="130" x2="940" y2="130" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="36" y="100" font-size="13" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">主要目标</text>
+              <text x="150" y="100" font-size="13" font-weight="700" fill="#245A6B" font-family="PingFang SC, sans-serif">改善优化器行数估算</text>
+              <text x="360" y="100" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">提供快速访问路径</text>
+              <text x="550" y="100" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">改变查询语义或数据形态</text>
+              <text x="755" y="100" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">缩小扫描与维护边界</text>
+
+              <!-- Row 2: 直接减少 IO -->
+              <line x1="20" y1="194" x2="940" y2="194" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="36" y="166" font-size="13" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">直接减少 IO</text>
+              <text x="150" y="166" font-size="13" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">否（仅影响计划选择）</text>
+              <text x="360" y="166" font-size="13" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">是</text>
+              <text x="550" y="166" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">视改法而定</text>
+              <text x="755" y="166" font-size="13" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">是（分区剪枝）</text>
+
+              <!-- Row 3: 写入代价 -->
+              <line x1="20" y1="264" x2="940" y2="264" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="36" y="234" font-size="13" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">写入代价</text>
+              <text x="150" y="234" font-size="13" fill="#1B2B33" font-family="PingFang SC, sans-serif">主要在 ANALYZE 阶段</text>
+              <text x="360" y="234" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">每次写入均需维护索引</text>
+              <text x="550" y="234" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">视模型改动而定</text>
+              <text x="755" y="234" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">分区路由与维护成本</text>
+
+              <!-- Row 4: 适合问题 -->
+              <line x1="20" y1="336" x2="940" y2="336" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="36" y="304" font-size="13" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">适合问题</text>
+              <text x="150" y="304" font-size="13" font-weight="600" fill="#245A6B" font-family="PingFang SC, sans-serif">行数与分组估算偏差</text>
+              <text x="360" y="304" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">高选择性定位、排序覆盖</text>
+              <text x="550" y="304" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">不可 sargable / 模型错位</text>
+              <text x="755" y="304" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">时间/租户冷热边界清晰</text>
+
+              <!-- Row 5: 不适合问题 -->
+              <text x="36" y="378" font-size="13" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">不适合问题</text>
+              <text x="150" y="378" font-size="13" fill="#BE653B" font-family="PingFang SC, sans-serif">缺少索引等访问结构</text>
+              <text x="360" y="378" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">仅分布误判无需定位</text>
+              <text x="550" y="378" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">仅仅是统计信息过旧</text>
+              <text x="755" y="378" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">跨分区查询过多</text>
+
+              <!-- Vertical Grid Lines -->
+              <line x1="138" y1="62" x2="138" y2="410" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="348" y1="62" x2="348" y2="410" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="538" y1="62" x2="538" y2="410" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="742" y1="62" x2="742" y2="410" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Right 420px: Manual Restore Stats Panel -->
+              <rect x="960" y="20" width="420" height="390" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="960" y="20" width="420" height="42" fill="#BE653B"/>
+              <text x="978" y="46" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">手工恢复统计：迁移窗口的临时工具</text>
+
+              <rect x="978" y="78" width="384" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="994" y="102" font-size="12.5" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">pg_restore_relation_stats()</text>
+              <text x="994" y="124" font-size="12" fill="#46585F" font-family="PingFang SC, sans-serif">relation_stats.c · 修改 pg_class 表级统计</text>
+
+              <rect x="978" y="148" width="384" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="994" y="172" font-size="12.5" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">pg_restore_attribute_stats()</text>
+              <text x="994" y="194" font-size="12" fill="#46585F" font-family="PingFang SC, sans-serif">attribute_stats.c · 修改 pg_statistic 列级统计</text>
+
+              <rect x="978" y="218" width="384" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="994" y="242" font-size="12.5" font-weight="700" fill="#245A6B" font-family="SF Mono, monospace">pg_restore_extended_stats()</text>
+              <text x="994" y="264" font-size="12" fill="#46585F" font-family="PingFang SC, sans-serif">extended_stats_funcs.c · 修改扩展统计数据</text>
+
+              <!-- Redline Warning -->
+              <rect x="978" y="292" width="384" height="102" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="994" y="316" font-size="13.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">官方文档红线警告</text>
+              <text x="994" y="340" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 仅用于恢复后、尚未 ANALYZE 前的计划预热</text>
+              <text x="994" y="362" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">· 会被 autovacuum / VACUUM / ANALYZE 覆盖</text>
+              <text x="994" y="384" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">· 严禁当作日常线上调参或长期固定计划手段</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">在机制与边界都清晰之后，投入自定义统计究竟能换来什么可观测收益，又必须接受哪些代价？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 横向对比与运维红线</span>
+            <span class="page-num">07 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-slide="7" data-title="收益与代价：换取计划稳定性，而非单算子加速" data-eyebrow="IMPACT ANALYSIS">
+          <div class="slide-eyebrow">
+            <span>IMPACT ANALYSIS · 08 / 12</span>
+            <span class="tag-right">五、效果如何？</span>
+          </div>
+          <h1 class="slide-title">收益与代价：换取计划稳定性，而非单算子加速</h1>
+          <p class="slide-lead">自定义统计信息的价值体现在执行计划不再抖动——但采样本质、刷新延迟与规划开销都是必须正视的工程代价。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Center Axis -->
+              <line x1="700" y1="20" x2="700" y2="410" stroke="#D9D5CB" stroke-width="2" stroke-dasharray="6 4"/>
+
+              <!-- Left Header: Observable Benefits -->
+              <rect x="24" y="20" width="648" height="40" fill="#2F7A66"/>
+              <text x="44" y="45" font-size="15" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">可观测收益（PLAN STABILITY）</text>
+
+              <!-- 5 Benefit Rows -->
+              <rect x="24" y="74" width="648" height="58" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="44" y="99" font-size="14" font-weight="700" fill="#2F7A66" font-family="SF Mono, monospace">01</text>
+              <text x="80" y="99" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">估算行数偏差收敛</text>
+              <text x="80" y="121" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">EXPLAIN (ANALYZE) 中 estimated rows 与 actual rows 倍数差距显著缩小</text>
+
+              <rect x="24" y="142" width="648" height="58" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="44" y="167" font-size="14" font-weight="700" fill="#2F7A66" font-family="SF Mono, monospace">02</text>
+              <text x="80" y="167" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">连接算子纠偏</text>
+              <text x="80" y="189" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">因严重低估引发的错误 Nested Loop，恢复为合理的 Hash Join 或 Merge Join</text>
+
+              <rect x="24" y="210" width="648" height="58" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="44" y="235" font-size="14" font-weight="700" fill="#2F7A66" font-family="SF Mono, monospace">03</text>
+              <text x="80" y="235" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">多列聚合内存可控</text>
+              <text x="80" y="257" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">多列 GROUP BY 的 HashAggregate 行数估算更贴近真实，避免误判内存压力</text>
+
+              <rect x="24" y="278" width="648" height="58" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="44" y="303" font-size="14" font-weight="700" fill="#2F7A66" font-family="SF Mono, monospace">04</text>
+              <text x="80" y="303" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">扫描路径选择更合理</text>
+              <text x="80" y="325" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">Bitmap Scan、Index Scan 与 Seq Scan 的切换与真实返回行数相匹配</text>
+
+              <rect x="24" y="346" width="648" height="58" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="44" y="371" font-size="14" font-weight="700" fill="#2F7A66" font-family="SF Mono, monospace">05</text>
+              <text x="80" y="371" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">表达式条件摆脱盲猜</text>
+              <text x="80" y="393" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">函数过滤不再依赖固定默认选择率，优化器能感知真实结果分布</text>
+
+              <!-- Right Header: Necessary Costs -->
+              <rect x="728" y="20" width="648" height="40" fill="#BE653B"/>
+              <text x="748" y="45" font-size="15" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">必须接受的代价（ENGINEERING COSTS）</text>
+
+              <!-- 5 Cost Rows -->
+              <rect x="728" y="74" width="648" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="748" y="99" font-size="14" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">01</text>
+              <text x="784" y="99" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">ANALYZE 耗时与负载上升</text>
+              <text x="784" y="121" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">提高统计目标或增加统计对象后，采样行数与统计构建计算变重</text>
+
+              <rect x="728" y="142" width="648" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="748" y="167" font-size="14" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">02</text>
+              <text x="784" y="167" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">目录空间与规划期匹配开销</text>
+              <text x="784" y="189" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">多列 MCV 占用更多 pg_statistic_ext_data 空间，规划时匹配计算增多</text>
+
+              <rect x="728" y="210" width="648" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="748" y="235" font-size="14" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">03</text>
+              <text x="784" y="235" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">仍是样本估算，非精确真值</text>
+              <text x="784" y="257" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">所有统计信息均基于采样，无法做到 100% 全量精确无误差</text>
+
+              <rect x="728" y="278" width="648" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="748" y="303" font-size="14" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">04</text>
+              <text x="784" y="303" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">高频变化场景的过期风险</text>
+              <text x="784" y="325" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">业务数据分布变化越快，统计快照过期并产生误导的风险越高</text>
+
+              <rect x="728" y="346" width="648" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="748" y="371" font-size="14" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">05</text>
+              <text x="784" y="371" font-size="14" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">不直接修正跨表 JOIN 估算</text>
+              <text x="784" y="393" font-size="13" fill="#46585F" font-family="PingFang SC, sans-serif">扩展统计当前作用域限于单表，无法直接解决表连接选择率失真</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">理论落到命令行：接下来看四组可直接复现的 SQL 实操验证模式。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 收益与代价天平</span>
+            <span class="page-num">08 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 ==================== -->
+        <section class="slide" data-slide="8" data-title="四类核心实操验证：建对象、ANALYZE 与观测点" data-eyebrow="PRACTICAL DEMO">
+          <div class="slide-eyebrow">
+            <span>PRACTICAL DEMO · 09 / 12</span>
+            <span class="tag-right">六、实操 DEMO（可执行语法 · 不伪造输出）</span>
+          </div>
+          <h1 class="slide-title">四类核心实操验证：建对象、ANALYZE 与观测点</h1>
+          <p class="slide-lead">四组脚本均依据官方文档与源码机制整理，聚焦「创建统计 → ANALYZE → EXPLAIN / 目录视图」的实证闭环。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- 2x2 Grid: each card 672 x 192 -->
+              <!-- Card 1: dependencies -->
+              <rect x="20" y="18" width="672" height="190" fill="#F1EFE9" stroke="#245A6B" stroke-width="1"/>
+              <rect x="20" y="18" width="672" height="32" fill="#1E4B5A"/>
+              <text x="36" y="39" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">DEMO 6.1 · dependencies：修正多列等值条件低估</text>
+              <text x="36" y="74" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">CREATE STATISTICS stat_demo_dep_ab_dep (dependencies)</text>
+              <text x="36" y="95" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">  ON a, b FROM stat_demo_dep;  ANALYZE stat_demo_dep;</text>
+              <text x="36" y="118" font-size="12.5" fill="#46585F" font-family="SF Mono, monospace">EXPLAIN (ANALYZE, TIMING OFF, BUFFERS OFF) ... WHERE a=1 AND b=1;</text>
+              <rect x="36" y="140" width="640" height="54" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="50" y="162" font-size="12.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">验证观测点：</text>
+              <text x="50" y="182" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">第二次计划 estimated rows 趋近 actual rows；无索引时不改扫描方式，但估算已纠正。</text>
+
+              <!-- Card 2: ndistinct -->
+              <rect x="708" y="18" width="672" height="190" fill="#F1EFE9" stroke="#245A6B" stroke-width="1"/>
+              <rect x="708" y="18" width="672" height="32" fill="#2E6373"/>
+              <text x="724" y="39" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">DEMO 6.2 · ndistinct：修正多列 GROUP BY 分组数</text>
+              <text x="724" y="74" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">CREATE STATISTICS stat_demo_dep_ab_nd (ndistinct)</text>
+              <text x="724" y="95" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">  ON a, b FROM stat_demo_dep;  ANALYZE stat_demo_dep;</text>
+              <text x="724" y="118" font-size="12.5" fill="#46585F" font-family="SF Mono, monospace">EXPLAIN (ANALYZE, ...) SELECT a, b, count(*) ... GROUP BY a, b;</text>
+              <rect x="724" y="140" width="640" height="54" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="738" y="162" font-size="12.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">验证观测点：</text>
+              <text x="738" y="182" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">HashAggregate / GroupAggregate 节点的 estimated rows 显著贴近真实分组数。</text>
+
+              <!-- Card 3: mcv -->
+              <rect x="20" y="222" width="672" height="190" fill="#F1EFE9" stroke="#BE653B" stroke-width="1"/>
+              <rect x="20" y="222" width="672" height="32" fill="#BE653B"/>
+              <text x="36" y="243" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">DEMO 6.3 · mcv：透视热门偏斜组合频率</text>
+              <text x="36" y="278" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">CREATE STATISTICS ... (mcv) ON tenant_id, status FROM stat_demo_mcv;</text>
+              <text x="36" y="299" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">SELECT m.values, m.frequency, m.base_frequency</text>
+              <text x="36" y="320" font-size="12.5" fill="#46585F" font-family="SF Mono, monospace">FROM pg_statistic_ext s JOIN pg_statistic_ext_data d ..., pg_mcv_list_items(d.stxdmcv) m;</text>
+              <rect x="36" y="344" width="640" height="54" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="50" y="366" font-size="12.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">验证观测点：</text>
+              <text x="50" y="386" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">热门组合 (tenant_id=1, status='paid') 的 frequency 远高于独立估算 base_frequency。</text>
+
+              <!-- Card 4: expression -->
+              <rect x="708" y="222" width="672" height="190" fill="#F1EFE9" stroke="#245A6B" stroke-width="1"/>
+              <rect x="708" y="222" width="672" height="32" fill="#47808D"/>
+              <text x="724" y="243" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">DEMO 6.4 · 表达式统计：低成本改善表达式估算</text>
+              <text x="724" y="278" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">CREATE STATISTICS stat_demo_expr_lower_email</text>
+              <text x="724" y="299" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">  ON lower(email) FROM stat_demo_expr;  ANALYZE stat_demo_expr;</text>
+              <text x="724" y="320" font-size="12.5" fill="#46585F" font-family="SF Mono, monospace">EXPLAIN (ANALYZE, ...) SELECT * ... WHERE lower(email) = 'hot_1@example.com';</text>
+              <rect x="724" y="344" width="640" height="54" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="738" y="366" font-size="12.5" font-weight="700" fill="#245A6B" font-family="PingFang SC, sans-serif">验证观测点：</text>
+              <text x="738" y="386" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">仅改善估算；若需快速定位命中行，仍须另建表达式索引 ON (lower(email))。</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">知道怎么写之后，在线上遇到计划异常时，应该按怎样的决策路径排查？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 四类实操验证</span>
+            <span class="page-num">09 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 (INTERACTIVE #3: DECISION FLOW) ==================== -->
+        <section class="slide" data-slide="9" data-title="自定义统计信息实践决策流程" data-eyebrow="DECISION FLOW">
+          <div class="slide-eyebrow">
+            <span>DECISION FLOW · 10 / 12</span>
+            <span class="tag-right">七、最佳实践 · 线上诊断决策树</span>
+          </div>
+          <h1 class="slide-title">自定义统计信息实践决策流程</h1>
+          <p class="slide-lead">遇到 estimated rows 与 actual rows 严重偏离，先查统计是否过旧，再区分单列粒度、多列/表达式关系与临时恢复窗口。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg id="svg-flow" viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Entry Node -->
+              <g id="df-entry" class="svg-node">
+                <rect x="24" y="168" width="210" height="90" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+                <text x="129" y="204" font-size="14" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="PingFang SC, sans-serif">EXPLAIN (ANALYZE)</text>
+                <text x="129" y="228" font-size="13" fill="#CFE0DC" text-anchor="middle" font-family="PingFang SC, sans-serif">estimated vs actual</text>
+                <text x="129" y="246" font-size="13" fill="#CFE0DC" text-anchor="middle" font-family="PingFang SC, sans-serif">估算偏差显著</text>
+              </g>
+
+              <!-- Orthogonal Trunk from Entry to 4 Decision Gates -->
+              <path id="df-trunk" d="M 234 213 H 284 M 284 64 V 364" stroke="#245A6B" stroke-width="2" fill="none"/>
+
+              <!-- Branch 1: Stale / Migration -->
+              <path id="df-line-1" d="M 284 64 H 334" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <g id="df-gate-1" class="svg-node">
+                <rect x="342" y="30" width="260" height="68" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+                <text x="358" y="56" font-size="13.5" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">1. 统计过旧 / 刚恢复导入？</text>
+                <text x="358" y="80" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">目录快照陈旧或为空</text>
+              </g>
+              <path id="df-line-1b" d="M 602 64 H 662" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <g id="df-act-1" class="svg-node">
+                <rect x="670" y="30" width="700" height="68" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="688" y="56" font-size="13.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">动作：优先执行 ANALYZE 刷新统计</text>
+                <text x="688" y="80" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">迁移恢复窗口若暂无法 ANALYZE，可临时评估 pg_restore_*_stats 预热计划，随后仍须 ANALYZE。</text>
+              </g>
+
+              <!-- Branch 2: Single Column Skew -->
+              <path id="df-line-2" d="M 284 152 H 334" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <g id="df-gate-2" class="svg-node">
+                <rect x="342" y="118" width="260" height="68" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+                <text x="358" y="144" font-size="13.5" font-weight="700" fill="#1B2B33" font-family="PingFang SC, sans-serif">2. 单列采样粒度不足？</text>
+                <text x="358" y="168" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">单列偏斜或直方图过粗</text>
+              </g>
+              <path id="df-line-2b" d="M 602 152 H 662" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <g id="df-act-2" class="svg-node">
+                <rect x="670" y="118" width="700" height="68" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="688" y="144" font-size="13.5" font-weight="700" fill="#2F7A66" font-family="PingFang SC, sans-serif">动作：局部调高单列统计目标 + ANALYZE</text>
+                <text x="688" y="168" font-size="12.5" fill="#1B2B33" font-family="SF Mono, monospace">ALTER TABLE ... ALTER COLUMN col SET STATISTICS N;（慎改全局 default_statistics_target）</text>
+              </g>
+
+              <!-- Branch 3: Multi-Column / Expression -->
+              <path id="df-line-3" d="M 284 256 H 334" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+              <g id="df-gate-3" class="svg-node">
+                <rect x="342" y="208" width="260" height="96" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="358" y="238" font-size="13.5" font-weight="700" fill="#245A6B" font-family="PingFang SC, sans-serif">3. 多列相关或表达式失真？</text>
+                <text x="358" y="262" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">单表多列过滤 / 分组 /</text>
+                <text x="358" y="282" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">热门组合 / 表达式过滤</text>
+              </g>
+              <path id="df-line-3b" d="M 602 256 H 662" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-primary)"/>
+
+              <!-- 4 Sub-actions under Branch 3 -->
+              <g id="df-act-3a" class="svg-node">
+                <rect x="670" y="206" width="166" height="100" fill="#F7F6F2" stroke="#47808D" stroke-width="1"/>
+                <rect x="670" y="206" width="166" height="26" fill="#47808D"/>
+                <text x="753" y="224" font-size="12.5" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="SF Mono, monospace">dependencies</text>
+                <text x="684" y="254" font-size="12" fill="#1B2B33" font-family="PingFang SC, sans-serif">强等值函数依赖</text>
+                <text x="684" y="274" font-size="11.5" fill="#46585F" font-family="PingFang SC, sans-serif">建对象+ANALYZE</text>
+              </g>
+              <g id="df-act-3b" class="svg-node">
+                <rect x="848" y="206" width="166" height="100" fill="#F7F6F2" stroke="#2E6373" stroke-width="1"/>
+                <rect x="848" y="206" width="166" height="26" fill="#2E6373"/>
+                <text x="931" y="224" font-size="12.5" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="SF Mono, monospace">ndistinct</text>
+                <text x="862" y="254" font-size="12" fill="#1B2B33" font-family="PingFang SC, sans-serif">多列 GROUP BY</text>
+                <text x="862" y="274" font-size="11.5" fill="#46585F" font-family="PingFang SC, sans-serif">修正聚合分组数</text>
+              </g>
+              <g id="df-act-3c" class="svg-node">
+                <rect x="1026" y="206" width="166" height="100" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+                <rect x="1026" y="206" width="166" height="26" fill="#BE653B"/>
+                <text x="1109" y="224" font-size="12.5" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="SF Mono, monospace">mcv</text>
+                <text x="1040" y="254" font-size="12" fill="#1B2B33" font-family="PingFang SC, sans-serif">低基数热门组合</text>
+                <text x="1040" y="274" font-size="11.5" fill="#46585F" font-family="PingFang SC, sans-serif">识别偏斜/冲突</text>
+              </g>
+              <g id="df-act-3d" class="svg-node">
+                <rect x="1204" y="206" width="166" height="100" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1"/>
+                <rect x="1204" y="206" width="166" height="26" fill="#1E4B5A"/>
+                <text x="1287" y="224" font-size="12.5" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="PingFang SC, sans-serif">表达式统计</text>
+                <text x="1218" y="254" font-size="12" fill="#1B2B33" font-family="PingFang SC, sans-serif">仅需分布估算</text>
+                <text x="1218" y="274" font-size="11.5" fill="#46585F" font-family="PingFang SC, sans-serif">需定位则建索引</text>
+              </g>
+
+              <!-- Branch 4: Access Path / JOIN -->
+              <path id="df-line-4" d="M 284 364 H 334" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-accent)"/>
+              <g id="df-gate-4" class="svg-node">
+                <rect x="342" y="330" width="260" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="358" y="356" font-size="13.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">4. 缺访问路径或跨表 JOIN？</text>
+                <text x="358" y="380" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">超出统计信息解决边界</text>
+              </g>
+              <path id="df-line-4b" d="M 602 364 H 662" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-accent)"/>
+              <g id="df-act-4" class="svg-node">
+                <rect x="670" y="330" width="700" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="688" y="356" font-size="13.5" font-weight="700" fill="#BE653B" font-family="PingFang SC, sans-serif">动作：转向建索引、改写 SQL、调整数据模型或表分区</text>
+                <text x="688" y="380" font-size="12.5" fill="#1B2B33" font-family="PingFang SC, sans-serif">切勿用扩展统计替代索引，也不应指望扩展统计直接修正跨表 JOIN selectivity。</text>
+              </g>
+            </svg>
+          </div>
+          <div class="interactive-strip">
+            <button class="bp-btn active" data-df="all">全部路径</button>
+            <button class="bp-btn" data-df="stale">统计过旧/恢复</button>
+            <button class="bp-btn" data-df="single">单列偏斜</button>
+            <button class="bp-btn" data-df="dep">多列等值</button>
+            <button class="bp-btn" data-df="nd">多列分组</button>
+            <button class="bp-btn" data-df="mcv">热门组合</button>
+            <button class="bp-btn" data-df="expr">表达式过滤</button>
+            <button class="bp-btn warn" data-df="join">跨表 JOIN/缺索引</button>
+            <button class="bp-btn" id="dfPlayBtn" style="margin-left:auto;">▶ 自动巡检</button>
+          </div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">流程清晰后，还需要架构师、DBA 与业务开发者三方协同，才能让统计信息长期稳定生效。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 实践决策流程</span>
+            <span class="page-num">10 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="10" data-title="面向架构师、DBA 与业务开发者的落地规范" data-eyebrow="ROLE PLAYBOOK">
+          <div class="slide-eyebrow">
+            <span>ROLE PLAYBOOK · 11 / 12</span>
+            <span class="tag-right">七 &amp; 八、三角色协同落地</span>
+          </div>
+          <h1 class="slide-title">面向架构师、DBA 与业务开发者的落地规范</h1>
+          <p class="slide-lead">统计信息不是 DBA 一个人的事后补救，而是从数据建模、SQL 写法到运维观测的全链路协同规范。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Lane 1: Architect -->
+              <rect x="20" y="20" width="1360" height="118" fill="#EBF1EE" stroke="#1E4B5A" stroke-width="1"/>
+              <rect x="20" y="20" width="180" height="118" fill="#1E4B5A"/>
+              <text x="110" y="70" font-size="16" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="PingFang SC, sans-serif">数据库架构师</text>
+              <text x="110" y="96" font-size="12.5" fill="#CFE0DC" text-anchor="middle" font-family="PingFang SC, sans-serif">纳入数据模型设计</text>
+
+              <rect x="218" y="34" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="234" y="60" font-size="13.5" font-weight="700" fill="#1E4B5A" font-family="PingFang SC, sans-serif">识别强相关字段组</text>
+              <text x="234" y="84" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">建模时显式记录常联查/联分组</text>
+              <text x="234" y="104" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">字段：租户/地域/币种/状态/渠道</text>
+
+              <rect x="506" y="34" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="522" y="60" font-size="13.5" font-weight="700" fill="#1E4B5A" font-family="PingFang SC, sans-serif">区分路径与估算需求</text>
+              <text x="522" y="84" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">固定查询族优先建索引；仅估算</text>
+              <text x="522" y="104" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">偏差无定位需求优先建扩展统计</text>
+
+              <rect x="794" y="34" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="810" y="60" font-size="13.5" font-weight="700" fill="#1E4B5A" font-family="PingFang SC, sans-serif">按特征精准选型</text>
+              <text x="810" y="84" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">热门组合用 mcv；强等值依赖用</text>
+              <text x="810" y="104" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">dependencies；多列聚合用 ndistinct</text>
+
+              <rect x="1082" y="34" width="280" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1098" y="60" font-size="13.5" font-weight="700" fill="#1E4B5A" font-family="PingFang SC, sans-serif">划清表达式边界</text>
+              <text x="1098" y="84" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">先区分「仅需分布估算」还是</text>
+              <text x="1098" y="104" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">「需快速定位」，再选统计或索引</text>
+
+              <!-- Lane 2: DBA -->
+              <rect x="20" y="156" width="1360" height="118" fill="#E5EFF0" stroke="#2E6373" stroke-width="1"/>
+              <rect x="20" y="156" width="180" height="118" fill="#2E6373"/>
+              <text x="110" y="206" font-size="16" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="PingFang SC, sans-serif">DBA 运维</text>
+              <text x="110" y="232" font-size="12.5" fill="#CFE0DC" text-anchor="middle" font-family="PingFang SC, sans-serif">可观测 · 可回滚 · 可验证</text>
+
+              <rect x="218" y="170" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="234" y="196" font-size="13.5" font-weight="700" fill="#2E6373" font-family="PingFang SC, sans-serif">量化定位偏差源</text>
+              <text x="234" y="220" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">用 EXPLAIN (ANALYZE, BUFFERS)</text>
+              <text x="234" y="240" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">逐节点核对 estimated vs actual</text>
+
+              <rect x="506" y="170" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="522" y="196" font-size="13.5" font-weight="700" fill="#2E6373" font-family="PingFang SC, sans-serif">目录视图核验构建</text>
+              <text x="522" y="220" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">检查 pg_stats、pg_stats_ext、</text>
+              <text x="522" y="240" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">pg_stats_ext_exprs 确认已落盘</text>
+
+              <rect x="794" y="170" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="810" y="196" font-size="13.5" font-weight="700" fill="#2E6373" font-family="PingFang SC, sans-serif">建后立刻 ANALYZE</text>
+              <text x="810" y="220" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">避免创建完空定义；对大表优先</text>
+              <text x="810" y="240" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">局部调大目标，慎改全局参数</text>
+
+              <rect x="1082" y="170" width="280" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1098" y="196" font-size="13.5" font-weight="700" fill="#2E6373" font-family="PingFang SC, sans-serif">规范恢复窗口预热</text>
+              <text x="1098" y="220" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">迁移恢复可评估 pg_restore_*_stats</text>
+              <text x="1098" y="240" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">但必须规划后续正式 ANALYZE</text>
+
+              <!-- Lane 3: Developer -->
+              <rect x="20" y="292" width="1360" height="118" fill="#F1EFE9" stroke="#47808D" stroke-width="1"/>
+              <rect x="20" y="292" width="180" height="118" fill="#47808D"/>
+              <text x="110" y="342" font-size="16" font-weight="700" fill="#F7F6F2" text-anchor="middle" font-family="PingFang SC, sans-serif">业务开发者</text>
+              <text x="110" y="368" font-size="12.5" fill="#EBF1EE" text-anchor="middle" font-family="PingFang SC, sans-serif">保持 SQL 表达稳定</text>
+
+              <rect x="218" y="306" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="234" y="332" font-size="13.5" font-weight="700" fill="#47808D" font-family="PingFang SC, sans-serif">统一高频表达式写法</text>
+              <text x="234" y="356" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">例如统一使用 lower(email)，切忌</text>
+              <text x="234" y="376" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">混用 lower / ILIKE / 正则导致失效</text>
+
+              <rect x="506" y="306" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="522" y="332" font-size="13.5" font-weight="700" fill="#47808D" font-family="PingFang SC, sans-serif">勿隐藏可过滤字段</text>
+              <text x="522" y="356" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">不要把过滤键藏在 JSON 文本或</text>
+              <text x="522" y="376" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">复杂函数里，除非配套表达式统计</text>
+
+              <rect x="794" y="306" width="272" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="810" y="332" font-size="13.5" font-weight="700" fill="#47808D" font-family="PingFang SC, sans-serif">多租户显式带租户键</text>
+              <text x="810" y="356" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">多租户系统查询条件与统计设计</text>
+              <text x="810" y="376" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">均应显式纳入 tenant_id 维度</text>
+
+              <rect x="1082" y="306" width="280" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1098" y="332" font-size="13.5" font-weight="700" fill="#47808D" font-family="PingFang SC, sans-serif">看计划更要看行数</text>
+              <text x="1098" y="356" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">阅读 EXPLAIN 不只看用了哪个索引，</text>
+              <text x="1098" y="376" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">更要盯紧每个节点的 rows 偏差</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">落地过程中有哪些高频踩坑点？最后一页帮你把 7 个典型误区和延伸思考一次扫清。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 三角色协同规范</span>
+            <span class="page-num">11 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="11" data-title="避坑清单与课后延伸思考" data-eyebrow="PITFALLS &amp; REFLECTION">
+          <div class="slide-eyebrow">
+            <span>PITFALLS &amp; REFLECTION · 12 / 12</span>
+            <span class="tag-right">九、十、十一 · 常见坑与源码索引</span>
+          </div>
+          <h1 class="slide-title">避坑清单与课后延伸思考</h1>
+          <p class="slide-lead">记住 7 条工程红线，避免把统计信息用成「心理安慰」或「运维负担」；结合业务表结构思考进阶问题并核对源码。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left 820px: 7 Pitfalls -->
+              <rect x="20" y="18" width="820" height="394" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <rect x="20" y="18" width="820" height="36" fill="#BE653B"/>
+              <text x="38" y="41" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">七大高频踩坑红线（PITFALLS CHECKLIST）</text>
+
+              <!-- 7 Rows, each 48px high -->
+              <g font-family="PingFang SC, sans-serif">
+                <rect x="34" y="64" width="792" height="42" fill="#F7E9DE"/>
+                <text x="48" y="90" font-size="13.5" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">01</text>
+                <text x="80" y="90" font-size="13.5" font-weight="700" fill="#1B2B33">建完忘记 ANALYZE</text>
+                <text x="242" y="90" font-size="13" fill="#46585F">CREATE STATISTICS 只写定义，pg_statistic_ext_data 无可用值</text>
+
+                <rect x="34" y="112" width="792" height="42" fill="#F1EFE9"/>
+                <text x="48" y="138" font-size="13.5" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">02</text>
+                <text x="80" y="138" font-size="13.5" font-weight="700" fill="#1B2B33">把扩展统计当索引用</text>
+                <text x="242" y="138" font-size="13" fill="#46585F">不减少 heap/index page 访问，无合适路径依然快不起来</text>
+
+                <rect x="34" y="160" width="792" height="42" fill="#F7E9DE"/>
+                <text x="48" y="186" font-size="13.5" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">03</text>
+                <text x="80" y="186" font-size="13.5" font-weight="700" fill="#1B2B33">所有列组合全建统计</text>
+                <text x="242" y="186" font-size="13" fill="#46585F">ANALYZE 变慢、目录膨胀、规划匹配变重，只给高频稳定查询建</text>
+
+                <rect x="34" y="208" width="792" height="42" fill="#F1EFE9"/>
+                <text x="48" y="234" font-size="13.5" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">04</text>
+                <text x="80" y="234" font-size="13.5" font-weight="700" fill="#1B2B33">冲突组合误用 dependencies</text>
+                <text x="268" y="234" font-size="13" fill="#46585F">查询矛盾组合会过度乐观，此类场景应改用 mcv</text>
+
+                <rect x="34" y="256" width="792" height="42" fill="#F7E9DE"/>
+                <text x="48" y="282" font-size="13.5" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">05</text>
+                <text x="80" y="282" font-size="13.5" font-weight="700" fill="#1B2B33">只调大全局统计目标</text>
+                <text x="242" y="282" font-size="13" fill="#46585F">default_statistics_target 影响全库，应优先局部调高关键列</text>
+
+                <rect x="34" y="304" width="792" height="42" fill="#F1EFE9"/>
+                <text x="48" y="330" font-size="13.5" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">06</text>
+                <text x="80" y="330" font-size="13.5" font-weight="700" fill="#1B2B33">忽略分区与继承统计</text>
+                <text x="242" y="330" font-size="13" fill="#46585F">核对 stxdinherit，确认查询依赖父表统计、子分区还是两者</text>
+
+                <rect x="34" y="352" width="792" height="42" fill="#F7E9DE"/>
+                <text x="48" y="378" font-size="13.5" font-weight="700" fill="#BE653B" font-family="SF Mono, monospace">07</text>
+                <text x="80" y="378" font-size="13.5" font-weight="700" fill="#1B2B33">长期依赖 pg_restore_*_stats</text>
+                <text x="292" y="378" font-size="13" fill="#46585F">会被自动/手工维护覆盖，仅限恢复窗口临时预热</text>
+              </g>
+
+              <!-- Right 520px: Reflection Questions + Source References -->
+              <rect x="860" y="18" width="520" height="236" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <rect x="860" y="18" width="520" height="36" fill="#245A6B"/>
+              <text x="878" y="41" font-size="14" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">课后延伸思考（选 3 题实战自检）</text>
+              <text x="878" y="78" font-size="13" font-weight="700" fill="#1E4B5A" font-family="PingFang SC, sans-serif">Q1 · 索引与统计如何协同？</text>
+              <text x="878" y="100" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">既要 tenant_id 快速定位又要 (tenant_id, status) 准确估算，怎么验？</text>
+              <text x="878" y="132" font-size="13" font-weight="700" fill="#1E4B5A" font-family="PingFang SC, sans-serif">Q2 · MCV 频率差反映什么业务特征？</text>
+              <text x="878" y="154" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">frequency 与 base_frequency 差距极大时，会影响哪些计划节点？</text>
+              <text x="878" y="186" font-size="13" font-weight="700" fill="#1E4B5A" font-family="PingFang SC, sans-serif">Q3 · 跨表 JOIN 估算错怎么办？</text>
+              <text x="878" y="208" font-size="12.5" fill="#46585F" font-family="PingFang SC, sans-serif">扩展统计不直接服务 join selectivity，该改 SQL、建索引还是改模型？</text>
+
+              <!-- Source Code Index -->
+              <rect x="860" y="268" width="520" height="144" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1"/>
+              <rect x="860" y="268" width="520" height="32" fill="#1E4B5A"/>
+              <text x="878" y="289" font-size="13.5" font-weight="700" fill="#F7F6F2" font-family="PingFang SC, sans-serif">实证源码与官方文档核对索引</text>
+              <text x="878" y="322" font-size="12" fill="#1B2B33" font-family="SF Mono, monospace">· src/backend/statistics/extended_stats.c · dependencies.c</text>
+              <text x="878" y="344" font-size="12" fill="#1B2B33" font-family="SF Mono, monospace">· src/backend/statistics/mcv.c · mvdistinct.c · README.*</text>
+              <text x="878" y="366" font-size="12" fill="#1B2B33" font-family="SF Mono, monospace">· src/backend/optimizer/path/clausesel.c · util/plancat.c</text>
+              <text x="878" y="388" font-size="12" fill="#46585F" font-family="PingFang SC, sans-serif">· PostgreSQL Docs: CREATE STATISTICS / planstats / func-admin</text>
+            </svg>
+          </div>
+          <div class="interactive-strip empty"></div>
+          <div class="slide-next-box">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">完 · 建议立即挑一条线上慢 SQL，用 EXPLAIN (ANALYZE) 检查估算行与实际行的偏差。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 自定义统计信息 · 避坑清单与源码索引</span>
+            <span class="page-num">12 / 12</span>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <!-- Right: In-Page Speaker Notes Drawer (Not a modal; scales stage left) -->
+    <aside class="notes-drawer" id="notesDrawer" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <span class="notes-title" id="notesTitle">本页讲稿</span>
+        <div class="notes-mode-tabs">
+          <button class="notes-tab" id="tabCurrentNote">本页 N</button>
+          <button class="notes-tab" id="tabFullNote">全文 T</button>
+          <button class="notes-tab" id="btnCloseNotes" title="关闭">✕</button>
+        </div>
+      </div>
+      <div class="notes-body" id="notesBody"></div>
+    </aside>
+  </div>
+
+  <!-- Table of Contents Overlay (Shortcut G) -->
+  <div class="toc-overlay" id="tocOverlay" aria-label="目录导航">
+    <div class="toc-head">
+      <h2>演说目录 · PostgreSQL 自定义统计信息</h2>
+      <button class="ctrl-btn" id="btnCloseToc">关闭目录 <span class="kbd">G</span></button>
+    </div>
+    <div class="toc-grid" id="tocGrid"></div>
+  </div>
+
+  <!-- Persistent Bottom Control Bar (Visible in normal AND fullscreen modes) -->
+  <footer class="control-bar" id="controlBar">
+    <div class="ctrl-group">
+      <button class="ctrl-btn" id="btnPrev" title="上一页">← 上一页</button>
+      <button class="ctrl-btn" id="btnNext" title="下一页">下一页 →</button>
+      <div class="progress-wrap">
+        <span id="ctrlPageNum">01 / 12</span>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <button class="ctrl-btn" id="btnToc">目录 <span class="kbd">G</span></button>
+      <button class="ctrl-btn" id="btnNoteCurrent">本页讲稿 <span class="kbd">N</span></button>
+      <button class="ctrl-btn" id="btnNoteFull">全文讲稿 <span class="kbd">T</span></button>
+      <button class="ctrl-btn" id="btnAutoPlay">自动播放 <span class="kbd">A</span></button>
+      <button class="ctrl-btn" id="btnFullscreen">全屏 <span class="kbd">F</span></button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== SPEAKER NOTES DATA (口语化 · 逻辑推演与实证 · 连绵不绝) ==================== */
+  const SPEAKER_NOTES = [
+    {
+      title: '自定义统计信息：校准优化器的世界观',
+      paragraphs: [
+        '大家好，今天我们聊一个在 PostgreSQL 性能排查里经常被忽略、但往往决定生死的话题——自定义统计信息。',
+        '很多时候我们遇到一条慢 SQL，第一反应是「执行器太慢了」或者「赶紧加个索引」。但如果你把执行计划摊开看，会发现真正的根因往往不在执行器，而是优化器在一开始就「看错了世界」。你看左边的四个高频现场：比如按租户和状态查订单，实际有几十万行，优化器估成几十行，一脚踩进 Nested Loop；再比如按省市分组，实际几百组被估成几万组；或者条件套了个 lower(email)，优化器完全抓瞎；还有刚恢复完数据没来得及 ANALYZE，计划直接抖动。',
+        '今天这堂课，我们顺着右边的「地层剖面」由浅入深，把 PostgreSQL 自定义统计信息的四层能力——从最底层的单列采样目标、核心的 CREATE STATISTICS 扩展统计、到可观测视图、再到恢复窗口的手工导入函数——一次讲透。先从最根本的问题切入：优化器到底是怎么看错世界的？'
+      ]
+    },
+    {
+      title: '统计信息驱动优化器估算闭环',
+      paragraphs: [
+        '紧接着刚才的问题，优化器在决定走全表扫、走索引，还是走 Hash Join 之前，必须先回答三个数学问题：单个过滤条件剩多少行？多个条件合起来剩多少行？后面的聚合、连接和排序中间结果有多大？',
+        'PostgreSQL 默认的统计信息是按「单列」采样的——记录 null 比例、平均宽度、distinct、MCV、直方图和物理相关性。单列本身没毛病，问题出在业务数据从来不是单列各自为政的。比如订单表里的租户、国家、币种和状态天然绑定。优化器不知道这层业务关系，只能做「独立性假设」，把两个条件的概率直接相乘。一旦行数估错，从扫描方式到连接算法再到聚合内存，整棵执行计划树都会连带跑偏。',
+        '所以大家看底部这条绿色的反馈闭环：以后看到 EXPLAIN (ANALYZE) 里 estimated rows 和 actual rows 差了几个数量级，千万别急着加索引，先问一句是不是统计信息失真了。当然，工程上没有免费的午餐，更细的统计会带来 ANALYZE 耗时、目录存储和规划期计算代价，它只负责校准「认知层」，绝不能替代索引和建模。那这套认知层在数据库内部究竟长什么样？我们看下一页。'
+      ]
+    },
+    {
+      title: '三类统计信息与核心定位：只管估算，不建路径',
+      paragraphs: [
+        '顺着认知层往下钻，PostgreSQL 的统计信息严格分成三层，就像地层剖面一样清晰。',
+        '最底层是表级统计，存在 pg_class 里，由 VACUUM 和 ANALYZE 维护，管的是表有多少页、大概多少行；中间层是单列统计，存在 pg_statistic，我们平时通过 pg_stats 视图看它，管的是单列的选择率、直方图和相关性；最上层就是今天的主角——扩展统计，定义写在 pg_statistic_ext，真正的统计值存在 pg_statistic_ext_data，查的时候看 pg_stats_ext 和 pg_stats_ext_exprs。',
+        '这里一定要钉死一个核心概念：CREATE STATISTICS 创建的是统计定义，不是索引！它不会帮数据库少读哪怕一个数据页，它只帮优化器算准「可能返回多少行、多少组」。官方文档也专门对比了表达式统计和表达式索引：前者没有索引写入维护开销，但也没有快速定位能力。右边列出的四种扩展类型——dependencies、ndistinct、mcv 和表达式统计，就是我们手里的四把手术刀。那么，定义写进目录之后，数据到底是怎么流转到优化器手里的？我们来看源码级的生命周期。'
+      ]
+    },
+    {
+      title: '从 CREATE STATISTICS 到优化器估算的源码生命周期',
+      paragraphs: [
+        '刚才提到定义存在 pg_statistic_ext，数据存在 pg_statistic_ext_data，这两张表是分开的——这直接引出了实战中最容易踩的第一个坑。大家可以看图上的四阶段源码流水线，也可以点下面的「播放全流程」或「模拟漏做 ANALYZE」跟着看。',
+        '第一步，你执行 CREATE STATISTICS，系统只是在 pg_statistic_ext 里登记了一个定义，此时没有任何统计值。第二步，当你执行 ANALYZE 时，源码 extended_stats.c 里的 BuildRelationExtStatistics() 会被触发——它非常聪明，直接复用普通单列采样捞出来的 rows，按你启用的类型分别调用 ndistinct、dependencies、mcv 或表达式的构建函数。第三步，通过 statext_store() 落盘到 pg_statistic_ext_data。注意如果 stxstattarget 设为 0，它就不会重建。',
+        '到了第四步查询规划时，plancat.c 会把已构建的扩展统计挂到表对象上，clausesel.c 里的 clauselist_selectivity_ext() 会先尽量用扩展统计去估能覆盖的条件，剩下的再回退普通估算。你可以点一下「模拟漏做 ANALYZE」感受一下：只要跳过 ANALYZE，数据表是空的，优化器就会原路回退到独立性盲猜。既然流程跑通了，那是不是所有多条件查询都能靠它救命？下一页我们马上来看它的硬边界。'
+      ]
+    },
+    {
+      title: '单表边界与 dependencies 软函数依赖模型',
+      paragraphs: [
+        '刚才在源码里其实已经埋了一个伏笔：clauselist_selectivity_ext() 会先检查这组条件是不是只引用了「一个普通 relation」。这对应了左边这张对比图——单表多条件过滤是扩展统计的主场，但跨表 JOIN 的 selectivity 估算，官方文档明确说明扩展统计目前是不参与的。千万别指望建个扩展统计去直接修正两张表 JOIN 后的行数。',
+        '看清了单表边界，我们把镜头推近到第一种也是最轻量的类型：dependencies，软函数依赖。源码 README.dependencies 里给出的估算公式非常直观：P(a, b) = P(a) × (d + (1 - d) × P(b))。大家可以拖动下面的滑块，或者直接点「演示 d: 0→1」。',
+        '你看，当 d 等于 0 时，公式退化成 P(a) × P(b)，就是盲目的独立相乘；当 d 趋近 1 时，比如邮编决定城市、租户决定币种，第二个条件就不会再把概率狠狠拉低，估算值直接恢复到真实量级。不过它也有明确弱点：它只表达全局依赖，不记录哪组值最热；如果你查一个互相矛盾的组合，比如北京的邮编配上海的城市，它反而会过度乐观。那遇到多列分组聚合，或者要精准抓热门组合怎么办？我们看下一页。'
+      ]
+    },
+    {
+      title: 'ndistinct、MCV 与表达式统计：能力与代价权衡',
+      paragraphs: [
+        '沿着刚才的问题往前推，既然 dependencies 只管全局软依赖，剩下三种扩展统计正好补齐了另外三块拼图。',
+        '第二列是 ndistinct，对应源码 mvdistinct.c。它专门存多列组合的 distinct 估算，比如 (a,b)、(a,c)、(a,b,c)。它的主战场是 GROUP BY 和 DISTINCT，能帮优化器算准 HashAggregate 需要多少内存、要不要走并行聚合。但它同样不知道具体哪个组合最热。',
+        '第三列是 MCV，多列最常见值组合，这是表达力最强但也最重的一类。它不仅记录高频组合的实际 frequency，还对照记录按独立假设算出来的 base_frequency。两者差距越大，说明单列独立假设越离谱。它能搞定偏斜热门组合、不等值、NULL 甚至识别「不可能组合」，代价是 ANALYZE 更慢、目录更大、规划期匹配更耗 CPU。',
+        '第四列是表达式统计，针对 lower(email)、date_trunc 这类单变量表达式采样。记住它的定位：如果你只需要优化器知道分布、不想承担表达式索引的写入和 WAL 开销，选它；如果要快速定位行，老老实实建索引。聊完建对象，接下来我们把视角拉高，把统计信息放到索引、改 SQL、分区和手工恢复的全局坐标里做一次横向对比。'
+      ]
+    },
+    {
+      title: '横向对比与运维边界：统计信息不能替代索引与建模',
+      paragraphs: [
+        '这一页把数据库调优的四把常见武器放在同一张工程蓝图里对比，核心结论其实就一句话：统计信息解决「看得准」，索引和分区解决「走得快」。',
+        '你看左边的矩阵：自定义统计信息不直接减少 IO，写入期几乎没有额外维护成本，代价集中在 ANALYZE 和规划期。如果你的表上压根没有合适的索引，统计信息再准，也只能非常诚实地告诉优化器：「兄弟，全表扫描是目前最不坏的选择。」反过来，如果索引已经建好了，但因为统计偏差优化器不敢用、或者错用成了 Nested Loop，这时候自定义统计信息就能立大功。',
+        '右边还要专门提一类运维级工具：pg_restore_relation_stats、attribute_stats 和 extended_stats。本地源码里确实提供了直接往目录写统计值的接口，但官方文档把它的用途卡得非常死——只适用于备份恢复或迁移刚完成、还没来得及跑 ANALYZE 之前的临时计划预热。因为只要 autovacuum、VACUUM 或 ANALYZE 一跑，你手工写进去的值就会被覆盖。绝不要拿它当日常调参工具。明确了边界之后，我们来看看投入这套手段到底能换来什么、又要付出什么。'
+      ]
+    },
+    {
+      title: '收益与代价：换取计划稳定性，而非单算子加速',
+      paragraphs: [
+        '既然统计信息不能直接减少 IO，那我们折腾它的真实回报是什么？一句话：换取执行计划的稳定性。',
+        '左边这五条是上线后你能直接用 EXPLAIN (ANALYZE) 观测到的收益：估算行数和实际行数的倍数差收敛了；原本被误判成 Nested Loop 的大查询切回了 Hash Join 或 Merge Join；多列 GROUP BY 的 HashAggregate 内存估算靠谱了；索引扫描、位图扫描和顺序扫描的切换符合真实数据量；表达式条件也不用再靠默认选择率瞎蒙。',
+        '但同时，右边这五条代价你必须心中有数：调高目标会让 ANALYZE 变重；多列 MCV 吃目录空间也吃规划期 CPU；所有统计本质上都是采样而不是精确全量；业务数据分布如果每分钟都在剧烈洗牌，统计刷新根本跟不上；以及我们反复强调的——它不直接修跨表 JOIN 估算。权衡清楚收益和代价后，下一步就是落到命令行，看四组可以直接复现的实操脚本。'
+      ]
+    },
+    {
+      title: '四类核心实操验证：建对象、ANALYZE 与观测点',
+      paragraphs: [
+        '为了保证严谨，这四组 SQL 严格依据 PostgreSQL 官方文档和源码机制编写，因为没有在本地启动真实实例，我们绝不伪造 EXPLAIN ANALYZE 的输出数字，而是把最关键的「验证观测点」标在每张卡片底部。',
+        '左上 6.1 验证 dependencies：构造两列完全相关的数据，建完对象后执行 ANALYZE，观察 WHERE a=1 AND b=1 的 estimated rows 是否贴近 actual rows——注意这张表没建索引，所以扫描方式不会变，变的是估算准确度。',
+        '右上 6.2 验证 ndistinct：换成多列 GROUP BY a, b，观察 HashAggregate 或 GroupAggregate 的分组估算是否收敛。',
+        '左下 6.3 验证 MCV：用 pg_mcv_list_items() 直接透视目录里的二进制 MCV 列表，对比热门组合的 frequency 和 base_frequency，你会一眼看出独立假设偏差有多大。右下 6.4 验证表达式统计：给 lower(email) 建统计后观察估算改善，再次提醒，如果需要快速定位行，得另建表达式索引。学会了怎么写，那线上真出了慢 SQL，该按什么顺序一步步排查？我们看下一页的互动决策流。'
+      ]
+    },
+    {
+      title: '自定义统计信息实践决策流程',
+      paragraphs: [
+        '这一页把整篇文章的实践心法浓缩成了一张标准诊断决策树。大家可以点击下方的场景按钮，或者点「自动巡检」，沿着蓝色和绿色的直角连线走一遍排查逻辑。',
+        '起点永远是 EXPLAIN (ANALYZE) 发现 estimated rows 和 actual rows 偏差巨大。第一关先问：统计是不是过旧了，或者刚做完导入恢复？如果是，别急着建扩展统计，先跑 ANALYZE；实在处于恢复窗口跑不了，再临时评估 pg_restore_*_stats。',
+        '第二关再问：是不是单列分布太偏斜、默认采样粒度不够？如果是，优先用 ALTER COLUMN SET STATISTICS 局部调大这一列的采样目标，别一上来就改全局参数。',
+        '第三关才是扩展统计的主场：强等值依赖选 dependencies，多列分组选 ndistinct，低基数热门组合选 mcv，只要表达式分布不需索引就选表达式统计。最后第四关是逃生口：如果根因是缺索引、不可优化的 SQL 或者跨表 JOIN 估算失真，果断跳出统计信息，回到索引、SQL 改写、建模和分区。流程有了，团队里不同角色该怎么分工配合？我们看第十一页。'
+      ]
+    },
+    {
+      title: '面向架构师、DBA 与业务开发者的落地规范',
+      paragraphs: [
+        '如果自定义统计信息只在故障发生后由 DBA 临时救火，那永远是治标不治本。真正成熟的工程实践，需要三个角色在三条泳道里协同发力。',
+        '最上面是数据库架构师：在数据模型设计阶段，就要把「哪些字段经常被一起过滤、一起分组」记下来，比如租户、地域、币种、状态、渠道；同时从源头划清访问路径和估算校准的边界，按业务特征精准选型。',
+        '中间是 DBA：把统计信息当作可观测、可回滚、可验证的标准运维对象。日常用 EXPLAIN (ANALYZE, BUFFERS) 定位偏差，用 pg_stats 系列视图验收落盘结果，养成「建完立刻 ANALYZE」的肌肉记忆，并且坚持局部调优、慎改全局参数。',
+        '最下面是业务开发者：你的 SQL 写法稳不稳定，直接决定了统计信息能不能命中。高频表达式写法必须统一，比如都写 lower(email)，别一处 lower 一处 ILIKE 一处正则；别把核心过滤条件藏进 JSON 文本；多租户查询自觉带上 tenant_id；平时看 EXPLAIN，别只瞄一眼索引名，养成核对 rows 估算偏差的习惯。最后，我们用一页避坑清单给今天的课程收尾。'
+      ]
+    },
+    {
+      title: '避坑清单与课后延伸思考',
+      paragraphs: [
+        '最后一页，左边整理了实战中最容易踩的七条红线，建议大家收藏当排查清单：第一，建完统计忘跑 ANALYZE，等于白建；第二，把扩展统计当索引用，指望它直接降 IO；第三，不管三七二十一对所有列组合全建统计，拖垮 ANALYZE 和规划器；第四，业务常查冲突组合却用了 dependencies，导致估算过度乐观，应该换 MCV；第五，图省事直接调大全库的 default_statistics_target；第六，在分区表上忽略了 stxdinherit，没搞清查询走的是父表还是子分区统计；第七，把 pg_restore_*_stats 当作永久调参手段，忘了它随时会被自动维护覆盖。',
+        '右边留了三道紧贴业务的课后思考题，以及本文所有结论对应的 PostgreSQL 源码与官方文档索引。今天听完课，最好的落地动作就是回到自己的业务库里，挑一条核心慢 SQL，跑一次 EXPLAIN (ANALYZE)，亲眼看看优化器的「世界观」和真实数据之间到底差了多远。感谢大家！'
+      ]
+    }
+  ];
+
+  /* ==================== CORE STATE & ELEMENTS ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentSlide = 0;
+  let notesMode = null; // null | 'current' | 'full'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+
+  const stageViewport = document.getElementById('stageViewport');
+  const stageFrame = document.getElementById('stageFrame');
+  const notesDrawer = document.getElementById('notesDrawer');
+  const notesTitle = document.getElementById('notesTitle');
+  const notesBody = document.getElementById('notesBody');
+  const tocOverlay = document.getElementById('tocOverlay');
+  const tocGrid = document.getElementById('tocGrid');
+  const ctrlPageNum = document.getElementById('ctrlPageNum');
+  const progressFill = document.getElementById('progressFill');
+
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+  const btnToc = document.getElementById('btnToc');
+  const btnCloseToc = document.getElementById('btnCloseToc');
+  const btnNoteCurrent = document.getElementById('btnNoteCurrent');
+  const btnNoteFull = document.getElementById('btnNoteFull');
+  const tabCurrentNote = document.getElementById('tabCurrentNote');
+  const tabFullNote = document.getElementById('tabFullNote');
+  const btnCloseNotes = document.getElementById('btnCloseNotes');
+  const btnAutoPlay = document.getElementById('btnAutoPlay');
+  const btnFullscreen = document.getElementById('btnFullscreen');
+
+  /* ==================== STAGE VECTOR SCALING ==================== */
+  function updateStageScale() {
+    const availW = Math.max(200, stageViewport.clientWidth - 28);
+    const availH = Math.max(120, stageViewport.clientHeight - 20);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageFrame.style.transform = `scale(${scale.toFixed(5)})`;
+  }
+
+  window.addEventListener('resize', updateStageScale);
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(updateStageScale).observe(stageViewport);
+  }
+
+  /* ==================== SLIDE NAVIGATION ==================== */
+  function formatPage(idx) {
+    return `${String(idx + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}`;
+  }
+
+  function goToSlide(idx, fromAutoPlay) {
+    const target = Math.max(0, Math.min(totalSlides - 1, idx));
+    if (!fromAutoPlay && autoPlayTimer) {
+      stopAutoPlay();
+    }
+    slides[currentSlide].classList.remove('active');
+    currentSlide = target;
+    slides[currentSlide].classList.add('active');
+
+    ctrlPageNum.textContent = formatPage(currentSlide);
+    progressFill.style.width = `${((currentSlide + 1) / totalSlides) * 100}%`;
+
+    updateTocHighlight();
+    if (notesMode) {
+      renderNotes(true);
+    }
+  }
+
+  /* ==================== TOC (G) ==================== */
+  function buildToc() {
+    tocGrid.innerHTML = '';
+    slides.forEach((s, i) => {
+      const card = document.createElement('div');
+      card.className = 'toc-item';
+      card.dataset.idx = i;
+      const title = s.dataset.title || `第 ${i + 1} 页`;
+      const eyebrow = s.dataset.eyebrow || '';
+      const leadEl = s.querySelector('.slide-lead');
+      const lead = leadEl ? leadEl.textContent.slice(0, 48) + '…' : '';
+      card.innerHTML = `
+        <div class="toc-num">${String(i + 1).padStart(2, '0')} · ${eyebrow}</div>
+        <div class="toc-item-title">${title}</div>
+        <div class="toc-item-sub">${lead}</div>
+      `;
+      card.addEventListener('click', () => {
+        goToSlide(i);
+        toggleToc(false);
+      });
+      tocGrid.appendChild(card);
+    });
+    updateTocHighlight();
+  }
+
+  function updateTocHighlight() {
+    Array.from(tocGrid.children).forEach((el, i) => {
+      el.classList.toggle('current', i === currentSlide);
+    });
+  }
+
+  function toggleToc(forceState) {
+    tocOpen = typeof forceState === 'boolean' ? forceState : !tocOpen;
+    tocOverlay.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  /* ==================== NOTES DRAWER (N / T) ==================== */
+  function renderNotes(shouldScroll) {
+    if (!notesMode) return;
+    tabCurrentNote.classList.toggle('active', notesMode === 'current');
+    tabFullNote.classList.toggle('active', notesMode === 'full');
+    btnNoteCurrent.classList.toggle('active', notesMode === 'current');
+    btnNoteFull.classList.toggle('active', notesMode === 'full');
+
+    if (notesMode === 'current') {
+      notesTitle.textContent = `本页讲稿 · ${formatPage(currentSlide)}`;
+      const item = SPEAKER_NOTES[currentSlide];
+      notesBody.innerHTML = `
+        <div class="note-card current" data-note-idx="${currentSlide}">
+          <div class="note-card-head">
+            <span>PAGE ${String(currentSlide + 1).padStart(2, '0')}</span>
+            <span>当前页</span>
+          </div>
+          <div class="note-card-title">${item.title}</div>
+          <div class="note-card-text">${item.paragraphs.map(p => `<p>${p}</p>`).join('')}</div>
+        </div>
+      `;
+      notesBody.scrollTop = 0;
+    } else {
+      notesTitle.textContent = `全文讲稿 · 共 ${totalSlides} 页`;
+      if (notesBody.dataset.renderedMode !== 'full') {
+        notesBody.innerHTML = SPEAKER_NOTES.map((item, i) => `
+          <div class="note-card ${i === currentSlide ? 'current' : ''}" id="full-note-${i}" data-note-idx="${i}">
+            <div class="note-card-head">
+              <span>PAGE ${String(i + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}</span>
+              <span>${i === currentSlide ? '当前页' : '点击跳转'}</span>
+            </div>
+            <div class="note-card-title">${item.title}</div>
+            <div class="note-card-text">${item.paragraphs.map(p => `<p>${p}</p>`).join('')}</div>
+          </div>
+        `).join('');
+        notesBody.dataset.renderedMode = 'full';
+        notesBody.querySelectorAll('.note-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const idx = Number(card.dataset.noteIdx);
+            if (!Number.isNaN(idx)) goToSlide(idx);
+          });
+        });
+      } else {
+        notesBody.querySelectorAll('.note-card').forEach((card, i) => {
+          const isCur = i === currentSlide;
+          card.classList.toggle('current', isCur);
+          const badge = card.querySelector('.note-card-head span:last-child');
+          if (badge) badge.textContent = isCur ? '当前页' : '点击跳转';
+        });
+      }
+      if (shouldScroll) {
+        const scrollToActive = (smooth) => {
+          const activeCard = document.getElementById(`full-note-${currentSlide}`);
+          if (activeCard) {
+            const top = Math.max(0, activeCard.offsetTop - notesBody.offsetTop - 16);
+            notesBody.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+          }
+        };
+        requestAnimationFrame(() => scrollToActive(false));
+      }
+    }
+    if (notesMode === 'current') {
+      notesBody.dataset.renderedMode = 'current';
+    }
+  }
+
+  function setNotesMode(mode) {
+    if (notesMode === mode) {
+      // Toggle off (loop behavior)
+      notesMode = null;
+      notesDrawer.classList.remove('open');
+      btnNoteCurrent.classList.remove('active');
+      btnNoteFull.classList.remove('active');
+    } else {
+      notesMode = mode;
+      notesDrawer.classList.add('open');
+      renderNotes(true);
+    }
+    // Re-scale stage after drawer width transition starts and finishes
+    updateStageScale();
+    setTimeout(updateStageScale, 240);
+  }
+
+  /* ==================== AUTO PLAY (A) ==================== */
+  function stopAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    btnAutoPlay.classList.remove('playing');
+    btnAutoPlay.innerHTML = '自动播放 <span class="kbd">A</span>';
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      stopAutoPlay();
+      return;
+    }
+    btnAutoPlay.classList.add('playing');
+    btnAutoPlay.innerHTML = '停止播放 <span class="kbd">A</span>';
+    autoPlayTimer = setInterval(() => {
+      if (currentSlide < totalSlides - 1) {
+        goToSlide(currentSlide + 1, true);
+      } else {
+        goToSlide(0, true);
+      }
+    }, 6000);
+  }
+
+  /* ==================== FULLSCREEN (F) ==================== */
+  function toggleFullscreen() {
+    try {
+      if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    } catch (e) {
+      // Fallback safely in restricted iframe
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = Boolean(document.fullscreenElement);
+    btnFullscreen.classList.toggle('active', isFs);
+    updateStageScale();
+  });
+
+  /* ==================== BUTTON & KEYBOARD BINDINGS ==================== */
+  btnPrev.addEventListener('click', () => goToSlide(currentSlide - 1));
+  btnNext.addEventListener('click', () => goToSlide(currentSlide + 1));
+  btnToc.addEventListener('click', () => toggleToc());
+  btnCloseToc.addEventListener('click', () => toggleToc(false));
+  btnNoteCurrent.addEventListener('click', () => setNotesMode('current'));
+  btnNoteFull.addEventListener('click', () => setNotesMode('full'));
+  tabCurrentNote.addEventListener('click', () => { if (notesMode !== 'current') setNotesMode('current'); });
+  tabFullNote.addEventListener('click', () => { if (notesMode !== 'full') setNotesMode('full'); });
+  btnCloseNotes.addEventListener('click', () => { if (notesMode) setNotesMode(notesMode); });
+  btnAutoPlay.addEventListener('click', toggleAutoPlay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', (e) => {
+    const tag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      if (tocOpen) return;
+      e.preventDefault();
+      goToSlide(currentSlide + 1);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      if (tocOpen) return;
+      e.preventDefault();
+      goToSlide(currentSlide - 1);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      toggleToc();
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      if (tocOpen) toggleToc(false);
+      setNotesMode('current');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      if (tocOpen) toggleToc(false);
+      setNotesMode('full');
+    } else if (key === 'a' || key === 'A') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) {
+        toggleToc(false);
+      } else if (notesMode) {
+        setNotesMode(notesMode);
+      }
+    }
+  });
+
+  /* ==================== INTERACTIVE ANIMATION #1: SLIDE 04 LIFECYCLE ==================== */
+  let lcStep = 0; // 0=overview, 1..4=stages, 5=missing analyze
+  let lcTimer = null;
+  const lcStages = [1, 2, 3, 4].map(n => document.getElementById(`lc-stage-${n}`));
+  const lcBypass = document.getElementById('lc-bypass-group');
+  const lcDataStatus = document.getElementById('lc-data-status');
+  const lcDataBox = document.getElementById('lc-data-box');
+  const lcCaptionTitle = document.getElementById('lc-caption-title');
+  const lcCaptionDesc = document.getElementById('lc-caption-desc');
+  const lcStatusBar = document.getElementById('lc-status-bar');
+  const lcStepReadout = document.getElementById('lcStepReadout');
+  const lcPlayBtn = document.getElementById('lcPlayBtn');
+  const lcStepBtn = document.getElementById('lcStepBtn');
+  const lcSkipBtn = document.getElementById('lcSkipBtn');
+  const lcResetBtn = document.getElementById('lcResetBtn');
+
+  const LC_COPY = {
+    0: ['全流程总览：点击下方按钮可逐步演示源码执行路径，或模拟「忘记 ANALYZE」的后果',
+        '核心规律：CREATE STATISTICS 只写定义，ANALYZE 复用样本计算并写入 pg_statistic_ext_data，规划期优先覆盖单表多条件子句。', '#245A6B', 'OVERVIEW'],
+    1: ['STAGE 01 · 定义登记（CREATE STATISTICS）',
+        '仅向 pg_statistic_ext 写入统计对象元数据；此时 pg_statistic_ext_data 尚无可用统计值。', '#1E4B5A', 'STAGE 1 / 4'],
+    2: ['STAGE 02 · ANALYZE 触发 BuildRelationExtStatistics()',
+        '复用普通单列统计采样得到的 rows，按启用类型分别构建 ndistinct、dependencies、mcv 或表达式统计。', '#2E6373', 'STAGE 2 / 4'],
+    3: ['STAGE 03 · statext_store() 持久化写入 pg_statistic_ext_data',
+        '统计结果落盘生效；注意统计非实时维护，数据分布变化后须再次 ANALYZE 刷新。', '#47808D', 'STAGE 3 / 4'],
+    4: ['STAGE 04 · 优化器 plancat.c 加载，clausesel.c 优先估算覆盖子句',
+        'statext_clauselist_selectivity() 先估算扩展统计覆盖的条件并标记，剩余条件回退普通方式估算。', '#2F7A66', 'STAGE 4 / 4'],
+    5: ['【警示】异常模拟：创建统计对象后忘记执行 ANALYZE',
+        'Stage 02 与 Stage 03 被跳过，pg_statistic_ext_data 为空！优化器无扩展数据可用，直接回退单列独立估算。', '#BE653B', 'MISSING ANALYZE']
+  };
+
+  function renderLifecycle(step) {
+    lcStep = step;
+    lcStages.forEach((el, idx) => {
+      const stageNum = idx + 1;
+      el.classList.remove('svg-dim');
+      if (step >= 1 && step <= 4 && stageNum !== step) {
+        el.classList.add('svg-dim');
+      } else if (step === 5 && (stageNum === 2 || stageNum === 3)) {
+        el.classList.add('svg-dim');
+      }
+    });
+    lcBypass.setAttribute('opacity', step === 5 ? '1' : '0');
+    if (step === 5) {
+      lcDataStatus.textContent = '为空（无可用统计值！）';
+      lcDataStatus.setAttribute('fill', '#BE653B');
+      lcDataBox.setAttribute('stroke', '#BE653B');
+    } else {
+      lcDataStatus.textContent = '已就绪（含有效分布值）';
+      lcDataStatus.setAttribute('fill', '#2F7A66');
+      lcDataBox.setAttribute('stroke', '#245A6B');
+    }
+    const [t, d, color, tag] = LC_COPY[step];
+    lcCaptionTitle.textContent = t;
+    lcCaptionTitle.setAttribute('fill', color);
+    lcCaptionDesc.textContent = d;
+    lcStatusBar.setAttribute('fill', color);
+    lcStepReadout.textContent = `STATE: ${tag}`;
+    lcSkipBtn.classList.toggle('active', step === 5);
+  }
+
+  function stopLcAnim() {
+    if (lcTimer) {
+      clearInterval(lcTimer);
+      lcTimer = null;
+      lcPlayBtn.classList.remove('active');
+      lcPlayBtn.textContent = '▶ 播放全流程';
+    }
+  }
+
+  lcPlayBtn.addEventListener('click', () => {
+    if (lcTimer) {
+      stopLcAnim();
+      return;
+    }
+    lcPlayBtn.classList.add('active');
+    lcPlayBtn.textContent = '❚❚ 暂停演示';
+    let s = 1;
+    renderLifecycle(s);
+    lcTimer = setInterval(() => {
+      s = s >= 4 ? 1 : s + 1;
+      renderLifecycle(s);
+    }, 1800);
+  });
+
+  lcStepBtn.addEventListener('click', () => {
+    stopLcAnim();
+    const next = (lcStep >= 4 || lcStep === 5) ? 1 : lcStep + 1;
+    renderLifecycle(next);
+  });
+
+  lcSkipBtn.addEventListener('click', () => {
+    stopLcAnim();
+    renderLifecycle(lcStep === 5 ? 0 : 5);
+  });
+
+  lcResetBtn.addEventListener('click', () => {
+    stopLcAnim();
+    renderLifecycle(0);
+  });
+
+  /* ==================== INTERACTIVE ANIMATION #2: SLIDE 05 DEPENDENCIES ==================== */
+  const slPa = document.getElementById('slPa');
+  const slPb = document.getElementById('slPb');
+  const slD = document.getElementById('slD');
+  const valPa = document.getElementById('valPa');
+  const valPb = document.getElementById('valPb');
+  const valD = document.getElementById('valD');
+  const depIndepVal = document.getElementById('dep-indep-val');
+  const depAdjVal = document.getElementById('dep-adj-val');
+  const depIndepBar = document.getElementById('dep-indep-bar');
+  const depAdjBar = document.getElementById('dep-adj-bar');
+  const depSummary = document.getElementById('dep-summary');
+  const depAnimBtn = document.getElementById('depAnimBtn');
+  const depPresetWeak = document.getElementById('depPresetWeak');
+  const depPresetStrong = document.getElementById('depPresetStrong');
+  let depTimer = null;
+
+  function renderDepFormula() {
+    const pa = parseFloat(slPa.value);
+    const pb = parseFloat(slPb.value);
+    const d = parseFloat(slD.value);
+    valPa.textContent = pa.toFixed(2);
+    valPb.textContent = pb.toFixed(2);
+    valD.textContent = d.toFixed(2);
+
+    const indep = pa * pb;
+    const adj = pa * (d + (1 - d) * pb);
+    const maxScale = Math.max(pa, adj, 0.01);
+    const maxBarW = 776;
+
+    depIndepVal.textContent = `${indep.toFixed(4)} (${(indep * 100).toFixed(2)}%)`;
+    depAdjVal.textContent = `${adj.toFixed(4)} (${(adj * 100).toFixed(2)}%)`;
+    depIndepBar.setAttribute('width', Math.max(6, (indep / maxScale) * maxBarW).toFixed(1));
+    depAdjBar.setAttribute('width', Math.max(6, (adj / maxScale) * maxBarW).toFixed(1));
+
+    const ratio = indep > 0 ? (adj / indep) : 1;
+    depSummary.textContent = `P(a)=${pa.toFixed(2)}、P(b)=${pb.toFixed(2)}、d=${d.toFixed(2)}：修正后选择率为独立假设的 ${ratio.toFixed(1)} 倍（公式推演值）。`;
+  }
+
+  [slPa, slPb, slD].forEach(el => el.addEventListener('input', () => {
+    if (depTimer) { clearInterval(depTimer); depTimer = null; depAnimBtn.classList.remove('active'); depAnimBtn.textContent = '▶ 演示 d: 0→1'; }
+    renderDepFormula();
+  }));
+
+  depPresetWeak.addEventListener('click', () => {
+    slD.value = '0.20';
+    renderDepFormula();
+  });
+
+  depPresetStrong.addEventListener('click', () => {
+    slD.value = '1.00';
+    renderDepFormula();
+  });
+
+  depAnimBtn.addEventListener('click', () => {
+    if (depTimer) {
+      clearInterval(depTimer);
+      depTimer = null;
+      depAnimBtn.classList.remove('active');
+      depAnimBtn.textContent = '▶ 演示 d: 0→1';
+      return;
+    }
+    depAnimBtn.classList.add('active');
+    depAnimBtn.textContent = '❚❚ 停止演示';
+    let cur = 0;
+    slD.value = '0.00';
+    renderDepFormula();
+    depTimer = setInterval(() => {
+      cur = +(cur + 0.05).toFixed(2);
+      if (cur > 1.0) cur = 0;
+      slD.value = cur.toFixed(2);
+      renderDepFormula();
+    }, 180);
+  });
+
+  /* ==================== INTERACTIVE ANIMATION #3: SLIDE 10 DECISION FLOW ==================== */
+  const dfButtons = Array.from(document.querySelectorAll('[data-df]'));
+  const dfPlayBtn = document.getElementById('dfPlayBtn');
+  let dfTimer = null;
+
+  const DF_NODES = [
+    'df-entry', 'df-gate-1', 'df-act-1', 'df-gate-2', 'df-act-2',
+    'df-gate-3', 'df-act-3a', 'df-act-3b', 'df-act-3c', 'df-act-3d',
+    'df-gate-4', 'df-act-4'
+  ];
+
+  const DF_MAP = {
+    all: DF_NODES,
+    stale: ['df-entry', 'df-gate-1', 'df-act-1'],
+    single: ['df-entry', 'df-gate-2', 'df-act-2'],
+    dep: ['df-entry', 'df-gate-3', 'df-act-3a'],
+    nd: ['df-entry', 'df-gate-3', 'df-act-3b'],
+    mcv: ['df-entry', 'df-gate-3', 'df-act-3c'],
+    expr: ['df-entry', 'df-gate-3', 'df-act-3d'],
+    join: ['df-entry', 'df-gate-4', 'df-act-4']
+  };
+
+  function renderDecisionFlow(mode) {
+    const activeIds = new Set(DF_MAP[mode] || DF_NODES);
+    DF_NODES.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('svg-dim', !activeIds.has(id));
+    });
+    dfButtons.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.df === mode);
+    });
+  }
+
+  dfButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (dfTimer) { clearInterval(dfTimer); dfTimer = null; dfPlayBtn.classList.remove('active'); dfPlayBtn.textContent = '▶ 自动巡检'; }
+      renderDecisionFlow(btn.dataset.df);
+    });
+  });
+
+  dfPlayBtn.addEventListener('click', () => {
+    if (dfTimer) {
+      clearInterval(dfTimer);
+      dfTimer = null;
+      dfPlayBtn.classList.remove('active');
+      dfPlayBtn.textContent = '▶ 自动巡检';
+      return;
+    }
+    dfPlayBtn.classList.add('active');
+    dfPlayBtn.textContent = '❚❚ 停止巡检';
+    const seq = ['stale', 'single', 'dep', 'nd', 'mcv', 'expr', 'join', 'all'];
+    let i = 0;
+    renderDecisionFlow(seq[i]);
+    dfTimer = setInterval(() => {
+      i = (i + 1) % seq.length;
+      renderDecisionFlow(seq[i]);
+    }, 1500);
+  });
+
+  /* ==================== INIT ==================== */
+  buildToc();
+  renderDepFormula();
+  renderLifecycle(0);
+  renderDecisionFlow('all');
+  updateStageScale();
+})();
+</script>
+</body>
+</html>

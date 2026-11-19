@@ -1,0 +1,2647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PostgreSQL 垃圾回收与膨胀的根源 — 数据库筑基课</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sec: #F1EFE9;
+    --ink: #1B2B33;
+    --ink-sec: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terracotta: #BE653B;
+    --terracotta-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E4F1ED;
+    --gold: #AE8A3E;
+    --gold-light: #F6EFE0;
+
+    /* Strata 7 levels: deep -> shallow */
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "STSong", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+
+    --notes-width: 440px;
+    --bar-height: 44px;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #162127;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* Main App Layout */
+  #app {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Left Stage Viewport */
+  #stage-viewport {
+    flex: 1;
+    height: calc(100vh - var(--bar-height));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #1B272E;
+    position: relative;
+    overflow: hidden;
+    transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Fixed 1600x900 Stage */
+  #stage {
+    width: 1600px;
+    height: 900px;
+    background-color: var(--bg-paper);
+    position: relative;
+    transform-origin: center center;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Blueprint subtle grid background on stage */
+  #stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(217, 213, 203, 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.22) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Blueprint outer registration frame */
+  .blueprint-frame {
+    position: absolute;
+    inset: 18px;
+    border: 1px solid var(--stroke);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .blueprint-frame::before {
+    content: "PG-ARCH // STRATA-BLUEPRINT // 1600×900";
+    position: absolute;
+    top: -9px;
+    right: 24px;
+    background: var(--bg-paper);
+    padding: 0 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--ink-muted);
+  }
+
+  /* Slide Container */
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 46px 64px 36px 64px;
+    display: none;
+    flex-direction: column;
+    z-index: 2;
+  }
+  .slide.active {
+    display: flex;
+  }
+
+  /* Slide Header */
+  .slide-header {
+    margin-bottom: 14px;
+  }
+  .eyebrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    text-transform: uppercase;
+  }
+  .eyebrow-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+  }
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.18;
+    color: var(--ink);
+    letter-spacing: -0.5px;
+    margin-bottom: 10px;
+  }
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-sec);
+    max-width: 1420px;
+  }
+  .slide-lead strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .slide-lead .hl-indigo {
+    color: var(--indigo);
+    font-weight: 600;
+  }
+  .slide-lead .hl-terra {
+    color: var(--terracotta);
+    font-weight: 600;
+  }
+  .slide-lead .hl-teal {
+    color: var(--teal);
+    font-weight: 600;
+  }
+
+  .header-divider {
+    width: 100%;
+    height: 1px;
+    background-color: var(--stroke);
+    margin: 14px 0 16px 0;
+    position: relative;
+  }
+  .header-divider::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: -1px;
+    width: 120px;
+    height: 3px;
+    background-color: var(--indigo);
+  }
+
+  /* Diagram Area: 1400x430 exact container */
+  .diagram-wrapper {
+    width: 1472px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .diagram-box {
+    width: 1400px;
+    height: 430px;
+    background-color: var(--bg-sec);
+    border: 1px solid var(--stroke);
+    position: relative;
+  }
+  .diagram-box svg {
+    width: 1400px;
+    height: 430px;
+    display: block;
+  }
+
+  /* Interactive Controls Strip inside Diagram Box */
+  .sim-controls {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    padding: 5px 10px;
+    z-index: 10;
+  }
+  .sim-controls label {
+    font-size: 12px;
+    color: var(--ink-sec);
+    font-family: var(--font-mono);
+  }
+  .sim-btn {
+    background: var(--bg-paper);
+    border: 1px solid var(--indigo);
+    color: var(--indigo);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sim-btn:hover {
+    background: var(--indigo-light);
+  }
+  .sim-btn.primary {
+    background: var(--indigo);
+    color: #F7F6F2;
+  }
+  .sim-btn.primary:hover {
+    background: #1E4B5A;
+  }
+  .sim-btn.warn {
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+  }
+  .sim-btn.warn:hover {
+    background: var(--terracotta-light);
+  }
+  .sim-btn.active-state {
+    background: var(--terracotta);
+    color: #F7F6F2;
+    border-color: var(--terracotta);
+  }
+  .sim-slider {
+    width: 90px;
+    accent-color: var(--indigo);
+    cursor: pointer;
+  }
+
+  /* Slide Footer & NEXT Bridge */
+  .slide-footer {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .next-bridge {
+    border-left: 3px solid var(--terracotta);
+    padding-left: 14px;
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  .next-bridge .next-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--terracotta);
+    display: block;
+    margin-bottom: 2px;
+  }
+  .page-meta {
+    text-align: right;
+    font-family: var(--font-mono);
+  }
+  .page-num {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--indigo);
+  }
+  .page-total {
+    font-size: 14px;
+    color: var(--ink-muted);
+  }
+  .page-series {
+    display: block;
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+
+  /* Right Side Speaker Notes Panel (In-page split window) */
+  #notes-panel {
+    width: 0;
+    height: calc(100vh - var(--bar-height));
+    background-color: var(--bg-paper);
+    border-left: 0px solid var(--stroke);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    user-select: text;
+    z-index: 20;
+  }
+  #notes-panel.open {
+    width: var(--notes-width);
+    border-left: 2px solid var(--indigo);
+  }
+  .notes-header {
+    padding: 14px 20px;
+    background-color: var(--bg-sec);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .notes-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .notes-mode-tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .notes-tab {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sec);
+    cursor: pointer;
+  }
+  .notes-tab.active {
+    background: var(--indigo);
+    color: #F7F6F2;
+    border-color: var(--indigo);
+    font-weight: 600;
+  }
+  .notes-close {
+    background: none;
+    border: 1px solid var(--stroke);
+    color: var(--ink-sec);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .notes-close:hover {
+    background: var(--terracotta-light);
+    color: var(--terracotta);
+    border-color: var(--terracotta);
+  }
+  #notes-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 48px 22px;
+    scroll-behavior: smooth;
+  }
+  .note-block {
+    margin-bottom: 24px;
+    padding: 16px;
+    background: var(--bg-sec);
+    border: 1px solid var(--stroke);
+    border-left: 4px solid var(--ink-muted);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .note-block.current-slide-note {
+    background: #FFFFFF;
+    border-color: var(--indigo);
+    border-left: 4px solid var(--terracotta);
+  }
+  .note-block-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--stroke);
+    cursor: pointer;
+  }
+  .note-block-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--terracotta);
+  }
+  .note-block-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-top: 3px;
+  }
+  .note-paragraph {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.78;
+    color: var(--ink);
+    margin-bottom: 12px;
+    text-align: justify;
+  }
+  .note-paragraph:last-child {
+    margin-bottom: 0;
+  }
+  .note-logic-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 6px;
+    margin-right: 6px;
+    background: var(--indigo-light);
+    color: var(--indigo);
+    border: 1px solid var(--strata-4);
+    vertical-align: middle;
+  }
+
+  /* Bottom Control & Shortcut Bar (Visible even in Fullscreen!) */
+  #bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--bar-height);
+    background-color: #162127;
+    border-top: 1px solid #2E424D;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+    color: #CFE0DC;
+    font-family: var(--font-sans);
+    font-size: 13px;
+  }
+  .bar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .bar-btn {
+    background: #1E2E36;
+    border: 1px solid #354E5B;
+    color: #EBF1EE;
+    padding: 5px 11px;
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-sans);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .bar-btn:hover {
+    background: #28404B;
+    border-color: #74A5AD;
+  }
+  .bar-btn.active {
+    background: var(--indigo);
+    border-color: #A4C4C6;
+    color: #FFFFFF;
+    font-weight: 600;
+  }
+  .bar-btn.autoplay-on {
+    background: var(--teal);
+    border-color: #A4C4C6;
+    color: #FFFFFF;
+    font-weight: 600;
+  }
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: #111A1F;
+    border: 1px solid #476270;
+    padding: 1px 5px;
+    color: #A4C4C6;
+  }
+  .progress-track {
+    width: 160px;
+    height: 4px;
+    background: #263842;
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--terracotta);
+    width: 8.33%;
+    transition: width 0.25s ease;
+  }
+  #autoplay-timer-bar {
+    position: fixed;
+    bottom: var(--bar-height);
+    left: 0;
+    height: 3px;
+    background: var(--teal);
+    width: 0%;
+    z-index: 101;
+    transition: width 0.1s linear;
+  }
+
+  /* Table of Contents Drawer (Key G) */
+  #toc-overlay {
+    position: fixed;
+    inset: 0;
+    bottom: var(--bar-height);
+    background: rgba(22, 33, 39, 0.78);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 90;
+  }
+  #toc-overlay.open {
+    display: flex;
+  }
+  .toc-panel {
+    width: 1060px;
+    max-width: 92vw;
+    max-height: 82vh;
+    background: var(--bg-paper);
+    border: 2px solid var(--indigo);
+    display: flex;
+    flex-direction: column;
+  }
+  .toc-header {
+    padding: 16px 24px;
+    background: var(--bg-sec);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .toc-header h2 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .toc-grid {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    overflow-y: auto;
+  }
+  .toc-item {
+    background: var(--bg-sec);
+    border: 1px solid var(--stroke);
+    border-left: 4px solid var(--indigo);
+    padding: 12px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .toc-item:hover {
+    background: var(--indigo-light);
+  }
+  .toc-item.current {
+    background: #FFFFFF;
+    border-color: var(--terracotta);
+    border-left-width: 5px;
+  }
+  .toc-item-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--terracotta);
+    margin-bottom: 4px;
+  }
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+  .toc-item-sub {
+    font-size: 12px;
+    color: var(--ink-sec);
+    line-height: 1.35;
+  }
+
+  /* SVG Text Styling */
+  svg text {
+    font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  }
+  svg text.svg-serif {
+    font-family: "Songti SC", "Noto Serif CJK SC", "STSong", serif;
+  }
+  svg text.svg-mono {
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Left 16:9 Fixed Stage Viewport -->
+  <div id="stage-viewport">
+    <div id="stage">
+      <div class="blueprint-frame"></div>
+
+      <!-- ==================== SLIDE 01 ==================== -->
+      <section class="slide active" data-index="0">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">POSTGRESQL DATABASE FOUNDATION // 01 · ARCH OVERVIEW</span>
+            <span class="eyebrow-tag">SOURCE: heapam.c / vacuumlazy.c / maintenance.sgml</span>
+          </div>
+          <h1 class="slide-title">垃圾回收与膨胀的根源：MVCC 的并发代价与稳态治理</h1>
+          <p class="slide-lead">
+            PostgreSQL 以 <strong>MVCC 多版本并发控制</strong> 换取读写不阻塞，代价是 <span class="hl-terra">UPDATE / DELETE 不立即抹除旧行版本</span>。垃圾回收并非简单删除文件，而是跨七个存储地层的状态机维护。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Background Strata 7 Layers (Shallow -> Deep) -->
+              <rect x="20" y="16" width="1360" height="398" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="36" y="40" class="svg-mono" font-size="12" font-weight="700" fill="#245A6B">STRATA PROFILE // POSTGRESQL STORAGE &amp; GC ARCHITECTURE (SHALLOW → DEEP)</text>
+
+              <!-- 7 Strata Horizontal Bands (left side x=36..940) -->
+              <!-- Layer 7 (Shallowest): SQL & Transaction -->
+              <rect x="36" y="54" width="900" height="44" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="52" y="81" class="svg-mono" font-size="12" font-weight="700" fill="#1E4B5A">L7 事务与SQL层</text>
+              <text x="210" y="81" font-size="14" fill="#1B2B33">UPDATE / DELETE 申请新 XID，生成快照 Snapshot（xmin / xmax 边界）</text>
+
+              <!-- Layer 6: Heap Page & Line Pointer -->
+              <rect x="36" y="102" width="900" height="44" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1"/>
+              <text x="52" y="129" class="svg-mono" font-size="12" font-weight="700" fill="#1E4B5A">L6 Heap 页内结构</text>
+              <text x="210" y="129" font-size="14" fill="#1B2B33">ItemIdData 指针数组（LP_NORMAL / LP_DEAD / LP_UNUSED）与版本链 t_ctid</text>
+
+              <!-- Layer 5: Tuple Header -->
+              <rect x="36" y="150" width="900" height="44" fill="#A4C4C6" stroke="#47808D" stroke-width="1"/>
+              <text x="52" y="177" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">L5 元组头部状态</text>
+              <text x="210" y="177" font-size="14" fill="#1B2B33">LIVE → RECENTLY DEAD（老快照仍可见）→ DEAD（全局不可见，可回收）</text>
+
+              <!-- Layer 4: Index Entries -->
+              <rect x="36" y="198" width="900" height="44" fill="#74A5AD" stroke="#2E6373" stroke-width="1"/>
+              <text x="52" y="225" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">L4 索引项映射</text>
+              <text x="210" y="225" font-size="14" fill="#F7F6F2">B-Tree / GIN 等索引持有 TID；清索引前严禁复用 Heap Line Pointer</text>
+
+              <!-- Layer 3: Auxiliary Maps (FSM & VM) -->
+              <rect x="36" y="246" width="900" height="44" fill="#47808D" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="52" y="273" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">L3 辅助映射分支</text>
+              <text x="210" y="273" font-size="14" fill="#F7F6F2">FSM（_fsm 记录页内可用空间字节近似值）与 VM（_vm 标记 all-visible / frozen）</text>
+
+              <!-- Layer 2: Vacuum & Autovacuum Engine -->
+              <rect x="36" y="294" width="900" height="44" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="52" y="321" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">L2 垃圾回收引擎</text>
+              <text x="210" y="321" font-size="14" fill="#F7F6F2">autovacuum worker 阈值调度 + vacuumlazy.c 三阶段清理与 XID 冻结</text>
+
+              <!-- Layer 1 (Deepest): OS Relation Files -->
+              <rect x="36" y="342" width="900" height="54" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="52" y="373" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">L1 物理段文件层</text>
+              <text x="210" y="373" font-size="14" fill="#F7F6F2">base/db_oid/relfilenode（默认页内复用空间，仅表尾连续空页可截断归还 OS）</text>
+
+              <!-- Orthogonal Connection Bus on Right (x=936 -> x=984) -->
+              <path d="M 936 76 L 960 76 L 960 369 L 936 369" fill="none" stroke="#BE653B" stroke-width="2"/>
+              <line x1="960" y1="220" x2="984" y2="220" stroke="#BE653B" stroke-width="2"/>
+
+              <!-- Right Core Proposition Box (x=984..1364) -->
+              <rect x="984" y="54" width="380" height="342" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="984" y="54" width="380" height="36" fill="#BE653B"/>
+              <text x="1000" y="77" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">CORE THESIS // 膨胀第一定律</text>
+
+              <text x="1002" y="118" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">空间膨胀 = 垃圾生产速率 &gt; 有效回收速率</text>
+              <line x1="1002" y1="132" x2="1346" y2="132" stroke="#D9D5CB" stroke-width="1"/>
+
+              <text x="1002" y="160" font-size="14" font-weight="700" fill="#245A6B">1. 为什么产生？（写入追加）</text>
+              <text x="1002" y="182" font-size="13" fill="#46585F">UPDATE 写入新版本并保留旧版本，以保障</text>
+              <text x="1002" y="201" font-size="13" fill="#46585F">并发事务的一致性快照隔离。</text>
+
+              <text x="1002" y="233" font-size="14" font-weight="700" fill="#BE653B">2. 为什么堆积？（回收受阻或滞后）</text>
+              <text x="1002" y="255" font-size="13" fill="#46585F">长事务、复制槽锁死全局 xmin 边界，或</text>
+              <text x="1002" y="274" font-size="13" fill="#46585F">默认 20% 比例阈值对大表触发过晚。</text>
+
+              <text x="1002" y="306" font-size="14" font-weight="700" fill="#2F7A66">3. 稳态目标是什么？（页内复用）</text>
+              <text x="1002" y="328" font-size="13" fill="#46585F">标准 VACUUM 将死空间登记进 FSM 供后续</text>
+              <text x="1002" y="347" font-size="13" fill="#46585F">写入复用，而非每次把 OS 文件缩小。</text>
+
+              <rect x="1002" y="362" width="344" height="22" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="1012" y="377" class="svg-mono" font-size="11" font-weight="700" fill="#245A6B">主线：HEAP + MVCC + VACUUM + AUTOVACUUM</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            明确了七层存储结构后，我们先拆解垃圾回收在工程上究竟要解决哪三个核心问题。
+          </div>
+          <div class="page-meta">
+            <span class="page-num">01</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 02 ==================== -->
+      <section class="slide" data-index="1">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">01 · ENGINEERING OBJECTIVES &amp; SYMPTOMS</span>
+            <span class="eyebrow-tag">SYSTEM VIEW: pg_stat_all_tables / EXPLAIN BUFFERS</span>
+          </div>
+          <h1 class="slide-title">垃圾回收解决的三大工程问题与失控症状图谱</h1>
+          <p class="slide-lead">
+            垃圾回收并非单纯「腾硬盘」，它同时承担 <span class="hl-teal">空间复用</span>、<span class="hl-indigo">索引净化</span> 与 <span class="hl-terra">事务号防回卷</span> 三重职责；任一环节滞后都会直接反映在系统视图与延迟曲线上。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Column Headers -->
+              <rect x="24" y="18" width="420" height="34" fill="#245A6B"/>
+              <text x="40" y="40" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">A. 垃圾回收三大核心目标 (GOALS)</text>
+
+              <rect x="490" y="18" width="430" height="34" fill="#BE653B"/>
+              <text x="506" y="40" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">B. 回收滞后的线上症状 (SYMPTOMS)</text>
+
+              <rect x="966" y="18" width="410" height="34" fill="#2E6373"/>
+              <text x="982" y="40" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">C. 维护付出的系统代价 (TRADE-OFFS)</text>
+
+              <!-- Row 1: Space Reuse -->
+              <rect x="24" y="68" width="420" height="104" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="40" y="94" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">1. 回收旧版本空间供后续写入复用</text>
+              <text x="40" y="119" font-size="13" fill="#46585F">将全局不可见的 dead tuple 转为页内空闲，</text>
+              <text x="40" y="139" font-size="13" fill="#46585F">登记至 FSM，避免每次写入都向 OS 扩展新页。</text>
+              <text x="40" y="160" class="svg-mono" font-size="11" fill="#2F7A66">TARGET: Steady-State Page Space Reuse</text>
+
+              <!-- Orthogonal arrow 1 -> 1 -->
+              <line x1="444" y1="120" x2="490" y2="120" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="490,120 482,115 482,125" fill="#BE653B"/>
+
+              <rect x="490" y="68" width="430" height="104" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="506" y="94" font-size="15" font-weight="700" fill="#1B2B33">表文件持续膨胀 &amp; 缓存命中率下跌</text>
+              <text x="506" y="118" font-size="13" fill="#46585F">• n_dead_tup 持续升高，业务数据未增但文件暴涨</text>
+              <text x="506" y="138" font-size="13" fill="#46585F">• EXPLAIN (ANALYZE, BUFFERS) 扫描更多无效页</text>
+              <text x="506" y="158" font-size="13" fill="#46585F">• Shared Buffers 被死元组污染，查询延迟抖动</text>
+
+              <!-- Row 2: Index Cleanup -->
+              <rect x="24" y="188" width="420" height="104" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="40" y="214" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">2. 清除指向死元组的无效索引项</text>
+              <text x="40" y="239" font-size="13" fill="#46585F">删除索引中指向已死 TID 的条目，防止索引体积</text>
+              <text x="40" y="259" font-size="13" fill="#46585F">失控膨胀，降低索引范围扫描回表过滤成本。</text>
+              <text x="40" y="280" class="svg-mono" font-size="11" fill="#245A6B">TARGET: Dead Index Entry Bulk Deletion</text>
+
+              <line x1="444" y1="240" x2="490" y2="240" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="490,240 482,235 482,245" fill="#BE653B"/>
+
+              <rect x="490" y="188" width="430" height="104" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="506" y="214" font-size="15" font-weight="700" fill="#1B2B33">索引膨胀与 VACUUM 扫描空转</text>
+              <text x="506" y="238" font-size="13" fill="#46585F">• 索引体积远超表本体，Index Scan 读写放大</text>
+              <text x="506" y="258" font-size="13" fill="#46585F">• VM all-visible 比例低，Index-Only Scan 退化回表</text>
+              <text x="506" y="278" font-size="13" fill="#46585F">• 长事务/复制槽挡住边界，日志显示死元组无法移除</text>
+
+              <!-- Row 3: XID Freeze -->
+              <rect x="24" y="308" width="420" height="104" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <text x="40" y="334" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">3. 冻结老事务 ID 防 XID 回卷故障</text>
+              <text x="40" y="359" font-size="13" fill="#46585F">推进 relfrozenxid 与 relminmxid，避免 32 位</text>
+              <text x="40" y="379" font-size="13" fill="#46585F">事务号空间耗尽引发数据库强制拒绝写入。</text>
+              <text x="40" y="400" class="svg-mono" font-size="11" fill="#AE8A3E">TARGET: Prevent XID / MultiXact Wraparound</text>
+
+              <line x1="444" y1="360" x2="490" y2="360" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="490,360 482,355 482,365" fill="#BE653B"/>
+
+              <rect x="490" y="308" width="430" height="104" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="506" y="334" font-size="15" font-weight="700" fill="#1B2B33">Anti-Wraparound 抢占资源与停写风险</text>
+              <text x="506" y="358" font-size="13" fill="#46585F">• age(relfrozenxid) 逼近 20 亿警戒线</text>
+              <text x="506" y="378" font-size="13" fill="#46585F">• 即使关闭 autovacuum 也会强制拉起防回卷清理</text>
+              <text x="506" y="398" font-size="13" fill="#46585F">• 极端情况下系统拒绝分配新 XID，业务写入中断</text>
+
+              <!-- Orthogonal bus from Column B to Column C -->
+              <path d="M 920 120 L 943 120 L 943 360 L 920 360" fill="none" stroke="#245A6B" stroke-width="1.5"/>
+              <line x1="943" y1="240" x2="966" y2="240" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="966,240 958,235 958,245" fill="#245A6B"/>
+
+              <!-- Column C: Trade-offs Box -->
+              <rect x="966" y="68" width="410" height="344" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="984" y="98" class="svg-serif" font-size="18" font-weight="700" fill="#245A6B">维护成本的本质：资源预算分配</text>
+              <line x1="984" y1="112" x2="1358" y2="112" stroke="#D9D5CB" stroke-width="1"/>
+
+              <rect x="984" y="128" width="374" height="58" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="998" y="151" font-size="14" font-weight="700" fill="#1B2B33">后台磁盘 IO 与 WAL 写入放大</text>
+              <text x="998" y="172" font-size="12" fill="#46585F">扫描脏页、清理索引、更新 VM/FSM 均产生读写与 WAL</text>
+
+              <rect x="984" y="198" width="374" height="58" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="998" y="221" font-size="14" font-weight="700" fill="#1B2B33">Shared Buffers 缓存替换竞争</text>
+              <text x="998" y="242" font-size="12" fill="#46585F">大规模扫描冷页可能挤占热业务数据缓冲池</text>
+
+              <rect x="984" y="268" width="374" height="58" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="998" y="291" font-size="14" font-weight="700" fill="#1B2B33">索引扫描 CPU 与表级策略调优</text>
+              <text x="998" y="312" font-size="12" fill="#46585F">索引越多清理越重，需按热表单独定制阈值与限流</text>
+
+              <rect x="984" y="340" width="374" height="54" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="998" y="362" font-size="13" font-weight="700" fill="#BE653B">工程平衡点</text>
+              <text x="998" y="382" font-size="12" fill="#1B2B33">太激进会与业务争 IO；太保守则欠下指数级清理债。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            了解目标与症状后，我们深入 Heap 页内部，看一次 UPDATE 是如何制造死元组的。
+          </div>
+          <div class="page-meta">
+            <span class="page-num">02</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 03 (INTERACTIVE MVCC SIMULATOR) ==================== -->
+      <section class="slide" data-index="2">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">02 · CORE MECHANISM I // MVCC TUPLE LIFECYCLE</span>
+            <span class="eyebrow-tag">SOURCE: src/backend/access/heap/heapam.c (heap_update)</span>
+          </div>
+          <h1 class="slide-title">UPDATE / DELETE 为何制造垃圾？行版本链与可见性演进</h1>
+          <p class="slide-lead">
+            在 <strong>heap_update()</strong> 中，更新等于 <span class="hl-terra">旧版本标记 xmax + 写入新版本 + t_ctid 串联</span>。旧版本能否回收不取决于当前事务是否提交，而取决于全局最老快照是否仍需要它。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <!-- Interactive Controls -->
+            <div class="sim-controls">
+              <label id="mvcc-xid-label">当前XID: 101 | 最老活跃快照: 100</label>
+              <button class="sim-btn primary" onclick="mvccSimStep('update')">执行 UPDATE</button>
+              <button class="sim-btn warn" onclick="mvccSimStep('hold')" id="btn-mvcc-hold">模拟长事务快照</button>
+              <button class="sim-btn" onclick="mvccSimStep('release')">释放长事务</button>
+              <button class="sim-btn" onclick="mvccSimStep('reset')">重置</button>
+            </div>
+
+            <svg id="svg-mvcc" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top Timeline / Global Horizon Bar -->
+              <rect x="24" y="52" width="1352" height="44" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="40" y="79" class="svg-mono" font-size="13" font-weight="700" fill="#1E4B5A">GLOBAL HORIZON (OldestXmin):</text>
+              <text id="svg-mvcc-horizon-text" x="305" y="79" font-size="14" font-weight="700" fill="#2F7A66">无长事务阻塞 —— 全局可见性边界随最新提交事务推进</text>
+
+              <!-- Left: Heap Page 8KB Physical View (x=24..880) -->
+              <rect x="24" y="110" width="856" height="302" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="110" width="856" height="32" fill="#245A6B"/>
+              <text x="40" y="131" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">HEAP PAGE #0 (8192 BYTES) // ITEMID POINTERS &amp; TUPLE VERSIONS</text>
+
+              <!-- ItemId Array Strip -->
+              <rect x="40" y="154" width="824" height="54" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="52" y="176" class="svg-mono" font-size="12" font-weight="700" fill="#1E4B5A">Line Pointers (ItemIdData):</text>
+              <g id="svg-mvcc-pointers"></g>
+
+              <!-- Tuples Area -->
+              <g id="svg-mvcc-tuples"></g>
+
+              <!-- Right: State Machine & HOT Explanation (x=900..1376) -->
+              <rect x="900" y="110" width="476" height="302" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="900" y="110" width="476" height="32" fill="#2E6373"/>
+              <text x="916" y="131" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">TUPLE STATE TRANSITION // 死元组三态演进</text>
+
+              <!-- State 1: LIVE -->
+              <rect x="918" y="156" width="440" height="56" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="932" y="178" class="svg-mono" font-size="13" font-weight="700" fill="#2F7A66">1. LIVE (活跃有效版本)</text>
+              <text x="932" y="199" font-size="13" fill="#1B2B33">xmin 已提交且 xmax 无效/未提交，当前事务可见。</text>
+
+              <line x1="1138" y1="212" x2="1138" y2="232" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="1138,232 1133,224 1143,224" fill="#BE653B"/>
+
+              <!-- State 2: RECENTLY DEAD -->
+              <rect x="918" y="232" width="440" height="66" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="932" y="254" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">2. RECENTLY DEAD (最近死亡 · 不可清理)</text>
+              <text x="932" y="274" font-size="13" fill="#1B2B33">新事务已看不见，但 xmax ≥ OldestXmin，老快照</text>
+              <text x="932" y="291" font-size="13" fill="#1B2B33">或复制槽仍可能读取它，VACUUM 必须跳过。</text>
+
+              <line x1="1138" y1="298" x2="1138" y2="318" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="1138,318 1133,310 1143,310" fill="#245A6B"/>
+
+              <!-- State 3: DEAD -->
+              <rect x="918" y="318" width="440" height="78" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="932" y="340" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">3. DEAD (彻底死亡 · 可回收)</text>
+              <text x="932" y="360" font-size="13" fill="#1B2B33">xmax &lt; OldestXmin，任何现存或未来事务均不可见。</text>
+              <text x="932" y="378" font-size="12" fill="#46585F">注：同页且未改索引列可走 HOT 更新，减少索引垃圾。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            当旧版本彻底变成 DEAD 后，标准 VACUUM 如何安全地把它们清理掉而不破坏索引？
+          </div>
+          <div class="page-meta">
+            <span class="page-num">03</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 04 (INTERACTIVE VACUUM 3-PHASE) ==================== -->
+      <section class="slide" data-index="3">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">03 · CORE MECHANISM II // LAZY VACUUM PIPELINE</span>
+            <span class="eyebrow-tag">SOURCE: src/backend/access/heap/vacuumlazy.c</span>
+          </div>
+          <h1 class="slide-title">标准 VACUUM 的三阶段流水线：为何必须「先清索引再释堆」</h1>
+          <p class="slide-lead">
+            <strong>vacuumlazy.c</strong> 严禁在扫描 Heap 时直接复用死元组指针——因为 <span class="hl-terra">索引里仍有指向该 TID 的条目</span>。必须经过三阶段协作，并受 <span class="hl-indigo">maintenance_work_mem</span> 容量约束。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <div class="sim-controls">
+              <label id="vac-step-label">当前阶段: 全景概览 (点击逐步演练)</label>
+              <button class="sim-btn primary" onclick="vacSimNext()">下一步演练</button>
+              <button class="sim-btn warn" onclick="vacSimToggleMem()" id="btn-vac-mem">模拟内存上限触发多轮</button>
+              <button class="sim-btn" onclick="vacSimReset()">重置</button>
+            </div>
+
+            <svg id="svg-vac" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Phase 1 Box -->
+              <rect id="vac-box-1" x="24" y="60" width="410" height="250" fill="#F7F6F2" stroke="#245A6B" stroke-width="2"/>
+              <rect x="24" y="60" width="410" height="36" fill="#245A6B"/>
+              <text x="40" y="83" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">PHASE 1 // HEAP SCAN &amp; PRUNE</text>
+
+              <text x="40" y="122" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">1. 扫描 Heap 页并收集死 TID</text>
+              <text x="40" y="148" font-size="13" fill="#46585F">• 跳过 VM 中标记为 all-visible 的页面</text>
+              <text x="40" y="170" font-size="13" fill="#46585F">• 执行 HOT 链剪枝 (Pruning) 与元组冻结</text>
+              <text x="40" y="192" font-size="13" fill="#46585F">• 将死元组标记为 LP_DEAD（暂不释放空间）</text>
+              <text x="40" y="214" font-size="13" fill="#46585F">• 将待删 TID 写入内存 TID Store</text>
+
+              <rect x="40" y="236" width="378" height="58" fill="#E5EFF0" stroke="#47808D" stroke-width="1"/>
+              <text x="52" y="258" class="svg-mono" font-size="12" font-weight="700" fill="#1E4B5A">TID STORE (受 maintenance_work_mem 限制)</text>
+              <text id="vac-tid-text" x="52" y="279" class="svg-mono" font-size="12" fill="#245A6B">收集队列: [(0,1), (0,3), (1,2), (2,5) ...]</text>
+
+              <!-- Orthogonal Connector 1 -> 2 -->
+              <line x1="434" y1="185" x2="494" y2="185" stroke="#245A6B" stroke-width="2.5"/>
+              <polygon points="494,185 485,179 485,191" fill="#245A6B"/>
+              <text x="442" y="175" class="svg-mono" font-size="11" font-weight="700" fill="#245A6B">TID列表</text>
+
+              <!-- Phase 2 Box -->
+              <rect id="vac-box-2" x="494" y="60" width="410" height="250" fill="#F7F6F2" stroke="#BE653B" stroke-width="2"/>
+              <rect x="494" y="60" width="410" height="36" fill="#BE653B"/>
+              <text x="510" y="83" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">PHASE 2 // INDEX BULK DELETE</text>
+
+              <text x="510" y="122" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">2. 批量扫描所有索引清除条目</text>
+              <text x="510" y="148" font-size="13" fill="#46585F">• 遍历表的每一棵索引（B-Tree / GIN 等）</text>
+              <text x="510" y="170" font-size="13" fill="#46585F">• 匹配 TID Store 中的无效指针并抹除</text>
+              <text x="510" y="192" font-size="13" fill="#46585F">• 索引越多、死元组越多，此阶段耗时越长</text>
+              <text x="510" y="214" font-size="13" fill="#46585F">• 解除索引对 Heap Line Pointer 的引用依赖</text>
+
+              <rect x="510" y="236" width="378" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="522" y="258" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">索引清理成本放大器</text>
+              <text x="522" y="279" font-size="12" fill="#1B2B33">5 个索引 = 每次清理循环扫 5 遍全量索引结构</text>
+
+              <!-- Orthogonal Connector 2 -> 3 -->
+              <line x1="904" y1="185" x2="964" y2="185" stroke="#2F7A66" stroke-width="2.5"/>
+              <polygon points="964,185 955,179 955,191" fill="#2F7A66"/>
+              <text x="910" y="175" class="svg-mono" font-size="11" font-weight="700" fill="#2F7A66">引用解除</text>
+
+              <!-- Phase 3 Box -->
+              <rect id="vac-box-3" x="964" y="60" width="412" height="250" fill="#F7F6F2" stroke="#2F7A66" stroke-width="2"/>
+              <rect x="964" y="60" width="412" height="36" fill="#2F7A66"/>
+              <text x="980" y="83" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">PHASE 3 // HEAP REAP &amp; MAP UPDATE</text>
+
+              <text x="980" y="122" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">3. 二次访问 Heap 释放空间并更新映射</text>
+              <text x="980" y="148" font-size="13" fill="#46585F">• 将 LP_DEAD 指针状态改为 LP_UNUSED</text>
+              <text x="980" y="170" font-size="13" fill="#46585F">• 回收页内自由空间并登记到 FSM</text>
+              <text x="980" y="192" font-size="13" fill="#46585F">• 若全页均已全局可见/冻结，设置 VM 标记</text>
+              <text x="980" y="214" font-size="13" fill="#46585F">• 末了更新 pg_class 统计并尝试截断表尾空页</text>
+
+              <rect x="980" y="236" width="380" height="58" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="992" y="258" class="svg-mono" font-size="12" font-weight="700" fill="#2F7A66">安全闭环：LP_DEAD → LP_UNUSED</text>
+              <text x="992" y="279" font-size="12" fill="#1B2B33">此时新写入方可安全复用该 Line Pointer 槽位</text>
+
+              <!-- Bottom Loopback / Memory Limit & Failsafe Bar -->
+              <path id="vac-loop-path" d="M 1170 310 L 1170 342 L 229 342 L 229 310" fill="none" stroke="#AE8A3E" stroke-width="2" stroke-dasharray="6 4"/>
+              <polygon points="229,310 224,319 234,319" fill="#AE8A3E"/>
+
+              <rect x="24" y="354" width="1352" height="60" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <text x="40" y="378" class="svg-mono" font-size="12" font-weight="700" fill="#AE8A3E">ENGINE ENGINEERING DETAILS // 内存上限多轮循环与防回卷熔断</text>
+              <text id="vac-bottom-desc" x="40" y="400" font-size="13" fill="#1B2B33">
+                ① 当死元组过多填满 TID Store 时，暂停 Phase 1，先执行一轮 Phase 2 + Phase 3 清空内存后再继续扫描；② 若 XID 接近回卷危险区，failsafe 机制会跳过索引清理优先冻结元组。
+              </text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            第三阶段更新的 FSM 和 VM 两个辅助文件，究竟是如何在日常读写与下次清理中发挥作用的？
+          </div>
+          <div class="page-meta">
+            <span class="page-num">04</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 05 ==================== -->
+      <section class="slide" data-index="4">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">04 · CORE MECHANISM III // FSM &amp; VM ARCHITECTURE</span>
+            <span class="eyebrow-tag">SOURCE: freespace.c / visibilitymap.c</span>
+          </div>
+          <h1 class="slide-title">FSM 与 VM 的精密分工：空间复用路由 vs 扫描跳过加速</h1>
+          <p class="slide-lead">
+            表文件旁挂的两个辅助分支文件决定了回收后的运行效率：<strong>FSM（空闲空间映射）</strong>解决 <span class="hl-teal">「新版本写到哪里」</span>，<strong>VM（可见性映射）</strong>解决 <span class="hl-indigo">「哪些页面可以少看」</span>。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Panel: FSM (x=24..686) -->
+              <rect x="24" y="18" width="662" height="394" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="24" y="18" width="662" height="36" fill="#2F7A66"/>
+              <text x="40" y="41" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">FSM // FREE SPACE MAP (_fsm 物理分支)</text>
+
+              <text x="40" y="80" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">核心职责：快速定位「装得下新元组」的 Heap 页</text>
+              <text x="40" y="103" font-size="13" fill="#46585F">每页仅用 1 字节近似值（量化步长 32B）记录空闲度，组织为多叉最大值搜索树。</text>
+
+              <!-- FSM Tree Visualization -->
+              <rect x="255" y="120" width="200" height="38" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="275" y="144" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">FSM 根节点 (最大空闲: 4KB)</text>
+
+              <!-- Orthogonal tree lines -->
+              <path d="M 355 158 L 355 174 L 185 174 L 185 190" fill="none" stroke="#2F7A66" stroke-width="2"/>
+              <path d="M 355 158 L 355 174 L 525 174 L 525 190" fill="none" stroke="#2F7A6B" stroke-width="2"/>
+
+              <rect x="95" y="190" width="180" height="34" fill="#47808D"/>
+              <text x="115" y="212" class="svg-mono" font-size="12" fill="#F7F6F2">中间节点 A (Max: 4KB)</text>
+
+              <rect x="435" y="190" width="180" height="34" fill="#74A5AD"/>
+              <text x="455" y="212" class="svg-mono" font-size="12" fill="#1B2B33">中间节点 B (Max: 1KB)</text>
+
+              <!-- Leaf Pages -->
+              <path d="M 185 224 L 185 238 L 110 238 L 110 252" fill="none" stroke="#2F7A6B" stroke-width="1.5"/>
+              <path d="M 185 224 L 185 238 L 260 238 L 260 252" fill="none" stroke="#2F7A6B" stroke-width="1.5"/>
+
+              <rect x="46" y="252" width="128" height="44" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="62" y="272" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #0</text>
+              <text x="62" y="289" class="svg-mono" font-size="11" fill="#2F7A66">空闲 ≈ 4096 B</text>
+
+              <rect x="196" y="252" width="128" height="44" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="212" y="272" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #1</text>
+              <text x="212" y="289" class="svg-mono" font-size="11" fill="#46585F">空闲 ≈ 512 B</text>
+
+              <rect x="455" y="252" width="140" height="44" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="472" y="272" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #2</text>
+              <text x="472" y="289" class="svg-mono" font-size="11" fill="#46585F">空闲 ≈ 1024 B</text>
+
+              <!-- FSM Workflow Summary -->
+              <rect x="40" y="314" width="630" height="84" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="54" y="337" font-size="13" font-weight="700" fill="#1B2B33">写入与更新双向联动：</text>
+              <text x="54" y="358" font-size="13" fill="#46585F">• 写入路径：INSERT 或非 HOT UPDATE 查询 FSM 树，直达 Page #0 复用空洞。</text>
+              <text x="54" y="379" font-size="13" fill="#46585F">• 清理路径：VACUUM 调用 RecordPageWithFreeSpace() 刷新底层并向上传播。</text>
+
+              <!-- Right Panel: VM (x=714..1376) -->
+              <rect x="714" y="18" width="662" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="714" y="18" width="662" height="36" fill="#245A6B"/>
+              <text x="730" y="41" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">VM // VISIBILITY MAP (_vm 物理分支 · 每页 2 BITS)</text>
+
+              <text x="730" y="80" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">核心职责：保守标记「全局可见」与「全部冻结」</text>
+              <text x="730" y="103" font-size="13" fill="#46585F">保守语义（visibilitymap.c）：Bit 为 1 必定为真；Bit 为 0 仅表示「尚不确定」。</text>
+
+              <!-- Two Bits Comparison Cards -->
+              <rect x="730" y="122" width="305" height="174" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="730" y="122" width="305" height="30" fill="#2E6373"/>
+              <text x="744" y="142" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">BIT 1: ALL-VISIBLE (全局可见)</text>
+              <text x="744" y="172" font-size="13" font-weight="700" fill="#1B2B33">• 加速 Index-Only Scan：</text>
+              <text x="744" y="192" font-size="12" fill="#46585F">索引命中后查 VM 为 1，直接返回结果，</text>
+              <text x="744" y="210" font-size="12" fill="#46585F">无需回表读取 Heap Page 核对可见性。</text>
+              <text x="744" y="238" font-size="13" font-weight="700" fill="#1B2B33">• 加速常规 VACUUM：</text>
+              <text x="744" y="258" font-size="12" fill="#46585F">普通清理直接跳过 all-visible 页面，</text>
+              <text x="744" y="276" font-size="12" fill="#46585F">避免全表无效 IO 扫描。</text>
+
+              <rect x="1053" y="122" width="307" height="174" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="1053" y="122" width="307" height="30" fill="#AE8A3E"/>
+              <text x="1067" y="142" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">BIT 2: ALL-FROZEN (全部冻结)</text>
+              <text x="1067" y="172" font-size="13" font-weight="700" fill="#1B2B33">• 加速 Aggressive Vacuum：</text>
+              <text x="1067" y="192" font-size="12" fill="#46585F">即便是防回卷激进清理，也可直接跳过</text>
+              <text x="1067" y="210" font-size="12" fill="#46585F">已标记 all-frozen 的历史冷数据页。</text>
+              <text x="1067" y="238" font-size="13" font-weight="700" fill="#1B2B33">• 降低 XID 冻结扫描代价：</text>
+              <text x="1067" y="258" font-size="12" fill="#46585F">只插入表（Append-Only）通过 Insert</text>
+              <text x="1067" y="276" font-size="12" fill="#46585F">Vacuum 提前冻结，避免突发全表冻结。</text>
+
+              <!-- VM Invalidation Rule -->
+              <rect x="730" y="314" width="630" height="84" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="744" y="337" font-size="13" font-weight="700" fill="#BE653B">状态清零规则（写操作触发）：</text>
+              <text x="744" y="358" font-size="13" fill="#1B2B33">• 仅由 VACUUM 将 VM bit 设为 1；任何 INSERT / UPDATE / DELETE 修改该页时，</text>
+              <text x="744" y="379" font-size="13" fill="#1B2B33">  必须立即清除对应 VM bit（设为 0），保证读取绝不会误判未提交数据。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            知道了清理如何工作、空间如何登记，下一个核心问题是：autovacuum 究竟什么时候才会启动？
+          </div>
+          <div class="page-meta">
+            <span class="page-num">05</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 06 (INTERACTIVE AUTOVACUUM CALCULATOR) ==================== -->
+      <section class="slide" data-index="5">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">05 · CORE MECHANISM IV // AUTOVACUUM TRIGGER FORMULA</span>
+            <span class="eyebrow-tag">SOURCE: src/backend/postmaster/autovacuum.c</span>
+          </div>
+          <h1 class="slide-title">autovacuum 如何决定何时清理？大表默认阈值的延迟陷阱</h1>
+          <p class="slide-lead">
+            autovacuum 不是「半夜定时任务」，而是由 worker 轮询统计信息按公式触发。默认 <span class="hl-terra">scale_factor = 0.2</span> 对十亿级大表意味着需累积 <span class="hl-terra">2 亿死元组</span> 才启动，极易造成严重膨胀。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <div class="sim-controls">
+              <label>预设表规模:</label>
+              <button class="sim-btn" onclick="avPreset(100000, 0.2, 50)">10万行(默认)</button>
+              <button class="sim-btn warn" onclick="avPreset(1000000000, 0.2, 50)">10亿行(默认0.2)</button>
+              <button class="sim-btn primary" onclick="avPreset(1000000000, 0.01, 5000)">10亿行(调优0.01)</button>
+            </div>
+
+            <svg id="svg-av" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top Formula Banner -->
+              <rect x="24" y="54" width="1352" height="74" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="42" y="80" class="svg-mono" font-size="13" font-weight="700" fill="#1E4B5A">TRIGGER FORMULA (UPDATE / DELETE 死元组触发公式):</text>
+              <text x="42" y="109" class="svg-mono" font-size="16" font-weight="700" fill="#1B2B33">
+                vacuum_threshold = min( max_threshold , vacuum_threshold + scale_factor × pg_class.reltuples )
+              </text>
+
+              <!-- Left: Interactive Gauge & Breakdown (x=24..860) -->
+              <rect x="24" y="144" width="836" height="268" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="42" y="172" class="svg-serif" font-size="18" font-weight="700" fill="#1B2B33">触发阈值动态推演（对比死元组累积窗口）</text>
+
+              <!-- Parameter readout boxes -->
+              <rect x="42" y="190" width="250" height="58" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="54" y="212" class="svg-mono" font-size="11" fill="#46585F">表估算总行数 (reltuples)</text>
+              <text id="av-reltuples-val" x="54" y="236" class="svg-mono" font-size="18" font-weight="700" fill="#1E4B5A">1,000,000,000 行</text>
+
+              <rect x="308" y="190" width="250" height="58" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="320" y="212" class="svg-mono" font-size="11" fill="#46585F">比例因子 (scale_factor)</text>
+              <text id="av-scale-val" x="320" y="236" class="svg-mono" font-size="18" font-weight="700" fill="#245A6B">0.20 (20%)</text>
+
+              <rect x="574" y="190" width="268" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="586" y="212" class="svg-mono" font-size="11" fill="#BE653B">需累积死元组才触发 (Threshold)</text>
+              <text id="av-thresh-val" x="586" y="236" class="svg-mono" font-size="18" font-weight="700" fill="#BE653B">200,000,050 行</text>
+
+              <!-- Visual Strata Scale Bar -->
+              <text x="42" y="280" class="svg-mono" font-size="12" font-weight="700" fill="#46585F">表空间死元组容忍度比例尺（占总行数百分比）:</text>
+              <rect x="42" y="292" width="800" height="36" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+              <rect id="av-bar-fill" x="42" y="292" width="160" height="36" fill="#BE653B"/>
+              <line id="av-bar-marker" x1="202" y1="286" x2="202" y2="336" stroke="#1B2B33" stroke-width="2.5"/>
+              <text id="av-bar-label" x="212" y="315" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">触发线: 20.0% (2亿行死元组堆积!)</text>
+
+              <text id="av-verdict-text" x="42" y="362" font-size="14" font-weight="700" fill="#BE653B">
+                诊断结论：在触发前表内已堆积 2 亿条死元组，对应数十 GB 膨胀空间与巨量索引垃圾，单次清理将引发剧烈 IO 抖动！
+              </text>
+              <text x="42" y="388" font-size="12" fill="#46585F">
+                注：PostgreSQL 18+ 引入 autovacuum_vacuum_max_threshold（默认 1 亿）封顶；更早版本大表必须显式下调表级 scale_factor。
+              </text>
+
+              <!-- Right: Two Other Trigger Paths (x=880..1376) -->
+              <rect x="880" y="144" width="496" height="268" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="880" y="144" width="496" height="32" fill="#245A6B"/>
+              <text x="896" y="165" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">OTHER TRIGGER PATHS // 另外两条独立触发路径</text>
+
+              <!-- Insert Vacuum -->
+              <rect x="898" y="190" width="460" height="96" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="912" y="212" font-size="14" font-weight="700" fill="#2F7A66">路径 B：只插入表触发 (Insert Vacuum)</text>
+              <text x="912" y="233" class="svg-mono" font-size="11" fill="#1B2B33">insert_thresh + insert_scale × reltuples × (1 - allfrozen/pages)</text>
+              <text x="912" y="254" font-size="12" fill="#46585F">解决纯 INSERT 日志表不产生 dead_tup 导致长期不清理、</text>
+              <text x="912" y="272" font-size="12" fill="#46585F">无法提前设置 VM all-frozen 的问题。</text>
+
+              <!-- Anti-Wraparound -->
+              <rect x="898" y="300" width="460" height="96" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1"/>
+              <text x="912" y="322" font-size="14" font-weight="700" fill="#AE8A3E">路径 C：防事务号回卷强制触发 (Anti-Wraparound)</text>
+              <text x="912" y="343" class="svg-mono" font-size="11" fill="#1B2B33">age(relfrozenxid) &gt; autovacuum_freeze_max_age (默认 2 亿)</text>
+              <text x="912" y="364" font-size="12" fill="#46585F">最高优先级保命机制：即使全局关闭了 autovacuum，</text>
+              <text x="912" y="382" font-size="12" fill="#46585F">系统依然会强行拉起 worker 推进冻结边界。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            很多团队看到 autovacuum 跑完了，却发现磁盘文件一点没变小——这正常吗？
+          </div>
+          <div class="page-meta">
+            <span class="page-num">06</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 07 ==================== -->
+      <section class="slide" data-index="6">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">06 · STEADY-STATE REUSE VS FILE SHRINKING</span>
+            <span class="eyebrow-tag">SOURCE: maintenance.sgml (Recovering Disk Space)</span>
+          </div>
+          <h1 class="slide-title">为什么 VACUUM 后文件还是大？页内空间复用 vs 物理截断</h1>
+          <p class="slide-lead">
+            标准 <strong>VACUUM</strong> 的设计目标是 <span class="hl-teal">稳态空间复用（Steady-State Reuse）</span>，而非缩小文件。只有当 <span class="hl-indigo">表文件末尾出现连续空页</span> 且能获取锁时，才会截断归还给操作系统。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Scenario 1: Before VACUUM -->
+              <text x="32" y="38" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">STATE 1 // 大量 UPDATE / DELETE 后的物理文件布局 (5 个 8KB Pages)</text>
+              <g transform="translate(32, 48)">
+                <rect x="0" y="0" width="210" height="68" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="12" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #0 (头)</text>
+                <rect x="12" y="32" width="90" height="24" fill="#245A6B"/><text x="34" y="48" font-size="11" fill="#FFF">LIVE</text>
+                <rect x="106" y="32" width="92" height="24" fill="#BE653B"/><text x="132" y="48" font-size="11" fill="#FFF">DEAD</text>
+
+                <rect x="222" y="0" width="210" height="68" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="234" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #1</text>
+                <rect x="234" y="32" width="60" height="24" fill="#245A6B"/><text x="248" y="48" font-size="11" fill="#FFF">LIVE</text>
+                <rect x="298" y="32" width="122" height="24" fill="#BE653B"/><text x="338" y="48" font-size="11" fill="#FFF">DEAD</text>
+
+                <rect x="444" y="0" width="210" height="68" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="456" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #2</text>
+                <rect x="456" y="32" width="130" height="24" fill="#245A6B"/><text x="502" y="48" font-size="11" fill="#FFF">LIVE</text>
+                <rect x="590" y="32" width="52" height="24" fill="#BE653B"/><text x="600" y="48" font-size="11" fill="#FFF">DEAD</text>
+
+                <rect x="666" y="0" width="210" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="678" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">Page #3 (全死页)</text>
+                <rect x="678" y="32" width="186" height="24" fill="#BE653B"/><text x="742" y="48" font-size="11" fill="#FFF">ALL DEAD</text>
+
+                <rect x="888" y="0" width="210" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="900" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">Page #4 (表尾全死页)</text>
+                <rect x="900" y="32" width="186" height="24" fill="#BE653B"/><text x="964" y="48" font-size="11" fill="#FFF">ALL DEAD</text>
+
+                <rect x="1116" y="0" width="220" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1130" y="28" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">OS 文件大小: 40 KB</text>
+                <text x="1130" y="50" font-size="12" fill="#BE653B">有效数据仅占约 35%</text>
+              </g>
+
+              <!-- Arrow Down -->
+              <line x1="560" y1="120" x2="560" y2="148" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="560,148 555,140 565,140" fill="#245A6B"/>
+              <text x="574" y="139" class="svg-mono" font-size="12" font-weight="700" fill="#245A6B">执行标准 VACUUM (不阻塞在线读写)</text>
+
+              <!-- Scenario 2: After Standard VACUUM -->
+              <text x="32" y="168" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">STATE 2 // 标准 VACUUM 后：中间空洞登记 FSM 复用，仅表尾连续空页可截断</text>
+              <g transform="translate(32, 178)">
+                <rect x="0" y="0" width="210" height="68" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="12" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #0</text>
+                <rect x="12" y="32" width="90" height="24" fill="#245A6B"/><text x="34" y="48" font-size="11" fill="#FFF">LIVE</text>
+                <rect x="106" y="32" width="92" height="24" fill="#CFE0DC" stroke="#2F7A66" stroke-dasharray="3 2"/><text x="124" y="48" font-size="11" fill="#1E4B5A">FSM复用</text>
+
+                <rect x="222" y="0" width="210" height="68" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="234" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #1</text>
+                <rect x="234" y="32" width="60" height="24" fill="#245A6B"/><text x="248" y="48" font-size="11" fill="#FFF">LIVE</text>
+                <rect x="298" y="32" width="122" height="24" fill="#CFE0DC" stroke="#2F7A66" stroke-dasharray="3 2"/><text x="330" y="48" font-size="11" fill="#1E4B5A">FSM 可复用</text>
+
+                <rect x="444" y="0" width="210" height="68" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="456" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">Page #2 (被LIVE挡住)</text>
+                <rect x="456" y="32" width="130" height="24" fill="#245A6B"/><text x="502" y="48" font-size="11" fill="#FFF">LIVE</text>
+                <rect x="590" y="32" width="52" height="24" fill="#CFE0DC" stroke="#2F7A66" stroke-dasharray="3 2"/><text x="602" y="48" font-size="10" fill="#1E4B5A">FSM</text>
+
+                <rect x="666" y="0" width="210" height="68" fill="#F7F6F2" stroke="#89938F" stroke-width="1.5" stroke-dasharray="5 3"/>
+                <text x="678" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#89938F">Page #3 (截断归还OS)</text>
+                <text x="708" y="48" class="svg-mono" font-size="11" fill="#89938F">ftruncate() 释放</text>
+
+                <rect x="888" y="0" width="210" height="68" fill="#F7F6F2" stroke="#89938F" stroke-width="1.5" stroke-dasharray="5 3"/>
+                <text x="900" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#89938F">Page #4 (截断归还OS)</text>
+                <text x="930" y="48" class="svg-mono" font-size="11" fill="#89938F">ftruncate() 释放</text>
+
+                <rect x="1116" y="0" width="220" height="68" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <text x="1130" y="28" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">OS 文件大小: 24 KB</text>
+                <text x="1130" y="50" font-size="12" fill="#1B2B33">若 Page #4 有 1 行 LIVE，则 40KB 一步不缩！</text>
+              </g>
+
+              <!-- Arrow Down -->
+              <line x1="560" y1="250" x2="560" y2="278" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="560,278 555,270 565,270" fill="#BE653B"/>
+              <text x="574" y="269" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">执行 VACUUM FULL / CLUSTER (重写全表 + ACCESS EXCLUSIVE 强锁)</text>
+
+              <!-- Scenario 3: After VACUUM FULL -->
+              <text x="32" y="298" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">STATE 3 // 全表物理重写后：消除一切内部空洞，生成全新紧凑文件并重建索引</text>
+              <g transform="translate(32, 308)">
+                <rect x="0" y="0" width="210" height="68" fill="#245A6B" stroke="#1B2B33" stroke-width="1.5"/>
+                <text x="12" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">New Page #0</text>
+                <text x="12" y="48" font-size="12" fill="#E5EFF0">100% 紧凑 LIVE 元组</text>
+
+                <rect x="222" y="0" width="210" height="68" fill="#245A6B" stroke="#1B2B33" stroke-width="1.5"/>
+                <text x="234" y="22" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">New Page #1</text>
+                <text x="234" y="48" font-size="12" fill="#E5EFF0">紧凑 LIVE 元组 + 预留</text>
+
+                <rect x="460" y="0" width="876" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="478" y="26" class="svg-serif" font-size="16" font-weight="700" fill="#1B2B33">核心决策法则：看业务未来「还会不会把空间吃回来」</text>
+                <text x="478" y="50" font-size="13" fill="#46585F">
+                  若业务仍持续写入，FSM 复用正是理想稳态，强行 VACUUM FULL 缩表后很快又会重新撑大；仅当「大删除后永不回涨」才需重写。
+                </text>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            既然不同场景需要不同手段，我们把五种主流维护与回收方案放在一张工程矩阵里横向对比。
+          </div>
+          <div class="page-meta">
+            <span class="page-num">07</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 08 ==================== -->
+      <section class="slide" data-index="7">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">07 · HORIZONTAL COMPARISON MATRIX</span>
+            <span class="eyebrow-tag">TRADE-OFFS: LOCKING / OS SPACE / COST / USE CASE</span>
+          </div>
+          <h1 class="slide-title">横向对比：五种垃圾回收与防膨胀方案的工程权衡</h1>
+          <p class="slide-lead">
+            没有「一招鲜」的清理命令。从日常在线稳态维护，到离线全表物理重写，再到架构级的 <span class="hl-teal">分区丢弃（DROP PARTITION）</span>，锁粒度与资源代价截然不同。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Table Header -->
+              <rect x="20" y="16" width="1360" height="42" fill="#1E4B5A"/>
+              <text x="36" y="42" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">治理手段</text>
+              <text x="230" y="42" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">并发锁影响</text>
+              <text x="460" y="42" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">归还 OS 空间</text>
+              <text x="665" y="42" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">资源与 IO 成本</text>
+              <text x="935" y="42" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">最佳适用场景与反模式边界</text>
+
+              <!-- Row 1: Standard VACUUM -->
+              <rect x="20" y="62" width="1360" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="20" y="62" width="6" height="68" fill="#245A6B"/>
+              <text x="36" y="92" class="svg-serif" font-size="17" font-weight="700" fill="#245A6B">标准 VACUUM</text>
+              <text x="36" y="114" class="svg-mono" font-size="11" fill="#46585F">手工执行常规清理</text>
+              <text x="230" y="92" font-size="13" font-weight="700" fill="#2F7A66">不阻塞常规 DML 读写</text>
+              <text x="230" y="114" font-size="12" fill="#46585F">仅限制互斥 DDL（如 ALTER）</text>
+              <text x="460" y="92" font-size="13" font-weight="700" fill="#AE8A3E">仅表尾连续空页可截断</text>
+              <text x="460" y="114" font-size="12" fill="#46585F">常态为页内登记 FSM 复用</text>
+              <text x="665" y="92" font-size="13" fill="#1B2B33">扫描脏页 + 索引清理 IO/CPU</text>
+              <text x="665" y="114" font-size="12" fill="#46585F">受 cost_limit 限流保护</text>
+              <text x="935" y="92" font-size="13" font-weight="700" fill="#1B2B33">适合：大批量删除后的手工补充清理</text>
+              <text x="935" y="114" font-size="12" fill="#BE653B">不适合：期望立刻释放数百 GB 磁盘给 OS</text>
+
+              <!-- Row 2: autovacuum -->
+              <rect x="20" y="134" width="1360" height="68" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="20" y="134" width="6" height="68" fill="#2F7A66"/>
+              <text x="36" y="164" class="svg-serif" font-size="17" font-weight="700" fill="#2F7A66">autovacuum</text>
+              <text x="36" y="186" class="svg-mono" font-size="11" fill="#46585F">后台守护进程自动调度</text>
+              <text x="230" y="164" font-size="13" font-weight="700" fill="#2F7A66">不阻塞 DML，遇锁冲突可退让</text>
+              <text x="230" y="186" font-size="12" fill="#46585F">普通 worker 会主动让路给 DDL</text>
+              <text x="460" y="164" font-size="13" font-weight="700" fill="#AE8A3E">同标准 VACUUM</text>
+              <text x="460" y="186" font-size="12" fill="#46585F">绝不会自动执行 VACUUM FULL</text>
+              <text x="665" y="164" font-size="13" fill="#1B2B33">持续后台细水长流消耗预算</text>
+              <text x="665" y="186" font-size="12" fill="#46585F">多 worker 共享全局 IO 额度</text>
+              <text x="935" y="164" font-size="13" font-weight="700" fill="#1B2B33">适合：95% 常规 OLTP 表稳态与统计更新</text>
+              <text x="935" y="186" font-size="12" fill="#BE653B">不适合：默认参数硬扛超大热表突发更新</text>
+
+              <!-- Row 3: VACUUM FULL -->
+              <rect x="20" y="206" width="1360" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="20" y="206" width="6" height="68" fill="#BE653B"/>
+              <text x="36" y="236" class="svg-serif" font-size="17" font-weight="700" fill="#BE653B">VACUUM FULL</text>
+              <text x="36" y="258" class="svg-mono" font-size="11" fill="#46585F">物理重构新表文件</text>
+              <text x="230" y="236" font-size="13" font-weight="700" fill="#BE653B">ACCESS EXCLUSIVE 强锁</text>
+              <text x="230" y="258" font-size="12" fill="#BE653B">全程完全阻塞所有读写操作！</text>
+              <text x="460" y="236" font-size="13" font-weight="700" fill="#2F7A66">是（彻底压缩归还 OS）</text>
+              <text x="460" y="258" font-size="12" fill="#46585F">消除一切内部页空洞</text>
+              <text x="665" y="236" font-size="13" fill="#1B2B33">极高：全表拷贝 + 重建全索引</text>
+              <text x="665" y="258" font-size="12" fill="#BE653B">需额外 1 倍临时磁盘空间</text>
+              <text x="935" y="236" font-size="13" font-weight="700" fill="#1B2B33">适合：一次性清理历史数据且有停机窗口</text>
+              <text x="935" y="258" font-size="12" fill="#BE653B">严禁作为 7×24 核心热表的日常维护手段</text>
+
+              <!-- Row 4: CLUSTER / pg_repack -->
+              <rect x="20" y="278" width="1360" height="68" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="20" y="278" width="6" height="68" fill="#AE8A3E"/>
+              <text x="36" y="308" class="svg-serif" font-size="17" font-weight="700" fill="#1B2B33">CLUSTER / 在线重写</text>
+              <text x="36" y="330" class="svg-mono" font-size="11" fill="#46585F">按索引顺序重排或影子表</text>
+              <text x="230" y="308" font-size="13" font-weight="700" fill="#AE8A3E">CLUSTER 强锁；repack 仅瞬时锁</text>
+              <text x="230" y="330" font-size="12" fill="#46585F">在线重写靠触发器增量同步</text>
+              <text x="460" y="308" font-size="13" font-weight="700" fill="#2F7A66">是（生成新紧凑文件）</text>
+              <text x="460" y="330" font-size="12" fill="#46585F">同时消除索引物理碎片</text>
+              <text x="665" y="308" font-size="13" fill="#1B2B33">极高 IO、WAL 激增与额外空间</text>
+              <text x="665" y="330" font-size="12" fill="#46585F">可能带来主从复制延迟冲击</text>
+              <text x="935" y="308" font-size="13" font-weight="700" fill="#1B2B33">适合：严重膨胀且无停机窗口的在线缩容</text>
+              <text x="935" y="330" font-size="12" fill="#BE653B">不适合：磁盘余量不足或备库延迟已高</text>
+
+              <!-- Row 5: Partition Drop -->
+              <rect x="20" y="350" width="1360" height="66" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="20" y="350" width="6" height="66" fill="#2F7A66"/>
+              <text x="36" y="379" class="svg-serif" font-size="17" font-weight="700" fill="#2F7A66">分区丢弃 (DROP/DETACH)</text>
+              <text x="36" y="401" class="svg-mono" font-size="11" fill="#1E4B5A">架构级生命周期管理</text>
+              <text x="230" y="379" font-size="13" font-weight="700" fill="#2F7A66">仅锁定目标分区（毫秒级）</text>
+              <text x="230" y="401" font-size="12" fill="#46585F">完全不影响其他活跃分区读写</text>
+              <text x="460" y="379" font-size="13" font-weight="700" fill="#2F7A66">是（直接 unlink 整段物理文件）</text>
+              <text x="460" y="401" font-size="12" fill="#46585F">零死元组残留，零索引清理</text>
+              <text x="665" y="379" font-size="13" font-weight="700" fill="#2F7A66">近乎为零（元数据级操作）</text>
+              <text x="665" y="401" font-size="12" fill="#46585F">避免逐行 DELETE 的海量 WAL</text>
+              <text x="935" y="379" font-size="13" font-weight="700" fill="#2F7A66">最优解：按时间/租户归档的生命周期表</text>
+              <text x="935" y="401" font-size="12" fill="#46585F">依赖建表初期的分区键设计</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            线上遇到疑似表膨胀时，如何用系统视图与扩展插件做出精准物理验证，而非盲目猜测？
+          </div>
+          <div class="page-meta">
+            <span class="page-num">08</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 09 ==================== -->
+      <section class="slide" data-index="8">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">08 · OBSERVABILITY &amp; DIAGNOSTIC PIPELINE</span>
+            <span class="eyebrow-tag">EXTENSIONS: pgstattuple / pg_visibility / pg_freespacemap</span>
+          </div>
+          <h1 class="slide-title">实战诊断：膨胀真实度验证与系统可观测性四步路径</h1>
+          <p class="slide-lead">
+            切忌仅凭 <span class="hl-terra">pg_relation_size()</span> 判定膨胀。从轻量统计视图入手，结合 <strong>pg_visibility</strong>、<strong>pg_freespacemap</strong> 与抽样 <strong>pgstattuple</strong>，才能看清页内真实空间分布。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Step 1 -->
+              <rect x="24" y="22" width="316" height="386" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="22" width="316" height="36" fill="#245A6B"/>
+              <text x="38" y="45" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">STEP 01 // 内存统计概览 (零扫描开销)</text>
+              <text x="38" y="82" class="svg-serif" font-size="17" font-weight="700" fill="#1B2B33">查死元组积压与清理频率</text>
+              <text x="38" y="104" font-size="12" fill="#46585F">读取 pg_stat_all_tables 累计计数器，</text>
+              <text x="38" y="122" font-size="12" fill="#46585F">对比 n_dead_tup 占比与最后清理时间。</text>
+
+              <rect x="38" y="138" width="288" height="170" fill="#1E2E36" stroke="#245A6B" stroke-width="1"/>
+              <text x="48" y="160" class="svg-mono" font-size="11" fill="#A4C4C6">SELECT relname,</text>
+              <text x="48" y="178" class="svg-mono" font-size="11" fill="#EBF1EE">  n_live_tup, n_dead_tup,</text>
+              <text x="48" y="196" class="svg-mono" font-size="11" fill="#EBF1EE">  vacuum_count,</text>
+              <text x="48" y="214" class="svg-mono" font-size="11" fill="#EBF1EE">  autovacuum_count,</text>
+              <text x="48" y="232" class="svg-mono" font-size="11" fill="#EBF1EE">  last_autovacuum</text>
+              <text x="48" y="250" class="svg-mono" font-size="11" fill="#A4C4C6">FROM pg_stat_all_tables</text>
+              <text x="48" y="268" class="svg-mono" font-size="11" fill="#A4C4C6">WHERE relname = 'target';</text>
+
+              <rect x="38" y="320" width="288" height="74" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="48" y="341" font-size="12" font-weight="700" fill="#1E4B5A">判读信号：</text>
+              <text x="48" y="360" font-size="12" fill="#1B2B33">• n_dead_tup 持续攀升且 last_autovacuum</text>
+              <text x="48" y="378" font-size="12" fill="#1B2B33">  停滞 → 阈值过高或 worker 繁忙。</text>
+
+              <!-- Connector 1 -> 2 -->
+              <line x1="340" y1="215" x2="368" y2="215" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="368,215 360,210 360,220" fill="#245A6B"/>
+
+              <!-- Step 2 -->
+              <rect x="368" y="22" width="316" height="386" fill="#F7F6F2" stroke="#2E6373" stroke-width="1.5"/>
+              <rect x="368" y="22" width="316" height="36" fill="#2E6373"/>
+              <text x="382" y="45" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">STEP 02 // 检查 VM 可见性覆盖率</text>
+              <text x="382" y="82" class="svg-serif" font-size="17" font-weight="700" fill="#1B2B33">验证页面成熟度与回表风险</text>
+              <text x="382" y="104" font-size="12" fill="#46585F">通过 pg_visibility 插件直接读取 _vm</text>
+              <text x="382" y="122" font-size="12" fill="#46585F">分支文件，无需全扫主表数据页。</text>
+
+              <rect x="382" y="138" width="288" height="170" fill="#1E2E36" stroke="#2E6373" stroke-width="1"/>
+              <text x="392" y="160" class="svg-mono" font-size="11" fill="#A4C4C6">CREATE EXTENSION IF NOT EXISTS</text>
+              <text x="392" y="178" class="svg-mono" font-size="11" fill="#EBF1EE">  pg_visibility;</text>
+              <text x="392" y="206" class="svg-mono" font-size="11" fill="#A4C4C6">SELECT *</text>
+              <text x="392" y="224" class="svg-mono" font-size="11" fill="#A4C4C6">FROM pg_visibility_map_summary(</text>
+              <text x="392" y="242" class="svg-mono" font-size="11" fill="#EBF1EE">  'target'::regclass</text>
+              <text x="392" y="260" class="svg-mono" font-size="11" fill="#A4C4C6">);</text>
+
+              <rect x="382" y="320" width="288" height="74" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="392" y="341" font-size="12" font-weight="700" fill="#1E4B5A">判读信号：</text>
+              <text x="392" y="360" font-size="12" fill="#1B2B33">• all_visible 比例过低 → 说明大量页面</text>
+              <text x="392" y="378" font-size="12" fill="#1B2B33">  近期被修改或尚未完成有效 VACUUM。</text>
+
+              <!-- Connector 2 -> 3 -->
+              <line x1="684" y1="215" x2="712" y2="215" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="712,215 704,210 704,220" fill="#2F7A66"/>
+
+              <!-- Step 3 -->
+              <rect x="712" y="22" width="316" height="386" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="712" y="22" width="316" height="36" fill="#2F7A66"/>
+              <text x="726" y="45" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">STEP 03 // 检查 FSM 可复用空洞</text>
+              <text x="726" y="82" class="svg-serif" font-size="17" font-weight="700" fill="#1B2B33">确认空洞是否已登记待复用</text>
+              <text x="726" y="104" font-size="12" fill="#46585F">读取 _fsm 分支，区分「尚未清理的死空间」</text>
+              <text x="726" y="122" font-size="12" fill="#46585F">与「已清理完毕待写入复用的空闲空间」。</text>
+
+              <rect x="726" y="138" width="288" height="170" fill="#1E2E36" stroke="#2F7A66" stroke-width="1"/>
+              <text x="736" y="160" class="svg-mono" font-size="11" fill="#A4C4C6">CREATE EXTENSION IF NOT EXISTS</text>
+              <text x="736" y="178" class="svg-mono" font-size="11" fill="#EBF1EE">  pg_freespacemap;</text>
+              <text x="736" y="206" class="svg-mono" font-size="11" fill="#A4C4C6">SELECT blkno, avail</text>
+              <text x="736" y="224" class="svg-mono" font-size="11" fill="#A4C4C6">FROM pg_freespace('target')</text>
+              <text x="736" y="242" class="svg-mono" font-size="11" fill="#EBF1EE">ORDER BY avail DESC</text>
+              <text x="736" y="260" class="svg-mono" font-size="11" fill="#EBF1EE">LIMIT 20;</text>
+
+              <rect x="726" y="320" width="288" height="74" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="736" y="341" font-size="12" font-weight="700" fill="#2F7A66">判读信号：</text>
+              <text x="736" y="360" font-size="12" fill="#1B2B33">• avail 充足且持续被新写入消耗 →</text>
+              <text x="736" y="378" font-size="12" fill="#1B2B33">  说明表已进入稳态复用，无需干预。</text>
+
+              <!-- Connector 3 -> 4 -->
+              <line x1="1028" y1="215" x2="1056" y2="215" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="1056,215 1048,210 1048,220" fill="#BE653B"/>
+
+              <!-- Step 4 -->
+              <rect x="1056" y="22" width="320" height="386" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="1056" y="22" width="320" height="36" fill="#BE653B"/>
+              <text x="1070" y="45" class="svg-mono" font-size="12" font-weight="700" fill="#F7F6F2">STEP 04 // 物理页精确解剖 (按需低频)</text>
+              <text x="1070" y="82" class="svg-serif" font-size="17" font-weight="700" fill="#1B2B33">量化物理膨胀率与死元组占比</text>
+              <text x="1070" y="104" font-size="12" fill="#46585F">pgstattuple 扫描物理数据页并返回精确</text>
+              <text x="1070" y="122" font-size="12" fill="#46585F">字节占比（大表慎用，可用 _approx 版）。</text>
+
+              <rect x="1070" y="138" width="292" height="170" fill="#1E2E36" stroke="#BE653B" stroke-width="1"/>
+              <text x="1080" y="160" class="svg-mono" font-size="11" fill="#A4C4C6">CREATE EXTENSION IF NOT EXISTS</text>
+              <text x="1080" y="178" class="svg-mono" font-size="11" fill="#EBF1EE">  pgstattuple;</text>
+              <text x="1080" y="206" class="svg-mono" font-size="11" fill="#A4C4C6">SELECT tuple_percent,</text>
+              <text x="1080" y="224" class="svg-mono" font-size="11" fill="#EBF1EE">  dead_tuple_percent,</text>
+              <text x="1080" y="242" class="svg-mono" font-size="11" fill="#EBF1EE">  free_percent</text>
+              <text x="1080" y="260" class="svg-mono" font-size="11" fill="#A4C4C6">FROM pgstattuple('target');</text>
+
+              <rect x="1070" y="320" width="292" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="1080" y="341" font-size="12" font-weight="700" fill="#BE653B">判读信号：</text>
+              <text x="1080" y="360" font-size="12" fill="#1B2B33">• dead_tuple_percent 高且反复 VACUUM</text>
+              <text x="1080" y="378" font-size="12" fill="#1B2B33">  不降 → 存在全局 xmin 阻塞者！</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            如果 VACUUM 跑了很多遍，dead_tuple_percent 依然纹丝不动，究竟是谁锁住了清理边界？
+          </div>
+          <div class="page-meta">
+            <span class="page-num">09</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 10 ==================== -->
+      <section class="slide" data-index="9">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">09 · ROOT CAUSE // HORIZON BLOCKERS</span>
+            <span class="eyebrow-tag">VIEWS: pg_stat_activity / pg_prepared_xacts / pg_replication_slots</span>
+          </div>
+          <h1 class="slide-title">根因阻塞：四大「时间锚点」如何锁死 VACUUM 清理边界</h1>
+          <p class="slide-lead">
+            即便长事务完全没有访问目标表，只要它持有一个老旧的 <span class="hl-terra">全局事务号视界（backend_xmin / catalog_xmin）</span>，全库所有表在它之后产生的旧版本都会被判定为 <strong>recently dead</strong>，寸步难清。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top XID Axis -->
+              <rect x="24" y="18" width="1352" height="58" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="40" y="42" class="svg-mono" font-size="12" font-weight="700" fill="#1E4B5A">TRANSACTION ID TIMELINE (全局 XID 演进轴):</text>
+              <line x1="40" y1="58" x2="1350" y2="58" stroke="#245A6B" stroke-width="2"/>
+
+              <!-- Blocker Anchor at XID 50,000 -->
+              <line x1="340" y1="22" x2="340" y2="395" stroke="#BE653B" stroke-width="2.5" stroke-dasharray="6 4"/>
+              <rect x="235" y="44" width="210" height="24" fill="#BE653B"/>
+              <text x="246" y="60" class="svg-mono" font-size="11" font-weight="700" fill="#F7F6F2">阻塞锚点: OldestXmin = 50,000</text>
+
+              <!-- Current XID at 50,800,000 -->
+              <rect x="1140" y="44" width="210" height="24" fill="#1E4B5A"/>
+              <text x="1152" y="60" class="svg-mono" font-size="11" font-weight="700" fill="#F7F6F2">当前最新 XID = 50,800,000</text>
+
+              <!-- Left of Anchor: Cleanable Zone -->
+              <rect x="24" y="92" width="300" height="318" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="40" y="120" class="svg-serif" font-size="17" font-weight="700" fill="#2F7A66">可清理区 (xmax &lt; 50,000)</text>
+              <text x="40" y="144" font-size="13" fill="#1B2B33">在此锚点之前已结束可见的旧版本，</text>
+              <text x="40" y="164" font-size="13" fill="#1B2B33">判定为 DEAD，VACUUM 可正常回收。</text>
+              <rect x="40" y="186" width="268" height="206" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="52" y="212" font-size="13" font-weight="700" fill="#1E4B5A">为什么长事务跨表影响？</text>
+              <text x="52" y="236" font-size="12" fill="#46585F">在 Repeatable Read 隔离级别下，</text>
+              <text x="52" y="256" font-size="12" fill="#46585F">或事务持有有效 Snapshot 时，</text>
+              <text x="52" y="276" font-size="12" fill="#46585F">数据库无法预知该事务下一条 SQL</text>
+              <text x="52" y="296" font-size="12" fill="#46585F">会查询哪张表，只能保守冻结全库</text>
+              <text x="52" y="316" font-size="12" fill="#46585F">OldestXmin 推进边界。</text>
+              <text x="52" y="346" font-size="12" font-weight="700" fill="#BE653B">结果：无论多频繁运行 VACUUM，</text>
+              <text x="52" y="366" font-size="12" font-weight="700" fill="#BE653B">锚点右侧的数千万死元组全部跳过！</text>
+
+              <!-- Right of Anchor: 4 Horizon Blockers Cards -->
+              <text x="364" y="112" class="svg-serif" font-size="18" font-weight="700" fill="#BE653B">四大经典阻塞源与排查 SQL 靶点（锚点右侧全区冻结）：</text>
+
+              <!-- Blocker 1 -->
+              <rect x="364" y="126" width="494" height="132" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="380" y="150" font-size="15" font-weight="700" fill="#1B2B33">1. 长事务 &amp; Idle in Transaction 事务</text>
+              <text x="380" y="172" font-size="12" fill="#46585F">业务 BEGIN 后等待外部 RPC、人工审批或忘记 COMMIT，持续挂起快照。</text>
+              <rect x="380" y="184" width="462" height="62" fill="#1E2E36"/>
+              <text x="390" y="203" class="svg-mono" font-size="11" fill="#EBF1EE">SELECT pid, state, now()-xact_start AS age, backend_xmin</text>
+              <text x="390" y="221" class="svg-mono" font-size="11" fill="#A4C4C6">FROM pg_stat_activity WHERE xact_start IS NOT NULL</text>
+              <text x="390" y="239" class="svg-mono" font-size="11" fill="#A4C4C6">ORDER BY xact_start ASC;</text>
+
+              <!-- Blocker 2 -->
+              <rect x="876" y="126" width="500" height="132" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="892" y="150" font-size="15" font-weight="700" fill="#1B2B33">2. 孤儿两阶段提交事务 (Prepared Xacts)</text>
+              <text x="892" y="172" font-size="12" fill="#46585F">分布式事务执行 PREPARE TRANSACTION 后协调者崩溃，既未提交也未回滚。</text>
+              <rect x="892" y="184" width="468" height="62" fill="#1E2E36"/>
+              <text x="902" y="203" class="svg-mono" font-size="11" fill="#EBF1EE">SELECT gid, prepared, owner, age(transaction) AS xid_age</text>
+              <text x="902" y="221" class="svg-mono" font-size="11" fill="#A4C4C6">FROM pg_prepared_xacts</text>
+              <text x="902" y="239" class="svg-mono" font-size="11" fill="#A4C4C6">ORDER BY prepared ASC;</text>
+
+              <!-- Blocker 3 -->
+              <rect x="364" y="274" width="494" height="136" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="380" y="298" font-size="15" font-weight="700" fill="#1B2B33">3. 物理/逻辑复制槽失效或积压 (Replication Slots)</text>
+              <text x="380" y="320" font-size="12" fill="#46585F">下游 CDC（如 Debezium）或备库断开，复制槽为防数据丢失强行保留 xmin。</text>
+              <rect x="380" y="332" width="462" height="66" fill="#1E2E36"/>
+              <text x="390" y="351" class="svg-mono" font-size="11" fill="#EBF1EE">SELECT slot_name, slot_type, active,</text>
+              <text x="390" y="369" class="svg-mono" font-size="11" fill="#EBF1EE">       age(xmin) AS xmin_age, age(catalog_xmin) AS cat_age</text>
+              <text x="390" y="387" class="svg-mono" font-size="11" fill="#A4C4C6">FROM pg_replication_slots;</text>
+
+              <!-- Blocker 4 -->
+              <rect x="876" y="274" width="500" height="136" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="892" y="298" font-size="15" font-weight="700" fill="#1B2B33">4. 开启 hot_standby_feedback 的备库长查询</text>
+              <text x="892" y="320" font-size="12" fill="#46585F">只读备库运行数小时报表分析，通过反馈机制将自身老 xmin 传回主库。</text>
+              <rect x="892" y="332" width="468" height="66" fill="#1E2E36"/>
+              <text x="902" y="351" class="svg-mono" font-size="11" fill="#EBF1EE">-- 治理策略：主库配置 max_standby_streaming_delay</text>
+              <text x="902" y="369" class="svg-mono" font-size="11" fill="#A4C4C6">-- 与 idle_in_transaction_session_timeout 兜底熔断，</text>
+              <text x="902" y="387" class="svg-mono" font-size="11" fill="#A4C4C6">-- 避免单个慢查询拖垮主库存储空间。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            看清了技术原理与阻塞根因，接下来我们把治理落地到架构师、DBA 与开发者的日常规范中。
+          </div>
+          <div class="page-meta">
+            <span class="page-num">10</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 11 ==================== -->
+      <section class="slide" data-index="10">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">10 · BEST PRACTICES BY ENGINEERING ROLE</span>
+            <span class="eyebrow-tag">COLLABORATION: ARCHITECT × DBA × DEVELOPER</span>
+          </div>
+          <h1 class="slide-title">最佳实践：架构师、DBA 与业务开发者的三道协同防线</h1>
+          <p class="slide-lead">
+            膨胀治理绝不只是 DBA 调几个参数。<strong>架构设计</strong>决定垃圾是否可控，<strong>数据库运维</strong>保证清理节奏稳健，<strong>业务代码</strong>杜绝制造长事务与无谓更新。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Column 1: Architect (x=24..464) -->
+              <rect x="24" y="18" width="436" height="394" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="24" y="18" width="436" height="40" fill="#1E4B5A"/>
+              <text x="40" y="43" class="svg-serif" font-size="18" font-weight="700" fill="#F7F6F2">防线一：面向数据库架构师 (源头控量)</text>
+
+              <rect x="40" y="72" width="404" height="62" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="52" y="94" font-size="14" font-weight="700" fill="#1B2B33">1. 生命周期数据强制分区化</text>
+              <text x="52" y="116" font-size="12" fill="#46585F">用 DROP / DETACH PARTITION 替代逐行 DELETE + VACUUM。</text>
+
+              <rect x="40" y="144" width="404" height="62" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="52" y="166" font-size="14" font-weight="700" fill="#1B2B33">2. 严控高频更新表的索引数量</text>
+              <text x="52" y="188" font-size="12" fill="#46585F">避免对索引列频繁 UPDATE，保护 HOT 更新机会并减少索引垃圾。</text>
+
+              <rect x="40" y="216" width="404" height="62" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="52" y="238" font-size="14" font-weight="700" fill="#1B2B33">3. 宽字段与高频状态列冷热拆分</text>
+              <text x="52" y="260" font-size="12" fill="#46585F">大文本/JSONB 独立分表，避免修改小状态触发整行复制与 TOAST。</text>
+
+              <rect x="40" y="288" width="404" height="108" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="52" y="310" font-size="14" font-weight="700" fill="#245A6B">4. 队列/状态机热表定制存储参数</text>
+              <text x="52" y="332" font-size="12" fill="#1B2B33">为高周转表单独设置更低 scale_factor（如 0.01~0.02）与适当</text>
+              <text x="52" y="350" font-size="12" fill="#1B2B33">fillfactor（如 70~80），预留页内更新空位提升 HOT 命中率，</text>
+              <text x="52" y="368" font-size="12" fill="#1B2B33">并提前规划可预期大批量删除的分批与维护窗口。</text>
+
+              <!-- Column 2: DBA (x=482..918) -->
+              <rect x="482" y="18" width="436" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="482" y="18" width="436" height="40" fill="#245A6B"/>
+              <text x="498" y="43" class="svg-serif" font-size="18" font-weight="700" fill="#F7F6F2">防线二：面向 DBA (稳态调度与监控)</text>
+
+              <rect x="498" y="72" width="404" height="62" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="510" y="94" font-size="14" font-weight="700" fill="#1B2B33">1. 开启 log_autovacuum_min_duration</text>
+              <text x="510" y="116" font-size="12" fill="#46585F">记录清理耗时、扫描/跳过页数及未能移除的死元组数量。</text>
+
+              <rect x="498" y="144" width="404" height="62" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="510" y="166" font-size="14" font-weight="700" fill="#1B2B33">2. 归一化监控死元组与 XID 年龄</text>
+              <text x="510" y="188" font-size="12" fill="#46585F">紧盯 age(relfrozenxid) 防回卷，其优先级高于空间回收。</text>
+
+              <rect x="498" y="216" width="404" height="62" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="510" y="238" font-size="14" font-weight="700" fill="#1B2B33">3. 针对大热表定制表级参数与 IO 额度</text>
+              <text x="510" y="260" font-size="12" fill="#46585F">下调 scale_factor，按存储能力放宽 cost_limit 与 worker 数。</text>
+
+              <rect x="498" y="288" width="404" height="108" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="510" y="310" font-size="14" font-weight="700" fill="#BE653B">4. 排查先除阻塞者，慎用 VACUUM FULL</text>
+              <text x="510" y="332" font-size="12" fill="#1B2B33">发现死元组清不掉时，第一时间排查长事务、2PC 与失效复制槽；</text>
+              <text x="510" y="350" font-size="12" fill="#1B2B33">绝不把 VACUUM FULL 当作日常定时任务，仅在确认空间不再回涨</text>
+              <text x="510" y="368" font-size="12" fill="#1B2B33">且具备充足磁盘与锁窗口时执行重写。</text>
+
+              <!-- Column 3: Developer (x=940..1376) -->
+              <rect x="940" y="18" width="436" height="394" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="940" y="18" width="436" height="40" fill="#2F7A66"/>
+              <text x="956" y="43" class="svg-serif" font-size="18" font-weight="700" fill="#F7F6F2">防线三：面向业务开发者 (代码自律)</text>
+
+              <rect x="956" y="72" width="404" height="62" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="968" y="94" font-size="14" font-weight="700" fill="#1B2B33">1. 严禁在事务内执行外部网络/人工等待</text>
+              <text x="968" y="116" font-size="12" fill="#46585F">将 HTTP RPC、文件处理移出 BEGIN...COMMIT 事务边界。</text>
+
+              <rect x="956" y="144" width="404" height="62" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="968" y="166" font-size="14" font-weight="700" fill="#1B2B33">2. 强制配置空闲事务超时熔断</text>
+              <text x="968" y="188" font-size="12" fill="#46585F">设置 idle_in_transaction_session_timeout 防止泄漏连接锁死边界。</text>
+
+              <rect x="956" y="216" width="404" height="62" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="968" y="238" font-size="14" font-weight="700" fill="#1B2B33">3. 大批量删除/更新必须小步分批提交</text>
+              <text x="968" y="260" font-size="12" fill="#46585F">按主键区间每批数千行提交，给复制消费与 VACUUM 留出喘息间隙。</text>
+
+              <rect x="956" y="288" width="404" height="108" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1"/>
+              <text x="968" y="310" font-size="14" font-weight="700" fill="#2F7A66">4. 精准列更新与「软删除」归档闭环</text>
+              <text x="968" y="332" font-size="12" fill="#1B2B33">ORM 更新仅 SET 变更字段（避免全字段覆盖触发索引更新）；</text>
+              <text x="968" y="350" font-size="12" fill="#1B2B33">逻辑软删除（deleted_at）同样占据物理页并拖慢扫描，必须配套</text>
+              <text x="968" y="368" font-size="12" fill="#1B2B33">定期物理归档清理策略。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            最后，我们盘点生产环境最常踩的六大误区，并用一张标准决策闭环收束全篇。
+          </div>
+          <div class="page-meta">
+            <span class="page-num">11</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 12 ==================== -->
+      <section class="slide" data-index="11">
+        <div class="slide-header">
+          <div class="eyebrow-row">
+            <span class="eyebrow">11 · ANTI-PATTERNS &amp; GOVERNANCE DECISION LOOP</span>
+            <span class="eyebrow-tag">SUMMARY: FIRST UNBLOCK → THEN TUNE → LAST REWRITE</span>
+          </div>
+          <h1 class="slide-title">六大常见坑与膨胀治理铁律：先解阻塞，再调节奏，末选重写</h1>
+          <p class="slide-lead">
+            跳过根因直接执行 <strong>VACUUM FULL</strong> 只能换来短暂的文件缩小——只要 <span class="hl-terra">阻塞源或过高的触发阈值</span> 仍在，表就会以同样的速度再次膨胀。
+          </p>
+          <div class="header-divider"></div>
+        </div>
+
+        <div class="diagram-wrapper">
+          <div class="diagram-box">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Grid: 6 Common Pitfalls (x=24..830) -->
+              <text x="24" y="34" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">SIX COMMON ANTI-PATTERNS // 生产环境六大常见误区</text>
+
+              <!-- Pitfall 1 -->
+              <rect x="24" y="46" width="394" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="38" y="70" font-size="14" font-weight="700" fill="#BE653B">坑 1：文件不缩小 = VACUUM 失败</text>
+              <text x="38" y="92" font-size="12" fill="#1B2B33">误判常态页内复用为失效。应通过 pg_freespace</text>
+              <text x="38" y="110" font-size="12" fill="#1B2B33">与 pgstattuple 观察空间是否被后续写入平稳复用。</text>
+              <text x="38" y="138" class="svg-mono" font-size="11" fill="#2F7A66">正解：关注稳态复用率而非单纯看文件体积</text>
+
+              <!-- Pitfall 2 -->
+              <rect x="434" y="46" width="394" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="448" y="70" font-size="14" font-weight="700" fill="#BE653B">坑 2：只调高并发参数，无视长事务</text>
+              <text x="448" y="92" font-size="12" fill="#1B2B33">OldestXmin 被锁死时，加再多 worker 也只能看到</text>
+              <text x="448" y="110" font-size="12" fill="#1B2B33">recently dead，造成大量无效 CPU 与 IO 扫描。</text>
+              <text x="448" y="138" class="svg-mono" font-size="11" fill="#2F7A66">正解：先清退长事务/孤儿2PC/失效复制槽</text>
+
+              <!-- Pitfall 3 -->
+              <rect x="24" y="172" width="394" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="38" y="196" font-size="14" font-weight="700" fill="#BE653B">坑 3：十亿大表沿用默认 20% 比例</text>
+              <text x="38" y="218" font-size="12" fill="#1B2B33">累积数亿死元组才触发，单次清理耗时数小时并</text>
+              <text x="38" y="236" font-size="12" fill="#1B2B33">引发剧烈缓存抖动。</text>
+              <text x="38" y="264" class="svg-mono" font-size="11" fill="#2F7A66">正解：大热表显式配置小 scale_factor</text>
+
+              <!-- Pitfall 4 -->
+              <rect x="434" y="172" width="394" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="448" y="196" font-size="14" font-weight="700" fill="#BE653B">坑 4：迷信「索引越多查询越快」</text>
+              <text x="448" y="218" font-size="12" fill="#1B2B33">冗余索引直接扼杀 HOT 更新，且每次 VACUUM 都</text>
+              <text x="448" y="236" font-size="12" fill="#1B2B33">需全量扫描所有索引清理死指针。</text>
+              <text x="448" y="264" class="svg-mono" font-size="11" fill="#2F7A66">正解：定期清理低使用率索引，保护 HOT 链</text>
+
+              <!-- Pitfall 5 -->
+              <rect x="24" y="298" width="394" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="38" y="322" font-size="14" font-weight="700" fill="#BE653B">坑 5：单条大事务 DELETE 千万级历史数据</text>
+              <text x="38" y="344" font-size="12" fill="#1B2B33">瞬间制造巨量未提交死元组、撑爆 WAL 并造成备库</text>
+              <text x="38" y="362" font-size="12" fill="#1B2B33">严重复制延迟。</text>
+              <text x="38" y="390" class="svg-mono" font-size="11" fill="#2F7A66">正解：改用分区 DROP 或小批量分段提交</text>
+
+              <!-- Pitfall 6 -->
+              <rect x="434" y="298" width="394" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="448" y="322" font-size="14" font-weight="700" fill="#BE653B">坑 6：强杀防回卷 (anti-wraparound) 进程</text>
+              <text x="448" y="344" font-size="12" fill="#1B2B33">将其当普通后台任务反复 kill，最终触发数据库强制</text>
+              <text x="448" y="362" font-size="12" fill="#1B2B33">拒绝分配新 XID 导致全库停写。</text>
+              <text x="448" y="390" class="svg-mono" font-size="11" fill="#2F7A66">正解：解除阻塞源并保障其顺利完成冻结</text>
+
+              <!-- Right Column: 4-Stage Governance Decision Loop (x=856..1376) -->
+              <rect x="856" y="18" width="520" height="394" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="2"/>
+              <rect x="856" y="18" width="520" height="38" fill="#1E4B5A"/>
+              <text x="874" y="42" class="svg-mono" font-size="13" font-weight="700" fill="#F7F6F2">GOVERNANCE ORDER // 膨胀根因治理标准闭环</text>
+
+              <!-- Stage 1 -->
+              <rect x="880" y="72" width="472" height="68" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="896" y="96" class="svg-serif" font-size="16" font-weight="700" fill="#245A6B">第一关：确认「能不能清」（解除边界阻塞）</text>
+              <text x="896" y="120" font-size="13" fill="#1B2B33">检查长事务、2PC 与复制槽 xmin，确保死元组进入 DEAD 状态。</text>
+
+              <line x1="1116" y1="140" x2="1116" y2="158" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="1116,158 1111,150 1121,150" fill="#245A6B"/>
+
+              <!-- Stage 2 -->
+              <rect x="880" y="158" width="472" height="68" fill="#E4F1ED" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="896" y="182" class="svg-serif" font-size="16" font-weight="700" fill="#2F7A66">第二关：确认「来不来得及清」（匹配生产速率）</text>
+              <text x="896" y="206" font-size="13" fill="#1B2B33">调低大表 scale_factor、放宽 cost_limit、精简冗余索引。</text>
+
+              <line x1="1116" y1="226" x2="1116" y2="244" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="1116,244 1111,236 1121,236" fill="#2F7A66"/>
+
+              <!-- Stage 3 -->
+              <rect x="880" y="244" width="472" height="68" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <text x="896" y="268" class="svg-serif" font-size="16" font-weight="700" fill="#AE8A3E">第三关：评估「是否还需重写」（判断回涨趋势）</text>
+              <text x="896" y="292" font-size="13" fill="#1B2B33">若空间不再回涨且影响扫描，再选在线重写或停机 VACUUM FULL。</text>
+
+              <line x1="1116" y1="312" x2="1116" y2="330" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="1116,330 1111,322 1121,322" fill="#BE653B"/>
+
+              <!-- Stage 4 -->
+              <rect x="880" y="330" width="472" height="66" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+              <text x="896" y="354" class="svg-serif" font-size="16" font-weight="700" fill="#F7F6F2">终局目标：长效稳态自治</text>
+              <text x="896" y="378" font-size="13" fill="#CFE0DC">分区承接冷热淘汰 + 监控闭环，让存储体积长期收敛于稳态。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer">
+          <div class="next-bridge">
+            <span class="next-label">完结 · SUMMARY</span>
+            理解 MVCC 与 VACUUM 的底层物理契约，就能从容应对 PostgreSQL 的每一次膨胀与维护挑战。
+          </div>
+          <div class="page-meta">
+            <span class="page-num">12</span><span class="page-total"> / 12</span>
+            <span class="page-series">应用开发者数据库筑基课</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Right Side In-Page Speaker Notes Panel -->
+  <aside id="notes-panel" aria-label="演讲稿面板">
+    <div class="notes-header">
+      <div>
+        <div class="notes-title" id="notes-panel-title">本页讲稿 (N)</div>
+      </div>
+      <div class="notes-mode-tabs">
+        <button class="notes-tab active" id="tab-single" onclick="setNotesMode('single')">本页 N</button>
+        <button class="notes-tab" id="tab-all" onclick="setNotesMode('all')">全文 T</button>
+        <button class="notes-close" onclick="closeNotes()" title="关闭讲稿">关闭 ×</button>
+      </div>
+    </div>
+    <div id="notes-body"></div>
+  </aside>
+</div>
+
+<!-- Autoplay Progress Bar -->
+<div id="autoplay-timer-bar"></div>
+
+<!-- Bottom Persistent Shortcut & Navigation Bar (Stays visible in Fullscreen!) -->
+<footer id="bottom-bar">
+  <div class="bar-group">
+    <button class="bar-btn" onclick="prevSlide()" title="上一页 (←)">◀ 上一页</button>
+    <span style="font-family: var(--font-mono); color: #EBF1EE; min-width: 64px; text-align: center;" id="bar-page-indicator">01 / 12</span>
+    <button class="bar-btn" onclick="nextSlide()" title="下一页 (→ / Space)">下一页 ▶</button>
+    <div class="progress-track"><div class="progress-fill" id="bar-progress-fill"></div></div>
+  </div>
+
+  <div class="bar-group">
+    <button class="bar-btn" id="btn-toc" onclick="toggleTOC()"><span class="kbd">G</span> 目录</button>
+    <button class="bar-btn" id="btn-note-single" onclick="toggleNotes('single')"><span class="kbd">N</span> 本页讲稿</button>
+    <button class="bar-btn" id="btn-note-all" onclick="toggleNotes('all')"><span class="kbd">T</span> 全文讲稿</button>
+    <button class="bar-btn" id="btn-autoplay" onclick="toggleAutoplay()"><span class="kbd">A</span> 自动播放</button>
+    <button class="bar-btn" id="btn-fullscreen" onclick="toggleFullscreen()"><span class="kbd">F</span> 全屏</button>
+  </div>
+</footer>
+
+<!-- Table of Contents Modal Overlay (Key G) -->
+<div id="toc-overlay" onclick="if(event.target===this) toggleTOC(false)">
+  <div class="toc-panel">
+    <div class="toc-header">
+      <h2>演说目录导航 // POSTGRESQL 垃圾回收与膨胀的根源</h2>
+      <button class="notes-close" onclick="toggleTOC(false)">ESC 关闭 ×</button>
+    </div>
+    <div class="toc-grid" id="toc-grid"></div>
+  </div>
+</div>
+
+<script>
+  // ==================== SLIDES METADATA & SPOKEN SCRIPTS ====================
+  const SLIDES_DATA = [
+    {
+      num: "01",
+      title: "垃圾回收与膨胀的根源：MVCC 的并发代价与稳态治理",
+      subtitle: "七层存储地层剖面与膨胀第一定律",
+      notes: [
+        "【开场切入】各位好。在日常运维 PostgreSQL 的时候，我们经常听到几个高频灵魂拷问：『明明删了上千万条历史数据，为什么磁盘空间一点没小？』『业务数据量没涨，为什么表文件和索引越来越大、查询越来越慢？』要彻底回答这些问题，我们不能只盯着一两个 autovacuum 参数看，而必须回到 PostgreSQL 最底层的架构契约。",
+        "【推演逻辑】请看屏幕上的七层地层剖面图。PostgreSQL 为了实现高并发下的『读写互不阻塞』，选择了基于多版本并发控制（MVCC）的追加写路线。当业务在最浅层的 L7 发起一次 UPDATE 或 DELETE 时，存储引擎并不会在原地覆盖旧数据，而是在 L6 和 L5 的 Heap 数据页里保留旧行版本，同时追加写入新行版本。这就引出了右边橙色框里的膨胀第一定律：只要死元组的生产速率长期大于有效回收速率，空间膨胀就一定会发生。",
+        "【核心澄清与承接】所以，PostgreSQL 里的『垃圾回收』绝对不是操作系统层面的 rm 删文件，而是一套跨越 Heap 页指针、索引条目、FSM 空闲映射和 VM 可见性映射的精密状态机。它的常态目标是把可复用的页内空洞登记进 FSM，供后续写入循环利用。理清了这张七层全局地图后，下一页我们来看看，这套垃圾回收机制在工程上具体要解决哪三个核心问题，以及一旦失控会出现什么线上症状。"
+      ]
+    },
+    {
+      num: "02",
+      title: "垃圾回收解决的三大工程问题与失控症状图谱",
+      subtitle: "空间复用、索引净化与防 XID 回卷的三角平衡",
+      notes: [
+        "【承接上文】既然垃圾回收是一套跨越多层的状态机，那我们花这么大代价在后台跑 VACUUM，到底图什么？屏幕左侧列出了它的三大核心工程使命。",
+        "【逻辑推演】第一，把确认全局不可见的死元组空间收回来，登记到 FSM 里交给后续的 INSERT 或 UPDATE 复用，防止文件无限向操作系统伸手要空间；第二，顺藤摸瓜清掉索引里指向这些死元组的无效 TID 指针，否则索引会比主表还大，每次范围扫描都要做大量无效回表；第三，也是最保命的一点，冻结足够老的事务 ID，推进 relfrozenxid，防止 32 位事务号回卷（Wraparound）引发全库强制拒绝写入。",
+        "【实证与代价】一旦这三件事没跟上，中间列出的症状就会接踵而至：pg_stat_all_tables 里的 n_dead_tup 持续攀升，EXPLAIN (ANALYZE, BUFFERS) 显示同样的 SQL 扫描了成倍的 Buffer 块，缓存命中率下跌，甚至频繁触发高优先级的 anti-wraparound 清理。当然，天下没有免费的午餐，右侧提醒我们：回收本身也要消耗后台磁盘 IO、WAL 带宽和缓冲池资源。太激进会跟业务抢 IO，太保守就会欠下指数级增长的清理债。那么，这些死元组究竟是怎么在页面里一步步诞生的？我们看下一页的源码级演进。"
+      ]
+    },
+    {
+      num: "03",
+      title: "UPDATE / DELETE 为何制造垃圾？行版本链与可见性演进",
+      subtitle: "heap_update() 写入路径与交互式 Heap Page 模拟器",
+      notes: [
+        "【机制剖析】我们直接打开 src/backend/access/heap/heapam.c 里的 heap_update() 函数来看真相。业务层执行一条看似简单的 UPDATE，在物理存储层面其实是三步动作：第一，给旧版本打上结束事务号 xmax；第二，在页内或新页里写入包含新事务号 xmin 的完整新版本；第三，把旧版本的 t_ctid 指针指向新版本，串起一条版本链。",
+        "【交互演示引导】大家可以用右上角的按钮亲自演练一下。点击『执行 UPDATE』，你会看到 ItemId 指针数组新增槽位，旧元组变成橙色的 RECENTLY DEAD。为什么此时 VACUUM 还不能删它？请点击『模拟长事务快照』：只要系统里还挂着一个 XID=100 的老事务快照，全局可见性边界 OldestXmin 就被死死钉在 100。对于任何 xmax 大于等于 100 的旧版本，数据库都必须保守地认为『那个老事务待会儿可能还要读它』，因此它只能停留在 RECENTLY DEAD 状态。",
+        "【核心结论与承接】只有当你点击『释放长事务』、让全局 OldestXmin 跨过旧版本的 xmax 之后，这些旧版本才会真正蜕变为可回收的 DEAD 状态。顺便提一句，如果更新没有改动任何索引列且新版本能放进同一张 Heap 页，PostgreSQL 会走 HOT 更新优化，大幅减轻索引负担。现在，旧版本终于变成 DEAD 了，下一页我们看 vacuumlazy.c 是如何安全清理它们的。"
+      ]
+    },
+    {
+      num: "04",
+      title: "标准 VACUUM 的三阶段流水线：为何必须「先清索引再释堆」",
+      subtitle: "vacuumlazy.c 三阶段协作与维护内存约束",
+      notes: [
+        "【提出问题】很多初学者会问：既然 VACUUM 扫描 Heap 页的时候已经认出了 DEAD 元组，为什么不顺手把它的空间直接清空复用呢？答案写在 src/backend/access/heap/vacuumlazy.c 的开篇注释里：因为索引里还有指向这个物理位置（TID）的指针！如果先释放了 Heap 的 Line Pointer 并被新数据占用了，索引查询就会顺着旧指针摸到一条完全不相干的新记录，造成严重的数据错乱。",
+        "【三阶段推演】大家可以点击右上角的『下一步演练』逐步观察这条三阶段流水线。第一阶段（Heap Scan & Prune），worker 扫描 Heap 页，跳过 VM 里标记为全局可见的页面，把死元组的指针状态标记为 LP_DEAD 占位，同时把它们的 TID 收集进内存里的 TID Store；第二阶段（Index Bulk Delete），拿着这份 TID 名单去遍历表上的每一棵索引，把对应的无效索引条目批量抹除；直到索引引用彻底解除后，第三阶段（Heap Reap）才二次回到 Heap 页，把 LP_DEAD 正式改成 LP_UNUSED 释放空间，并更新 FSM 和 VM。",
+        "【工程细节与承接】这里有两个极其关键的工程细节：一是如果索引有五六个，第二阶段就得扫遍所有索引；二是如果死元组太多撑满了 maintenance_work_mem，TID Store 就会触发多轮循环，暂停主表扫描先清一轮索引再继续，导致清理耗时成倍放大。第三阶段更新完的 FSM 和 VM 两个辅助文件，在日常运行中到底怎么工作？我们看下一页。"
+      ]
+    },
+    {
+      num: "05",
+      title: "FSM 与 VM 的精密分工：空间复用路由 vs 扫描跳过加速",
+      subtitle: "Free Space Map 与 Visibility Map 双辅助分支解剖",
+      notes: [
+        "【结构总览】在 PostgreSQL 的数据目录里，每张表除了主数据文件外，还常跟着两个后缀为 _fsm 和 _vm 的小伙伴。它们分别对应 freespace.c 和 visibilitymap.c 实现的两套加速结构，分工极其明确：FSM 管『往哪写』，VM 管『少看哪』。",
+        "【双向推演】先看左边的 FSM（空闲空间映射）。它并不精确记录每个页面剩了多少字节，而是用每页 1 个字节的近似值（量化步长 32 字节），组织成一棵多叉最大值搜索树。每当 VACUUM 在第三阶段清出空洞，就会调用 RecordPageWithFreeSpace 把可用空间向上传播到树根。下次业务执行 INSERT 或非 HOT UPDATE 时，直接查一下 FSM 树根，就能瞬间路由到像 Page #0 这样装得下新元组的页面，实现空间复用。",
+        "【VM 保守语义与承接】再看右边的 VM（可见性映射），它为每个 Heap 页只维护两个 bit：all-visible 和 all-frozen。源码特别强调它的『保守语义』：bit 为 1 时，页内所有元组必定对全库所有事务可见，此时 Index-Only Scan 就可以直接靠索引返回结果而免去回表，普通 VACUUM 也可以直接跳过这一页；而一旦有任何写操作修改了该页，系统会立刻把这两个 bit 清零。搞清楚了回收机制与辅助映射，接下来最现实的问题来了：后台的 autovacuum 到底什么时候才会触发干活？"
+      ]
+    },
+    {
+      num: "06",
+      title: "autovacuum 如何决定何时清理？大表默认阈值的延迟陷阱",
+      subtitle: "触发公式解剖与大表调优计算器",
+      notes: [
+        "【破除误区】很多开发同学以为 autovacuum 是每天凌晨两点跑一次的定时任务，其实完全不是。autovacuum launcher 会周期性唤醒 worker，worker 检查每张表的统计信息，套用屏幕上方这道核心公式来决定是否开工：触发阈值等于基础阈值加上比例因子乘以表估算总行数（在较新版本中还受 max_threshold 封顶）。",
+        "【交互推演】我们可以点击右上角的三个预设按钮对比一下。对于一张 10 万行的小表，默认 0.2 的比例因子意味着累积 2 万多条死元组就触发清理，非常及时；但请点击『10亿行(默认0.2)』——当表规模来到 10 亿行时，0.2 的比例意味着要等表里足足堆积 2 亿条死元组、产生几十 GB 膨胀垃圾后，autovacuum 才会慢吞吞地启动！这在生产环境绝对是灾难性的延迟。",
+        "【补充路径与承接】除此之外，右侧还列出了两条独立触发通道：一是针对纯插入日志表的 Insert Vacuum，专门用来提前推进 all-frozen；二是最高优先级的防回卷（Anti-Wraparound）触发，即便你把全局 autovacuum 关了，只要表年龄逼近 2 亿，它依然会强行拉起保命。那么，当 autovacuum 终于跑完之后，为什么我们去操作系统里 ls -lh 看表文件，发现文件体积往往还是那么大呢？下一页揭晓答案。"
+      ]
+    },
+    {
+      num: "07",
+      title: "为什么 VACUUM 后文件还是大？页内空间复用 vs 物理截断",
+      subtitle: "从膨胀态到稳态复用，再到全表重写的物理空间演变",
+      notes: [
+        "【直面高频困惑】这是线上工单里被问得最多的问题：『我刚执行完 VACUUM，也看到清理了几百万死元组，为什么表文件还是 40GB 一点没小？』请看屏幕上的三层物理页演进图。",
+        "【逐层推演】在第一层 STATE 1，经过大量更新删除后，表文件由 5 个数据页组成，其中 Page #0、#1、#2 内部既有存活的 LIVE 元组，也有死亡的 DEAD 元组，而表尾的 Page #3 和 #4 已经全部死亡。当我们执行标准 VACUUM 进入第二层 STATE 2 时，Page #0、#1、#2 里的死元组被清空并登记进了 FSM，变成绿色虚线框标识的可复用空间，但因为这些页里还住着存活元组，操作系统层面的文件空洞是无法直接抽走的；只有表尾连续全空的 Page #3 和 #4，在拿到短暂排他锁后才能通过 ftruncate 截断归还给操作系统。试想一下，如果 Page #4 里哪怕只剩一行存活数据，整个 40GB 文件的末尾边界就会被死死顶住，一字节都不会缩小！",
+        "【决策本质与承接】而第三层 STATE 3 展示的 VACUUM FULL，则是另起炉灶拷贝所有存活数据重建新文件，虽然能把文件压到最紧凑，但代价是全程 ACCESS EXCLUSIVE 强锁阻断业务。所以，文件不缩小在绝大多数场景下是完全正常的稳态预期——只要业务后续还会继续写入，新数据就会直接填进 FSM 登记的绿色空洞里。既然不同手段各有代价，下一页我们把五种主流方案放进一张横向矩阵里做个彻底对比。"
+      ]
+    },
+    {
+      num: "08",
+      title: "横向对比：五种垃圾回收与防膨胀方案的工程权衡",
+      subtitle: "并发锁影响、空间归还、资源代价与场景匹配矩阵",
+      notes: [
+        "【全景对比】在面对空间膨胀或日常维护时，我们手里通常有五张牌可打。这张矩阵从并发锁影响、是否归还 OS 空间、资源成本以及适用边界四个维度，帮大家做一次清晰的工程选型。",
+        "【逐行拆解】第一行的标准 VACUUM 和第二行的 autovacuum 属于日常在线稳态武器，它们不阻塞常规的增删改查，重点在于把死空间转化为 FSM 页内复用，其中 autovacuum 遇到锁冲突还会礼貌退让。第三行的 VACUUM FULL 则是外科手术级的重武器，虽然能彻底归还磁盘空间，但全程持有最严厉的 ACCESS EXCLUSIVE 锁，还会消耗双倍磁盘空间并重建所有索引，绝不能拿来当核心热表的日常维护。",
+        "【在线重写与架构降维】如果大表确实已经严重膨胀且没有停机窗口，第四行的在线重写工具（如 pg_repack）通过影子表加触发器增量同步，可以把强锁时间压缩到切换瞬间的毫秒级，但依然要警惕它对磁盘剩余空间和主从复制延迟的冲击。而最优雅的降维打击在第五行：分区丢弃（DROP / DETACH PARTITION）。对于按时间或租户淘汰的生命周期数据，直接卸载整个分区文件，零死元组、零索引清理、零 WAL 放大。选好了工具，下一页我们来看实战中如何用四步 SQL 诊断表的真实健康度。"
+      ]
+    },
+    {
+      num: "09",
+      title: "实战诊断：膨胀真实度验证与系统可观测性四步路径",
+      subtitle: "从内存统计视图到 VM / FSM 分支及物理页抽样验证",
+      notes: [
+        "【诊断方法论】线上排查膨胀，最忌讳一上来就对几十 GB 的大表跑全表物理扫描，或者只看一个 pg_relation_size 就下结论。我们推荐遵循屏幕上的四步渐进式诊断路径，开销由零到重，证据链层层递进。",
+        "【四步推演】第一步，零开销查询内存统计视图 pg_stat_all_tables，看 n_dead_tup 和 n_live_tup 的比例，以及 last_autovacuum 是不是很久没动静了；第二步，利用 pg_visibility 插件直接读取体积很小的 _vm 分支文件，如果 all_visible 页面占比极低，说明大量页面近期被频繁修改或者清理严重滞后，此时 Index-Only Scan 的效率也会大打折扣。",
+        "【确认复用与物理定性】第三步，用 pg_freespacemap 插件查看 _fsm 分支里的可用空间分布，结合后续写入观察这些空闲块是不是正在被正常复用；第四步，如果确实需要量化精确的物理膨胀率，再在低峰期调用 pgstattuple（大表建议用近似版本 pgstattuple_approx），直接看 dead_tuple_percent 和 free_percent 的精确字节占比。如果发现 dead_tuple_percent 极高，而且哪怕手工跑了 VACUUM 也降不下来，那就说明背后一定藏着『时间锚点』阻塞者——我们马上看下一页。"
+      ]
+    },
+    {
+      num: "10",
+      title: "根因阻塞：四大「时间锚点」如何锁死 VACUUM 清理边界",
+      subtitle: "跨表冻结原理与四大阻塞源排查 SQL 靶点",
+      notes: [
+        "【核心痛点解析】很多团队遇到死元组清不掉时，第一反应是调大 autovacuum_vacuum_cost_limit 或者增加 worker 数量，结果发现后台 CPU 飙高，死元组却一行没少。根源就在于这张时间轴图所揭示的全局冻结机制。",
+        "【逻辑推演】只要系统里存在任何一个持有老旧事务视界的组件，把全局 OldestXmin 死死钉在比如 50,000 这个时间锚点上，那么在此之后产生的所有更新删除版本，哪怕跨越了几千万个事务，也全都被判定为『老快照可能还需要读取的 recently dead』。注意，长事务即便根本没有访问过你的目标热表，也会锁死全库的清理边界，因为数据库无法预知这个未提交事务下一条语句会去查哪张表。",
+        "【四大靶点排查】右侧给出了生产环境最常见的四大阻塞源和对应的排查 SQL：第一类是业务代码里 BEGIN 之后去调外部接口或忘记提交的 idle in transaction 长事务，查询 pg_stat_activity 的 backend_xmin 即可抓现行；第二类是分布式事务崩溃留下的孤儿两阶段提交（pg_prepared_xacts）；第三类是下游消费端断开后长期积压的逻辑或物理复制槽（pg_replication_slots）；第四类是开启了 hot_standby_feedback 的备库正在跑超长分析查询。解除这些阻塞源，VACUUM 才能真正推进。下一页我们把这些规律沉淀为三个角色的协同规范。"
+      ]
+    },
+    {
+      num: "11",
+      title: "最佳实践：架构师、DBA 与业务开发者的三道协同防线",
+      subtitle: "源头控量、稳态调度与代码自律的全链路治理",
+      notes: [
+        "【角色协同视角】要把 PostgreSQL 的表膨胀治理好，单靠 DBA 救火是远远不够的，必须建立起架构师、DBA 和业务开发者三道协同防线。",
+        "【三道防线展开】第一道防线在架构师：源头控量。凡是会定期大批量淘汰的流水、日志、历史订单，建表之初就必须按时间或租户分区，用 DROP PARTITION 彻底绕开逐行 DELETE；高频更新的状态表要严控索引数量，把大文本字段拆出去，并适当调低 fillfactor 给页内 HOT 更新留出余地。第二道防线在 DBA：稳态调度与可观测性。务必开启 log_autovacuum_min_duration 留下清理轨迹，紧盯 age(relfrozenxid) 防回卷红线，针对大热表单独下调 scale_factor，排查问题时永远坚持『先找阻塞者、后调参数、慎用全表重写』。",
+        "【代码自律与承接】第三道防线在业务开发者：代码自律。严禁把外部 RPC 调用、文件处理或人工审批包进数据库事务里；在连接池或数据库层强制配置 idle_in_transaction_session_timeout 兜底熔断；批量清理历史数据时必须按主键小步分批提交；同时谨记，数据库里的『软删除』（只更新一个 deleted_at 字段）不仅不会减少存储空间，反而会制造大量死元组并拖慢扫描，必须配套物理归档清理。最后，我们用一页六大常见坑和标准决策闭环收束全篇。"
+      ]
+    },
+    {
+      num: "12",
+      title: "六大常见坑与膨胀治理铁律：先解阻塞，再调节奏，末选重写",
+      subtitle: "生产反模式避坑指南与四关标准治理决策闭环",
+      notes: [
+        "【六大避坑复盘】在课程的最后，我们把团队在生产环境中最容易踩的六个坑集中摆在左侧。第一，别把标准 VACUUM 后文件没变小误判为清理失败，要看 FSM 空间有没有被后续写入复用；第二，别在长事务还挂着的时候盲目调高 autovacuum 并发，那只会让 worker 做无用功；第三，十亿级大表千万别沿用默认 20% 的 scale_factor；第四，别迷信索引越多越安全，冗余索引是 HOT 更新的天敌和 VACUUM 的重担；第五，千万级历史数据清理别用一条大事务 DELETE 一把梭；第六，绝对不要因为看到 anti-wraparound 进程占资源就手动 kill 它，那是在拆掉防止数据库停写的最后一道保险丝。",
+        "【四关治理闭环】右侧是我们在处理任何表膨胀告警时都应该严格遵循的四关决策闭环：第一关，先查阻塞锚点，确认死元组『能不能清』；第二关，调优大表阈值、IO 限额与冗余索引，确保清理速度跟得上生产速度，解决『来不来得及清』；第三关，只有当空间确认不会再回涨、且内部空洞严重拖累扫描性能时，才评估在线重写或停机 VACUUM FULL；第四关，通过分区生命周期与常态监控实现长效稳态自治。",
+        "【结束语】掌握了 MVCC 与 VACUUM 之间的底层空间契约，我们就不再会对磁盘波动感到恐慌，而是能用清晰的工程指标去驾驭 PostgreSQL 的每一次维护。感谢各位的聆听！"
+      ]
+    }
+  ];
+
+  // ==================== STATE MANAGEMENT ====================
+  let currentSlide = 0;
+  const totalSlides = SLIDES_DATA.length;
+  let notesMode = null; // null | 'single' | 'all'
+  let autoplayInterval = null;
+  let autoplayTimerBarInterval = null;
+  const AUTOPLAY_DURATION = 12000; // 12 seconds per slide
+  let autoplayElapsed = 0;
+
+  // ==================== STAGE VECTOR SCALING ====================
+  function updateStageScale() {
+    const viewport = document.getElementById('stage-viewport');
+    const stage = document.getElementById('stage');
+    if (!viewport || !stage) return;
+
+    const vw = viewport.clientWidth;
+    const vh = viewport.clientHeight;
+    const targetW = 1600;
+    const targetH = 900;
+
+    // Slight padding (16px) so blueprint border breathes cleanly
+    const scaleX = (vw - 16) / targetW;
+    const scaleY = (vh - 16) / targetH;
+    const scale = Math.max(0.2, Math.min(scaleX, scaleY));
+
+    stage.style.transform = `scale(${scale.toFixed(5)})`;
+  }
+
+  window.addEventListener('resize', updateStageScale);
+  document.addEventListener('fullscreenchange', () => {
+    updateFullscreenBtn();
+    setTimeout(updateStageScale, 60);
+  });
+
+  // ==================== SLIDE NAVIGATION ====================
+  function goToSlide(index) {
+    if (index < 0) index = 0;
+    if (index >= totalSlides) index = totalSlides - 1;
+    currentSlide = index;
+
+    const slides = document.querySelectorAll('.slide');
+    slides.forEach((el, idx) => {
+      el.classList.toggle('active', idx === currentSlide);
+    });
+
+    // Update bottom bar
+    const numStr = String(currentSlide + 1).padStart(2, '0');
+    const totStr = String(totalSlides).padStart(2, '0');
+    document.getElementById('bar-page-indicator').textContent = `${numStr} / ${totStr}`;
+    document.getElementById('bar-progress-fill').style.width = `${((currentSlide + 1) / totalSlides) * 100}%`;
+
+    // Update TOC highlight
+    document.querySelectorAll('.toc-item').forEach((item, idx) => {
+      item.classList.toggle('current', idx === currentSlide);
+    });
+
+    // Update Speaker Notes if open
+    if (notesMode) {
+      renderNotes();
+    }
+
+    // Reset autoplay progress bar on manual/auto step
+    autoplayElapsed = 0;
+    updateAutoplayProgressBar();
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides - 1) {
+      goToSlide(currentSlide + 1);
+    } else if (autoplayInterval) {
+      // Stop autoplay at the end
+      toggleAutoplay(false);
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 0) {
+      goToSlide(currentSlide - 1);
+    }
+  }
+
+  // ==================== TABLE OF CONTENTS (KEY G) ====================
+  function initTOC() {
+    const grid = document.getElementById('toc-grid');
+    grid.innerHTML = SLIDES_DATA.map((s, idx) => `
+      <div class="toc-item ${idx === 0 ? 'current' : ''}" onclick="selectSlideFromTOC(${idx})">
+        <div class="toc-item-num">SLIDE ${s.num}</div>
+        <div class="toc-item-title">${s.title}</div>
+        <div class="toc-item-sub">${s.subtitle}</div>
+      </div>
+    `).join('');
+  }
+
+  function toggleTOC(forceState) {
+    const overlay = document.getElementById('toc-overlay');
+    const btn = document.getElementById('btn-toc');
+    const willOpen = typeof forceState === 'boolean' ? forceState : !overlay.classList.contains('open');
+    overlay.classList.toggle('open', willOpen);
+    btn.classList.toggle('active', willOpen);
+  }
+
+  function selectSlideFromTOC(idx) {
+    goToSlide(idx);
+    toggleTOC(false);
+  }
+
+  // ==================== SPEAKER NOTES IN-PAGE SPLIT WINDOW (KEYS N & T) ====================
+  function toggleNotes(mode) {
+    if (notesMode === mode) {
+      // Pressing same key again closes it (cycle)
+      closeNotes();
+    } else {
+      setNotesMode(mode);
+    }
+  }
+
+  function setNotesMode(mode) {
+    notesMode = mode;
+    const panel = document.getElementById('notes-panel');
+    panel.classList.add('open');
+
+    document.getElementById('notes-panel-title').textContent =
+      mode === 'single' ? `本页讲稿 · 第 ${String(currentSlide + 1).padStart(2, '0')} 页` : '全文讲稿 · 完整演说词 (自动定位)';
+
+    document.getElementById('tab-single').classList.toggle('active', mode === 'single');
+    document.getElementById('tab-all').classList.toggle('active', mode === 'all');
+    document.getElementById('btn-note-single').classList.toggle('active', mode === 'single');
+    document.getElementById('btn-note-all').classList.toggle('active', mode === 'all');
+
+    renderNotes();
+    // Recalculate stage vector scale after panel opens/transitions
+    updateStageScale();
+    setTimeout(updateStageScale, 240);
+  }
+
+  function closeNotes() {
+    notesMode = null;
+    const panel = document.getElementById('notes-panel');
+    panel.classList.remove('open');
+
+    document.getElementById('btn-note-single').classList.remove('active');
+    document.getElementById('btn-note-all').classList.remove('active');
+
+    updateStageScale();
+    setTimeout(updateStageScale, 240);
+  }
+
+  function renderNotes() {
+    const body = document.getElementById('notes-body');
+    if (!notesMode) return;
+
+    if (notesMode === 'single') {
+      document.getElementById('notes-panel-title').textContent =
+        `本页讲稿 · 第 ${String(currentSlide + 1).padStart(2, '0')} 页`;
+      const s = SLIDES_DATA[currentSlide];
+      body.innerHTML = `
+        <div class="note-block current-slide-note">
+          <div class="note-block-header">
+            <div>
+              <div class="note-block-num">PAGE ${s.num} / ${String(totalSlides).padStart(2, '0')}</div>
+              <div class="note-block-title">${s.title}</div>
+            </div>
+          </div>
+          ${s.notes.map(p => `<p class="note-paragraph">${formatNoteTags(p)}</p>`).join('')}
+        </div>
+      `;
+      body.scrollTop = 0;
+    } else if (notesMode === 'all') {
+      document.getElementById('notes-panel-title').textContent = '全文讲稿 · 完整演说词 (点击标题跳转)';
+      body.innerHTML = SLIDES_DATA.map((s, idx) => `
+        <div class="note-block ${idx === currentSlide ? 'current-slide-note' : ''}" id="note-card-${idx}">
+          <div class="note-block-header" onclick="goToSlide(${idx})" title="点击跳转到第 ${s.num} 页">
+            <div>
+              <div class="note-block-num">PAGE ${s.num} ${idx === currentSlide ? '· 当前页' : ''}</div>
+              <div class="note-block-title">${s.title}</div>
+            </div>
+          </div>
+          ${s.notes.map(p => `<p class="note-paragraph">${formatNoteTags(p)}</p>`).join('')}
+        </div>
+      `).join('');
+
+      // Automatically scroll right panel to current page block!
+      requestAnimationFrame(() => {
+        const activeCard = document.getElementById(`note-card-${currentSlide}`);
+        if (activeCard) {
+          activeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+  }
+
+  function formatNoteTags(text) {
+    return text.replace(/^【([^】]+)】/, '<span class="note-logic-tag">$1</span>');
+  }
+
+  // ==================== AUTOPLAY ====================
+  function toggleAutoplay(forceState) {
+    const willRun = typeof forceState === 'boolean' ? forceState : !autoplayInterval;
+    const btn = document.getElementById('btn-autoplay');
+
+    if (willRun) {
+      if (currentSlide >= totalSlides - 1) {
+        goToSlide(0);
+      }
+      btn.classList.add('autoplay-on');
+      btn.innerHTML = '<span class="kbd">A</span> 停止播放';
+      autoplayElapsed = 0;
+
+      autoplayInterval = setInterval(() => {
+        nextSlide();
+      }, AUTOPLAY_DURATION);
+
+      autoplayTimerBarInterval = setInterval(() => {
+        autoplayElapsed += 100;
+        updateAutoplayProgressBar();
+      }, 100);
+    } else {
+      clearInterval(autoplayInterval);
+      clearInterval(autoplayTimerBarInterval);
+      autoplayInterval = null;
+      autoplayTimerBarInterval = null;
+      autoplayElapsed = 0;
+      updateAutoplayProgressBar();
+      btn.classList.remove('autoplay-on');
+      btn.innerHTML = '<span class="kbd">A</span> 自动播放';
+    }
+  }
+
+  function updateAutoplayProgressBar() {
+    const bar = document.getElementById('autoplay-timer-bar');
+    if (!autoplayInterval) {
+      bar.style.width = '0%';
+      return;
+    }
+    const pct = Math.min(100, (autoplayElapsed / AUTOPLAY_DURATION) * 100);
+    bar.style.width = `${pct}%`;
+  }
+
+  // ==================== FULLSCREEN (KEY F) ====================
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  function updateFullscreenBtn() {
+    const btn = document.getElementById('btn-fullscreen');
+    if (document.fullscreenElement) {
+      btn.classList.add('active');
+      btn.innerHTML = '<span class="kbd">F</span> 退出全屏';
+    } else {
+      btn.classList.remove('active');
+      btn.innerHTML = '<span class="kbd">F</span> 全屏';
+    }
+  }
+
+  // ==================== KEYBOARD SHORTCUTS ====================
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    const key = e.key.toLowerCase();
+    if (key === 'arrowright' || key === ' ' || key === 'pagedown') {
+      e.preventDefault();
+      nextSlide();
+    } else if (key === 'arrowleft' || key === 'pageup') {
+      e.preventDefault();
+      prevSlide();
+    } else if (key === 'g') {
+      e.preventDefault();
+      toggleTOC();
+    } else if (key === 'n') {
+      e.preventDefault();
+      toggleNotes('single');
+    } else if (key === 't') {
+      e.preventDefault();
+      toggleNotes('all');
+    } else if (key === 'a') {
+      e.preventDefault();
+      toggleAutoplay();
+    } else if (key === 'f') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'escape') {
+      if (document.getElementById('toc-overlay').classList.contains('open')) {
+        toggleTOC(false);
+      } else if (notesMode) {
+        closeNotes();
+      }
+    }
+  });
+
+  // ==================== INTERACTIVE SIMULATOR 1: SLIDE 03 MVCC ====================
+  let mvccState = {
+    xid: 101,
+    oldestXmin: 100,
+    longTxHeld: false,
+    versions: [
+      { id: 1, xmin: 100, xmax: 0, ctid: '(0,1)', val: 'balance=1000', hot: false }
+    ]
+  };
+
+  function mvccSimStep(action) {
+    if (action === 'reset') {
+      mvccState = {
+        xid: 101,
+        oldestXmin: 100,
+        longTxHeld: false,
+        versions: [
+          { id: 1, xmin: 100, xmax: 0, ctid: '(0,1)', val: 'balance=1000', hot: false }
+        ]
+      };
+    } else if (action === 'update') {
+      if (mvccState.versions.length >= 4) {
+        // Keep max 4 tuples in page demo
+        mvccState.versions.shift();
+      }
+      const nextXid = mvccState.xid++;
+      const prev = mvccState.versions[mvccState.versions.length - 1];
+      const nextSlot = prev.id + 1;
+      prev.xmax = nextXid;
+      prev.ctid = `(0,${nextSlot})`;
+      mvccState.versions.push({
+        id: nextSlot,
+        xmin: nextXid,
+        xmax: 0,
+        ctid: `(0,${nextSlot})`,
+        val: `balance=${1000 - (nextSlot - 1) * 100}`,
+        hot: true
+      });
+      if (!mvccState.longTxHeld) {
+        mvccState.oldestXmin = nextXid;
+      }
+    } else if (action === 'hold') {
+      mvccState.longTxHeld = true;
+      // Pin oldestXmin to the first version's xmin
+      mvccState.oldestXmin = mvccState.versions[0].xmin;
+    } else if (action === 'release') {
+      mvccState.longTxHeld = false;
+      const latest = mvccState.versions[mvccState.versions.length - 1];
+      mvccState.oldestXmin = latest.xmin;
+    }
+    renderMvccSim();
+  }
+
+  function renderMvccSim() {
+    const label = document.getElementById('mvcc-xid-label');
+    const horizonText = document.getElementById('svg-mvcc-horizon-text');
+    const holdBtn = document.getElementById('btn-mvcc-hold');
+    const ptrGroup = document.getElementById('svg-mvcc-pointers');
+    const tupGroup = document.getElementById('svg-mvcc-tuples');
+    if (!ptrGroup || !tupGroup) return;
+
+    label.textContent = `当前XID: ${mvccState.xid} | OldestXmin: ${mvccState.oldestXmin}`;
+    if (mvccState.longTxHeld) {
+      holdBtn.classList.add('active-state');
+      horizonText.textContent = `长事务快照挂起 (OldestXmin = ${mvccState.oldestXmin}) —— 锚点后的旧版本全部被锁在 RECENTLY DEAD！`;
+      horizonText.setAttribute('fill', '#BE653B');
+    } else {
+      holdBtn.classList.remove('active-state');
+      horizonText.textContent = `无长事务阻塞 (OldestXmin = ${mvccState.oldestXmin}) —— 全局可见性边界正常推进，已结束旧版本转为 DEAD`;
+      horizonText.setAttribute('fill', '#2F7A66');
+    }
+
+    let ptrHtml = '';
+    let tupHtml = '';
+
+    mvccState.versions.forEach((v, idx) => {
+      const px = 270 + idx * 145;
+      let status = 'LIVE';
+      let color = '#2F7A66';
+      let bg = '#E4F1ED';
+
+      if (v.xmax !== 0) {
+        if (v.xmax < mvccState.oldestXmin) {
+          status = 'DEAD';
+          color = '#245A6B';
+          bg = '#E5EFF0';
+        } else {
+          status = 'RECENTLY DEAD';
+          color = '#BE653B';
+          bg = '#F7E9DE';
+        }
+      }
+
+      // Line pointer slot
+      ptrHtml += `
+        <rect x="${px}" y="162" width="132" height="38" fill="${bg}" stroke="${color}" stroke-width="1.5"/>
+        <text x="${px + 10}" y="178" class="svg-mono" font-size="11" font-weight="700" fill="#1B2B33">lp[${v.id}] → (0,${v.id})</text>
+        <text x="${px + 10}" y="193" class="svg-mono" font-size="10" font-weight="700" fill="${color}">LP_NORMAL</text>
+      `;
+
+      // Tuple Box in bottom half of page
+      const tx = 44 + idx * 204;
+      const ty = 228;
+      tupHtml += `
+        <rect x="${tx}" y="${ty}" width="186" height="164" fill="${bg}" stroke="${color}" stroke-width="2"/>
+        <rect x="${tx}" y="${ty}" width="186" height="28" fill="${color}"/>
+        <text x="${tx + 10}" y="${ty + 19}" class="svg-mono" font-size="11" font-weight="700" fill="#F7F6F2">TID (0,${v.id}) · ${status}</text>
+        <text x="${tx + 12}" y="${ty + 52}" class="svg-mono" font-size="12" fill="#1B2B33">xmin: ${v.xmin}</text>
+        <text x="${tx + 12}" y="${ty + 74}" class="svg-mono" font-size="12" font-weight="700" fill="${v.xmax ? '#BE653B' : '#2F7A66'}">xmax: ${v.xmax === 0 ? '0 (有效)' : v.xmax}</text>
+        <text x="${tx + 12}" y="${ty + 96}" class="svg-mono" font-size="12" fill="#1B2B33">t_ctid: ${v.ctid}</text>
+        <line x1="${tx + 10}" y1="${ty + 108}" x2="${tx + 176}" y2="${ty + 108}" stroke="#D9D5CB" stroke-width="1"/>
+        <text x="${tx + 12}" y="${ty + 128}" class="svg-mono" font-size="12" font-weight="700" fill="#1B2B33">${v.val}</text>
+        <text x="${tx + 12}" y="${ty + 148}" class="svg-mono" font-size="10" fill="#46585F">${v.hot ? 'HOT-Tuple (同页链)' : 'Initial Version'}</text>
+      `;
+
+      // Orthogonal chain arrow to next version
+      if (idx < mvccState.versions.length - 1) {
+        const ax1 = tx + 186;
+        const ax2 = tx + 204;
+        const ay = ty + 88;
+        tupHtml += `
+          <line x1="${ax1}" y1="${ay}" x2="${ax2}" y2="${ay}" stroke="#BE653B" stroke-width="2"/>
+          <polygon points="${ax2},${ay} ${ax2 - 6},${ay - 4} ${ax2 - 6},${ay + 4}" fill="#BE653B"/>
+        `;
+      }
+    });
+
+    ptrGroup.innerHTML = ptrHtml;
+    tupGroup.innerHTML = tupHtml;
+  }
+
+  // ==================== INTERACTIVE SIMULATOR 2: SLIDE 04 LAZY VACUUM ====================
+  let vacStep = 0; // 0: all, 1: phase1, 2: phase2, 3: phase3
+  let vacMemFull = false;
+
+  function vacSimNext() {
+    vacStep = (vacStep % 3) + 1;
+    renderVacSim();
+  }
+
+  function vacSimToggleMem() {
+    vacMemFull = !vacMemFull;
+    renderVacSim();
+  }
+
+  function vacSimReset() {
+    vacStep = 0;
+    vacMemFull = false;
+    renderVacSim();
+  }
+
+  function renderVacSim() {
+    const label = document.getElementById('vac-step-label');
+    const b1 = document.getElementById('vac-box-1');
+    const b2 = document.getElementById('vac-box-2');
+    const b3 = document.getElementById('vac-box-3');
+    const tidText = document.getElementById('vac-tid-text');
+    const bottomDesc = document.getElementById('vac-bottom-desc');
+    const memBtn = document.getElementById('btn-vac-mem');
+    if (!b1) return;
+
+    const names = [
+      '全景概览 (点击逐步演练)',
+      'Phase 1: 扫描 Heap 收集死 TID',
+      'Phase 2: 批量清理索引死指针',
+      'Phase 3: 释放 LP_UNUSED 并更新映射'
+    ];
+    label.textContent = `当前阶段: ${names[vacStep]}`;
+
+    [b1, b2, b3].forEach((box, idx) => {
+      const active = (vacStep === 0 || vacStep === idx + 1);
+      box.setAttribute('opacity', active ? '1' : '0.32');
+      box.setAttribute('stroke-width', vacStep === idx + 1 ? '3.5' : '2');
+    });
+
+    if (vacMemFull) {
+      memBtn.classList.add('active-state');
+      tidText.textContent = 'TID Store 已满 (达到 maintenance_work_mem 上限)! 暂停 Phase 1';
+      tidText.setAttribute('fill', '#BE653B');
+      bottomDesc.textContent =
+        '【多轮循环触发】死元组超出维护内存上限！worker 立即暂停扫描剩余 Heap 页，先执行 Phase 2 清索引 + Phase 3 释堆，清空 TID Store 后再折返继续扫描。';
+    } else {
+      memBtn.classList.remove('active-state');
+      tidText.textContent = '收集队列: [(0,1), (0,3), (1,2), (2,5) ...]';
+      tidText.setAttribute('fill', '#245A6B');
+      bottomDesc.textContent =
+        '① 当死元组过多填满 TID Store 时，暂停 Phase 1，先执行一轮 Phase 2 + Phase 3 清空内存后再继续扫描；② 若 XID 接近回卷危险区，failsafe 机制会跳过索引清理优先冻结元组。';
+    }
+  }
+
+  // ==================== INTERACTIVE SIMULATOR 3: SLIDE 06 AUTOVACUUM ====================
+  function avPreset(reltuples, scaleFactor, baseThresh) {
+    const maxThresh = 100000000; // 1亿上限 (PG18+ 或概念上限展示)
+    const rawThresh = Math.round(baseThresh + scaleFactor * reltuples);
+    const pct = ((rawThresh / reltuples) * 100);
+
+    document.getElementById('av-reltuples-val').textContent = `${reltuples.toLocaleString()} 行`;
+    document.getElementById('av-scale-val').textContent = `${scaleFactor.toFixed(2)} (${(scaleFactor * 100).toFixed(0)}%)`;
+    document.getElementById('av-thresh-val').textContent = `${rawThresh.toLocaleString()} 行`;
+
+    const barMaxW = 800;
+    const fillW = Math.max(18, Math.min(barMaxW, Math.round(barMaxW * (pct / 100) * 2.5)));
+    const barFill = document.getElementById('av-bar-fill');
+    const barMarker = document.getElementById('av-bar-marker');
+    const barLabel = document.getElementById('av-bar-label');
+    const verdict = document.getElementById('av-verdict-text');
+
+    barFill.setAttribute('width', fillW);
+    barMarker.setAttribute('x1', 42 + fillW);
+    barMarker.setAttribute('x2', 42 + fillW);
+    barLabel.setAttribute('x', Math.min(540, 42 + fillW + 10));
+    barLabel.textContent = `触发线: ${pct.toFixed(1)}% (${rawThresh.toLocaleString()} 死元组)`;
+
+    if (rawThresh >= 50000000) {
+      barFill.setAttribute('fill', '#BE653B');
+      verdict.setAttribute('fill', '#BE653B');
+      verdict.textContent =
+        `诊断结论：触发前已累积 ${rawThresh.toLocaleString()} 死元组，对应数十 GB 膨胀空间与巨量索引垃圾，清理极度滞后！`;
+    } else {
+      barFill.setAttribute('fill', '#2F7A66');
+      verdict.setAttribute('fill', '#2F7A66');
+      verdict.textContent =
+        `诊断结论：触发窗口控制在 ${rawThresh.toLocaleString()} 行以内，autovacuum 高频小步清理，表空间与索引长期保持紧凑稳态！`;
+    }
+  }
+
+  // ==================== INITIALIZE ON LOAD ====================
+  window.addEventListener('DOMContentLoaded', () => {
+    initTOC();
+    renderMvccSim();
+    renderVacSim();
+    avPreset(1000000000, 0.2, 50); // Start with the striking 1B default example
+    goToSlide(0);
+    updateStageScale();
+  });
+</script>
+</body>
+</html>

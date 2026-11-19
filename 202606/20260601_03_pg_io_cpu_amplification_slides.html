@@ -1,0 +1,2379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 — IO & CPU 放大的系统性优化</title>
+<style>
+  :root {
+    --bg-primary: #F7F6F2;
+    --bg-secondary: #F1EFE9;
+    --ink-primary: #1B2B33;
+    --ink-secondary: #46585F;
+    --ink-muted: #89938F;
+    --border-color: #D9D5CB;
+    --accent-indigo: #245A6B;
+    --accent-indigo-light: #E5EFF0;
+    --accent-terracotta: #BE653B;
+    --accent-terracotta-light: #F7E9DE;
+    --accent-teal: #2F7A66;
+    --accent-gold: #AE8A3E;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", SimSun, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", -apple-system, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #161E22;
+    font-family: var(--font-sans);
+    color: var(--ink-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 舞台外框：负责 16:9 缩放与讲稿侧边栏分屏布局 */
+  #app-root {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    background-color: #161E22;
+    position: relative;
+  }
+
+  #stage-container {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    transition: width 0.25s ease;
+  }
+
+  /* 固定 1600x900 舞台，严格按 JS 计算等比缩放，禁止响应式重排 */
+  #stage {
+    width: 1600px;
+    height: 900px;
+    background-color: var(--bg-primary);
+    position: relative;
+    transform-origin: center center;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+    flex-shrink: 0;
+    /* 工程蓝图细微背景网格 */
+    background-image: 
+      linear-gradient(to right, rgba(217, 213, 203, 0.28) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.28) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* 顶部工程蓝图地层色条装饰（极细 4px 视觉锚点） */
+  .strata-top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1600px;
+    height: 5px;
+    display: flex;
+    z-index: 10;
+  }
+  .strata-top-bar span { flex: 1; height: 100%; }
+
+  /* 幻灯片单页结构 */
+  .slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1600px;
+    height: 900px;
+    padding: 46px 64px 36px 64px;
+    display: none;
+    flex-direction: column;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* 眉标 */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--accent-indigo);
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .eyebrow-tag {
+    background: var(--accent-indigo-light);
+    color: var(--accent-indigo);
+    padding: 2px 8px;
+    border: 1px solid var(--accent-indigo);
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+
+  /* 标题 44px 宋体 */
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--ink-primary);
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+
+  /* 导语 19px */
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-secondary);
+    margin-bottom: 18px;
+    max-width: 1440px;
+  }
+
+  /* 1px 分隔线 */
+  .divider {
+    width: 1472px;
+    height: 1px;
+    background-color: var(--border-color);
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .divider::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: -1px;
+    width: 84px;
+    height: 3px;
+    background-color: var(--accent-indigo);
+  }
+
+  /* 图区 1400x430 (居中或左对齐 64px，宽 1472px 内嵌 1400x430 核心画布) */
+  .diagram-zone {
+    width: 1472px;
+    height: 445px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .diagram-canvas {
+    width: 1400px;
+    height: 430px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  /* 底部承接区 */
+  .slide-footer-zone {
+    margin-top: auto;
+    width: 1472px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-top: 8px;
+  }
+
+  .next-bridge {
+    border-left: 3px solid var(--accent-terracotta);
+    padding-left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 1180px;
+  }
+
+  .next-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    color: var(--accent-terracotta);
+    font-weight: 700;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink-primary);
+    line-height: 1.35;
+    font-weight: 600;
+  }
+
+  .page-meta {
+    text-align: right;
+    font-family: var(--font-mono);
+    color: var(--ink-muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .page-num {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink-primary);
+  }
+
+  /* 互动动画控制条（嵌入图区顶部或底部边角，规整不遮挡） */
+  .anim-controls {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    padding: 4px 10px;
+    z-index: 5;
+  }
+  .anim-controls label {
+    font-size: 12px;
+    color: var(--ink-secondary);
+    font-family: var(--font-mono);
+  }
+  .anim-controls select, .anim-controls button, .anim-controls input[type="range"] {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    padding: 3px 8px;
+    cursor: pointer;
+    outline: none;
+  }
+  .anim-controls button:hover {
+    background: var(--accent-indigo);
+    color: #FFFFFF;
+    border-color: var(--accent-indigo);
+  }
+  .anim-controls button.active-btn {
+    background: var(--accent-terracotta);
+    color: #FFFFFF;
+    border-color: var(--accent-terracotta);
+  }
+
+  /* 封面页专用网格排版 */
+  .cover-layout {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+  }
+  .cover-main {
+    margin-top: 24px;
+    display: grid;
+    grid-template-columns: 880px 552px;
+    gap: 40px;
+    align-items: center;
+  }
+  .cover-title {
+    font-family: var(--font-serif);
+    font-size: 54px;
+    line-height: 1.22;
+    font-weight: 700;
+    color: var(--ink-primary);
+    margin-bottom: 20px;
+  }
+  .cover-subtitle {
+    font-size: 21px;
+    line-height: 1.6;
+    color: var(--ink-secondary);
+    margin-bottom: 28px;
+  }
+  .cover-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 14px 0;
+    gap: 16px;
+  }
+  .cover-meta-item span {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+  .cover-meta-item strong {
+    font-size: 15px;
+    color: var(--ink-primary);
+    font-weight: 600;
+  }
+
+  /* 讲稿右侧抽屉面板（页内开窗，非弹窗） */
+  #notes-drawer {
+    width: 0;
+    height: 100vh;
+    background-color: var(--bg-primary);
+    border-left: 0px solid var(--border-color);
+    overflow: hidden;
+    transition: width 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 30;
+  }
+
+  #notes-drawer.open {
+    width: 440px;
+    border-left: 2px solid var(--accent-indigo);
+  }
+
+  .notes-header {
+    padding: 18px 22px;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .notes-header-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink-primary);
+  }
+  .notes-mode-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    background: var(--accent-indigo);
+    color: #fff;
+    letter-spacing: 1px;
+  }
+  .notes-close-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--ink-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .notes-close-btn:hover {
+    background: var(--accent-terracotta);
+    color: #fff;
+    border-color: var(--accent-terracotta);
+  }
+
+  #notes-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 48px 22px;
+    scroll-behavior: smooth;
+  }
+
+  .note-block {
+    margin-bottom: 24px;
+    padding: 16px 18px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--ink-muted);
+    transition: border-color 0.2s, background-color 0.2s;
+  }
+
+  .note-block.current-note {
+    border-left: 4px solid var(--accent-terracotta);
+    background: #FFFDF9;
+    box-shadow: 0 2px 10px rgba(30, 75, 90, 0.08);
+  }
+
+  .note-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--border-color);
+  }
+  .note-page-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-indigo);
+  }
+  .note-block.current-note .note-page-tag {
+    color: var(--accent-terracotta);
+  }
+  .note-slide-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink-primary);
+    margin-bottom: 10px;
+  }
+  .note-content {
+    font-size: 14.5px;
+    line-height: 1.75;
+    color: var(--ink-primary);
+    text-align: justify;
+  }
+  .note-content p {
+    margin-bottom: 10px;
+  }
+  .note-content p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* 目录浮层（页内覆盖层，按 G 开关） */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(247, 246, 242, 0.97);
+    z-index: 40;
+    display: none;
+    flex-direction: column;
+    padding: 48px 64px;
+  }
+  #toc-overlay.open {
+    display: flex;
+  }
+  .toc-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .toc-item {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--accent-indigo);
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+  }
+  .toc-item:hover, .toc-item.active-toc {
+    background: var(--accent-indigo-light);
+    border-left-color: var(--accent-terracotta);
+  }
+  .toc-item-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent-terracotta);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink-primary);
+    margin-bottom: 4px;
+  }
+  .toc-item-sub {
+    font-size: 13px;
+    color: var(--ink-secondary);
+  }
+
+  /* 底部常驻快捷键控制栏（全屏后同样显示在页面底部） */
+  #hud-bar {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(27, 43, 51, 0.92);
+    color: #F7F6F2;
+    border: 1px solid #47808D;
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    z-index: 100;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    backdrop-filter: blur(4px);
+    transition: left 0.25s ease;
+  }
+  body.notes-open #hud-bar {
+    left: calc((100vw - 440px) / 2);
+  }
+
+  .hud-btn {
+    background: transparent;
+    border: 1px solid rgba(217, 213, 203, 0.35);
+    color: #F7F6F2;
+    padding: 3px 9px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .hud-btn:hover {
+    background: var(--accent-indigo);
+    border-color: #A4C4C6;
+  }
+  .hud-btn.active {
+    background: var(--accent-terracotta);
+    border-color: var(--accent-terracotta);
+    color: #FFFFFF;
+  }
+  .hud-sep {
+    width: 1px;
+    height: 14px;
+    background: rgba(217, 213, 203, 0.3);
+  }
+  .hud-key {
+    background: rgba(255, 255, 255, 0.15);
+    padding: 1px 5px;
+    font-size: 11px;
+    color: #CFE0DC;
+  }
+
+  /* SVG 通用字体与线条样式 */
+  svg text {
+    font-family: "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    user-select: none;
+  }
+  svg .svg-serif {
+    font-family: "Songti SC", "Noto Serif CJK SC", serif;
+  }
+  svg .svg-mono {
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+  }
+</style>
+</head>
+<body>
+
+<div id="app-root">
+  <!-- 左侧：16:9 固定舞台容器 -->
+  <div id="stage-container">
+    <div id="stage">
+      <!-- 顶部地层七阶色带 -->
+      <div class="strata-top-bar">
+        <span style="background:#1E4B5A"></span>
+        <span style="background:#2E6373"></span>
+        <span style="background:#47808D"></span>
+        <span style="background:#74A5AD"></span>
+        <span style="background:#A4C4C6"></span>
+        <span style="background:#CFE0DC"></span>
+        <span style="background:#EBF1EE"></span>
+      </div>
+
+      <!-- 目录浮层 (G) -->
+      <div id="toc-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="eyebrow">STRATA INDEX · 课程地层导航</div>
+            <h2 class="slide-title">数据库筑基课 — 目录总览</h2>
+          </div>
+          <button class="hud-btn" style="background:var(--ink-primary); padding:6px 14px;" onclick="toggleTOC()">关闭目录 [G / ESC]</button>
+        </div>
+        <div class="divider" style="margin-top:10px;"></div>
+        <div class="toc-grid" id="toc-grid-container"></div>
+        <div style="margin-top:auto; font-family:var(--font-mono); font-size:13px; color:var(--ink-secondary);">
+          快捷键提示：←/→ 翻页 ｜ G 目录 ｜ N 本页讲稿 ｜ T 全文讲稿 ｜ A 自动播放 ｜ F 全屏 ｜ R 重置本页动画
+        </div>
+      </div>
+
+      <!-- ==================== SLIDE 01: 封面 ==================== -->
+      <section class="slide active" data-index="0">
+        <div class="cover-layout">
+          <div>
+            <div class="eyebrow">
+              <span class="eyebrow-tag">POSTGRESQL · CORE ARCHITECTURE</span>
+              <span>应用开发者数据库筑基课 · 2026-06-01</span>
+            </div>
+            <div class="cover-main">
+              <div>
+                <h1 class="cover-title">IO &amp; CPU 放大的<br>系统性诊断与优化</h1>
+                <p class="cover-subtitle">
+                  穿透「有没有建索引」的表象，沿着 PostgreSQL 优化器与执行器源码脉络，剖析后置过滤（Filter）、索引近似边界（Boundbox / Lossy Bitmap）、额外运算与 OR 分支重检（Recheck）的真实代价。
+                </p>
+                <div class="cover-meta-grid">
+                  <div class="cover-meta-item">
+                    <span>CORE SOURCE PATHS</span>
+                    <strong>indxpath.c · createplan.c · costsize.c</strong>
+                  </div>
+                  <div class="cover-meta-item">
+                    <span>EXECUTOR NODES</span>
+                    <strong>nodeIndexscan.c · nodeBitmapHeapscan.c</strong>
+                  </div>
+                  <div class="cover-meta-item">
+                    <span>DIAGNOSTIC EVIDENCE</span>
+                    <strong>EXPLAIN (ANALYZE, BUFFERS)</strong>
+                  </div>
+                </div>
+              </div>
+              <!-- 封面工程蓝图：地层剖面漏斗图 -->
+              <div style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:16px;">
+                <svg width="520" height="410" viewBox="0 0 520 410">
+                  <rect x="0" y="0" width="520" height="410" fill="#F1EFE9"/>
+                  <text x="20" y="28" class="svg-mono" font-size="11" fill="#46585F" letter-spacing="2">STRATA PIPELINE · 查询执行漏斗剖面</text>
+                  <line x1="20" y1="38" x2="500" y2="38" stroke="#D9D5CB" stroke-width="1"/>
+
+                  <!-- 第一层：SQL WHERE -->
+                  <rect x="40" y="56" width="440" height="54" fill="#EBF1EE" stroke="#1E4B5A" stroke-width="1.5"/>
+                  <text x="56" y="79" font-size="15" font-weight="700" fill="#1B2B33">L1 · SQL WHERE 谓词输入层</text>
+                  <text x="56" y="99" class="svg-mono" font-size="12" fill="#46585F">原始查询条件集合（等值 / 范围 / 函数 / OR / 空间）</text>
+
+                  <!-- 连接线 -->
+                  <line x1="260" y1="110" x2="260" y2="132" stroke="#245A6B" stroke-width="2"/>
+                  <polygon points="255,127 265,127 260,134" fill="#245A6B"/>
+
+                  <!-- 第二层：Index Cond -->
+                  <rect x="70" y="134" width="380" height="58" fill="#CFE0DC" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="86" y="158" font-size="15" font-weight="700" fill="#1B2B33">L2 · 索引访问层（Index Cond / indexqual）</text>
+                  <text x="86" y="179" font-size="13" fill="#245A6B">决定扫描多少索引页与回表候选 TID（控制 IO 放大）</text>
+
+                  <!-- 连接线 -->
+                  <line x1="260" y1="192" x2="260" y2="214" stroke="#BE653B" stroke-width="2"/>
+                  <polygon points="255,209 265,209 260,216" fill="#BE653B"/>
+
+                  <!-- 第三层：Recheck Cond -->
+                  <rect x="105" y="216" width="310" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                  <text x="121" y="240" font-size="15" font-weight="700" fill="#1B2B33">L3 · 回表重检层（Recheck Cond）</text>
+                  <text x="121" y="261" font-size="13" fill="#BE653B">Boundbox / Lossy Bitmap 候选的精确校验</text>
+
+                  <!-- 连接线 -->
+                  <line x1="260" y1="274" x2="260" y2="296" stroke="#BE653B" stroke-width="2"/>
+                  <polygon points="255,291 265,291 260,298" fill="#BE653B"/>
+
+                  <!-- 第四层：Filter -->
+                  <rect x="140" y="298" width="240" height="58" fill="#E5EFF0" stroke="#2F7A66" stroke-width="1.5"/>
+                  <text x="156" y="322" font-size="15" font-weight="700" fill="#1B2B33">L4 · 执行器后置过滤（Filter）</text>
+                  <text x="156" y="343" font-size="13" fill="#2F7A66">逐行算表达式（控制 CPU 放大）</text>
+
+                  <!-- 底部输出 -->
+                  <line x1="260" y1="356" x2="260" y2="376" stroke="#2F7A66" stroke-width="2"/>
+                  <rect x="175" y="376" width="170" height="24" fill="#1E4B5A"/>
+                  <text x="260" y="392" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF">FINAL RESULT TUPLES</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="slide-footer-zone">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">为什么执行计划明明显示「Index Scan」，数据库却依然读了海量数据页并耗尽 CPU？</span>
+            </div>
+            <div class="page-meta">
+              <div>AUTHOR: digoal</div>
+              <div class="page-num">01 / 12</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 02: 问题本质 ==================== -->
+      <section class="slide" data-index="1">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">01 · PROBLEM DEFINITION</span>
+          <span>诊断起点：建立「候选集缩窄」的工程直觉</span>
+        </div>
+        <h2 class="slide-title">慢 SQL 的真凶：不是「没走索引」，而是「候选集过宽」</h2>
+        <p class="slide-lead">
+          业务最终只需要几十行结果，数据库却扫描了上万个数据页、对百万行执行表达式判断。优化的第一步不是盲目加索引，而是回答四个诊断问题。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 左侧：典型慢 SQL 剖析 -->
+              <rect x="20" y="20" width="640" height="390" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="20" y="20" width="640" height="38" fill="#1E4B5A"/>
+              <text x="38" y="44" class="svg-mono" font-size="13" fill="#FFFFFF" font-weight="700">CASE STUDY · 典型多条件查询中的隐性放大</text>
+
+              <text x="38" y="84" class="svg-mono" font-size="13" fill="#245A6B" font-weight="700">SELECT * FROM orders</text>
+              <rect x="38" y="96" width="604" height="34" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="50" y="118" class="svg-mono" font-size="13" fill="#1B2B33">WHERE tenant_id = 42</text>
+              <text x="628" y="118" text-anchor="end" font-size="12" fill="#245A6B" font-weight="700">→ 仅此项进入 Index Cond</text>
+
+              <rect x="38" y="138" width="604" height="34" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="50" y="160" class="svg-mono" font-size="13" fill="#1B2B33">  AND status = 'paid' AND created_at &gt;= now() - '7d'</text>
+              <text x="628" y="160" text-anchor="end" font-size="12" fill="#BE653B" font-weight="700">→ 退化为 Filter 后置过滤</text>
+
+              <rect x="38" y="180" width="604" height="34" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="50" y="202" class="svg-mono" font-size="13" fill="#1B2B33">  AND (buyer_phone = '...' OR buyer_email = '...')</text>
+              <text x="628" y="202" text-anchor="end" font-size="12" fill="#BE653B" font-weight="700">→ OR 分支逐行判定</text>
+
+              <rect x="38" y="222" width="604" height="34" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="50" y="244" class="svg-mono" font-size="13" fill="#1B2B33">  AND lower(extra-&gt;&gt;'channel') = 'wechat';</text>
+              <text x="628" y="244" text-anchor="end" font-size="12" fill="#BE653B" font-weight="700">→ 逐行 JSON 解析与转小写</text>
+
+              <!-- 执行计划证据框 -->
+              <rect x="38" y="274" width="604" height="118" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="296" class="svg-mono" font-size="12" fill="#46585F" font-weight="700">EXPLAIN (ANALYZE, BUFFERS) 关键证据信号：</text>
+              <text x="52" y="320" class="svg-mono" font-size="13" fill="#1B2B33">Index Cond: (tenant_id = 42)          <tspan fill="#245A6B">// 定位到 980,050 行候选</tspan></text>
+              <text x="52" y="344" class="svg-mono" font-size="13" fill="#BE653B" font-weight="700">Rows Removed by Filter: 980000        <tspan fill="#46585F" font-weight="400">// 99.99% 读出后丢弃（IO+CPU双重放大）</tspan></text>
+              <text x="52" y="368" class="svg-mono" font-size="13" fill="#1B2B33">Rows Removed by Index Recheck: 12400  <tspan fill="#46585F">// 近似索引或 Lossy Bitmap 误判</tspan></text>
+
+              <!-- 中间直角连接线 -->
+              <line x1="660" y1="215" x2="710" y2="215" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="704,209 714,215 704,221" fill="#245A6B"/>
+
+              <!-- 右侧：四问诊断矩阵 -->
+              <rect x="716" y="20" width="664" height="390" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="716" y="20" width="664" height="38" fill="#245A6B"/>
+              <text x="734" y="44" class="svg-mono" font-size="13" fill="#FFFFFF" font-weight="700">DIAGNOSTIC PROTOCOL · 优化前必答的四个核心问题</text>
+
+              <!-- Q1 -->
+              <rect x="734" y="74" width="628" height="68" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <rect x="734" y="74" width="44" height="68" fill="#245A6B"/>
+              <text x="756" y="114" text-anchor="middle" class="svg-mono" font-size="16" fill="#FFFFFF" font-weight="700">Q1</text>
+              <text x="794" y="101" font-size="16" font-weight="700" fill="#1B2B33">条件在索引内缩小候选，还是取出 Tuple 后才判断？</text>
+              <text x="794" y="125" font-size="13.5" fill="#46585F">区分 Index Cond 与 Filter，决定究竟读取了多少 Heap Page（IO 放大根源）。</text>
+
+              <!-- Q2 -->
+              <rect x="734" y="154" width="628" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <rect x="734" y="154" width="44" height="68" fill="#BE653B"/>
+              <text x="756" y="194" text-anchor="middle" class="svg-mono" font-size="16" fill="#FFFFFF" font-weight="700">Q2</text>
+              <text x="794" y="181" font-size="16" font-weight="700" fill="#1B2B33">索引返回的是精确命中，还是「可能命中」的候选？</text>
+              <text x="794" y="205" font-size="13.5" fill="#46585F">识别 GiST Boundbox、Hash、Bloom 及 Lossy Bitmap 触发的 Recheck Cond。</text>
+
+              <!-- Q3 -->
+              <rect x="734" y="234" width="628" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <rect x="734" y="234" width="44" height="68" fill="#AE8A3E"/>
+              <text x="756" y="274" text-anchor="middle" class="svg-mono" font-size="16" fill="#FFFFFF" font-weight="700">Q3</text>
+              <text x="794" y="261" font-size="16" font-weight="700" fill="#1B2B33">每个候选 Tuple 还要承受多少额外 CPU 表达式计算？</text>
+              <text x="794" y="285" font-size="13.5" fill="#46585F">评估 OR 多分支、JSONB 拆解、隐式类型转换与函数求值的累积算力消耗。</text>
+
+              <!-- Q4 -->
+              <rect x="734" y="314" width="628" height="68" fill="#EBF1EE" stroke="#2F7A66" stroke-width="1"/>
+              <rect x="734" y="314" width="44" height="68" fill="#2F7A66"/>
+              <text x="756" y="354" text-anchor="middle" class="svg-mono" font-size="16" fill="#FFFFFF" font-weight="700">Q4</text>
+              <text x="794" y="341" font-size="16" font-weight="700" fill="#1B2B33">BUFFERS 指标是否证明候选行、读页与重检真实下降？</text>
+              <text x="794" y="365" font-size="13.5" fill="#46585F">不唯执行计划节点名称论，用 shared hit/read 与写入维护成本做最终裁决。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">PostgreSQL 优化器是如何把一条 SQL 的 WHERE 子句拆解并分流到这三个执行阶段的？</span>
+          </div>
+          <div class="page-meta">
+            <div>IO &amp; CPU AMPLIFICATION</div>
+            <div class="page-num">02 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 03: WHERE 谓词分流机制 (含交互动画) ==================== -->
+      <section class="slide" data-index="2">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">02 · PLANNER QUAL DISPATCH</span>
+          <span>源码架构：createplan.c 中的谓词三分流</span>
+        </div>
+        <h2 class="slide-title">WHERE 不是整体开关：优化器的谓词三分流机制</h2>
+        <p class="slide-lead">
+          在 create_indexscan_plan() 与 create_bitmap_scan_plan() 中，优化器将 WHERE 条件拆分为 indexqual、bitmapqualorig 与 qpqual，分别决定 IO 边界与 CPU 开销。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <!-- 交互控制条 -->
+          <div class="anim-controls">
+            <label>模拟查询谓词：</label>
+            <select id="s3-predicate-select" onchange="runSlide3Demo()">
+              <option value="all">复合查询（等值 + 范围 + JSON表达式）</option>
+              <option value="gist">空间/全文查询（GiST Boundbox 近似匹配）</option>
+              <option value="covered">全覆盖复合索引（所有谓词前移）</option>
+            </select>
+            <button onclick="runSlide3Demo()">▶ 演练谓词分流</button>
+          </div>
+
+          <div class="diagram-canvas">
+            <svg id="svg-slide-3" width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 左侧：输入谓词池 -->
+              <rect x="20" y="45" width="350" height="345" fill="#FFFFFF" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="20" y="45" width="350" height="36" fill="#1E4B5A"/>
+              <text x="36" y="68" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">INPUT · WHERE CLAUSE AST</text>
+
+              <g id="s3-pred-1">
+                <rect x="36" y="98" width="318" height="68" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="50" y="122" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">P1: tenant_id = 42</text>
+                <text x="50" y="146" font-size="12.5" fill="#46585F">匹配 B-tree 索引前导列操作符类</text>
+              </g>
+
+              <g id="s3-pred-2">
+                <rect x="36" y="184" width="318" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="50" y="208" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">P2: geom &amp;&amp; box / lossy page</text>
+                <text x="50" y="232" font-size="12.5" fill="#46585F">索引仅存 Boundbox 或页面压缩位图</text>
+              </g>
+
+              <g id="s3-pred-3">
+                <rect x="36" y="270" width="318" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="50" y="294" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">P3: lower(extra-&gt;&gt;'ch') = 'wx'</text>
+                <text x="50" y="318" font-size="12.5" fill="#46585F">无对应表达式索引，访问方法无法识别</text>
+              </g>
+
+              <!-- 中间：优化器分流器 -->
+              <rect x="440" y="90" width="230" height="255" fill="#EBF1EE" stroke="#245A6B" stroke-width="2"/>
+              <text x="555" y="122" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B" font-weight="700">OPTIMIZER DISPATCHER</text>
+              <line x1="456" y1="134" x2="654" y2="134" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="555" y="162" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">indxpath.c</text>
+              <text x="555" y="182" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#46585F">match_clause_to_indexcol()</text>
+              <line x1="470" y1="202" x2="640" y2="202" stroke="#D9D5CB" stroke-width="1" stroke-dasharray="4 3"/>
+              <text x="555" y="230" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">createplan.c</text>
+              <text x="555" y="250" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#46585F">create_indexscan_plan()</text>
+              <text x="555" y="270" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#46585F">create_bitmap_scan_plan()</text>
+              <rect x="462" y="292" width="186" height="34" fill="#245A6B"/>
+              <text x="555" y="314" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" id="s3-status-badge">STATUS: ACTIVE</text>
+
+              <!-- 左侧到中间的直角连线 -->
+              <line x1="370" y1="132" x2="440" y2="132" stroke="#245A6B" stroke-width="2"/>
+              <line x1="370" y1="218" x2="440" y2="218" stroke="#BE653B" stroke-width="2"/>
+              <line x1="370" y1="304" x2="440" y2="304" stroke="#BE653B" stroke-width="2"/>
+
+              <!-- 右侧三条目标泳道 -->
+              <!-- 泳道 1：Index Cond -->
+              <line x1="670" y1="132" x2="750" y2="132" stroke="#245A6B" stroke-width="2"/>
+              <line x1="750" y1="132" x2="750" y2="95" stroke="#245A6B" stroke-width="2"/>
+              <line x1="750" y1="95" x2="790" y2="95" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="784,90 793,95 784,100" fill="#245A6B"/>
+
+              <rect x="795" y="45" width="585" height="102" fill="#FFFFFF" stroke="#245A6B" stroke-width="2"/>
+              <rect x="795" y="45" width="185" height="102" fill="#245A6B"/>
+              <text x="887" y="88" text-anchor="middle" class="svg-mono" font-size="15" font-weight="700" fill="#FFFFFF">Index Cond</text>
+              <text x="887" y="112" text-anchor="middle" class="svg-mono" font-size="12" fill="#CFE0DC">源码：indexqual</text>
+              <text x="998" y="78" font-size="15" font-weight="700" fill="#1B2B33">索引访问方法直接下推过滤</text>
+              <text x="998" y="102" font-size="13.5" fill="#46585F">核心价值：在 B-tree / GIN 内部直接裁剪扫描范围，减少候选 TID 数量。</text>
+              <text x="998" y="126" class="svg-mono" font-size="12.5" fill="#2F7A66" font-weight="700" id="s3-lane1-val">当前命中：tenant_id = 42（直接减少 Heap IO）</text>
+
+              <!-- 泳道 2：Recheck Cond -->
+              <line x1="670" y1="218" x2="790" y2="218" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="784,213 793,218 784,223" fill="#BE653B"/>
+
+              <rect x="795" y="167" width="585" height="102" fill="#FFFFFF" stroke="#BE653B" stroke-width="2"/>
+              <rect x="795" y="167" width="185" height="102" fill="#BE653B"/>
+              <text x="887" y="210" text-anchor="middle" class="svg-mono" font-size="15" font-weight="700" fill="#FFFFFF">Recheck Cond</text>
+              <text x="887" y="234" text-anchor="middle" class="svg-mono" font-size="12" fill="#F7E9DE">源码：bitmapqualorig</text>
+              <text x="998" y="200" font-size="15" font-weight="700" fill="#1B2B33">回表拿到 Heap Tuple 后的二次精确校验</text>
+              <text x="998" y="224" font-size="13.5" fill="#46585F">触发场景：GiST Boundbox、Hash、Bloom 签名及 Bitmap Lossy Page。</text>
+              <text x="998" y="248" class="svg-mono" font-size="12.5" fill="#BE653B" font-weight="700" id="s3-lane2-val">当前命中：lossy bitmap / boundbox 候选校验</text>
+
+              <!-- 泳道 3：Filter -->
+              <line x1="670" y1="304" x2="750" y2="304" stroke="#AE8A3E" stroke-width="2"/>
+              <line x1="750" y1="304" x2="750" y2="340" stroke="#AE8A3E" stroke-width="2"/>
+              <line x1="750" y1="340" x2="790" y2="340" stroke="#AE8A3E" stroke-width="2"/>
+              <polygon points="784,335 793,340 784,345" fill="#AE8A3E"/>
+
+              <rect x="795" y="289" width="585" height="102" fill="#FFFFFF" stroke="#AE8A3E" stroke-width="2"/>
+              <rect x="795" y="289" width="185" height="102" fill="#AE8A3E"/>
+              <text x="887" y="332" text-anchor="middle" class="svg-mono" font-size="15" font-weight="700" fill="#FFFFFF">Filter</text>
+              <text x="887" y="356" text-anchor="middle" class="svg-mono" font-size="12" fill="#F7F6F2">源码：qpqual</text>
+              <text x="998" y="322" font-size="15" font-weight="700" fill="#1B2B33">扫描节点输出前的普通布尔表达式过滤</text>
+              <text x="998" y="346" font-size="13.5" fill="#46585F">源码铁律（costsize.c）：qpqual 只能少返回行，绝不减少必须 fetch 的页！</text>
+              <text x="998" y="370" class="svg-mono" font-size="12.5" fill="#AE8A3E" font-weight="700" id="s3-lane3-val">当前命中：lower(extra-&gt;&gt;'ch') = 'wx'（逐行 CPU 计算）</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">当条件落入 Filter 时，costsize.c 的成本公式揭示了怎样的残酷真相？</span>
+          </div>
+          <div class="page-meta">
+            <div>SOURCE: createplan.c</div>
+            <div class="page-num">03 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 04: 后置过滤 Filter 放大 ==================== -->
+      <section class="slide" data-index="3">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">03 · POST-FILTER AMPLIFICATION</span>
+          <span>核心原理 3.1：Filter 只减少输出，不减少已扫描候选</span>
+        </div>
+        <h2 class="slide-title">后置过滤（Filter）：百万行回表后的「逐行丢弃」</h2>
+        <p class="slide-lead">
+          cost_index() 源码明确指出：额外作为 qpqual 执行的条件不会减少必须从表里取出的 Tuple 数量。单列索引定位到百万行后，其余条件全在执行器里逐行空转。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 上半部分：优化前（单列索引 + Filter 放大） -->
+              <rect x="20" y="22" width="1360" height="176" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="20" y="22" width="210" height="176" fill="#F7E9DE"/>
+              <text x="125" y="88" text-anchor="middle" font-size="17" font-weight="700" fill="#BE653B">优化前：单列索引</text>
+              <text x="125" y="114" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">(tenant_id)</text>
+              <text x="125" y="142" text-anchor="middle" font-size="13" fill="#BE653B" font-weight="700">IO + CPU 双重放大</text>
+
+              <!-- 节点 1 -->
+              <rect x="260" y="48" width="250" height="124" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="385" y="76" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33">1. Index Scan 定位</text>
+              <text x="385" y="102" text-anchor="middle" class="svg-mono" font-size="12.5" fill="#245A6B">Index Cond: tenant_id = 42</text>
+              <rect x="280" y="116" width="210" height="38" fill="#1E4B5A"/>
+              <text x="385" y="140" text-anchor="middle" class="svg-mono" font-size="14" fill="#FFFFFF" font-weight="700">命中候选：1,000,000 行</text>
+
+              <line x1="510" y1="110" x2="565" y2="110" stroke="#BE653B" stroke-width="2.5"/>
+              <polygon points="558,104 568,110 558,116" fill="#BE653B"/>
+
+              <!-- 节点 2 -->
+              <rect x="570" y="48" width="320" height="124" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="730" y="76" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33">2. 回表读取 Heap Blocks</text>
+              <text x="730" y="102" text-anchor="middle" font-size="13" fill="#46585F">读取数万个 8KB 数据页并做可见性检查</text>
+              <rect x="590" y="116" width="280" height="38" fill="#BE653B"/>
+              <text x="730" y="140" text-anchor="middle" class="svg-mono" font-size="13.5" fill="#FFFFFF" font-weight="700">Buffers: shared hit/read 剧增</text>
+
+              <line x1="890" y1="110" x2="945" y2="110" stroke="#BE653B" stroke-width="2.5"/>
+              <polygon points="938,104 948,110 938,116" fill="#BE653B"/>
+
+              <!-- 节点 3 -->
+              <rect x="950" y="48" width="405" height="124" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="1152" y="76" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33">3. 执行器 Filter 后置筛除</text>
+              <text x="1152" y="100" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">status='paid' AND created_at &gt;= ...</text>
+              <text x="1152" y="128" text-anchor="middle" class="svg-mono" font-size="13.5" fill="#BE653B" font-weight="700">Rows Removed by Filter: 999,900</text>
+              <text x="1152" y="152" text-anchor="middle" font-size="13" fill="#2F7A66" font-weight="700">最终仅输出：100 行（有效率 0.01%）</text>
+
+              <!-- 下半部分：优化后（复合索引 / 部分索引前移） -->
+              <rect x="20" y="226" width="1360" height="176" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="20" y="226" width="210" height="176" fill="#E5EFF0"/>
+              <text x="125" y="286" text-anchor="middle" font-size="17" font-weight="700" fill="#2F7A66">优化后：复合/部分索引</text>
+              <text x="125" y="312" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#245A6B">(tenant_id, status, created_at)</text>
+              <text x="125" y="340" text-anchor="middle" font-size="13" fill="#2F7A66" font-weight="700">谓词前移至索引树</text>
+
+              <!-- 节点 1 -->
+              <rect x="260" y="252" width="380" height="124" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="450" y="280" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33">1. Index Cond 精准定位区间</text>
+              <text x="450" y="304" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B">tenant_id=42 AND status='paid' AND created_at&gt;=...</text>
+              <rect x="285" y="318" width="330" height="38" fill="#2F7A66"/>
+              <text x="450" y="342" text-anchor="middle" class="svg-mono" font-size="14" fill="#FFFFFF" font-weight="700">索引直接锁定候选：100 行</text>
+
+              <line x1="640" y1="314" x2="710" y2="314" stroke="#2F7A66" stroke-width="2.5"/>
+              <polygon points="703,308 713,314 703,320" fill="#2F7A66"/>
+
+              <!-- 节点 2 -->
+              <rect x="715" y="252" width="310" height="124" fill="#EBF1EE" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="870" y="280" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33">2. 最小化回表读取</text>
+              <text x="870" y="306" text-anchor="middle" font-size="13" fill="#46585F">仅访问包含这 100 行的极少量页面</text>
+              <rect x="740" y="320" width="260" height="36" fill="#245A6B"/>
+              <text x="870" y="343" text-anchor="middle" class="svg-mono" font-size="13" fill="#FFFFFF">Buffers 访问量下降 99%+</text>
+
+              <line x1="1025" y1="314" x2="1095" y2="314" stroke="#2F7A66" stroke-width="2.5"/>
+              <polygon points="1088,308 1098,314 1088,320" fill="#2F7A66"/>
+
+              <!-- 节点 3 -->
+              <rect x="1100" y="252" width="255" height="124" fill="#E5EFF0" stroke="#2F7A6B" stroke-width="1.5"/>
+              <text x="1227" y="284" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33">3. 零后置过滤开销</text>
+              <text x="1227" y="314" text-anchor="middle" class="svg-mono" font-size="13.5" fill="#2F7A6B" font-weight="700">Filter: 无（或极少）</text>
+              <text x="1227" y="342" text-anchor="middle" font-size="13" fill="#46585F">部分索引可进一步剔除历史归档行</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">如果条件已经写进了 Index Cond，为什么执行计划里还会冒出「Recheck Cond」并丢弃大量行？</span>
+          </div>
+          <div class="page-meta">
+            <div>SOURCE: costsize.c · cost_index()</div>
+            <div class="page-num">04 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 05: 索引近似性、Boundbox 与 Recheck ==================== -->
+      <section class="slide" data-index="4">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">04 · APPROXIMATE INDEX &amp; RECHECK</span>
+          <span>核心原理 3.2：索引返回的是「候选」，不是「最终真相」</span>
+        </div>
+        <h2 class="slide-title">索引 Boundbox 与 Recheck：为什么命中索引还要回表重检？</h2>
+        <p class="slide-lead">
+          并非所有索引都存储原始键值的完整信息。GiST 空间边界框、Hash 哈希码、Bloom 签名以及 Bitmap 压缩页，都天然存在假阳性（False Positive），必须依赖执行器重检保证正确性。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 左侧：四类 Lossy 索引机制矩阵 -->
+              <rect x="20" y="20" width="760" height="390" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="20" y="20" width="760" height="36" fill="#1E4B5A"/>
+              <text x="38" y="43" class="svg-mono" font-size="12.5" fill="#FFFFFF" font-weight="700">FOUR LOSSY MECHANISMS · 触发 Recheck Cond 的四大索引根源</text>
+
+              <!-- 1. GiST Boundbox -->
+              <rect x="38" y="72" width="352" height="152" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="54" y="98" font-size="16" font-weight="700" fill="#1B2B33">1. GiST 几何边界框（Boundbox）</text>
+              <text x="54" y="122" font-size="13" fill="#46585F">索引仅存储多边形的最小外接矩形（MBR）。</text>
+              <text x="54" y="144" font-size="13" fill="#46585F">外接矩形相交（Overlap）≠ 真实多边形包含，</text>
+              <text x="54" y="166" font-size="13" fill="#46585F">必须回表取出完整几何对象做精确判定。</text>
+              <text x="54" y="202" class="svg-mono" font-size="12" fill="#245A6B" font-weight="700">典型特征：候选矩形重叠，实际图形未命中</text>
+
+              <!-- 2. Hash Index -->
+              <rect x="410" y="72" width="352" height="152" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="426" y="98" font-size="16" font-weight="700" fill="#1B2B33">2. Hash 索引（始终 Lossy）</text>
+              <text x="426" y="122" font-size="13" fill="#46585F">源码 hash.c 明确标注：索引桶中仅保存 32 位</text>
+              <text x="426" y="144" font-size="13" fill="#46585F">hash code 而非原始键值，存在哈希碰撞可能。</text>
+              <text x="426" y="166" font-size="13" fill="#46585F">因此扫描描述符强制设置 xs_recheck = true。</text>
+              <text x="426" y="202" class="svg-mono" font-size="12" fill="#245A6B" font-weight="700">源码铁律：Hash Scan 永远触发回表重检</text>
+
+              <!-- 3. Bloom Signature -->
+              <rect x="38" y="240" width="352" height="152" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="54" y="266" font-size="16" font-weight="700" fill="#1B2B33">3. Bloom 索引多列位图签名</text>
+              <text x="54" y="290" font-size="13" fill="#46585F">将多列哈希映射至固定长度的位签名（Signature）。</text>
+              <text x="54" y="312" font-size="13" fill="#46585F">不同列组合可能置位相同的比特位（假阳性）。</text>
+              <text x="54" y="334" font-size="13" fill="#46585F">官方文档示例曾出现高达 2300 行重检被丢弃。</text>
+              <text x="54" y="370" class="svg-mono" font-size="12" fill="#BE653B" font-weight="700">权衡：节省多列组合索引空间，换取重检开销</text>
+
+              <!-- 4. Bitmap Lossy Page -->
+              <rect x="410" y="240" width="352" height="152" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="426" y="266" font-size="16" font-weight="700" fill="#1B2B33">4. Bitmap 内存溢出退化（Lossy Page）</text>
+              <text x="426" y="290" font-size="13" fill="#46585F">当 TIDBitmap 内存超过 work_mem 上限时，</text>
+              <text x="426" y="312" font-size="13" fill="#46585F">精准的「行偏移数组」被压缩为「整页标记位」。</text>
+              <text x="426" y="334" font-size="13" fill="#46585F">扫描该页时必须遍历页内全部 Tuple 重新校验。</text>
+              <text x="426" y="370" class="svg-mono" font-size="12" fill="#BE653B" font-weight="700">信号：Heap Blocks: exact=xxx lossy=yyy</text>
+
+              <!-- 右侧：GiST Boundbox 几何直观示意图 -->
+              <rect x="810" y="20" width="570" height="390" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="810" y="20" width="570" height="36" fill="#245A6B"/>
+              <text x="828" y="43" class="svg-mono" font-size="12.5" fill="#FFFFFF" font-weight="700">VISUAL PROOF · GiST 外接矩形（Boundbox）假阳性原理</text>
+
+              <!-- 坐标系背景 -->
+              <rect x="835" y="75" width="520" height="225" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              
+              <!-- 查询目标区域 (Query Box) -->
+              <rect x="875" y="110" width="170" height="120" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <text x="960" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#245A6B">查询条件区域 Q</text>
+
+              <!-- 候选多边形的 Bounding Box (虚线橙框，与查询框相交) -->
+              <rect x="1005" y="135" width="250" height="135" fill="none" stroke="#BE653B" stroke-width="2" stroke-dasharray="6 4"/>
+              <text x="1135" y="156" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#BE653B" font-weight="700">候选外接矩形 MBR（与 Q 相交！）</text>
+
+              <!-- 真实多边形（斜向位于右下，完全未接触 Q） -->
+              <polygon points="1115,180 1235,175 1220,255 1095,245" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+              <text x="1165" y="220" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33">真实多边形 P</text>
+
+              <!-- 底部说明栏 -->
+              <rect x="835" y="314" width="520" height="80" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="850" y="338" font-size="13.5" font-weight="700" fill="#1B2B33">执行器分步动作（nodeIndexscan.c）：</text>
+              <text x="850" y="360" font-size="13" fill="#245A6B">① 索引阶段：MBR 与 Q 相交 → 判定「可能命中」，返回候选 TID。</text>
+              <text x="850" y="382" font-size="13" fill="#BE653B">② 回表重检：xs_recheck = true → 取出 P 精确计算，发现未相交，计入 Recheck 丢弃！</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">除了几何 Boundbox，在大规模数据查询中最常触发 Lossy Recheck 的正是 Bitmap Heap Scan，它是如何运作的？</span>
+          </div>
+          <div class="page-meta">
+            <div>SOURCE: nodeIndexscan.c · hash.c</div>
+            <div class="page-num">05 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 06: Bitmap Heap Scan 与 Lossy Page 动画 ==================== -->
+      <section class="slide" data-index="5">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">05 · BITMAP HEAP SCAN &amp; WORK_MEM</span>
+          <span>执行器解剖：nodeBitmapHeapscan.c 的两阶段扫描与内存退化</span>
+        </div>
+        <h2 class="slide-title">Bitmap Scan 的双刃剑：把随机 IO 变顺序，却怕内存退化</h2>
+        <p class="slide-lead">
+          Bitmap Index Scan 先在内存中构建 TIDBitmap 将乱序指针按页号排序；但一旦工作内存不足，exact 精确行记录就会坍缩为 lossy 整页扫描。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <!-- 交互控制条 -->
+          <div class="anim-controls">
+            <label>内存状态切换：</label>
+            <button id="btn-bm-exact" class="active-btn" onclick="setBitmapMode('exact')">Exact 模式（work_mem 充足）</button>
+            <button id="btn-bm-lossy" onclick="setBitmapMode('lossy')">Lossy 模式（work_mem 溢出）</button>
+          </div>
+
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 阶段 1：Bitmap Index Scan -->
+              <rect x="20" y="55" width="330" height="330" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="55" width="330" height="36" fill="#245A6B"/>
+              <text x="36" y="78" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STAGE 1 · Bitmap Index Scan</text>
+              <text x="36" y="116" font-size="15" font-weight="700" fill="#1B2B33">收集散乱索引指针（TID）</text>
+              <text x="36" y="140" font-size="13" fill="#46585F">避免立即随机回表，先提取行指针：</text>
+
+              <rect x="36" y="160" width="298" height="34" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="50" y="182" class="svg-mono" font-size="13" fill="#1B2B33">TID (Block 102, Offset 4)</text>
+              <rect x="36" y="202" width="298" height="34" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="50" y="224" class="svg-mono" font-size="13" fill="#1B2B33">TID (Block 102, Offset 19)</text>
+              <rect x="36" y="244" width="298" height="34" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="50" y="266" class="svg-mono" font-size="13" fill="#1B2B33">TID (Block 508, Offset 2)</text>
+              <rect x="36" y="286" width="298" height="34" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="50" y="308" class="svg-mono" font-size="13" fill="#1B2B33">... 持续插入 TIDBitmap 结构</text>
+
+              <text x="36" y="356" class="svg-mono" font-size="12" fill="#2F7A66" font-weight="700">优势：将随机磁盘寻道整理为页号顺序</text>
+
+              <!-- 连接箭头 1->2 -->
+              <line x1="350" y1="220" x2="415" y2="220" stroke="#245A6B" stroke-width="2.5"/>
+              <polygon points="409,214 419,220 409,226" fill="#245A6B"/>
+
+              <!-- 阶段 2：TIDBitmap 内存结构 -->
+              <rect x="420" y="55" width="440" height="330" fill="#FFFFFF" stroke="#1E4B5A" stroke-width="2"/>
+              <rect x="420" y="55" width="440" height="36" fill="#1E4B5A"/>
+              <text x="436" y="78" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STAGE 2 · TIDBitmap 内存状态（受 work_mem 限制）</text>
+
+              <text x="440" y="118" font-size="16" font-weight="700" fill="#1B2B33" id="bm-title">当前状态：Exact 精确行位图</text>
+              <text x="440" y="142" font-size="13" fill="#46585F" id="bm-desc">内存足够记录每个数据页内的具体行偏移号（Offset Array）。</text>
+
+              <!-- 模拟数据页位图可视化 -->
+              <rect x="440" y="162" width="400" height="145" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="456" y="186" class="svg-mono" font-size="12.5" font-weight="700" fill="#1B2B33">Heap Block #102（共 80 条 Tuple）</text>
+              
+              <!-- 8 个槽位示意图 -->
+              <g id="bm-slots">
+                <rect x="456" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+                <text x="477" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#1</text>
+
+                <rect x="504" y="202" width="42" height="42" fill="#2F7A66" stroke="#1E4B5A" stroke-width="1.5"/>
+                <text x="525" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">#4</text>
+
+                <rect x="552" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+                <text x="573" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#8</text>
+
+                <rect x="600" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+                <text x="621" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#12</text>
+
+                <rect x="648" y="202" width="42" height="42" fill="#2F7A66" stroke="#1E4B5A" stroke-width="1.5"/>
+                <text x="669" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">#19</text>
+
+                <rect x="696" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+                <text x="717" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#35</text>
+
+                <rect x="744" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+                <text x="765" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#61</text>
+
+                <rect x="792" y="202" width="32" height="42" fill="#EBF1EE" stroke="#89938F"/>
+                <text x="808" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">..</text>
+              </g>
+
+              <text x="456" y="274" class="svg-mono" font-size="12.5" fill="#2F7A66" font-weight="700" id="bm-slot-note">精确指针：仅提取 #4 与 #19 两条记录，其余 78 条跳过！</text>
+
+              <rect x="440" y="320" width="400" height="46" fill="#E5EFF0" stroke="#245A6B" stroke-width="1" id="bm-plan-box"/>
+              <text x="456" y="348" class="svg-mono" font-size="13" fill="#1B2B33" font-weight="700" id="bm-plan-line">Heap Blocks: exact=2450 lossy=0</text>
+
+              <!-- 连接箭头 2->3 -->
+              <line x1="860" y1="220" x2="925" y2="220" stroke="#245A6B" stroke-width="2.5" id="bm-arrow-2"/>
+              <polygon points="919,214 929,220 919,226" fill="#245A6B" id="bm-arrow-2-head"/>
+
+              <!-- 阶段 3：Bitmap Heap Scan 执行结果 -->
+              <rect x="930" y="55" width="450" height="330" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5" id="bm-stage3-box"/>
+              <rect x="930" y="55" width="450" height="36" fill="#2F7A66" id="bm-stage3-header"/>
+              <text x="946" y="78" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STAGE 3 · Bitmap Heap Scan 执行器行为</text>
+
+              <text x="950" y="118" font-size="16" font-weight="700" fill="#1B2B33" id="bm-s3-title">按页顺序读取 + 精准定位</text>
+              <text x="950" y="146" font-size="13.5" fill="#46585F" id="bm-s3-line1">• table_scan_bitmap_next_tuple() 返回 recheck = false</text>
+              <text x="950" y="174" font-size="13.5" fill="#46585F" id="bm-s3-line2">• 无需对页内无关行执行 bitmapqualorig 表达式计算</text>
+              <text x="950" y="202" font-size="13.5" fill="#46585F" id="bm-s3-line3">• Rows Removed by Index Recheck = 0</text>
+
+              <rect x="950" y="232" width="410" height="134" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="966" y="258" font-size="14" font-weight="700" fill="#1B2B33">工程调优警告（避坑第 3 条）：</text>
+              <text x="966" y="284" font-size="13" fill="#46585F">调大 work_mem 可以把 lossy 变回 exact，降低页内 CPU</text>
+              <text x="966" y="306" font-size="13" fill="#46585F">重检；但如果索引候选页本身多达数万页，Heap IO 依然</text>
+              <text x="966" y="328" font-size="13" fill="#BE653B" font-weight="700">不会减少——根本解法仍是收窄复合索引条件！</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">当业务查询中出现多个 OR 条件时，Bitmap 合并路径是如何建立或突然崩溃的？</span>
+          </div>
+          <div class="page-meta">
+            <div>SOURCE: nodeBitmapHeapscan.c</div>
+            <div class="page-num">06 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 07: OR 条件与 CPU 额外运算 ==================== -->
+      <section class="slide" data-index="6">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">06 · OR CLAUSE &amp; CPU AMPLIFICATION</span>
+          <span>核心原理 3.3：indxpath.c 的「全分支可索引」铁律</span>
+        </div>
+        <h2 class="slide-title">OR 条件与额外 CPU：一颗老鼠屎如何毁掉整条索引路径</h2>
+        <p class="slide-lead">
+          generate_bitmap_or_paths() 要求 OR 的每一个分支（arm）都必须匹配至少一个可用索引路径。只要混入一个不可索引函数或低选择性分支，整条查询就会退化为全表/宽范围扫描加逐行 OR 计算。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 左侧：理想形态 BitmapOr -->
+              <rect x="20" y="20" width="665" height="390" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="20" y="20" width="665" height="36" fill="#2F7A66"/>
+              <text x="38" y="43" class="svg-mono" font-size="12.5" fill="#FFFFFF" font-weight="700">PATH A · 所有分支均有索引 → 生成 BitmapOr 合并路径</text>
+
+              <rect x="40" y="74" width="625" height="46" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+              <text x="56" y="102" class="svg-mono" font-size="13" fill="#1B2B33">WHERE buyer_phone = '13800000000' OR buyer_email = 'a@b.com'</text>
+
+              <!-- 分支 1 -->
+              <rect x="40" y="146" width="295" height="74" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="187" y="174" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">Arm 1: idx_buyer_phone</text>
+              <text x="187" y="198" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B">Bitmap Index Scan (命中 2 行)</text>
+
+              <!-- 分支 2 -->
+              <rect x="370" y="146" width="295" height="74" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="517" y="174" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">Arm 2: idx_buyer_email</text>
+              <text x="517" y="198" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B">Bitmap Index Scan (命中 1 行)</text>
+
+              <!-- 直角汇合线 -->
+              <line x1="187" y1="220" x2="187" y2="246" stroke="#2F7A66" stroke-width="2"/>
+              <line x1="517" y1="220" x2="517" y2="246" stroke="#2F7A66" stroke-width="2"/>
+              <line x1="187" y1="246" x2="517" y2="246" stroke="#2F7A66" stroke-width="2"/>
+              <line x1="352" y1="246" x2="352" y2="270" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="346,264 358,264 352,272" fill="#2F7A66"/>
+
+              <!-- BitmapOr 节点 -->
+              <rect x="140" y="272" width="424" height="52" fill="#2F7A6B"/>
+              <text x="352" y="303" text-anchor="middle" class="svg-mono" font-size="14" fill="#FFFFFF" font-weight="700">BitmapOr → 位图并集（Union）→ 精准回表 3 行</text>
+
+              <text x="40" y="362" font-size="13.5" fill="#1B2B33" font-weight="700">源码约束（indxpath.c）：</text>
+              <text x="40" y="384" font-size="13" fill="#46585F">generate_bitmap_or_paths() 必须为 OR 的每个 arm 匹配至少一个索引路径。</text>
+
+              <!-- 右侧：退化形态 Seq Scan + Filter -->
+              <rect x="715" y="20" width="665" height="390" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="715" y="20" width="665" height="36" fill="#BE653B"/>
+              <text x="733" y="43" class="svg-mono" font-size="12.5" fill="#FFFFFF" font-weight="700">PATH B · 混入不可索引分支 → 整体退化为扫描 + 逐行计算</text>
+
+              <rect x="735" y="74" width="625" height="46" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="751" y="102" class="svg-mono" font-size="12.5" fill="#1B2B33">WHERE buyer_phone = '...' OR lower(extra-&gt;&gt;'ch') = 'wx'</text>
+
+              <!-- 分支 1 -->
+              <rect x="735" y="146" width="295" height="74" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="882" y="174" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">Arm 1: 有索引可用</text>
+              <text x="882" y="198" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B">idx_buyer_phone 就绪</text>
+
+              <!-- 分支 2 (阻塞) -->
+              <rect x="1065" y="146" width="295" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+              <text x="1212" y="174" text-anchor="middle" font-size="14" font-weight="700" fill="#BE653B">Arm 2: 无表达式索引！</text>
+              <text x="1212" y="198" text-anchor="middle" class="svg-mono" font-size="12" fill="#BE653B">BitmapOr 构造直接中止</text>
+
+              <line x1="1047" y1="220" x2="1047" y2="268" stroke="#BE653B" stroke-width="2.5"/>
+              <polygon points="1041,262 1053,262 1047,270" fill="#BE653B"/>
+
+              <rect x="775" y="272" width="545" height="58" fill="#BE653B"/>
+              <text x="1047" y="297" text-anchor="middle" font-size="14.5" fill="#FFFFFF" font-weight="700">退化为 Seq Scan / 宽范围扫描 + 逐行 Filter</text>
+              <text x="1047" y="319" text-anchor="middle" class="svg-mono" font-size="12" fill="#F7E9DE">每行都要解析 JSONB + 调用 lower() + 评估多个 OR 分支</text>
+
+              <text x="735" y="362" font-size="13.5" fill="#1B2B33" font-weight="700">工程破局手段：</text>
+              <text x="735" y="384" font-size="13" fill="#46585F">① 为 Arm 2 补齐表达式索引；或 ② 改写为 UNION / 互斥 UNION ALL 拆分路径。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">面对后置过滤、Bitmap Recheck、复合索引、部分索引与 OR 拆分，如何在不同业务场景下做横向取舍？</span>
+          </div>
+          <div class="page-meta">
+            <div>SOURCE: indxpath.c · generate_bitmap_or_paths()</div>
+            <div class="page-num">07 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 08: 五大技术方案横向对比 ==================== -->
+      <section class="slide" data-index="7">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">07 · ARCHITECTURAL TRADE-OFFS</span>
+          <span>横向评估：没有银弹，只有读写代价与候选缩窄的平衡</span>
+        </div>
+        <h2 class="slide-title">五大执行策略横向对比：IO、CPU 与写入维护的权衡矩阵</h2>
+        <p class="slide-lead">
+          索引条件越早缩小候选集，查询期 IO 与 CPU 越低；但索引越多、表达式越复杂，写入放大、索引膨胀与优化器规划成本就越高。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 表头 -->
+              <rect x="20" y="18" width="1360" height="44" fill="#1E4B5A"/>
+              <text x="40" y="45" font-size="14" font-weight="700" fill="#FFFFFF">评估维度</text>
+              <text x="210" y="45" font-size="14" font-weight="700" fill="#FFFFFF">后置过滤 Filter</text>
+              <text x="445" y="45" font-size="14" font-weight="700" fill="#FFFFFF">Bitmap / Recheck</text>
+              <text x="685" y="45" font-size="14" font-weight="700" fill="#FFFFFF">精确复合 B-tree 索引</text>
+              <text x="935" y="45" font-size="14" font-weight="700" fill="#FFFFFF">表达式 / 部分索引</text>
+              <text x="1175" y="45" font-size="14" font-weight="700" fill="#FFFFFF">SQL 拆分 OR (UNION)</text>
+
+              <!-- 纵向分隔线 -->
+              <line x1="195" y1="18" x2="195" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="430" y1="18" x2="430" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="670" y1="18" x2="670" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="920" y1="18" x2="920" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="1160" y1="18" x2="1160" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Row 1: IO 影响 -->
+              <rect x="20" y="62" width="1360" height="70" fill="#FFFFFF"/>
+              <text x="40" y="102" font-size="14" font-weight="700" fill="#1B2B33">查询 IO 影响</text>
+              <text x="210" y="94" font-size="13" fill="#BE653B" font-weight="700">不减少已扫描页</text>
+              <text x="210" y="116" font-size="12.5" fill="#46585F">候选宽则发生大量回表</text>
+              <text x="445" y="94" font-size="13" fill="#245A6B" font-weight="700">整理随机 IO 为顺序</text>
+              <text x="445" y="116" font-size="12.5" fill="#46585F">假阳性高时回表页仍多</text>
+              <text x="685" y="94" font-size="13" fill="#2F7A66" font-weight="700">最直接削减 Heap IO</text>
+              <text x="685" y="116" font-size="12.5" fill="#46585F">索引树内直接锁定窄区间</text>
+              <text x="935" y="94" font-size="13" fill="#2F7A66" font-weight="700">显著降低扫描与索引体积</text>
+              <text x="935" y="116" font-size="12.5" fill="#46585F">依赖谓词与表达式严格匹配</text>
+              <text x="1175" y="94" font-size="13" fill="#245A6B" font-weight="700">各分支独立走窄索引</text>
+              <text x="1175" y="116" font-size="12.5" fill="#46585F">避免单分支拖垮退化全扫</text>
+              <line x1="20" y1="132" x2="1380" y2="132" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Row 2: CPU 影响 -->
+              <rect x="20" y="132" width="1360" height="70" fill="#F7F6F2"/>
+              <text x="40" y="172" font-size="14" font-weight="700" fill="#1B2B33">查询 CPU 影响</text>
+              <text x="210" y="164" font-size="13" fill="#BE653B" font-weight="700">每个候选均计算条件</text>
+              <text x="210" y="186" font-size="12.5" fill="#46585F">函数与 OR 放大尤为明显</text>
+              <text x="445" y="164" font-size="13" fill="#AE8A3E" font-weight="700">候选需算 Recheck Cond</text>
+              <text x="445" y="186" font-size="12.5" fill="#46585F">Lossy 页触发整页行重检</text>
+              <text x="685" y="164" font-size="13" fill="#2F7A66" font-weight="700">极低（仅索引键比较）</text>
+              <text x="685" y="186" font-size="12.5" fill="#46585F">几乎无执行器层表达式空转</text>
+              <text x="935" y="164" font-size="13" fill="#2F7A66" font-weight="700">查询期免去实时函数求值</text>
+              <text x="935" y="186" font-size="12.5" fill="#46585F">计算成本转移至写入阶段</text>
+              <text x="1175" y="164" font-size="13" fill="#AE8A3E" font-weight="700">多次子查询 + 去重排序</text>
+              <text x="1175" y="186" font-size="12.5" fill="#46585F">互斥分支用 UNION ALL 省去重</text>
+              <line x1="20" y1="202" x2="1380" y2="202" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Row 3: 写入与空间代价 -->
+              <rect x="20" y="202" width="1360" height="70" fill="#FFFFFF"/>
+              <text x="40" y="242" font-size="14" font-weight="700" fill="#1B2B33">写入与维护代价</text>
+              <text x="210" y="234" font-size="13" fill="#2F7A66" font-weight="700">零额外索引写入开销</text>
+              <text x="210" y="256" font-size="12.5" fill="#46585F">不增加 WAL 与页分裂压力</text>
+              <text x="445" y="234" font-size="13" fill="#46585F">复用现有索引，写入中立</text>
+              <text x="445" y="256" font-size="12.5" fill="#46585F">Bloom/GiST 维护成本较高</text>
+              <text x="685" y="234" font-size="13" fill="#BE653B" font-weight="700">中～高（索引变宽变大）</text>
+              <text x="685" y="256" font-size="12.5" fill="#46585F">阻碍 HOT 更新，增加膨胀</text>
+              <text x="935" y="234" font-size="13" fill="#245A6B" font-weight="700">部分索引可大幅降低写入</text>
+              <text x="935" y="256" font-size="12.5" fill="#46585F">非目标数据不进入索引树</text>
+              <text x="1175" y="234" font-size="13" fill="#2F7A66" font-weight="700">零额外索引写入代价</text>
+              <text x="1175" y="256" font-size="12.5" fill="#46585F">纯 SQL 层改写换取执行路径</text>
+              <line x1="20" y1="272" x2="1380" y2="272" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Row 4: 计划稳定性 -->
+              <rect x="20" y="272" width="1360" height="70" fill="#F7F6F2"/>
+              <text x="40" y="312" font-size="14" font-weight="700" fill="#1B2B33">执行计划稳定性</text>
+              <text x="210" y="304" font-size="13" fill="#46585F">结构简单但数据涨后易慢</text>
+              <text x="210" y="326" font-size="12.5" fill="#46585F">受数据倾斜影响剧烈</text>
+              <text x="445" y="304" font-size="13" fill="#AE8A3E" font-weight="700">受 work_mem 与统计影响</text>
+              <text x="445" y="326" font-size="12.5" fill="#46585F">并发高时易退化为 Lossy</text>
+              <text x="685" y="304" font-size="13" fill="#2F7A66" font-weight="700">高（数据分布稳定时）</text>
+              <text x="685" y="326" font-size="12.5" fill="#46585F">支持索引有序输出免排序</text>
+              <text x="935" y="304" font-size="13" fill="#AE8A3E" font-weight="700">中等（依赖 SQL 规范）</text>
+              <text x="935" y="326" font-size="12.5" fill="#46585F">写法微调即可能失配回退</text>
+              <text x="1175" y="304" font-size="13" fill="#2F7A66" font-weight="700">高（人工锁定分支路径）</text>
+              <text x="1175" y="326" font-size="12.5" fill="#46585F">但 SQL 复杂度与分页变难</text>
+              <line x1="20" y1="342" x2="1380" y2="342" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Row 5: 适用与禁忌 -->
+              <rect x="20" y="342" width="1360" height="70" fill="#FFFFFF"/>
+              <text x="40" y="382" font-size="14" font-weight="700" fill="#1B2B33">最佳适用场景</text>
+              <text x="210" y="374" font-size="13" fill="#1B2B33">小表、低频、候选本就极少</text>
+              <text x="210" y="396" font-size="12.5" fill="#BE653B">忌：百万候选后筛百行</text>
+              <text x="445" y="374" font-size="13" fill="#1B2B33">多单列索引组合、空间/全文</text>
+              <text x="445" y="396" font-size="12.5" fill="#BE653B">忌：假阳性极高且内存受限</text>
+              <text x="685" y="374" font-size="13" fill="#1B2B33">高频 OLTP 等值 + 范围查询</text>
+              <text x="685" y="396" font-size="12.5" fill="#BE653B">忌：写多读少或塞入低区分列</text>
+              <text x="935" y="374" font-size="13" fill="#1B2B33">JSON固定路径、活跃状态子集</text>
+              <text x="935" y="396" font-size="12.5" fill="#BE653B">忌：查询条件动态多变</text>
+              <text x="1175" y="374" font-size="13" fill="#1B2B33">OR 分支高度异构、选择性悬殊</text>
+              <text x="1175" y="396" font-size="12.5" fill="#BE653B">忌：分支重叠大且无法去重</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">在生产环境中，如何用一套标准化的工程闭环来定位放大源并验证优化收益？</span>
+          </div>
+          <div class="page-meta">
+            <div>ARCHITECTURAL MATRIX</div>
+            <div class="page-num">08 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 09: 诊断闭环与可验证指标 ==================== -->
+      <section class="slide" data-index="8">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">08 · DIAGNOSTIC CLOSED LOOP</span>
+          <span>工程方法论：从 EXPLAIN 证据到可量化验收</span>
+        </div>
+        <h2 class="slide-title">IO &amp; CPU 放大的五步诊断闭环与验收标准</h2>
+        <p class="slide-lead">
+          优化目标永远不是「执行计划里出现了 Index Scan」，而是可量化验证的候选行数下降、Buffer 读写比例收敛与写入成本可控。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 顶部五步闭环流 -->
+              <!-- Step 1 -->
+              <rect x="20" y="35" width="240" height="175" fill="#FFFFFF" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="20" y="35" width="240" height="34" fill="#1E4B5A"/>
+              <text x="140" y="57" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STEP 01 · 采集真实基线</text>
+              <text x="36" y="94" font-size="14" font-weight="700" fill="#1B2B33">开启全量执行计划</text>
+              <text x="36" y="118" class="svg-mono" font-size="11.5" fill="#245A6B">EXPLAIN (ANALYZE, BUFFERS)</text>
+              <text x="36" y="144" font-size="12.5" fill="#46585F">禁止仅凭预估成本下结论，</text>
+              <text x="36" y="164" font-size="12.5" fill="#46585F">必须在接近生产分布的数据</text>
+              <text x="36" y="184" font-size="12.5" fill="#46585F">规模下观测实际行数与页数。</text>
+
+              <line x1="260" y1="122" x2="298" y2="122" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="292,116 301,122 292,128" fill="#245A6B"/>
+
+              <!-- Step 2 -->
+              <rect x="303" y="35" width="240" height="175" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="303" y="35" width="240" height="34" fill="#245A6B"/>
+              <text x="423" y="57" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STEP 02 · 定位放大层级</text>
+              <text x="319" y="94" font-size="14" font-weight="700" fill="#1B2B33">拆解丢弃行来源</text>
+              <text x="319" y="118" class="svg-mono" font-size="11.5" fill="#BE653B">Removed by Filter / Recheck</text>
+              <text x="319" y="144" font-size="12.5" fill="#46585F">判断究竟是 Index Cond 过宽</text>
+              <text x="319" y="164" font-size="12.5" fill="#46585F">导致回表过多，还是 Lossy</text>
+              <text x="319" y="184" font-size="12.5" fill="#46585F">Bitmap 与表达式算力瓶颈。</text>
+
+              <line x1="543" y1="122" x2="581" y2="122" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="575,116 584,122 575,128" fill="#245A6B"/>
+
+              <!-- Step 3 -->
+              <rect x="586" y="35" width="240" height="175" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="586" y="35" width="240" height="34" fill="#BE653B"/>
+              <text x="706" y="57" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STEP 03 · 匹配精准动作</text>
+              <text x="602" y="94" font-size="14" font-weight="700" fill="#1B2B33">谓词前移或路径隔离</text>
+              <text x="602" y="118" class="svg-mono" font-size="11.5" fill="#245A6B">Composite / Partial / Expr</text>
+              <text x="602" y="144" font-size="12.5" fill="#46585F">按「等值→范围→排序」建复</text>
+              <text x="602" y="164" font-size="12.5" fill="#46585F">合索引；异构 OR 改写拆分；</text>
+              <text x="602" y="184" font-size="12.5" fill="#46585F">多列关联补充扩展统计信息。</text>
+
+              <line x1="826" y1="122" x2="864" y2="122" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="858,116 867,122 858,128" fill="#245A6B"/>
+
+              <!-- Step 4 -->
+              <rect x="869" y="35" width="240" height="175" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="869" y="35" width="240" height="34" fill="#2F7A66"/>
+              <text x="989" y="57" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STEP 04 · 量化指标复测</text>
+              <text x="885" y="94" font-size="14" font-weight="700" fill="#1B2B33">对比优化前后四项指标</text>
+              <text x="885" y="118" class="svg-mono" font-size="11.5" fill="#2F7A6B">Buffers &amp; Lossy &amp; Rows</text>
+              <text x="885" y="144" font-size="12.5" fill="#46585F">核验 shared read/hit 与返回</text>
+              <text x="885" y="164" font-size="12.5" fill="#46585F">行比例是否合理，actual 与</text>
+              <text x="885" y="184" font-size="12.5" fill="#46585F">estimated rows 是否收敛。</text>
+
+              <line x1="1109" y1="122" x2="1147" y2="122" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="1141,116 1150,122 1141,128" fill="#245A6B"/>
+
+              <!-- Step 5 -->
+              <rect x="1152" y="35" width="228" height="175" fill="#FFFFFF" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="1152" y="35" width="228" height="34" fill="#AE8A3E"/>
+              <text x="1266" y="57" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">STEP 05 · 评估系统副作用</text>
+              <text x="1168" y="94" font-size="14" font-weight="700" fill="#1B2B33">写入与维护成本审计</text>
+              <text x="1168" y="118" class="svg-mono" font-size="11.5" fill="#AE8A3E">TPS · WAL · Autovacuum</text>
+              <text x="1168" y="144" font-size="12.5" fill="#46585F">监控新增索引对写入延迟、</text>
+              <text x="1168" y="164" font-size="12.5" fill="#46585F">HOT 更新率及索引空间膨胀</text>
+              <text x="1168" y="184" font-size="12.5" fill="#46585F">的长期影响，形成持续巡检。</text>
+
+              <!-- 闭环反馈折线（底部从 Step 5 回到 Step 1） -->
+              <line x1="1266" y1="210" x2="1266" y2="232" stroke="#47808D" stroke-width="1.5" stroke-dasharray="5 3"/>
+              <line x1="1266" y1="232" x2="140" y2="232" stroke="#47808D" stroke-width="1.5" stroke-dasharray="5 3"/>
+              <line x1="140" y1="232" x2="140" y2="212" stroke="#47808D" stroke-width="1.5" stroke-dasharray="5 3"/>
+              <polygon points="135,217 145,217 140,210" fill="#47808D"/>
+              <text x="700" y="227" text-anchor="middle" class="svg-mono" font-size="11" fill="#47808D" background="#F1EFE9">CONTINUOUS GOVERNANCE · 随着业务数据量增长与倾斜演进周期性复检</text>
+
+              <!-- 底部：六大可验证验收指标卡 -->
+              <rect x="20" y="252" width="1360" height="156" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="38" y="278" font-size="15" font-weight="700" fill="#1B2B33">优化成功的六项硬性验收指标（Checklist）：</text>
+              <line x1="38" y1="288" x2="1362" y2="288" stroke="#D9D5CB" stroke-width="1"/>
+
+              <rect x="38" y="302" width="420" height="40" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="52" y="327" font-size="13" fill="#1B2B33">1. <tspan class="svg-mono" font-weight="700" fill="#245A6B">Rows Removed by Filter</tspan> 数量级下降</text>
+
+              <rect x="480" y="302" width="420" height="40" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="494" y="327" font-size="13" fill="#1B2B33">2. <tspan class="svg-mono" font-weight="700" fill="#245A6B">Rows Removed by Index Recheck</tspan> 显著收敛</text>
+
+              <rect x="922" y="302" width="440" height="40" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="936" y="327" font-size="13" fill="#1B2B33">3. <tspan class="svg-mono" font-weight="700" fill="#245A6B">Heap Blocks: lossy=...</tspan> 下降或归零</text>
+
+              <rect x="38" y="352" width="420" height="40" fill="#EBF1EE" stroke="#2F7A66" stroke-width="1"/>
+              <text x="52" y="377" font-size="13" fill="#1B2B33">4. <tspan class="svg-mono" font-weight="700" fill="#2F7A66">Buffers shared read/hit</tspan> 与返回行成正比</text>
+
+              <rect x="480" y="352" width="420" height="40" fill="#EBF1EE" stroke="#2F7A66" stroke-width="1"/>
+              <text x="494" y="377" font-size="13" fill="#1B2B33">5. <tspan class="svg-mono" font-weight="700" fill="#2F7A66">actual rows</tspan> 与优化器估算 rows 高度接近</text>
+
+              <rect x="922" y="352" width="440" height="40" fill="#EBF1EE" stroke="#2F7A66" stroke-width="1"/>
+              <text x="936" y="377" font-size="13" fill="#1B2B33">6. 查询耗时下降，且写入 TPS 与膨胀率在安全阈值内</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">理论与闭环已经清晰，接下来进入百万级订单表的三组实战演练 SQL 模板。</span>
+          </div>
+          <div class="page-meta">
+            <div>DIAGNOSTIC LOOP</div>
+            <div class="page-num">09 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 10: 实操 DEMO 三大验证实验 ==================== -->
+      <section class="slide" data-index="9">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">09 · HANDS-ON EXPERIMENTS</span>
+          <span>实操 DEMO：100 万行 demo_orders 表的三组标准对照实验</span>
+        </div>
+        <h2 class="slide-title">可复现的实操验证模板：后置过滤、表达式前移与 OR 拆分</h2>
+        <p class="slide-lead">
+          基于 100 万行模拟订单表（100 个租户、5% paid 状态、2% wechat 渠道），通过三组对照 DDL 与 EXPLAIN (ANALYZE, BUFFERS) 验证候选集收敛效果。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 实验 1 -->
+              <rect x="20" y="20" width="440" height="390" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="20" width="440" height="36" fill="#245A6B"/>
+              <text x="36" y="43" class="svg-mono" font-size="12.5" fill="#FFFFFF" font-weight="700">LAB 6.1 · 消除后置过滤放大</text>
+
+              <text x="36" y="80" font-size="14" font-weight="700" fill="#BE653B">对照组：单列索引（过滤后置）</text>
+              <rect x="36" y="90" width="408" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="48" y="112" class="svg-mono" font-size="11.5" fill="#1B2B33">CREATE INDEX idx_tenant ON demo_orders(tenant_id);</text>
+              <text x="48" y="132" class="svg-mono" font-size="11.5" fill="#46585F">WHERE tenant_id=42 AND status='paid'</text>
+              <text x="48" y="150" class="svg-mono" font-size="11.5" fill="#BE653B">  AND created_at &gt;= '2026-03-01'; -- 留Filter</text>
+
+              <line x1="240" y1="162" x2="240" y2="188" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="234,182 246,182 240,190" fill="#2F7A66"/>
+
+              <text x="36" y="210" font-size="14" font-weight="700" fill="#2F7A66">实验组：三列复合索引前移</text>
+              <rect x="36" y="220" width="408" height="74" fill="#E5EFF0" stroke="#2F7A6B" stroke-width="1"/>
+              <text x="48" y="242" class="svg-mono" font-size="11.5" fill="#1B2B33">CREATE INDEX idx_t_s_c ON demo_orders</text>
+              <text x="48" y="262" class="svg-mono" font-size="11.5" fill="#2F7A66" font-weight="700">  (tenant_id, status, created_at);</text>
+              <text x="48" y="282" class="svg-mono" font-size="11" fill="#46585F">-- 三个条件全部进入 Index Cond</text>
+
+              <rect x="36" y="308" width="408" height="86" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="48" y="330" font-size="13" font-weight="700" fill="#1B2B33">关键观察点：</text>
+              <text x="48" y="352" font-size="12.5" fill="#46585F">• status 与 created_at 是否从 Filter 消失</text>
+              <text x="48" y="374" font-size="12.5" fill="#46585F">• shared hit/read 缓冲区访问数是否大幅跌落</text>
+
+              <!-- 实验 2 -->
+              <rect x="480" y="20" width="440" height="390" fill="#FFFFFF" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="480" y="20" width="440" height="36" fill="#1E4B5A"/>
+              <text x="496" y="43" class="svg-mono" font-size="12.5" fill="#FFFFFF" font-weight="700">LAB 6.2 · JSONB 表达式过滤前移</text>
+
+              <text x="496" y="80" font-size="14" font-weight="700" fill="#BE653B">对照组：普通列索引无法吸收函数</text>
+              <rect x="496" y="90" width="408" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="508" y="114" class="svg-mono" font-size="11.5" fill="#1B2B33">SELECT * FROM demo_orders</text>
+              <text x="508" y="136" class="svg-mono" font-size="11.5" fill="#BE653B">WHERE lower(payload-&gt;&gt;'channel') = 'wechat';</text>
+
+              <line x1="700" y1="162" x2="700" y2="188" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="694,182 706,182 700,190" fill="#2F7A66"/>
+
+              <text x="496" y="210" font-size="14" font-weight="700" fill="#2F7A66">实验组：建立完全匹配的表达式索引</text>
+              <rect x="496" y="220" width="408" height="74" fill="#E5EFF0" stroke="#2F7A6B" stroke-width="1"/>
+              <text x="508" y="242" class="svg-mono" font-size="11.5" fill="#1B2B33">CREATE INDEX idx_channel_expr ON demo_orders</text>
+              <text x="508" y="262" class="svg-mono" font-size="11.5" fill="#2F7A66" font-weight="700">  ((lower(payload-&gt;&gt;'channel')));</text>
+              <text x="508" y="282" class="svg-mono" font-size="11" fill="#46585F">-- 双层括号语法，仅允许 IMMUTABLE 表达式</text>
+
+              <rect x="496" y="308" width="408" height="86" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="508" y="330" font-size="13" font-weight="700" fill="#1B2B33">设计边界：</text>
+              <text x="508" y="352" font-size="12.5" fill="#46585F">• 查询 SQL 表达式必须与索引定义一字不差</text>
+              <text x="508" y="374" font-size="12.5" fill="#46585F">• 写入与更新 JSONB 时会触发额外的函数计算</text>
+
+              <!-- 实验 3 -->
+              <rect x="940" y="20" width="440" height="390" fill="#FFFFFF" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="940" y="20" width="440" height="36" fill="#47808D"/>
+              <text x="956" y="43" class="svg-mono" font-size="12.5" fill="#FFFFFF" font-weight="700">LAB 6.3 · 异构 OR 拆分验证</text>
+
+              <text x="956" y="80" font-size="14" font-weight="700" fill="#BE653B">对照组：选择性悬殊导致放弃 BitmapOr</text>
+              <rect x="956" y="90" width="408" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="968" y="114" class="svg-mono" font-size="11.5" fill="#1B2B33">WHERE amount = 123.4 -- 极高选择性</text>
+              <text x="968" y="136" class="svg-mono" font-size="11.5" fill="#BE653B">   OR created_at &gt;= '2026-04-01'; -- 极宽范围</text>
+
+              <line x1="1160" y1="162" x2="1160" y2="188" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="1154,182 1166,182 1160,190" fill="#2F7A66"/>
+
+              <text x="956" y="210" font-size="14" font-weight="700" fill="#2F7A66">实验组：UNION / 互斥 UNION ALL 拆分</text>
+              <rect x="956" y="220" width="408" height="74" fill="#E5EFF0" stroke="#2F7A6B" stroke-width="1"/>
+              <text x="968" y="242" class="svg-mono" font-size="11.5" fill="#1B2B33">SELECT * FROM demo_orders WHERE amount = 123.4</text>
+              <text x="968" y="260" class="svg-mono" font-size="11.5" fill="#2F7A66" font-weight="700">UNION -- 若可证明互斥改用 UNION ALL 省去重</text>
+              <text x="968" y="278" class="svg-mono" font-size="11.5" fill="#1B2B33">SELECT * FROM demo_orders WHERE created_at &gt;= ...</text>
+
+              <rect x="956" y="308" width="408" height="86" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="968" y="330" font-size="13" font-weight="700" fill="#1B2B33">语义铁律：</text>
+              <text x="968" y="352" font-size="12.5" fill="#46585F">• 无法证明互斥时严禁随意将 UNION 改为 UNION ALL</text>
+              <text x="968" y="374" font-size="12.5" fill="#46585F">• 若含 ORDER BY / LIMIT 需重写外层分页边界</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">在真实的研发组织中，架构师、DBA 与业务开发者各自应该守住哪些最佳实践防线？</span>
+          </div>
+          <div class="page-meta">
+            <div>EXPERIMENTAL BENCHMARK</div>
+            <div class="page-num">10 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 11: 三大角色最佳实践 ==================== -->
+      <section class="slide" data-index="10">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">10 · ROLE-BASED BEST PRACTICES</span>
+          <span>协同治理：架构师、DBA 与业务开发者的三层防线</span>
+        </div>
+        <h2 class="slide-title">分角色最佳实践：从表结构建模到 SQL 编写规范</h2>
+        <p class="slide-lead">
+          消除 IO 与 CPU 放大不能仅靠上线后的救火，需要架构设计、日常巡检与研发编码三个环节在各自职责边界内协同发力。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 列 1：数据库架构师 -->
+              <rect x="20" y="20" width="440" height="390" fill="#FFFFFF" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="20" y="20" width="440" height="42" fill="#1E4B5A"/>
+              <text x="38" y="46" font-size="16" font-weight="700" fill="#FFFFFF">一、面向数据库架构师（Schema &amp; Index）</text>
+
+              <text x="38" y="88" font-size="14" font-weight="700" fill="#245A6B">核心理念：五维拆解查询，而非只盯 WHERE</text>
+              <text x="38" y="110" font-size="13" fill="#46585F">将核心 SQL 拆分为「定位、排序、过滤、投影、更新」五类：</text>
+
+              <rect x="38" y="126" width="404" height="54" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="148" font-size="13.5" font-weight="700" fill="#1B2B33">1. 少量高价值复合索引</text>
+              <text x="52" y="168" font-size="12.5" fill="#46585F">按「租户/分区键 → 状态 → 时间范围 → 排序键」构建。</text>
+
+              <rect x="38" y="190" width="404" height="54" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="212" font-size="13.5" font-weight="700" fill="#1B2B33">2. 部分索引（Partial Index）隔离冷热</text>
+              <text x="52" y="232" font-size="12.5" fill="#46585F">对仅查活跃未归档数据的业务，过滤历史归档行减负。</text>
+
+              <rect x="38" y="254" width="404" height="54" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="276" font-size="13.5" font-weight="700" fill="#1B2B33">3. 固定表达式索引或生成列</text>
+              <text x="52" y="296" font-size="12.5" fill="#46585F">固化 JSON 路径提取、大小写归一化，消除运行时算力。</text>
+
+              <rect x="38" y="318" width="404" height="72" fill="#F1EFE9" stroke="#245A6B" stroke-width="1"/>
+              <text x="52" y="340" font-size="13" font-weight="700" fill="#245A6B">近似索引设计准则：</text>
+              <text x="52" y="362" font-size="12.5" fill="#46585F">使用 GiST / GIN / Bloom / trgm 时默认接受 Recheck，</text>
+              <text x="52" y="380" font-size="12.5" fill="#46585F">直接以假阳性率（False Positive Rate）评估吞吐收益。</text>
+
+              <!-- 列 2：DBA -->
+              <rect x="480" y="20" width="440" height="390" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="480" y="20" width="440" height="42" fill="#245A6B"/>
+              <text x="498" y="46" font-size="16" font-weight="700" fill="#FFFFFF">二、面向 DBA（Monitoring &amp; Tuning）</text>
+
+              <text x="498" y="88" font-size="14" font-weight="700" fill="#245A6B">核心理念：将放大信号纳入自动化巡检</text>
+              <text x="498" y="110" font-size="13" fill="#46585F">主动识别高 Buffer 读写与统计信息失真：</text>
+
+              <rect x="498" y="126" width="404" height="54" fill="#E5EFF0" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="512" y="148" font-size="13.5" font-weight="700" fill="#1B2B33">1. pg_stat_statements 块读写巡检</text>
+              <text x="512" y="168" font-size="12.5" fill="#46585F">重点盯防 shared_blks_hit/read 与返回行数极度失衡的 SQL。</text>
+
+              <rect x="498" y="190" width="404" height="54" fill="#E5EFF0" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="512" y="212" font-size="13.5" font-weight="700" fill="#1B2B33">2. 精准调控 work_mem 抑制 Lossy</text>
+              <text x="512" y="232" font-size="12.5" fill="#46585F">针对大 Bitmap 扫描会话局部调优，严禁全局盲目放大防 OOM。</text>
+
+              <rect x="498" y="254" width="404" height="54" fill="#E5EFF0" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="512" y="276" font-size="13.5" font-weight="700" fill="#1B2B33">3. 扩展统计信息修复多列相关性</text>
+              <text x="512" y="296" class="svg-mono" font-size="11.5" fill="#245A6B">CREATE STATISTICS s (dependencies, mcv) ON a, b;</text>
+
+              <rect x="498" y="318" width="404" height="72" fill="#F1EFE9" stroke="#245A6B" stroke-width="1"/>
+              <text x="512" y="340" font-size="13" font-weight="700" fill="#245A6B">全生命周期成本审计：</text>
+              <text x="512" y="362" font-size="12.5" fill="#46585F">上线新索引前同步评估写入 TPS 折损、WAL 日志增量、</text>
+              <text x="512" y="380" font-size="12.5" fill="#46585F">Autovacuum 清理压力及索引膨胀率。</text>
+
+              <!-- 列 3：业务开发者 -->
+              <rect x="940" y="20" width="440" height="390" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="940" y="20" width="440" height="42" fill="#2F7A66"/>
+              <text x="958" y="46" font-size="16" font-weight="700" fill="#FFFFFF">三、面向业务开发者（SQL Craft）</text>
+
+              <text x="958" y="88" font-size="14" font-weight="700" fill="#2F7A66">核心理念：写出让优化器「看得懂」的 SQL</text>
+              <text x="958" y="110" font-size="13" fill="#46585F">避免破坏索引可用性的常见编码反模式：</text>
+
+              <rect x="958" y="126" width="404" height="62" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="972" y="148" font-size="13.5" font-weight="700" fill="#1B2B33">1. 严禁在索引列外侧包裹函数</text>
+              <text x="972" y="168" class="svg-mono" font-size="11.5" fill="#BE653B">忌: date_trunc('day', created_at) = '2026-05-31'</text>
+              <text x="972" y="183" class="svg-mono" font-size="11.5" fill="#2F7A66">宜: created_at &gt;= '05-31' AND created_at &lt; '06-01'</text>
+
+              <rect x="958" y="198" width="404" height="54" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="972" y="220" font-size="13.5" font-weight="700" fill="#1B2B33">2. 杜绝参数隐式类型转换</text>
+              <text x="972" y="240" font-size="12.5" fill="#46585F">保证 ORM 绑定参数类型与列定义严格一致（如 varchar vs int）。</text>
+
+              <rect x="958" y="262" width="404" height="54" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="972" y="284" font-size="13.5" font-weight="700" fill="#1B2B33">3. 拒绝为低选择性单列盲目建索引</text>
+              <text x="972" y="304" font-size="12.5" fill="#46585F">全表 95% 均为 status='active' 时，单列索引只会制造随机回表。</text>
+
+              <rect x="958" y="326" width="404" height="64" fill="#F1EFE9" stroke="#2F7A66" stroke-width="1"/>
+              <text x="972" y="348" font-size="13" font-weight="700" fill="#2F7A66">契约化表达式约定：</text>
+              <text x="972" y="370" font-size="12.5" fill="#46585F">高频 JSON / 归一化条件与 DBA 约定统一表达式模板，</text>
+              <text x="972" y="386" font-size="12.5" fill="#46585F">避免团队成员各写各的变体导致表达式索引失配。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">最后一页：梳理实际排障中最容易踩中的七大认知陷阱与边界场景。</span>
+          </div>
+          <div class="page-meta">
+            <div>ENGINEERING GOVERNANCE</div>
+            <div class="page-num">11 / 12</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 12: 场景边界与七大常见坑 ==================== -->
+      <section class="slide" data-index="11">
+        <div class="eyebrow">
+          <span class="eyebrow-tag">11 · BOUNDARIES &amp; PITFALLS</span>
+          <span>总结与避坑：守住工程边界，远离七大诊断误区</span>
+        </div>
+        <h2 class="slide-title">适用场景边界与生产环境七大高频踩坑清单</h2>
+        <p class="slide-lead">
+          每一条索引都是用写入空间与维护算力换取读取吞吐。分清「必须优化」与「过度设计」的边界，避开执行计划表象带来的误判。
+        </p>
+        <div class="divider"></div>
+
+        <div class="diagram-zone">
+          <div class="diagram-canvas">
+            <svg width="1400" height="430" viewBox="0 0 1400 430">
+              <!-- 左侧：适用 vs 不适用边界 -->
+              <rect x="20" y="20" width="450" height="186" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="20" y="20" width="450" height="34" fill="#2F7A66"/>
+              <text x="36" y="42" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">FIT · 适合重点优化的场景</text>
+              <text x="36" y="76" font-size="13.5" fill="#1B2B33">• 高频 OLTP 查询：返回几十行但初始候选达百万行</text>
+              <text x="36" y="102" font-size="13.5" fill="#1B2B33">• 多租户大表：单租户内按状态与时间范围检索</text>
+              <text x="36" y="128" font-size="13.5" fill="#1B2B33">• 空间、全文、trgm、JSONB 等天然存在 Recheck 场景</text>
+              <text x="36" y="154" font-size="13.5" fill="#1B2B33">• 多个高选择性条件通过 OR 组合的实时检索接口</text>
+              <text x="36" y="182" font-size="13" fill="#2F7A66" font-weight="700">核心特征：读远大于写，且过滤漏斗收窄比例极高</text>
+
+              <rect x="20" y="224" width="450" height="186" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="20" y="224" width="450" height="34" fill="#BE653B"/>
+              <text x="36" y="246" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">ANTI-FIT · 不适合过度索引优化的场景</text>
+              <text x="36" y="280" font-size="13.5" fill="#1B2B33">• 小表或低频后台报表：Seq Scan 顺序读更快更省</text>
+              <text x="36" y="306" font-size="13.5" fill="#1B2B33">• 写多读少流水表：新增索引收益无法覆盖写入折损</text>
+              <text x="36" y="332" font-size="13.5" fill="#1B2B33">• 谓词选择性极低（如命中全表 40% 以上数据）</text>
+              <text x="36" y="358" font-size="13.5" fill="#1B2B33">• 探索式 ad-hoc 查询：条件组合每次随机变化</text>
+              <text x="36" y="386" font-size="13" fill="#BE653B" font-weight="700">核心特征：维护成本高于查询收益，或全扫本就最优</text>
+
+              <!-- 右侧：七大常见坑网格 -->
+              <rect x="495" y="20" width="885" height="390" fill="#FFFFFF" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="495" y="20" width="885" height="34" fill="#1E4B5A"/>
+              <text x="513" y="42" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">SEVEN PITFALLS · 慢 SQL 诊断中的七大常见误区</text>
+
+              <!-- Pitfall 1 -->
+              <rect x="513" y="68" width="415" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="526" y="90" font-size="13.5" font-weight="700" fill="#BE653B">坑 1：看到 Index Scan 就以为没有 IO 放大</text>
+              <text x="526" y="112" font-size="12.5" fill="#46585F">宽 Index Cond 配合巨量 Filter 依然会读取海量 Heap 页，</text>
+              <text x="526" y="130" font-size="12.5" fill="#46585F">必须核对 Rows Removed by Filter 与 Buffers 指标。</text>
+
+              <!-- Pitfall 2 -->
+              <rect x="945" y="68" width="417" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="958" y="90" font-size="13.5" font-weight="700" fill="#BE653B">坑 2：把 Recheck Cond 当成执行计划报错</text>
+              <text x="958" y="112" font-size="12.5" fill="#46585F">Recheck 是 GiST/GIN/Bloom/Hash 保证正确性的必经步骤，</text>
+              <text x="958" y="130" font-size="12.5" fill="#46585F">真正需要警惕的是 Recheck 丢弃行数远大于有效输出行。</text>
+
+              <!-- Pitfall 3 -->
+              <rect x="513" y="150" width="415" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="526" y="172" font-size="13.5" font-weight="700" fill="#BE653B">坑 3：盲目调大 work_mem 掩盖索引设计缺陷</text>
+              <text x="526" y="194" font-size="12.5" fill="#46585F">增大内存仅将 lossy page 还原为 exact page，若候选页</text>
+              <text x="526" y="212" font-size="12.5" fill="#46585F">本身数以万计，回表读取的物理页数依然居高不下。</text>
+
+              <!-- Pitfall 4 -->
+              <rect x="945" y="150" width="417" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="958" y="172" font-size="13.5" font-weight="700" fill="#BE653B">坑 4：建了表达式索引，但查询 SQL 写法失配</text>
+              <text x="958" y="194" font-size="12.5" fill="#46585F">函数嵌套、类型转换或 collation 差异都会导致优化器</text>
+              <text x="958" y="212" font-size="12.5" fill="#46585F">无法匹配表达式索引，静默退化为 Filter 后置计算。</text>
+
+              <!-- Pitfall 5 -->
+              <rect x="513" y="232" width="415" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="526" y="254" font-size="13.5" font-weight="700" fill="#BE653B">坑 5：OR 混入不可索引分支却不知已退化</text>
+              <text x="526" y="276" font-size="12.5" fill="#46585F">单一不可索引分支会阻断 BitmapOr；手工拆分改写时，</text>
+              <text x="526" y="294" font-size="12.5" fill="#46585F">务必审慎处理重复行去重（UNION vs UNION ALL）与分页。</text>
+
+              <!-- Pitfall 6 -->
+              <rect x="945" y="232" width="417" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="958" y="254" font-size="13.5" font-weight="700" fill="#BE653B">坑 6：只优化 WHERE 过滤，忽略 ORDER BY 分页</text>
+              <text x="958" y="276" font-size="12.5" fill="#46585F">未将排序键纳入复合索引尾部，会导致过滤后仍需对海量</text>
+              <text x="958" y="294" font-size="12.5" fill="#46585F">候选集做 Top-N 内存或磁盘排序（Sort Spill）。</text>
+
+              <!-- Pitfall 7 -->
+              <rect x="513" y="314" width="849" height="78" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="528" y="340" font-size="14" font-weight="700" fill="#1E4B5A">坑 7：仅在测试库小数据量或均匀分布下验证执行计划</text>
+              <text x="528" y="364" font-size="13" fill="#1B2B33">小表上 Seq Scan 成本最低，而生产大表与多租户严重数据倾斜（Skew）会彻底反转最优路径。所有索引与 SQL 改写</text>
+              <text x="528" y="382" font-size="13" fill="#1B2B33">必须使用贴近生产规模与真实倾斜度的数据集进行 EXPLAIN (ANALYZE, BUFFERS) 闭环验证。</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="slide-footer-zone">
+          <div class="next-bridge">
+            <span class="next-label">结语 · SUMMARY</span>
+            <span class="next-text">以「候选集收敛」为纲，以「EXPLAIN BUFFERS」为尺，构建可持续演进的数据库访问层。</span>
+          </div>
+          <div class="page-meta">
+            <div>END OF DECK · 感谢聆听</div>
+            <div class="page-num">12 / 12</div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- 右侧：页内开窗讲稿面板 -->
+  <aside id="notes-drawer">
+    <div class="notes-header">
+      <div>
+        <div class="notes-header-title">演讲者讲稿</div>
+        <div style="font-size:11px; color:var(--ink-secondary); margin-top:2px;">逻辑推演与源码实证</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="notes-mode-badge" id="notes-mode-label">单页模式 [N]</span>
+        <button class="notes-close-btn" onclick="closeNotes()">关闭 [ESC]</button>
+      </div>
+    </div>
+    <div id="notes-body"></div>
+  </aside>
+</div>
+
+<!-- 底部常驻快捷键导航栏（全屏时依然可见） -->
+<div id="hud-bar">
+  <button class="hud-btn" onclick="prevSlide()">◀ 上一页</button>
+  <span id="hud-counter" style="font-weight:700; color:#FFFFFF;">01 / 12</span>
+  <button class="hud-btn" onclick="nextSlide()">下一页 ▶</button>
+  <div class="hud-sep"></div>
+  <button class="hud-btn" id="btn-hud-toc" onclick="toggleTOC()"><span class="hud-key">G</span> 目录</button>
+  <button class="hud-btn" id="btn-hud-note" onclick="toggleSingleNote()"><span class="hud-key">N</span> 本页讲稿</button>
+  <button class="hud-btn" id="btn-hud-allnotes" onclick="toggleAllNotes()"><span class="hud-key">T</span> 全文讲稿</button>
+  <button class="hud-btn" id="btn-hud-autoplay" onclick="toggleAutoPlay()"><span class="hud-key">A</span> 自动播放</button>
+  <button class="hud-btn" id="btn-hud-fs" onclick="toggleFullscreen()"><span class="hud-key">F</span> 全屏</button>
+</div>
+
+<script>
+  // 12 页完整讲稿数据（口语化、重逻辑推演与源码实证、连绵不绝）
+  const SLIDES_DATA = [
+    {
+      title: "IO & CPU 放大的系统性诊断与优化",
+      sub: "封面 · 课程导论与执行漏斗全局视图",
+      notes: [
+        "各位同学好，欢迎来到《数据库筑基课》。今天我们要聊一个在生产环境里最让人头疼、也最容易产生误判的话题：查询中的 IO 放大与 CPU 放大。",
+        "在日常研发中，每当业务接口变慢，大家的第一反应往往是去查慢日志，然后问一句：这条 SQL 是不是没走索引？但当你真正把执行计划拉出来一看，却发现上面赫然写着 Index Scan。索引明明用上了，为什么数据库还是读了上万个数据页，CPU 依然飙升？",
+        "看右边的地层剖面漏斗图，一条 SQL 从输入 WHERE 条件到吐出最终结果，其实要穿过四道地层：第一层是原始 WHERE 谓词；第二层是真正进入索引访问方法的 Index Cond，它决定了我们要扫描多少索引页、捞出多少候选行指针；第三层是回表重检 Recheck Cond，专门处理那些「可能命中」的近似候选；第四层才是执行器的后置过滤 Filter。今天我们就顺着 PostgreSQL 优化器与执行器的源码脉络，把每一层的放大机制彻底拆开。"
+      ]
+    },
+    {
+      title: "慢 SQL 的真凶：不是「没走索引」，而是「候选集过宽」",
+      sub: "问题定义 · 四问诊断法",
+      notes: [
+        "我们来看左侧这个非常典型的业务查询：在订单表 orders 里，按租户 tenant_id 查已支付、最近七天、匹配手机号或邮箱，并且渠道为微信的订单。假设表上只建了 tenant_id 的单列索引。",
+        "执行计划跑出来后，你会看到 Index Cond 只吃到了 tenant_id = 42 这一个条件。如果这个大租户下面有 98 万笔历史订单，数据库就会老老实实把这 98 万行全捞出来，然后再在 Filter 阶段丢弃掉 98 万行，最终只返回 50 行。这就是典型的双重放大：捞出 98 万行带来的海量数据页读取是 IO 放大；对这 98 万行逐行解析 JSON、转小写、判断 OR 分支，就是 CPU 放大。",
+        "所以，面对慢 SQL，千万不要条件反射地去背「建索引」三个字，而是要先回答右边的四个核心问题：第一，条件到底是在索引里缩小了候选集，还是取出 Tuple 之后才判断？第二，索引返回的是精确命中，还是仅仅「可能命中」的候选？第三，每个候选行还要承受多少额外的 CPU 表达式算力？第四，EXPLAIN (ANALYZE, BUFFERS) 里的缓冲区读写指标，能不能实实在在证明我们的候选集真的变窄了？带着这四个问题，我们往下看优化器的内部逻辑。"
+      ]
+    },
+    {
+      title: "WHERE 不是整体开关：优化器的谓词三分流机制",
+      sub: "源码架构 · createplan.c 谓词分流",
+      notes: [
+        "很多开发者把 WHERE 子句当成一个整体，认为只要走索引，WHERE 里的所有条件就都能享受索引加速。但在 PostgreSQL 源码里，WHERE 谓词在进入执行器之前，会经历一次严格的三分流。",
+        "在优化器 indxpath.c 的 match_clause_to_indexcol() 以及 createplan.c 的 create_indexscan_plan() 中，优化器会逐个审视 WHERE 里的条件：凡是能匹配当前索引列、表达式和操作符类的，被放进 indexqual，也就是执行计划里的 Index Cond；如果索引本身是 lossy 的，或者走了 Bitmap 扫描需要保留原始条件防页内压缩失真，就会复制一份放进 bitmapqualorig，也就是 Recheck Cond；而剩下的所有条件，全都被塞进 qpqual，变成执行节点的 Filter。",
+        "大家可以点击右上角的演练按钮切换不同的查询场景。你会清晰地看到：决定物理 IO 上限的是第一条泳道 Index Cond，决定回表二次校验的是第二条泳道 Recheck Cond，而第三条泳道 Filter，本质上是扫描节点吐出数据前的最后一道安检门——货都已经从仓库搬出来了，安检门再严格，也省不掉搬运的体力。"
+      ]
+    },
+    {
+      title: "后置过滤（Filter）：百万行回表后的「逐行丢弃」",
+      sub: "核心原理 3.1 · costsize.c 成本铁律",
+      notes: [
+        "为什么说后置过滤是 IO 放大的头号推手？在 PostgreSQL 优化器成本模型源码 src/backend/optimizer/path/costsize.c 的 cost_index() 函数注释里，写着一句极其关键的工程铁律：额外作为 qpqual 执行的条件，虽然可能减少最终返回的 tuple 数量，但绝不会减少必须从表里取出的 tuple 数量，因此它不降低扫描成本。",
+        "看图中的上下对比。上半部分是优化前的单列索引路径：Index Scan 凭借 tenant_id = 42 定位到了 100 万个行指针 TID，随后执行器必须顺着这 100 万个指针去回表读取数万个 8KB 的 Heap 数据页，做完事务可见性判断后，再交给 Filter 筛掉 999,900 行，有效率只有万分之一。",
+        "下半部分则是我们把 status 和 created_at 前移进复合索引后的效果。这三个条件同时进入 Index Cond，B-tree 索引在树内部就直接把扫描区间精准锁定在 100 行以内。回表读取的 Buffer 数量直接下降 99% 以上，执行器层几乎零空转。如果业务只关心未归档订单，我们还可以进一步加上 WHERE archived = false 构建部分索引，连索引自身的存储与写入维护成本也一并削减。"
+      ]
+    },
+    {
+      title: "索引 Boundbox 与 Recheck：为什么命中索引还要回表重检？",
+      sub: "核心原理 3.2 · 近似索引与假阳性",
+      notes: [
+        "现在我们把问题推进一步：假如一个条件确实已经进入了 Index Cond，是不是就万事大吉、绝对精确了呢？答案是否定的。在 PostgreSQL 中，有四大类索引机制返回的是「候选」而非「最终结果」。",
+        "第一类是 GiST 几何索引。看右边的原理图，为了快速检索多边形，GiST 索引页里只存了多边形的最小外接矩形 Boundbox。当查询区域 Q 和候选多边形的虚线外接矩形相交时，索引就认为它「可能命中」并把行指针交出来。但回表取出真实多边形 P 一算，发现它根本没挨着 Q！这时执行器 nodeIndexscan.c 看到 xs_recheck 为真，就会触发重检并把它丢弃，计入 Rows Removed by Index Recheck。",
+        "同理，第二类 Hash 索引在源码 hash.c 里明确写着永远是 lossy 的，因为桶里只存 32 位哈希码，防碰撞必须回表重检；第三类 Bloom 索引把多列压成位图签名，天然存在假阳性；第四类则是我们下一页要重点剖析的 Bitmap 内存溢出退化。所以看到 Recheck Cond 千万别慌，它是 PostgreSQL 保证数据正确性的安全网，我们要关注的是它的假阳性淘汰比例是否过高。"
+      ]
+    },
+    {
+      title: "Bitmap Scan 的双刃剑：把随机 IO 变顺序，却怕内存退化",
+      sub: "执行器解剖 · nodeBitmapHeapscan.c",
+      notes: [
+        "在大规模条件组合查询中，Bitmap Heap Scan 是非常常见的一位选手。它的设计初衷非常优雅：第一阶段 Bitmap Index Scan 先不急着回表，而是把散落在各处的行指针 TID 收集到内存里的 TIDBitmap 结构中，按数据页号排好序；第三阶段 Bitmap Heap Scan 再按物理页号顺序去读盘，把随机 IO 变成了顺序 IO。",
+        "但是，这中间藏着一个关键变量：work_mem。大家可以点击图区右上角的两个按钮切换观察。当 work_mem 充足时，处于 Exact 模式，TIDBitmap 为每个数据页精确记录了命中的行偏移数组，比如 102 号页只命中了 #4 和 #19 两行，回表时就会精准跳过其余 78 行，Recheck 丢弃数为零。",
+        "可一旦候选行太多、work_mem 装不下，TIDBitmap 就会触发内存压缩，退化成 Lossy 模式！此时内存里不再记录具体行号，只标记「102 号整页可能命中」。回表读取 102 号页时，执行器不得不把整页 80 行全部拉出来重新跑一遍 bitmapqualorig 条件。这里有一个高频避坑点：调大 work_mem 确实能把 lossy 变回 exact，省掉页内 CPU 重检，但如果候选页本身多达数万页，物理 IO 依然不会减少，根本解法还是收窄索引条件。"
+      ]
+    },
+    {
+      title: "OR 条件与额外 CPU：一颗老鼠屎如何毁掉整条索引路径",
+      sub: "核心原理 3.3 · indxpath.c 全分支铁律",
+      notes: [
+        "除了后置过滤和重检，SQL 里的 OR 条件是引发 CPU 放大与计划退化的另一个重灾区。",
+        "看左边的 PATH A：如果 buyer_phone 和 buyer_email 各自都有独立索引，优化器就能为两个分支分别生成 Bitmap Index Scan，然后通过 BitmapOr 节点在内存中做位图并集，精准捞出 3 行数据。但是，在源码 src/backend/optimizer/path/indxpath.c 的 generate_bitmap_or_paths() 函数注释里有一条死规矩：必须能为 OR 的每一个分支（arm）都匹配到至少一个索引路径，否则绝不能生成 BitmapOrPath！",
+        "这就导致了右边 PATH B 的惨剧：哪怕前两个条件都有极佳的索引，只要你在后面用 OR 拼上了一个没有表达式索引的 JSON 提取 lower(extra->>'ch') = 'wx'，或者拼上了一个不可下推的自定义函数，整条 BitmapOr 路径就会瞬间崩塌！优化器被迫退化为全表扫描或宽范围扫描，然后对每一行候选数据把所有 OR 分支和 JSON 解析算一遍。遇到这种异构 OR，要么补齐缺失的表达式索引，要么用 UNION 或互斥条件下的 UNION ALL 把查询拆开，让每个分支独立走上快车道。"
+      ]
+    },
+    {
+      title: "五大执行策略横向对比：IO、CPU 与写入维护的权衡矩阵",
+      sub: "架构权衡 · 五维对比矩阵",
+      notes: [
+        "讲到这里，我们已经剖析了后置过滤、Bitmap/Recheck、复合索引、表达式/部分索引以及 OR 拆分这五种核心机制。在实际架构评审中，没有哪一种方案是绝对完美的银弹，我们必须把它们放在一张五维矩阵里做工程权衡。",
+        "从查询 IO 和 CPU 来看，精确复合 B-tree 索引与表达式/部分索引表现最犀利，因为它们把过滤动作直接前移到了索引树内部，从源头上掐断了多余的 Heap Page 读取；而后置过滤 Filter 则把所有压力留给了执行器。",
+        "但如果我们把视角切换到第三行「写入与维护代价」，局势就反转了：复合索引越宽，每次 INSERT 和 UPDATE 产生的 WAL 日志就越多，还会破坏 PostgreSQL 的 HOT（Heap-Only Tuple）更新机制，加速索引膨胀；而部分索引则是一个绝佳的折中，它只对业务真正关心的活跃子集建立索引，既保住了查询速度，又大幅减轻了写入负担。至于 SQL 拆分 OR，虽然零写入代价，但会增加 SQL 复杂度与去重排序开销。"
+      ]
+    },
+    {
+      title: "IO & CPU 放大的五步诊断闭环与验收标准",
+      sub: "工程方法论 · 诊断闭环与六项验收指标",
+      notes: [
+        "为了避免大家在日常调优中陷入「凭感觉建索引、建完不敢删」的混乱状态，我们总结了一套标准化的五步诊断闭环。",
+        "第一步，采集真实基线，务必带上 BUFFERS 参数运行 EXPLAIN ANALYZE，光看预估 cost 很容易被过期的统计信息欺骗；第二步，定位放大层级，顺着 Index Cond、Recheck Cond、Filter 往下看，算出究竟是哪一层丢弃了最多的行；第三步，匹配精准动作，根据放大层级选择复合索引前移、部分索引隔离、表达式固化或 OR 拆分。",
+        "最关键的是第四步和第五步：优化上线前，必须对照底部的六项硬性验收指标做量化复测——不仅要看耗时是否下降，更要核对 Rows Removed by Filter 和 Recheck 是否数量级下降，Heap Blocks lossy 是否收敛，Buffers shared read/hit 与返回行数的比例是否恢复健康。同时，在第五步审计写入 TPS 与索引膨胀，随着业务数据分布的演进周期性复检。"
+      ]
+    },
+    {
+      title: "可复现的实操验证模板：后置过滤、表达式前移与 OR 拆分",
+      sub: "实操 DEMO · 百万级订单表对照实验",
+      notes: [
+        "这一页为大家准备了三组可以直接在测试环境落地的对照实验模板。我们构建了一张 100 万行的 demo_orders 表，模拟了 100 个租户、5% 的已支付订单以及 2% 的微信渠道比例。",
+        "在实验 6.1 中，你可以亲眼看到当只有 tenant_id 单列索引时，status 和 created_at 是如何滞留在 Filter 里造成近万行无效过滤的；而一旦换成三列复合索引，这三个条件便严丝合缝地并入了 Index Cond。",
+        "在实验 6.2 中，针对 JSONB 字段的转小写查询，我们展示了双层括号的表达式索引语法。这里要特别提醒：查询里的表达式写法必须和索引定义一字不差，且函数必须是 IMMUTABLE 不可变的。实验 6.3 则演示了当 OR 两侧选择性极度悬殊时，如何通过 UNION 或严格证明互斥后的 UNION ALL 来挽救被放弃的索引路径。"
+      ]
+    },
+    {
+      title: "分角色最佳实践：从表结构建模到 SQL 编写规范",
+      sub: "协同治理 · 架构师、DBA 与业务开发者的三层防线",
+      notes: [
+        "根治 IO 与 CPU 放大需要研发团队三个角色的协同配合。首先是数据库架构师：设计索引时不能只盯着 WHERE，要把 SQL 拆成「定位、排序、过滤、投影、更新」五个维度。优先为高频核心路径构建少量高价值复合索引，善用部分索引隔离历史冷数据，并在引入 GiST 或 Bloom 等近似索引时提前评估假阳性率。",
+        "其次是 DBA：要把放大信号纳入日常巡检。通过 pg_stat_statements 定期捞取 shared_blks_hit/read 与返回行数严重失衡的慢 SQL；遇到多列相关性导致估算失真时，及时用 CREATE STATISTICS 建立 dependencies 和 mcv 扩展统计信息；同时守住全局 work_mem 的安全红线，避免高并发下内存溢出。",
+        "最后是业务开发者：核心原则是写出让优化器「看得懂」的 SQL。严禁在索引列外侧包裹 date_trunc 等函数，把等值函数改写成半开半闭的时间区间；保证 ORM 传入的参数类型与数据库列类型严格一致，杜绝隐式类型转换；也不要为区分度极低的状态列盲目建单列索引。"
+      ]
+    },
+    {
+      title: "适用场景边界与生产环境七大高频踩坑清单",
+      sub: "总结与避坑 · 边界与七大误区",
+      notes: [
+        "课程的最后，我们把全文的精华浓缩为左侧的「适用边界」与右侧的「七大高频踩坑清单」。",
+        "左侧告诉我们什么时候该出手、什么时候该收手：对于高频 OLTP、多租户大表、漏斗收窄比例极高的查询，谓词前移带来的收益是立竿见影的；但对于小表、写多读少的流水表，或者谓词本身就要命中全表 40% 以上数据的查询，顺序扫描反而是最经济的选择，强行建索引只会拖垮写入。",
+        "右侧的七个坑，几乎涵盖了慢 SQL 诊断中 90% 的认知盲区：比如看到 Index Scan 就以为万事大吉；把正常的 Recheck Cond 当成报错；试图用无脑调大 work_mem 来掩盖宽候选索引的缺陷；或者忽略了 ORDER BY 分页排序导致的内存溢出。尤其要注意第七条：永远不要在几千行的测试库里验证索引效果，小表与均匀分布会掩盖一切问题，唯有贴近生产规模与真实数据倾斜度的 EXPLAIN (ANALYZE, BUFFERS)，才是检验优化的唯一标准。感谢大家的聆听！"
+      ]
+    }
+  ];
+
+  // 状态管理
+  let currentIndex = 0;
+  const totalSlides = SLIDES_DATA.length;
+  let notesOpen = false;
+  let notesMode = 'single'; // 'single' | 'all'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+
+  const stage = document.getElementById('stage');
+  const stageContainer = document.getElementById('stage-container');
+  const slides = document.querySelectorAll('.slide');
+  const notesDrawer = document.getElementById('notes-drawer');
+  const notesBody = document.getElementById('notes-body');
+  const notesModeLabel = document.getElementById('notes-mode-label');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const hudCounter = document.getElementById('hud-counter');
+
+  // 初始化目录与讲稿 DOM
+  function initDeck() {
+    const tocGrid = document.getElementById('toc-grid-container');
+    tocGrid.innerHTML = '';
+    SLIDES_DATA.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'toc-item' + (idx === 0 ? ' active-toc' : '');
+      div.id = `toc-item-${idx}`;
+      div.innerHTML = `
+        <div class="toc-item-num">PAGE ${String(idx + 1).padStart(2, '0')}</div>
+        <div class="toc-item-title">${item.title}</div>
+        <div class="toc-item-sub">${item.sub}</div>
+      `;
+      div.onclick = () => {
+        goToSlide(idx);
+        toggleTOC(false);
+      };
+      tocGrid.appendChild(div);
+    });
+
+    renderNotesContent();
+    fitStageScale();
+    updateUI();
+  }
+
+  // 严格等比缩放 1600x900 舞台，适应左侧可用容器（无论是否打开讲稿或全屏）
+  function fitStageScale() {
+    const rect = stageContainer.getBoundingClientRect();
+    const availW = rect.width - 24;
+    const availH = rect.height - 56; // 预留底部 HUD 空间
+    const scaleX = availW / 1600;
+    const scaleY = availH / 900;
+    const scale = Math.min(scaleX, scaleY);
+    stage.style.transform = `scale(${scale})`;
+  }
+
+  window.addEventListener('resize', fitStageScale);
+  document.addEventListener('fullscreenchange', () => {
+    setTimeout(fitStageScale, 60);
+    const fsBtn = document.getElementById('btn-hud-fs');
+    if (document.fullscreenElement) {
+      fsBtn.classList.add('active');
+    } else {
+      fsBtn.classList.remove('active');
+    }
+  });
+
+  // 切换页面
+  function goToSlide(idx) {
+    if (idx < 0) idx = 0;
+    if (idx >= totalSlides) idx = totalSlides - 1;
+    currentIndex = idx;
+
+    slides.forEach((s, i) => {
+      s.classList.toggle('active', i === currentIndex);
+    });
+
+    document.querySelectorAll('.toc-item').forEach((el, i) => {
+      el.classList.toggle('active-toc', i === currentIndex);
+    });
+
+    updateUI();
+    renderNotesContent();
+  }
+
+  function nextSlide() {
+    if (currentIndex < totalSlides - 1) {
+      goToSlide(currentIndex + 1);
+    } else if (autoPlayTimer) {
+      stopAutoPlay();
+    }
+  }
+
+  function prevSlide() {
+    if (currentIndex > 0) {
+      goToSlide(currentIndex - 1);
+    }
+  }
+
+  function updateUI() {
+    hudCounter.textContent = `${String(currentIndex + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}`;
+    document.getElementById('btn-hud-note').classList.toggle('active', notesOpen && notesMode === 'single');
+    document.getElementById('btn-hud-allnotes').classList.toggle('active', notesOpen && notesMode === 'all');
+    document.getElementById('btn-hud-toc').classList.toggle('active', tocOpen);
+  }
+
+  // 渲染讲稿内容（支持单页模式 N 与全文模式 T 自动定位滚动）
+  function renderNotesContent() {
+    notesBody.innerHTML = '';
+    if (notesMode === 'single') {
+      notesModeLabel.textContent = `本页讲稿 [N] · ${String(currentIndex + 1).padStart(2, '0')}/${totalSlides}`;
+      const item = SLIDES_DATA[currentIndex];
+      const block = createNoteBlock(item, currentIndex, true);
+      notesBody.appendChild(block);
+      notesBody.scrollTop = 0;
+    } else {
+      notesModeLabel.textContent = `全文讲稿 [T] · 联动定位`;
+      SLIDES_DATA.forEach((item, idx) => {
+        const isCurrent = idx === currentIndex;
+        const block = createNoteBlock(item, idx, isCurrent);
+        block.id = `note-block-${idx}`;
+        notesBody.appendChild(block);
+      });
+      // 自动滚动定位到当前页讲稿
+      requestAnimationFrame(() => {
+        const target = document.getElementById(`note-block-${currentIndex}`);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+  }
+
+  function createNoteBlock(item, idx, isCurrent) {
+    const block = document.createElement('div');
+    block.className = 'note-block' + (isCurrent ? ' current-note' : '');
+    const paragraphs = item.notes.map(p => `<p>${p}</p>`).join('');
+    block.innerHTML = `
+      <div class="note-block-header">
+        <span class="note-page-tag">SLIDE ${String(idx + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}</span>
+        <span style="font-size:11px; color:var(--ink-muted); font-family:var(--font-mono);">${isCurrent ? '● CURRENT' : ''}</span>
+      </div>
+      <div class="note-slide-title">${item.title}</div>
+      <div class="note-content">${paragraphs}</div>
+    `;
+    if (notesMode === 'all') {
+      block.style.cursor = 'pointer';
+      block.title = '点击跳转到此页幻灯片';
+      block.onclick = () => goToSlide(idx);
+    }
+    return block;
+  }
+
+  // 按 N：本页讲稿开窗开关（按一下开，再按一下关，若当前是全文模式则切换为单页模式）
+  function toggleSingleNote() {
+    if (notesOpen && notesMode === 'single') {
+      closeNotes();
+    } else {
+      notesMode = 'single';
+      openNotes();
+    }
+  }
+
+  // 按 T：全文讲稿开窗开关（按一下开并自动定位当前页，再按一下关）
+  function toggleAllNotes() {
+    if (notesOpen && notesMode === 'all') {
+      closeNotes();
+    } else {
+      notesMode = 'all';
+      openNotes();
+    }
+  }
+
+  function openNotes() {
+    notesOpen = true;
+    notesDrawer.classList.add('open');
+    document.body.classList.add('notes-open');
+    renderNotesContent();
+    updateUI();
+    // 等待侧边栏过渡动画同步缩放舞台，保证左侧画面完整无裁切
+    setTimeout(fitStageScale, 30);
+    setTimeout(fitStageScale, 260);
+  }
+
+  function closeNotes() {
+    notesOpen = false;
+    notesDrawer.classList.remove('open');
+    document.body.classList.remove('notes-open');
+    updateUI();
+    setTimeout(fitStageScale, 30);
+    setTimeout(fitStageScale, 260);
+  }
+
+  // 按 G：目录开关
+  function toggleTOC(forceState) {
+    tocOpen = typeof forceState === 'boolean' ? forceState : !tocOpen;
+    tocOverlay.classList.toggle('open', tocOpen);
+    updateUI();
+  }
+
+  // 自动播放开关
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      stopAutoPlay();
+    } else {
+      document.getElementById('btn-hud-autoplay').classList.add('active');
+      autoPlayTimer = setInterval(() => {
+        if (currentIndex < totalSlides - 1) {
+          nextSlide();
+        } else {
+          stopAutoPlay();
+        }
+      }, 6000);
+    }
+  }
+
+  function stopAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    document.getElementById('btn-hud-autoplay').classList.remove('active');
+  }
+
+  // 按 F：全屏切换
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  // 全局键盘快捷键监听
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+    const key = e.key.toLowerCase();
+
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault();
+      if (!tocOpen) nextSlide();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      if (!tocOpen) prevSlide();
+    } else if (key === 'g') {
+      e.preventDefault();
+      toggleTOC();
+    } else if (key === 'n') {
+      e.preventDefault();
+      toggleSingleNote();
+    } else if (key === 't') {
+      e.preventDefault();
+      toggleAllNotes();
+    } else if (key === 'a') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (e.key === 'Escape') {
+      if (tocOpen) toggleTOC(false);
+      else if (notesOpen) closeNotes();
+    }
+  });
+
+  // ==================== Slide 03 互动动画逻辑 ====================
+  function runSlide3Demo() {
+    const mode = document.getElementById('s3-predicate-select').value;
+    const badge = document.getElementById('s3-status-badge');
+    const l1 = document.getElementById('s3-lane1-val');
+    const l2 = document.getElementById('s3-lane2-val');
+    const l3 = document.getElementById('s3-lane3-val');
+
+    badge.textContent = 'DISPATCHING...';
+    setTimeout(() => {
+      badge.textContent = 'STATUS: ROUTED';
+      if (mode === 'all') {
+        l1.textContent = '当前命中：tenant_id = 42（仅定位租户，候选仍宽）';
+        l2.textContent = '当前命中：无（常规 B-tree 精确扫描）';
+        l3.textContent = "当前命中：status='paid' AND lower(extra->>'ch')='wx'（逐行过滤）";
+      } else if (mode === 'gist') {
+        l1.textContent = '当前命中：geom && bounding_box（粗筛相交外接矩形）';
+        l2.textContent = '当前命中：ST_Contains(geom, point)（回表精确几何重检）';
+        l3.textContent = '当前命中：未建索引的附加业务状态字段';
+      } else if (mode === 'covered') {
+        l1.textContent = "当前命中：tenant_id=42 AND status='paid' AND lower(...)='wx'";
+        l2.textContent = '当前命中：无（全部谓词前移至复合表达式索引）';
+        l3.textContent = '当前命中：无（Filter 彻底清零，IO 与 CPU 均达最优）';
+      }
+    }, 180);
+  }
+
+  // ==================== Slide 06 Bitmap Exact / Lossy 切换动画 ====================
+  function setBitmapMode(mode) {
+    const btnExact = document.getElementById('btn-bm-exact');
+    const btnLossy = document.getElementById('btn-bm-lossy');
+    const title = document.getElementById('bm-title');
+    const desc = document.getElementById('bm-desc');
+    const slots = document.getElementById('bm-slots');
+    const slotNote = document.getElementById('bm-slot-note');
+    const planBox = document.getElementById('bm-plan-box');
+    const planLine = document.getElementById('bm-plan-line');
+    const s3Box = document.getElementById('bm-stage3-box');
+    const s3Header = document.getElementById('bm-stage3-header');
+    const s3Title = document.getElementById('bm-s3-title');
+    const s3L1 = document.getElementById('bm-s3-line1');
+    const s3L2 = document.getElementById('bm-s3-line2');
+    const s3L3 = document.getElementById('bm-s3-line3');
+
+    if (mode === 'exact') {
+      btnExact.classList.add('active-btn');
+      btnLossy.classList.remove('active-btn');
+      title.textContent = '当前状态：Exact 精确行位图';
+      title.setAttribute('fill', '#1B2B33');
+      desc.textContent = '内存足够记录每个数据页内的具体行偏移号（Offset Array）。';
+      slots.innerHTML = `
+        <rect x="456" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+        <text x="477" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#1</text>
+        <rect x="504" y="202" width="42" height="42" fill="#2F7A66" stroke="#1E4B5A" stroke-width="1.5"/>
+        <text x="525" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">#4</text>
+        <rect x="552" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+        <text x="573" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#8</text>
+        <rect x="600" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+        <text x="621" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#12</text>
+        <rect x="648" y="202" width="42" height="42" fill="#2F7A66" stroke="#1E4B5A" stroke-width="1.5"/>
+        <text x="669" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#FFFFFF" font-weight="700">#19</text>
+        <rect x="696" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+        <text x="717" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#35</text>
+        <rect x="744" y="202" width="42" height="42" fill="#EBF1EE" stroke="#89938F"/>
+        <text x="765" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">#61</text>
+        <rect x="792" y="202" width="32" height="42" fill="#EBF1EE" stroke="#89938F"/>
+        <text x="808" y="228" text-anchor="middle" class="svg-mono" font-size="12" fill="#46585F">..</text>
+      `;
+      slotNote.textContent = '精确指针：仅提取 #4 与 #19 两条记录，其余 78 条跳过！';
+      slotNote.setAttribute('fill', '#2F7A66');
+      planBox.setAttribute('fill', '#E5EFF0');
+      planBox.setAttribute('stroke', '#245A6B');
+      planLine.textContent = 'Heap Blocks: exact=2450 lossy=0';
+
+      s3Box.setAttribute('stroke', '#2F7A66');
+      s3Header.setAttribute('fill', '#2F7A66');
+      s3Title.textContent = '按页顺序读取 + 精准定位';
+      s3L1.textContent = '• table_scan_bitmap_next_tuple() 返回 recheck = false';
+      s3L2.textContent = '• 无需对页内无关行执行 bitmapqualorig 表达式计算';
+      s3L3.textContent = '• Rows Removed by Index Recheck = 0';
+    } else {
+      btnLossy.classList.add('active-btn');
+      btnExact.classList.remove('active-btn');
+      title.textContent = '当前状态：Lossy 整页压缩位图（内存溢出）';
+      title.setAttribute('fill', '#BE653B');
+      desc.textContent = '超出 work_mem 上限，行偏移数组被丢弃，退化为仅记录整页标记位。';
+      slots.innerHTML = `
+        <rect x="456" y="202" width="368" height="42" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+        <text x="640" y="228" text-anchor="middle" class="svg-mono" font-size="13" fill="#BE653B" font-weight="700">LOSSY PAGE BIT = 1（页内全部 80 行均标记为疑似命中）</text>
+      `;
+      slotNote.textContent = '精度丢失：必须扫描整页全部 80 条记录并逐行重检！';
+      slotNote.setAttribute('fill', '#BE653B');
+      planBox.setAttribute('fill', '#F7E9DE');
+      planBox.setAttribute('stroke', '#BE653B');
+      planLine.textContent = 'Heap Blocks: exact=410 lossy=2040';
+
+      s3Box.setAttribute('stroke', '#BE653B');
+      s3Header.setAttribute('fill', '#BE653B');
+      s3Title.textContent = '整页扫描 + 强制触发 Recheck Cond';
+      s3L1.textContent = '• table_scan_bitmap_next_tuple() 强制设置 recheck = true';
+      s3L2.textContent = '• 对该页内全部 80 行执行 ExecQualAndReset(bitmapqualorig)';
+      s3L3.textContent = '• Rows Removed by Index Recheck 急剧飙升（CPU 放大）';
+    }
+  }
+
+  // 启动初始化
+  initDeck();
+</script>
+</body>
+</html>

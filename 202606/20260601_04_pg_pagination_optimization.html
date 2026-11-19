@@ -1,0 +1,1967 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课：分页优化（OFFSET / 服务端游标 / Keyset 边界递进）</title>
+<style>
+  :root {
+    --bg-base: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --border: #D9D5CB;
+    --primary: #245A6B;
+    --primary-light: #E5EFF0;
+    --accent: #BE653B;
+    --accent-light: #F7E9DE;
+    --gain: #2F7A66;
+    --gain-light: #E4F1EC;
+    --gold: #AE8A3E;
+    --gold-light: #F5EEDB;
+
+    /* 地层七阶 (深->浅) */
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", -apple-system, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background-color: #161E22;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* 主视口容器：支持右侧讲稿分栏 */
+  #app-wrapper {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* 左侧舞台视口 */
+  #stage-viewport {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background-color: #1A2429;
+    overflow: hidden;
+  }
+
+  /* 1600x900 固定舞台，等比缩放 + letterbox */
+  #slide-stage {
+    width: 1600px;
+    height: 900px;
+    background-color: var(--bg-base);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    transform-origin: center center;
+    flex-shrink: 0;
+  }
+
+  /* 单页幻灯片 */
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 46px 64px 44px 64px;
+    display: none;
+    flex-direction: column;
+    background-color: var(--bg-base);
+    background-image: 
+      linear-gradient(to right, rgba(217, 213, 203, 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.22) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* 地层边条装饰 */
+  .strata-edge {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+  .strata-edge div { flex: 1; }
+
+  /* 顶部眉标与标题区 */
+  .slide-header {
+    width: 1472px;
+    flex-shrink: 0;
+  }
+
+  .eyebrow {
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--primary);
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .eyebrow span.tag-accent {
+    color: var(--accent);
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    line-height: 1.22;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .slide-lead {
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-sub);
+    margin-bottom: 16px;
+    max-width: 1400px;
+  }
+
+  .header-divider {
+    width: 1400px;
+    height: 1px;
+    background-color: var(--border);
+    margin-bottom: 20px;
+  }
+
+  /* 核心图区 1400x430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    background-color: #FAF9F6;
+    border: 1px solid var(--border);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* 底部承接与页脚 */
+  .slide-footer-area {
+    margin-top: auto;
+    width: 1400px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .next-takeaway {
+    border-left: 3px solid var(--accent);
+    padding: 6px 0 6px 16px;
+    background-color: rgba(247, 233, 222, 0.35);
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.4;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .next-label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .page-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+
+  /* 动画控制栏（内嵌于图区右上） */
+  .anim-controls {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-sub);
+    border: 1px solid var(--border);
+    padding: 5px 10px;
+    z-index: 10;
+  }
+
+  .anim-controls label {
+    font-size: 12px;
+    color: var(--ink-sub);
+    font-family: var(--font-mono);
+  }
+
+  .anim-controls input {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 3px 6px;
+    border: 1px solid var(--border);
+    background: #FFF;
+    color: var(--ink);
+    width: 72px;
+  }
+
+  .btn-ctrl {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: #FFF;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-ctrl:hover {
+    background: var(--strata-1);
+  }
+
+  .btn-ctrl.secondary {
+    background: #FFF;
+    color: var(--primary);
+  }
+
+  .btn-ctrl.secondary:hover {
+    background: var(--primary-light);
+  }
+
+  .anim-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    min-width: 170px;
+    text-align: right;
+  }
+
+  /* 右侧讲稿抽屉（非弹窗，页内分栏缩放） */
+  #notes-drawer {
+    width: 0;
+    height: 100%;
+    background-color: var(--bg-base);
+    border-left: 0 solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  #notes-drawer.open {
+    width: 440px;
+    border-left-width: 2px;
+  }
+
+  .notes-header {
+    padding: 18px 22px;
+    background-color: var(--bg-sub);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .notes-header-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  .notes-mode-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .tab-btn {
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: #FFF;
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .tab-btn.active {
+    background: var(--primary);
+    color: #FFF;
+    border-color: var(--primary);
+  }
+
+  .notes-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 60px 22px;
+    user-select: text;
+    line-height: 1.75;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .note-block {
+    margin-bottom: 24px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    background: #FFF;
+  }
+
+  .note-block.current-slide-note {
+    border-left: 4px solid var(--accent);
+    background: #FCFBF8;
+  }
+
+  .note-block-header {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+
+  .note-block-header:hover {
+    text-decoration: underline;
+  }
+
+  .note-text p {
+    margin-bottom: 10px;
+    text-align: justify;
+  }
+
+  .note-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* 底部悬浮快捷键栏（全屏及非全屏均在底部可见） */
+  #shortcut-bar {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(27, 43, 51, 0.92);
+    color: #F7F6F2;
+    padding: 7px 18px;
+    border: 1px solid rgba(217, 213, 203, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+    transition: left 0.25s ease;
+  }
+
+  #app-wrapper.notes-open #shortcut-bar {
+    left: calc(50% - 220px);
+  }
+
+  .sc-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: #EBF1EE;
+    white-space: nowrap;
+  }
+
+  .sc-item:hover {
+    color: #F7E9DE;
+  }
+
+  .sc-key {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    padding: 1px 6px;
+    color: #FFF;
+  }
+
+  .sc-item.active-flag .sc-key {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* 目录页内覆盖层（非弹窗） */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(247, 246, 242, 0.98);
+    z-index: 500;
+    display: none;
+    flex-direction: column;
+    padding: 48px 64px;
+  }
+
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  .toc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px 32px;
+    margin-top: 24px;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    background: #FFF;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .toc-item:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+
+  .toc-item.active {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-light);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  .toc-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .toc-sub {
+    font-size: 13px;
+    color: var(--ink-sub);
+    margin-left: auto;
+  }
+
+  /* SVG 通用字体类 */
+  .svg-title { font-family: "Songti SC", "Noto Serif CJK SC", serif; font-weight: 700; fill: #1B2B33; }
+  .svg-label { font-family: "PingFang SC", "Noto Sans CJK SC", sans-serif; fill: #1B2B33; }
+  .svg-sub { font-family: "PingFang SC", "Noto Sans CJK SC", sans-serif; fill: #46585F; }
+  .svg-mono { font-family: "SF Mono", "JetBrains Mono", monospace; fill: #1B2B33; }
+  .svg-white { font-family: "PingFang SC", "Noto Sans CJK SC", sans-serif; fill: #FFFFFF; }
+</style>
+</head>
+<body>
+
+<div id="app-wrapper">
+  <!-- 左侧舞台区 -->
+  <div id="stage-viewport">
+    <div id="slide-stage">
+
+      <!-- 目录层（按 G 切换） -->
+      <div id="toc-overlay">
+        <div class="eyebrow">STRATA BLUEPRINT · DIRECTORY <span class="tag-accent">目录导航（按 G 或 ESC 返回）</span></div>
+        <div class="slide-title">数据库筑基课：分页优化全景地层图</div>
+        <div class="slide-lead">从执行器扫描代价到底层索引寻址，系统剖析 OFFSET、服务端游标与 Keyset 边界递进。</div>
+        <div class="header-divider"></div>
+        <div class="toc-grid" id="toc-list"></div>
+      </div>
+
+      <!-- ==================== SLIDE 1: 封面与核心命题 ==================== -->
+      <section class="slide active" data-index="0">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">POSTGRESQL DATABASE FOUNDATION · 01 / 10 <span class="tag-accent">最佳实践系列</span></div>
+          <h1 class="slide-title">数据库筑基课：分页优化的三种执行模型</h1>
+          <p class="slide-lead">分页性能退化的根因不是「LIMIT 20」，而是「OFFSET 1000000」背后的先扫描计算、再逐行丢弃。优化的本质是改写「找下一批数据」的寻址契约。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <rect x="40" y="24" width="1320" height="42" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="50" class="svg-title" font-size="16">从「数位置」到「定边界」：三种分页模型的地层映射总览</text>
+            <text x="1340" y="50" text-anchor="end" class="svg-mono" font-size="13" fill="#46585F">ARCH-OVERVIEW · PG EXECUTOR &amp; INDEX</text>
+
+            <!-- Column 1: OFFSET -->
+            <rect x="40" y="86" width="410" height="314" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="40" y="86" width="410" height="44" fill="#BE653B"/>
+            <text x="60" y="114" class="svg-white" font-size="17" font-weight="700">模型一：LIMIT / OFFSET（位置型）</text>
+            
+            <rect x="64" y="148" width="362" height="52" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+            <text x="80" y="170" class="svg-label" font-size="14" font-weight="700">核心契约：跳过前 N 行，取后 M 行</text>
+            <text x="80" y="190" class="svg-mono" font-size="12" fill="#46585F">LIMIT 20 OFFSET 100000</text>
+
+            <rect x="64" y="216" width="362" height="84" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="80" y="240" class="svg-label" font-size="14" font-weight="700">执行器代价特征</text>
+            <text x="80" y="262" class="svg-sub" font-size="13">· 必须拉取 N+M 行并执行 MVCC 可见性检查</text>
+            <text x="80" y="284" class="svg-sub" font-size="13">· 前 N 行在 Limit 节点被丢弃，CPU/IO 线性放大</text>
+
+            <rect x="64" y="316" width="362" height="64" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="80" y="340" class="svg-label" font-size="14" font-weight="700">适用边界：小结果集 / 浅页 / 必须任意跳页</text>
+            <text x="80" y="362" class="svg-sub" font-size="13">反模式：高频深翻页接口、无限滚动信息流</text>
+
+            <!-- Column 2: Cursor -->
+            <rect x="495" y="86" width="410" height="314" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="495" y="86" width="410" height="44" fill="#245A6B"/>
+            <text x="515" y="114" class="svg-white" font-size="17" font-weight="700">模型二：服务端游标（状态型）</text>
+
+            <rect x="519" y="148" width="362" height="52" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+            <text x="535" y="170" class="svg-label" font-size="14" font-weight="700">核心契约：会话内持有 Portal 执行状态</text>
+            <text x="535" y="190" class="svg-mono" font-size="12" fill="#46585F">DECLARE cur CURSOR / FETCH 20</text>
+
+            <rect x="519" y="216" width="362" height="84" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="535" y="240" class="svg-label" font-size="14" font-weight="700">执行器代价特征</text>
+            <text x="535" y="262" class="svg-sub" font-size="13">· Portal 记录 portalPos 指针，断点续读不重算</text>
+            <text x="535" y="284" class="svg-sub" font-size="13">· 绑定事务快照，长事务会阻塞 Vacuum 清理</text>
+
+            <rect x="519" y="316" width="362" height="64" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="535" y="340" class="svg-label" font-size="14" font-weight="700">适用边界：单任务导出 / ETL / 驱动流式读取</text>
+            <text x="535" y="362" class="svg-sub" font-size="13">反模式：无状态 HTTP API、跨连接池翻页</text>
+
+            <!-- Column 3: Keyset -->
+            <rect x="950" y="86" width="410" height="314" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="950" y="86" width="410" height="44" fill="#2F7A66"/>
+            <text x="970" y="114" class="svg-white" font-size="17" font-weight="700">模型三：WHERE 边界递进（值域型）</text>
+
+            <rect x="974" y="148" width="362" height="52" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1"/>
+            <text x="990" y="170" class="svg-label" font-size="14" font-weight="700">核心契约：以上一页末行排序键为下页起点</text>
+            <text x="990" y="190" class="svg-mono" font-size="12" fill="#46585F">WHERE (created_at, id) &lt; ($1, $2)</text>
+
+            <rect x="974" y="216" width="362" height="84" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="990" y="240" class="svg-label" font-size="14" font-weight="700">执行器代价特征</text>
+            <text x="990" y="262" class="svg-sub" font-size="13">· 借助 B-Tree 索引直接定位边界，跳过前缀</text>
+            <text x="990" y="284" class="svg-sub" font-size="13">· 复杂度稳定为 O(log N + M)，深页零退化</text>
+
+            <rect x="974" y="316" width="362" height="64" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="990" y="340" class="svg-label" font-size="14" font-weight="700">适用边界：大表深分页 / 信息流 / 订单流水</text>
+            <text x="990" y="362" class="svg-sub" font-size="13">限制：不天然支持任意跳页，需稳定唯一排序键</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>在选型之前，必须先厘清分页在工程上必须同时面对的四重核心约束：延迟、顺序、资源与并发。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: 20260601_04.md · digoal · PostgreSQL 分页优化</span>
+            <span>PAGE 01 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 2: 工程四维难题 ==================== -->
+      <section class="slide" data-index="1">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">PROBLEM DEFINITION · 02 / 10 <span class="tag-accent">工程四维约束</span></div>
+          <h1 class="slide-title">分页真正要解决的四重工程边界</h1>
+          <p class="slide-lead">分页不只是把大结果集切成小块传给客户端。在高并发与千万级数据量下，任何分页方案都必须在四个维度上给出明确答案。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <rect x="40" y="40" width="320" height="350" fill="#1E4B5A"/>
+            <text x="64" y="90" class="svg-white" font-size="22" font-weight="700">核心问题转化</text>
+            <line x1="64" y1="110" x2="336" y2="110" stroke="#74A5AD" stroke-width="1"/>
+            <text x="64" y="148" class="svg-white" font-size="15">传统思维（位置视角）：</text>
+            <rect x="64" y="160" width="272" height="44" fill="#2E6373" stroke="#74A5AD" stroke-width="1"/>
+            <text x="80" y="187" class="svg-white" font-size="14">「给我第 50000 页的数据」</text>
+
+            <path d="M 200 214 L 200 246" stroke="#F7E9DE" stroke-width="2"/>
+            <polygon points="200,252 194,242 206,242" fill="#F7E9DE"/>
+
+            <text x="64" y="278" class="svg-white" font-size="15">数据库优化视角：</text>
+            <rect x="64" y="290" width="272" height="72" fill="#BE653B"/>
+            <text x="80" y="320" class="svg-white" font-size="14" font-weight="700">「下一批数据从哪个值开始，</text>
+            <text x="80" y="344" class="svg-white" font-size="14" font-weight="700">索引能否直接定位到那里？」</text>
+
+            <!-- 正交直角分流线 -->
+            <path d="M 360 215 L 410 215" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <path d="M 410 82 L 410 343" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <path d="M 410 82 L 450 82" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <path d="M 410 169 L 450 169" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <path d="M 410 256 L 450 256" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <path d="M 410 343 L 450 343" stroke="#245A6B" stroke-width="2" fill="none"/>
+
+            <!-- 维度 1 -->
+            <rect x="450" y="45" width="910" height="74" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="450" y="45" width="180" height="74" fill="#245A6B"/>
+            <text x="470" y="88" class="svg-white" font-size="17" font-weight="700">01 · 延迟稳定性</text>
+            <text x="650" y="76" class="svg-label" font-size="15" font-weight="700">第 1 页耗时 10ms，第 50000 页不能退化成 10s</text>
+            <text x="650" y="102" class="svg-sub" font-size="14">必须消除随页码深度线性增长的扫描与丢弃开销，保证尾部响应时间可预测。</text>
+
+            <!-- 维度 2 -->
+            <rect x="450" y="132" width="910" height="74" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="450" y="132" width="180" height="74" fill="#2E6373"/>
+            <text x="470" y="175" class="svg-white" font-size="17" font-weight="700">02 · 排序确定性</text>
+            <text x="650" y="163" class="svg-label" font-size="15" font-weight="700">翻页过程中严禁出现记录重复、漏行或乱序</text>
+            <text x="650" y="189" class="svg-sub" font-size="14">缺乏唯一 ORDER BY 时，PostgreSQL 规划器在不同 LIMIT/OFFSET 下可能选择不同执行路径导致结果漂移。</text>
+
+            <!-- 维度 3 -->
+            <rect x="450" y="219" width="910" height="74" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="450" y="219" width="180" height="74" fill="#BE653B"/>
+            <text x="470" y="262" class="svg-white" font-size="17" font-weight="700">03 · 资源可控性</text>
+            <text x="650" y="250" class="svg-label" font-size="15" font-weight="700">不能为了返回 20 行而扫描、排序、校验 100 万行</text>
+            <text x="650" y="276" class="svg-sub" font-size="14">避免无效的缓冲区读取（shared hit/read）、临时文件磁盘排序与 CPU 空转。</text>
+
+            <!-- 维度 4 -->
+            <rect x="450" y="306" width="910" height="74" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="450" y="306" width="180" height="74" fill="#2F7A66"/>
+            <text x="470" y="349" class="svg-white" font-size="17" font-weight="700">04 · 并发一致性</text>
+            <text x="650" y="337" class="svg-label" font-size="15" font-weight="700">翻页期间存在并发写入时，明确应用可接受的语义</text>
+            <text x="650" y="363" class="svg-sub" font-size="14">Read Committed 下每次查询生成新快照；新数据插入会改变物理行号偏移，但不会改变已过记录的排序键值。</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>剖析第一种模型：为什么看似无害的 OFFSET 在 PostgreSQL 执行器内部会演变成性能黑洞？</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: 20260601_04.md · Section 1: 它解决什么问题</span>
+            <span>PAGE 02 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 3: OFFSET 原理与源码流水线（带交互动画） ==================== -->
+      <section class="slide" data-index="2">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">EXECUTOR INTERNALS · 03 / 10 <span class="tag-accent">模型一：OFFSET 执行流水线</span></div>
+          <h1 class="slide-title">OFFSET 的执行代价：被 Limit 节点丢弃的前缀</h1>
+          <p class="slide-lead">源码 nodeLimit.c 揭示：ExecLimit 必须循环调用 ExecProcNode(outerPlan) 拉取 tuple，直到 position &gt; offset 才开始向上输出。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <div class="anim-controls">
+            <label>OFFSET:</label>
+            <input type="number" id="offset-input" value="100" min="10" max="500" step="10">
+            <label>LIMIT:</label>
+            <input type="number" id="limit-input" value="20" min="5" max="50" step="5">
+            <button class="btn-ctrl" onclick="runOffsetAnim()">播放执行过程</button>
+            <button class="btn-ctrl secondary" onclick="resetOffsetAnim()">重置</button>
+            <span class="anim-status" id="offset-status">就绪：点击播放观察丢弃率</span>
+          </div>
+
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <!-- 底层数据/索引扫描层 -->
+            <rect x="40" y="70" width="340" height="310" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+            <rect x="40" y="70" width="340" height="38" fill="#1E4B5A"/>
+            <text x="58" y="94" class="svg-white" font-size="15" font-weight="700">1. 子计划 (outerPlan)：Index / Seq Scan</text>
+            
+            <text x="58" y="132" class="svg-label" font-size="13" font-weight="700">按序向上吐出 Tuple Stream：</text>
+            <rect x="58" y="148" width="304" height="32" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+            <text x="72" y="169" class="svg-mono" font-size="12">Tuple #1 .. #N (前 OFFSET 行)</text>
+
+            <rect x="58" y="190" width="304" height="32" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1"/>
+            <text x="72" y="211" class="svg-mono" font-size="12">Tuple #N+1 .. #N+M (目标窗口)</text>
+
+            <rect x="58" y="242" width="304" height="118" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="72" y="264" class="svg-label" font-size="13" font-weight="700">每行都必须经历的完整开销：</text>
+            <text x="72" y="286" class="svg-sub" font-size="12">· 索引页读取与回表 Fetch</text>
+            <text x="72" y="306" class="svg-sub" font-size="12">· MVCC 快照可见性判断 (HeapTupleSatisfies)</text>
+            <text x="72" y="326" class="svg-sub" font-size="12">· 过滤条件计算 (Qual Check)</text>
+            <text x="72" y="346" class="svg-sub" font-size="12">· 若无匹配索引，还需全量 Sort 排序</text>
+
+            <!-- 正交连接箭头 1 -> 2 -->
+            <path d="M 380 225 L 460 225" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <polygon points="466,225 456,219 456,231" fill="#245A6B"/>
+            <rect x="392" y="194" width="60" height="22" fill="#FAF9F6"/>
+            <text x="422" y="209" text-anchor="middle" class="svg-mono" font-size="11" fill="#245A6B">PULL</text>
+
+            <!-- 中间 ExecLimit 节点 -->
+            <rect x="466" y="70" width="460" height="310" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+            <rect x="466" y="70" width="460" height="38" fill="#2E6373"/>
+            <text x="484" y="94" class="svg-white" font-size="15" font-weight="700">2. 执行器 Limit 节点 (nodeLimit.c · ExecLimit)</text>
+
+            <rect x="488" y="126" width="416" height="66" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+            <text x="504" y="150" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">阶段 A：position &lt;= offset（循环丢弃）</text>
+            <text x="504" y="172" class="svg-sub" font-size="13">循环调用 ExecProcNode()，计数器 position++，直接丢弃数据！</text>
+
+            <rect x="488" y="206" width="416" height="66" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1"/>
+            <text x="504" y="230" class="svg-mono" font-size="13" font-weight="700" fill="#2F7A66">阶段 B：offset &lt; position &lt;= offset + count</text>
+            <text x="504" y="252" class="svg-sub" font-size="13">进入有效窗口，将当前 Tuple 向上返回给客户端。</text>
+
+            <!-- 实时进度条（动画驱动） -->
+            <rect x="488" y="290" width="416" height="70" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="504" y="312" class="svg-mono" font-size="12" id="offset-bar-label">扫描总数: 120 行 | 丢弃: 100 行 (83.3%) | 有效: 20 行</text>
+            <rect x="504" y="324" width="384" height="22" fill="#E5EFF0" stroke="#D9D5CB" stroke-width="1"/>
+            <rect id="offset-discard-bar" x="504" y="324" width="320" height="22" fill="#BE653B"/>
+            <rect id="offset-keep-bar" x="824" y="324" width="64" height="22" fill="#2F7A66"/>
+
+            <!-- 正交连接箭头 2 -> 3 -->
+            <path d="M 926 159 L 1010 159" stroke="#BE653B" stroke-width="2" fill="none"/>
+            <polygon points="1016,159 1006,153 1006,165" fill="#BE653B"/>
+
+            <path d="M 926 239 L 1010 239" stroke="#2F7A66" stroke-width="2" fill="none"/>
+            <polygon points="1016,239 1006,233 1006,245" fill="#2F7A66"/>
+
+            <!-- 右侧输出去向 -->
+            <rect x="1016" y="114" width="344" height="86" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+            <text x="1034" y="144" class="svg-label" font-size="15" font-weight="700" fill="#BE653B">垃圾桶：前 OFFSET 行被抛弃</text>
+            <text x="1034" y="168" class="svg-sub" font-size="13">规划器代价估算 (planner.c)：</text>
+            <text x="1034" y="188" class="svg-mono" font-size="12" fill="#46585F">total_rows = offset + count</text>
+
+            <rect x="1016" y="218" width="344" height="96" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+            <text x="1034" y="248" class="svg-label" font-size="15" font-weight="700" fill="#2F7A66">客户端网络：仅收到 LIMIT 行</text>
+            <text x="1034" y="272" class="svg-sub" font-size="13">网络传输量虽小，但数据库内部已承担</text>
+            <text x="1034" y="292" class="svg-sub" font-size="13">O(OFFSET + LIMIT) 的全额扫描代价。</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>常见误区：给 ORDER BY 建了 B-Tree 索引就能解决深 OFFSET 吗？索引能消除排序，但消除不了「数行」。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: nodeLimit.c (ExecLimit) · planner.c (preprocess_limit)</span>
+            <span>PAGE 03 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 4: B-Tree 索引与 ORDER BY + LIMIT ==================== -->
+      <section class="slide" data-index="3">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">INDEX &amp; PATHKEYS · 04 / 10 <span class="tag-accent">索引误区澄清</span></div>
+          <h1 class="slide-title">有索引也救不了深 OFFSET：扫描路径对比</h1>
+          <p class="slide-lead">B-Tree 索引按有序链表组织叶子节点，能让 ORDER BY ... LIMIT n 避免全表 Sort；但遇到 OFFSET k 时，指针依然要从头沿叶子链表走过 k 个条目。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <rect x="40" y="24" width="1320" height="175" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="52" class="svg-title" font-size="16">B-Tree 复合索引叶子层链表：idx_feed (tenant_id, created_at DESC, id DESC)</text>
+            <text x="1340" y="52" text-anchor="end" class="svg-mono" font-size="12" fill="#245A6B">pathkeys.c / indxpath.c</text>
+
+            <rect x="60" y="74" width="170" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+            <text x="145" y="102" text-anchor="middle" class="svg-mono" font-size="13" font-weight="700">Leaf Page 1</text>
+            <text x="145" y="124" text-anchor="middle" class="svg-sub" font-size="12">Row 1 ~ 200 (跳过)</text>
+
+            <path d="M 230 110 L 270 110" stroke="#BE653B" stroke-width="2"/>
+            <polygon points="276,110 266,105 266,115" fill="#BE653B"/>
+
+            <rect x="276" y="74" width="170" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+            <text x="361" y="102" text-anchor="middle" class="svg-mono" font-size="13" font-weight="700">Leaf Page 2</text>
+            <text x="361" y="124" text-anchor="middle" class="svg-sub" font-size="12">Row 201 ~ 400 (跳过)</text>
+
+            <path d="M 446 110 L 486 110" stroke="#BE653B" stroke-width="2"/>
+            <polygon points="492,110 482,105 482,115" fill="#BE653B"/>
+
+            <rect x="492" y="74" width="240" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5" stroke-dasharray="5,3"/>
+            <text x="612" y="102" text-anchor="middle" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">... 连续遍历 500 个叶子页 ...</text>
+            <text x="612" y="124" text-anchor="middle" class="svg-sub" font-size="12">逐条回表检查 MVCC 可见性</text>
+
+            <path d="M 732 110 L 772 110" stroke="#BE653B" stroke-width="2"/>
+            <polygon points="778,110 768,105 768,115" fill="#BE653B"/>
+
+            <rect x="778" y="74" width="250" height="72" fill="#E4F1EC" stroke="#2F7A66" stroke-width="2"/>
+            <text x="903" y="102" text-anchor="middle" class="svg-mono" font-size="13" font-weight="700" fill="#2F7A66">Leaf Page 501 (Target)</text>
+            <text x="903" y="124" text-anchor="middle" class="svg-label" font-size="12">Row 100001 ~ 100020 (返回)</text>
+
+            <path d="M 1028 110 L 1068 110" stroke="#89938F" stroke-width="1.5"/>
+            <polygon points="1074,110 1064,105 1064,115" fill="#89938F"/>
+
+            <rect x="1074" y="74" width="266" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1207" y="102" text-anchor="middle" class="svg-mono" font-size="13" fill="#89938F">Leaf Page 502 ... End</text>
+            <text x="1207" y="124" text-anchor="middle" class="svg-sub" font-size="12">到达 LIMIT 后提前终止扫描</text>
+
+            <line x1="60" y1="168" x2="768" y2="168" stroke="#BE653B" stroke-width="2"/>
+            <text x="414" y="185" text-anchor="middle" class="svg-label" font-size="12" font-weight="700" fill="#BE653B">OFFSET 100,000：索引扫描仍必须物理走过前 10 万条记录</text>
+
+            <line x1="778" y1="168" x2="1028" y2="168" stroke="#2F7A66" stroke-width="2"/>
+            <text x="903" y="185" text-anchor="middle" class="svg-label" font-size="12" font-weight="700" fill="#2F7A66">LIMIT 20 窗口</text>
+
+            <!-- 下半部分：三种查询计划对比卡片 -->
+            <rect x="40" y="218" width="420" height="186" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="40" y="218" width="420" height="36" fill="#89938F"/>
+            <text x="58" y="241" class="svg-white" font-size="14" font-weight="700">场景 A：无匹配索引 + OFFSET 100000</text>
+            <text x="58" y="278" class="svg-mono" font-size="12" fill="#BE653B">Sort -&gt; Seq/Bitmap Scan -&gt; Limit</text>
+            <text x="58" y="304" class="svg-sub" font-size="13">· 必须扫出全部满足 WHERE 的行并在内存/磁盘排序</text>
+            <text x="58" y="328" class="svg-sub" font-size="13">· 排序完成后再数过前 100000 行丢弃</text>
+            <text x="58" y="352" class="svg-sub" font-size="13">· 最坏情况：全表扫描 + 外部磁盘归并排序</text>
+
+            <rect x="490" y="218" width="420" height="186" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="490" y="218" width="420" height="36" fill="#245A6B"/>
+            <text x="508" y="241" class="svg-white" font-size="14" font-weight="700">场景 B：匹配索引 + OFFSET 100000</text>
+            <text x="508" y="278" class="svg-mono" font-size="12" fill="#245A6B">Index Scan (Backward) -&gt; Limit</text>
+            <text x="508" y="304" class="svg-sub" font-size="13">· 消除了显式 Sort 节点（pathkeys 匹配）</text>
+            <text x="508" y="328" class="svg-sub" font-size="13">· 仍需沿索引读取 100020 条记录并回表校验可见性</text>
+            <text x="508" y="352" class="svg-sub" font-size="13">· 浅页极快，深页依然随 OFFSET 线性变慢</text>
+
+            <rect x="940" y="218" width="420" height="186" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+            <rect x="940" y="218" width="420" height="36" fill="#2F7A66"/>
+            <text x="958" y="241" class="svg-white" font-size="14" font-weight="700">场景 C：匹配索引 + WHERE 边界 (Keyset)</text>
+            <text x="958" y="278" class="svg-mono" font-size="12" fill="#2F7A66">Index Cond: (tenant_id, created_at, id) &lt; ...</text>
+            <text x="958" y="304" class="svg-sub" font-size="13">· B-Tree 根节点直接二分定位到 Leaf Page 501</text>
+            <text x="958" y="328" class="svg-sub" font-size="13">· 前 500 个叶子页零访问、零回表、零 MVCC 校验</text>
+            <text x="958" y="352" class="svg-sub" font-size="13">· 第 1 页与第 50000 页扫描行数完全一致（~20行）</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>既然从头数行太慢，如果让数据库在服务端记住当前读到哪里，分批吐出呢？这就引出了第二种模型：服务端游标。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: PostgreSQL Docs (Indexes and ORDER BY) · indxpath.c</span>
+            <span>PAGE 04 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 5: 服务端游标与 Portal 机制 ==================== -->
+      <section class="slide" data-index="4">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">SERVER-SIDE CURSOR · 05 / 10 <span class="tag-accent">模型二：服务端游标与 Portal</span></div>
+          <h1 class="slide-title">服务端游标：用会话状态换取流式消费</h1>
+          <p class="slide-lead">PostgreSQL 中的 SQL Cursor 底层对应内存结构体 Portal。它保存执行计划树与当前游标位置（portalPos），适合单连接批处理，却与无状态 Web 架构天然冲突。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <!-- 左侧：客户端批处理任务 -->
+            <rect x="40" y="36" width="320" height="358" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="40" y="36" width="320" height="40" fill="#1E4B5A"/>
+            <text x="58" y="61" class="svg-white" font-size="15" font-weight="700">客户端 / 批处理 Worker</text>
+
+            <rect x="60" y="96" width="280" height="54" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+            <text x="74" y="118" class="svg-mono" font-size="12" font-weight="700">1. BEGIN; DECLARE cur CURSOR...</text>
+            <text x="74" y="138" class="svg-sub" font-size="12">绑定当前物理数据库连接与事务</text>
+
+            <rect x="60" y="168" width="280" height="54" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+            <text x="74" y="190" class="svg-mono" font-size="12" font-weight="700">2. FETCH FORWARD 5000 FROM cur</text>
+            <text x="74" y="210" class="svg-sub" font-size="12">拉取第 1 批（5000 行）写入文件</text>
+
+            <rect x="60" y="240" width="280" height="54" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+            <text x="74" y="262" class="svg-mono" font-size="12" font-weight="700">3. FETCH FORWARD 5000 FROM cur</text>
+            <text x="74" y="282" class="svg-sub" font-size="12">从上次断点继续，无需重新扫描</text>
+
+            <rect x="60" y="312" width="280" height="54" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="74" y="334" class="svg-mono" font-size="12" font-weight="700">4. CLOSE cur; COMMIT;</text>
+            <text x="74" y="354" class="svg-sub" font-size="12">释放 Portal 内存与事务快照</text>
+
+            <!-- 正交连线 -->
+            <path d="M 360 123 L 430 123" stroke="#245A6B" stroke-width="2"/>
+            <polygon points="436,123 426,118 426,128" fill="#245A6B"/>
+
+            <path d="M 360 195 L 430 195" stroke="#245A6B" stroke-width="2"/>
+            <polygon points="436,195 426,190 426,200" fill="#245A6B"/>
+
+            <path d="M 360 267 L 430 267" stroke="#245A6B" stroke-width="2"/>
+            <polygon points="436,267 426,262 426,272" fill="#245A6B"/>
+
+            <!-- 中间：PostgreSQL Backend Portal 内部 -->
+            <rect x="436" y="36" width="490" height="358" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+            <rect x="436" y="36" width="490" height="40" fill="#245A6B"/>
+            <text x="456" y="61" class="svg-white" font-size="15" font-weight="700">PG 后端进程：Portal 执行上下文 (portal.h)</text>
+
+            <rect x="458" y="96" width="446" height="86" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+            <text x="476" y="120" class="svg-mono" font-size="13" font-weight="700" fill="#1E4B5A">PerformCursorOpen (portalcmds.c)</text>
+            <text x="476" y="144" class="svg-sub" font-size="13">· 创建 Named Portal，初始化 QueryDesc 与执行器树</text>
+            <text x="476" y="166" class="svg-sub" font-size="13">· 持有当前事务的一致性快照 (Snapshot)</text>
+
+            <rect x="458" y="200" width="446" height="92" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="476" y="224" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">PortalRunFetch (pquery.c) &amp; portalPos</text>
+            <text x="476" y="248" class="svg-sub" font-size="13">· portalPos 精确记录当前已读取的逻辑位置</text>
+            <text x="476" y="270" class="svg-sub" font-size="13">· 每次 FETCH 仅驱动底层节点再向前推进 N 步</text>
+
+            <rect x="458" y="310" width="446" height="66" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1"/>
+            <text x="476" y="334" class="svg-label" font-size="13" font-weight="700" fill="#AE8A3E">特例：DECLARE ... WITH HOLD CURSOR</text>
+            <text x="476" y="356" class="svg-sub" font-size="12">允许跨事务存活，但提交时会将全部剩余结果物化复制到临时文件/内存！</text>
+
+            <!-- 右侧：架构限制与风险预警 -->
+            <rect x="954" y="36" width="406" height="358" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+            <rect x="954" y="36" width="406" height="40" fill="#BE653B"/>
+            <text x="974" y="61" class="svg-white" font-size="15" font-weight="700">为何不适合无状态 Web 翻页？</text>
+
+            <rect x="974" y="96" width="366" height="64" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="990" y="120" class="svg-label" font-size="14" font-weight="700" fill="#BE653B">1. 连接池会话漂移</text>
+            <text x="990" y="142" class="svg-sub" font-size="13">HTTP 下一页请求通常落到不同连接，找不到原 Portal。</text>
+
+            <rect x="974" y="174" width="366" height="64" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="990" y="198" class="svg-label" font-size="14" font-weight="700" fill="#BE653B">2. 长事务拖垮 Vacuum</text>
+            <text x="990" y="220" class="svg-sub" font-size="13">用户停留在第 2 页不关闭，快照持续阻塞死元组回收。</text>
+
+            <rect x="974" y="252" width="366" height="64" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="990" y="276" class="svg-label" font-size="14" font-weight="700" fill="#BE653B">3. WITH HOLD 隐性放大</text>
+            <text x="990" y="298" class="svg-sub" font-size="13">COMMIT 时强制把百万行写入临时磁盘，失去流式优势。</text>
+
+            <rect x="974" y="330" width="366" height="46" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="990" y="358" class="svg-mono" font-size="12" fill="#46585F">4. FETCH ABSOLUTE k 仍需逐行跳过中间行</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>Web 接口既不能用深 OFFSET，又不能在服务端挂长事务，那状态该存在哪里？答案是：把值域边界交给客户端 Token。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: portal.h · portalcmds.c · pquery.c · PostgreSQL DECLARE Docs</span>
+            <span>PAGE 05 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 6: Keyset Pagination 边界递进（带交互动画） ==================== -->
+      <section class="slide" data-index="5">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">KEYSET PAGINATION · 06 / 10 <span class="tag-accent">模型三：WHERE 边界递进</span></div>
+          <h1 class="slide-title">Keyset 边界递进：从「数行」跃迁到「索引二分定位」</h1>
+          <p class="slide-lead">将上一页最后一行的排序键 (created_at, id) 编码为不透明 Token 返回客户端；下一页查询直接通过 Index Cond 精准切入目标位置。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <div class="anim-controls">
+            <span style="font-size:12px;color:var(--ink-sub);font-family:var(--font-mono)">模拟连续翻页：</span>
+            <button class="btn-ctrl" onclick="stepKeysetAnim()">执行下一页 (Next Page)</button>
+            <button class="btn-ctrl secondary" onclick="resetKeysetAnim()">回到第 1 页</button>
+            <span class="anim-status" id="keyset-status">当前：第 1 页 (无边界条件)</span>
+          </div>
+
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <!-- 左侧：客户端 Token 状态流转 -->
+            <rect x="40" y="66" width="380" height="334" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+            <rect x="40" y="66" width="380" height="38" fill="#245A6B"/>
+            <text x="58" y="90" class="svg-white" font-size="15" font-weight="700">无状态客户端与 Opaque Token</text>
+
+            <rect x="60" y="122" width="340" height="82" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+            <text x="76" y="146" class="svg-label" font-size="13" font-weight="700">当前请求携带边界 Token：</text>
+            <text x="76" y="170" class="svg-mono" font-size="12" id="ks-req-token" fill="#1E4B5A">cursor = NULL (首次请求)</text>
+            <text x="76" y="190" class="svg-sub" font-size="12">服务端无需保留任何连接或事务状态</text>
+
+            <path d="M 230 204 L 230 236" stroke="#2F7A66" stroke-width="2"/>
+            <polygon points="230,242 224,232 236,232" fill="#2F7A66"/>
+
+            <rect x="60" y="242" width="340" height="136" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1"/>
+            <text x="76" y="266" class="svg-label" font-size="13" font-weight="700" fill="#2F7A66">响应返回数据 + 下一页新边界：</text>
+            <text x="76" y="290" class="svg-mono" font-size="12" id="ks-resp-rows">返回行: #1 ~ #20 (扫描: 20 行)</text>
+            <text x="76" y="314" class="svg-mono" font-size="12" id="ks-next-token" fill="#1B2B33">next_token = ('10:00:00', 980)</text>
+            <text x="76" y="340" class="svg-sub" font-size="12">最佳实践：对 Token 做 HMAC 签名防篡改，</text>
+            <text x="76" y="360" class="svg-sub" font-size="12">并校验过滤条件版本号。</text>
+
+            <!-- 正交连线 -->
+            <path d="M 420 163 L 480 163" stroke="#2F7A6B" stroke-width="2"/>
+            <polygon points="486,163 476,158 476,168" fill="#2F7A6B"/>
+
+            <!-- 右侧：执行器与 B-Tree 索引寻址示意 -->
+            <rect x="486" y="66" width="874" height="334" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="486" y="66" width="874" height="38" fill="#2F7A66"/>
+            <text x="506" y="90" class="svg-white" font-size="15" font-weight="700">数据库执行层：B-Tree Index Cond 精准切片</text>
+
+            <!-- 动态 SQL 展示框 -->
+            <rect x="508" y="120" width="830" height="74" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="524" y="144" class="svg-mono" font-size="13" font-weight="700" fill="#1E4B5A">SELECT id, created_at, title FROM feed WHERE tenant_id = 42</text>
+            <text x="524" y="166" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B" id="ks-sql-where">  -- 无额外边界条件，直接从索引最左端读取</text>
+            <text x="524" y="186" class="svg-mono" font-size="13" fill="#46585F">ORDER BY created_at DESC, id DESC LIMIT 20;</text>
+
+            <text x="508" y="222" class="svg-label" font-size="13" font-weight="700">索引有序序列 (tenant_id=42, created_at DESC, id DESC)：</text>
+
+            <rect id="ks-blk-1" x="508" y="236" width="154" height="76" fill="#E4F1EC" stroke="#2F7A66" stroke-width="2.5"/>
+            <text x="585" y="264" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700">Page 1 (#1~20)</text>
+            <text x="585" y="286" text-anchor="middle" class="svg-sub" font-size="11">末行: ('10:00', 980)</text>
+
+            <rect id="ks-blk-2" x="677" y="236" width="154" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="754" y="264" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700">Page 2 (#21~40)</text>
+            <text x="754" y="286" text-anchor="middle" class="svg-sub" font-size="11">末行: ('09:58', 960)</text>
+
+            <rect id="ks-blk-3" x="846" y="236" width="154" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="923" y="264" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700">Page 3 (#41~60)</text>
+            <text x="923" y="286" text-anchor="middle" class="svg-sub" font-size="11">末行: ('09:55', 940)</text>
+
+            <rect id="ks-blk-4" x="1015" y="236" width="154" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1092" y="264" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700">Page 4 (#61~80)</text>
+            <text x="1092" y="286" text-anchor="middle" class="svg-sub" font-size="11">末行: ('09:51', 920)</text>
+
+            <rect id="ks-blk-5" x="1184" y="236" width="154" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1261" y="264" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700">Page N (深页)</text>
+            <text x="1261" y="286" text-anchor="middle" class="svg-sub" font-size="11">同样仅扫描 20 行</text>
+
+            <rect x="508" y="330" width="830" height="50" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+            <text x="524" y="352" class="svg-label" font-size="13" font-weight="700" fill="#1E4B5A">关键设计铁律：唯一 Tie-Breaker</text>
+            <text x="524" y="370" class="svg-sub" font-size="12">created_at 可能在同一毫秒重复！必须将主键 id 附在排序末位 (created_at DESC, id DESC)，否则边界会漏行或死循环。</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>当排序列出现「一升一降」（混合方向）或可为 NULL 时，直接写 (a, b) &lt; ($1, $2) 会导致严重的数据错乱。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: 20260601_04.md · Section 3.3 &amp; Section 6.3</span>
+            <span>PAGE 06 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 7: 混合方向排序与边界展开 ==================== -->
+      <section class="slide" data-index="6">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">COMPLEX PREDICATES · 07 / 10 <span class="tag-accent">混合方向与表达式展开</span></div>
+          <h1 class="slide-title">混合排序方向：严禁机械套用 Row Comparison</h1>
+          <p class="slide-lead">PostgreSQL 的行比较语法 (a, b) &lt; ($1, $2) 隐含所有列同向比较。遇到 ORDER BY score DESC, created_at ASC, id ASC 时，必须手动展开为标准布尔析取范式。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <!-- 左侧：错误写法剖析 -->
+            <rect x="40" y="34" width="580" height="362" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+            <rect x="40" y="34" width="580" height="40" fill="#BE653B"/>
+            <text x="60" y="59" class="svg-white" font-size="16" font-weight="700">反模式：混合方向直接写行比较 (Row Comparison)</text>
+
+            <rect x="64" y="92" width="532" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+            <text x="80" y="116" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">-- 错误 SQL 写法：</text>
+            <text x="80" y="138" class="svg-mono" font-size="13">WHERE (score, created_at, id) &lt; ($2, $3, $4)</text>
+            <text x="80" y="156" class="svg-mono" font-size="13">ORDER BY score DESC, created_at ASC, id ASC</text>
+
+            <text x="64" y="194" class="svg-label" font-size="14" font-weight="700">为什么会逻辑崩坏？</text>
+            <rect x="64" y="208" width="532" height="164" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="80" y="234" class="svg-sub" font-size="13">1. SQL 标准定义 (a, b) &lt; (x, y) 等价于：</text>
+            <text x="96" y="256" class="svg-mono" font-size="12" fill="#1B2B33">a &lt; x OR (a = x AND b &lt; y)</text>
+            <text x="80" y="284" class="svg-sub" font-size="13">2. 当 score 相等时，created_at 是 ASC 升序排序：</text>
+            <text x="96" y="306" class="svg-sub" font-size="13" fill="#BE653B">下一页需要的是「更大的 created_at (&gt; $3)」，</text>
+            <text x="96" y="328" class="svg-sub" font-size="13" fill="#BE653B">而行比较却错误地查询了「更小的 created_at (&lt; $3)」！</text>
+            <text x="80" y="356" class="svg-label" font-size="13" font-weight="700">后果：同分记录大量漏行，甚至重复返回已读旧数据。</text>
+
+            <!-- 中间正交指向 -->
+            <path d="M 620 215 L 690 215" stroke="#2F7A66" stroke-width="2.5"/>
+            <polygon points="698,215 686,208 686,222" fill="#2F7A66"/>
+            <text x="659" y="202" text-anchor="middle" class="svg-label" font-size="12" font-weight="700" fill="#2F7A66">改写为</text>
+
+            <!-- 右侧：正确展开范式 -->
+            <rect x="698" y="34" width="662" height="362" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+            <rect x="698" y="34" width="662" height="40" fill="#2F7A66"/>
+            <text x="718" y="59" class="svg-white" font-size="16" font-weight="700">正解：按各列排序方向逐级展开布尔条件 + 匹配索引</text>
+
+            <rect x="722" y="92" width="614" height="58" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+            <text x="738" y="114" class="svg-mono" font-size="12" font-weight="700" fill="#1E4B5A">-- 1. 必须创建与 ORDER BY 方向完全一致的复合索引：</text>
+            <text x="738" y="136" class="svg-mono" font-size="12">CREATE INDEX idx_score ON feed (tenant_id, score DESC, created_at ASC, id ASC);</text>
+
+            <rect x="722" y="166" width="614" height="142" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1"/>
+            <text x="738" y="190" class="svg-mono" font-size="12" font-weight="700" fill="#2F7A66">-- 2. 边界谓词逐级展开（DESC 用 &lt;，ASC 用 &gt;）：</text>
+            <text x="738" y="214" class="svg-mono" font-size="13">WHERE tenant_id = $1</text>
+            <text x="738" y="236" class="svg-mono" font-size="13">  AND (</text>
+            <text x="738" y="258" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">       score &lt; $2</text>
+            <text x="738" y="280" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">    OR (score = $2 AND created_at &gt; $3)</text>
+            <text x="738" y="302" class="svg-mono" font-size="13" font-weight="700" fill="#1B2B33">    OR (score = $2 AND created_at = $3 AND id &gt; $4) )</text>
+
+            <rect x="722" y="322" width="614" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="738" y="344" class="svg-label" font-size="13" font-weight="700">NULL 语义提醒：</text>
+            <text x="738" y="364" class="svg-sub" font-size="12">生产表分页排序列强烈建议设为 NOT NULL；若允许 NULL，需显式处理 NULLS FIRST/LAST 边界。</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>掌握了三种模型的原理与边界写法后，我们把它们放在同一张全景坐标系中，完成横向量化对比。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: 20260601_04.md · Section 6.4: 混合方向排序不要硬套 row comparison</span>
+            <span>PAGE 07 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 8: 三种方案八维横向对比 ==================== -->
+      <section class="slide" data-index="7">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">COMPARATIVE MATRIX · 08 / 10 <span class="tag-accent">三模型八维全景对比</span></div>
+          <h1 class="slide-title">OFFSET、服务端游标与 Keyset 横向评估矩阵</h1>
+          <p class="slide-lead">不存在银弹架构：OFFSET 按位置计数，Cursor 按会话保存执行状态，Keyset 按值域定位边界。选型的关键是让业务诉求与代价边界对齐。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <rect x="40" y="22" width="220" height="42" fill="#1E4B5A" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="48" class="svg-white" font-size="15" font-weight="700">评估维度</text>
+
+            <rect x="260" y="22" width="366" height="42" fill="#BE653B" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="48" class="svg-white" font-size="15" font-weight="700">OFFSET / LIMIT（位置型）</text>
+
+            <rect x="626" y="22" width="366" height="42" fill="#245A6B" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="48" class="svg-white" font-size="15" font-weight="700">服务端游标 Cursor（状态型）</text>
+
+            <rect x="992" y="22" width="368" height="42" fill="#2F7A66" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="48" class="svg-white" font-size="15" font-weight="700">WHERE 边界递进 Keyset（值域型）</text>
+
+            <!-- Row 1 -->
+            <rect x="40" y="64" width="220" height="48" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="93" class="svg-label" font-size="14" font-weight="700">状态保存位置</text>
+            <rect x="260" y="64" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="93" class="svg-sub" font-size="13">客户端传入页号 (page_no)</text>
+            <rect x="626" y="64" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="93" class="svg-sub" font-size="13">数据库会话 / 事务内 Portal 内存</text>
+            <rect x="992" y="64" width="368" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="93" class="svg-sub" font-size="13">客户端 Token 保存上页末行排序键值</text>
+
+            <!-- Row 2 -->
+            <rect x="40" y="112" width="220" height="48" fill="#CFE0DC" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="141" class="svg-label" font-size="14" font-weight="700">深分页执行成本</text>
+            <rect x="260" y="112" width="366" height="48" fill="#F7E9DE" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="141" class="svg-label" font-size="13" font-weight="700" fill="#BE653B">随 OFFSET 线性增长（扫描并丢弃）</text>
+            <rect x="626" y="112" width="366" height="48" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="141" class="svg-sub" font-size="13">顺序续读稳定，但长期占用会话资源</text>
+            <rect x="992" y="112" width="368" height="48" fill="#E4F1EC" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="141" class="svg-label" font-size="13" font-weight="700" fill="#2F7A66">接近 O(索引定位 + page_size)，恒定低延迟</text>
+
+            <!-- Row 3 -->
+            <rect x="40" y="160" width="220" height="48" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="189" class="svg-label" font-size="14" font-weight="700">任意跳页能力</text>
+            <rect x="260" y="160" width="366" height="48" fill="#E4F1EC" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="189" class="svg-label" font-size="13" font-weight="700" fill="#2F7A66">原生支持（可直接跳第 N 页）</text>
+            <rect x="626" y="160" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="189" class="svg-sub" font-size="13">FETCH ABSOLUTE 可移动，但底层仍需步进</text>
+            <rect x="992" y="160" width="368" height="48" fill="#F7E9DE" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="189" class="svg-label" font-size="13" font-weight="700" fill="#BE653B">不支持（除非配合时间/ID 锚点表）</text>
+
+            <!-- Row 4 -->
+            <rect x="40" y="208" width="220" height="48" fill="#CFE0DC" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="237" class="svg-label" font-size="14" font-weight="700">排序与索引要求</text>
+            <rect x="260" y="208" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="237" class="svg-sub" font-size="13">必须唯一 ORDER BY，否则页间结果漂移</text>
+            <rect x="626" y="208" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="237" class="svg-sub" font-size="13">查询需稳定排序，单快照内自然有序</text>
+            <rect x="992" y="208" width="368" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="237" class="svg-sub" font-size="13">必须唯一稳定排序 + 严格匹配的复合索引</text>
+
+            <!-- Row 5 -->
+            <rect x="40" y="256" width="220" height="48" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="285" class="svg-label" font-size="14" font-weight="700">并发写入影响</text>
+            <rect x="260" y="256" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="285" class="svg-sub" font-size="13">头部插入新行会导致下页出现重复数据</text>
+            <rect x="626" y="256" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="285" class="svg-sub" font-size="13">同一事务快照隔离变化（代价是长事务）</text>
+            <rect x="992" y="256" width="368" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="285" class="svg-sub" font-size="13">头部插入不影响已翻页边界，更新排序键会漂移</text>
+
+            <!-- Row 6 -->
+            <rect x="40" y="304" width="220" height="48" fill="#CFE0DC" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="333" class="svg-label" font-size="14" font-weight="700">数据库资源占用</text>
+            <rect x="260" y="304" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="333" class="svg-sub" font-size="13">深页导致 CPU 飙升与 Buffer IO 放大</text>
+            <rect x="626" y="304" width="366" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="333" class="svg-sub" font-size="13">占用连接、快照、延迟 Vacuum（或临时磁盘）</text>
+            <rect x="992" y="304" width="368" height="48" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="333" class="svg-sub" font-size="13">查询轻量，但需维护对应复合索引写入成本</text>
+
+            <!-- Row 7 -->
+            <rect x="40" y="352" width="220" height="54" fill="#1E4B5A" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="384" class="svg-white" font-size="14" font-weight="700">最佳适用场景</text>
+            <rect x="260" y="352" width="366" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="280" y="384" class="svg-label" font-size="13" font-weight="700">后台小表管理、限定浅页（前几十页）</text>
+            <rect x="626" y="352" width="366" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="646" y="384" class="svg-label" font-size="13" font-weight="700">单任务 CSV 导出、ETL 批处理、流式消费</text>
+            <rect x="992" y="352" width="368" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="1012" y="384" class="svg-label" font-size="13" font-weight="700">Feed 信息流、订单流水、审计日志深分页</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>理论分析之后，如何在真实生产环境中用 EXPLAIN (ANALYZE, BUFFERS) 验证分页是否真正走对了路径？</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: 20260601_04.md · Section 4: 横向对比</span>
+            <span>PAGE 08 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 9: 实证验证方法与 EXPLAIN 诊断 ==================== -->
+      <section class="slide" data-index="8">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">EMPIRICAL VERIFICATION · 09 / 10 <span class="tag-accent">执行计划实证诊断</span></div>
+          <h1 class="slide-title">实证方法论：用 EXPLAIN (ANALYZE, BUFFERS) 验真</h1>
+          <p class="slide-lead">分页性能受缓存命中率、行宽、死元组比例影响巨大，切忌轻信纸面数字。必须通过真实执行计划的四个关键指标来验证索引与边界是否生效。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <!-- 左侧：基准测试三步法 -->
+            <rect x="40" y="34" width="420" height="362" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+            <rect x="40" y="34" width="420" height="40" fill="#1E4B5A"/>
+            <text x="60" y="59" class="svg-white" font-size="16" font-weight="700">DBA 压测基线三采样点</text>
+
+            <rect x="64" y="94" width="372" height="78" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+            <text x="80" y="120" class="svg-label" font-size="14" font-weight="700">采样 1：第 1 页（冷/热缓存基线）</text>
+            <text x="80" y="144" class="svg-sub" font-size="13">验证是否走 Index Scan / Index Only Scan，确认零 Sort。</text>
+
+            <rect x="64" y="188" width="372" height="78" fill="#CFE0DC" stroke="#245A6B" stroke-width="1"/>
+            <text x="80" y="214" class="svg-label" font-size="14" font-weight="700">采样 2：中间页（如第 500 页）</text>
+            <text x="80" y="238" class="svg-sub" font-size="13">对比 Buffers 增长斜率，检查规划器是否发生计划跳变。</text>
+
+            <rect x="64" y="282" width="372" height="90" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+            <text x="80" y="308" class="svg-label" font-size="14" font-weight="700" fill="#BE653B">采样 3：最大允许深度页</text>
+            <text x="80" y="332" class="svg-sub" font-size="13">暴露极端情况下的尾部延迟与共享缓冲区读放大。</text>
+            <text x="80" y="352" class="svg-mono" font-size="12" fill="#46585F">EXPLAIN (ANALYZE, BUFFERS) ...</text>
+
+            <!-- 正交连线 -->
+            <path d="M 460 215 L 520 215" stroke="#245A6B" stroke-width="2"/>
+            <polygon points="526,215 516,209 516,221" fill="#245A6B"/>
+
+            <!-- 右侧：执行计划四大核心诊断指标 -->
+            <rect x="526" y="34" width="834" height="362" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="526" y="34" width="834" height="40" fill="#245A6B"/>
+            <text x="546" y="59" class="svg-white" font-size="16" font-weight="700">EXPLAIN 输出四大核心健康度判据</text>
+
+            <!-- 指标 1 -->
+            <rect x="548" y="92" width="385" height="132" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="548" y="92" width="385" height="32" fill="#2E6373"/>
+            <text x="564" y="113" class="svg-white" font-size="14" font-weight="700">判据 1：Sort 节点是否彻底消失</text>
+            <text x="564" y="146" class="svg-sub" font-size="13">· 健康：直接由 Index Scan 提供有序流</text>
+            <text x="564" y="170" class="svg-sub" font-size="13" fill="#BE653B">· 异常：出现 Sort Method: external merge Disk</text>
+            <text x="564" y="194" class="svg-sub" font-size="12">说明索引列顺序或升降序方向与 ORDER BY 不匹配。</text>
+
+            <!-- 指标 2 -->
+            <rect x="953" y="92" width="385" height="132" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="953" y="92" width="385" height="32" fill="#2F7A66"/>
+            <text x="969" y="113" class="svg-white" font-size="14" font-weight="700">判据 2：Limit 下层实际 rows 数量</text>
+            <text x="969" y="146" class="svg-sub" font-size="13">· 健康：Keyset 查询下层 actual rows ≈ page_size</text>
+            <text x="969" y="170" class="svg-sub" font-size="13" fill="#BE653B">· 异常：actual rows = offset + limit（如 100020）</text>
+            <text x="969" y="194" class="svg-sub" font-size="12">说明数据库仍在执行全前缀扫描与丢弃。</text>
+
+            <!-- 指标 3 -->
+            <rect x="548" y="242" width="385" height="132" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="548" y="242" width="385" height="32" fill="#AE8A3E"/>
+            <text x="564" y="263" class="svg-white" font-size="14" font-weight="700">判据 3：Buffers (shared hit / read)</text>
+            <text x="564" y="296" class="svg-sub" font-size="13">· 健康：深页与浅页的逻辑读块数基本持平</text>
+            <text x="564" y="320" class="svg-sub" font-size="13" fill="#BE653B">· 异常：shared hit 随页码深度的增加呈倍数暴涨</text>
+            <text x="564" y="344" class="svg-sub" font-size="12">宽行回表（Heap Fetches）是 IO 放大的主要推手。</text>
+
+            <!-- 指标 4 -->
+            <rect x="953" y="242" width="385" height="132" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="953" y="242" width="385" height="32" fill="#BE653B"/>
+            <text x="969" y="263" class="svg-white" font-size="14" font-weight="700">判据 4：Rows Removed by Filter</text>
+            <text x="969" y="296" class="svg-sub" font-size="13">· 健康：边界条件走 Index Cond 精准过滤</text>
+            <text x="969" y="320" class="svg-sub" font-size="13" fill="#BE653B">· 异常：出现大量 Rows Removed by Filter</text>
+            <text x="969" y="344" class="svg-sub" font-size="12">说明索引前导列未包含等值过滤条件或边界写法有误。</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">承接 · NEXT</span>
+            <span>最后，将全部原理与诊断沉淀为一张可落地的「决策边界图」与角色分工清单，指导团队日常开发。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: 20260601_04.md · Section 5 &amp; Section 6: 效果验证与实操</span>
+            <span>PAGE 09 / 10</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 10: 决策路径树与三角色最佳实践 ==================== -->
+      <section class="slide" data-index="9">
+        <div class="strata-edge">
+          <div style="background:var(--strata-1)"></div><div style="background:var(--strata-2)"></div>
+          <div style="background:var(--strata-3)"></div><div style="background:var(--strata-4)"></div>
+          <div style="background:var(--strata-5)"></div><div style="background:var(--strata-6)"></div>
+          <div style="background:var(--strata-7)"></div>
+        </div>
+        <div class="slide-header">
+          <div class="eyebrow">BEST PRACTICES &amp; DECISION TREE · 10 / 10 <span class="tag-accent">架构选型决策与行动清单</span></div>
+          <h1 class="slide-title">分页方案选型决策边界与三角色落地规范</h1>
+          <p class="slide-lead">分页优化是产品交互、应用协议与数据库索引的联合设计。先通过决策树锁定技术模型，再由架构师、DBA 与业务开发协同闭环。</p>
+          <div class="header-divider"></div>
+        </div>
+        <div class="diagram-zone">
+          <svg width="1400" height="430" viewBox="0 0 1400 430">
+            <!-- 上半部分：横向决策流程树（全直角正交连线） -->
+            <rect x="40" y="20" width="1320" height="196" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <text x="60" y="46" class="svg-title" font-size="15">分页架构选型决策树（图 4 工程化演绎）</text>
+
+            <!-- 节点 1 -->
+            <rect x="60" y="76" width="230" height="68" fill="#1E4B5A"/>
+            <text x="175" y="106" text-anchor="middle" class="svg-white" font-size="14" font-weight="700">Q1: 业务是否必须</text>
+            <text x="175" y="128" text-anchor="middle" class="svg-white" font-size="14" font-weight="700">支持「任意随机跳页」？</text>
+
+            <!-- 分支 YES -> OFFSET -->
+            <path d="M 290 94 L 390 94" stroke="#BE653B" stroke-width="2"/>
+            <polygon points="396,94 386,89 386,99" fill="#BE653B"/>
+            <text x="340" y="86" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">YES</text>
+
+            <rect x="396" y="64" width="350" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+            <text x="412" y="88" class="svg-label" font-size="13" font-weight="700" fill="#BE653B">采用 OFFSET/LIMIT + 严格限制最大页深</text>
+            <text x="412" y="108" class="svg-sub" font-size="12">超过上限改用「按时间/ID 锚点定位」或搜索引擎</text>
+
+            <!-- 分支 NO -> Q2 -->
+            <path d="M 175 144 L 175 176 L 390 176" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <polygon points="396,176 386,171 386,181" fill="#245A6B"/>
+            <text x="275" y="168" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700" fill="#245A6B">NO (连续向后翻)</text>
+
+            <!-- 节点 2 -->
+            <rect x="396" y="144" width="280" height="60" fill="#245A6B"/>
+            <text x="536" y="170" text-anchor="middle" class="svg-white" font-size="13" font-weight="700">Q2: 是否为单后台任务</text>
+            <text x="536" y="190" text-anchor="middle" class="svg-white" font-size="13" font-weight="700">连续消费全量结果集？</text>
+
+            <!-- Q2 YES -> Cursor -->
+            <path d="M 676 158 L 770 158 L 770 94 L 840 94" stroke="#245A6B" stroke-width="2" fill="none"/>
+            <polygon points="846,94 836,89 836,99" fill="#245A6B"/>
+            <text x="724" y="150" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700" fill="#245A6B">YES (导出/ETL)</text>
+
+            <rect x="846" y="64" width="490" height="58" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+            <text x="862" y="88" class="svg-label" font-size="13" font-weight="700" fill="#1E4B5A">采用服务端游标 (Server-Side Cursor)</text>
+            <text x="862" y="108" class="svg-sub" font-size="12">控制每批 FETCH 行数，设置事务超时，隔离连接池防止拖垮 Vacuum</text>
+
+            <!-- Q2 NO -> Keyset -->
+            <path d="M 676 186 L 840 186" stroke="#2F7A66" stroke-width="2"/>
+            <polygon points="846,186 836,181 836,191" fill="#2F7A66"/>
+            <text x="758" y="178" text-anchor="middle" class="svg-mono" font-size="12" font-weight="700" fill="#2F7A66">NO (无状态 Web/App)</text>
+
+            <rect x="846" y="144" width="490" height="60" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+            <text x="862" y="168" class="svg-label" font-size="13" font-weight="700" fill="#2F7A66">首选 WHERE 边界递进 (Keyset Pagination)</text>
+            <text x="862" y="188" class="svg-sub" font-size="12">强制唯一稳定排序键 + 复合索引 + 签名 Opaque Token</text>
+
+            <!-- 下半部分：三角色落地规范 -->
+            <rect x="40" y="232" width="424" height="176" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="40" y="232" width="424" height="34" fill="#2E6373"/>
+            <text x="58" y="254" class="svg-white" font-size="14" font-weight="700">面向数据库架构师</text>
+            <text x="58" y="288" class="svg-sub" font-size="13">1. 将分页契约写入接口规范，不混用翻页与导出协议</text>
+            <text x="58" y="314" class="svg-sub" font-size="13">2. 复合索引遵循「等值过滤 + 排序键 + 唯一主键」</text>
+            <text x="58" y="340" class="svg-sub" font-size="13">3. 复杂相关性搜索先落临时结果表/缓存再分页</text>
+            <text x="58" y="366" class="svg-sub" font-size="13">4. 高频列表默认设计签名 Token 防越权扫描</text>
+
+            <rect x="488" y="232" width="424" height="176" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="488" y="232" width="424" height="34" fill="#AE8A3E"/>
+            <text x="506" y="254" class="svg-white" font-size="14" font-weight="700">面向 DBA</text>
+            <text x="506" y="288" class="svg-sub" font-size="13">1. 建立浅/中/深三档 EXPLAIN (ANALYZE, BUFFERS) 基线</text>
+            <text x="506" y="314" class="svg-sub" font-size="13">2. 监控慢查询中大 OFFSET 参数并纳入专项治理</text>
+            <text x="506" y="340" class="svg-sub" font-size="13">3. 结合 pg_stat_statements 识别高频累计耗时 SQL</text>
+            <text x="506" y="366" class="svg-sub" font-size="13">4. 为长事务 Cursor 配置连接池隔离与超时熔断</text>
+
+            <rect x="936" y="232" width="424" height="176" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+            <rect x="936" y="232" width="424" height="34" fill="#2F7A66"/>
+            <text x="954" y="254" class="svg-white" font-size="14" font-weight="700">面向业务开发者</text>
+            <text x="954" y="288" class="svg-sub" font-size="13">1. 推动交互去除无意义的深页跳转页码器</text>
+            <text x="954" y="314" class="svg-sub" font-size="13">2. 严禁省略 ORDER BY，排序末位必加唯一主键</text>
+            <text x="954" y="340" class="svg-sub" font-size="13">3. 优先选用不可变字段（创建时间/序列号）作排序主轴</text>
+            <text x="954" y="366" class="svg-sub" font-size="13">4. 列表查询只取必要列，避免宽行回表拖慢吞吐</text>
+          </svg>
+        </div>
+        <div class="slide-footer-area">
+          <div class="next-takeaway">
+            <span class="next-label">完结 · SUMMARY</span>
+            <span>分页优化的终极心法：不让数据库做无谓的计数，用索引确定性换取千万级数据下的恒定响应。</span>
+          </div>
+          <div class="page-meta-row">
+            <span>SOURCE: 20260601_04.md · Section 7, 8, 9: 最佳实践与避坑指南</span>
+            <span>PAGE 10 / 10</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- 右侧页内讲稿抽屉（非弹窗，支持本页 N / 全文 T） -->
+  <aside id="notes-drawer">
+    <div class="notes-header">
+      <span class="notes-header-title" id="notes-drawer-title">本页讲稿 (N)</span>
+      <div class="notes-mode-tabs">
+        <button class="tab-btn active" id="tab-current" onclick="setNotesMode('current')">本页讲稿 (N)</button>
+        <button class="tab-btn" id="tab-all" onclick="setNotesMode('all')">全文讲稿 (T)</button>
+        <button class="tab-btn" onclick="closeNotes()">收起</button>
+      </div>
+    </div>
+    <div class="notes-body" id="notes-content"></div>
+  </aside>
+</div>
+
+<!-- 底部悬浮快捷键提示栏（全屏后亦可见） -->
+<div id="shortcut-bar">
+  <div class="sc-item" onclick="prevSlide()"><span class="sc-key">← / ↑</span><span>上一页</span></div>
+  <div class="sc-item" onclick="nextSlide()"><span class="sc-key">→ / ↓ / Space</span><span>下一页</span></div>
+  <div class="sc-item" id="sc-toc" onclick="toggleToc()"><span class="sc-key">G</span><span>目录</span></div>
+  <div class="sc-item" id="sc-note-n" onclick="toggleNotes('current')"><span class="sc-key">N</span><span>本页讲稿</span></div>
+  <div class="sc-item" id="sc-note-t" onclick="toggleNotes('all')"><span class="sc-key">T</span><span>全文讲稿</span></div>
+  <div class="sc-item" id="sc-autoplay" onclick="toggleAutoPlay()"><span class="sc-key">P</span><span id="autoplay-text">自动播放</span></div>
+  <div class="sc-item" id="sc-fullscreen" onclick="toggleFullscreen()"><span class="sc-key">F</span><span>全屏</span></div>
+</div>
+
+<script>
+// ==================== 1. 演讲稿数据（逻辑推演 + 口语化 + 实证连贯） ====================
+const SLIDES_DATA = [
+  {
+    title: "01. 数据库筑基课：分页优化的三种执行模型",
+    subtitle: "从「数位置」到「定边界」",
+    notes: [
+      "大家好，今天我们进入《数据库筑基课》非常经典但也最容易被低估的一讲——分页优化。",
+      "在日常业务开发中，分页几乎是所有列表接口的标配。刚上线时数据只有几千行，第一页 10 毫秒，第二页 10 毫秒，大家觉得风平浪静。可一旦业务跑了半年，数据量涨到几千万行，突然有一天运营在后台点了第 5000 页，或者某个爬虫顺着接口往下深翻，数据库监控瞬间报警：CPU 打满、磁盘 IO 飙升、连接池堆积。",
+      "很多人第一反应是看 SQL 里的 LIMIT 20，心想我只取 20 行怎么会慢？其实真正的罪魁祸首不是 LIMIT 20，而是紧跟在后面的 OFFSET 1000000。它背后代表了一种极其昂贵的执行逻辑：先老老实实把一百万行算出来，再一脚踢掉。",
+      "要彻底治好分页慢，不能靠死记硬背 SQL 语法，而是要把三种完全不同的底层模型分清楚：第一种是位置型的 LIMIT/OFFSET，它按结果集顺序从头数；第二种是状态型的服务端游标，它在数据库会话里保存执行现场；第三种是值域型的 WHERE 边界递进，也就是常说的 Keyset Pagination，它把上一页最后一行作为下一页的索引切入点。接下来我们一层层往下拆解。"
+    ]
+  },
+  {
+    title: "02. 分页真正要解决的四重工程边界",
+    subtitle: "延迟、顺序、资源与并发",
+    notes: [
+      "在对比具体技术之前，我们先退一步问一个本质问题：工程上做分页，到底要守住哪几条底线？",
+      "第一条是延迟稳定性。用户翻第 1 页是 10 毫秒，翻到第 50000 页时，响应时间绝对不能退化成 10 秒。如果延迟随着页码深度线性恶化，那这个接口在大数据量下就是不可用的。",
+      "第二条是排序确定性。翻页过程中不能出现同一条记录在第一页出现、第二页又出现，或者某条数据凭空漏掉。PostgreSQL 官方文档特别指出，如果你只写 LIMIT/OFFSET 而不加唯一确定的 ORDER BY，规划器在不同参数下可能选出不同的执行计划，返回的子集是完全不可预测的。",
+      "第三条是资源可控性。数据库不能为了给前端吐出 20 行数据，在底层扫描、排序并校验一百万行的 MVCC 可见性。这种百万级输入、二十行输出的投入产出比，在高并发下会迅速耗尽 IOPS。",
+      "第四条是并发一致性。翻页不是在静态快照里进行的，用户翻页的同时，后台正有源源不断的新订单插入。应用架构必须清楚自己接受哪种并发语义。归根结底，分页优化的核心思维转换，就是把「我要第几页」改写成「下一批数据从哪个值开始，索引能不能直接定位过去」。"
+    ]
+  },
+  {
+    title: "03. OFFSET 的执行代价：被 Limit 节点丢弃的前缀",
+    subtitle: "nodeLimit.c 源码级剖析",
+    notes: [
+      "我们先看第一种模型：LIMIT/OFFSET。为什么 OFFSET 100000 会这么慢？我们直接看 PostgreSQL 的执行器源码。",
+      "在 PostgreSQL 执行器中，负责处理 LIMIT 和 OFFSET 的是 nodeLimit.c 里的 ExecLimit 函数。从图上可以看到，Limit 节点像一个漏斗卡在子计划（outerPlan）的上方。子计划可能是 Index Scan，也可能是全表扫描加 Sort。",
+      "当查询启动时，ExecLimit 并没有什么魔法能直接「瞬移」到第 100001 行。它的源码逻辑非常朴素：只要当前计数器 position 小于等于 offset，它就进入一个死循环，不断调用 ExecProcNode 向下层子计划索要下一条 tuple，拿到之后看一眼计数器，然后直接丢弃！",
+      "大家可以在右上角调整 OFFSET 参数点击「播放执行过程」感受一下。当 OFFSET 是 100、LIMIT 是 20 时，底层扫描了 120 行，83.3% 的工作量全被扔进了垃圾桶；如果 OFFSET 是 10 万，丢弃率高达 99.98%！而且被丢弃的每一行，都实实在在经历了索引读取、回表、以及 MVCC 事务可见性判断。规划器在 planner.c 估算成本时，也是老老实实把 offset + count 当作总拉取行数来算的。"
+    ]
+  },
+  {
+    title: "04. 有索引也救不了深 OFFSET：扫描路径对比",
+    subtitle: "B-Tree 索引与 pathkeys 机制",
+    notes: [
+      "讲到这里，很多同学会提出一个经典疑问：我已经在 WHERE 条件和 ORDER BY 列上建了完美的 B-Tree 复合索引，执行计划里也没有 Sort 节点了，深 OFFSET 还会慢吗？",
+      "答案是：依然会慢，只是从「全表排序慢」变成了「索引线性扫描慢」。这正是 PostgreSQL 文档中关于 Indexes and ORDER BY 最容易被误读的地方。",
+      "我们看图上的 B-Tree 叶子节点链表。B-Tree 确实能按排好序的顺序输出数据，当执行 ORDER BY ... LIMIT 20 时，执行器从第一个叶子页取 20 条就立刻收工，毫秒级返回。但是，当你加上 OFFSET 100000 时，B-Tree 叶子节点之间是双向链表结构，索引本身并不知道第 100001 条记录在哪个物理页上——因为每条记录的 MVCC 可见性状态不同，有的行可能已经被删除但还没清理。",
+      "因此，执行器只能从 Leaf Page 1 开始，顺着链表一页一页往后摸，足足跨过 500 个叶子页、校验完 10 万条记录的可见性后，才终于摸到 Leaf Page 501 的目标数据。只有改用右侧场景 C 的 WHERE 边界条件，数据库才能利用 B-Tree 的树形结构，从根节点二分查找直接空降到 Leaf Page 501。"
+    ]
+  },
+  {
+    title: "05. 服务端游标：用会话状态换取流式消费",
+    subtitle: "Portal 机制与架构适用边界",
+    notes: [
+      "既然每次从头数太慢，那如果让数据库记住我上次读到哪里，下次接着往后读行不行？这就是第二种模型：服务端游标（Server-Side Cursor）。",
+      "在 PostgreSQL 内部，当你执行 DECLARE CURSOR 时，后端进程会在内存中创建一个名为 Portal 的数据结构（定义在 portal.h 中）。这个 Portal 就像一个书签，里面保存了整棵查询执行树、当前事务的一致性快照，以及一个极其关键的字段 portalPos，记录当前读到了第几行。",
+      "当你第一次执行 FETCH FORWARD 5000 时，执行器推进 5000 步并更新 portalPos；下次再执行 FETCH 时，它直接从书签位置继续往下走，完全不需要重新扫描前面的数据。这对于后台导出百万级 CSV 报表、ETL 数据同步非常友好，客户端内存占用极低。",
+      "但为什么我们强烈反对在无状态 Web 翻页中使用游标？看图右侧的三座大山：第一，现代 Web 应用都经过连接池，用户点下一页时的 HTTP 请求极大概率被路由到另一个数据库连接，根本找不到原来的 Portal；第二，普通游标必须在事务内存活，如果用户打开页面去吃了个午饭，这个长事务就会一直占着快照，死死拖住 Autovacuum 导致表膨胀；第三，即便你用 WITH HOLD 声明跨事务游标，PG 在 COMMIT 时也会把剩余结果全部物化写进临时磁盘，瞬间打回原形。"
+    ]
+  },
+  {
+    title: "06. Keyset 边界递进：从「数行」跃迁到「索引二分定位」",
+    subtitle: "值域型分页与不透明 Token",
+    notes: [
+      "既不能用深 OFFSET 折磨 CPU，又不能用游标把状态绑死在数据库连接上，那无状态 Web 深分页的终极解法是什么？就是第三种模型：每次递进输入 WHERE 边界，也就是 Keyset Pagination。",
+      "它的核心思想非常优雅：既然数据库不记状态，那就把「位置书签」交给客户端保管，但保管的不是第几页，而是「上一页最后一行数据的排序键值」。",
+      "大家可以点击右上角的「执行下一页」按钮体验这个过程。第一页查询不带边界，拿到前 20 行后，服务端把第 20 行的 (created_at, id) 编码成一个不透明的 Token 返回给前端。当用户请求下一页时，前端把这个 Token 传回来，后端解码后拼入 WHERE (created_at, id) < ($2, $3)。",
+      "此时奇迹发生了：PostgreSQL 优化器拿到这个条件后，直接将其转化为 B-Tree 索引的 Index Cond 边界条件，从索引树根直接二分定位到目标页，前面的几万、几百万行数据连看都不看一眼！无论翻到第几页，实际扫描行数永远稳定在 20 行左右。这里要特别提醒一条铁律：排序键必须唯一，时间字段 created_at 极易重复，一定要把主键 id 拼在最后作为决胜字段（Tie-breaker）。"
+    ]
+  },
+  {
+    title: "07. 混合排序方向：严禁机械套用 Row Comparison",
+    subtitle: "布尔析取展开与索引方向匹配",
+    notes: [
+      "Keyset 分页虽然威力巨大，但在实际写 SQL 时有一个非常隐蔽的深坑，很多资深开发都会栽在这里，那就是「混合排序方向」。",
+      "看图左侧的反模式。假设业务要求按热度分数降序、创建时间升序排列：ORDER BY score DESC, created_at ASC, id ASC。有些同学顺手就写出了 WHERE (score, created_at, id) < ($2, $3, $4)。",
+      "这在逻辑上是完全错误的！因为 SQL 标准里的行比较运算符 < 规定，所有列必须同向比较。当两行记录的 score 相等时，我们需要找的是 created_at 排在后面的记录；由于 created_at 是 ASC 升序，排在后面的记录它的时间值应该「大于 $3」，而不是「小于 $3」！机械套用行比较会导致同分记录大量漏掉，甚至翻出上一页的旧数据。",
+      "正确的做法如右侧所示：首先，复合索引的每一列方向必须和 ORDER BY 严丝合缝，即 (tenant_id, score DESC, created_at ASC, id ASC)；其次，WHERE 条件必须按排序语义逐级展开为标准的布尔 OR 组合：要么 score 严格小于上一页末行；要么 score 相等且 created_at 严格大于末行；要么前两者都相等且 id 严格大于末行。只有这样，优化器才能正确利用索引区间扫描。"
+    ]
+  },
+  {
+    title: "08. OFFSET、服务端游标与 Keyset 横向评估矩阵",
+    subtitle: "八维全景对比与代价边界",
+    notes: [
+      "现在，我们把三种模型放到同一张八维评估矩阵里，做一次冷静的横向对比。",
+      "从状态位置看，OFFSET 传页号，Cursor 占数据库内存，Keyset 传值域 Token。从深分页成本看，OFFSET 是线性灾难，Cursor 顺序读取稳定但长事务代价高，Keyset 则实现了接近恒定的对数级索引定位。",
+      "但在「任意跳页」这一栏，OFFSET 拿到了唯一的一票。如果你的产品经理要求页面底部必须有「1, 2, 3 ... 998, 999, 1000」并且允许用户直接点击第 999 页，Keyset 是无法直接跳过去的，因为它不知道第 999 页第一行的 created_at 是多少。",
+      "再看并发写入的影响：在信息流场景下，如果用户在看第 1 页时，后台新插入了 5 条动态，用 OFFSET 翻第 2 页时，第 1 页末尾的 5 条数据会被挤到第 2 页开头，造成用户刷到重复内容；而 Keyset 锚定的是具体的值边界，新插入的数据在边界之前，完全不会干扰后续翻页的连贯性。不过反过来，如果排序字段本身是频繁更新的热度分，Keyset 也可能因为记录位置跳变而漏行。"
+    ]
+  },
+  {
+    title: "09. 实证方法论：用 EXPLAIN (ANALYZE, BUFFERS) 验真",
+    subtitle: "拒绝编造跑分，用执行计划说话",
+    notes: [
+      "在数据库工程实践中，我们从不轻信脱离场景的所谓 benchmark 跑分，因为分页耗时高度依赖数据分布、缓存命中率、行宽以及死元组比例。判断你的分页优化是否真正落地，唯一可靠的标准是执行计划实证。",
+      "DBA 在做上线前验收时，应当建立三档基准测试：第一页、中间页（比如第 500 页），以及系统允许的最大深度页，全部执行 EXPLAIN (ANALYZE, BUFFERS)。",
+      "拿到输出后，请盯着图右侧的四个核心健康度判据：第一，看执行树里有没有出现 Sort 节点，特别是 external merge Disk 磁盘排序，健康的索引分页应该直接由 Index Scan 吐出有序数据；第二，看 Limit 节点下层的 actual rows，如果翻第 5000 页时下层实际扫描行数依然接近 20，说明 Keyset 生效了，如果变成了 100020，说明还在走老路；第三，对比浅页和深页的 Buffers shared hit/read，防止宽行回表导致逻辑读成倍放大；第四，检查是否出现大量 Rows Removed by Filter，那通常意味着复合索引的列顺序建错了。"
+    ]
+  },
+  {
+    title: "10. 分页方案选型决策边界与三角色落地规范",
+    subtitle: "架构师、DBA 与开发者的协同闭环",
+    notes: [
+      "课程的最后，我们把所有原理浓缩成上半部分的「架构选型决策树」和下半部分的「三角色落地清单」。",
+      "面对任何分页需求，先问第一个问题：业务是否真的必须支持任意随机跳页？如果是，且无法妥协，那就用 OFFSET，但必须在代码层死守最大页深上限，超过上限引导用户按时间范围或关键词过滤；如果不需要跳页，再问第二个问题：这是不是一个后台任务在连续消费全量结果？如果是导出或 ETL，果断上服务端游标；如果是无状态 Web 或 App 接口，Keyset 边界递进就是唯一的最优解。",
+      "在团队协作层面：架构师要把分页契约写进接口规范，Token 必须包含完整排序键与过滤条件版本，并做好签名防篡改；DBA 要利用 pg_stat_statements 揪出那些单次耗时不长但调用极频、累计消耗大量 CPU 的分页 SQL，同时做好长事务游标的超时熔断；业务开发者则要主动与产品沟通，砍掉无意义的深页跳转控件，写 SQL 时永远带上唯一排序末位字段，列表页按需查询避免宽行回表。",
+      "总结一句话：分页优化的终极心法，就是不让数据库做无谓的计数，用索引的确定性换取千万级数据下的恒定低延迟。今天的课程就到这里，谢谢大家！"
+    ]
+  }
+];
+
+// ==================== 2. 状态管理与舞台等比缩放 ====================
+let currentIndex = 0;
+const totalSlides = SLIDES_DATA.length;
+let notesOpen = false;
+let notesMode = 'current';
+let autoPlayTimer = null;
+
+function resizeStage() {
+  const viewport = document.getElementById('stage-viewport');
+  const stage = document.getElementById('slide-stage');
+  if (!viewport || !stage) return;
+
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  const availH = vh - 46;
+  const scale = Math.min(vw / 1600, availH / 900);
+  stage.style.transform = `scale(${scale})`;
+}
+
+window.addEventListener('resize', resizeStage);
+
+// ==================== 3. 幻灯片切换与目录 ====================
+function goToSlide(index) {
+  if (index < 0) index = 0;
+  if (index >= totalSlides) index = totalSlides - 1;
+  currentIndex = index;
+
+  const slides = document.querySelectorAll('.slide');
+  slides.forEach((s, i) => {
+    s.classList.toggle('active', i === currentIndex);
+  });
+
+  updateTocActive();
+  renderNotes();
+}
+
+function nextSlide() {
+  if (currentIndex < totalSlides - 1) {
+    goToSlide(currentIndex + 1);
+  } else if (autoPlayTimer) {
+    stopAutoPlay();
+  }
+}
+
+function prevSlide() {
+  if (currentIndex > 0) {
+    goToSlide(currentIndex - 1);
+  }
+}
+
+function initToc() {
+  const list = document.getElementById('toc-list');
+  list.innerHTML = '';
+  SLIDES_DATA.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'toc-item' + (idx === currentIndex ? ' active' : '');
+    div.innerHTML = `
+      <span class="toc-num">${String(idx + 1).padStart(2, '0')}</span>
+      <span class="toc-title">${item.title.replace(/^\d+\.\s*/, '')}</span>
+      <span class="toc-sub">${item.subtitle}</span>
+    `;
+    div.onclick = () => {
+      goToSlide(idx);
+      toggleToc(false);
+    };
+    list.appendChild(div);
+  });
+}
+
+function updateTocActive() {
+  const items = document.querySelectorAll('.toc-item');
+  items.forEach((el, idx) => {
+    el.classList.toggle('active', idx === currentIndex);
+  });
+}
+
+function toggleToc(forceState) {
+  const overlay = document.getElementById('toc-overlay');
+  const scBtn = document.getElementById('sc-toc');
+  const nextState = typeof forceState === 'boolean' ? forceState : !overlay.classList.contains('open');
+  overlay.classList.toggle('open', nextState);
+  scBtn.classList.toggle('active-flag', nextState);
+}
+
+// ==================== 4. 页内讲稿抽屉（N 本页 / T 全文联动定位） ====================
+function toggleNotes(mode) {
+  if (notesOpen && notesMode === mode) {
+    closeNotes();
+    return;
+  }
+  notesOpen = true;
+  notesMode = mode;
+  document.getElementById('notes-drawer').classList.add('open');
+  document.getElementById('app-wrapper').classList.add('notes-open');
+  updateNotesUI();
+  renderNotes();
+  setTimeout(resizeStage, 260);
+}
+
+function setNotesMode(mode) {
+  notesMode = mode;
+  updateNotesUI();
+  renderNotes();
+}
+
+function closeNotes() {
+  notesOpen = false;
+  document.getElementById('notes-drawer').classList.remove('open');
+  document.getElementById('app-wrapper').classList.remove('notes-open');
+  updateNotesUI();
+  setTimeout(resizeStage, 260);
+}
+
+function updateNotesUI() {
+  document.getElementById('sc-note-n').classList.toggle('active-flag', notesOpen && notesMode === 'current');
+  document.getElementById('sc-note-t').classList.toggle('active-flag', notesOpen && notesMode === 'all');
+  document.getElementById('tab-current').classList.toggle('active', notesMode === 'current');
+  document.getElementById('tab-all').classList.toggle('active', notesMode === 'all');
+  document.getElementById('notes-drawer-title').textContent = notesMode === 'current' ? '本页讲稿 (N)' : '全文讲稿 (T)';
+}
+
+function renderNotes() {
+  if (!notesOpen) return;
+  const container = document.getElementById('notes-content');
+  if (notesMode === 'current') {
+    const data = SLIDES_DATA[currentIndex];
+    container.innerHTML = `
+      <div class="note-block current-slide-note">
+        <div class="note-block-header">
+          <span>PAGE ${String(currentIndex + 1).padStart(2, '0')} / ${totalSlides}</span>
+          <span>${data.subtitle}</span>
+        </div>
+        <div style="font-family:var(--font-serif);font-weight:700;font-size:16px;margin-bottom:12px;color:var(--ink);">
+          ${data.title}
+        </div>
+        <div class="note-text">
+          ${data.notes.map(p => `<p>${p}</p>`).join('')}
+        </div>
+      </div>
+    `;
+    container.scrollTop = 0;
+  } else {
+    container.innerHTML = SLIDES_DATA.map((data, idx) => `
+      <div class="note-block ${idx === currentIndex ? 'current-slide-note' : ''}" id="full-note-${idx}">
+        <div class="note-block-header" onclick="goToSlide(${idx})">
+          <span>PAGE ${String(idx + 1).padStart(2, '0')} · 点击跳转该页</span>
+          <span>${data.subtitle}</span>
+        </div>
+        <div style="font-family:var(--font-serif);font-weight:700;font-size:15px;margin-bottom:10px;color:var(--ink);">
+          ${data.title}
+        </div>
+        <div class="note-text">
+          ${data.notes.map(p => `<p>${p}</p>`).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    requestAnimationFrame(() => {
+      const targetEl = document.getElementById(`full-note-${currentIndex}`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+}
+
+// ==================== 5. 自动播放与全屏控制 ====================
+function toggleAutoPlay() {
+  if (autoPlayTimer) {
+    stopAutoPlay();
+  } else {
+    document.getElementById('sc-autoplay').classList.add('active-flag');
+    document.getElementById('autoplay-text').textContent = '停止播放';
+    autoPlayTimer = setInterval(() => {
+      if (currentIndex < totalSlides - 1) {
+        goToSlide(currentIndex + 1);
+      } else {
+        stopAutoPlay();
+      }
+    }, 6000);
+  }
+}
+
+function stopAutoPlay() {
+  if (autoPlayTimer) {
+    clearInterval(autoPlayTimer);
+    autoPlayTimer = null;
+  }
+  document.getElementById('sc-autoplay').classList.remove('active-flag');
+  document.getElementById('autoplay-text').textContent = '自动播放';
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('sc-fullscreen').classList.toggle('active-flag', !!document.fullscreenElement);
+  setTimeout(resizeStage, 100);
+});
+
+// ==================== 6. 键盘快捷键绑定 ====================
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  const key = e.key.toLowerCase();
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+    e.preventDefault();
+    nextSlide();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    prevSlide();
+  } else if (key === 'g') {
+    e.preventDefault();
+    toggleToc();
+  } else if (e.key === 'Escape') {
+    const overlay = document.getElementById('toc-overlay');
+    if (overlay.classList.contains('open')) {
+      toggleToc(false);
+    }
+  } else if (key === 'n') {
+    e.preventDefault();
+    toggleNotes('current');
+  } else if (key === 't') {
+    e.preventDefault();
+    toggleNotes('all');
+  } else if (key === 'p') {
+    e.preventDefault();
+    toggleAutoPlay();
+  } else if (key === 'f') {
+    e.preventDefault();
+    toggleFullscreen();
+  }
+});
+
+// ==================== 7. Slide 3 & Slide 6 内置教学动画逻辑 ====================
+let offsetAnimInterval = null;
+
+function runOffsetAnim() {
+  if (offsetAnimInterval) clearInterval(offsetAnimInterval);
+  const offsetVal = Math.max(10, parseInt(document.getElementById('offset-input').value) || 100);
+  const limitVal = Math.max(5, parseInt(document.getElementById('limit-input').value) || 20);
+  const total = offsetVal + limitVal;
+
+  const discardBar = document.getElementById('offset-discard-bar');
+  const keepBar = document.getElementById('offset-keep-bar');
+  const barLabel = document.getElementById('offset-bar-label');
+  const statusEl = document.getElementById('offset-status');
+
+  const maxW = 384;
+  let step = 0;
+  const steps = 25;
+  discardBar.setAttribute('width', 0);
+  keepBar.setAttribute('width', 0);
+
+  offsetAnimInterval = setInterval(() => {
+    step++;
+    const progress = step / steps;
+    const curTotal = Math.round(total * progress);
+    const curDiscard = Math.min(offsetVal, curTotal);
+    const curKeep = Math.max(0, curTotal - offsetVal);
+
+    const curDW = Math.round((curDiscard / total) * maxW);
+    const curKW = Math.round((curKeep / total) * maxW);
+
+    discardBar.setAttribute('width', curDW);
+    keepBar.setAttribute('x', 504 + curDW);
+    keepBar.setAttribute('width', curKW);
+
+    const wastePct = ((offsetVal / total) * 100).toFixed(1);
+    barLabel.textContent = `扫描进度: ${curTotal}/${total} 行 | 已丢弃: ${curDiscard} 行 | 有效输出: ${curKeep} 行`;
+    statusEl.textContent = step < steps ? '执行器正在丢弃前缀...' : `完成！前缀丢弃率 ${wastePct}%`;
+
+    if (step >= steps) {
+      clearInterval(offsetAnimInterval);
+      offsetAnimInterval = null;
+    }
+  }, 40);
+}
+
+function resetOffsetAnim() {
+  if (offsetAnimInterval) clearInterval(offsetAnimInterval);
+  document.getElementById('offset-input').value = 100;
+  document.getElementById('limit-input').value = 20;
+  document.getElementById('offset-discard-bar').setAttribute('width', 320);
+  document.getElementById('offset-keep-bar').setAttribute('x', 824);
+  document.getElementById('offset-keep-bar').setAttribute('width', 64);
+  document.getElementById('offset-bar-label').textContent = '扫描总数: 120 行 | 丢弃: 100 行 (83.3%) | 有效: 20 行';
+  document.getElementById('offset-status').textContent = '已重置为默认参数';
+}
+
+const KEYSET_STEPS = [
+  {
+    page: 1,
+    req: "cursor = NULL (首次请求)",
+    rows: "返回行: #1 ~ #20 (实际扫描: 20 行)",
+    next: "next_token = ('10:00:00', 980)",
+    sql: "  -- 无边界谓词，直接从索引最左端读取",
+    blk: 1
+  },
+  {
+    page: 2,
+    req: "cursor = ('10:00:00', 980)",
+    rows: "返回行: #21 ~ #40 (实际扫描: 20 行)",
+    next: "next_token = ('09:58:00', 960)",
+    sql: "  AND (created_at, id) < ('10:00:00', 980)",
+    blk: 2
+  },
+  {
+    page: 3,
+    req: "cursor = ('09:58:00', 960)",
+    rows: "返回行: #41 ~ #60 (实际扫描: 20 行)",
+    next: "next_token = ('09:55:00', 940)",
+    sql: "  AND (created_at, id) < ('09:58:00', 960)",
+    blk: 3
+  },
+  {
+    page: 4,
+    req: "cursor = ('09:55:00', 940)",
+    rows: "返回行: #61 ~ #80 (实际扫描: 20 行)",
+    next: "next_token = ('09:51:00', 920)",
+    sql: "  AND (created_at, id) < ('09:55:00', 940)",
+    blk: 4
+  },
+  {
+    page: 5000,
+    req: "cursor = ('01:12:05', 10020)",
+    rows: "返回行: #99981 ~ #100000 (实际扫描: 20 行!)",
+    next: "next_token = ('01:11:40', 10000)",
+    sql: "  AND (created_at, id) < ('01:12:05', 10020)",
+    blk: 5
+  }
+];
+
+let ksStepIdx = 0;
+function stepKeysetAnim() {
+  ksStepIdx = (ksStepIdx + 1) % KEYSET_STEPS.length;
+  updateKeysetUI();
+}
+
+function resetKeysetAnim() {
+  ksStepIdx = 0;
+  updateKeysetUI();
+}
+
+function updateKeysetUI() {
+  const st = KEYSET_STEPS[ksStepIdx];
+  document.getElementById('keyset-status').textContent = `当前：第 ${st.page} 页 (扫描恒为 20 行)`;
+  document.getElementById('ks-req-token').textContent = st.req;
+  document.getElementById('ks-resp-rows').textContent = st.rows;
+  document.getElementById('ks-next-token').textContent = st.next;
+  document.getElementById('ks-sql-where').textContent = st.sql;
+
+  for (let i = 1; i <= 5; i++) {
+    const blk = document.getElementById(`ks-blk-${i}`);
+    if (i < st.blk) {
+      blk.setAttribute('fill', '#EFECE6');
+      blk.setAttribute('stroke', '#89938F');
+      blk.setAttribute('stroke-width', '1');
+    } else if (i === st.blk) {
+      blk.setAttribute('fill', '#E4F1EC');
+      blk.setAttribute('stroke', '#2F7A66');
+      blk.setAttribute('stroke-width', '2.5');
+    } else {
+      blk.setAttribute('fill', '#F7F6F2');
+      blk.setAttribute('stroke', '#D9D5CB');
+      blk.setAttribute('stroke-width', '1');
+    }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  initToc();
+  resizeStage();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,2962 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PLAN HINT（pg_hint_plan 工程蓝图）</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-letterbox: #E6E3DA;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terra: #BE653B;
+    --terra-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E5F1EC;
+    --gold: #AE8A3E;
+    --gold-light: #F6EFE0;
+    --s1: #1E4B5A;
+    --s2: #2E6373;
+    --s3: #47808D;
+    --s4: #74A5AD;
+    --s5: #A4C4C6;
+    --s6: #CFE0DC;
+    --s7: #EBF1EE;
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "STSong", "Source Han Serif SC", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* 顶层外壳：上部主工作区 + 底部常驻快捷键栏 */
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+  }
+
+  .workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 左侧舞台视口：等比缩放 + letterbox，禁止响应式重排 */
+  .stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+    transition: width 0.22s ease;
+  }
+
+  .stage-scaler {
+    width: 1600px;
+    height: 900px;
+    position: relative;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    transform-origin: center center;
+    overflow: hidden;
+  }
+
+  /* 幻灯片固定版式 1600x900 */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    padding: 40px 64px 28px 64px;
+    display: none;
+    flex-direction: column;
+    background: var(--bg-paper);
+    background-image:
+      linear-gradient(to right, rgba(217, 213, 203, 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.22) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* 顶部工程角标装饰线（极简，非装饰图形，作为工程坐标尺） */
+  .slide-header {
+    flex-shrink: 0;
+  }
+
+  .eyebrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .strata-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    color: var(--ink-muted);
+    border: 1px solid var(--stroke);
+    background: var(--bg-sub);
+    padding: 2px 10px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.18;
+    color: var(--ink);
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.48;
+    color: var(--ink-sub);
+    max-width: 1400px;
+  }
+
+  .slide-lead strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .header-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--stroke);
+    margin: 16px 0 14px 0;
+    flex-shrink: 0;
+  }
+
+  /* 主内容与图区 */
+  .slide-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  /* 独立交互工具条：严格位于 SVG 图区上方，绝不遮挡 SVG */
+  .anim-toolbar {
+    width: 1400px;
+    height: 44px;
+    margin-bottom: 10px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--indigo);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .anim-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .anim-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-sub);
+    letter-spacing: 0.5px;
+  }
+
+  .ctrl-btn {
+    height: 28px;
+    padding: 0 11px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+
+  .ctrl-btn.primary {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+    font-weight: 500;
+  }
+
+  .ctrl-btn.primary:hover {
+    background: var(--s1);
+  }
+
+  .ctrl-btn.active {
+    background: var(--indigo-light);
+    border-color: var(--indigo);
+    color: var(--indigo);
+    font-weight: 600;
+  }
+
+  .ctrl-btn.warn-active {
+    background: var(--terra-light);
+    border-color: var(--terra);
+    color: var(--terra);
+    font-weight: 600;
+  }
+
+  .ctrl-select, .ctrl-input {
+    height: 28px;
+    padding: 0 8px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    outline: none;
+  }
+
+  .ctrl-input {
+    width: 84px;
+  }
+
+  .ctrl-select:focus, .ctrl-input:focus {
+    border-color: var(--indigo);
+  }
+
+  .anim-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--indigo);
+    background: var(--indigo-light);
+    border: 1px solid #C5DCE0;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+
+  /* 固定图区 1400 x 430 */
+  .diagram-frame {
+    width: 1400px;
+    height: 430px;
+    background: #FAF9F6;
+    border: 1px solid var(--stroke);
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .diagram-frame svg {
+    display: block;
+    width: 1400px;
+    height: 430px;
+  }
+
+  /* 底部「承接 · NEXT」与等宽页脚 */
+  .slide-footer-wrap {
+    margin-top: auto;
+    padding-top: 14px;
+    flex-shrink: 0;
+  }
+
+  .next-bridge {
+    border-left: 3px solid var(--terra);
+    padding: 4px 0 4px 16px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .next-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--terra);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.35;
+    color: var(--ink);
+  }
+
+  .slide-meta-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--stroke);
+    padding-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+
+  .page-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-sub);
+    letter-spacing: 1px;
+  }
+
+  /* 右侧页内讲稿开窗（非弹窗） */
+  .notes-pane {
+    width: 0;
+    height: 100%;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+    flex-shrink: 0;
+    user-select: text;
+  }
+
+  .notes-pane.open {
+    width: 440px;
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .notes-tab {
+    height: 28px;
+    padding: 0 10px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-tab.active {
+    background: var(--bg-paper);
+    border-color: var(--stroke);
+    border-bottom-color: var(--indigo);
+    color: var(--indigo);
+    font-weight: 600;
+  }
+
+  .notes-close {
+    height: 28px;
+    padding: 0 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-close:hover {
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+
+  .notes-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 36px 22px;
+    line-height: 1.78;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--stroke);
+    background: #FAF9F6;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .note-block.current {
+    border-color: #C3D6DA;
+    border-left: 3px solid var(--indigo);
+    background: var(--indigo-light);
+  }
+
+  .note-block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--stroke);
+    cursor: pointer;
+  }
+
+  .note-block-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+    letter-spacing: 1px;
+  }
+
+  .note-block-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-left: 8px;
+    flex: 1;
+  }
+
+  .note-p {
+    margin-bottom: 10px;
+    color: var(--ink);
+    text-align: justify;
+  }
+
+  .note-p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-logic-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--terra);
+    border: 1px solid #DFC2B2;
+    background: var(--terra-light);
+    padding: 0 6px;
+    margin-right: 6px;
+    vertical-align: 1px;
+  }
+
+  /* 目录页内抽屉（按 G 开关） */
+  .toc-drawer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 390px;
+    background: var(--bg-paper);
+    border-right: 1px solid var(--stroke);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .toc-drawer.open {
+    transform: translateX(0);
+  }
+
+  .toc-head {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .toc-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--indigo);
+    font-weight: 700;
+  }
+
+  .toc-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border: 1px solid transparent;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .toc-item:hover {
+    background: var(--bg-sub);
+    border-color: var(--stroke);
+  }
+
+  .toc-item.active {
+    background: var(--indigo-light);
+    border-color: #C3D6DA;
+    border-left-color: var(--indigo);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+    padding-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .toc-text-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+
+  .toc-item-sub {
+    font-size: 12px;
+    color: var(--ink-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 底部常驻快捷键控制条（全屏时也始终可见，不遮挡舞台） */
+  .hud-bar {
+    height: 44px;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+    border-top: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    z-index: 50;
+  }
+
+  .hud-left, .hud-center, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    height: 28px;
+    padding: 0 10px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .hud-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+
+  .hud-btn.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .hud-btn.active kbd {
+    background: rgba(247, 246, 242, 0.2);
+    border-color: rgba(247, 246, 242, 0.4);
+    color: #F7F6F2;
+  }
+
+  .hud-btn.autoplay-on {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #F7F6F2;
+  }
+
+  .hud-btn.autoplay-on kbd {
+    background: rgba(247, 246, 242, 0.2);
+    border-color: rgba(247, 246, 242, 0.4);
+    color: #F7F6F2;
+  }
+
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+  }
+
+  .hud-progress {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-sub);
+    min-width: 66px;
+    text-align: center;
+  }
+
+  .hud-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--stroke);
+    margin: 0 2px;
+  }
+
+  /* 伪全屏兜底样式（当浏览环境禁用原生 Fullscreen API 时） */
+  body.pseudo-fullscreen .app-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+  }
+
+  /* SVG 通用高亮状态类 */
+  .svg-node {
+    transition: opacity 0.22s ease, stroke 0.22s ease, fill 0.22s ease;
+  }
+  .svg-dim {
+    opacity: 0.28;
+  }
+  .svg-hl-indigo rect.node-box,
+  .svg-hl-indigo path.node-line {
+    stroke: #245A6B !important;
+    stroke-width: 2.5 !important;
+  }
+  .svg-hl-terra rect.node-box,
+  .svg-hl-terra path.node-line {
+    stroke: #BE653B !important;
+    stroke-width: 2.5 !important;
+  }
+  .svg-hl-teal rect.node-box,
+  .svg-hl-teal path.node-line {
+    stroke: #2F7A66 !important;
+    stroke-width: 2.5 !important;
+  }
+  .svg-hl-gold rect.node-box,
+  .svg-hl-gold path.node-line {
+    stroke: #AE8A3E !important;
+    stroke-width: 2.5 !important;
+  }
+  .line-active {
+    stroke: #BE653B !important;
+    stroke-width: 2.8 !important;
+  }
+  .line-active-teal {
+    stroke: #2F7A66 !important;
+    stroke-width: 2.8 !important;
+  }
+  .line-active-indigo {
+    stroke: #245A6B !important;
+    stroke-width: 2.8 !important;
+  }
+
+  /* 轻量提示条 */
+  .toast {
+    position: fixed;
+    bottom: 58px;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--ink);
+    color: var(--bg-paper);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 6px 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 90;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+  <div class="workspace" id="workspace">
+    <!-- 目录页内抽屉 -->
+    <nav class="toc-drawer" id="tocDrawer" aria-label="演示目录">
+      <div class="toc-head">
+        <span class="toc-title">STRATA INDEX · 演说目录</span>
+        <button class="notes-close" id="btnCloseToc" type="button">关闭 G</button>
+      </div>
+      <div class="toc-list" id="tocList"></div>
+    </nav>
+
+    <!-- 左侧 16:9 固定舞台视口 -->
+    <main class="stage-viewport" id="stageViewport">
+      <div class="stage-scaler" id="stageScaler">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-slide="0" data-title="数据库筑基课 —— PLAN HINT" data-sub="封面与地层剖面总览">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">POSTGRESQL DATABASE FOUNDATION · CHAPTER 00</span>
+              <span class="strata-tag">AUTHOR: DIGOAL · 2026-06-08 · PG_HINT_PLAN</span>
+            </div>
+            <h1 class="slide-title">数据库筑基课 —— PLAN HINT</h1>
+            <p class="slide-lead">以 <strong>pg_hint_plan</strong> 为工程剖面，透视 PostgreSQL 优化器干预的输入路径、Hook 生效机理、成本边界与生产治理闭环。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="PLAN HINT 七阶地层剖面总览图">
+                <defs>
+                  <marker id="arr-indigo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                  <marker id="arr-terra" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="#BE653B"/>
+                  </marker>
+                  <marker id="arr-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="#2F7A66"/>
+                  </marker>
+                  <marker id="arr-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="#89938F"/>
+                  </marker>
+                </defs>
+                <!-- 左侧深度标尺 -->
+                <rect x="24" y="20" width="110" height="390" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="79" y="44" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">DEPTH SCALE</text>
+                <line x1="38" y1="54" x2="120" y2="54" stroke="#D9D5CB"/>
+                <text x="79" y="88" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#46585F">L7 表层 SQL</text>
+                <text x="79" y="140" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#46585F">L6 解析提取</text>
+                <text x="79" y="192" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#46585F">L5 规划入口</text>
+                <text x="79" y="244" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#46585F">L4 索引裁剪</text>
+                <text x="79" y="296" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#46585F">L3 扫描枚举</text>
+                <text x="79" y="348" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#46585F">L2 连接搜索</text>
+                <text x="79" y="396" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#1E4B5A" font-weight="700">L1 基数/执行</text>
+
+                <!-- 中央七阶地层横带（由浅至深） -->
+                <!-- L7 #EBF1EE -->
+                <rect x="154" y="20" width="840" height="50" fill="#EBF1EE" stroke="#C5D5D1"/>
+                <text x="174" y="42" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#1B2B33">表层输入：SQL 首块 /*+ ... */ 注释 与 hint_plan.hints 扩展表</text>
+                <text x="174" y="61" font-family="SF Mono, monospace" font-size="12" fill="#46585F" data-max-w="800">两条人工约束通道，优先查表（query_id + application_name），未命中再扫 SQL 注释</text>
+
+                <!-- L6 #CFE0DC -->
+                <rect x="154" y="76" width="840" height="50" fill="#CFE0DC" stroke="#A7C2BC"/>
+                <text x="174" y="98" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#1B2B33">词法解析：post_parse_analyze_hook &amp; parse_hints()</text>
+                <text x="174" y="117" font-family="SF Mono, monospace" font-size="12" fill="#2A4048" data-max-w="800">避开字符串、普通注释与 dollar-quoted 文本；构造 HintState，同类冲突后者胜出</text>
+
+                <!-- L5 #A4C4C6 -->
+                <rect x="154" y="132" width="840" height="50" fill="#A4C4C6" stroke="#85AEB2"/>
+                <text x="174" y="154" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#1B2B33">规划总控：planner_hook &amp; Set(...) 临时 GUC 嵌套栈</text>
+                <text x="174" y="173" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="800">建立新 GUC nest level 临时覆盖成本参数，规划结束自动回滚，零污染会话</text>
+
+                <!-- L4 #74A5AD -->
+                <rect x="154" y="188" width="840" height="50" fill="#74A5AD" stroke="#5A8E97"/>
+                <text x="174" y="210" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">候选索引裁剪：build_simple_rel_hook &amp; DisableIndex(...)</text>
+                <text x="174" y="229" font-family="SF Mono, monospace" font-size="12" fill="#F1EFE9" data-max-w="800">在构建 simple rel 时直接从 rel-&gt;indexlist 移除目标 IndexOptInfo，彻底排除误导索引</text>
+
+                <!-- L3 #47808D -->
+                <rect x="154" y="244" width="840" height="50" fill="#47808D" stroke="#376975"/>
+                <text x="174" y="266" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">单表路径枚举：set_rel_pathlist_hook &amp; Scan / Parallel Hint</text>
+                <text x="174" y="285" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE" data-max-w="800">调整 enable_* 与并行成本门槛后清空旧路径，重调 set_plain_rel_pathlist() 重新枚举</text>
+
+                <!-- L2 #2E6373 -->
+                <rect x="154" y="300" width="840" height="50" fill="#2E6373" stroke="#224E5B"/>
+                <text x="174" y="322" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">连接搜索控制：join_search_hook &amp; Leading / JoinMethod Hint</text>
+                <text x="174" y="341" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE" data-max-w="800">对象名转 Relids 位图；按集合匹配拨动 enable_nestloop/hashjoin/mergejoin 与连接方向</text>
+
+                <!-- L1 #1E4B5A -->
+                <rect x="154" y="356" width="840" height="54" fill="#1E4B5A" stroke="#153742"/>
+                <text x="174" y="379" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">基数修正与清场：adjust_rows() &amp; fmgr_hook / ExecutorEnd_hook</text>
+                <text x="174" y="399" font-family="SF Mono, monospace" font-size="12" fill="#CFE0DC" data-max-w="800">修正 joinrel-&gt;rows（#/+/-/*），处理 PL/pgSQL 嵌套并在执行结束后清理 HintState</text>
+
+                <!-- 右侧课程核心定位卡 -->
+                <rect x="1020" y="20" width="356" height="184" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="1020" y="20" width="356" height="4" fill="#245A6B"/>
+                <text x="1040" y="52" font-family="Songti SC, serif" font-size="20" font-weight="700" fill="#1B2B33">本课核心命题</text>
+                <text x="1040" y="82" font-family="PingFang SC, sans-serif" font-size="14" fill="#46585F" data-max-w="316">1. 优化器选错计划，多源于信息失真</text>
+                <text x="1040" y="108" font-family="PingFang SC, sans-serif" font-size="14" fill="#46585F" data-max-w="316">2. Hint 约束候选空间，不改执行器</text>
+                <text x="1040" y="134" font-family="PingFang SC, sans-serif" font-size="14" fill="#46585F" data-max-w="316">3. 价值在于诊断、止血与小流量灰度</text>
+                <text x="1040" y="160" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="600" data-max-w="316">4. 终极目标不是留 Hint，而是回收它</text>
+                <text x="1040" y="188" font-family="SF Mono, monospace" font-size="11" fill="#89938F">SCOPE: PG 19 / pg_hint_plan 1.9 源码剖析</text>
+
+                <rect x="1020" y="220" width="356" height="190" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="1020" y="220" width="356" height="4" fill="#BE653B"/>
+                <text x="1040" y="252" font-family="Songti SC, serif" font-size="20" font-weight="700" fill="#1B2B33">演说路径导览</text>
+                <text x="1040" y="282" font-family="SF Mono, monospace" font-size="13" fill="#245A6B">02-03 · 问题本质与双输入通道</text>
+                <text x="1040" y="308" font-family="SF Mono, monospace" font-size="13" fill="#245A6B">04-06 · Hook 机理与四类特种控制</text>
+                <text x="1040" y="334" font-family="SF Mono, monospace" font-size="13" fill="#2F7A66">07-08 · 横向对比与收益代价边界</text>
+                <text x="1040" y="360" font-family="SF Mono, monospace" font-size="13" fill="#BE653B">09-11 · 实操验证、运维闭环与八大坑</text>
+                <text x="1040" y="386" font-family="SF Mono, monospace" font-size="13" fill="#AE8A3E">12    · 七个架构追问与源码索引</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">在拆解内核 Hook 之前，先回答一个根本问题：PostgreSQL 优化器为什么会「看走眼」，PLAN HINT 究竟在补什么缺口？</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">01 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-slide="1" data-title="它解决什么问题？估算偏差与干预通道" data-sub="优化器信息失真 vs 人工约束代价">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">01 · PROBLEM &amp; TRADE-OFF</span>
+              <span class="strata-tag">COST OPTIMIZER VS HUMAN CONSTRAINT</span>
+            </div>
+            <h1 class="slide-title">SQL 慢不是「优化器笨」，而是估算前提失真</h1>
+            <p class="slide-lead">PostgreSQL 总是挑估算成本最低的计划；当统计、相关性或成本参数偏离现实时，PLAN HINT 提供可控的临时干预通道，代价是<strong>牺牲自适应空间</strong>。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="估算偏差源、优化器选路与PLAN HINT适用场景及代价对比图">
+                <!-- 左区：6 类估算偏差源 -->
+                <rect x="24" y="20" width="380" height="390" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="24" y="20" width="380" height="36" fill="#245A6B"/>
+                <text x="42" y="43" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">一、优化器看到的信息不完整（6 类根因）</text>
+
+                <rect x="42" y="72" width="344" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="58" y="99" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="312">01 · 统计信息过期，表行数与分布失真</text>
+
+                <rect x="42" y="126" width="344" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="58" y="153" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="312">02 · 多列相关性未表达，联合选择率算错</text>
+
+                <rect x="42" y="180" width="344" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="58" y="207" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="312">03 · 参数化 SQL 复用旧计划，未贴合新参数</text>
+
+                <rect x="42" y="234" width="344" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="58" y="261" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="312">04 · 数据严重倾斜（热点值与长尾差异极大）</text>
+
+                <rect x="42" y="288" width="344" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="58" y="315" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="312">05 · 索引空间过大/过小或连接搜索被限制</text>
+
+                <rect x="42" y="342" width="344" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="58" y="369" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="312">06 · 成本参数与真实硬件 IO/CPU 不匹配</text>
+
+                <!-- 连接线：左 -> 中 -->
+                <path d="M 404 215 H 460" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <!-- 中区：成本优化器矛盾点 -->
+                <rect x="466" y="88" width="300" height="254" fill="#FAF9F6" stroke="#245A6B" stroke-width="2"/>
+                <rect x="466" y="88" width="300" height="36" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="616" y="111" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#245A6B">PostgreSQL 成本优化器</text>
+                <text x="616" y="154" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33">枚举全部可行路径</text>
+                <path d="M 616 164 V 188" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+                <text x="616" y="210" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33">选出「估算成本最低」计划</text>
+                <line x1="490" y1="230" x2="742" y2="230" stroke="#D9D5CB"/>
+                <rect x="486" y="246" width="260" height="76" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="616" y="274" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#BE653B">工程矛盾</text>
+                <text x="616" y="298" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="240">估算前提错 → 最低估算成本 ≠ 实际最快</text>
+
+                <!-- 连接线：中 -> 右上（青绿通道）与 右下（陶橙代价） -->
+                <path d="M 766 170 H 816 V 136 H 844" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+                <path d="M 766 270 H 816 V 330 H 844" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+
+                <!-- 右上：PLAN HINT 四类核心价值 -->
+                <rect x="850" y="20" width="526" height="232" fill="#E5F1EC" stroke="#2F7A66"/>
+                <rect x="850" y="20" width="526" height="36" fill="#2F7A66"/>
+                <text x="868" y="43" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">二、PLAN HINT 解决的四类工程问题（正确动作）</text>
+
+                <rect x="868" y="70" width="238" height="76" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="882" y="94" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#2F7A66">生产故障止血</text>
+                <text x="882" y="116" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">索引突变为全表扫描或连接顺序</text>
+                <text x="882" y="134" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">突变时，快速把计划拉回稳定态</text>
+
+                <rect x="1120" y="70" width="238" height="76" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="1134" y="94" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#2F7A66">根因假设诊断</text>
+                <text x="1134" y="116" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">验证「换 HashJoin / 禁索引 /</text>
+                <text x="1134" y="134" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">修 join rows」是否真能变快</text>
+
+                <rect x="868" y="160" width="238" height="76" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="882" y="184" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#2F7A66">无法修改 SQL</text>
+                <text x="882" y="206" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">第三方系统、ORM、历史应用包</text>
+                <text x="882" y="224" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">短期无法发版，从数据库侧介入</text>
+
+                <rect x="1120" y="160" width="238" height="76" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="1134" y="184" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#2F7A66">小流量灰度验证</text>
+                <text x="1134" y="206" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">按指定 application_name 灰度</text>
+                <text x="1134" y="224" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="210">确认计划方向后再做长期治理</text>
+
+                <!-- 右下：结构性代价 -->
+                <rect x="850" y="270" width="526" height="140" fill="#F7E9DE" stroke="#BE653B"/>
+                <rect x="850" y="270" width="526" height="34" fill="#BE653B"/>
+                <text x="868" y="292" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">三、核心代价：牺牲优化器的自适应空间</text>
+                <text x="868" y="328" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="490">· 把动态成本模型问题，部分转化为静态「人工约束」。</text>
+                <text x="868" y="356" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" data-max-w="490">· 一旦数据量、版本、索引、参数或 SQL 形态变化，旧的正确 Hint 会变错。</text>
+                <text x="868" y="384" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#BE653B" data-max-w="490">· 定位结论：适合诊断、过渡与精确止血，绝不适合成为永久依赖。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">明确了「为什么用」之后，一条人工约束究竟通过哪两条通道进入 pg_hint_plan，又如何避免误伤与冲突？</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">02 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 (交互演示 #1) ==================== -->
+        <section class="slide" data-slide="2" data-title="它是什么？两条输入路径与解析裁决" data-sub="hint_plan.hints 优先于首块 /*+ ... */">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">02 · INPUT PATHWAY &amp; PARSER · INTERACTIVE</span>
+              <span class="strata-tag">HINT TABLE PRIORITY &amp; LEXICAL SCAN</span>
+            </div>
+            <h1 class="slide-title">双通道输入：表优先于注释，同类冲突后者胜出</h1>
+            <p class="slide-lead"><code>pg_hint_plan</code> 优先查 <strong>hint_plan.hints</strong> 表，未命中再扫描 SQL 首个 <code>/*+ ... */</code> 块注释，并避开字符串与 dollar-quoted 伪注释。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <!-- 独立交互工具条 -->
+            <div class="anim-toolbar" id="s3Toolbar">
+              <div class="anim-group">
+                <span class="anim-label">场景模拟:</span>
+                <button class="ctrl-btn active" type="button" data-s3-mode="table-hit">表开启且命中</button>
+                <button class="ctrl-btn" type="button" data-s3-mode="comment-first">表未命中→走SQL注释</button>
+                <button class="ctrl-btn" type="button" data-s3-mode="pseudo-conflict">伪注释+同类冲突</button>
+              </div>
+              <div class="anim-group">
+                <button class="ctrl-btn primary" type="button" id="s3Play">播放追踪</button>
+                <button class="ctrl-btn" type="button" id="s3Reset">重置</button>
+                <span class="anim-status" id="s3Status">就绪：点击场景或播放追踪输入路径</span>
+              </div>
+            </div>
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" id="svgS3" role="img" aria-label="PLAN HINT 双输入路径、词法扫描与 HintState 归档流程图">
+                <!-- 节点 1：SQL 到达 -->
+                <g class="svg-node" id="s3-n1">
+                  <rect class="node-box" x="24" y="150" width="210" height="126" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="129" y="180" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#1B2B33">SQL 语句到达</text>
+                  <text x="129" y="206" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="#46585F">query_id +</text>
+                  <text x="129" y="226" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="#46585F">application_name</text>
+                  <text x="129" y="252" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#245A6B">post_parse_analyze</text>
+                </g>
+
+                <!-- 连线 n1 -> 分支 -->
+                <path id="s3-l1" class="node-line" d="M 234 213 H 286" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <!-- 节点 2：判断 hint table -->
+                <g class="svg-node" id="s3-n2">
+                  <rect class="node-box" x="292" y="150" width="230" height="126" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="407" y="180" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#245A6B">通道 1：hint_plan.hints</text>
+                  <text x="407" y="206" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="#46585F" data-max-w="202">enable_hint_table = on?</text>
+                  <text x="407" y="228" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="202">按 query_id 与应用名查表</text>
+                  <text x="407" y="254" text-anchor="middle" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66" font-weight="700">优先级：HIGH（优先提取）</text>
+                </g>
+
+                <!-- 上分支：表命中直接到解析 -->
+                <path id="s3-l2-hit" class="node-line" d="M 407 150 V 74 H 904 V 150" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+                <rect x="572" y="54" width="186" height="24" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="665" y="70" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" font-weight="600">命中表记录：直接采用</text>
+
+                <!-- 下分支：未命中走 SQL 注释 -->
+                <path id="s3-l2-miss" class="node-line" d="M 407 276 V 336 H 544" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+                <rect x="330" y="294" width="154" height="24" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="407" y="310" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">未启用或未命中</text>
+
+                <!-- 节点 3：SQL 词法扫描器 -->
+                <g class="svg-node" id="s3-n3">
+                  <rect class="node-box" x="550" y="256" width="290" height="148" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="695" y="284" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#245A6B">通道 2：SQL 注释扫描器</text>
+                  <text x="568" y="310" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="254">· 仅读取首个 /*+ ... */ 块</text>
+                  <text x="568" y="334" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="254">· 自动避开单引号字符串字面量</text>
+                  <text x="568" y="358" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="254">· 避开普通注释与 $tag$...$tag$</text>
+                  <text x="568" y="384" font-family="SF Mono, monospace" font-size="11" fill="#BE653B" data-max-w="254">防伪 Hint 误注入（query_scan）</text>
+                </g>
+
+                <!-- 连线 n3 -> n4 -->
+                <path id="s3-l3" class="node-line" d="M 840 336 H 904 V 276" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <!-- 节点 4：parse_hints & create_hintstate -->
+                <g class="svg-node" id="s3-n4">
+                  <rect class="node-box" x="876" y="150" width="240" height="126" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="996" y="178" text-anchor="middle" font-family="SF Mono, monospace" font-size="13" font-weight="700" fill="#245A6B">parse_hints()</text>
+                  <text x="894" y="204" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="206">· 查 parsers 数组建对象</text>
+                  <text x="894" y="228" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="206">· 按类型计数、排序、归档</text>
+                  <text x="894" y="254" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B" font-weight="600" data-max-w="206">· 同对象同类冲突：后者胜</text>
+                </g>
+
+                <!-- 连线 n4 -> n5 -->
+                <path id="s3-l4" class="node-line" d="M 1116 213 H 1162" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <!-- 节点 5：HintState -->
+                <g class="svg-node" id="s3-n5">
+                  <rect class="node-box" x="1168" y="90" width="208" height="250" fill="#1E4B5A" stroke="#153742"/>
+                  <text x="1272" y="122" text-anchor="middle" font-family="SF Mono, monospace" font-size="15" font-weight="700" fill="#F7F6F2">HintState</text>
+                  <line x1="1186" y1="136" x2="1358" y2="136" stroke="#47808D"/>
+                  <text x="1188" y="162" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE">ScanMethodHint</text>
+                  <text x="1188" y="186" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE">JoinMethodHint</text>
+                  <text x="1188" y="210" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE">LeadingHint</text>
+                  <text x="1188" y="234" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE">RowsHint</text>
+                  <text x="1188" y="258" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE">ParallelHint</text>
+                  <text x="1188" y="282" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE">SetHint</text>
+                  <text x="1188" y="306" font-family="SF Mono, monospace" font-size="12" fill="#EBF1EE">DisableIndexHint</text>
+                  <text x="1272" y="330" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="11" fill="#CFE0DC">交由 Planner Hook 消费</text>
+                </g>
+
+                <!-- 底部动态案例说明栏（SVG内部底部区域，无任何重叠） -->
+                <rect x="24" y="24" width="380" height="86" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="40" y="48" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">当前示例输入：</text>
+                <text id="s3-sample-1" x="40" y="72" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="348">hint_plan.hints: (query_id, 'canary-app')</text>
+                <text id="s3-sample-2" x="40" y="94" font-family="SF Mono, monospace" font-size="12" fill="#2F7A66" data-max-w="348">→ Leading(c o) HashJoin(c o)</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">Hint 被解析归档进 HintState 之后，它们如何在不修改执行器的前提下，精准撬动 PostgreSQL 规划器的每一层？</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">03 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 (交互演示 #2) ==================== -->
+        <section class="slide" data-slide="3" data-title="核心原理：Planner Hook 生效地层流" data-sub="_PG_init 注册的 6 组规划期 Hook">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">03 · PLANNER HOOK ARCHITECTURE · INTERACTIVE</span>
+              <span class="strata-tag">_PG_INIT() HOOK INTERCEPTION</span>
+            </div>
+            <h1 class="slide-title">不改执行器：在六个规划 Hook 点逐层介入</h1>
+            <p class="slide-lead"><code>pg_hint_plan</code> 通过 <code>_PG_init()</code> 挂载规划器 Hook，把不同 Hint 精确投放到索引构建、路径枚举、连接搜索与基数估算阶段。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="anim-toolbar" id="s4Toolbar">
+              <div class="anim-group">
+                <span class="anim-label">追踪 Hint 信号:</span>
+                <button class="ctrl-btn active" type="button" data-s4-filter="all">全流程</button>
+                <button class="ctrl-btn" type="button" data-s4-filter="set">Set()</button>
+                <button class="ctrl-btn" type="button" data-s4-filter="disable">DisableIndex</button>
+                <button class="ctrl-btn" type="button" data-s4-filter="scan">Scan/Parallel</button>
+                <button class="ctrl-btn" type="button" data-s4-filter="join">Leading/Join</button>
+                <button class="ctrl-btn" type="button" data-s4-filter="rows">Rows()</button>
+              </div>
+              <div class="anim-group">
+                <button class="ctrl-btn primary" type="button" id="s4Play">播放演进</button>
+                <button class="ctrl-btn" type="button" id="s4Step">单步</button>
+                <button class="ctrl-btn" type="button" id="s4Reset">重置</button>
+                <span class="anim-status" id="s4Status">步骤 0/6：选择 Hint 或点击播放</span>
+              </div>
+            </div>
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" id="svgS4" role="img" aria-label="PostgreSQL Planner Hook 六阶段地层生效架构图">
+                <!-- 左侧主管道说明 -->
+                <rect x="24" y="20" width="244" height="390" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="24" y="20" width="244" height="36" fill="#1E4B5A"/>
+                <text x="146" y="43" text-anchor="middle" font-family="SF Mono, monospace" font-size="13" font-weight="700" fill="#F7F6F2">PLANNER LIFECYCLE</text>
+                <text x="40" y="84" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">核心架构铁律：</text>
+                <text x="40" y="110" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="212">1. 全部干预发生在 Planner</text>
+                <text x="40" y="132" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="212">   计划生成期，绝不侵入</text>
+                <text x="40" y="154" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="212">   Executor 算子执行逻辑。</text>
+                <line x1="40" y1="176" x2="252" y2="176" stroke="#D9D5CB"/>
+                <text x="40" y="202" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#245A6B">源码定位：</text>
+                <text x="40" y="226" font-family="SF Mono, monospace" font-size="12" fill="#46585F">· pg_hint_plan.c</text>
+                <text x="40" y="248" font-family="SF Mono, monospace" font-size="12" fill="#46585F">· core.c（复制规划函数）</text>
+                <text x="40" y="270" font-family="SF Mono, monospace" font-size="12" fill="#46585F">· make_join_rel.c</text>
+                <line x1="40" y1="292" x2="252" y2="292" stroke="#D9D5CB"/>
+                <text x="40" y="318" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">嵌套与收尾：</text>
+                <text x="40" y="342" font-family="SF Mono, monospace" font-size="12" fill="#46585F">· fmgr_hook / needs_fmgr</text>
+                <text x="40" y="364" font-family="SF Mono, monospace" font-size="12" fill="#46585F">· ExecutorEnd_hook</text>
+                <text x="40" y="388" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="212">处理 PL/pgSQL 与状态清理</text>
+
+                <!-- 右侧 6 层垂直地层节点（3列×2行 规整蛇形正交连线，宽裕留白） -->
+                <!-- Row 1: S1 -> S2 -> S3 -->
+                <g class="svg-node" id="s4-step1">
+                  <rect class="node-box" x="296" y="24" width="330" height="162" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                  <rect x="296" y="24" width="330" height="30" fill="#47808D"/>
+                  <text x="312" y="44" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">01 · post_parse_analyze_hook</text>
+                  <text x="312" y="78" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">解析分析后提取 Hint 字符串</text>
+                  <text x="312" y="104" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="298">· 此时已生成 query_id</text>
+                  <text x="312" y="128" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="298">· 优先查 hint_plan.hints 表</text>
+                  <text x="312" y="152" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="298">· 未命中则扫描首个 /*+ */ 注释</text>
+                </g>
+
+                <path id="s4-l12" class="node-line" d="M 626 105 H 662" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s4-step2">
+                  <rect class="node-box" x="668" y="24" width="330" height="162" fill="#CFE0DC" stroke="#245A6B" stroke-width="1.5"/>
+                  <rect x="668" y="24" width="330" height="30" fill="#2E6373"/>
+                  <text x="684" y="44" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">02 · planner_hook（主入口）</text>
+                  <text x="684" y="78" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">构建 HintState 与临时 GUC</text>
+                  <text x="684" y="104" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="298">· 调用 create_hintstate() 归档</text>
+                  <text x="684" y="128" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="298">· 新 nest level 应用 Set(...) 参数</text>
+                  <text x="684" y="152" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="298">· 调标准 planner，结束后回滚 GUC</text>
+                </g>
+
+                <path id="s4-l23" class="node-line" d="M 998 105 H 1034" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s4-step3">
+                  <rect class="node-box" x="1040" y="24" width="336" height="162" fill="#A4C4C6" stroke="#245A6B" stroke-width="1.5"/>
+                  <rect x="1040" y="24" width="336" height="30" fill="#1E4B5A"/>
+                  <text x="1056" y="44" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">03 · build_simple_rel_hook</text>
+                  <text x="1056" y="78" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">DisableIndex 精确裁剪索引</text>
+                  <text x="1056" y="104" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="304">· 遍历 rel-&gt;indexlist 候选集</text>
+                  <text x="1056" y="128" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="304">· 直接移除目标 IndexOptInfo</text>
+                  <text x="1056" y="152" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="304">· 优先级高于后续 IndexScan()</text>
+                </g>
+
+                <!-- 折返直角连线 S3 -> S4 -->
+                <path id="s4-l34" class="node-line" d="M 1208 186 V 212 V 236" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <!-- Row 2: S6 <- S5 <- S4（自右向左蛇形，避免长距离折线交叉） -->
+                <g class="svg-node" id="s4-step4">
+                  <rect class="node-box" x="1040" y="242" width="336" height="166" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>
+                  <rect x="1040" y="242" width="336" height="30" fill="#245A6B"/>
+                  <text x="1056" y="262" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">04 · set_rel_pathlist_hook</text>
+                  <text x="1056" y="296" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">单表扫描与并行路径重枚举</text>
+                  <text x="1056" y="322" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="304">· 拨动 enable_seqscan 等开关</text>
+                  <text x="1056" y="346" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="304">· 清空旧路径并重调 pathlist 枚举</text>
+                  <text x="1056" y="370" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="304">· 应用 Parallel(soft | hard) 门槛</text>
+                </g>
+
+                <path id="s4-l45" class="node-line" d="M 1040 325 H 1004" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s4-step5">
+                  <rect class="node-box" x="668" y="242" width="330" height="166" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>
+                  <rect x="668" y="242" width="330" height="30" fill="#245A6B"/>
+                  <text x="684" y="262" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">05 · join_search_hook</text>
+                  <text x="684" y="296" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">连接顺序、连接算法与行数修正</text>
+                  <text x="684" y="322" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="298">· Leading() 施加组合与方向约束</text>
+                  <text x="684" y="346" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="298">· NestLoop/HashJoin/MergeJoin</text>
+                  <text x="684" y="370" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" font-weight="600" data-max-w="298">· make_join_rel.c 修正 joinrel-&gt;rows</text>
+                </g>
+
+                <path id="s4-l56" class="node-line" d="M 668 325 H 632" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s4-step6">
+                  <rect class="node-box" x="296" y="242" width="330" height="166" fill="#E5F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                  <rect x="296" y="242" width="330" height="30" fill="#2F7A66"/>
+                  <text x="312" y="262" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">06 · Plan 输出 &amp; ExecutorEnd_hook</text>
+                  <text x="312" y="296" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">产出可执行计划并清理状态</text>
+                  <text x="312" y="322" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="298">· 若 Hint 指向不可执行路径，自动回退</text>
+                  <text x="312" y="346" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="298">· 标准 Executor 执行最终 Plan</text>
+                  <text x="312" y="370" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="600" data-max-w="298">· ExecutorEnd_hook 回收 HintState</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">看清了 6 个 Hook 的坐标后，我们深入最常用的两类干预：扫描路径 Hint 和连接 Hint，在源码里到底是如何改写候选空间的？</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">04 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 ==================== -->
+        <section class="slide" data-slide="4" data-title="扫描与连接机制：重构候选空间而非硬切算子" data-sub="enforce_mask 重枚举与 Relids 位图约束">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">04 · SCAN &amp; JOIN MECHANISM</span>
+              <span class="strata-tag">PATHLIST RE-ENUMERATION &amp; RELIDS BITMAP</span>
+            </div>
+            <h1 class="slide-title">扫描与连接 Hint：收缩候选空间，而非硬切算子</h1>
+            <p class="slide-lead">无论单表扫描还是多表连接，<code>pg_hint_plan</code> 都是通过临时拨动规划器开关来<strong>重塑候选路径集</strong>，让优化器在剩余可行路径中按成本择优。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="单表扫描路径重枚举与多表连接 Relids 位图约束双栏机制图">
+                <!-- 左半区：单表扫描路径 Hint -->
+                <rect x="24" y="20" width="664" height="390" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="20" width="664" height="38" fill="#245A6B"/>
+                <text x="44" y="44" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">A. 单表扫描 Hint（set_rel_pathlist_hook）</text>
+
+                <rect x="48" y="78" width="276" height="72" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="64" y="104" font-family="SF Mono, monospace" font-size="13" font-weight="700" fill="#245A6B">1. 匹配 Relation 与掩码</text>
+                <text x="64" y="128" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="244">读取 ScanMethodHint.enforce_mask</text>
+
+                <path d="M 324 114 H 374" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="380" y="78" width="284" height="72" fill="#F1EFE9" stroke="#245A6B"/>
+                <text x="396" y="104" font-family="SF Mono, monospace" font-size="13" font-weight="700" fill="#245A6B">2. 临时拨动规划器 GUC</text>
+                <text x="396" y="128" font-family="SF Mono, monospace" font-size="11" fill="#46585F" data-max-w="252">enable_seqscan / indexscan / bitmap...</text>
+
+                <path d="M 522 150 V 184" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="380" y="190" width="284" height="78" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="396" y="216" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#BE653B">3. 清空原路径并重枚举</text>
+                <text x="396" y="238" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="252">清空已生成 pathlist，调用复制版</text>
+                <text x="396" y="256" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="252">set_plain_rel_pathlist()</text>
+
+                <path d="M 380 229 H 330" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <rect x="48" y="190" width="276" height="78" fill="#E5F1EC" stroke="#2F7A66"/>
+                <text x="64" y="216" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#2F7A66">4. 剩余可行集内择优</text>
+                <text x="64" y="238" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="244">在被允许的候选路径里</text>
+                <text x="64" y="256" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="244">仍由优化器按成本选最低者</text>
+
+                <rect x="48" y="294" width="616" height="94" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="48" y="294" width="4" height="94" fill="#BE653B"/>
+                <text x="68" y="320" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">关键物理边界（为什么有时「不生效」）</text>
+                <text x="68" y="346" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="580">· 开关只是施加高惩罚成本或过滤候选路径，并非在执行器硬塞算子。</text>
+                <text x="68" y="370" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="580">· 若无匹配谓词或无 ctid 条件，强写 IndexScan / TidScan 会自动回退。</text>
+
+                <!-- 右半区：多表连接 Hint -->
+                <rect x="712" y="20" width="664" height="390" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="712" y="20" width="664" height="38" fill="#1E4B5A"/>
+                <text x="732" y="44" font-family="PingFang SC, sans-serif" font-size="15" font-weight="700" fill="#F7F6F2">B. 连接顺序与连接算法（join_search_hook）</text>
+
+                <rect x="736" y="78" width="616" height="62" fill="#EBF1EE" stroke="#245A6B"/>
+                <text x="754" y="103" font-family="SF Mono, monospace" font-size="13" font-weight="700" fill="#245A6B">transform_join_hints()：Relation 名称 → Relids 位图</text>
+                <text x="754" y="126" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="580">在 join search 阶段通过集合位图匹配，判断当前生成的 join relation 是否命中 Hint</text>
+
+                <!-- 两条并行控制机制 -->
+                <path d="M 884 140 V 168" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+                <path d="M 1204 140 V 168" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+
+                <!-- 左子框：Join Method -->
+                <rect x="736" y="174" width="296" height="148" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="736" y="174" width="296" height="30" fill="#E5EFF0"/>
+                <text x="752" y="194" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#245A6B">Join Method（连接算法）</text>
+                <text x="752" y="222" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">NestLoop / HashJoin</text>
+                <text x="752" y="242" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">MergeJoin / NoHashJoin</text>
+                <text x="752" y="270" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="266">在 make_join_rel_wrapper 与</text>
+                <text x="752" y="290" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="266">add_paths_to_joinrel_wrapper</text>
+                <text x="752" y="310" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="266">前后临时开关三种连接算法 GUC</text>
+
+                <!-- 右子框：Leading Order -->
+                <rect x="1056" y="174" width="296" height="148" fill="#FAF9F6" stroke="#BE653B"/>
+                <rect x="1056" y="174" width="296" height="30" fill="#F7E9DE"/>
+                <text x="1072" y="194" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">Leading（组合与方向约束）</text>
+                <text x="1072" y="222" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">Leading(a b c)</text>
+                <text x="1072" y="242" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33">Leading((a b) c)（带方向）</text>
+                <text x="1072" y="270" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="266">若指定了内外表方向，当 inner/</text>
+                <text x="1072" y="290" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="266">outer 不匹配时，源码临时禁用</text>
+                <text x="1072" y="310" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="266">全部 join 方法以排除逆向路径</text>
+
+                <rect x="736" y="338" width="616" height="50" fill="#F6EFE0" stroke="#AE8A3E"/>
+                <text x="754" y="368" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="580">搜索边界提示：若触发 GEQO 或受限于 from_collapse_limit，优化器未搜索到的连接顺序无法被强制。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">除了直接限制扫描和连接方式，还有四类更精细的「特种 Hint」——直接修正估算行数、并行门槛、临时 GUC 或彻底剔除误导索引。</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">05 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 (交互演示 #3) ==================== -->
+        <section class="slide" data-slide="5" data-title="四类特种控制：Rows / Parallel / Set / DisableIndex" data-sub="adjust_rows() 实时基数推演与精准索引移除">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">05 · SPECIALIZED HINTS &amp; CARDINALITY SIMULATOR · INTERACTIVE</span>
+              <span class="strata-tag">ROWS · PARALLEL · SET · DISABLEINDEX</span>
+            </div>
+            <h1 class="slide-title">四类特种控制：改基数、压门槛、套参数、剪索引</h1>
+            <p class="slide-lead"><code>Rows</code> 修正成本模型输入，<code>Parallel</code> 控制并行成本门槛，<code>Set</code> 在新嵌套层临时调 GUC，<code>DisableIndex</code> 从候选索引集直接剔除。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <!-- 独立交互工具条：Rows() 基数修正计算器 -->
+            <div class="anim-toolbar" id="s6Toolbar">
+              <div class="anim-group">
+                <span class="anim-label">Rows(c o ...) 机制推演:</span>
+                <span class="anim-label">原估算行</span>
+                <input class="ctrl-input" id="s6BaseRows" type="number" min="1" max="10000000" value="50000" aria-label="原始估算行数">
+                <select class="ctrl-select" id="s6Op" aria-label="Rows 运算符">
+                  <option value="*">* (按倍数缩放)</option>
+                  <option value="#"># (设为绝对值)</option>
+                  <option value="+">+ (增加行数)</option>
+                  <option value="-">- (减少行数)</option>
+                </select>
+                <input class="ctrl-input" id="s6Val" type="number" step="0.1" value="0.1" aria-label="修正参数值">
+                <button class="ctrl-btn primary" type="button" id="s6Apply">应用并推演</button>
+                <button class="ctrl-btn" type="button" id="s6Reset">重置</button>
+              </div>
+              <div class="anim-group">
+                <span class="anim-status" id="s6Status">Rows(c o *0.1)：50,000 → 5,000 行</span>
+              </div>
+            </div>
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" id="svgS6" role="img" aria-label="Rows Parallel Set DisableIndex 四类特种 Hint 控制点映射与 Rows 修正推演图">
+                <!-- 左侧 3 块：Parallel, Set, DisableIndex -->
+                <!-- 1. Parallel -->
+                <rect x="24" y="20" width="440" height="122" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="24" y="20" width="8" height="122" fill="#245A6B"/>
+                <text x="48" y="46" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#245A6B">Parallel(table n soft | hard)</text>
+                <text x="48" y="72" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="400">· soft：仅调 max_parallel_workers_per_gather</text>
+                <text x="48" y="96" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="400">· hard：压低 parallel_*_cost 且大小门槛归 0</text>
+                <text x="48" y="120" font-family="SF Mono, monospace" font-size="12" fill="#BE653B" data-max-w="400">· Parallel(t 0 hard) 可用于彻底抑制并行</text>
+
+                <!-- 2. Set -->
+                <rect x="24" y="154" width="440" height="122" fill="#FAF9F6" stroke="#AE8A3E"/>
+                <rect x="24" y="154" width="8" height="122" fill="#AE8A3E"/>
+                <text x="48" y="180" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#AE8A3E">Set(name value)</text>
+                <text x="48" y="206" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="400">· 如 Set(random_page_cost 2.0)</text>
+                <text x="48" y="230" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="400">· 在 pg_hint_plan_planner() 新 GUC nest level 生效</text>
+                <text x="48" y="254" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" data-max-w="400">· 规划结束后自动回滚，不影响会话后续 SQL</text>
+
+                <!-- 3. DisableIndex -->
+                <rect x="24" y="288" width="440" height="122" fill="#E5F1EC" stroke="#2F7A66"/>
+                <rect x="24" y="288" width="8" height="122" fill="#2F7A66"/>
+                <text x="48" y="314" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#2F7A66">DisableIndex(table index...)</text>
+                <text x="48" y="340" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="400">· 比 NoIndexScan 更精准：只禁特定误导索引</text>
+                <text x="48" y="364" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="400">· 在 build_simple_rel_hook 从 rel-&gt;indexlist 删去</text>
+                <text x="48" y="388" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" font-weight="600" data-max-w="400">· 即便同写 IndexScan(t idx)，该索引也不可见</text>
+
+                <!-- 右侧宽区：Rows Hint 原理 + 动态可视化推演面板 -->
+                <rect x="490" y="20" width="886" height="390" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="490" y="20" width="886" height="38" fill="#1E4B5A"/>
+                <text x="510" y="44" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#F7F6F2">Rows(rel1 rel2 #|+|-|*n) —— make_join_rel.c :: adjust_rows() 实时推演</text>
+
+                <!-- 四种运算符速查带 -->
+                <rect x="510" y="74" width="196" height="64" fill="#FAF9F6" stroke="#D9D5CB" id="s6-op-hash"/>
+                <text x="526" y="98" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#245A6B">#&lt;n&gt;</text>
+                <text x="526" y="122" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">设为绝对估算行数</text>
+
+                <rect x="724" y="74" width="196" height="64" fill="#FAF9F6" stroke="#D9D5CB" id="s6-op-plus"/>
+                <text x="740" y="98" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#245A6B">+&lt;n&gt;</text>
+                <text x="740" y="122" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">原估算上增加 n 行</text>
+
+                <rect x="938" y="74" width="196" height="64" fill="#FAF9F6" stroke="#D9D5CB" id="s6-op-minus"/>
+                <text x="954" y="98" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#245A6B">-&lt;n&gt;</text>
+                <text x="954" y="122" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">原估算上减少 n 行</text>
+
+                <rect x="1152" y="74" width="204" height="64" fill="#E5EFF0" stroke="#245A6B" stroke-width="2" id="s6-op-mul"/>
+                <text x="1168" y="98" font-family="SF Mono, monospace" font-size="14" font-weight="700" fill="#245A6B">*&lt;n&gt;</text>
+                <text x="1168" y="122" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">按倍数缩放原估算</text>
+
+                <!-- 动态条形对比区 -->
+                <rect x="510" y="156" width="846" height="156" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="530" y="182" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">joinrel-&gt;rows 修正前后对比（仅修正成本模型输入，不修改 pg_statistic 表统计）</text>
+
+                <!-- 原始条 -->
+                <text x="530" y="220" font-family="SF Mono, monospace" font-size="12" fill="#46585F">原估算 rows</text>
+                <rect x="640" y="204" width="520" height="24" fill="#EBF1EE" stroke="#CFE0DC"/>
+                <rect id="s6-bar-orig" x="640" y="204" width="460" height="24" fill="#74A5AD"/>
+                <text id="s6-txt-orig" x="1174" y="221" font-family="SF Mono, monospace" font-size="13" font-weight="700" fill="#1B2B33">50,000</text>
+
+                <!-- 修正后条 -->
+                <text x="530" y="264" font-family="SF Mono, monospace" font-size="12" fill="#BE653B" font-weight="700">修正后 rows</text>
+                <rect x="640" y="248" width="520" height="24" fill="#F7E9DE" stroke="#E8C7B3"/>
+                <rect id="s6-bar-new" x="640" y="248" width="46" height="24" fill="#BE653B"/>
+                <text id="s6-txt-new" x="1174" y="265" font-family="SF Mono, monospace" font-size="13" font-weight="700" fill="#BE653B">5,000</text>
+
+                <text id="s6-formula-txt" x="530" y="298" font-family="SF Mono, monospace" font-size="12" fill="#245A6B">生效语句：/*+ Rows(c o *0.1) */  →  输出给上层 Join 成本评估</text>
+
+                <!-- 诊断结论框 -->
+                <rect x="510" y="326" width="846" height="68" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="530" y="352" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#245A6B">诊断推演指向：</text>
+                <text id="s6-diag-txt" x="530" y="376" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="806">基数大幅下修（缩小 10.0x）：若计划因此改善，说明长期修复应优先补充扩展统计信息、表达式统计或优化谓词。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">掌握了全部 Hint 工具箱的机理，接下来必须拉高视角：把它和统计信息治理、索引/SQL 改写放在同一张工程坐标纸上横向对比。</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">06 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 ==================== -->
+        <section class="slide" data-slide="6" data-title="横向对比：控制计划、修正输入与改变问题" data-sub="三种优化治理手段的七维工程评估">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">06 · ENGINEERING COMPARISON MATRIX</span>
+              <span class="strata-tag">HINT VS STATISTICS VS INDEX / SQL</span>
+            </div>
+            <h1 class="slide-title">横向对比：先止血验证，再回到统计与索引根治</h1>
+            <p class="slide-lead">PLAN HINT 是<strong>「控制计划」</strong>，统计信息是<strong>「修正输入」</strong>，索引与 SQL 改写是<strong>「改变问题本身」</strong>——三者定位互补而非替代。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="PLAN HINT、统计信息、索引与SQL改写七维工程对比矩阵">
+                <!-- 表头 -->
+                <rect x="24" y="16" width="176" height="40" fill="#1E4B5A" stroke="#153742"/>
+                <text x="112" y="41" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">工程维度</text>
+
+                <rect x="200" y="16" width="392" height="40" fill="#BE653B" stroke="#9B4F2B"/>
+                <text x="396" y="41" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">pg_hint_plan（控制计划）</text>
+
+                <rect x="592" y="16" width="392" height="40" fill="#245A6B" stroke="#1A4452"/>
+                <text x="788" y="41" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">统计信息 / 扩展统计（修正输入）</text>
+
+                <rect x="984" y="16" width="392" height="40" fill="#2F7A66" stroke="#225D4D"/>
+                <text x="1180" y="41" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">索引与 SQL 改写（改变问题本身）</text>
+
+                <!-- 7行数据，每行高 44px（y=56..364） -->
+                <!-- Row 1: 主要目标 -->
+                <rect x="24" y="56" width="176" height="44" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="42" y="83" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">主要目标</text>
+                <rect x="200" y="56" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="216" y="83" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="360">人工约束某次规划的候选路径</text>
+                <rect x="592" y="56" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="608" y="83" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="360">让优化器看到更真实的数据分布</text>
+                <rect x="984" y="56" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1000" y="83" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="360">改变可用访问路径或 SQL 逻辑表达</text>
+
+                <!-- Row 2: 生效速度 -->
+                <rect x="24" y="100" width="176" height="44" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <text x="42" y="127" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">生效速度</text>
+                <rect x="200" y="100" width="392" height="44" fill="#F7E9DE" stroke="#D9D5CB"/>
+                <text x="216" y="127" font-family="PingFang SC, sans-serif" font-size="13" font-weight="600" fill="#BE653B" data-max-w="360">快，最适合紧急止血与假设验证</text>
+                <rect x="592" y="100" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="608" y="127" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">需要采样、ANALYZE 与持续观察</text>
+                <rect x="984" y="100" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="1000" y="127" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">可能需要 DDL、应用发布与回滚窗口</text>
+
+                <!-- Row 3: 长期稳定性 -->
+                <rect x="24" y="144" width="176" height="44" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="42" y="171" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">长期稳定性</text>
+                <rect x="200" y="144" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="216" y="171" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">强依赖 SQL 形态、版本、对象名与分布</text>
+                <rect x="592" y="144" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="608" y="171" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="360">稳定性较好，但仍需定期维护</text>
+                <rect x="984" y="144" width="392" height="44" fill="#E5F1EC" stroke="#D9D5CB"/>
+                <text x="1000" y="171" font-family="PingFang SC, sans-serif" font-size="13" font-weight="600" fill="#2F7A66" data-max-w="360">通常最适合作为长期治本方案</text>
+
+                <!-- Row 4: 主要风险 -->
+                <rect x="24" y="188" width="176" height="44" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <text x="42" y="215" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">主要风险</text>
+                <rect x="200" y="188" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="216" y="215" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" data-max-w="360">数据漂移后可能锁死过时计划</text>
+                <rect x="592" y="188" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="608" y="215" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">统计目标不足或采样偏差</text>
+                <rect x="984" y="188" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="1000" y="215" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">索引膨胀、写放大与 SQL 复杂化</text>
+
+                <!-- Row 5: 适合对象 -->
+                <rect x="24" y="232" width="176" height="44" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="42" y="259" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">适合角色</text>
+                <rect x="200" y="232" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="216" y="259" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="360">DBA、内核/性能工程师、应急处理</text>
+                <rect x="592" y="232" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="608" y="259" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="360">DBA、数据库架构师</text>
+                <rect x="984" y="232" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1000" y="259" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="360">架构师、DBA、应用开发者</text>
+
+                <!-- Row 6: 验证方式 -->
+                <rect x="24" y="276" width="176" height="44" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <text x="42" y="303" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">验证方式</text>
+                <rect x="200" y="276" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="216" y="303" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">对比 Hint 前后 EXPLAIN 与真实延迟</text>
+                <rect x="592" y="276" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="608" y="303" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">对比估算行数（rows）与实际行数</text>
+                <rect x="984" y="276" width="392" height="44" fill="#F4F6F5" stroke="#D9D5CB"/>
+                <text x="1000" y="303" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">对比计划、IO、锁等待与写入成本</text>
+
+                <!-- Row 7: 不适合场景 -->
+                <rect x="24" y="320" width="176" height="44" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="42" y="347" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">不适合场景</text>
+                <rect x="200" y="320" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="216" y="347" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" data-max-w="360">试图永久绕过根因治理</text>
+                <rect x="592" y="320" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="608" y="347" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">SQL 自身逻辑低效</text>
+                <rect x="984" y="320" width="392" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1000" y="347" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" data-max-w="360">突发故障且短期无法发版</text>
+
+                <!-- 底部生产优先级横带 -->
+                <rect x="24" y="376" width="1352" height="38" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="44" y="400" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#245A6B">生产治理优先级路线：第一步用 PLAN HINT 快速验证假设并止血  →  第二步回到统计信息、索引、SQL 与数据模型做长期根治  →  第三步回收 Hint</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">在生产现场，启用 PLAN HINT 到底会带来哪些可观察变化，又必须为之承担哪些结构性边界与代价？</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">07 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-slide="7" data-title="效果评估与决策边界" data-sub="六项可观察计划变化 vs 五类明确代价">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">07 · OBSERVABLE EFFECTS &amp; DECISION BOUNDARY</span>
+              <span class="strata-tag">PLAN SHIFT VS STRUCTURAL COST</span>
+            </div>
+            <h1 class="slide-title">效果不是固定倍数，而是计划空间的精确切换</h1>
+            <p class="slide-lead">PLAN HINT 的真实产出是 6 类可观测的计划差异；能否使用它，取决于是否跨过了<strong>「根因可治 vs 临时止血」</strong>的决策边界。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="PLAN HINT 六项可观察收益、五项刚性代价与决策边界分流图">
+                <!-- 左栏：6 项可观察收益 -->
+                <rect x="24" y="20" width="430" height="390" fill="#E5F1EC" stroke="#2F7A66"/>
+                <rect x="24" y="20" width="430" height="36" fill="#2F7A66"/>
+                <text x="42" y="43" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">可观察的 6 类计划变化（非虚构加速数字）</text>
+
+                <rect x="42" y="72" width="394" height="46" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="58" y="92" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#2F7A66">1. 扫描方式切换</text>
+                <text x="58" y="110" font-family="SF Mono, monospace" font-size="11" fill="#46585F" data-max-w="362">Seq / Index / Bitmap Heap / Index Only Scan</text>
+
+                <rect x="42" y="126" width="394" height="46" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="58" y="146" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#2F7A66">2. 连接算法切换</text>
+                <text x="58" y="164" font-family="SF Mono, monospace" font-size="11" fill="#46585F" data-max-w="362">Nested Loop / Hash Join / Merge Join</text>
+
+                <rect x="42" y="180" width="394" height="46" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="58" y="200" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#2F7A66">3. 连接顺序调整</text>
+                <text x="58" y="218" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="362">避免大表过早 Join，让高选择性表先过滤</text>
+
+                <rect x="42" y="234" width="394" height="46" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="58" y="254" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#2F7A66">4. 并行度改变</text>
+                <text x="58" y="272" font-family="SF Mono, monospace" font-size="11" fill="#46585F" data-max-w="362">Gather / Parallel Seq Scan 与 worker 数量</text>
+
+                <rect x="42" y="288" width="394" height="46" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="58" y="308" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#2F7A66">5. 行数估算联动</text>
+                <text x="58" y="326" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="362">Rows 修正后，触发上层 Join 成本重算</text>
+
+                <rect x="42" y="342" width="394" height="46" fill="#FAF9F6" stroke="#B6D5C9"/>
+                <text x="58" y="362" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#2F7A66">6. 候选索引净化</text>
+                <text x="58" y="380" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="362">DisableIndex 精准排除误导优化器的索引</text>
+
+                <!-- 中栏：5 项刚性代价 -->
+                <rect x="480" y="20" width="440" height="390" fill="#F7E9DE" stroke="#BE653B"/>
+                <rect x="480" y="20" width="440" height="36" fill="#BE653B"/>
+                <text x="498" y="43" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">必须正视的 5 类维护代价与限制</text>
+
+                <rect x="498" y="72" width="404" height="56" fill="#FAF9F6" stroke="#E0C3B1"/>
+                <text x="514" y="96" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">代价 1：掩盖底层根因</text>
+                <text x="514" y="116" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="372">掩盖统计信息、SQL 写法或 schema 设计缺陷</text>
+
+                <rect x="498" y="138" width="404" height="56" fill="#FAF9F6" stroke="#E0C3B1"/>
+                <text x="514" y="162" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">代价 2：强绑定易失效</text>
+                <text x="514" y="182" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="372">绑定对象名、别名、query_id、PG 主版本与扩展版本</text>
+
+                <rect x="498" y="204" width="404" height="56" fill="#FAF9F6" stroke="#E0C3B1"/>
+                <text x="514" y="228" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">代价 3：数据漂移锁死错误计划</text>
+                <text x="514" y="248" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="372">小表变大表或热点迁移后，旧 Hint 反向制造慢查询</text>
+
+                <rect x="498" y="270" width="404" height="56" fill="#FAF9F6" stroke="#E0C3B1"/>
+                <text x="514" y="294" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">代价 4：query_id 忽略注释风险</text>
+                <text x="514" y="314" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="372">相同正文但不同 Hint 可能共享同一 query_id</text>
+
+                <rect x="498" y="336" width="404" height="56" fill="#FAF9F6" stroke="#E0C3B1"/>
+                <text x="514" y="360" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">代价 5：复杂语法存在额外限制</text>
+                <text x="514" y="380" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="372">PL/pgSQL、视图、继承、VALUES、子查询、FDW 受限</text>
+
+                <!-- 右栏：决策边界树 -->
+                <rect x="946" y="20" width="430" height="390" fill="#F1EFE9" stroke="#245A6B"/>
+                <rect x="946" y="20" width="430" height="36" fill="#245A6B"/>
+                <text x="964" y="43" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">PLAN HINT 工程决策边界</text>
+
+                <rect x="976" y="76" width="370" height="54" fill="#FAF9F6" stroke="#245A6B"/>
+                <text x="1161" y="100" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#1B2B33">遇到执行计划异常</text>
+                <text x="1161" y="120" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">是否可直接通过统计/索引/SQL 根因治理？</text>
+
+                <!-- 分支向左下（是）和向右下（否） -->
+                <path d="M 1068 130 V 184" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+                <text x="1054" y="162" text-anchor="end" font-family="PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#2F7A66">可快速根治</text>
+
+                <path d="M 1254 130 V 184" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+                <text x="1268" y="162" font-family="PingFang SC, sans-serif" font-size="12" font-weight="700" fill="#BE653B">需先止血/验证</text>
+
+                <rect x="972" y="190" width="176" height="114" fill="#E5F1EC" stroke="#2F7A66"/>
+                <text x="1060" y="218" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#2F7A66">优先根因治理</text>
+                <text x="986" y="244" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">· ANALYZE / 扩展统计</text>
+                <text x="986" y="266" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">· 调整索引与谓词</text>
+                <text x="986" y="288" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">· 让优化器自然选对</text>
+
+                <rect x="1170" y="190" width="182" height="114" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1261" y="218" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#BE653B">启用 PLAN HINT</text>
+                <text x="1184" y="244" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">· 故障精确止血</text>
+                <text x="1184" y="266" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">· 假设诊断与灰度</text>
+                <text x="1184" y="288" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">· 登记工单与退出条件</text>
+
+                <path d="M 1261 304 V 332 H 1060 V 348" fill="none" stroke="#AE8A3E" stroke-width="2" marker-end="url(#arr-indigo)"/>
+                <rect x="972" y="352" width="380" height="42" fill="#F6EFE0" stroke="#AE8A3E"/>
+                <text x="1162" y="378" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">所有临时 Hint 最终都必须回流至根因治理并回收</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">原则清晰之后，落到真实 SQL 上怎么做？我们用一套单变量递进 DEMO，演示从数据倾斜复现到 hint_plan.hints 灰度的完整验证路径。</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">08 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 ==================== -->
+        <section class="slide" data-slide="8" data-title="实操 DEMO：单变量递进验证路线" data-sub="从数据倾斜建模到 application_name 灰度注入">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">08 · HANDS-ON VERIFICATION PIPELINE</span>
+              <span class="strata-tag">PG 19 + PG_HINT_PLAN 1.9 DEMO DESIGN</span>
+            </div>
+            <h1 class="slide-title">实操 DEMO：每次只改一个变量的六步验证法</h1>
+            <p class="slide-lead">构造热点倾斜订单表，严格遵循<strong>基线观测 → 扫描 → 连接 → Rows 诊断 → Hint Table 灰度</strong>递进归因（原文面向 PG 19，本机 PG 18.3 未实机执行，不伪造耗时）。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="六步单变量递进实操验证流水线图">
+                <!-- 上排 3 步：Step 1 -> Step 2 -> Step 3 -->
+                <rect x="24" y="20" width="424" height="172" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="24" y="20" width="424" height="32" fill="#245A6B"/>
+                <text x="40" y="41" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">STEP 01 · 构造数据倾斜实验场</text>
+                <text x="40" y="74" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="392">demo_customer (100,000 行)：前 100 行为 'hot'</text>
+                <text x="40" y="96" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="392">demo_orders (1,000,000 行)：90% 倾斜至前 100 客户</text>
+                <text x="40" y="120" font-family="SF Mono, monospace" font-size="12" fill="#46585F" data-max-w="392">status: 5% 为 'paid'；建 customer_id / status 索引</text>
+                <text x="40" y="146" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" font-weight="600" data-max-w="392">动作：执行 ANALYZE demo_customer / demo_orders</text>
+                <text x="40" y="170" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F" data-max-w="392">目的：复现真实业务中典型的热点倾斜 + 组合过滤</text>
+
+                <path d="M 448 106 H 482" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="488" y="20" width="424" height="172" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="488" y="20" width="424" height="32" fill="#245A6B"/>
+                <text x="504" y="41" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">STEP 02 · LOAD 扩展并建立基线</text>
+                <text x="504" y="74" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="392">LOAD 'pg_hint_plan';</text>
+                <text x="504" y="96" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" data-max-w="392">EXPLAIN (ANALYZE, BUFFERS, VERBOSE)</text>
+                <text x="504" y="122" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">验证 4 项指标：估算 vs 实际行数偏差、Join 顺序、</text>
+                <text x="504" y="144" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">是否出现异常算子、BUFFERS 是否存在大量无效读</text>
+                <text x="504" y="170" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B" font-weight="600" data-max-w="392">铁律：先看计划与 Buffers，绝不只看总耗时</text>
+
+                <path d="M 912 106 H 946" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="952" y="20" width="424" height="172" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="952" y="20" width="424" height="32" fill="#245A6B"/>
+                <text x="968" y="41" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">STEP 03 · 单测扫描方式假设</text>
+                <rect x="968" y="64" width="392" height="34" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="980" y="86" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A" data-max-w="368">/*+ IndexScan(o demo_orders_status_idx) */</text>
+                <text x="968" y="122" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="392">若变快，结论不是「永久写死 IndexScan」</text>
+                <text x="968" y="146" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">而是反查原因：统计信息、成本参数、相关性还是缓存</text>
+                <text x="968" y="170" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">导致优化器原本放弃了这条索引路径？</text>
+
+                <!-- 折返直角连线 Step 3 -> Step 4 -->
+                <path d="M 1164 192 V 230" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <!-- 下排 3 步（自右向左 Step 4 -> Step 5 -> Step 6） -->
+                <rect x="952" y="236" width="424" height="174" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="952" y="236" width="424" height="32" fill="#2E6373"/>
+                <text x="968" y="257" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">STEP 04 · 单测连接顺序与算法</text>
+                <rect x="968" y="280" width="392" height="34" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="980" y="302" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A" data-max-w="368">/*+ Leading(c o) HashJoin(c o) */</text>
+                <text x="968" y="338" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="392">· 确认 demo_customer 是否先参与过滤</text>
+                <text x="968" y="362" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">· 确认 HashJoin 是否替换原连接方式</text>
+                <text x="968" y="386" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">· 区分收益来自顺序、算法，还是扫描联动变化</text>
+
+                <path d="M 952 323 H 918" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect x="488" y="236" width="424" height="174" fill="#FAF9F6" stroke="#AE8A3E"/>
+                <rect x="488" y="236" width="424" height="32" fill="#AE8A3E"/>
+                <text x="504" y="257" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">STEP 05 · 用 Rows 诊断基数根因</text>
+                <rect x="504" y="280" width="392" height="34" fill="#F6EFE0" stroke="#D9D5CB"/>
+                <text x="516" y="302" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="368">/*+ Rows(c o *0.1) */</text>
+                <text x="504" y="338" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="392">回答核心问题：若真实基数缩小 10 倍，计划会变吗？</text>
+                <text x="504" y="362" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">若会变 → 长期方向锁定：扩展统计、表达式统计、</text>
+                <text x="504" y="386" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="392">分区统计、改写谓词或提高统计目标</text>
+
+                <path d="M 488 323 H 454" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <rect x="24" y="236" width="424" height="174" fill="#E5F1EC" stroke="#2F7A66"/>
+                <rect x="24" y="236" width="424" height="32" fill="#2F7A66"/>
+                <text x="40" y="257" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#F7F6F2">STEP 06 · Hint Table 灰度注入（不改 SQL）</text>
+                <text x="40" y="290" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33" data-max-w="392">SET compute_query_id = on;</text>
+                <text x="40" y="310" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33" data-max-w="392">SET pg_hint_plan.enable_hint_table = on;</text>
+                <text x="40" y="334" font-family="SF Mono, monospace" font-size="11" fill="#245A6B" data-max-w="392">INSERT INTO hint_plan.hints VALUES</text>
+                <text x="40" y="354" font-family="SF Mono, monospace" font-size="11" fill="#245A6B" data-max-w="392">  (&lt;query_id&gt;, 'canary-app', 'Leading(c o) HashJoin(c o)');</text>
+                <text x="40" y="388" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B" font-weight="700" data-max-w="392">生产红线：必设非空 application_name，禁止全局空串起步</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">实验台上的验证只是起点；把 PLAN HINT 放进多人协作的生产系统，架构师、DBA 和开发者如何协同形成完整闭环？</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">09 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 (交互演示 #4) ==================== -->
+        <section class="slide" data-slide="9" data-title="最佳实践：三角色协同与六步运维闭环" data-sub="最危险的做法：故障加了 Hint 却永不回收">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">09 · BEST PRACTICES &amp; OPERATIONAL LOOP · INTERACTIVE</span>
+              <span class="strata-tag">ARCHITECT · DBA · DEVELOPER</span>
+            </div>
+            <h1 class="slide-title">运维闭环：给每条 Hint 设好「退出条件与回收期」</h1>
+            <p class="slide-lead">PLAN HINT 的完整生命周期是<strong>定位 → 验证 → 灰度 → 监控 → 根因修复 → 回收</strong>；故障止血后遗忘回收，是最隐蔽的系统性事故源。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="anim-toolbar" id="s10Toolbar">
+              <div class="anim-group">
+                <span class="anim-label">生命周期演练:</span>
+                <button class="ctrl-btn primary" type="button" id="s10Play">播放闭环</button>
+                <button class="ctrl-btn" type="button" id="s10Step">单步推进</button>
+                <button class="ctrl-btn" type="button" id="s10Anti">切换反模式对比（遗留风险）</button>
+                <button class="ctrl-btn" type="button" id="s10Reset">重置</button>
+              </div>
+              <div class="anim-group">
+                <span class="anim-status" id="s10Status">就绪：点击播放观察正确闭环或反模式演化</span>
+              </div>
+            </div>
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" id="svgS10" role="img" aria-label="三角色分工与六步运维闭环及反模式对比图">
+                <!-- 上部：三角色分工横带 -->
+                <rect x="24" y="18" width="434" height="154" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="24" y="18" width="434" height="32" fill="#245A6B"/>
+                <text x="40" y="39" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">数据库架构师（制度与退出设计）</text>
+                <text x="40" y="72" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="402">· 定义为「计划治理工具」，而非业务 SQL 常规写法</text>
+                <text x="40" y="96" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· 为每条 Hint 登记假设：慢在哪、为何不先改索引/SQL</text>
+                <text x="40" y="120" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· 明确退出条件：统计修复/版本升级后必须复验并回收</text>
+                <text x="40" y="144" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· 建立关键 SQL 计划基线（节点、行数、Buffer、分位延迟）</text>
+
+                <rect x="483" y="18" width="434" height="154" fill="#FAF9F6" stroke="#2F7A66"/>
+                <rect x="483" y="18" width="434" height="32" fill="#2F7A66"/>
+                <text x="499" y="39" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">DBA（单变量验证与灰度执行）</text>
+                <text x="499" y="72" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="402">· 先看 EXPLAIN (ANALYZE, BUFFERS)，不只盯总耗时</text>
+                <text x="499" y="96" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· 一次只改一个变量：扫描 → 算法 → 顺序 → Rows</text>
+                <text x="499" y="120" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· Hint Table 必用 application_name 灰度，留存回滚 SQL</text>
+                <text x="499" y="144" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· debug_print 仅在诊断窗口开启，避免长期日志噪声</text>
+
+                <rect x="942" y="18" width="434" height="154" fill="#FAF9F6" stroke="#AE8A3E"/>
+                <rect x="942" y="18" width="434" height="32" fill="#AE8A3E"/>
+                <text x="958" y="39" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">业务开发者（规范别名与禁止滥用）</text>
+                <text x="958" y="72" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" data-max-w="402">· 先排查谓词、Join 条件、分页与隐式类型转换</text>
+                <text x="958" y="96" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· 多表 SQL 稳定使用别名（别名一变，Hint 即失效）</text>
+                <text x="958" y="120" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B" font-weight="600" data-max-w="402">· 严禁把 Hint 写进 ORM 模板批量生成</text>
+                <text x="958" y="144" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="402">· 验证出更优路径后，及时反馈 DBA/架构师推动根治</text>
+
+                <!-- 下部：六阶段闭环流程（y=204..410） -->
+                <rect x="24" y="192" width="1352" height="220" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text id="s10-loop-title" x="44" y="218" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#245A6B">正确运维闭环（6 阶段全链路治理）</text>
+
+                <!-- 6 个阶段框，每个宽 192px，间隔 28px，起点 x=44 -->
+                <g class="svg-node" id="s10-p1">
+                  <rect class="node-box" x="44" y="236" width="192" height="96" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="140" y="262" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">01 · 定位</text>
+                  <text x="140" y="286" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">EXPLAIN ANALYZE</text>
+                  <text x="140" y="308" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">找偏差节点与 Buffers</text>
+                </g>
+                <path id="s10-l1" class="node-line" d="M 236 284 H 264" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s10-p2">
+                  <rect class="node-box" x="270" y="236" width="192" height="96" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="366" y="262" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">02 · 验证</text>
+                  <text x="366" y="286" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">单变量 Hint 测试</text>
+                  <text x="366" y="308" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">登记假设与归因记录</text>
+                </g>
+                <path id="s10-l2" class="node-line" d="M 462 284 H 490" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s10-p3">
+                  <rect class="node-box" x="496" y="236" width="192" height="96" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="592" y="262" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">03 · 灰度</text>
+                  <text x="592" y="286" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">按应用名精准命中</text>
+                  <text x="592" y="308" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">准备一键回滚 SQL</text>
+                </g>
+                <path id="s10-l3" class="node-line" d="M 688 284 H 716" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s10-p4">
+                  <rect class="node-box" x="722" y="236" width="192" height="96" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="818" y="262" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">04 · 监控</text>
+                  <text x="818" y="286" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">观测基线与延迟</text>
+                  <text x="818" y="308" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">盯紧数据分布变化</text>
+                </g>
+                <path id="s10-l4" class="node-line" d="M 914 284 H 942" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s10-p5">
+                  <rect class="node-box" x="948" y="236" width="192" height="96" fill="#E5F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                  <text x="1044" y="262" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#2F7A66">05 · 根因修复</text>
+                  <text x="1044" y="286" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">统计 / 索引 / SQL</text>
+                  <text x="1044" y="308" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">让优化器自然选对</text>
+                </g>
+                <path id="s10-l5" class="node-line" d="M 1140 284 H 1168" fill="none" stroke="#89938F" stroke-width="2" marker-end="url(#arr-muted)"/>
+
+                <g class="svg-node" id="s10-p6">
+                  <rect class="node-box" x="1174" y="236" width="182" height="96" fill="#E5F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+                  <text x="1265" y="262" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#2F7A66">06 · 回收 Hint</text>
+                  <text x="1265" y="286" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">下线并复验计划</text>
+                  <text x="1265" y="308" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">恢复优化器自适应</text>
+                </g>
+
+                <!-- 底部状态提示带（正常闭环 vs 反模式告警） -->
+                <rect id="s10-banner" x="44" y="352" width="1312" height="44" fill="#E5EFF0" stroke="#245A6B"/>
+                <text id="s10-banner-txt" x="64" y="379" font-family="PingFang SC, sans-serif" font-size="13" font-weight="600" fill="#1B2B33" data-max-w="1272">闭环要点：每条生产 Hint 必须绑定 Owner、工单号与明确回收条件；升级或数据重构时统一复验。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">即使流程再规范，生产落地仍常在细节处翻车——接下来集中排雷：PLAN HINT 的工程禁区与 8 个最高频踩坑点。</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">10 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="10" data-title="适用禁区与八大高频踩坑图谱" data-sub="从 schema.table 失效到 GEQO 搜索边界">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">10 · PITFALLS &amp; ANTI-PATTERNS</span>
+              <span class="strata-tag">8 PRODUCTION FAILURE MODES</span>
+            </div>
+            <h1 class="slide-title">八大高频踩坑：写对语法，更要看清内核约束</h1>
+            <p class="slide-lead">大量「Hint 不生效」或「线上误伤」，并非扩展有 Bug，而是踩中了标识符大小写、注释忽略、PL/pgSQL 位置或 GEQO 阈值等<strong>底层规则</strong>。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="PLAN HINT 生产八大常见坑 4x2 工程排障图谱">
+                <!-- 4列 x 2行 规整网格，每格 328x164，间距 14px -->
+                <!-- Row 1 -->
+                <rect x="24" y="18" width="328" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="18" width="328" height="30" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="38" y="38" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#BE653B">PITFALL 01 · schema.table 写法</text>
+                <text x="38" y="68" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">不按 schema-qualified 匹配</text>
+                <text x="38" y="94" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">扫描 Hint 匹配 relation 名称或别名。</text>
+                <text x="38" y="116" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">多 schema 同名表须显式用别名：</text>
+                <text x="38" y="142" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66" data-max-w="300">s1.t1 a, s2.t1 b → SeqScan(a)</text>
+
+                <rect x="366" y="18" width="328" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="366" y="18" width="328" height="30" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="380" y="38" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#BE653B">PITFALL 02 · 大小写敏感</text>
+                <text x="380" y="68" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">bare object name 区分大小写</text>
+                <text x="380" y="94" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">不同于 PG 默认把未引用标识符</text>
+                <text x="380" y="116" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">折叠为小写，大小写不一致将漏匹配。</text>
+                <text x="380" y="142" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" data-max-w="300">解法：复杂对象统一使用小写稳定别名</text>
+
+                <rect x="708" y="18" width="328" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="708" y="18" width="328" height="30" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="722" y="38" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#BE653B">PITFALL 03 · 同类 Hint 冲突</text>
+                <text x="722" y="68" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">多写不会「总有一个生效」</text>
+                <text x="722" y="94" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">同对象同类型重复写时，较早者标为</text>
+                <text x="722" y="116" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">duplicated，仅最后一个有效 Hint 生效。</text>
+                <text x="722" y="142" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" data-max-w="300">解法：保持单变量、零冗余书写</text>
+
+                <rect x="1050" y="18" width="326" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="1050" y="18" width="326" height="30" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1064" y="38" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#BE653B">PITFALL 04 · 物理不可执行</text>
+                <text x="1064" y="68" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">回退是物理边界，不是 Bug</text>
+                <text x="1064" y="94" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="298">FULL OUTER JOIN 强用 NestLoop、</text>
+                <text x="1064" y="116" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="298">无 ctid 强用 TidScan 或无可用谓词，</text>
+                <text x="1064" y="142" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" data-max-w="298">优化器必然自动回退至可执行路径</text>
+
+                <!-- Row 2 -->
+                <rect x="24" y="196" width="328" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="196" width="328" height="30" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="38" y="216" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">PITFALL 05 · query_id 误伤</text>
+                <text x="38" y="246" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">query_id 计算忽略注释</text>
+                <text x="38" y="272" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">正文相同、注释不同的 SQL 共享同</text>
+                <text x="38" y="294" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">一 query_id，空应用名会波及全局。</text>
+                <text x="38" y="320" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" data-max-w="300">解法：必配合非空 application_name</text>
+
+                <rect x="366" y="196" width="328" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="366" y="196" width="328" height="30" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="380" y="216" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">PITFALL 06 · PL/pgSQL 位置</text>
+                <text x="380" y="246" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">前置注释可能被剥离</text>
+                <text x="380" y="272" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">PL/pgSQL 中前置注释不一定随查询</text>
+                <text x="380" y="294" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">文本下发；ECPG 也会剥离注释。</text>
+                <text x="380" y="320" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66" data-max-w="300">写法：SELECT /*+ ... */ ... 或用表</text>
+
+                <rect x="708" y="196" width="328" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="708" y="196" width="328" height="30" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="722" y="216" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">PITFALL 07 · GEQO 与折叠阈值</text>
+                <text x="722" y="246" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">超出搜索空间则 Join 失控</text>
+                <text x="722" y="272" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">达 GEQO 阈值时，Join 算法与顺序</text>
+                <text x="722" y="294" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="300">Hint 不可控；超 from_collapse_limit 同理。</text>
+                <text x="722" y="320" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" data-max-w="300">仅扫描与 Set Hint 仍可能生效</text>
+
+                <rect x="1050" y="196" width="326" height="164" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="1050" y="196" width="326" height="30" fill="#F6EFE0" stroke="#AE8A3E"/>
+                <text x="1064" y="216" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#AE8A3E">PITFALL 08 · 永久遗留止血</text>
+                <text x="1064" y="246" font-family="PingFang SC, sans-serif" font-size="13" font-weight="700" fill="#1B2B33">无工单、无 Owner、无回收</text>
+                <text x="1064" y="272" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="298">今天救命的 Hint，在下次数据翻倍</text>
+                <text x="1064" y="294" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="298">或大版本升级时会成为新故障源。</text>
+                <text x="1064" y="320" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B" font-weight="700" data-max-w="298">禁区：大量 SQL 靠 Hint 维持运行</text>
+
+                <!-- 底部禁区警示条 -->
+                <rect x="24" y="374" width="1352" height="38" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="42" y="398" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="1316">工程信号：如果系统里「大量 SQL 都要靠 Hint 才能跑通」，问题绝不在优化器，而是统计、索引、参数或数据模型治理已经失效。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">承接 · NEXT</span>
+              <span class="next-text">排完生产雷区后，最后一页留给深度思考：用七个架构追问和一份源码索引，把 PLAN HINT 沉淀为真正的优化器洞察力。</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT</span>
+              <span class="page-num">11 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="11" data-title="深度思考与源码延伸索引" data-sub="七个架构追问与 pg_hint_plan 核心文件坐标">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">11 · ARCHITECTURAL QUESTIONS &amp; REFERENCES</span>
+              <span class="strata-tag">CLOSING · FURTHER READING</span>
+            </div>
+            <h1 class="slide-title">从「会写 Hint」走向「读懂优化器」</h1>
+            <p class="slide-lead">把这七个问题带回你的生产环境反复推演，并沿着 <code>pg_hint_plan</code> 核心源码与 PostgreSQL 官方文档继续向下钻探。</p>
+            <div class="header-divider"></div>
+          </div>
+          <div class="slide-body">
+            <div class="diagram-frame">
+              <svg viewBox="0 0 1400 430" width="1400" height="430" role="img" aria-label="七个扩展思考题分类图谱与核心源码参考索引">
+                <!-- 左区：七个扩展思考题（分三组） -->
+                <rect x="24" y="20" width="886" height="390" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="20" width="886" height="36" fill="#1E4B5A"/>
+                <text x="42" y="43" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">课后深度思考：七个工程追问</text>
+
+                <!-- 组 1：诊断归因 -->
+                <rect x="42" y="72" width="850" height="92" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="58" y="96" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">GROUP A · 诊断归因</text>
+                <text x="58" y="122" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="818">Q1. 当一条 Hint 显著改善计划时，如何判断根因是统计信息、成本参数、索引设计，还是 SQL 写法？</text>
+                <text x="58" y="148" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="818">Q2. 当 Rows(a b *0.1) 改善计划时，应优先考虑 PostgreSQL 的哪类统计能力或 SQL 改写？</text>
+
+                <!-- 组 2：精准控制 -->
+                <rect x="42" y="178" width="850" height="92" fill="#E5F1EC" stroke="#2F7A66"/>
+                <text x="58" y="202" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#2F7A66">GROUP B · 精准控制与隔离</text>
+                <text x="58" y="228" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="818">Q3. 为什么 DisableIndex(t idx) 和 NoIndexScan(t) 的生产风险完全不同？</text>
+                <text x="58" y="254" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="818">Q4. 在多租户 SaaS 系统中，Hint Table 使用空 application_name 会带来怎样的误伤风险？</text>
+
+                <!-- 组 3：演进与敬畏 -->
+                <rect x="42" y="284" width="850" height="110" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="58" y="308" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#BE653B">GROUP C · 演进治理与工程克制</text>
+                <text x="58" y="334" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="818">Q5. 数据库大版本升级时，为什么 PLAN HINT 必须重新验收，而不是简单迁移？</text>
+                <text x="58" y="358" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="818">Q6. 一条 SQL 在小表适合 NestLoop、大表适合 HashJoin，此时固定 Hint 是否合理？</text>
+                <text x="58" y="382" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" data-max-w="818">Q7. 什么时候应该尊重优化器的选择，而不是为了追求「更高级」的算子去强加 Hint？</text>
+
+                <!-- 右区：源码与文档延伸坐标 -->
+                <rect x="934" y="20" width="442" height="390" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="934" y="20" width="442" height="36" fill="#245A6B"/>
+                <text x="952" y="43" font-family="PingFang SC, sans-serif" font-size="14" font-weight="700" fill="#F7F6F2">源码钻探与官方文档坐标</text>
+
+                <text x="952" y="82" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#245A6B">ossc-db/pg_hint_plan 核心文件</text>
+                <text x="952" y="108" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="406">· pg_hint_plan.c —— Hook 注册与主控逻辑</text>
+                <text x="952" y="132" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="406">· core.c —— 复制的优化器路径枚举函数</text>
+                <text x="952" y="156" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="406">· make_join_rel.c —— adjust_rows() 修正点</text>
+                <text x="952" y="180" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="406">· query_scan.h / _int.h —— 注释词法扫描</text>
+                <text x="952" y="204" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="406">· docs/hint_list.md · hint_table.md</text>
+                <text x="952" y="228" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" data-max-w="406">· docs/functional_limitations.md</text>
+
+                <line x1="952" y1="250" x2="1356" y2="250" stroke="#D9D5CB"/>
+
+                <text x="952" y="278" font-family="SF Mono, monospace" font-size="12" font-weight="700" fill="#2F7A66">PostgreSQL 官方核心文档</text>
+                <text x="952" y="304" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="406">· EXPLAIN 与 Using EXPLAIN 指南</text>
+                <text x="952" y="328" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="406">· Query Planning GUC 成本参数体系</text>
+                <text x="952" y="352" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F" data-max-w="406">· Parallel Plans 并行执行规划机制</text>
+
+                <rect x="952" y="368" width="406" height="28" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="964" y="387" font-family="SF Mono, monospace" font-size="11" fill="#89938F" data-max-w="382">注：结论均以本地源码与 docs 为准核对（含 DisableIndex）</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-footer-wrap">
+            <div class="next-bridge">
+              <span class="next-label">终章 · END</span>
+              <span class="next-text">感谢聆听 —— 愿你在每一次执行计划异常时，既手里有止血的手术刀，心里更有根因治理的工程罗盘。</span>
+            </div>
+            <div class="slide-meta-bar">
+              <span>DATABASE FOUNDATION · PLAN HINT · DIGOAL</span>
+              <span class="page-num">12 / 12</span>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- 右侧页内讲稿开窗（非弹窗，支持 N 本页 / T 全文联动滚动） -->
+    <aside class="notes-pane" id="notesPane" aria-label="演说讲稿面板">
+      <div class="notes-header">
+        <div class="notes-tabs">
+          <button class="notes-tab active" id="tabPageNote" type="button">本页讲稿 N</button>
+          <button class="notes-tab" id="tabFullNote" type="button">全文讲稿 T</button>
+        </div>
+        <button class="notes-close" id="btnCloseNotes" type="button">关闭 Esc</button>
+      </div>
+      <div class="notes-body" id="notesBody"></div>
+    </aside>
+  </div>
+
+  <!-- 底部常驻快捷键控制栏（全屏时也固定在页面底部显示） -->
+  <footer class="hud-bar" id="hudBar">
+    <div class="hud-left">
+      <button class="hud-btn" id="btnPrev" type="button" title="上一页">上一页 <kbd>←</kbd></button>
+      <span class="hud-progress" id="hudProgress">01 / 12</span>
+      <button class="hud-btn" id="btnNext" type="button" title="下一页">下一页 <kbd>→</kbd></button>
+      <span class="hud-sep"></span>
+      <button class="hud-btn" id="btnToc" type="button" title="切换目录">目录 <kbd>G</kbd></button>
+    </div>
+
+    <div class="hud-center">
+      <button class="hud-btn" id="btnNotePage" type="button" title="切换本页讲稿">本页讲稿 <kbd>N</kbd></button>
+      <button class="hud-btn" id="btnNoteFull" type="button" title="切换全文讲稿">全文讲稿 <kbd>T</kbd></button>
+      <button class="hud-btn" id="btnAutoplay" type="button" title="切换自动播放">自动播放 <kbd>A</kbd></button>
+      <button class="hud-btn" id="btnFullscreen" type="button" title="切换全屏">全屏 <kbd>F</kbd></button>
+    </div>
+
+    <div class="hud-right">
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">PG_HINT_PLAN · 16:9 BLUEPRINT</span>
+    </div>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== 讲稿数据（口语化、重逻辑推演与实证、层层连绵） ==================== */
+  const SPEAKER_NOTES = [
+    {
+      page: 1,
+      title: '数据库筑基课 —— PLAN HINT',
+      paragraphs: [
+        { tag: '开场破题', text: '大家好，欢迎来到今天的数据库筑基课。我们今天聊一个在 PostgreSQL 生产一线既让人爱不释手、又让老 DBA 格外警惕的能力——PLAN HINT。' },
+        { tag: '为何剖源码', text: '很多人一提到 Hint，脑子里蹦出来的就是「在 SQL 里写个注释强制走索引」。但如果只停留在这一层，线上迟早会踩大坑。所以今天我们不讲零散语法，而是直接以开源扩展 pg_hint_plan 1.9 为剖面，像地质勘探一样，从最表层的 SQL 注释和扩展表，一层一层往下挖到 PostgreSQL 优化器的六个 Hook 点。' },
+        { tag: '定下基调', text: '大家看右边这张总览图，整场分享其实就围绕四句话展开：第一，优化器选错计划往往不是它笨，而是它看到的信息失真了；第二，Hint 只是约束优化器的候选空间，绝不修改执行器；第三，它的工程价值在于诊断、止血和灰度；第四，也是最重要的一点——我们加 Hint 的终极目标，不是留住它，而是修好根因之后把它优雅地回收掉。好，那我们先从第一个根本问题切入。' }
+      ]
+    },
+    {
+      page: 2,
+      title: 'SQL 慢不是「优化器笨」，而是估算前提失真',
+      paragraphs: [
+        { tag: '直击误区', text: '线上 SQL 突然变慢，最容易听到的一句话是「PostgreSQL 优化器真笨，明明有索引不走」。其实这句话对优化器挺不公平的。PostgreSQL 是标准的基于成本的优化器，它的逻辑非常诚实：枚举出所有物理上可行的执行路径，套用成本模型算出每一条的代价，然后挑一个估算成本最低的。' },
+        { tag: '六类失真', text: '那为什么「估算成本最低」会变成「实际跑得最慢」呢？看画面左侧这六类典型根因：统计信息过期了；两列之间有强相关性但优化器默认它们独立；参数化 SQL 复用了旧的通用计划；热点数据严重倾斜；索引空间或连接搜索深度被参数截断；或者 random_page_cost 这些硬件参数和当前 NVMe SSD 严重脱节。输入前提一旦错了，算得再精确，结果也是错的。' },
+        { tag: '价值与代价', text: '这时候 PLAN HINT 的价值就出来了——它给了我们四条可控的干预通道：线上故障先止血、做根因假设验证、应对第三方或 ORM 短期改不了 SQL 的窘境，以及按应用名做小流量灰度。但天下没有免费的午餐，你每写一条 Hint，都是在把原本动态自适应的成本模型，硬生生锁成静态的人工约束。数据分布一变、版本一升级，今天救命的 Hint 明天可能就成了新故障。所以记住：它是手术刀，不是日常保健品。那么，这把手术刀具体是怎么递到优化器手里的？我们看下一页。' }
+      ]
+    },
+    {
+      page: 3,
+      title: '双通道输入：表优先于注释，同类冲突后者胜出',
+      paragraphs: [
+        { tag: '双通道设计', text: '在 pg_hint_plan 里，一条 Hint 并不是只有写进 SQL 注释这一条路。它设计了两条平行的输入通道：第一条是扩展表 hint_plan.hints，靠 query_id 加 application_name 去匹配 SQL；第二条才是大家熟悉的 SQL 块注释 /*+ ... */。' },
+        { tag: '优先级与扫描', text: '这里我们可以点击上方的场景按钮演示一下。当语句经过 parse analyze 生成 query_id 后，pg_hint_plan 永远优先查 hint_plan.hints 表。只要表功能开启且命中了记录，就直接采用表里的 Hint，压根不再理会 SQL 注释——这正是我们不改应用代码就能线上止血的底气所在。如果表没开或者没命中，才会走到下方的词法扫描器。注意看，这个扫描器非常严谨，它只认第一个 /*+ ... */ 块，并且会专门跳过单引号字符串、普通注释和 dollar-quoted 文本，防止你业务字段里恰好存了一段类似 Hint 的字符串被误当成指令。' },
+        { tag: '归档与去重', text: '拿到 Hint 文本之后，parse_hints() 会查 parsers 数组实例化出 ScanMethodHint、JoinMethodHint、RowsHint 等具体对象，再由 create_hintstate() 排序归档进 HintState。如果有人对同一张表连写两条同类型 Hint，源码会把前面那条标成 duplicated，以最后一条有效 Hint 为准。好，现在 HintState 已经装填完毕，接下来它就要正式进入规划器了。' }
+      ]
+    },
+    {
+      page: 4,
+      title: '不改执行器：在六个规划 Hook 点逐层介入',
+      paragraphs: [
+        { tag: '架构铁律', text: '这一页是整套原理的核心地层图。请大家先记住一条铁律：pg_hint_plan 从头到尾没有修改 PostgreSQL 的执行器。所有魔法全部发生在规划器生成计划的阶段，靠的是 _PG_init() 在启动时挂载的六组 Hook。' },
+        { tag: '逐层推演', text: '我们可以点击上面的「播放演进」或者切换不同的 Hint 信号来追踪。第一步，post_parse_analyze_hook 负责把 Hint 字符串捞出来；第二步，进入总控入口 planner_hook，在这里创建 HintState，并且最巧妙的是，它会开一个新的 GUC 嵌套层来应用 Set(...) 参数，等标准 planner 跑完自动回滚，绝不污染当前会话的下一条 SQL。第三步非常关键，在 build_simple_rel_hook 里，如果写了 DisableIndex，它会直接把那个索引从 rel->indexlist 里抹掉。' },
+        { tag: '后半程闭环', text: '接着第四步进入 set_rel_pathlist_hook，接管单表扫描和并行扫描的路径枚举；第五步进入 join_search_hook，在这里控制连接顺序、连接算法，并在复制出来的 make_join_rel.c 里通过 adjust_rows() 修正连接后的行数估算；最后第六步，标准执行器拿到计划去跑，跑完由 ExecutorEnd_hook 以及处理 PL/pgSQL 嵌套的 fmgr_hook 完成清场。看懂了这六个坐标，下面我们把最核心的两层放大来拆解。' }
+      ]
+    },
+    {
+      page: 5,
+      title: '扫描与连接 Hint：收缩候选空间，而非硬切算子',
+      paragraphs: [
+        { tag: '扫描的真相', text: '很多人以为写了一个 SeqScan(t) 或 IndexScan(t)，是让执行器硬生生切换算子。其实看左侧源码机制就明白了：在 set_rel_pathlist_hook 命中目标表后，setup_scan_method_enforcement() 会根据 enforce_mask 临时拨动 enable_seqscan、enable_indexscan 这些开关，然后把优化器刚刚辛辛苦苦算出来的原 pathlist 清空，再调用从内核复制过来的 set_plain_rel_pathlist() 重新枚举一遍。优化器依然是在「剩下的可行路径」里挑成本最低的。这就解释了为什么没有匹配谓词却强写 IndexScan，或者没有 ctid 条件却强写 TidScan 时，优化器会自动回退——它只是收缩了候选空间，变不出物理上不存在的算子。' },
+        { tag: '连接的位图魔法', text: '再看右侧的多表连接。SQL 里写的是表别名，但优化器做连接搜索时认的是表集合。所以 transform_join_hints() 会先把表名转成 Relids 位图。在 join_search_hook 跑动态规划组合表的时候，一旦当前 join relation 命中位图，包装函数就在前后临时开关 enable_nestloop、enable_hashjoin、enable_mergejoin。而 Leading((a b) c) 这种带方向的顺序约束更绝：如果当前尝试的 inner 和 outer 方向跟你的要求拧着来，源码干脆把三种连接算法全部临时禁用，让这条逆向路径直接出局。' },
+        { tag: '边界提醒', text: '顺带提一个容易忽略的边界：如果表太多触发了 GEQO 遗传算法，或者被 from_collapse_limit 截断了搜索空间，优化器压根没搜索过的连接顺序，Hint 也是无能为力的。除了控制扫描和连接，pg_hint_plan 还有四把更精细的特种工具，我们看下一页。' }
+      ]
+    },
+    {
+      page: 6,
+      title: '四类特种控制：改基数、压门槛、套参数、剪索引',
+      paragraphs: [
+        { tag: '三类精准控制', text: '左边这三类 Hint，在复杂排障里非常趁手。先看 Parallel：写 soft 只调高 worker 上限，最后并不用并行还是优化器算成本说了算；写 hard 则直接把并行代价压低、把表大小门槛归零，逼着并行胜出；反过来，Parallel(t 0 hard) 可以精准关掉某张表的并行。再看 Set(name value)，它能只针对这一条 SQL 临时调 random_page_cost，规划完自动回滚。第三个 DisableIndex 是我最推荐的排障利器——相比一刀切的 NoIndexScan，它在 build_simple_rel_hook 里只精准拔掉那一颗误导优化器的索引，而且因为动手最早，就算后面又写了 IndexScan 指定那个索引，它也已经被移除了。' },
+        { tag: 'Rows 实时推演', text: '右边这块是我们今天的重点推演区：Rows Hint。请大家注意，Rows(c o *0.1) 绝对不是去改 pg_statistic 里的表统计信息，而是在 make_join_rel.c 的 adjust_rows() 里，直接按 # 绝对值、+ 加、- 减、* 乘四种方式，改写 joinrel->rows 的估算结果。大家可以在上方工具条改一下数字和运算符试试，比如把 50,000 行乘以 0.1 变成 5,000 行。' },
+        { tag: '诊断价值', text: '这个功能最大的工程价值其实不是线上硬扛，而是做根因诊断：如果我把基数修正到接近真实值，优化器立马就选出了完美计划，那就铁证如山地说明——问题出在行数估算！接下来你的长期修复方向就非常明确：建扩展统计信息、表达式统计、调高统计目标，或者改写谓词。既然提到了统计信息和 SQL 改写，我们马上把三类手段拉到同一张表里做横向对比。' }
+      ]
+    },
+    {
+      page: 7,
+      title: '横向对比：先止血验证，再回到统计与索引根治',
+      paragraphs: [
+        { tag: '三层定位', text: '把这三列放在一起看，大家对 PLAN HINT 的工程定位瞬间就会清晰很多。第一列 pg_hint_plan，本质是「控制计划」；第二列统计信息和扩展统计，本质是「修正优化器的输入」；第三列索引设计与 SQL 改写，本质是「改变问题本身」。' },
+        { tag: '权衡逻辑', text: '从生效速度看，Hint 是最快的，线上报警响了，一条 hint_plan.hints 几秒钟就能把延迟打下来，而改索引、改 SQL 往往要走 DDL 和发版窗口。但反过来，从长期稳定性看，Hint 是最脆弱的，它强依赖 SQL 文本、表别名、数据分布和 PG 版本；而统计信息和索引 SQL 改写才是能陪系统走过三五年的长治久安方案。' },
+        { tag: '优先级结论', text: '所以看最下面这条工程路线：成熟团队在生产上的优先级非常明确——先用 PLAN HINT 做假设验证和紧急止血，换取喘息窗口；然后立刻回到统计信息、索引、SQL 和数据模型做根治；根治验证通过后，果断回收 Hint。那在决定要不要动用 Hint 之前，我们还要把它的真实效果和代价摊在桌面上算清楚。' }
+      ]
+    },
+    {
+      page: 8,
+      title: '效果不是固定倍数，而是计划空间的精确切换',
+      paragraphs: [
+        { tag: '拒绝虚构数字', text: '这里我必须强调一点工程严谨性：千万不要相信「用了 Hint 就能提速 10 倍」这种脱离上下文的口号。PLAN HINT 产出的不是固定性能数字，而是左侧这六类实实在在的计划差异——扫描方式变了、连接算法换了、高选择性表提前过滤了、并行度调了、上层 Join 因为 Rows 修正重新选路了，或者误导索引被剔除了。' },
+        { tag: '五类刚性代价', text: '但中间这五类红字代价，每一条都是真实生产里交过学费的：第一，它会掩盖统计和 Schema 缺陷，让你以为问题解决了；第二，它跟对象名、别名、query_id、PG 主版本和扩展版本强绑定，一升级就可能静默失效；第三，数据分布漂移后，它会把计划死死钉在错误方向上；第四，也是最隐蔽的——PostgreSQL 计算 query_id 时忽略注释，正文相同但注释不同的 SQL 会算出同一个 query_id；第五，遇到 PL/pgSQL、视图、子查询、FDW 时还有额外语法限制。' },
+        { tag: '决策边界', text: '因此看右侧的决策树：遇到慢 SQL，先问能不能直接靠统计或索引快速根治；能，就让优化器自己选对。只有必须先止血、做诊断、或者实在改不了应用 SQL 时，才走右边分支启用 Hint，而且从启用那一刻起，就必须挂上回流根因治理的倒计时。下面我们看一套标准的实操验证路线。' }
+      ]
+    },
+    {
+      page: 9,
+      title: '实操 DEMO：每次只改一个变量的六步验证法',
+      paragraphs: [
+        { tag: '严谨声明', text: '先说明一下实验环境边界：原文这套 DEMO 是面向 PostgreSQL 19 和 pg_hint_plan 1.9 设计的，而作者本机 pg_config 是 PostgreSQL 18.3，没有实机运行，所以我们这里严格呈现可复现的 SQL 路径与观测指标，绝不伪造任何执行耗时。' },
+        { tag: '单变量递进', text: '大家看这六步的设计精髓，就在于「每次只改一个变量」。第一步先造一个典型的热点倾斜模型：10 万客户表里前 100 个是 hot，100 万订单表里 90% 都砸在这 100 个热点客户上，再配合 5% 的 paid 状态。第二步加载扩展，跑 EXPLAIN (ANALYZE, BUFFERS, VERBOSE) 拿基线，重点盯住估算行数和实际行数的差距，以及 Buffers 的无效读。第三步单独测 IndexScan，验证索引路径；第四步单独测 Leading(c o) HashJoin(c o)，区分收益到底来自顺序还是算法；第五步单独用 Rows(c o *0.1) 做基数诊断，一旦生效就锁定统计治理方向。' },
+        { tag: '灰度红线', text: '最后第六步特别实用：如果应用代码短期不能改，就打开 compute_query_id 和 enable_hint_table，把 VERBOSE 里看到的 query_id 写进 hint_plan.hints。注意左下角那条红线：application_name 一定要填具体的灰度应用名，比如 canary-app，千万别图省事留个空字符串让全库会话一次性中招。个人验证跑通了，团队协作怎么管？看下一页。' }
+      ]
+    },
+    {
+      page: 10,
+      title: '运维闭环：给每条 Hint 设好「退出条件与回收期」',
+      paragraphs: [
+        { tag: '三角色边界', text: '在真实生产里，Hint 管不好往往是因为职责不清。看上面三张角色卡：架构师负责定规矩，把 Hint 定性为治理工具，要求每条 Hint 登记假设、设计退出条件并维护计划基线；DBA 负责手上的精细活，坚持单变量验证、小流量灰度、备好回滚 SQL，并且 debug_print 只在排障窗口临时开；业务开发者则要守好代码侧，先查隐式转换和谓词，多表 SQL 必须写稳定别名，而且绝对禁止把 Hint 写进 ORM 模板批量生成。' },
+        { tag: '闭环与反模式', text: '大家可以点一下上方的「播放闭环」，看完整的六步生命周期：定位、验证、灰度、监控、根因修复，最后一步——回收 Hint，把自适应权还给优化器。然后强烈建议大家再点一下「切换反模式对比」：一旦你在第三步止血后就撒手不管，既不建工单也不设回收期，等几个月后数据量翻倍或者数据库升级，那条被遗忘的 Hint 就会直接把系统拖进下一次故障。' },
+        { tag: '过渡排雷', text: '制度和闭环建好了，但在敲下那行 Hint 之前，还有八个非常具体的技术暗礁，我们放到下一页一次性排雷。' }
+      ]
+    },
+    {
+      page: 11,
+      title: '八大高频踩坑：写对语法，更要看清内核约束',
+      paragraphs: [
+        { tag: '前四个语法与物理坑', text: '这一页的八个坑，几乎囊括了线上 90% 的「为什么我的 Hint 没生效」。前四个偏向语法和物理边界：第一，别写 schema.table，它只认 relation 名或别名，跨 schema 同名表老老实实用别名；第二，bare object name 是大小写敏感的，跟 PostgreSQL 默认转小写的直觉相反，统一用小写别名最稳；第三，同一对象写一堆同类 Hint 不会「总有一个中」，只有最后一个有效；第四，像 FULL OUTER JOIN 强写 NestLoop 或者没有 ctid 强写 TidScan，优化器回退是守住物理底线，别当成扩展 Bug。' },
+        { tag: '后四个环境与治理坑', text: '后四个则更隐蔽：第五，query_id 忽略注释，用 hint table 不限 application_name 很容易误伤；第六，PL/pgSQL 里注释必须写在 SELECT 等第一个词后面，写在最前面可能被吃掉，ECPG 甚至会直接剥离注释；第七，表多到触发 GEQO 阈值或超过 from_collapse_limit 时，Join 类 Hint 直接失控；第八，还是那句老话——永久遗留止血 Hint。' },
+        { tag: '系统性警示', text: '最后看底部的工程信号：如果你们系统里出现「大量 SQL 都要靠 Hint 才能正常跑」，千万别继续加 Hint 了，那是底层统计、索引、参数或数据模型治理全面亮红灯的信号。' }
+      ]
+    },
+    {
+      page: 12,
+      title: '从「会写 Hint」走向「读懂优化器」',
+      paragraphs: [
+        { tag: '七个架构追问', text: '讲到最后一页，我们不喊总结口号，而是留七个值得带回生产环境反复咀嚼的工程问题。第一组关于诊断归因：Hint 生效后，怎么精准区分是统计、参数、索引还是 SQL 的锅？Rows 生效后，该上哪种扩展统计？第二组关于精准隔离：为什么 DisableIndex 和 NoIndexScan 风险天差地别？多租户 SaaS 里空 application_name 会炸出什么连锁反应？第三组关于演进与克制：版本升级为何必须重验 Hint？数据规模跨级时固定 Hint 合不合理？以及，我们什么时候应该学会尊重优化器的判断？' },
+        { tag: '源码钻探地图', text: '右侧我把 pg_hint_plan 最核心的几个源码文件和官方文档坐标都列出来了，包括 pg_hint_plan.c、core.c、make_join_rel.c 和 query_scan.h。原文里作者也特别提醒了一个实证细节：他用 AI 工具辅助梳理架构时，工具漏掉了 DisableIndex，最终是以本地源码和 docs/hint_list.md 为准核对出来的——做底层技术，永远以源码和文档为准。' },
+        { tag: '收尾致谢', text: '今天的数据库筑基课就到这里。愿大家在面对每一次执行计划突变时，手里握得住 PLAN HINT 这把精准止血的手术刀，心里更装着统计、索引与架构治理的工程罗盘。感谢各位聆听！' }
+      ]
+    }
+  ];
+
+  /* ==================== 全局状态 ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentSlide = 0;
+  let notesMode = 'closed'; // 'closed' | 'page' | 'full'
+  let tocOpen = false;
+  let autoplayTimer = null;
+  const AUTOPLAY_INTERVAL = 7000;
+
+  const stageViewport = document.getElementById('stageViewport');
+  const stageScaler = document.getElementById('stageScaler');
+  const notesPane = document.getElementById('notesPane');
+  const notesBody = document.getElementById('notesBody');
+  const tocDrawer = document.getElementById('tocDrawer');
+  const tocList = document.getElementById('tocList');
+  const hudProgress = document.getElementById('hudProgress');
+  const btnToc = document.getElementById('btnToc');
+  const btnNotePage = document.getElementById('btnNotePage');
+  const btnNoteFull = document.getElementById('btnNoteFull');
+  const btnAutoplay = document.getElementById('btnAutoplay');
+  const btnFullscreen = document.getElementById('btnFullscreen');
+  const tabPageNote = document.getElementById('tabPageNote');
+  const tabFullNote = document.getElementById('tabFullNote');
+  const toastEl = document.getElementById('toast');
+  let toastTimer = null;
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+  }
+
+  /* ==================== 16:9 舞台等比矢量缩放 ==================== */
+  function updateScale() {
+    const padX = 24;
+    const padY = 20;
+    const availW = Math.max(200, stageViewport.clientWidth - padX);
+    const availH = Math.max(120, stageViewport.clientHeight - padY);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageScaler.style.transform = 'scale(' + scale.toFixed(5) + ')';
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => updateScale());
+    ro.observe(stageViewport);
+  }
+  window.addEventListener('resize', updateScale);
+
+  /* ==================== SVG 按框宽自动缩字号（零出界硬保障） ==================== */
+  function fitSvgTexts(root) {
+    const texts = (root || document).querySelectorAll('svg text[data-max-w]');
+    texts.forEach((t) => {
+      const maxW = parseFloat(t.getAttribute('data-max-w'));
+      if (!maxW || isNaN(maxW)) return;
+      if (!t.dataset.origSize) {
+        t.dataset.origSize = t.getAttribute('font-size') || '13';
+      }
+      const origSize = parseFloat(t.dataset.origSize);
+      t.setAttribute('font-size', origSize);
+      try {
+        const len = t.getComputedTextLength();
+        if (len > maxW && len > 0) {
+          const newSize = Math.max(9.5, (origSize * (maxW / len) * 0.97));
+          t.setAttribute('font-size', newSize.toFixed(2));
+        }
+      } catch (e) {
+        // 隐藏元素在切换显示时再重算
+      }
+    });
+  }
+
+  /* ==================== 目录渲染 ==================== */
+  function buildToc() {
+    tocList.innerHTML = '';
+    slides.forEach((slide, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toc-item' + (idx === currentSlide ? ' active' : '');
+      btn.dataset.index = String(idx);
+      const num = String(idx + 1).padStart(2, '0');
+      btn.innerHTML =
+        '<span class="toc-num">' + num + '</span>' +
+        '<span class="toc-text-wrap">' +
+          '<div class="toc-item-title">' + slide.dataset.title + '</div>' +
+          '<div class="toc-item-sub">' + slide.dataset.sub + '</div>' +
+        '</span>';
+      btn.addEventListener('click', () => {
+        goToSlide(idx);
+        setToc(false);
+      });
+      tocList.appendChild(btn);
+    });
+  }
+
+  function updateTocActive() {
+    const items = tocList.querySelectorAll('.toc-item');
+    items.forEach((el, idx) => {
+      el.classList.toggle('active', idx === currentSlide);
+    });
+  }
+
+  function setToc(open) {
+    tocOpen = open;
+    tocDrawer.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  /* ==================== 右侧讲稿渲染与翻页自动滚动联动 ==================== */
+  function renderNoteBlock(note, idx, isCurrent) {
+    const num = String(idx + 1).padStart(2, '0');
+    const parasHtml = note.paragraphs.map((p) =>
+      '<p class="note-p"><span class="note-logic-tag">' + p.tag + '</span>' + p.text + '</p>'
+    ).join('');
+    return (
+      '<article class="note-block' + (isCurrent ? ' current' : '') + '" id="note-page-' + idx + '" data-note-idx="' + idx + '">' +
+        '<div class="note-block-head" data-jump="' + idx + '">' +
+          '<span class="note-block-num">PAGE ' + num + '</span>' +
+          '<span class="note-block-title">' + note.title + '</span>' +
+        '</div>' +
+        parasHtml +
+      '</article>'
+    );
+  }
+
+  function renderNotes() {
+    if (notesMode === 'closed') {
+      notesPane.classList.remove('open');
+      btnNotePage.classList.remove('active');
+      btnNoteFull.classList.remove('active');
+      setTimeout(updateScale, 240);
+      updateScale();
+      return;
+    }
+
+    notesPane.classList.add('open');
+    btnNotePage.classList.toggle('active', notesMode === 'page');
+    btnNoteFull.classList.toggle('active', notesMode === 'full');
+    tabPageNote.classList.toggle('active', notesMode === 'page');
+    tabFullNote.classList.toggle('active', notesMode === 'full');
+
+    if (notesMode === 'page') {
+      notesBody.innerHTML = renderNoteBlock(SPEAKER_NOTES[currentSlide], currentSlide, true);
+      notesBody.scrollTop = 0;
+    } else {
+      notesBody.innerHTML = SPEAKER_NOTES.map((n, i) => renderNoteBlock(n, i, i === currentSlide)).join('');
+      notesBody.querySelectorAll('[data-jump]').forEach((head) => {
+        head.addEventListener('click', () => {
+          const targetIdx = parseInt(head.getAttribute('data-jump'), 10);
+          if (!isNaN(targetIdx)) goToSlide(targetIdx);
+        });
+      });
+      scrollTranscriptToCurrent(false);
+    }
+
+    updateScale();
+    setTimeout(updateScale, 240);
+  }
+
+  function scrollTranscriptToCurrent(smooth) {
+    if (notesMode !== 'full') return;
+    const blocks = notesBody.querySelectorAll('.note-block');
+    blocks.forEach((b, i) => b.classList.toggle('current', i === currentSlide));
+    const target = document.getElementById('note-page-' + currentSlide);
+    if (target) {
+      const topOffset = target.offsetTop - 14;
+      if (smooth && typeof notesBody.scrollTo === 'function') {
+        notesBody.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+      } else {
+        notesBody.scrollTop = Math.max(0, topOffset);
+      }
+    }
+  }
+
+  function toggleNotesMode(targetMode) {
+    if (notesMode === targetMode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = targetMode;
+    }
+    renderNotes();
+  }
+
+  /* ==================== 翻页核心逻辑 ==================== */
+  function goToSlide(idx) {
+    const clamped = Math.max(0, Math.min(totalSlides - 1, idx));
+    slides[currentSlide].classList.remove('active');
+    currentSlide = clamped;
+    slides[currentSlide].classList.add('active');
+
+    const numStr = String(currentSlide + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+    hudProgress.textContent = numStr;
+    updateTocActive();
+    fitSvgTexts(slides[currentSlide]);
+
+    if (notesMode === 'page') {
+      renderNotes();
+    } else if (notesMode === 'full') {
+      scrollTranscriptToCurrent(true);
+    }
+  }
+
+  /* ==================== 自动播放控制 ==================== */
+  function toggleAutoplay() {
+    if (autoplayTimer) {
+      clearInterval(autoplayTimer);
+      autoplayTimer = null;
+      btnAutoplay.classList.remove('autoplay-on');
+      btnAutoplay.innerHTML = '自动播放 <kbd>A</kbd>';
+      showToast('已暂停自动播放');
+    } else {
+      btnAutoplay.classList.add('autoplay-on');
+      btnAutoplay.innerHTML = '停止播放 <kbd>A</kbd>';
+      showToast('自动播放已开启（每 7 秒翻页）');
+      autoplayTimer = setInterval(() => {
+        if (currentSlide < totalSlides - 1) {
+          goToSlide(currentSlide + 1);
+        } else {
+          goToSlide(0);
+        }
+      }, AUTOPLAY_INTERVAL);
+    }
+  }
+
+  /* ==================== 全屏切换（原生 + 伪全屏兜底） ==================== */
+  function syncFullscreenBtn() {
+    const isFs = Boolean(document.fullscreenElement) || document.body.classList.contains('pseudo-fullscreen');
+    btnFullscreen.classList.toggle('active', isFs);
+    btnFullscreen.innerHTML = (isFs ? '退出全屏' : '全屏') + ' <kbd>F</kbd>';
+    setTimeout(updateScale, 60);
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {
+        document.body.classList.remove('pseudo-fullscreen');
+        syncFullscreenBtn();
+      });
+      return;
+    }
+    if (document.body.classList.contains('pseudo-fullscreen')) {
+      document.body.classList.remove('pseudo-fullscreen');
+      syncFullscreenBtn();
+      showToast('已退出全屏');
+      return;
+    }
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().then(() => {
+        syncFullscreenBtn();
+      }).catch(() => {
+        document.body.classList.add('pseudo-fullscreen');
+        syncFullscreenBtn();
+        showToast('已切换窗口全屏模式');
+      });
+    } else {
+      document.body.classList.add('pseudo-fullscreen');
+      syncFullscreenBtn();
+      showToast('已切换窗口全屏模式');
+    }
+  }
+
+  document.addEventListener('fullscreenchange', syncFullscreenBtn);
+
+  /* ==================== 交互演示 1：Slide 03 输入路径与优先级 ==================== */
+  let s3Mode = 'table-hit';
+  let s3Timer = null;
+  const s3Status = document.getElementById('s3Status');
+  const s3Sample1 = document.getElementById('s3-sample-1');
+  const s3Sample2 = document.getElementById('s3-sample-2');
+
+  const S3_CONFIG = {
+    'table-hit': {
+      sample1: "hint_plan.hints: (query_id, 'canary-app')",
+      sample2: '→ 命中表记录：Leading(c o) HashJoin(c o)',
+      steps: [
+        { nodes: ['s3-n1'], lines: ['s3-l1'], msg: '步骤 1/4：SQL 完成解析分析，生成 query_id' },
+        { nodes: ['s3-n1', 's3-n2'], lines: ['s3-l1'], msg: '步骤 2/4：优先查 hint_plan.hints（enable_hint_table = on）' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n4'], lines: ['s3-l1', 's3-l2-hit'], msg: '步骤 3/4：命中表记录，直接跳过 SQL 注释进入 parse_hints()' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n4', 's3-n5'], lines: ['s3-l1', 's3-l2-hit', 's3-l4'], msg: '步骤 4/4：构建 HintState 完成，交由 Planner Hook 消费' }
+      ]
+    },
+    'comment-first': {
+      sample1: '/*+ IndexScan(o idx) */ /*+ SeqScan(o) */ SELECT ...',
+      sample2: '→ 表未命中，仅提取首个 /*+ ... */ 块',
+      steps: [
+        { nodes: ['s3-n1'], lines: ['s3-l1'], msg: '步骤 1/5：SQL 到达，进入提取阶段' },
+        { nodes: ['s3-n1', 's3-n2'], lines: ['s3-l1', 's3-l2-miss'], msg: '步骤 2/5：hint_plan.hints 未开启或无匹配记录' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n3'], lines: ['s3-l1', 's3-l2-miss', 's3-l3'], msg: '步骤 3/5：词法扫描器仅截取首个 /*+ IndexScan(o idx) */' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n3', 's3-n4'], lines: ['s3-l1', 's3-l2-miss', 's3-l3', 's3-l4'], msg: '步骤 4/5：parse_hints() 解析并排序归档' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n3', 's3-n4', 's3-n5'], lines: ['s3-l1', 's3-l2-miss', 's3-l3', 's3-l4'], msg: '步骤 5/5：装填 HintState（第二块注释被忽略）' }
+      ]
+    },
+    'pseudo-conflict': {
+      sample1: "WHERE note = '/*+ SeqScan(o) */' /*+ SeqScan(o) IndexScan(o) */",
+      sample2: '→ 避开字符串伪 Hint；同对象冲突以 IndexScan(o) 为准',
+      steps: [
+        { nodes: ['s3-n1', 's3-n2'], lines: ['s3-l1', 's3-l2-miss'], msg: '步骤 1/4：表未命中，转入 SQL 词法扫描' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n3'], lines: ['s3-l1', 's3-l2-miss', 's3-l3'], msg: '步骤 2/4：跳过单引号伪 Hint，提取真实注释块' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n3', 's3-n4'], lines: ['s3-l1', 's3-l2-miss', 's3-l3', 's3-l4'], msg: '步骤 3/4：SeqScan(o) 标为 duplicated，后者 IndexScan(o) 胜出' },
+        { nodes: ['s3-n1', 's3-n2', 's3-n3', 's3-n4', 's3-n5'], lines: ['s3-l1', 's3-l2-miss', 's3-l3', 's3-l4'], msg: '步骤 4/4：最终 HintState 仅生效 IndexScan(o)' }
+      ]
+    }
+  };
+
+  function clearS3Visual() {
+    clearInterval(s3Timer);
+    s3Timer = null;
+    ['s3-n1', 's3-n2', 's3-n3', 's3-n4', 's3-n5'].forEach((id) => {
+      const el = document.getElementById(id);
+      el.classList.remove('svg-dim', 'svg-hl-terra', 'svg-hl-teal', 'svg-hl-indigo');
+    });
+    ['s3-l1', 's3-l2-hit', 's3-l2-miss', 's3-l3', 's3-l4'].forEach((id) => {
+      const el = document.getElementById(id);
+      el.classList.remove('line-active', 'line-active-teal', 'line-active-indigo');
+    });
+  }
+
+  function applyS3Step(step) {
+    const allNodes = ['s3-n1', 's3-n2', 's3-n3', 's3-n4', 's3-n5'];
+    const allLines = ['s3-l1', 's3-l2-hit', 's3-l2-miss', 's3-l3', 's3-l4'];
+    allNodes.forEach((id) => {
+      const el = document.getElementById(id);
+      const hit = step.nodes.includes(id);
+      el.classList.toggle('svg-dim', !hit);
+      el.classList.toggle('svg-hl-terra', hit && id === step.nodes[step.nodes.length - 1]);
+      el.classList.toggle('svg-hl-indigo', hit && id !== step.nodes[step.nodes.length - 1]);
+    });
+    allLines.forEach((id) => {
+      const el = document.getElementById(id);
+      el.classList.toggle('line-active', step.lines.includes(id));
+    });
+    s3Status.textContent = step.msg;
+  }
+
+  function playS3() {
+    clearS3Visual();
+    const cfg = S3_CONFIG[s3Mode];
+    let i = 0;
+    applyS3Step(cfg.steps[0]);
+    i = 1;
+    s3Timer = setInterval(() => {
+      if (i >= cfg.steps.length) {
+        clearInterval(s3Timer);
+        s3Timer = null;
+        return;
+      }
+      applyS3Step(cfg.steps[i]);
+      i += 1;
+    }, 950);
+  }
+
+  document.querySelectorAll('[data-s3-mode]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      s3Mode = btn.getAttribute('data-s3-mode');
+      document.querySelectorAll('[data-s3-mode]').forEach((b) => b.classList.toggle('active', b === btn));
+      s3Sample1.textContent = S3_CONFIG[s3Mode].sample1;
+      s3Sample2.textContent = S3_CONFIG[s3Mode].sample2;
+      fitSvgTexts(document.getElementById('svgS3'));
+      playS3();
+    });
+  });
+  document.getElementById('s3Play').addEventListener('click', playS3);
+  document.getElementById('s3Reset').addEventListener('click', () => {
+    clearS3Visual();
+    s3Status.textContent = '已重置：点击场景或播放追踪输入路径';
+  });
+
+  /* ==================== 交互演示 2：Slide 04 Planner Hook 地层流 ==================== */
+  let s4Filter = 'all';
+  let s4StepIdx = 0;
+  let s4Timer = null;
+  const s4Status = document.getElementById('s4Status');
+  const S4_PATHS = {
+    all: { steps: [1, 2, 3, 4, 5, 6], label: '全流程' },
+    set: { steps: [1, 2, 6], label: 'Set() 临时 GUC' },
+    disable: { steps: [1, 2, 3, 6], label: 'DisableIndex 索引裁剪' },
+    scan: { steps: [1, 2, 4, 6], label: 'Scan / Parallel 路径重枚举' },
+    join: { steps: [1, 2, 5, 6], label: 'Leading / JoinMethod 控制' },
+    rows: { steps: [1, 2, 5, 6], label: 'Rows() 基数修正' }
+  };
+  const S4_DESC = {
+    1: 'post_parse_analyze_hook：读取 Hint 字符串',
+    2: 'planner_hook：构建 HintState 并应用临时 Set() GUC',
+    3: 'build_simple_rel_hook：DisableIndex 从 indexlist 移除目标索引',
+    4: 'set_rel_pathlist_hook：拨动扫描/并行开关并重枚举 pathlist',
+    5: 'join_search_hook：控制连接顺序、连接算法并调用 adjust_rows()',
+    6: 'Plan 输出 & ExecutorEnd_hook：回滚 GUC 并清理 HintState'
+  };
+
+  function renderS4(upToIndex) {
+    const seq = S4_PATHS[s4Filter].steps;
+    const activeSet = new Set(seq.slice(0, upToIndex));
+    const currentNum = upToIndex > 0 ? seq[upToIndex - 1] : 0;
+    for (let k = 1; k <= 6; k++) {
+      const node = document.getElementById('s4-step' + k);
+      node.classList.toggle('svg-dim', upToIndex > 0 && !activeSet.has(k));
+      node.classList.toggle('svg-hl-terra', k === currentNum);
+      node.classList.toggle('svg-hl-indigo', activeSet.has(k) && k !== currentNum);
+    }
+    const lineIds = ['s4-l12', 's4-l23', 's4-l34', 's4-l45', 's4-l56'];
+    lineIds.forEach((lid, idx) => {
+      const line = document.getElementById(lid);
+      const on = upToIndex > 0 && currentNum > idx + 1;
+      line.classList.toggle('line-active', on);
+    });
+    if (upToIndex === 0) {
+      s4Status.textContent = '步骤 0/' + seq.length + '：' + S4_PATHS[s4Filter].label;
+    } else {
+      s4Status.textContent = '步骤 ' + upToIndex + '/' + seq.length + ' · ' + S4_DESC[currentNum];
+    }
+  }
+
+  function stopS4() {
+    clearInterval(s4Timer);
+    s4Timer = null;
+  }
+
+  function stepS4() {
+    const seq = S4_PATHS[s4Filter].steps;
+    s4StepIdx = s4StepIdx >= seq.length ? 1 : s4StepIdx + 1;
+    renderS4(s4StepIdx);
+  }
+
+  function playS4() {
+    stopS4();
+    s4StepIdx = 1;
+    renderS4(s4StepIdx);
+    const seq = S4_PATHS[s4Filter].steps;
+    s4Timer = setInterval(() => {
+      if (s4StepIdx >= seq.length) {
+        stopS4();
+        return;
+      }
+      s4StepIdx += 1;
+      renderS4(s4StepIdx);
+    }, 900);
+  }
+
+  document.querySelectorAll('[data-s4-filter]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      stopS4();
+      s4Filter = btn.getAttribute('data-s4-filter');
+      document.querySelectorAll('[data-s4-filter]').forEach((b) => b.classList.toggle('active', b === btn));
+      s4StepIdx = S4_PATHS[s4Filter].steps.length;
+      renderS4(s4StepIdx);
+    });
+  });
+  document.getElementById('s4Play').addEventListener('click', playS4);
+  document.getElementById('s4Step').addEventListener('click', () => {
+    stopS4();
+    stepS4();
+  });
+  document.getElementById('s4Reset').addEventListener('click', () => {
+    stopS4();
+    s4StepIdx = 0;
+    renderS4(0);
+  });
+
+  /* ==================== 交互演示 3：Slide 06 Rows() 基数修正计算器 ==================== */
+  const s6BaseInput = document.getElementById('s6BaseRows');
+  const s6OpSelect = document.getElementById('s6Op');
+  const s6ValInput = document.getElementById('s6Val');
+  const s6Status = document.getElementById('s6Status');
+  const s6BarOrig = document.getElementById('s6-bar-orig');
+  const s6BarNew = document.getElementById('s6-bar-new');
+  const s6TxtOrig = document.getElementById('s6-txt-orig');
+  const s6TxtNew = document.getElementById('s6-txt-new');
+  const s6FormulaTxt = document.getElementById('s6-formula-txt');
+  const s6DiagTxt = document.getElementById('s6-diag-txt');
+
+  function updateS6Rows() {
+    let base = parseFloat(s6BaseInput.value);
+    let val = parseFloat(s6ValInput.value);
+    const op = s6OpSelect.value;
+    if (isNaN(base) || base < 1) base = 1;
+    if (isNaN(val) || val < 0) val = 0;
+
+    let result = base;
+    if (op === '#') result = Math.max(1, val);
+    else if (op === '+') result = Math.max(1, base + val);
+    else if (op === '-') result = Math.max(1, base - val);
+    else if (op === '*') result = Math.max(1, base * val);
+
+    const roundedOrig = Math.round(base);
+    const roundedNew = Math.max(1, Math.round(result));
+    const maxV = Math.max(roundedOrig, roundedNew, 1);
+    const maxBarW = 520;
+    const origW = Math.max(8, (roundedOrig / maxV) * maxBarW);
+    const newW = Math.max(8, (roundedNew / maxV) * maxBarW);
+
+    s6BarOrig.setAttribute('width', origW.toFixed(1));
+    s6BarNew.setAttribute('width', newW.toFixed(1));
+    s6TxtOrig.textContent = roundedOrig.toLocaleString('en-US');
+    s6TxtNew.textContent = roundedNew.toLocaleString('en-US');
+
+    const hintExpr = 'Rows(c o ' + op + val + ')';
+    s6Status.textContent = hintExpr + '：' + roundedOrig.toLocaleString('en-US') + ' → ' + roundedNew.toLocaleString('en-US') + ' 行';
+    s6FormulaTxt.textContent = '生效语句：/*+ ' + hintExpr + ' */  →  修正 joinrel->rows 后交由上层成本比较';
+
+    // 高亮对应运算符卡片
+    const opMap = { '#': 's6-op-hash', '+': 's6-op-plus', '-': 's6-op-minus', '*': 's6-op-mul' };
+    Object.keys(opMap).forEach((k) => {
+      const box = document.getElementById(opMap[k]);
+      const active = k === op;
+      box.setAttribute('fill', active ? '#E5EFF0' : '#FAF9F6');
+      box.setAttribute('stroke', active ? '#245A6B' : '#D9D5CB');
+      box.setAttribute('stroke-width', active ? '2' : '1');
+    });
+
+    const ratio = roundedNew / roundedOrig;
+    if (ratio < 0.5) {
+      s6DiagTxt.textContent = '基数大幅下修（缩小 ' + (roundedOrig / roundedNew).toFixed(1) + 'x）：若计划因此改善，说明长期应优先补充扩展统计、表达式统计或优化谓词。';
+    } else if (ratio > 2.0) {
+      s6DiagTxt.textContent = '基数大幅上修（放大 ' + ratio.toFixed(1) + 'x）：优化器可能放弃 Nested Loop 转选 Hash/Merge Join，应重点排查多列相关性与热点倾斜。';
+    } else {
+      s6DiagTxt.textContent = '基数小幅微调（比例 ' + ratio.toFixed(2) + 'x）：适合测试优化器在临界成本点附近对连接算法的敏感度。';
+    }
+    fitSvgTexts(document.getElementById('svgS6'));
+  }
+
+  document.getElementById('s6Apply').addEventListener('click', updateS6Rows);
+  s6OpSelect.addEventListener('change', () => {
+    if (s6OpSelect.value === '*') s6ValInput.value = '0.1';
+    else if (s6OpSelect.value === '#') s6ValInput.value = '10';
+    else if (s6OpSelect.value === '+') s6ValInput.value = '50000';
+    else if (s6OpSelect.value === '-') s6ValInput.value = '40000';
+    updateS6Rows();
+  });
+  document.getElementById('s6Reset').addEventListener('click', () => {
+    s6BaseInput.value = '50000';
+    s6OpSelect.value = '*';
+    s6ValInput.value = '0.1';
+    updateS6Rows();
+  });
+
+  /* ==================== 交互演示 4：Slide 10 生产运维闭环 ==================== */
+  let s10Step = 0;
+  let s10Anti = false;
+  let s10Timer = null;
+  const s10Status = document.getElementById('s10Status');
+  const s10LoopTitle = document.getElementById('s10-loop-title');
+  const s10Banner = document.getElementById('s10-banner');
+  const s10BannerTxt = document.getElementById('s10-banner-txt');
+  const btnS10Anti = document.getElementById('s10Anti');
+
+  const S10_NORMAL_MSGS = [
+    '就绪：点击播放观察六阶段完整治理闭环',
+    '阶段 1/6 定位：用 EXPLAIN (ANALYZE, BUFFERS) 找到偏差算子',
+    '阶段 2/6 验证：单变量测试 Hint，明确假设与归因',
+    '阶段 3/6 灰度：按非空 application_name 小流量生效并备回滚 SQL',
+    '阶段 4/6 监控：持续盯紧分位延迟、Buffer 与数据分布基线',
+    '阶段 5/6 根因修复：落地统计信息、索引或 SQL 改写',
+    '阶段 6/6 回收 Hint：下线临时 Hint，恢复优化器自适应能力'
+  ];
+
+  function renderS10() {
+    if (s10Anti) {
+      s10LoopTitle.textContent = '危险反模式：止血后永久遗留（缺失 05 根因修复与 06 回收）';
+      s10LoopTitle.setAttribute('fill', '#BE653B');
+      btnS10Anti.classList.add('warn-active');
+      for (let i = 1; i <= 6; i++) {
+        const el = document.getElementById('s10-p' + i);
+        el.classList.remove('svg-hl-indigo', 'svg-hl-teal');
+        el.classList.toggle('svg-dim', i >= 5);
+        el.classList.toggle('svg-hl-terra', i === 3 || i === 4);
+      }
+      for (let i = 1; i <= 5; i++) {
+        const ln = document.getElementById('s10-l' + i);
+        ln.classList.toggle('line-active', i <= 3);
+      }
+      s10Banner.setAttribute('fill', '#F7E9DE');
+      s10Banner.setAttribute('stroke', '#BE653B');
+      s10BannerTxt.setAttribute('fill', '#BE653B');
+      s10BannerTxt.textContent = '反模式后果：故障后既无记录也无回收 → 数据分布变化或大版本升级后，旧 Hint 把计划锁死在错误路径，制造新慢 SQL！';
+      s10Status.textContent = '反模式警示：05/06 缺失导致长期隐患';
+      fitSvgTexts(document.getElementById('svgS10'));
+      return;
+    }
+
+    s10LoopTitle.textContent = '正确运维闭环（6 阶段全链路治理）';
+    s10LoopTitle.setAttribute('fill', '#245A6B');
+    btnS10Anti.classList.remove('warn-active');
+    s10Banner.setAttribute('fill', '#E5EFF0');
+    s10Banner.setAttribute('stroke', '#245A6B');
+    s10BannerTxt.setAttribute('fill', '#1B2B33');
+    s10BannerTxt.textContent = '闭环要点：每条生产 Hint 必须绑定 Owner、工单号与明确回收条件；升级或数据重构时统一复验。';
+
+    for (let i = 1; i <= 6; i++) {
+      const el = document.getElementById('s10-p' + i);
+      el.classList.remove('svg-hl-terra');
+      el.classList.toggle('svg-dim', s10Step > 0 && i > s10Step);
+      el.classList.toggle('svg-hl-teal', s10Step > 0 && i === s10Step && i >= 5);
+      el.classList.toggle('svg-hl-indigo', s10Step > 0 && i <= s10Step && !(i === s10Step && i >= 5));
+    }
+    for (let i = 1; i <= 5; i++) {
+      const ln = document.getElementById('s10-l' + i);
+      ln.classList.toggle('line-active', s10Step > i);
+    }
+    s10Status.textContent = S10_NORMAL_MSGS[s10Step] || S10_NORMAL_MSGS[0];
+    fitSvgTexts(document.getElementById('svgS10'));
+  }
+
+  function stopS10() {
+    clearInterval(s10Timer);
+    s10Timer = null;
+  }
+
+  document.getElementById('s10Play').addEventListener('click', () => {
+    stopS10();
+    s10Anti = false;
+    s10Step = 1;
+    renderS10();
+    s10Timer = setInterval(() => {
+      if (s10Step >= 6) {
+        stopS10();
+        return;
+      }
+      s10Step += 1;
+      renderS10();
+    }, 850);
+  });
+
+  document.getElementById('s10Step').addEventListener('click', () => {
+    stopS10();
+    s10Anti = false;
+    s10Step = s10Step >= 6 ? 1 : s10Step + 1;
+    renderS10();
+  });
+
+  btnS10Anti.addEventListener('click', () => {
+    stopS10();
+    s10Anti = !s10Anti;
+    renderS10();
+  });
+
+  document.getElementById('s10Reset').addEventListener('click', () => {
+    stopS10();
+    s10Anti = false;
+    s10Step = 0;
+    renderS10();
+  });
+
+  /* ==================== 底部控制栏与面板按钮事件 ==================== */
+  document.getElementById('btnPrev').addEventListener('click', () => goToSlide(currentSlide - 1));
+  document.getElementById('btnNext').addEventListener('click', () => goToSlide(currentSlide + 1));
+  btnToc.addEventListener('click', () => setToc(!tocOpen));
+  document.getElementById('btnCloseToc').addEventListener('click', () => setToc(false));
+  btnNotePage.addEventListener('click', () => toggleNotesMode('page'));
+  btnNoteFull.addEventListener('click', () => toggleNotesMode('full'));
+  tabPageNote.addEventListener('click', () => {
+    notesMode = 'page';
+    renderNotes();
+  });
+  tabFullNote.addEventListener('click', () => {
+    notesMode = 'full';
+    renderNotes();
+  });
+  document.getElementById('btnCloseNotes').addEventListener('click', () => {
+    notesMode = 'closed';
+    renderNotes();
+  });
+  btnAutoplay.addEventListener('click', toggleAutoplay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  /* ==================== 全局快捷键绑定 ==================== */
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      if (e.key === 'Enter' && currentSlide === 5) updateS6Rows();
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      e.preventDefault();
+      goToSlide(currentSlide + 1);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      goToSlide(currentSlide - 1);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      setToc(!tocOpen);
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      toggleNotesMode('page');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      toggleNotesMode('full');
+    } else if (key === 'a' || key === 'A') {
+      e.preventDefault();
+      toggleAutoplay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) setToc(false);
+      else if (notesMode !== 'closed') {
+        notesMode = 'closed';
+        renderNotes();
+      } else if (document.body.classList.contains('pseudo-fullscreen')) {
+        document.body.classList.remove('pseudo-fullscreen');
+        syncFullscreenBtn();
+      }
+    }
+  });
+
+  /* ==================== 初始化 ==================== */
+  buildToc();
+  updateS6Rows();
+  updateScale();
+  fitSvgTexts(slides[0]);
+})();
+</script>
+</body>
+</html>

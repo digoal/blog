@@ -1,0 +1,2894 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL WAL Buffer 管理</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-letterbox: #E6E3DA;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terracotta: #BE653B;
+    --terracotta-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E4F0EC;
+    --gold: #AE8A3E;
+    --gold-light: #F5EFE0;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'STSong', 'SimSun', Georgia, serif;
+    --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app-shell {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-letterbox);
+    position: relative;
+  }
+
+  #app-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Stage container: centers and letterboxes 1600x900 fixed stage */
+  #stage-wrap {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+  }
+
+  #stage-scaler {
+    width: 1600px;
+    height: 900px;
+    flex-shrink: 0;
+    transform-origin: center center;
+    position: relative;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+  }
+
+  /* Slide structure: fixed 1600x900, no responsive reflow */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    background: var(--bg-paper);
+    padding: 40px 64px 32px 64px;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Subtle blueprint top strata bar */
+  .strata-strip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    display: flex;
+  }
+  .strata-strip span { flex: 1; display: block; }
+  .strata-strip .s1 { background: var(--strata-1); }
+  .strata-strip .s2 { background: var(--strata-2); }
+  .strata-strip .s3 { background: var(--strata-3); }
+  .strata-strip .s4 { background: var(--strata-4); }
+  .strata-strip .s5 { background: var(--strata-5); }
+  .strata-strip .s6 { background: var(--strata-6); }
+  .strata-strip .s7 { background: var(--strata-7); }
+
+  .slide-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 18px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .slide-eyebrow-tag {
+    color: var(--ink-muted);
+    letter-spacing: 2px;
+    font-weight: 500;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    line-height: 1.2;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+    white-space: nowrap;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.45;
+    color: var(--ink-sub);
+    margin-bottom: 14px;
+    max-width: 1400px;
+  }
+
+  .slide-lead strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .slide-divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Diagram zone: strictly 1400 x 430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .diagram-zone svg {
+    display: block;
+    width: 1400px;
+    height: 430px;
+    background: var(--bg-paper);
+  }
+
+  .diagram-zone.has-controls svg {
+    height: 386px;
+  }
+
+  /* Dedicated non-overlapping control toolbar above animated SVGs */
+  .anim-toolbar {
+    width: 1400px;
+    height: 40px;
+    margin-bottom: 4px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .anim-controls-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .anim-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .anim-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+
+  .anim-btn.primary {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .anim-btn.primary:hover {
+    background: var(--strata-1);
+  }
+
+  .anim-btn.active-toggle {
+    background: var(--terracotta-light);
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+  }
+
+  .anim-btn.teal-toggle {
+    background: var(--teal-light);
+    border-color: var(--teal);
+    color: var(--teal);
+  }
+
+  .anim-select {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+
+  .anim-status {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 640px;
+  }
+
+  .anim-status strong {
+    color: var(--terracotta);
+    font-weight: 700;
+  }
+
+  /* Bottom NEXT bridge */
+  .slide-next {
+    margin-top: auto;
+    width: 1400px;
+    border-left: 3px solid var(--terracotta);
+    padding: 6px 0 6px 16px;
+    background: linear-gradient(90deg, rgba(247, 233, 222, 0.45) 0%, rgba(247, 246, 242, 0) 65%);
+  }
+
+  .slide-next-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2.2px;
+    color: var(--terracotta);
+    font-weight: 700;
+    margin-bottom: 3px;
+  }
+
+  .slide-next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.35;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* Footer */
+  .slide-footer {
+    width: 1400px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .slide-footer-left {
+    font-family: var(--font-sans);
+    letter-spacing: 0.4px;
+  }
+
+  .slide-footer-page {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--ink-sub);
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  /* In-page Right Notes Pane (no modal) */
+  #notes-pane {
+    width: 0;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.2s ease;
+  }
+
+  #notes-pane.open {
+    width: min(440px, 34vw);
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    height: 48px;
+    padding: 0 16px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    gap: 8px;
+  }
+
+  .notes-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .notes-tab {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-tab.active {
+    background: var(--bg-paper);
+    border-color: var(--stroke);
+    color: var(--indigo);
+  }
+
+  .notes-close {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .notes-close:hover {
+    color: var(--terracotta);
+    border-color: var(--terracotta);
+  }
+
+  #notes-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 48px 22px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--ink);
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border-left: 3px solid var(--stroke);
+    background: var(--bg-paper);
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .note-block.clickable {
+    cursor: pointer;
+  }
+
+  .note-block.clickable:hover {
+    background: var(--bg-sub);
+  }
+
+  .note-block.current {
+    border-left-color: var(--terracotta);
+    background: var(--bg-sub);
+  }
+
+  .note-block-meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--indigo);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .note-block-title {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+
+  .note-block p {
+    margin-bottom: 10px;
+    color: var(--ink-sub);
+  }
+
+  .note-block p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-block code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--indigo-light);
+    color: var(--strata-1);
+    padding: 1px 5px;
+  }
+
+  /* TOC Panel (G) */
+  #toc-panel {
+    position: absolute;
+    inset: 0;
+    background: rgba(27, 43, 51, 0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 40;
+  }
+
+  #toc-panel.open {
+    display: flex;
+  }
+
+  .toc-box {
+    width: min(960px, 90%);
+    max-height: 82%;
+    background: var(--bg-paper);
+    border: 1px solid var(--strata-1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toc-header {
+    padding: 14px 20px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toc-title {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .toc-grid {
+    padding: 16px 20px 20px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .toc-item {
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    padding: 10px 14px;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .toc-item:hover {
+    border-color: var(--indigo);
+    background: var(--indigo-light);
+  }
+
+  .toc-item.current {
+    border-color: var(--terracotta);
+    border-left-width: 4px;
+    background: var(--terracotta-light);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--indigo);
+    padding-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .toc-item.current .toc-num {
+    color: var(--terracotta);
+  }
+
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+
+  .toc-item-sub {
+    font-size: 12px;
+    color: var(--ink-sub);
+  }
+
+  /* Bottom HUD Bar: always visible including in fullscreen */
+  #hud-bar {
+    height: 44px;
+    flex-shrink: 0;
+    background: var(--strata-1);
+    color: #EBF1EE;
+    border-top: 1px solid var(--strata-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    position: relative;
+    z-index: 50;
+    user-select: none;
+  }
+
+  #autoplay-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 2px;
+    width: 0%;
+    background: var(--terracotta);
+    transition: width 0.1s linear;
+  }
+
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: #EBF1EE;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(207, 224, 220, 0.28);
+    padding: 4px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .hud-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #CFE0DC;
+  }
+
+  .hud-btn.active {
+    background: var(--terracotta);
+    border-color: var(--terracotta);
+    color: #F7F6F2;
+  }
+
+  .hud-kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.28);
+    padding: 1px 5px;
+    color: #CFE0DC;
+  }
+
+  .hud-btn.active .hud-kbd {
+    background: rgba(0, 0, 0, 0.25);
+    color: #F7F6F2;
+  }
+
+  .hud-page-indicator {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #CFE0DC;
+    min-width: 72px;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+
+  /* SVG global typography helpers */
+  svg text {
+    font-family: var(--font-sans);
+    user-select: none;
+  }
+  svg .t-serif {
+    font-family: var(--font-serif);
+  }
+  svg .t-mono {
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+<div id="app-shell">
+  <div id="app-body">
+    <div id="stage-wrap">
+      <div id="stage-scaler">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-slide="0" data-eyebrow="01 / OVERVIEW" data-title="数据库筑基课 —— WAL Buffer 管理">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>POSTGRESQL INTERNALS · WRITE PATH &amp; MAINTENANCE</span>
+            <span class="slide-eyebrow-tag">AUTHOR: DIGOAL · 2026-06-08</span>
+          </div>
+          <h1 class="slide-title">数据库筑基课 —— PostgreSQL WAL Buffer 管理</h1>
+          <p class="slide-lead"><strong>WAL Buffer 不是孤立参数</strong>，而是 PostgreSQL 把「业务修改」变成「崩溃后可恢复事实」的共享内存关键中转站。本课基于本地 PostgreSQL 源码与官方 SGML 文档，拆解其内存结构、并发锁、环形复用与调优闭环。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-terra" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#BE653B"/>
+                </marker>
+                <marker id="arr-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#2F7A66"/>
+                </marker>
+                <marker id="arr-gold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#AE8A3E"/>
+                </marker>
+              </defs>
+              <!-- Background engineering grid -->
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left Stratigraphic Column (7 layers shallow -> deep) -->
+              <text x="24" y="30" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">STRATIGRAPHIC WRITE PROFILE · 写入路径七层剖面（浅 → 深）</text>
+
+              <!-- Layer 7: SQL / Resource Manager -->
+              <rect x="24" y="46" width="850" height="46" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="42" y="74" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">L7 · 业务事务层</text>
+              <text x="210" y="74" font-size="14" fill="#46585F">INSERT / UPDATE / DELETE 触发资源管理器构造修改记录</text>
+
+              <!-- Layer 6: Backend Private Memory -->
+              <rect x="24" y="98" width="850" height="46" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1"/>
+              <text x="42" y="126" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">L6 · 后端私有内存</text>
+              <text x="210" y="126" font-size="14" fill="#1B2B33">xloginsert.c · XLogRegisterBuffer() → XLogRecordAssemble() 组装 WAL Record</text>
+
+              <!-- Layer 5: Concurrency Lock Layer -->
+              <rect x="24" y="150" width="850" height="46" fill="#A4C4C6" stroke="#47808D" stroke-width="1"/>
+              <text x="42" y="178" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">L5 · 并发协调锁层</text>
+              <text x="210" y="178" font-size="14" fill="#1B2B33">insertpos_lck 预留 LSN · 8 把 WALInsertLock 并行复制 · WALBufMappingLock 管槽位</text>
+
+              <!-- Layer 4: WAL Buffer (Core Focus) -->
+              <rect x="24" y="202" width="850" height="54" fill="#245A6B" stroke="#1E4B5A" stroke-width="2"/>
+              <text x="42" y="234" font-size="15" font-weight="700" fill="#F7F6F2" class="t-mono">L4 · 共享 WAL BUFFER</text>
+              <text x="245" y="234" font-size="14" font-weight="600" fill="#EBF1EE">XLogCtlData.pages[] + xlblocks[] 环形页缓存（wal_buffers 控制，默认约 3% shared_buffers）</text>
+
+              <!-- Layer 3: Write Path & WALWriteLock -->
+              <rect x="24" y="262" width="850" height="46" fill="#47808D" stroke="#2E6373" stroke-width="1"/>
+              <text x="42" y="290" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">L3 · 三路写出协调</text>
+              <text x="210" y="290" font-size="14" fill="#EBF1EE">WALWriteLock 保护 XLogWrite()：同步提交 / WAL Writer / Buffer 满被迫写出</text>
+
+              <!-- Layer 2: OS Page Cache -->
+              <rect x="24" y="314" width="850" height="46" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="42" y="342" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">L2 · 内核页缓存层</text>
+              <text x="210" y="342" font-size="14" fill="#CFE0DC">write() 进入 OS Page Cache；尚未落盘前仍不满足崩溃持久性承诺</text>
+
+              <!-- Layer 1: pg_wal & Stable Storage -->
+              <rect x="24" y="366" width="850" height="46" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="42" y="394" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">L1 · 稳定存储 pg_wal</text>
+              <text x="210" y="394" font-size="14" fill="#CFE0DC">issue_xlog_fsync() 落盘至 WAL Segment（典型 16MB），确立崩溃可恢复事实</text>
+
+              <!-- Right side: Core Thesis & Course Scope Blueprint Card -->
+              <rect x="910" y="46" width="466" height="366" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="910" y="46" width="466" height="36" fill="#1E4B5A"/>
+              <text x="928" y="69" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">COURSE BLUEPRINT · 本课四大主线</text>
+
+              <rect x="928" y="100" width="430" height="62" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="928" y="100" width="4" height="62" fill="#245A6B"/>
+              <text x="946" y="124" font-size="15" font-weight="700" fill="#1B2B33">01 · 内存结构与边界</text>
+              <text x="946" y="148" font-size="13" fill="#46585F">区分 wal_buffers、shared_buffers 与 pg_wal，读懂自动调参</text>
+
+              <rect x="928" y="174" width="430" height="62" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="928" y="174" width="4" height="62" fill="#245A6B"/>
+              <text x="946" y="198" font-size="15" font-weight="700" fill="#1B2B33">02 · 并发插入与环形淘汰</text>
+              <text x="946" y="222" font-size="13" fill="#46585F">先预留后并行复制、WAL 页头、LSN 取模与 wal_buffers_full</text>
+
+              <rect x="928" y="248" width="430" height="62" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="928" y="248" width="4" height="62" fill="#BE653B"/>
+              <text x="946" y="272" font-size="15" font-weight="700" fill="#1B2B33">03 · 三路写出与组提交</text>
+              <text x="946" y="296" font-size="13" fill="#46585F">write ≠ flush；拆解同步提交、WAL Writer 与被动写出差异</text>
+
+              <rect x="928" y="322" width="430" height="62" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="928" y="322" width="4" height="62" fill="#2F7A66"/>
+              <text x="946" y="346" font-size="15" font-weight="700" fill="#1B2B33">04 · 观测指标与避坑指南</text>
+              <text x="946" y="370" font-size="13" fill="#46585F">pg_stat_wal + pg_stat_io 闭环排障，拒绝盲目调参</text>
+
+              <!-- Orthogonal connector from L4 to Right Panel -->
+              <path d="M 874 229 L 910 229" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">先从一个真实的生产抖动现象切入：为什么 CPU 和磁盘都没打满，前台事务却突然变慢？</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">01 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-slide="1" data-eyebrow="02 / PRODUCTION SYMPTOM" data-title="生产现象与五个真问题">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>PROBLEM FRAMING · BEYOND SIMPLE PARAMETER TUNING</span>
+            <span class="slide-eyebrow-tag">PG_STAT_WAL · WAL_BUFFERS_FULL</span>
+          </div>
+          <h1 class="slide-title">CPU 与磁盘未打满，为何前台事务突然抖动？</h1>
+          <p class="slide-lead">批量导入或热点更新时，监控里的 <strong>pg_stat_wal.wal_buffers_full</strong> 持续增长。第一反应去调大 <strong>wal_buffers</strong> 只回答了一小半——必须先追问底层链路上的五个真问题。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left: Production Symptom Box -->
+              <rect x="28" y="34" width="380" height="362" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="28" y="34" width="380" height="38" fill="#BE653B"/>
+              <text x="46" y="58" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">PRODUCTION SYMPTOM · 生产现场信号</text>
+
+              <rect x="46" y="92" width="344" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="62" y="118" font-size="14" font-weight="700" fill="#1B2B33">负载特征：批量导入 / 热点更新</text>
+              <text x="62" y="142" font-size="13" fill="#46585F">CPU 未打满，磁盘带宽也未持续打满</text>
+
+              <rect x="46" y="176" width="344" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="62" y="202" font-size="14" font-weight="700" fill="#BE653B">前台体感：部分事务延迟突然抖动</text>
+              <text x="62" y="226" font-size="13" fill="#46585F">EXPLAIN (ANALYZE, WAL) 见 buffers full 非零</text>
+
+              <rect x="46" y="260" width="344" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="62" y="286" font-size="14" font-weight="700" fill="#1B2B33">全局指标：wal_buffers_full 持续上升</text>
+              <text x="62" y="310" font-size="13" fill="#46585F">pg_stat_wal 与 pg_stat_statements 同步出现</text>
+
+              <rect x="46" y="342" width="344" height="38" fill="#1E4B5A"/>
+              <text x="62" y="366" font-size="13" font-weight="600" fill="#EBF1EE">误区：只调大 wal_buffers = 治标不治本</text>
+
+              <!-- Orthogonal bus from left to right 5 questions -->
+              <path d="M 408 215 L 464 215" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <path d="M 464 66 L 464 364" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <path d="M 464 66 L 504 66" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <path d="M 464 140 L 504 140" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <path d="M 464 215 L 504 215" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+              <path d="M 464 290 L 504 290" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <path d="M 464 364 L 504 364" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+              <!-- Right: 5 Architectural Questions -->
+              <rect x="512" y="36" width="858" height="60" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="530" y="61" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">Q1 · 插入路径</text>
+              <text x="660" y="61" font-size="15" font-weight="700" fill="#1B2B33">WAL 记录如何从后端私有内存进入共享 WAL Buffer？</text>
+              <text x="660" y="83" font-size="13" fill="#46585F">对应源码：xloginsert.c 组装 → xlog.c 预留位置与 8 把 WALInsertLock 并行复制</text>
+
+              <rect x="512" y="110" width="858" height="60" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="530" y="135" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">Q2 · 概念边界</text>
+              <text x="660" y="135" font-size="15" font-weight="700" fill="#1B2B33">wal_buffers 控制的究竟是多少共享内存，还是多少 WAL 文件？</text>
+              <text x="660" y="157" font-size="13" fill="#46585F">对应文档：config.sgml —— 它是共享内存环形页缓存，不是 pg_wal 磁盘容量</text>
+
+              <rect x="512" y="185" width="858" height="60" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="530" y="210" font-size="13" font-weight="700" fill="#BE653B" class="t-mono">Q3 · 前台阻塞</text>
+              <text x="660" y="210" font-size="15" font-weight="700" fill="#1B2B33">什么情况下，前台插入 WAL 的路径会被迫自己去写 WAL 文件？</text>
+              <text x="660" y="232" font-size="13" fill="#46585F">核心机制：环形槽位复用时旧页尚未写出（LogwrtResult.Write &lt; OldPageRqstPtr）</text>
+
+              <rect x="512" y="260" width="858" height="60" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="530" y="285" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">Q4 · 写出分流</text>
+              <text x="660" y="285" font-size="15" font-weight="700" fill="#1B2B33">提交刷盘、WAL Writer、Buffer 满写出三条路径有何本质区别？</text>
+              <text x="660" y="307" font-size="13" fill="#46585F">对应文档：wal.sgml —— 触发者、持久化目标与调优杠杆各不相同</text>
+
+              <rect x="512" y="334" width="858" height="60" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="530" y="359" font-size="13" font-weight="700" fill="#2F7A66" class="t-mono">Q5 · 指标判读</text>
+              <text x="660" y="359" font-size="15" font-weight="700" fill="#1B2B33">wal_buffers_full 到底能证明什么，又不能证明什么？</text>
+              <text x="660" y="381" font-size="13" fill="#46585F">诊断边界：它是 Buffer 周转受阻信号，不是 WAL 字节数，也不能单独归因 fsync 慢</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">要回答这五个问题，先退一步看本质：PostgreSQL 为什么要把 WAL 写入拆成五个阶段？</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">02 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-slide="2" data-eyebrow="03 / WHY WAL BUFFER EXISTS" data-title="它解决什么问题：五阶段写入拆分">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>WRITE-AHEAD RULE · XLOGINSERTRECORD()</span>
+            <span class="slide-eyebrow-tag">SRC/BACKEND/ACCESS/TRANSAM/XLOG.C</span>
+          </div>
+          <h1 class="slide-title">先写日志再写数据页：WAL Buffer 承接第 2~4 步</h1>
+          <p class="slide-lead">数据页写出前，WAL 必须至少刷到对应 LSN。若每次行修改都直写文件并 fsync，系统会被小随机 I/O 拖垮；<strong>WAL Buffer 负责把并发组装与昂贵落盘解耦</strong>。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Top Span Bracket for WAL Buffer responsibility (Steps 2-4) -->
+              <rect x="308" y="24" width="800" height="34" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="708" y="46" text-anchor="middle" font-size="14" font-weight="700" fill="#245A6B">WAL BUFFER 核心职责区间（第 2 ~ 4 步）：缓冲 + 并发协调，移出低层修改关键路径</text>
+              <path d="M 308 58 L 308 74 M 1108 58 L 1108 74" fill="none" stroke="#245A6B" stroke-width="1.5"/>
+
+              <!-- 5 Stages horizontal row -->
+              <!-- Step 1 -->
+              <rect x="28" y="82" width="236" height="152" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+              <rect x="28" y="82" width="236" height="32" fill="#47808D"/>
+              <text x="44" y="103" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">STEP 01 · 私有内存</text>
+              <text x="44" y="140" font-size="16" font-weight="700" fill="#1B2B33">组装 WAL Record</text>
+              <text x="44" y="168" font-size="13" fill="#46585F">各后端在私有内存中</text>
+              <text x="44" y="188" font-size="13" fill="#46585F">拼接页引用与修改数据，</text>
+              <text x="44" y="208" font-size="13" fill="#46585F">零共享锁争用</text>
+
+              <!-- Arrow 1->2 -->
+              <path d="M 264 158 L 302 158" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 2 -->
+              <rect x="308" y="82" width="236" height="152" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="308" y="82" width="236" height="32" fill="#245A6B"/>
+              <text x="324" y="103" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">STEP 02 · 共享预留</text>
+              <text x="324" y="140" font-size="16" font-weight="700" fill="#1B2B33">预留连续 LSN 空间</text>
+              <text x="324" y="168" font-size="13" fill="#46585F">短自旋锁推进 CurrBytePos，</text>
+              <text x="324" y="188" font-size="13" fill="#46585F">把全局串行段压到极短，</text>
+              <text x="324" y="208" font-size="13" fill="#46585F">返回确定 LSN 给数据页</text>
+
+              <!-- Arrow 2->3 -->
+              <path d="M 544 158 L 582 158" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 3 -->
+              <rect x="590" y="82" width="236" height="152" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="590" y="82" width="236" height="32" fill="#245A6B"/>
+              <text x="606" y="103" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">STEP 03 · 并行复制</text>
+              <text x="606" y="140" font-size="16" font-weight="700" fill="#1B2B33">写入共享 WAL Buffer</text>
+              <text x="606" y="168" font-size="13" fill="#46585F">多后端并发将 Record</text>
+              <text x="606" y="188" font-size="13" fill="#46585F">复制到各自预留的槽位，</text>
+              <text x="606" y="208" font-size="13" fill="#46585F">互不阻塞数据拷贝</text>
+
+              <!-- Arrow 3->4 -->
+              <path d="M 826 158 L 864 158" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 4 -->
+              <rect x="872" y="82" width="236" height="152" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="872" y="82" width="236" height="32" fill="#2E6373"/>
+              <text x="888" y="103" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">STEP 04 · 批量写出</text>
+              <text x="888" y="140" font-size="16" font-weight="700" fill="#1B2B33">写出到 pg_wal 文件</text>
+              <text x="888" y="168" font-size="13" fill="#46585F">由提交、WAL Writer、</text>
+              <text x="888" y="188" font-size="13" fill="#46585F">Buffer 满或段切换触发，</text>
+              <text x="888" y="208" font-size="13" fill="#46585F">合并写入操作系统缓存</text>
+
+              <!-- Arrow 4->5 -->
+              <path d="M 1108 158 L 1134 158" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+
+              <!-- Step 5 -->
+              <rect x="1142" y="82" width="230" height="152" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="1142" y="82" width="230" height="32" fill="#BE653B"/>
+              <text x="1158" y="103" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">STEP 05 · 持久刷盘</text>
+              <text x="1158" y="140" font-size="16" font-weight="700" fill="#1B2B33">fsync 到稳定存储</text>
+              <text x="1158" y="168" font-size="13" fill="#46585F">同步提交等持久化点</text>
+              <text x="1158" y="188" font-size="13" fill="#46585F">必须刷盘确认，</text>
+              <text x="1158" y="208" font-size="13" fill="#BE653B">调大 Buffer 无法消除</text>
+
+              <!-- Bottom Trade-off Comparison Strip -->
+              <rect x="28" y="264" width="656" height="138" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="48" y="294" font-size="15" font-weight="700" fill="#BE653B">若 WAL Buffer 太小：周转不足</text>
+              <text x="48" y="322" font-size="14" fill="#1B2B33">• 高 WAL 速率下共享页迅速被写满，旧页来不及由后台写出</text>
+              <text x="48" y="348" font-size="14" fill="#1B2B33">• 前台插入者被迫中断插入流程，自己抢锁写出旧 WAL 页</text>
+              <text x="48" y="374" font-size="14" fill="#46585F">• 表现为 wal_buffers_full 飙升与前台事务延迟毛刺</text>
+
+              <rect x="716" y="264" width="656" height="138" fill="#F1EFE9" stroke="#AE8A3E" stroke-width="1"/>
+              <text x="736" y="294" font-size="15" font-weight="700" fill="#AE8A3E">若 WAL Buffer 太大：收益递减且有边界</text>
+              <text x="736" y="322" font-size="14" fill="#1B2B33">• 占用固定共享内存，且参数修改必须重启数据库实例</text>
+              <text x="736" y="348" font-size="14" fill="#1B2B33">• 同步提交仍必须把 commit record 刷到磁盘，无法省掉 fsync</text>
+              <text x="736" y="374" font-size="14" fill="#46585F">• 超过一个 WAL segment 后，段切换仍强制刷盘，边际收益极低</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">明确了它解决的问题后，先划清概念边界：wal_buffers 与 shared_buffers、OS Cache、pg_wal 究竟怎么区分？</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">03 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 ==================== -->
+        <section class="slide" data-slide="3" data-eyebrow="04 / CONCEPT BOUNDARY & AUTO-SIZING" data-title="它是什么：概念边界与自动调参规则">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>DOC/SRC/SGML/CONFIG.SGML · XLOGCHOOSENUMBUFFERS()</span>
+            <span class="slide-eyebrow-tag">POSTMASTER STARTUP ONLY</span>
+          </div>
+          <h1 class="slide-title">wal_buffers 是共享内存环形页缓存，不是 pg_wal 容量</h1>
+          <p class="slide-lead"><strong>wal_buffers</strong> 分配给「尚未写入磁盘的 WAL 数据」。默认值 <strong>-1</strong> 会按 <strong>shared_buffers / 32</strong>（约 3%）自动计算，下限 64kB，上限一个 WAL Segment（典型 16MB）。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Top: 4-concept comparison grid -->
+              <text x="28" y="30" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">CONCEPT MATRIX · 四个高频混淆概念的精准切分</text>
+
+              <!-- Col 1: shared_buffers -->
+              <rect x="28" y="44" width="320" height="206" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <rect x="28" y="44" width="320" height="34" fill="#47808D"/>
+              <text x="44" y="66" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">shared_buffers</text>
+              <text x="44" y="102" font-size="13" font-weight="700" fill="#245A6B">缓冲对象：</text>
+              <text x="116" y="102" font-size="13" fill="#1B2B33">表和索引的数据页</text>
+              <text x="44" y="130" font-size="13" font-weight="700" fill="#245A6B">所在位置：</text>
+              <text x="116" y="130" font-size="13" fill="#1B2B33">PostgreSQL 共享内存</text>
+              <text x="44" y="158" font-size="13" font-weight="700" fill="#245A6B">核心职责：</text>
+              <text x="44" y="180" font-size="13" fill="#46585F">缓存数据读写、承载脏页与 MVCC</text>
+              <text x="44" y="206" font-size="13" font-weight="700" fill="#BE653B">不解决：</text>
+              <text x="102" y="206" font-size="13" fill="#46585F">WAL Buffer 槽位周转满</text>
+
+              <!-- Col 2: wal_buffers (Highlighted) -->
+              <rect x="368" y="44" width="320" height="206" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="368" y="44" width="320" height="34" fill="#245A6B"/>
+              <text x="384" y="66" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">wal_buffers（本课主角）</text>
+              <text x="384" y="102" font-size="13" font-weight="700" fill="#245A6B">缓冲对象：</text>
+              <text x="456" y="102" font-size="13" font-weight="600" fill="#1B2B33">尚未写出的 WAL 页</text>
+              <text x="384" y="130" font-size="13" font-weight="700" fill="#245A6B">所在位置：</text>
+              <text x="456" y="130" font-size="13" fill="#1B2B33">PostgreSQL 共享内存</text>
+              <text x="384" y="158" font-size="13" font-weight="700" fill="#245A6B">核心职责：</text>
+              <text x="384" y="180" font-size="13" fill="#1B2B33">写入路径环形缓存、承接并发插入</text>
+              <text x="384" y="206" font-size="13" font-weight="700" fill="#BE653B">不解决：</text>
+              <text x="442" y="206" font-size="13" fill="#46585F">fsync 慢 / 同步复制等待</text>
+
+              <!-- Col 3: OS Page Cache -->
+              <rect x="708" y="44" width="320" height="206" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="708" y="44" width="320" height="34" fill="#2E6373"/>
+              <text x="724" y="66" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">OS Page Cache</text>
+              <text x="724" y="102" font-size="13" font-weight="700" fill="#245A6B">缓冲对象：</text>
+              <text x="796" y="102" font-size="13" fill="#1B2B33">操作系统文件页</text>
+              <text x="724" y="130" font-size="13" font-weight="700" fill="#245A6B">所在位置：</text>
+              <text x="796" y="130" font-size="13" fill="#1B2B33">操作系统内核内存</text>
+              <text x="724" y="158" font-size="13" font-weight="700" fill="#245A6B">核心职责：</text>
+              <text x="724" y="180" font-size="13" fill="#46585F">缓存文件系统读写，不理解事务语义</text>
+              <text x="724" y="206" font-size="13" font-weight="700" fill="#BE653B">不解决：</text>
+              <text x="782" y="206" font-size="13" fill="#46585F">PG 内部锁争用与持久性</text>
+
+              <!-- Col 4: pg_wal -->
+              <rect x="1048" y="44" width="324" height="206" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="1048" y="44" width="324" height="34" fill="#1E4B5A"/>
+              <text x="1064" y="66" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">pg_wal 目录文件</text>
+              <text x="1064" y="102" font-size="13" font-weight="700" fill="#245A6B">缓冲对象：</text>
+              <text x="1136" y="102" font-size="13" fill="#1B2B33">WAL Segment 磁盘文件</text>
+              <text x="1064" y="130" font-size="13" font-weight="700" fill="#245A6B">所在位置：</text>
+              <text x="1136" y="130" font-size="13" fill="#1B2B33">数据目录磁盘存储</text>
+              <text x="1064" y="158" font-size="13" font-weight="700" fill="#245A6B">核心职责：</text>
+              <text x="1064" y="180" font-size="13" fill="#46585F">崩溃恢复、流复制与归档的持久日志</text>
+              <text x="1064" y="206" font-size="13" font-weight="700" fill="#BE653B">注意：</text>
+              <text x="1110" y="206" font-size="13" fill="#46585F">不受 wal_buffers 大小控制</text>
+
+              <!-- Bottom: Auto-sizing ruler (XLOGChooseNumBuffers) -->
+              <rect x="28" y="274" width="1344" height="134" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="48" y="302" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">AUTO-SIZING RULER · XLOGChooseNumBuffers() 与 check_wal_buffers() 规则标尺（单位：XLOG_BLCKSZ，典型 8kB）</text>
+
+              <!-- Ruler bar -->
+              <line x1="68" y1="348" x2="1332" y2="348" stroke="#1E4B5A" stroke-width="3"/>
+              <!-- Tick 1: 32kB manual clamp -->
+              <line x1="120" y1="334" x2="120" y2="362" stroke="#BE653B" stroke-width="2.5"/>
+              <text x="120" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#BE653B" class="t-mono">32kB (4 blocks)</text>
+              <text x="120" y="384" text-anchor="middle" font-size="12" fill="#46585F">手工正值最小钳制</text>
+
+              <!-- Tick 2: 64kB auto floor -->
+              <line x1="360" y1="334" x2="360" y2="362" stroke="#245A6B" stroke-width="2.5"/>
+              <text x="360" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">64kB (8 blocks)</text>
+              <text x="360" y="384" text-anchor="middle" font-size="12" fill="#46585F">自动值下限（历史默认）</text>
+
+              <!-- Active auto range highlight -->
+              <rect x="360" y="343" width="640" height="10" fill="#2F7A66"/>
+              <text x="680" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#2F7A66" class="t-mono">自动区间：NBuffers / 32 (≈ 3% shared_buffers)</text>
+              <text x="680" y="384" text-anchor="middle" font-size="12" fill="#2F7A66">wal_buffers = -1 时由 XLOGShmemRequest() 启动期自动分配</text>
+
+              <!-- Tick 3: 16MB auto cap -->
+              <line x1="1000" y1="334" x2="1000" y2="362" stroke="#245A6B" stroke-width="2.5"/>
+              <text x="1000" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">16MB (1 Segment)</text>
+              <text x="1000" y="384" text-anchor="middle" font-size="12" fill="#46585F">自动值上限：wal_segment_size</text>
+
+              <!-- Tick 4: Manual > 16MB -->
+              <line x1="1220" y1="334" x2="1220" y2="362" stroke="#AE8A3E" stroke-width="2.5"/>
+              <text x="1220" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#AE8A3E" class="t-mono">&gt; 16MB 手工配置</text>
+              <text x="1220" y="384" text-anchor="middle" font-size="12" fill="#46585F">需重启生效，极少有额外收益</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">知道它在共享内存里之后，我们切开 XLogCtlData，看清楚控制区、页数组和三类锁怎么配合。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">04 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 ==================== -->
+        <section class="slide" data-slide="4" data-eyebrow="05 / SHARED MEMORY ARCHITECTURE" data-title="共享内存布局：XLogCtlData 与三类锁">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>XLOGCTLDATA · NUM_XLOGINSERT_LOCKS = 8</span>
+            <span class="slide-eyebrow-tag">XLOGSHMEMINIT() · LOCK BOUNDARIES</span>
+          </div>
+          <h1 class="slide-title">共享内存蓝图：控制区、页数组与三类锁的职责边界</h1>
+          <p class="slide-lead"><strong>XLogCtlData</strong> 把 WAL 管理拆成插入进度、槽位映射、写出刷盘三条线，由 <strong>WALInsertLock</strong>、<strong>WALBufMappingLock</strong>、<strong>WALWriteLock</strong> 各自守住边界，缩短全局串行段。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Outer Container: XLogCtlData -->
+              <rect x="24" y="20" width="880" height="390" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="2"/>
+              <rect x="24" y="20" width="880" height="32" fill="#1E4B5A"/>
+              <text x="40" y="41" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">XLogCtlData · PostgreSQL 共享内存控制区（src/backend/access/transam/xlog.c）</text>
+
+              <!-- Sub-block 1: Insert sub-struct -->
+              <rect x="44" y="68" width="408" height="150" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="44" y="68" width="408" height="28" fill="#245A6B"/>
+              <text x="58" y="87" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">Insert 子结构（插入协调）</text>
+              <text x="58" y="118" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">CurrBytePos / PrevBytePos</text>
+              <text x="58" y="136" font-size="12" fill="#46585F">当前预留尾部与上条起点（不含页头的可用字节位置）</text>
+              <text x="58" y="162" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">RedoRecPtr · fullPageWrites · runningBackups</text>
+              <text x="58" y="180" font-size="12" fill="#46585F">决定本次修改是否必须附带 Full-Page Image</text>
+              <text x="58" y="204" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">WALInsertLocks[0..7]（固定 8 把）</text>
+
+              <!-- Sub-block 2: Watermarks -->
+              <rect x="472" y="68" width="412" height="150" fill="#F7F6F2" stroke="#2E6373" stroke-width="1.5"/>
+              <rect x="472" y="68" width="412" height="28" fill="#2E6373"/>
+              <text x="486" y="87" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">全局进度水位线（单调推进）</text>
+              <text x="486" y="118" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">InitializedUpTo</text>
+              <text x="646" y="118" font-size="12" fill="#46585F">已初始化的 WAL 页边界</text>
+              <text x="486" y="146" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">logInsertResult</text>
+              <text x="646" y="146" font-size="12" fill="#46585F">已插入 Buffer 的位置</text>
+              <text x="486" y="174" font-size="13" font-weight="700" fill="#AE8A3E" class="t-mono">logWriteResult</text>
+              <text x="646" y="174" font-size="12" fill="#46585F">已 write 到 pg_wal 的位置</text>
+              <text x="486" y="202" font-size="13" font-weight="700" fill="#2F7A66" class="t-mono">logFlushResult</text>
+              <text x="646" y="202" font-size="12" fill="#46585F">已 fsync 落盘的位置</text>
+
+              <!-- Sub-block 3: xlblocks[] + pages[] Ring Array -->
+              <rect x="44" y="236" width="840" height="156" fill="#F7F6F2" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="44" y="236" width="840" height="28" fill="#47808D"/>
+              <text x="58" y="255" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">环形页缓存阵列：xlblocks[idx]（页结束位置身份） + pages[idx]（每页 XLOG_BLCKSZ = 8kB）</text>
+
+              <!-- 8 visual slots -->
+              <g font-family="'SF Mono', monospace" font-size="12">
+                <rect x="60" y="280" width="94" height="36" fill="#CFE0DC" stroke="#245A6B"/>
+                <text x="107" y="303" text-anchor="middle" fill="#1B2B33" font-weight="700">xlblocks[0]</text>
+                <rect x="60" y="320" width="94" height="54" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="107" y="352" text-anchor="middle" fill="#46585F">Page 0</text>
+
+                <rect x="162" y="280" width="94" height="36" fill="#CFE0DC" stroke="#245A6B"/>
+                <text x="209" y="303" text-anchor="middle" fill="#1B2B33" font-weight="700">xlblocks[1]</text>
+                <rect x="162" y="320" width="94" height="54" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="209" y="352" text-anchor="middle" fill="#46585F">Page 1</text>
+
+                <rect x="264" y="280" width="94" height="36" fill="#CFE0DC" stroke="#245A6B"/>
+                <text x="311" y="303" text-anchor="middle" fill="#1B2B33" font-weight="700">xlblocks[2]</text>
+                <rect x="264" y="320" width="94" height="54" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="311" y="352" text-anchor="middle" fill="#46585F">Page 2</text>
+
+                <rect x="366" y="280" width="94" height="36" fill="#A4C4C6" stroke="#245A6B"/>
+                <text x="413" y="303" text-anchor="middle" fill="#1B2B33" font-weight="700">xlblocks[3]</text>
+                <rect x="366" y="320" width="94" height="54" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="413" y="352" text-anchor="middle" fill="#1B2B33" font-weight="600">写入中</text>
+
+                <rect x="468" y="280" width="94" height="36" fill="#A4C4C6" stroke="#245A6B"/>
+                <text x="515" y="303" text-anchor="middle" fill="#1B2B33" font-weight="700">xlblocks[4]</text>
+                <rect x="468" y="320" width="94" height="54" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="515" y="352" text-anchor="middle" fill="#1B2B33" font-weight="600">写入中</text>
+
+                <rect x="570" y="280" width="94" height="36" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="617" y="303" text-anchor="middle" fill="#BE653B" font-weight="700">xlblocks[5]</text>
+                <rect x="570" y="320" width="94" height="54" fill="#F7F6F2" stroke="#BE653B" stroke-dasharray="4 3"/>
+                <text x="617" y="352" text-anchor="middle" fill="#BE653B">待复用</text>
+
+                <rect x="672" y="280" width="94" height="36" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="719" y="303" text-anchor="middle" fill="#89938F">...</text>
+                <rect x="672" y="320" width="94" height="54" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="719" y="352" text-anchor="middle" fill="#89938F">...</text>
+
+                <rect x="774" y="280" width="94" height="36" fill="#CFE0DC" stroke="#245A6B"/>
+                <text x="821" y="303" text-anchor="middle" fill="#1B2B33" font-weight="700">xlblocks[N]</text>
+                <rect x="774" y="320" width="94" height="54" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="821" y="352" text-anchor="middle" fill="#46585F">Page N</text>
+              </g>
+
+              <!-- Right side: 3 Locks Specification Cards -->
+              <rect x="936" y="20" width="440" height="118" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="936" y="20" width="6" height="118" fill="#245A6B"/>
+              <text x="956" y="46" font-size="15" font-weight="700" fill="#245A6B" class="t-mono">1. WALInsertLock (×8)</text>
+              <text x="956" y="72" font-size="13" fill="#1B2B33">保护：正在插入的 WAL 进度与 RedoRecPtr</text>
+              <text x="956" y="94" font-size="13" fill="#46585F">持有者：生成 WAL 的前台后端</text>
+              <text x="956" y="116" font-size="13" fill="#2F7A66">目的：允许 8 路并行复制，同时让写出者知晓完成点</text>
+
+              <rect x="936" y="156" width="440" height="118" fill="#F5EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="936" y="156" width="6" height="118" fill="#AE8A3E"/>
+              <text x="956" y="182" font-size="15" font-weight="700" fill="#AE8A3E" class="t-mono">2. WALBufMappingLock (×1)</text>
+              <text x="956" y="208" font-size="13" fill="#1B2B33">保护：WAL Buffer 槽位与 WAL 页身份映射</text>
+              <text x="956" y="230" font-size="13" fill="#46585F">持有者：初始化或复用 WAL 页的后端 / WAL Writer</text>
+              <text x="956" y="252" font-size="13" fill="#46585F">目的：防止同一槽位同时被当成两个不同 WAL 页</text>
+
+              <rect x="936" y="292" width="440" height="118" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="936" y="292" width="6" height="118" fill="#BE653B"/>
+              <text x="956" y="318" font-size="15" font-weight="700" fill="#BE653B" class="t-mono">3. WALWriteLock (×1)</text>
+              <text x="956" y="344" font-size="13" fill="#1B2B33">保护：WAL Buffer 写到文件与刷盘进度</text>
+              <text x="956" y="366" font-size="13" fill="#46585F">持有者：提交者 / WAL Writer / 满 Buffer 写出者</text>
+              <text x="956" y="388" font-size="13" fill="#BE653B">目的：避免多进程重复写同一段 WAL 或打乱结果</text>
+
+              <!-- Orthogonal connectors from XLogCtlData to Locks -->
+              <path d="M 904 79 L 936 79" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <path d="M 904 215 L 936 215" fill="none" stroke="#AE8A3E" stroke-width="2" marker-end="url(#arr-gold)"/>
+              <path d="M 904 351 L 936 351" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">结构就位后，让多后端真正跑起来：一条 WAL 记录如何「先预留位置、再并行复制」，遇到 Checkpoint 又为何要重试？</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">05 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 (INTERACTIVE ANIMATION 1) ==================== -->
+        <section class="slide" data-slide="5" data-eyebrow="06 / INSERTION PATH · INTERACTIVE" data-title="插入路径：先预留位置，再并行复制">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>XLOGINSERT.C → XLOGINSERTRECORD() · RESERVEXLOGINSERTLOCATION()</span>
+            <span class="slide-eyebrow-tag">INTERACTIVE SIMULATION · 并发插入演示</span>
+          </div>
+          <h1 class="slide-title">插入路径：全局串行仅限于 CurrBytePos += X</h1>
+          <p class="slide-lead">后端先在私有内存组装 Record，再持一把 <strong>WALInsertLock</strong>，短暂进入自旋锁 <strong>insertpos_lck</strong> 预留 LSN，随后锁外并行复制到共享 Buffer；若 <strong>RedoRecPtr</strong> 推进则触发 FPW 重试。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="anim-toolbar">
+              <div class="anim-controls-left">
+                <button class="anim-btn primary" id="ins-play">播放并发插入</button>
+                <button class="anim-btn" id="ins-step">单步推进</button>
+                <button class="anim-btn" id="ins-fpw">模拟 FPW 重试：关</button>
+                <button class="anim-btn" id="ins-reset">重置</button>
+              </div>
+              <div class="anim-status" id="ins-status">就绪：点击「播放并发插入」观察 3 个后端如何避开全局大锁</div>
+            </div>
+            <svg id="svg-insert" viewBox="0 0 1400 386" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="386" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Column Headers -->
+              <rect x="20" y="16" width="270" height="30" fill="#47808D"/>
+              <text x="155" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">1. 后端私有内存组装</text>
+
+              <rect x="330" y="16" width="250" height="30" fill="#245A6B"/>
+              <text x="455" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">2. 持 WALInsertLock + 校验</text>
+
+              <rect x="620" y="16" width="270" height="30" fill="#BE653B"/>
+              <text x="755" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">3. 自旋锁预留（极短串行）</text>
+
+              <rect x="930" y="16" width="450" height="30" fill="#1E4B5A"/>
+              <text x="1155" y="36" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">4. 共享 WAL Buffer（锁外并行复制）</text>
+
+              <!-- Static Lanes -->
+              <!-- Backend A -->
+              <rect id="ins-a-priv" x="20" y="64" width="270" height="72" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+              <text x="36" y="92" font-size="14" font-weight="700" fill="#1B2B33">Backend A（事务 #101）</text>
+              <text x="36" y="116" font-size="12" fill="#46585F" class="t-mono">XLogRecordAssemble(256B)</text>
+
+              <!-- Backend B -->
+              <rect id="ins-b-priv" x="20" y="156" width="270" height="72" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+              <text x="36" y="184" font-size="14" font-weight="700" fill="#1B2B33">Backend B（事务 #102）</text>
+              <text x="36" y="208" font-size="12" fill="#46585F" class="t-mono">XLogRecordAssemble(512B)</text>
+
+              <!-- Backend C -->
+              <rect id="ins-c-priv" x="20" y="248" width="270" height="72" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+              <text x="36" y="276" font-size="14" font-weight="700" fill="#1B2B33">Backend C（事务 #103）</text>
+              <text x="36" y="300" font-size="12" fill="#46585F" class="t-mono">XLogRecordAssemble(384B)</text>
+
+              <!-- Column 2: 3 WALInsertLocks -->
+              <rect id="ins-a-lock" x="330" y="64" width="250" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="346" y="92" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">WALInsertLock[0]</text>
+              <text id="ins-a-lock-txt" x="346" y="116" font-size="12" fill="#89938F">空闲 · 等待校验 RedoRecPtr</text>
+
+              <rect id="ins-b-lock" x="330" y="156" width="250" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="346" y="184" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">WALInsertLock[3]</text>
+              <text id="ins-b-lock-txt" x="346" y="208" font-size="12" fill="#89938F">空闲 · 等待校验 RedoRecPtr</text>
+
+              <rect id="ins-c-lock" x="330" y="248" width="250" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="346" y="276" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">WALInsertLock[6]</text>
+              <text id="ins-c-lock-txt" x="346" y="300" font-size="12" fill="#89938F">空闲 · 等待校验 RedoRecPtr</text>
+
+              <!-- Column 3: Spinlock Box -->
+              <rect id="ins-spin" x="620" y="112" width="270" height="160" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="636" y="142" font-size="14" font-weight="700" fill="#BE653B" class="t-mono">insertpos_lck (自旋锁)</text>
+              <text x="636" y="170" font-size="13" fill="#1B2B33" class="t-mono">CurrBytePos += len</text>
+              <text id="ins-pos-val" x="636" y="198" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">CurrBytePos: 0x0000</text>
+              <text id="ins-spin-holder" x="636" y="226" font-size="12" fill="#46585F">当前持有者：无</text>
+              <text x="636" y="252" font-size="12" fill="#89938F">物理 LSN 换算放在锁外完成</text>
+
+              <!-- Column 4: Shared WAL Buffer Segments -->
+              <rect x="930" y="64" width="450" height="256" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="948" y="92" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">WAL Buffer 连续预留区（CopyXLogRecordToWAL）</text>
+
+              <rect id="ins-slot-a" x="948" y="112" width="414" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text id="ins-slot-a-txt" x="964" y="144" font-size="13" fill="#89938F" class="t-mono">[区间 A · 0x0000..0x0100] 待预留</text>
+
+              <rect id="ins-slot-b" x="948" y="178" width="414" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text id="ins-slot-b-txt" x="964" y="210" font-size="13" fill="#89938F" class="t-mono">[区间 B · 0x0100..0x0300] 待预留</text>
+
+              <rect id="ins-slot-c" x="948" y="244" width="414" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text id="ins-slot-c-txt" x="964" y="276" font-size="13" fill="#89938F" class="t-mono">[区间 C · 0x0300..0x0480] 待预留</text>
+
+              <!-- Orthogonal Connectors -->
+              <path d="M 290 100 L 324 100" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+              <path d="M 290 192 L 324 192" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+              <path d="M 290 284 L 324 284" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+
+              <path d="M 580 100 L 600 100 L 600 160 L 614 160" fill="none" stroke="#BE653B" stroke-width="1.5" marker-end="url(#arr-terra)"/>
+              <path d="M 580 192 L 614 192" fill="none" stroke="#BE653B" stroke-width="1.5" marker-end="url(#arr-terra)"/>
+              <path d="M 580 284 L 600 284 L 600 224 L 614 224" fill="none" stroke="#BE653B" stroke-width="1.5" marker-end="url(#arr-terra)"/>
+
+              <path d="M 890 160 L 910 160 L 910 139 L 942 139" fill="none" stroke="#2F7A66" stroke-width="1.5" marker-end="url(#arr-teal)"/>
+              <path d="M 890 192 L 910 192 L 910 205 L 942 205" fill="none" stroke="#2F7A6B" stroke-width="1.5" marker-end="url(#arr-teal)"/>
+              <path d="M 890 224 L 910 224 L 910 271 L 942 271" fill="none" stroke="#2F7A66" stroke-width="1.5" marker-end="url(#arr-teal)"/>
+
+              <!-- FPW Retry Callout Bar at bottom -->
+              <rect id="ins-fpw-bar" x="20" y="336" width="1360" height="36" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text id="ins-fpw-txt" x="36" y="359" font-size="13" fill="#46585F">FPW 重试机制：拿到 WALInsertLock 后重查 RedoRecPtr / fullPageWrites；若 Checkpoint 刚推进导致缺少 FPI，返回 InvalidXLogRecPtr 让上层重装。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">为什么预留时要用「不含页头的可用字节位置」，写进去又必须换算成物理 LSN？秘密藏在 WAL 页头结构里。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">06 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 ==================== -->
+        <section class="slide" data-slide="6" data-eyebrow="07 / WAL PAGE STRUCTURE" data-title="WAL 页结构：固定页头与跨页延续">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>SRC/INCLUDE/ACCESS/XLOG_INTERNAL.H · XLOG_BLCKSZ = 8KB</span>
+            <span class="slide-eyebrow-tag">USABLE BYTE POS ↔ PHYSICAL LSN</span>
+          </div>
+          <h1 class="slide-title">WAL 不是裸字节流：按页切分、页头校验与跨页延续</h1>
+          <p class="slide-lead">每个 WAL 页都有页头（段首页为 <strong>Long Page Header</strong>）。预留时忽略页头让 <strong>CurrBytePos += X</strong> 极快，复制时再把页头空出并在跨页处写入 <strong>XLP_FIRST_IS_CONTRECORD</strong>。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Segment Header -->
+              <text x="28" y="30" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">WAL SEGMENT (典型 16MB = 2048 × 8kB PAGES) · 字节级物理布局</text>
+
+              <!-- Page 0: Long Header + Records -->
+              <rect x="28" y="48" width="644" height="224" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="28" y="48" width="644" height="30" fill="#1E4B5A"/>
+              <text x="44" y="68" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">Page 0（段首页 · XLP_LONG_HEADER）</text>
+
+              <!-- Long Header Box -->
+              <rect x="44" y="92" width="218" height="164" fill="#245A6B" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="58" y="116" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">Long Page Header</text>
+              <text x="58" y="140" font-size="12" fill="#CFE0DC" class="t-mono">• xlp_magic / xlp_info</text>
+              <text x="58" y="160" font-size="12" fill="#CFE0DC" class="t-mono">• xlp_tli (时间线 ID)</text>
+              <text x="58" y="180" font-size="12" fill="#CFE0DC" class="t-mono">• xlp_pageaddr (起始地址)</text>
+              <text x="58" y="200" font-size="12" fill="#F5EFE0" class="t-mono">• system_identifier</text>
+              <text x="58" y="220" font-size="12" fill="#F5EFE0" class="t-mono">• seg_size / XLOG_BLCKSZ</text>
+              <text x="58" y="242" font-size="11" fill="#A4C4C6">AdvanceXLInsertBuffer 填充</text>
+
+              <!-- Record 1 -->
+              <rect x="272" y="92" width="180" height="164" fill="#EBF1EE" stroke="#47808D" stroke-width="1"/>
+              <text x="362" y="142" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">WAL Record #1</text>
+              <text x="362" y="168" text-anchor="middle" font-size="12" fill="#46585F">完整落在 Page 0 内</text>
+              <text x="362" y="196" text-anchor="middle" font-size="12" fill="#245A6B" class="t-mono">可用字节区</text>
+
+              <!-- Record 2 Part 1 (spanning) -->
+              <rect x="462" y="92" width="194" height="164" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="559" y="138" text-anchor="middle" font-size="14" font-weight="700" fill="#BE653B">WAL Record #2</text>
+              <text x="559" y="162" text-anchor="middle" font-size="13" font-weight="600" fill="#1B2B33">前半段（跨页截断）</text>
+              <text x="559" y="190" text-anchor="middle" font-size="12" fill="#46585F">页尾写满，剩余字节</text>
+              <text x="559" y="210" text-anchor="middle" font-size="12" fill="#46585F">延续至 Page 1</text>
+
+              <!-- Orthogonal arrow for continuation -->
+              <path d="M 656 174 L 722 174" fill="none" stroke="#BE653B" stroke-width="2.5" marker-end="url(#arr-terra)"/>
+
+              <!-- Page 1: Short Header + Continuation + Record 3 -->
+              <rect x="728" y="48" width="644" height="224" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="728" y="48" width="644" height="30" fill="#2E6373"/>
+              <text x="744" y="68" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">Page 1（普通页 · XLP_FIRST_IS_CONTRECORD）</text>
+
+              <!-- Short Header Box -->
+              <rect x="744" y="92" width="212" height="164" fill="#47808D" stroke="#2E6373" stroke-width="1"/>
+              <text x="758" y="116" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">Short Page Header</text>
+              <text x="758" y="142" font-size="12" fill="#EBF1EE" class="t-mono">• xlp_magic</text>
+              <text x="758" y="164" font-size="12" fill="#F5EFE0" font-weight="700" class="t-mono">• xlp_info: CONTRECORD</text>
+              <text x="758" y="186" font-size="12" fill="#EBF1EE" class="t-mono">• xlp_tli / xlp_pageaddr</text>
+              <text x="758" y="208" font-size="12" fill="#F7E9DE" font-weight="700" class="t-mono">• xlp_rem_len (剩余长度)</text>
+              <text x="758" y="238" font-size="11" fill="#CFE0DC">CopyXLogRecordToWAL 标记</text>
+
+              <!-- Record 2 Part 2 -->
+              <rect x="966" y="92" width="176" height="164" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="1054" y="138" text-anchor="middle" font-size="14" font-weight="700" fill="#BE653B">WAL Record #2</text>
+              <text x="1054" y="162" text-anchor="middle" font-size="13" font-weight="600" fill="#1B2B33">后半段（延续部分）</text>
+              <text x="1054" y="190" text-anchor="middle" font-size="12" fill="#46585F">长度由 xlp_rem_len</text>
+              <text x="1054" y="210" text-anchor="middle" font-size="12" fill="#46585F">精确记录，便于恢复</text>
+
+              <!-- Record 3 -->
+              <rect x="1152" y="92" width="204" height="164" fill="#EBF1EE" stroke="#47808D" stroke-width="1"/>
+              <text x="1254" y="142" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">WAL Record #3</text>
+              <text x="1254" y="168" text-anchor="middle" font-size="12" fill="#46585F">紧随其后的新记录</text>
+              <text x="1254" y="196" text-anchor="middle" font-size="12" fill="#245A6B" class="t-mono">可用字节区</text>
+
+              <!-- Bottom: Coordinate Conversion Explanation -->
+              <rect x="28" y="294" width="1344" height="114" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="48" y="324" font-size="15" font-weight="700" fill="#1E4B5A">为什么源码区分「可用字节位置（Usable Byte Pos）」与「物理 LSN」？</text>
+              <text x="48" y="354" font-size="14" fill="#1B2B33">1. 预留阶段（持 insertpos_lck）：忽略页头，直接 CurrBytePos += len，单次加法完成，把全局串行时间压到最低。</text>
+              <text x="48" y="382" font-size="14" fill="#1B2B33">2. 复制阶段（锁外并行）：用 XLogBytePosToRecPtr() 把可用字节换算为物理 LSN，自动跳过每一页的页头空间。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">WAL 页源源不断产生，但共享内存槽位是有限的——当新页撞上「尚未写出的旧页」，就会引爆 wal_buffers_full。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">07 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 (INTERACTIVE ANIMATION 2) ==================== -->
+        <section class="slide" data-slide="7" data-eyebrow="08 / RING BUFFER & EVICTION · INTERACTIVE" data-title="环形映射与满 Buffer 被迫写出">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>XLOGRECPTRTOBUFIDX() · ADVANCEXLINSERTBUFFER()</span>
+            <span class="slide-eyebrow-tag">INTERACTIVE SIMULATION · 环形淘汰演示</span>
+          </div>
+          <h1 class="slide-title">环形映射：旧页未写出就不能复用，触发 wal_buffers_full</h1>
+          <p class="slide-lead">槽位由 <strong>(recptr / XLOG_BLCKSZ) % N</strong> 取模确定。当新页需要复用槽位且 <strong>LogwrtResult.Write &lt; OldPageRqstPtr</strong> 时，前台插入者必须先写出旧页并累加 <strong>wal_buffers_full</strong>。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="anim-toolbar">
+              <div class="anim-controls-left">
+                <button class="anim-btn primary" id="ring-insert">写入新 WAL 页</button>
+                <button class="anim-btn teal-toggle" id="ring-writer">WAL Writer 写出旧页</button>
+                <button class="anim-btn" id="ring-auto">自动演示</button>
+                <button class="anim-btn" id="ring-reset">重置</button>
+                <select class="anim-select" id="ring-size" aria-label="选择 WAL Buffer 槽位数">
+                  <option value="4" selected>槽位数 N = 4（易触发满写出）</option>
+                  <option value="8">槽位数 N = 8（更大周转空间）</option>
+                </select>
+              </div>
+              <div class="anim-status" id="ring-status">wal_buffers_full = <strong>0</strong> | 已写出页: 0 | 点击「写入新 WAL 页」体验槽位取模与冲突</div>
+            </div>
+            <svg id="svg-ring" viewBox="0 0 1400 386" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="386" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left: Ring Buffer Slots Panel -->
+              <text x="24" y="30" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">RING BUFFER SLOTS · XLogRecPtrToBufIdx(recptr) = (PageNo) % N</text>
+
+              <!-- Dynamic slots container -->
+              <g id="ring-slots-group"></g>
+
+              <!-- Legend row under slots -->
+              <rect x="24" y="286" width="14" height="14" fill="#EBF1EE" stroke="#74A5AD"/>
+              <text x="46" y="298" font-size="12" fill="#46585F">空闲 / 已写出可复用</text>
+              <rect x="196" y="286" width="14" height="14" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="218" y="298" font-size="12" fill="#1B2B33">未写出脏 WAL 页（禁止直接覆盖）</text>
+              <rect x="442" y="286" width="14" height="14" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+              <text x="464" y="298" font-size="12" fill="#BE653B">槽位冲突 → 触发前台写出</text>
+
+              <!-- Watermark readout bar -->
+              <rect x="24" y="316" width="690" height="52" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text id="ring-wm-text" x="42" y="347" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">Next PageNo: 0 | LogwrtResult.Write: Page -1 | wal_buffers_full: 0</text>
+
+              <!-- Right: 7-Step Eviction Flowchart -->
+              <rect x="742" y="16" width="634" height="352" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="742" y="16" width="634" height="30" fill="#1E4B5A"/>
+              <text x="758" y="36" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">AdvanceXLInsertBuffer() · 旧页未写出时的 7 步补救序列</text>
+
+              <g id="evict-steps" font-size="13">
+                <rect id="ev-1" x="760" y="60" width="598" height="34" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="776" y="82" fill="#1B2B33">1. 更新共享写请求 LogwrtRqst.Write，声明需要写出旧页</text>
+
+                <rect id="ev-2" x="760" y="102" width="598" height="34" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="776" y="124" fill="#BE653B" font-weight="600">2. 先释放 WALBufMappingLock（关键：防止与写出路径死锁）</text>
+
+                <rect id="ev-3" x="760" y="144" width="598" height="34" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="776" y="166" fill="#1B2B33">3. 调用 WaitXLogInsertionsToFinish(OldPageRqstPtr) 等旧页插入完毕</text>
+
+                <rect id="ev-4" x="760" y="186" width="598" height="34" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="776" y="208" fill="#1B2B33">4. 获取 WALWriteLock，串行化 WAL 文件写出</text>
+
+                <rect id="ev-5" x="760" y="228" width="598" height="34" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="776" y="250" fill="#1B2B33">5. 调用 XLogWrite() 将旧页写至 pg_wal 文件</text>
+
+                <rect id="ev-6" x="760" y="270" width="598" height="34" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="776" y="292" fill="#BE653B" font-weight="700">6. 累加 pgWalUsage.wal_buffers_full++（前台受阻信号）</text>
+
+                <rect id="ev-7" x="760" y="312" width="598" height="34" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <text x="776" y="334" fill="#2F7A66" font-weight="600">7. 重新获取 WALBufMappingLock，初始化新页并恢复插入</text>
+              </g>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">满 Buffer 写出只是三条写出路径之一。接下来把「同步提交」「WAL Writer」「满 Buffer 写出」摆在同一张图里，看清 write 与 flush 的本质分界。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">08 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 (INTERACTIVE ANIMATION 3) ==================== -->
+        <section class="slide" data-slide="8" data-eyebrow="09 / WRITE, FLUSH & GROUP COMMIT · INTERACTIVE" data-title="写出与刷盘：write 不是 flush">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>DOC/SRC/SGML/WAL.SGML · XLOGWRITE() VS ISSUE_XLOG_FSYNC()</span>
+            <span class="slide-eyebrow-tag">INTERACTIVE SIMULATION · 三路径与水位线</span>
+          </div>
+          <h1 class="slide-title">三条路径汇向 XLogWrite()，但持久化目标截然不同</h1>
+          <p class="slide-lead"><strong>write</strong> 通常只进入内核缓存，<strong>fsync</strong> 才保证落盘。同步提交靠 <strong>XLogFlush()</strong> 刷盘并天然促成组提交；调大 <strong>wal_buffers</strong> 主要减少被动写出，不会取消同步提交刷盘。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="anim-toolbar">
+              <div class="anim-controls-left">
+                <button class="anim-btn primary" id="fl-sync">1. 同步提交 + 组提交</button>
+                <button class="anim-btn teal-toggle" id="fl-writer">2. WAL Writer 后台写出</button>
+                <button class="anim-btn" id="fl-evict">3. Buffer 满被动写出</button>
+                <button class="anim-btn" id="fl-reset">重置水位</button>
+              </div>
+              <div class="anim-status" id="fl-status">选择一条触发路径，观察 logInsertResult / logWriteResult / logFlushResult 三条水位线变化</div>
+            </div>
+            <svg id="svg-flush" viewBox="0 0 1400 386" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="386" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left Column: 3 Trigger Paths -->
+              <rect id="fl-box-sync" x="24" y="20" width="380" height="80" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="40" y="46" font-size="14" font-weight="700" fill="#245A6B">路径 A：同步提交 XLogFlush(record)</text>
+              <text x="40" y="68" font-size="12" fill="#1B2B33">先等并发插入完成 → 争 WALWriteLock → 刷到 commit LSN</text>
+              <text x="40" y="88" font-size="12" fill="#2F7A66">组提交基础：等锁后重查，别人可能已代刷；可配 commit_delay</text>
+
+              <rect id="fl-box-writer" x="24" y="114" width="380" height="80" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="40" y="140" font-size="14" font-weight="700" fill="#2F7A66">路径 B：WAL Writer XLogBackgroundFlush()</text>
+              <text x="40" y="162" font-size="12" fill="#1B2B33">后台周期写出完整 WAL 页与异步提交 LSN</text>
+              <text x="40" y="182" font-size="12" fill="#46585F">受 wal_writer_delay 与 wal_writer_flush_after 节奏控制</text>
+
+              <rect id="fl-box-evict" x="24" y="208" width="380" height="80" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="40" y="234" font-size="14" font-weight="700" fill="#BE653B">路径 C：Buffer 满 AdvanceXLInsertBuffer()</text>
+              <text x="40" y="256" font-size="12" fill="#1B2B33">前台插入路径的被动补救：只为腾出未写出的旧槽位</text>
+              <text x="40" y="276" font-size="12" fill="#BE653B">触发 wal_buffers_full++，写出为主（由请求决定是否 fsync）</text>
+
+              <!-- Orthogonal converge connectors -->
+              <path id="fl-path-sync" d="M 404 60 L 454 60 L 454 134 L 494 134" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <path id="fl-path-writer" d="M 404 154 L 494 154" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+              <path id="fl-path-evict" d="M 404 248 L 454 248 L 454 174 L 494 174" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+
+              <!-- Middle: WALWriteLock + XLogWrite -->
+              <rect id="fl-box-write" x="502" y="96" width="260" height="116" fill="#2E6373" stroke="#1E4B5A" stroke-width="2"/>
+              <text x="632" y="128" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">WALWriteLock</text>
+              <text x="632" y="156" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">XLogWrite()</text>
+              <text x="632" y="182" text-anchor="middle" font-size="12" fill="#CFE0DC">write() → OS Page Cache</text>
+              <text x="632" y="200" text-anchor="middle" font-size="12" fill="#F5EFE0">推进 logWriteResult</text>
+
+              <!-- Arrow Write -> Fsync -->
+              <path id="fl-path-fsync" d="M 762 154 L 826 154" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+
+              <!-- Right: issue_xlog_fsync -->
+              <rect id="fl-box-fsync" x="834" y="96" width="260" height="116" fill="#1E4B5A" stroke="#1B2B33" stroke-width="2"/>
+              <text x="964" y="128" text-anchor="middle" font-size="14" font-weight="700" fill="#F7E9DE" class="t-mono">wal_sync_method</text>
+              <text x="964" y="156" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">issue_xlog_fsync()</text>
+              <text x="964" y="182" text-anchor="middle" font-size="12" fill="#CFE0DC">fdatasync / fsync / open_sync</text>
+              <text x="964" y="200" text-anchor="middle" font-size="12" fill="#A4C4C6">推进 logFlushResult</text>
+
+              <!-- Rightmost: Stable Disk -->
+              <path d="M 1094 154 L 1144 154" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+              <rect x="1152" y="96" width="224" height="116" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="1264" y="132" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33">pg_wal 稳定存储</text>
+              <text x="1264" y="160" text-anchor="middle" font-size="13" fill="#2F7A66" font-weight="600">崩溃后可恢复事实</text>
+              <text x="1264" y="186" text-anchor="middle" font-size="12" fill="#46585F">数据页允许刷盘的前提</text>
+
+              <!-- Bottom: Live LSN Watermark Timeline -->
+              <rect x="24" y="304" width="1352" height="66" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="42" y="326" font-size="12" font-weight="700" fill="#245A6B" class="t-mono">WAL LSN WATERMARKS · 三条水位线实时关系（logFlushResult ≤ logWriteResult ≤ logInsertResult）</text>
+
+              <!-- Track -->
+              <rect x="42" y="338" width="1316" height="18" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <rect id="fl-bar-insert" x="42" y="338" width="960" height="18" fill="#A4C4C6"/>
+              <rect id="fl-bar-write" x="42" y="338" width="480" height="18" fill="#47808D"/>
+              <rect id="fl-bar-flush" x="42" y="338" width="260" height="18" fill="#2F7A66"/>
+
+              <text id="fl-lbl-flush" x="50" y="351" font-size="11" font-weight="700" fill="#F7F6F2" class="t-mono">Flush: 20%</text>
+              <text id="fl-lbl-write" x="310" y="351" font-size="11" font-weight="700" fill="#F7F6F2" class="t-mono">Write: 36%</text>
+              <text id="fl-lbl-insert" x="620" y="351" font-size="11" font-weight="700" fill="#1B2B33" class="t-mono">Insert: 73%</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">看清三条路径后，再看后台的 WAL Writer 到底帮了什么忙，以及为什么自动调参上限恰好卡在一个 Segment。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">09 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-slide="9" data-eyebrow="10 / WAL WRITER & AUTO-TUNING CEILING" data-title="WAL Writer 的双重职责与调参天花板">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>SRC/BACKEND/POSTMASTER/WALWRITER.C · XLOGSHMEMREQUEST()</span>
+            <span class="slide-eyebrow-tag">OPPORTUNISTIC PRE-INIT &amp; SEGMENT CEILING</span>
+          </div>
+          <h1 class="slide-title">WAL Writer 降低前台负担，但不能替代同步提交</h1>
+          <p class="slide-lead">后台 <strong>WAL Writer</strong> 既提前写出完整页与异步提交，也机会性预初始化未来 WAL 页；而默认 <strong>wal_buffers</strong> 上限设为一个 Segment，正是因为段切换会强制刷盘。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left Panel: WAL Writer Dual Role -->
+              <rect x="24" y="24" width="664" height="382" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="24" width="664" height="34" fill="#245A6B"/>
+              <text x="42" y="46" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">WAL WRITER · XLogBackgroundFlush() 的两项核心贡献</text>
+
+              <rect x="44" y="76" width="624" height="96" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="62" y="102" font-size="15" font-weight="700" fill="#2F7A66">贡献 1：提前写出完整 WAL 页与异步提交 LSN</text>
+              <text x="62" y="128" font-size="13" fill="#1B2B33">• 读取共享 LogwrtRqst，优先退到完整 WAL 页边界写出，避免半页重写</text>
+              <text x="62" y="152" font-size="13" fill="#46585F">• 按 wal_writer_delay / wal_writer_flush_after 刷盘，减少旧页阻塞槽位复用</text>
+
+              <rect x="44" y="188" width="624" height="96" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="62" y="214" font-size="15" font-weight="700" fill="#245A6B">贡献 2：机会性预初始化未来 WAL 页</text>
+              <text x="62" y="240" font-size="13" fill="#1B2B33">• 写完后调用 AdvanceXLInsertBuffer(..., opportunistic = true)</text>
+              <text x="62" y="264" font-size="13" fill="#46585F">• 提前把已不再需要的槽位清零初始化，降低前台插入关键路径的初始化耗时</text>
+
+              <rect x="44" y="300" width="624" height="86" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="62" y="326" font-size="14" font-weight="700" fill="#BE653B">边界声明：WAL Writer 不是可靠性的唯一来源</text>
+              <text x="62" y="352" font-size="13" fill="#1B2B33">• synchronous_commit = on 时，前台事务提交仍须确保自身 commit record 落盘</text>
+              <text x="62" y="372" font-size="13" fill="#46585F">• 若 WAL Writer 跟不上，普通后端依然可以自行调用 XLogWrite() 兜底</text>
+
+              <!-- Right Panel: Why Auto-Tuning Ceiling = 1 Segment -->
+              <rect x="712" y="24" width="664" height="382" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="712" y="24" width="664" height="34" fill="#1E4B5A"/>
+              <text x="730" y="46" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">ENGINEERING CEILING · 为什么 wal_buffers 不是越大越好？</text>
+
+              <!-- Step chain inside right panel -->
+              <rect x="732" y="76" width="624" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="750" y="102" font-size="14" font-weight="700" fill="#1B2B33">1. 每次事务提交都会触发 WAL 写出</text>
+              <text x="750" y="126" font-size="13" fill="#46585F">官方文档指出：极大值很难在常规事务提交节奏下带来显著额外收益</text>
+
+              <path d="M 1044 144 L 1044 166" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+
+              <rect x="732" y="172" width="624" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="750" y="198" font-size="14" font-weight="700" fill="#1B2B33">2. Segment 切换天然强制 fsync</text>
+              <text x="750" y="222" font-size="13" fill="#46585F">源码注释理由：只要段切换仍强制刷盘，超过 1 个 Segment（16MB）就少有收益</text>
+
+              <path d="M 1044 240 L 1044 262" fill="none" stroke="#BE653B" stroke-width="1.5" marker-end="url(#arr-terra)"/>
+
+              <rect x="732" y="268" width="624" height="118" fill="#F5EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <text x="750" y="296" font-size="15" font-weight="700" fill="#AE8A3E">3. 工程结论：先辨瓶颈，再决定是否加内存</text>
+              <text x="750" y="324" font-size="13" fill="#1B2B33">• 真正解决的问题：高并发写入时 Buffer 周转不足导致的被动写出</text>
+              <text x="750" y="348" font-size="13" fill="#BE653B">• 无法解决的问题：fsync 延迟高、同步备库确认慢、Checkpoint 过频、磁盘满带宽</text>
+              <text x="750" y="372" font-size="13" fill="#2F7A66">• 多数繁忙服务器至少数 MB 到 16MB 即可；默认自动调参通常已合理</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">机制和边界都清楚了，落地到生产监控怎么查？下面建立「生成量 / 周转 / I/O」三维观测与实操闭环。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">10 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="10" data-eyebrow="11 / OBSERVABILITY & TUNING LOOP" data-title="收益、代价与三维观测闭环">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>PG_STAT_WAL · EXPLAIN (ANALYZE, WAL, BUFFERS) · PG_STAT_IO</span>
+            <span class="slide-eyebrow-tag">EVIDENCE-BASED A/B VERIFICATION</span>
+          </div>
+          <h1 class="slide-title">排查 WAL 瓶颈：先切分生成量、周转与 I/O 三条线</h1>
+          <p class="slide-lead">绝不在没有压测时承诺「调大到多少提升多少 TPS」。用 <strong>pg_stat_wal</strong>、<strong>EXPLAIN (ANALYZE, WAL)</strong> 与 <strong>pg_stat_io</strong> 精准定位根因，再用灰度 A/B 实证验证。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Top 3 diagnostic lanes -->
+              <text x="24" y="28" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">THREE-DIMENSION DIAGNOSTICS · 三类瓶颈与对应 SQL 观测探针</text>
+
+              <!-- Lane 1: Generation Volume -->
+              <rect x="24" y="42" width="430" height="222" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="42" width="430" height="32" fill="#245A6B"/>
+              <text x="40" y="63" font-size="14" font-weight="700" fill="#F7F6F2">维度一：WAL 生成量信号</text>
+              <text x="40" y="98" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">pg_stat_wal: wal_bytes / wal_fpi_bytes</text>
+              <text x="40" y="124" font-size="13" fill="#46585F">• wal_bytes 增速：衡量总 WAL 产生速率</text>
+              <text x="40" y="148" font-size="13" fill="#46585F">• wal_fpi / wal_fpi_bytes：识别 Checkpoint 后</text>
+              <text x="48" y="168" font-size="13" fill="#46585F">Full-Page Image 放大峰值</text>
+              <rect x="40" y="186" width="398" height="62" fill="#F7F6F2" stroke="#A4C4C6"/>
+              <text x="52" y="208" font-size="12" font-weight="700" fill="#2F7A66">对症动作：降源头而非盲目扩 Buffer</text>
+              <text x="52" y="230" font-size="12" fill="#46585F">检查索引数、Checkpoint 间隔、批量写法、wal_compression</text>
+
+              <!-- Lane 2: Buffer Turnover -->
+              <rect x="485" y="42" width="430" height="222" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="485" y="42" width="430" height="32" fill="#BE653B"/>
+              <text x="501" y="63" font-size="14" font-weight="700" fill="#F7F6F2">维度二：Buffer 周转信号</text>
+              <text x="501" y="98" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">pg_stat_wal: wal_buffers_full</text>
+              <text x="501" y="124" font-size="13" fill="#46585F">• 全局：pg_stat_reset_shared('wal') 做短窗口观测</text>
+              <text x="501" y="148" font-size="13" fill="#46585F">• 单 SQL：EXPLAIN (ANALYZE, WAL, BUFFERS)</text>
+              <text x="509" y="168" font-size="13" fill="#46585F">定位具体哪条批量写入触发 buffers full</text>
+              <rect x="501" y="186" width="398" height="62" fill="#F7F6F2" stroke="#BE653B"/>
+              <text x="513" y="208" font-size="12" font-weight="700" fill="#BE653B">对症动作：确认持续增长且无独立 I/O 瓶颈</text>
+              <text x="513" y="230" font-size="12" fill="#46585F">检查 SHOW wal_buffers，必要时灰度调至 16MB 并重启</text>
+
+              <!-- Lane 3: I/O & Fsync Latency -->
+              <rect x="946" y="42" width="430" height="222" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="946" y="42" width="430" height="32" fill="#2F7A66"/>
+              <text x="962" y="63" font-size="14" font-weight="700" fill="#F7F6F2">维度三：I/O 与刷盘延迟信号</text>
+              <text x="962" y="98" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">pg_stat_io WHERE object = 'wal'</text>
+              <text x="962" y="124" font-size="13" fill="#46585F">• 开启 track_wal_io_timing 观测真实耗时</text>
+              <text x="962" y="148" font-size="13" fill="#46585F">• 关注 writes / write_time 与 fsyncs / fsync_time</text>
+              <text x="970" y="168" font-size="13" fill="#46585F">按 backend_type 区分前台与 WAL Writer</text>
+              <rect x="962" y="186" width="398" height="62" fill="#F7F6F2" stroke="#2F7A66"/>
+              <text x="974" y="208" font-size="12" font-weight="700" fill="#2F7A66">对症动作：优化存储、组提交或复制策略</text>
+              <text x="974" y="230" font-size="12" fill="#46585F">fsync_time 极高时，调大 wal_buffers 无法治本</text>
+
+              <!-- Bottom: 5-Step Low-Risk A/B Verification Strip -->
+              <rect x="24" y="286" width="1352" height="122" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <text x="42" y="314" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">LOW-RISK A/B TUNING LOOP · 测试库 / 灰度实例五步验证闭环（禁止生产盲调）</text>
+
+              <rect x="42" y="330" width="234" height="60" fill="#F7F6F2" stroke="#245A6B"/>
+              <text x="56" y="354" font-size="13" font-weight="700" fill="#245A6B">1. 查配置与基线</text>
+              <text x="56" y="376" font-size="12" fill="#46585F">SHOW 参数 + 记录 pg_stat_wal</text>
+
+              <path d="M 276 360 L 304 360" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+
+              <rect x="310" y="330" width="234" height="60" fill="#F7F6F2" stroke="#245A6B"/>
+              <text x="324" y="354" font-size="13" font-weight="700" fill="#245A6B">2. 跑代表性并发负载</text>
+              <text x="324" y="376" font-size="12" fill="#46585F">多客户端 + 真实事务与 CP 周期</text>
+
+              <path d="M 544 360 L 572 360" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+
+              <rect x="578" y="330" width="234" height="60" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="592" y="354" font-size="13" font-weight="700" fill="#BE653B">3. 调参并重启实例</text>
+              <text x="592" y="376" font-size="12" fill="#46585F">如 wal_buffers = 16MB（需重启）</text>
+
+              <path d="M 812 360 L 840 360" fill="none" stroke="#2F7A66" stroke-width="1.5" marker-end="url(#arr-teal)"/>
+
+              <rect x="846" y="330" width="234" height="60" fill="#E4F0EC" stroke="#2F7A66"/>
+              <text x="860" y="354" font-size="13" font-weight="700" fill="#2F7A66">4. 同负载复测对比</text>
+              <text x="860" y="376" font-size="12" fill="#46585F">看 buffers_full 与 p95/p99 延迟</text>
+
+              <path d="M 1080 360 L 1108 360" fill="none" stroke="#2F7A66" stroke-width="1.5" marker-end="url(#arr-teal)"/>
+
+              <rect x="1114" y="330" width="244" height="60" fill="#F5EFE0" stroke="#AE8A3E"/>
+              <text x="1128" y="354" font-size="13" font-weight="700" fill="#AE8A3E">5. 确认瓶颈未转移</text>
+              <text x="1128" y="376" font-size="12" fill="#46585F">核查 fsync / 复制 / Checkpoint</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">有了观测工具，架构师、DBA 和业务开发者在各自岗位上应该抓哪根杠杆，哪些场景又根本不该动 wal_buffers？</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">11 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="11" data-eyebrow="12 / BEST PRACTICES & SCENARIOS" data-title="角色最佳实践与适用场景边界">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>ARCHITECT · DBA · APPLICATION DEVELOPER</span>
+            <span class="slide-eyebrow-tag">WHEN TO TUNE VS WHEN NOT TO</span>
+          </div>
+          <h1 class="slide-title">三类角色各抓主杠杆，明确适合与不适合场景</h1>
+          <p class="slide-lead">减少无意义 WAL 往往比要求 DBA 调参更有效；<strong>把 wal_buffers 放进完整写入链路</strong>，才能避免用内存参数去硬抗存储或复制瓶颈。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left: 3 Role Strata (Width 860) -->
+              <text x="24" y="28" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">ROLE PLAYBOOK · 面向三类角色的最佳实践</text>
+
+              <!-- Architect -->
+              <rect x="24" y="42" width="854" height="112" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="42" width="146" height="112" fill="#1E4B5A"/>
+              <text x="97" y="92" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">数据库架构师</text>
+              <text x="97" y="116" text-anchor="middle" font-size="12" fill="#CFE0DC" class="t-mono">链路整体设计</text>
+              <text x="188" y="70" font-size="13" fill="#1B2B33">• 统筹事务大小、索引数量、Checkpoint 间隔与 wal_compression（省 FPI 体积，换 CPU）</text>
+              <text x="188" y="98" font-size="13" fill="#1B2B33">• 同步复制策略（synchronous_commit）比 wal_buffers 更直接决定提交延迟</text>
+              <text x="188" y="126" font-size="13" font-weight="600" fill="#BE653B">• 底线：切勿在生产关闭 full_page_writes 或 fsync 换性能</text>
+
+              <!-- DBA -->
+              <rect x="24" y="168" width="854" height="112" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="24" y="168" width="146" height="112" fill="#2F7A66"/>
+              <text x="97" y="218" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">DBA</text>
+              <text x="97" y="242" text-anchor="middle" font-size="12" fill="#EBF1EE" class="t-mono">四步排障顺序</text>
+              <text x="188" y="196" font-size="13" fill="#1B2B33">• 监控全覆盖：pg_stat_wal + pg_stat_io(wal) + 单 SQL WAL + Checkpoint + 复制/归档延迟</text>
+              <text x="188" y="224" font-size="13" font-weight="600" fill="#2F7A66">• 调参四步法：① 查 WAL 生成量是否异常 → ② 确认 wal_buffers_full 持续增长</text>
+              <text x="188" y="252" font-size="13" font-weight="600" fill="#2F7A66">  → ③ 查 write/fsync 时间与存储延迟 → ④ 再决定调 wal_buffers / wal_writer_* / CP</text>
+
+              <!-- Developer -->
+              <rect x="24" y="294" width="854" height="112" fill="#F1EFE9" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="24" y="294" width="146" height="112" fill="#47808D"/>
+              <text x="97" y="344" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">业务开发者</text>
+              <text x="97" y="368" text-anchor="middle" font-size="12" fill="#EBF1EE" class="t-mono">源头削峰减量</text>
+              <text x="188" y="322" font-size="13" fill="#1B2B33">• 批量写入控制事务粒度：既别每行一提交打爆 fsync，也别单事务制造超长 WAL 峰值</text>
+              <text x="188" y="350" font-size="13" fill="#1B2B33">• 克制高频写表的低价值索引（每个索引维护都会产生 WAL）；批处理善用 COPY / 索引后建</text>
+              <text x="188" y="378" font-size="13" fill="#46585F">• UNLOGGED 表仅用于可重建、可丢失的中间数据，绝非通用加速器</text>
+
+              <!-- Right: Suitable vs Unsuitable Decision Panel -->
+              <text x="904" y="28" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">SCENARIO BOUNDARY · 适用与不适用</text>
+
+              <rect x="904" y="42" width="472" height="174" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="904" y="42" width="472" height="30" fill="#2F7A66"/>
+              <text x="920" y="62" font-size="13" font-weight="700" fill="#F7F6F2">适合重点关注 wal_buffers</text>
+              <text x="920" y="94" font-size="13" fill="#1B2B33">✓ 写密集 OLTP，高峰期 wal_buffers_full 持续增长</text>
+              <text x="920" y="122" font-size="13" fill="#1B2B33">✓ Checkpoint 后 FPI 突发放大 WAL，前台延迟抖动</text>
+              <text x="920" y="150" font-size="13" fill="#1B2B33">✓ 多客户端并发提交，WAL Writer 跟不上页周转</text>
+              <text x="920" y="178" font-size="13" fill="#1B2B33">✓ 大量中小事务并发写，插入路径被满 Buffer 拖住</text>
+
+              <rect x="904" y="232" width="472" height="174" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="904" y="232" width="472" height="30" fill="#BE653B"/>
+              <text x="920" y="252" font-size="13" font-weight="700" fill="#F7F6F2">不适合把 wal_buffers 当主解法</text>
+              <text x="920" y="284" font-size="13" fill="#1B2B33">✗ 提交延迟主因是同步复制等待</text>
+              <text x="920" y="312" font-size="13" fill="#1B2B33">✗ pg_stat_io 显示 fsync 时间极高（存储瓶颈）</text>
+              <text x="920" y="340" font-size="13" fill="#1B2B33">✗ 复制槽 / 归档阻塞导致 pg_wal 磁盘暴涨</text>
+              <text x="920" y="368" font-size="13" fill="#1B2B33">✗ 索引过多、锁等待、MVCC 膨胀或慢查询误判</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">实践中最容易踩的六个认知大坑是什么？我们逐一对照源码事实把雷排干净。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">12 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-slide="12" data-eyebrow="13 / COMMON PITFALLS" data-title="六大常见认知坑与源码事实纠正">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>ANTI-PATTERNS · LOCK ORDER &amp; METRIC MISINTERPRETATION</span>
+            <span class="slide-eyebrow-tag">6 VERIFIED CORRECTIONS</span>
+          </div>
+          <h1 class="slide-title">避开六大常见坑：从指标误读到源码死锁顺序</h1>
+          <p class="slide-lead">把 <strong>wal_buffers_full</strong> 当字节数、指望靠它省 fsync、或用单会话小测试下结论，都会把排障引入歧途；工程上必须以源码事实为准绳。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- 2x3 Blueprint Grid (sharp rectangles, zero rounded card stacks) -->
+              <!-- Pitfall 1 -->
+              <rect x="24" y="20" width="434" height="186" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="20" width="434" height="32" fill="#BE653B"/>
+              <text x="40" y="41" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">PITFALL 01 · 误把次数当字节数</text>
+              <text x="40" y="76" font-size="14" font-weight="700" fill="#1B2B33">误区：wal_buffers_full 是 WAL 大小</text>
+              <line x1="40" y1="90" x2="442" y2="90" stroke="#D9D5CB"/>
+              <text x="40" y="114" font-size="13" font-weight="700" fill="#2F7A66">事实纠正：</text>
+              <text x="40" y="138" font-size="13" fill="#46585F">它记录的是「因 Buffer 满触发写出」的次数。</text>
+              <text x="40" y="162" font-size="13" fill="#46585F">看生成量请查 wal_bytes，看 FPI 请查</text>
+              <text x="40" y="184" font-size="13" fill="#46585F">wal_fpi 与 wal_fpi_bytes。</text>
+
+              <!-- Pitfall 2 -->
+              <rect x="483" y="20" width="434" height="186" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="483" y="20" width="434" height="32" fill="#BE653B"/>
+              <text x="499" y="41" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">PITFALL 02 · 以为能省掉提交 fsync</text>
+              <text x="499" y="76" font-size="14" font-weight="700" fill="#1B2B33">误区：调大 wal_buffers 可减少刷盘</text>
+              <line x1="499" y1="90" x2="901" y2="90" stroke="#D9D5CB"/>
+              <text x="499" y="114" font-size="13" font-weight="700" fill="#2F7A66">事实纠正：</text>
+              <text x="499" y="138" font-size="13" fill="#46585F">wal_buffers 只是易失的共享内存缓冲，</text>
+              <text x="499" y="162" font-size="13" fill="#46585F">不是稳定存储。同步提交的 commit record</text>
+              <text x="499" y="184" font-size="13" fill="#46585F">依然必须刷盘才能向客户端返回成功。</text>
+
+              <!-- Pitfall 3 -->
+              <rect x="942" y="20" width="434" height="186" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="942" y="20" width="434" height="32" fill="#BE653B"/>
+              <text x="958" y="41" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">PITFALL 03 · 孤立调参不看 Checkpoint</text>
+              <text x="958" y="76" font-size="14" font-weight="700" fill="#1B2B33">误区：只盯 Buffer 大小，忽略 CP 频率</text>
+              <line x1="958" y1="90" x2="1360" y2="90" stroke="#D9D5CB"/>
+              <text x="958" y="114" font-size="13" font-weight="700" fill="#2F7A66">事实纠正：</text>
+              <text x="958" y="138" font-size="13" fill="#46585F">full_page_writes = on 时，每次 CP 后</text>
+              <text x="958" y="162" font-size="13" fill="#46585F">首次改页必写整页 FPI。CP 太频繁会反复</text>
+              <text x="958" y="184" font-size="13" fill="#46585F">制造 WAL 脉冲峰值，冲垮 Buffer 周转。</text>
+
+              <!-- Pitfall 4 -->
+              <rect x="24" y="224" width="434" height="186" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="224" width="434" height="32" fill="#245A6B"/>
+              <text x="40" y="245" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">PITFALL 04 · 忽略 WAL Writer 节奏</text>
+              <text x="40" y="280" font-size="14" font-weight="700" fill="#1B2B33">误区：不管 wal_writer_delay / flush_after</text>
+              <line x1="40" y1="294" x2="442" y2="294" stroke="#D9D5CB"/>
+              <text x="40" y="318" font-size="13" font-weight="700" fill="#2F7A66">事实纠正：</text>
+              <text x="40" y="342" font-size="13" fill="#46585F">WAL Writer 负责后台腾空旧槽位，其周期与</text>
+              <text x="40" y="366" font-size="13" fill="#46585F">阈值直接影响前台被迫写出概率；调整时需</text>
+              <text x="40" y="388" font-size="13" fill="#46585F">同步权衡异步提交安全窗口与磁盘 I/O。</text>
+
+              <!-- Pitfall 5 -->
+              <rect x="483" y="224" width="434" height="186" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="483" y="224" width="434" height="32" fill="#245A6B"/>
+              <text x="499" y="245" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">PITFALL 05 · 忽略源码锁顺序约束</text>
+              <text x="499" y="280" font-size="14" font-weight="700" fill="#1B2B33">误区：排查等待事件时不看加锁顺序</text>
+              <line x1="499" y1="294" x2="901" y2="90" stroke="none"/>
+              <line x1="499" y1="294" x2="901" y2="294" stroke="#D9D5CB"/>
+              <text x="499" y="318" font-size="13" font-weight="700" fill="#2F7A66">事实纠正：</text>
+              <text x="499" y="342" font-size="13" fill="#46585F">源码明确要求在拿 WALWriteLock 前先调用</text>
+              <text x="499" y="366" font-size="13" fill="#46585F">WaitXLogInsertionsToFinish()，否则插入者</text>
+              <text x="499" y="388" font-size="13" fill="#46585F">与写出者会互等死锁。</text>
+
+              <!-- Pitfall 6 -->
+              <rect x="942" y="224" width="434" height="186" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="942" y="224" width="434" height="32" fill="#245A6B"/>
+              <text x="958" y="245" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">PITFALL 06 · 单条 SQL 小测试下结论</text>
+              <text x="958" y="280" font-size="14" font-weight="700" fill="#1B2B33">误区：单会话跑一次 INSERT 就定参数</text>
+              <line x1="958" y1="294" x2="1360" y2="294" stroke="#D9D5CB"/>
+              <text x="958" y="318" font-size="13" font-weight="700" fill="#2F7A66">事实纠正：</text>
+              <text x="958" y="342" font-size="13" fill="#46585F">WAL Buffer 争用本质上是高并发写入问题。</text>
+              <text x="958" y="366" font-size="13" fill="#46585F">单会话测不出真实压力，必须用多客户端、</text>
+              <text x="958" y="388" font-size="13" fill="#46585F">真实事务粒度并跨 Checkpoint 周期压测。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">承接 · NEXT</div>
+            <div class="slide-next-text">最后一页，留下六个检验理解深度的思考题，以及可直接对照翻阅的 PostgreSQL 源码与文档地图。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">13 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-slide="13" data-eyebrow="14 / DEEP QUESTIONS & SOURCE MAP" data-title="深度思考题与源码阅读地图">
+          <div class="strata-strip"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span><span class="s6"></span><span class="s7"></span></div>
+          <div class="slide-eyebrow">
+            <span>FURTHER EXPLORATION · POSTGRESQL SOURCE &amp; SGML</span>
+            <span class="slide-eyebrow-tag">END OF LECTURE</span>
+          </div>
+          <h1 class="slide-title">六个进阶思考题与 PostgreSQL 源码导航</h1>
+          <p class="slide-lead">真正掌握 WAL Buffer 管理，不在于背诵几个参数默认值，而在于能沿着 <strong>xloginsert.c → xlog.c → walwriter.c</strong> 推演出任意故障与性能抖动的根因。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left: 6 Extension Questions -->
+              <rect x="24" y="20" width="690" height="390" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="20" width="690" height="34" fill="#245A6B"/>
+              <text x="42" y="42" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">EXTENSION QUESTIONS · 课后六问（检验真理解）</text>
+
+              <text x="42" y="84" font-size="14" font-weight="700" fill="#245A6B" class="t-mono">01.</text>
+              <text x="76" y="84" font-size="14" fill="#1B2B33">若 wal_buffers_full 很低，但提交 p99 很高，先查哪些指标？</text>
+              <line x1="42" y1="100" x2="696" y2="100" stroke="#D9D5CB"/>
+
+              <text x="42" y="132" font-size="14" font-weight="700" fill="#245A6B" class="t-mono">02.</text>
+              <text x="76" y="132" font-size="14" fill="#1B2B33">为什么 wal_buffers 自动上限是一段 WAL，而非接近 shared_buffers？</text>
+              <line x1="42" y1="148" x2="696" y2="148" stroke="#D9D5CB"/>
+
+              <text x="42" y="180" font-size="14" font-weight="700" fill="#245A6B" class="t-mono">03.</text>
+              <text x="76" y="180" font-size="14" fill="#1B2B33">Full-Page Image 为什么容易在 Checkpoint 后制造 WAL 脉冲峰值？</text>
+              <line x1="42" y1="196" x2="696" y2="196" stroke="#D9D5CB"/>
+
+              <text x="42" y="228" font-size="14" font-weight="700" fill="#245A6B" class="t-mono">04.</text>
+              <text x="76" y="228" font-size="14" fill="#1B2B33">synchronous_commit = off 为何不破坏一致性，却可能丢已提交事务？</text>
+              <line x1="42" y1="244" x2="696" y2="244" stroke="#D9D5CB"/>
+
+              <text x="42" y="276" font-size="14" font-weight="700" fill="#245A6B" class="t-mono">05.</text>
+              <text x="76" y="276" font-size="14" fill="#1B2B33">固定 8 把 WALInsertLock 解决了什么，又带来怎样的扫描成本？</text>
+              <line x1="42" y1="292" x2="696" y2="292" stroke="#D9D5CB"/>
+
+              <text x="42" y="324" font-size="14" font-weight="700" fill="#245A6B" class="t-mono">06.</text>
+              <text x="76" y="324" font-size="14" fill="#1B2B33">逻辑复制槽导致 pg_wal 不断增长，调大 wal_buffers 有没有意义？</text>
+              <line x1="42" y1="340" x2="696" y2="340" stroke="#D9D5CB"/>
+
+              <text x="42" y="376" font-size="13" fill="#2F7A66" font-weight="600">提示：按 N 或 T 打开讲稿，可对照每题的推演思路与源码依据。</text>
+
+              <!-- Right: Source & Doc Navigation Map -->
+              <rect x="738" y="20" width="638" height="390" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="738" y="20" width="638" height="34" fill="#1E4B5A"/>
+              <text x="756" y="42" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">SOURCE &amp; SGML MAP · 本地源码与官方文档入口</text>
+
+              <rect x="756" y="70" width="602" height="164" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="772" y="94" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">CORE C SOURCE FILES</text>
+              <text x="772" y="118" font-size="12" fill="#1B2B33" class="t-mono">• src/backend/access/transam/xlog.c</text>
+              <text x="1080" y="118" font-size="12" fill="#46585F">XLogCtlData / Insert / Write / Flush</text>
+              <text x="772" y="142" font-size="12" fill="#1B2B33" class="t-mono">• src/backend/access/transam/xloginsert.c</text>
+              <text x="1080" y="142" font-size="12" fill="#46585F">XLogBeginInsert / RecordAssemble</text>
+              <text x="772" y="166" font-size="12" fill="#1B2B33" class="t-mono">• src/backend/postmaster/walwriter.c</text>
+              <text x="1080" y="166" font-size="12" fill="#46585F">WAL Writer 主循环与后台写出</text>
+              <text x="772" y="190" font-size="12" fill="#1B2B33" class="t-mono">• src/include/access/xlog_internal.h</text>
+              <text x="1080" y="190" font-size="12" fill="#46585F">WAL 页头、Segment 与 LSN 宏</text>
+              <text x="772" y="214" font-size="12" fill="#1B2B33" class="t-mono">• instrument.h / pgstat_wal.c</text>
+              <text x="1080" y="214" font-size="12" fill="#46585F">WalUsage 与 wal_buffers_full 累计</text>
+
+              <rect x="756" y="248" width="602" height="146" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="772" y="272" font-size="13" font-weight="700" fill="#2F7A66" class="t-mono">OFFICIAL SGML DOCUMENTATION</text>
+              <text x="772" y="298" font-size="12" fill="#1B2B33" class="t-mono">• doc/src/sgml/config.sgml</text>
+              <text x="1040" y="298" font-size="12" fill="#46585F">wal_buffers / wal_writer_* / FPW</text>
+              <text x="772" y="322" font-size="12" fill="#1B2B33" class="t-mono">• doc/src/sgml/wal.sgml</text>
+              <text x="1040" y="322" font-size="12" fill="#46585F">XLogWrite / XLogFlush / Group Commit</text>
+              <text x="772" y="346" font-size="12" fill="#1B2B33" class="t-mono">• doc/src/sgml/monitoring.sgml</text>
+              <text x="1040" y="346" font-size="12" fill="#46585F">pg_stat_wal / pg_stat_io 监控字段</text>
+              <text x="772" y="370" font-size="12" fill="#1B2B33" class="t-mono">• doc/src/sgml/ref/explain.sgml</text>
+              <text x="1040" y="370" font-size="12" fill="#46585F">EXPLAIN (ANALYZE, WAL) 输出规范</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <div class="slide-next-label">结语 · CLOSING</div>
+            <div class="slide-next-text">数据库筑基，重在源码求证与指标闭环——把参数还原成机制，把经验还原成实证。</div>
+          </div>
+          <div class="slide-footer">
+            <span class="slide-footer-left">数据库筑基课 · PostgreSQL WAL Buffer 管理</span>
+            <span class="slide-footer-page">14 / 14</span>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- TOC Overlay Panel (G) -->
+      <div id="toc-panel" role="dialog" aria-label="课件目录">
+        <div class="toc-box">
+          <div class="toc-header">
+            <span class="toc-title">目录导航 · 共 14 页</span>
+            <button class="notes-close" id="toc-close" title="关闭目录 (G / Esc)">×</button>
+          </div>
+          <div class="toc-grid" id="toc-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- In-page Right Notes Pane (N / T) -->
+    <aside id="notes-pane" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div class="notes-tabs">
+          <button class="notes-tab active" id="tab-page-note">本页讲稿 [N]</button>
+          <button class="notes-tab" id="tab-full-note">全文讲稿 [T]</button>
+        </div>
+        <button class="notes-close" id="notes-close" title="关闭讲稿">×</button>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+  </div>
+
+  <!-- Bottom Shortcut Bar (always visible, including in Fullscreen) -->
+  <footer id="hud-bar">
+    <div id="autoplay-progress"></div>
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-prev" title="上一页">← 上一页</button>
+      <span class="hud-page-indicator" id="hud-page">01 / 14</span>
+      <button class="hud-btn" id="btn-next" title="下一页">下一页 →</button>
+    </div>
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-toc" title="目录"><span class="hud-kbd">G</span> 目录</button>
+      <button class="hud-btn" id="btn-note" title="本页讲稿"><span class="hud-kbd">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="btn-transcript" title="全文讲稿"><span class="hud-kbd">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="btn-autoplay" title="自动播放"><span class="hud-kbd">A</span> 自动播放</button>
+      <button class="hud-btn" id="btn-fullscreen" title="全屏"><span class="hud-kbd">F</span> 全屏</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ==================== LECTURE NOTES (逻辑推演 + 实证 + 口语化 + 连绵不绝) ==================== */
+  const NOTES = [
+    {
+      title: '数据库筑基课 —— WAL Buffer 管理',
+      paragraphs: [
+        '大家好，欢迎来到数据库筑基课。今天我们要聊的主题是 PostgreSQL 的 <code>WAL Buffer</code> 管理。很多同学一听到 <code>wal_buffers</code>，脑子里蹦出来的就是配置文件里那一行数字，觉得调大一点就完事了。但其实它绝不是一个孤立的参数。',
+        '如果我们把 PostgreSQL 的写入路径像地质剖面一样切开——从最上面 L7 的业务事务，一路往下钻到 L1 磁盘上的 <code>pg_wal</code>——你会发现 <code>WAL Buffer</code> 恰好卡在 L4 共享内存这一层。它是数据库把「内存里的业务修改」变成「崩溃后可恢复事实」的关键中转站。',
+        '今天整场分享，我们不讲玄学、不编造压测百分比，所有结论都直接回到本地 PostgreSQL 源码（<code>xlog.c</code>、<code>xloginsert.c</code>、<code>walwriter.c</code>）和官方 SGML 文档。咱们沿着四条主线推进：先划清概念边界，再看并发插入与环形淘汰，接着拆解三条写出路径，最后落到监控指标与避坑指南。'
+      ]
+    },
+    {
+      title: '生产现象与五个真问题',
+      paragraphs: [
+        '顺着这个视角，我们先看一个在生产环境里特别容易让人困惑的现场：业务正在做批量导入，或者高频热点更新。你看监控，CPU 没打满，磁盘带宽也没持续打满，看起来硬件还很宽裕，但前台部分事务的延迟却突然一阵一阵地抖动。',
+        '这时候你去查 <code>pg_stat_wal</code>，发现 <code>wal_buffers_full</code> 一直在涨；对具体 SQL 跑 <code>EXPLAIN (ANALYZE, WAL)</code>，也看到 <code>buffers full</code> 非零。很多人的第一反应是「赶紧把 <code>wal_buffers</code> 调大」。但这只回答了一小半问题。',
+        '真正能帮你解决根因的，是右侧这五个环环相扣的问题：WAL 记录怎么进共享内存？<code>wal_buffers</code> 管的是内存还是文件？什么条件下前台插入会被迫自己写盘？三条写出路径有什么区别？以及 <code>wal_buffers_full</code> 到底能证明什么、不能证明什么？下面我们逐一破题。'
+      ]
+    },
+    {
+      title: '它解决什么问题：五阶段写入拆分',
+      paragraphs: [
+        '要回答刚才那五个问题，得先回到 WAL 最底层的第一性原理——Write-Ahead 规则。<code>xlog.c</code> 里 <code>XLogInsertRecord()</code> 的注释写得很清楚：函数返回的 LSN 可以写到受影响的数据页上，但在数据页写出之前，WAL 必须至少刷到这个 LSN。',
+        '想一想，如果每一次行修改都直接写 WAL 文件并且立刻 <code>fsync</code>，数据库马上就会被海量小随机 I/O 拖垮。所以 PostgreSQL 把一条 WAL 记录的生命周期拆成了五个阶段：第一步在后端私有内存组装 Record；第二步在共享 WAL Buffer 预留连续 LSN；第三步并行复制进去；第四步批量写出到 <code>pg_wal</code>；第五步在需要持久化时刷盘。',
+        '看图上方的括号：<code>WAL Buffer</code> 解决的就是第 2 到第 4 步的缓冲和并发协调问题。它的代价也很现实——太小了，高写入速率下迅速写满，前台被迫自己写盘；太大了，不仅吃掉固定共享内存、改起来还要重启，而且同步提交该做的 <code>fsync</code> 一次也少不了。'
+      ]
+    },
+    {
+      title: '它是什么：概念边界与自动调参规则',
+      paragraphs: [
+        '明确了职责之后，咱们必须把四个经常被混为一谈的概念彻底切开。看上面这四列：<code>shared_buffers</code> 缓的是表和索引的数据页；<code>wal_buffers</code> 缓的是尚未写出的 WAL 页，它们都在 PostgreSQL 共享内存里。再往下，OS Page Cache 在操作系统内核里，它不理解事务；而 <code>pg_wal</code> 是磁盘上的持久日志目录。',
+        '所以记住一条铁律：<code>wal_buffers</code> 绝不是 <code>pg_wal</code> 目录大小，也不是 checkpoint 后保留多少段 WAL。它只是共享内存里一段环形页缓存。',
+        '那默认配多大呢？看底部的标尺。官方 <code>config.sgml</code> 和源码 <code>XLOGChooseNumBuffers()</code> 规定：默认值 <code>-1</code> 表示启动时自动算，大约取 <code>shared_buffers</code> 的 1/32（也就是 3%），下限 64kB（8 个 8kB WAL block），上限卡死在一个 WAL Segment，典型就是 16MB。如果你手工填了小于 32kB 的正值，<code>check_wal_buffers()</code> 会帮你钳制到 32kB，而且它只能在启动时生效。'
+      ]
+    },
+    {
+      title: '共享内存布局：XLogCtlData 与三类锁',
+      paragraphs: [
+        '既然它是共享内存里的一块区域，我们就直接把 <code>xlog.c</code> 里的核心结构体 <code>XLogCtlData</code> 切开来看。左侧框里主要有三大块：左上角是 <code>Insert</code> 子结构，管着 <code>CurrBytePos</code>、<code>PrevBytePos</code> 和决定是否写整页的 <code>RedoRecPtr</code>；右上角是四条单调推进的全局水位线——已初始化、已插入、已写出、已刷盘；下面则是真正的环形页缓存阵列 <code>pages[]</code>，配上记录每槽页身份的 <code>xlblocks[]</code>。',
+        '多进程并发访问这块内存，靠右侧这三类锁各司其职：第一类 <code>WALInsertLock</code>，源码里 <code>NUM_XLOGINSERT_LOCKS</code> 固定是 8 把，允许最多 8 个插入者并行复制，同时让写出者知道哪些 LSN 之前已经完工。',
+        '第二类 <code>WALBufMappingLock</code>，保护槽位和 WAL 页身份的映射，防止同一个槽位同时被当成两个不同的页。第三类 <code>WALWriteLock</code>，串行化写出和刷盘，防止多个进程重复写同一段 WAL。把这三把锁的边界记牢，后面的并发流程一眼就通。'
+      ]
+    },
+    {
+      title: '插入路径：先预留位置，再并行复制',
+      paragraphs: [
+        '现在我们让多个后端真正跑起来，大家可以用图上方工具栏的「播放并发插入」或者「单步推进」跟着看。一条修改从 <code>xloginsert.c</code> 出发，先在后端私有内存里调用 <code>XLogRecordAssemble()</code> 把记录拼好——这一步完全不碰共享锁。',
+        '进入 <code>XLogInsertRecord()</code> 后，后端拿一把 <code>WALInsertLock</code>，然后短暂抢占自旋锁 <code>insertpos_lck</code>。注意，全局串行段就被压缩在 <code>ReserveXLogInsertLocation()</code> 里，做的几乎就是一次简单的 <code>CurrBytePos += len</code>！预留完立刻放开自旋锁，把耗时的字节复制放回锁外，三个后端就可以在各自的 LSN 区间里并行拷贝。',
+        '你可以点一下「模拟 FPW 重试」看看边界情况：如果后端在私有内存刚组装完，恰好 Checkpoint 推进了 <code>RedoRecPtr</code>，导致某些页现在必须写 Full-Page Image，拿到 <code>WALInsertLock</code> 重查时就会发现不匹配，返回 <code>InvalidXLogRecPtr</code> 让上层退回去重装。这就是既保证高并发、又不丢崩溃安全性的精巧设计。'
+      ]
+    },
+    {
+      title: 'WAL 页结构：固定页头与跨页延续',
+      paragraphs: [
+        '刚才提到一个很有意思的细节：为什么预留时 <code>CurrBytePos</code> 是「不含页头的可用字节位置」，写进去又必须换算成物理 LSN？答案就在这一页的字节剖面图里。',
+        'WAL 文件并不是裸字节流，而是按 <code>XLOG_BLCKSZ</code>（典型 8kB）切成页。<code>xlog_internal.h</code> 定义了两种页头：每个 Segment 的第 0 页用 <code>Long Page Header</code>，多带了 <code>system_identifier</code>、段大小和页大小校验；后面的普通页用短页头，包含魔数、时间线、页起始地址。',
+        '当一条 Record 比较长、撞到页尾写不下时，<code>CopyXLogRecordToWAL()</code> 会把它截断，并在下一页的页头里打上 <code>XLP_FIRST_IS_CONTRECORD</code> 标志，同时用 <code>xlp_rem_len</code> 记下还剩多少字节。正因为页头占了物理位置，预留阶段忽略页头才能做到一次加法搞定，复制阶段再通过坐标换算自动把每一页的页头空出来。'
+      ]
+    },
+    {
+      title: '环形映射与满 Buffer 被迫写出',
+      paragraphs: [
+        'WAL 页不断往后长，但 <code>WAL Buffer</code> 的槽位是有限的，这就引出了最核心的「环形复用」机制。PostgreSQL 不是随便找个空槽塞进去，而是直接用 LSN 取模：<code>(recptr / XLOG_BLCKSZ) % N</code>。每个 WAL 页命中哪个槽位，生来就是注定的。',
+        '大家可以点击上面的「写入新 WAL 页」多点几次。当槽位 N 设为 4，写到第 4 页时就会绕回 0 号槽。如果这时候 0 号槽里的旧页还没写出到文件——也就是 <code>LogwrtResult.Write &lt; OldPageRqstPtr</code>——绝对不能直接覆盖！',
+        '此时前台插入者只能停下手里的活，严格按右侧 7 步走：更新写请求 → 先释放 <code>WALBufMappingLock</code> 防死锁 → 调 <code>WaitXLogInsertionsToFinish()</code> 等旧页插入收尾 → 抢 <code>WALWriteLock</code> → 自己调 <code>XLogWrite()</code> 写出旧页 → 给 <code>pgWalUsage.wal_buffers_full</code> 加 1 → 再重新拿映射锁初始化新页。你点一下「WAL Writer 写出旧页」再写入，就能直观看到后台提前腾空槽位后，冲突立刻消失。'
+      ]
+    },
+    {
+      title: '写出与刷盘：write 不是 flush',
+      paragraphs: [
+        '刚才我们看到满 Buffer 会触发 <code>XLogWrite()</code>，但别忘了，把 WAL 送进磁盘一共三条路。这一页大家可以直接点工具栏上的三个按钮，观察底部三条水位线 <code>logInsertResult</code>、<code>logWriteResult</code>、<code>logFlushResult</code> 的实时联动。',
+        '首先必须区分两个动作：<code>XLogWrite()</code> 在 <code>fdatasync/fsync</code> 模式下通常只是把数据写进操作系统内核缓存，推进的是 Write 水位；只有 <code>issue_xlog_fsync()</code> 才真正把数据刷到稳定存储，推进 Flush 水位。',
+        '三条路的目标截然不同：同步提交 <code>XLogFlush()</code> 紧盯自己的 commit LSN 必须落盘，等锁期间别人可能已经顺手帮它刷了，这就是组提交的基础，<code>commit_delay</code> 也是在这里生效；WAL Writer 负责后台兜底；Buffer 满写出只是前台为了腾槽位的被动补救。所以调大 <code>wal_buffers</code> 只能压低第三条路，绝不会取消第一条路的同步刷盘。'
+      ]
+    },
+    {
+      title: 'WAL Writer 的双重职责与调参天花板',
+      paragraphs: [
+        '顺着刚才的三条路，我们单独把 <code>walwriter.c</code> 拎出来看看。很多同学以为 WAL Writer 只是个后台定时刷盘工具，其实它对 WAL Buffer 管理有两项关键贡献：第一，按 <code>wal_writer_delay</code> 和 <code>wal_writer_flush_after</code> 提前把完整 WAL 页和异步提交写出去，帮前台把旧槽位腾空；第二，写完后会调用 <code>AdvanceXLInsertBuffer(..., opportunistic = true)</code>，顺手把未来要用的槽位提前初始化好。',
+        '不过它并不是可靠性的唯一来源：开启同步提交时，前台依然要为自己的 commit record 负责；如果 WAL Writer 忙不过来，普通后端也会自己出手写 WAL。',
+        '再看右侧的工程天花板：为什么自动调参把上限卡死在 1 个 Segment（16MB）？源码注释讲得非常透彻——每次事务提交本来就要写出 WAL，而且只要 Segment 切换依然强制 <code>fsync</code>，Buffer 大过一个段就很难再换来明显收益。所以默认自动值在绝大多数场景下已经很合理。'
+      ]
+    },
+    {
+      title: '收益、代价与三维观测闭环',
+      paragraphs: [
+        '机制全讲透了，回到生产排障，怎么把「经验拍脑袋」变成「证据说话」？记住图中这三个维度，一定要先切分再动手：第一维度看生成量，查 <code>pg_stat_wal</code> 里的 <code>wal_bytes</code> 和 <code>wal_fpi_bytes</code>，判断是不是 Checkpoint 后 FPI 爆发或索引太多；第二维度看周转，查 <code>wal_buffers_full</code>，配合 <code>EXPLAIN (ANALYZE, WAL, BUFFERS)</code> 抓出具体的批量 SQL；第三维度看 I/O，开 <code>track_wal_io_timing</code> 查 <code>pg_stat_io</code> 里 <code>object = \'wal\'</code> 的写入和刷盘耗时。',
+        '如果确认 <code>wal_buffers_full</code> 持续飙升，同时存储 I/O 没有独立瓶颈，再走底部这套低风险 A/B 闭环：测试库或灰度实例先录基线 → 跑多客户端代表性负载 → 调整比如 <code>wal_buffers = 16MB</code> 并重启 → 同负载复测看 <code>buffers_full</code> 与 p95/p99 延迟 → 最后确认瓶颈有没有转移到 fsync 或复制上。'
+      ]
+    },
+    {
+      title: '角色最佳实践与适用场景边界',
+      paragraphs: [
+        '把这套方法论分配到团队里的三个角色，每个人其实都有最趁手的主杠杆。对数据库架构师来说，别孤立看参数，要把事务大小、索引数量、Checkpoint 间隔、<code>wal_compression</code> 和同步复制策略放在一条链路上统筹，底线是生产绝不关 <code>full_page_writes</code> 和 <code>fsync</code>。',
+        '对 DBA 来说，监控要覆盖 <code>pg_stat_wal</code>、<code>pg_stat_io</code>、单 SQL WAL、Checkpoint 和复制归档延迟，调参严格走「生成量 → 周转 → I/O → 调参」四步顺序。对业务开发者来说，源头减量比求 DBA 调参管用得多：控制批量事务粒度、砍掉高频写表的低价值索引、批处理评估 <code>COPY</code> 与索引后建，<code>UNLOGGED</code> 表只给可丢弃的中间数据用。',
+        '右侧的场景边界也一眼分明：写密集 OLTP 且 <code>wal_buffers_full</code> 持续上涨、CP 后 FPI 脉冲抖动，值得重点看它；但如果慢在同步复制、慢在磁盘 fsync、或者复制槽堵爆了 <code>pg_wal</code>，调它就是药不对症。'
+      ]
+    },
+    {
+      title: '六大常见认知坑与源码事实纠正',
+      paragraphs: [
+        '在收尾前，我们把现场最容易踩的六个坑集中排一遍雷。第一坑，把 <code>wal_buffers_full</code> 当字节数——它其实是次数，看大小要看 <code>wal_bytes</code>。第二坑，以为调大 <code>wal_buffers</code> 能省掉提交 fsync——共享内存不是持久化存储，同步提交照刷不误。',
+        '第三坑，只调 Buffer 不看 Checkpoint——<code>full_page_writes = on</code> 时，过频的 Checkpoint 会反复制造整页写入脉冲。第四坑，忽略 <code>wal_writer_delay</code> 和 <code>wal_writer_flush_after</code>，没管后台腾空槽位的节奏。',
+        '第五坑偏内核一点，但排查等待事件极有用：源码严格规定拿到 <code>WALWriteLock</code> 之前必须先等 <code>WaitXLogInsertionsToFinish()</code>，不然插入者和写出者就会死锁。第六坑，拿单会话一条小 SQL 测完就定生产参数——WAL Buffer 是典型的并发路径问题，脱离多客户端和 Checkpoint 周期测不出真实压力。'
+      ]
+    },
+    {
+      title: '深度思考题与源码阅读地图',
+      paragraphs: [
+        '最后留六道进阶思考题给大家课后反刍。比如第 1 题：如果 <code>wal_buffers_full</code> 很低但提交 p99 很高，沿着咱们今天画的图，你应该立刻去查 <code>pg_stat_io</code> 的 fsync 耗时、同步备库确认延迟以及锁等待；再比如第 6 题：逻辑复制槽把 <code>pg_wal</code> 撑爆了，那是磁盘文件无法回收，和共享内存环形缓存毫无关系，调大 <code>wal_buffers</code> 没有任何意义。',
+        '右侧是今天所有结论对应的本地 PostgreSQL 源码与官方 SGML 文档导航：从 <code>xloginsert.c</code> 组装，到 <code>xlog.c</code> 预留、复用、写出、刷盘，再到 <code>walwriter.c</code> 后台协作和 <code>pgstat_wal.c</code> 指标统计，每一行结论都有据可查。',
+        '数据库筑基，重在源码求证与指标闭环。感谢大家的聆听，欢迎按 G 回到目录或按 T 回顾全文讲稿！'
+      ]
+    }
+  ];
+
+  /* ==================== SLIDE & VIEWPORT CONTROLLER ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentSlide = 0;
+
+  const stageWrap = document.getElementById('stage-wrap');
+  const stageScaler = document.getElementById('stage-scaler');
+  const hudPage = document.getElementById('hud-page');
+  const notesPane = document.getElementById('notes-pane');
+  const notesBody = document.getElementById('notes-body');
+  const tabPageNote = document.getElementById('tab-page-note');
+  const tabFullNote = document.getElementById('tab-full-note');
+  const tocPanel = document.getElementById('toc-panel');
+  const tocGrid = document.getElementById('toc-grid');
+
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNote = document.getElementById('btn-note');
+  const btnTranscript = document.getElementById('btn-transcript');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const autoplayProgress = document.getElementById('autoplay-progress');
+
+  let notesMode = 'closed'; // 'closed' | 'page' | 'full'
+  let tocOpen = false;
+  let autoplayTimer = null;
+  let autoplayTick = null;
+  const AUTOPLAY_MS = 8000;
+  let autoplayStart = 0;
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function layoutStage() {
+    const w = stageWrap.clientWidth;
+    const h = stageWrap.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    const scale = Math.min((w - 16) / 1600, (h - 16) / 900);
+    stageScaler.style.transform = `scale(${Math.max(0.1, scale)})`;
+  }
+
+  const ro = new ResizeObserver(() => layoutStage());
+  ro.observe(stageWrap);
+  window.addEventListener('resize', layoutStage);
+  notesPane.addEventListener('transitionend', layoutStage);
+
+  function goToSlide(idx) {
+    const target = Math.max(0, Math.min(totalSlides - 1, idx));
+    slides[currentSlide].classList.remove('active');
+    currentSlide = target;
+    slides[currentSlide].classList.add('active');
+    hudPage.textContent = `${pad2(currentSlide + 1)} / ${pad2(totalSlides)}`;
+    updateTocHighlight();
+    syncNotesOnSlideChange();
+    if (autoplayTimer) resetAutoplayCycle();
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides - 1) goToSlide(currentSlide + 1);
+    else if (autoplayTimer) stopAutoplay();
+  }
+
+  function prevSlide() {
+    if (currentSlide > 0) goToSlide(currentSlide - 1);
+  }
+
+  /* ==================== TOC (G) ==================== */
+  function buildToc() {
+    tocGrid.innerHTML = '';
+    slides.forEach((s, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'toc-item' + (i === currentSlide ? ' current' : '');
+      btn.dataset.idx = i;
+      btn.innerHTML = `
+        <span class="toc-num">${pad2(i + 1)}</span>
+        <div>
+          <div class="toc-item-title">${s.dataset.title}</div>
+          <div class="toc-item-sub">${s.dataset.eyebrow}</div>
+        </div>
+      `;
+      btn.addEventListener('click', () => {
+        goToSlide(i);
+        setToc(false);
+      });
+      tocGrid.appendChild(btn);
+    });
+  }
+
+  function updateTocHighlight() {
+    const items = tocGrid.querySelectorAll('.toc-item');
+    items.forEach((el, i) => el.classList.toggle('current', i === currentSlide));
+  }
+
+  function setToc(open) {
+    tocOpen = open;
+    tocPanel.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  /* ==================== NOTES PANE (N / T) ==================== */
+  function renderNotes() {
+    if (notesMode === 'page') {
+      const n = NOTES[currentSlide];
+      notesBody.innerHTML = `
+        <div class="note-block current" id="note-block-${currentSlide}">
+          <div class="note-block-meta">PAGE ${pad2(currentSlide + 1)} / ${pad2(totalSlides)} · 本页讲稿</div>
+          <div class="note-block-title">${n.title}</div>
+          ${n.paragraphs.map(p => `<p>${p}</p>`).join('')}
+        </div>
+      `;
+      notesBody.scrollTop = 0;
+    } else if (notesMode === 'full') {
+      notesBody.innerHTML = NOTES.map((n, i) => `
+        <div class="note-block clickable ${i === currentSlide ? 'current' : ''}" id="note-block-${i}" data-note-idx="${i}">
+          <div class="note-block-meta">PAGE ${pad2(i + 1)} / ${pad2(totalSlides)}</div>
+          <div class="note-block-title">${n.title}</div>
+          ${n.paragraphs.map(p => `<p>${p}</p>`).join('')}
+        </div>
+      `).join('');
+      notesBody.querySelectorAll('.note-block[data-note-idx]').forEach(el => {
+        el.addEventListener('click', () => {
+          goToSlide(Number(el.dataset.noteIdx));
+        });
+      });
+      scrollFullNoteToCurrent(false);
+    }
+  }
+
+  function scrollFullNoteToCurrent(smooth) {
+    const el = document.getElementById(`note-block-${currentSlide}`);
+    if (!el) return;
+    const containerTop = notesBody.getBoundingClientRect().top;
+    const elTop = el.getBoundingClientRect().top;
+    const targetScroll = notesBody.scrollTop + (elTop - containerTop) - 16;
+    notesBody.scrollTo({ top: Math.max(0, targetScroll), behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  function syncNotesOnSlideChange() {
+    if (notesMode === 'page') {
+      renderNotes();
+    } else if (notesMode === 'full') {
+      notesBody.querySelectorAll('.note-block').forEach((el, i) => {
+        el.classList.toggle('current', i === currentSlide);
+      });
+      scrollFullNoteToCurrent(true);
+    }
+  }
+
+  function setNotesMode(mode) {
+    notesMode = mode;
+    const isOpen = notesMode !== 'closed';
+    notesPane.classList.toggle('open', isOpen);
+    btnNote.classList.toggle('active', notesMode === 'page');
+    btnTranscript.classList.toggle('active', notesMode === 'full');
+    tabPageNote.classList.toggle('active', notesMode === 'page');
+    tabFullNote.classList.toggle('active', notesMode === 'full');
+    if (isOpen) renderNotes();
+    // Re-scale stage immediately and after CSS width transition
+    requestAnimationFrame(layoutStage);
+    setTimeout(layoutStage, 230);
+  }
+
+  function togglePageNotes() {
+    setNotesMode(notesMode === 'page' ? 'closed' : 'page');
+  }
+
+  function toggleFullTranscript() {
+    setNotesMode(notesMode === 'full' ? 'closed' : 'full');
+  }
+
+  /* ==================== AUTOPLAY ==================== */
+  function startAutoplay() {
+    if (currentSlide >= totalSlides - 1) goToSlide(0);
+    btnAutoplay.classList.add('active');
+    resetAutoplayCycle();
+  }
+
+  function resetAutoplayCycle() {
+    clearTimeout(autoplayTimer);
+    clearInterval(autoplayTick);
+    autoplayStart = Date.now();
+    autoplayProgress.style.width = '0%';
+    autoplayTick = setInterval(() => {
+      const pct = Math.min(100, ((Date.now() - autoplayStart) / AUTOPLAY_MS) * 100);
+      autoplayProgress.style.width = pct + '%';
+    }, 80);
+    autoplayTimer = setTimeout(() => {
+      if (currentSlide < totalSlides - 1) {
+        goToSlide(currentSlide + 1);
+      } else {
+        stopAutoplay();
+      }
+    }, AUTOPLAY_MS);
+  }
+
+  function stopAutoplay() {
+    clearTimeout(autoplayTimer);
+    clearInterval(autoplayTick);
+    autoplayTimer = null;
+    autoplayTick = null;
+    autoplayProgress.style.width = '0%';
+    btnAutoplay.classList.remove('active');
+  }
+
+  function toggleAutoplay() {
+    if (autoplayTimer) stopAutoplay();
+    else startAutoplay();
+  }
+
+  /* ==================== FULLSCREEN (F) ==================== */
+  function toggleFullscreen() {
+    const doc = document;
+    const el = document.documentElement;
+    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } else {
+      if (doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
+      else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+    }
+  }
+
+  function syncFullscreenBtn() {
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    btnFullscreen.classList.toggle('active', isFs);
+    requestAnimationFrame(layoutStage);
+  }
+  document.addEventListener('fullscreenchange', syncFullscreenBtn);
+  document.addEventListener('webkitfullscreenchange', syncFullscreenBtn);
+
+  /* ==================== BUTTON & KEYBOARD WIRING ==================== */
+  btnPrev.addEventListener('click', prevSlide);
+  btnNext.addEventListener('click', nextSlide);
+  btnToc.addEventListener('click', () => setToc(!tocOpen));
+  document.getElementById('toc-close').addEventListener('click', () => setToc(false));
+  tocPanel.addEventListener('click', (e) => { if (e.target === tocPanel) setToc(false); });
+
+  btnNote.addEventListener('click', togglePageNotes);
+  btnTranscript.addEventListener('click', toggleFullTranscript);
+  tabPageNote.addEventListener('click', () => setNotesMode('page'));
+  tabFullNote.addEventListener('click', () => setNotesMode('full'));
+  document.getElementById('notes-close').addEventListener('click', () => setNotesMode('closed'));
+  btnAutoplay.addEventListener('click', toggleAutoplay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const key = e.key.toLowerCase();
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      e.preventDefault(); nextSlide();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault(); prevSlide();
+    } else if (e.key === 'Home') {
+      e.preventDefault(); goToSlide(0);
+    } else if (e.key === 'End') {
+      e.preventDefault(); goToSlide(totalSlides - 1);
+    } else if (key === 'g') {
+      e.preventDefault(); setToc(!tocOpen);
+    } else if (key === 'n') {
+      e.preventDefault(); togglePageNotes();
+    } else if (key === 't') {
+      e.preventDefault(); toggleFullTranscript();
+    } else if (key === 'a') {
+      e.preventDefault(); toggleAutoplay();
+    } else if (key === 'f') {
+      e.preventDefault(); toggleFullscreen();
+    } else if (e.key === 'Escape') {
+      if (tocOpen) setToc(false);
+      else if (notesMode !== 'closed') setNotesMode('closed');
+    }
+  });
+
+  /* ==================== ANIMATION 1: SLIDE 06 CONCURRENT INSERT & FPW RETRY ==================== */
+  (function initInsertAnim() {
+    let step = 0;
+    let fpwRetry = false;
+    let timer = null;
+
+    const btnPlay = document.getElementById('ins-play');
+    const btnStep = document.getElementById('ins-step');
+    const btnFpw = document.getElementById('ins-fpw');
+    const btnReset = document.getElementById('ins-reset');
+    const statusEl = document.getElementById('ins-status');
+
+    const aPriv = document.getElementById('ins-a-priv');
+    const bPriv = document.getElementById('ins-b-priv');
+    const cPriv = document.getElementById('ins-c-priv');
+    const aLock = document.getElementById('ins-a-lock');
+    const bLock = document.getElementById('ins-b-lock');
+    const cLock = document.getElementById('ins-c-lock');
+    const aLockTxt = document.getElementById('ins-a-lock-txt');
+    const bLockTxt = document.getElementById('ins-b-lock-txt');
+    const cLockTxt = document.getElementById('ins-c-lock-txt');
+    const spinBox = document.getElementById('ins-spin');
+    const posVal = document.getElementById('ins-pos-val');
+    const spinHolder = document.getElementById('ins-spin-holder');
+    const slotA = document.getElementById('ins-slot-a');
+    const slotB = document.getElementById('ins-slot-b');
+    const slotC = document.getElementById('ins-slot-c');
+    const slotATxt = document.getElementById('ins-slot-a-txt');
+    const slotBTxt = document.getElementById('ins-slot-b-txt');
+    const slotCTxt = document.getElementById('ins-slot-c-txt');
+    const fpwBar = document.getElementById('ins-fpw-bar');
+    const fpwTxt = document.getElementById('ins-fpw-txt');
+
+    function renderInsertState() {
+      // Reset styles
+      [aPriv, bPriv, cPriv].forEach(el => { el.setAttribute('fill', '#EBF1EE'); el.setAttribute('stroke', '#74A5AD'); });
+      [aLock, bLock, cLock].forEach(el => { el.setAttribute('fill', '#F1EFE9'); el.setAttribute('stroke', '#D9D5CB'); });
+      [slotA, slotB, slotC].forEach(el => { el.setAttribute('fill', '#F7F6F2'); el.setAttribute('stroke', '#D9D5CB'); });
+      spinBox.setAttribute('fill', '#F7E9DE');
+      spinBox.setAttribute('stroke', '#BE653B');
+      fpwBar.setAttribute('fill', '#F1EFE9');
+      fpwBar.setAttribute('stroke', '#D9D5CB');
+
+      aLockTxt.textContent = '空闲 · 等待校验 RedoRecPtr';
+      bLockTxt.textContent = '空闲 · 等待校验 RedoRecPtr';
+      cLockTxt.textContent = '空闲 · 等待校验 RedoRecPtr';
+      posVal.textContent = 'CurrBytePos: 0x0000';
+      spinHolder.textContent = '当前持有者：无';
+      slotATxt.textContent = '[区间 A · 0x0000..0x0100] 待预留';
+      slotBTxt.textContent = '[区间 B · 0x0100..0x0300] 待预留';
+      slotCTxt.textContent = '[区间 C · 0x0300..0x0480] 待预留';
+      fpwTxt.textContent = 'FPW 重试机制：拿到 WALInsertLock 后重查 RedoRecPtr / fullPageWrites；若 Checkpoint 刚推进导致缺少 FPI，返回 InvalidXLogRecPtr 让上层重装。';
+
+      if (step === 0) {
+        statusEl.textContent = '就绪：点击「播放并发插入」观察 3 个后端如何避开全局大锁';
+      } else if (step === 1) {
+        [aPriv, bPriv, cPriv].forEach(el => { el.setAttribute('fill', '#CFE0DC'); el.setAttribute('stroke', '#245A6B'); });
+        statusEl.innerHTML = '步骤 1/5：3 个后端在<strong>私有内存</strong>并行组装 WAL Record，零共享锁争用';
+      } else if (step === 2) {
+        aLock.setAttribute('fill', '#E5EFF0'); aLock.setAttribute('stroke', '#245A6B');
+        aLockTxt.textContent = 'Backend A 持有 · RedoRecPtr 校验通过';
+        bLock.setAttribute('fill', fpwRetry ? '#F7E9DE' : '#E5EFF0');
+        bLock.setAttribute('stroke', fpwRetry ? '#BE653B' : '#245A6B');
+        bLockTxt.textContent = fpwRetry ? 'CP 推进！缺 FPI → 退回私有内存重装' : 'Backend B 持有 · RedoRecPtr 校验通过';
+        cLock.setAttribute('fill', '#E5EFF0'); cLock.setAttribute('stroke', '#245A6B');
+        cLockTxt.textContent = 'Backend C 持有 · RedoRecPtr 校验通过';
+        if (fpwRetry) {
+          fpwBar.setAttribute('fill', '#F7E9DE');
+          fpwBar.setAttribute('stroke', '#BE653B');
+          fpwTxt.textContent = '触发重试：Backend B 释放 WALInsertLock[3]，回退至私有内存重新组装包含 Full-Page Image 的记录！';
+          statusEl.innerHTML = '步骤 2/5：Backend B 检测到 <strong>Checkpoint 推进</strong>，触发 FPW 重试机制';
+        } else {
+          statusEl.innerHTML = '步骤 2/5：3 个后端分别拿到不同的 <strong>WALInsertLock[0/3/6]</strong>，互不阻塞';
+        }
+      } else if (step === 3) {
+        [aLock, bLock, cLock].forEach(el => { el.setAttribute('fill', '#E5EFF0'); el.setAttribute('stroke', '#245A6B'); });
+        aLockTxt.textContent = 'A 已预留 0x0000..0x0100';
+        bLockTxt.textContent = fpwRetry ? 'B 重装含 FPI 完成并预留' : 'B 已预留 0x0100..0x0300';
+        cLockTxt.textContent = 'C 已预留 0x0300..0x0480';
+        spinBox.setAttribute('fill', '#BE653B');
+        posVal.textContent = fpwRetry ? 'CurrBytePos: 0x0680' : 'CurrBytePos: 0x0480';
+        posVal.setAttribute('fill', '#F7F6F2');
+        spinHolder.textContent = 'A → B → C 依次毫秒级推进后立即释放';
+        spinHolder.setAttribute('fill', '#F7E9DE');
+        statusEl.innerHTML = '步骤 3/5：极短自旋锁 <strong>insertpos_lck</strong> 串行执行 CurrBytePos += len 后立即释放';
+        return;
+      } else if (step === 4) {
+        posVal.setAttribute('fill', '#245A6B');
+        spinHolder.setAttribute('fill', '#46585F');
+        posVal.textContent = fpwRetry ? 'CurrBytePos: 0x0680' : 'CurrBytePos: 0x0480';
+        spinHolder.textContent = '已释放 · 物理 LSN 换算在锁外完成';
+        [slotA, slotB, slotC].forEach(el => { el.setAttribute('fill', '#E4F0EC'); el.setAttribute('stroke', '#2F7A66'); });
+        slotATxt.textContent = '[区间 A] Backend A 并行复制中 (CopyXLogRecordToWAL)';
+        slotBTxt.textContent = fpwRetry ? '[区间 B] Backend B 并行复制中（含 FPI 整页）' : '[区间 B] Backend B 并行复制中 (CopyXLogRecordToWAL)';
+        slotCTxt.textContent = '[区间 C] Backend C 并行复制中 (CopyXLogRecordToWAL)';
+        statusEl.innerHTML = '步骤 4/5：3 个后端在<strong>锁外并行复制</strong>到各自 WAL Buffer 区间，彻底消除大锁瓶颈';
+      } else if (step === 5) {
+        posVal.setAttribute('fill', '#245A6B');
+        spinHolder.setAttribute('fill', '#46585F');
+        posVal.textContent = fpwRetry ? 'CurrBytePos: 0x0680' : 'CurrBytePos: 0x0480';
+        spinHolder.textContent = '全部插入完成 · 已释放 WALInsertLock';
+        [slotA, slotB, slotC].forEach(el => { el.setAttribute('fill', '#CFE0DC'); el.setAttribute('stroke', '#245A6B'); });
+        slotATxt.textContent = '[区间 A] ✓ 插入完成 · 返回 LSN 写入数据页';
+        slotBTxt.textContent = '[区间 B] ✓ 插入完成 · 返回 LSN 写入数据页';
+        slotCTxt.textContent = '[区间 C] ✓ 插入完成 · 返回 LSN 写入数据页';
+        statusEl.innerHTML = '步骤 5/5：插入完成，释放 WALInsertLock 并更新 WAL 统计';
+      }
+      posVal.setAttribute('fill', '#245A6B');
+      spinHolder.setAttribute('fill', '#46585F');
+    }
+
+    function stopPlay() {
+      clearInterval(timer);
+      timer = null;
+      btnPlay.textContent = '播放并发插入';
+    }
+
+    btnPlay.addEventListener('click', () => {
+      if (timer) { stopPlay(); return; }
+      if (step >= 5) step = 0;
+      btnPlay.textContent = '暂停演示';
+      step++;
+      renderInsertState();
+      timer = setInterval(() => {
+        if (step >= 5) { stopPlay(); return; }
+        step++;
+        renderInsertState();
+      }, 1500);
+    });
+
+    btnStep.addEventListener('click', () => {
+      stopPlay();
+      step = step >= 5 ? 1 : step + 1;
+      renderInsertState();
+    });
+
+    btnFpw.addEventListener('click', () => {
+      fpwRetry = !fpwRetry;
+      btnFpw.textContent = fpwRetry ? '模拟 FPW 重试：开' : '模拟 FPW 重试：关';
+      btnFpw.classList.toggle('active-toggle', fpwRetry);
+      renderInsertState();
+    });
+
+    btnReset.addEventListener('click', () => {
+      stopPlay();
+      step = 0;
+      renderInsertState();
+    });
+
+    renderInsertState();
+  })();
+
+  /* ==================== ANIMATION 2: SLIDE 08 RING BUFFER & EVICTION ==================== */
+  (function initRingAnim() {
+    let slotCount = 4;
+    let nextPageNo = 0;
+    let writtenUpTo = -1;
+    let buffersFull = 0;
+    let slots = [];
+    let lastConflictSlot = -1;
+    let autoTimer = null;
+
+    const slotsGroup = document.getElementById('ring-slots-group');
+    const wmText = document.getElementById('ring-wm-text');
+    const statusEl = document.getElementById('ring-status');
+    const btnInsert = document.getElementById('ring-insert');
+    const btnWriter = document.getElementById('ring-writer');
+    const btnAuto = document.getElementById('ring-auto');
+    const btnReset = document.getElementById('ring-reset');
+    const selSize = document.getElementById('ring-size');
+
+    function resetRing() {
+      stopAuto();
+      nextPageNo = 0;
+      writtenUpTo = -1;
+      buffersFull = 0;
+      lastConflictSlot = -1;
+      slots = Array.from({ length: slotCount }, () => ({ pageNo: null, dirty: false }));
+      highlightEvictSteps(false);
+      renderRing();
+      statusEl.innerHTML = `wal_buffers_full = <strong>0</strong> | 已写出页: 0 | 点击「写入新 WAL 页」体验槽位取模与冲突`;
+    }
+
+    function highlightEvictSteps(active) {
+      for (let i = 1; i <= 7; i++) {
+        const el = document.getElementById(`ev-${i}`);
+        if (!el) continue;
+        if (active) {
+          el.setAttribute('fill', (i === 2 || i === 6) ? '#F7E9DE' : '#E5EFF0');
+          el.setAttribute('stroke', (i === 2 || i === 6) ? '#BE653B' : '#245A6B');
+        } else {
+          el.setAttribute('fill', '#F7F6F2');
+          el.setAttribute('stroke', '#D9D5CB');
+        }
+      }
+    }
+
+    function renderRing() {
+      slotsGroup.innerHTML = '';
+      const cols = 4;
+      const boxW = 160;
+      const boxH = slotCount === 4 ? 196 : 104;
+      const gapX = 16;
+      const gapY = 14;
+      const startX = 24;
+      const startY = 48;
+
+      slots.forEach((s, idx) => {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const x = startX + col * (boxW + gapX);
+        const y = startY + row * (boxH + gapY);
+
+        const isConflict = idx === lastConflictSlot;
+        let fill = '#EBF1EE';
+        let stroke = '#74A5AD';
+        let strokeW = 1.5;
+        let stateLabel = '空闲 · 可直接写入';
+        let stateColor = '#46585F';
+
+        if (s.pageNo !== null) {
+          if (isConflict) {
+            fill = '#F7E9DE';
+            stroke = '#BE653B';
+            strokeW = 2.5;
+            stateLabel = '冲突写出 → 已复用';
+            stateColor = '#BE653B';
+          } else if (s.dirty) {
+            fill = '#E5EFF0';
+            stroke = '#245A6B';
+            strokeW = 2;
+            stateLabel = '未写出（受保护）';
+            stateColor = '#245A6B';
+          } else {
+            fill = '#E4F0EC';
+            stroke = '#2F7A66';
+            strokeW = 1.5;
+            stateLabel = '已写出 · 可安全复用';
+            stateColor = '#2F7A66';
+          }
+        }
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', x);
+        rect.setAttribute('y', y);
+        rect.setAttribute('width', boxW);
+        rect.setAttribute('height', boxH);
+        rect.setAttribute('fill', fill);
+        rect.setAttribute('stroke', stroke);
+        rect.setAttribute('stroke-width', strokeW);
+        g.appendChild(rect);
+
+        const hdr = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        hdr.setAttribute('x', x);
+        hdr.setAttribute('y', y);
+        hdr.setAttribute('width', boxW);
+        hdr.setAttribute('height', 26);
+        hdr.setAttribute('fill', isConflict ? '#BE653B' : '#245A6B');
+        g.appendChild(hdr);
+
+        const tIdx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        tIdx.setAttribute('x', x + boxW / 2);
+        tIdx.setAttribute('y', y + 18);
+        tIdx.setAttribute('text-anchor', 'middle');
+        tIdx.setAttribute('font-size', '12');
+        tIdx.setAttribute('font-weight', '700');
+        tIdx.setAttribute('fill', '#F7F6F2');
+        tIdx.setAttribute('class', 't-mono');
+        tIdx.textContent = `Slot [${idx}]`;
+        g.appendChild(tIdx);
+
+        const tPage = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        tPage.setAttribute('x', x + boxW / 2);
+        tPage.setAttribute('y', y + (slotCount === 4 ? 92 : 56));
+        tPage.setAttribute('text-anchor', 'middle');
+        tPage.setAttribute('font-size', slotCount === 4 ? '18' : '15');
+        tPage.setAttribute('font-weight', '700');
+        tPage.setAttribute('fill', '#1B2B33');
+        tPage.setAttribute('class', 't-mono');
+        tPage.textContent = s.pageNo === null ? 'Empty' : `WAL Page #${s.pageNo}`;
+        g.appendChild(tPage);
+
+        const tState = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        tState.setAttribute('x', x + boxW / 2);
+        tState.setAttribute('y', y + (slotCount === 4 ? 128 : 82));
+        tState.setAttribute('text-anchor', 'middle');
+        tState.setAttribute('font-size', '12');
+        tState.setAttribute('font-weight', '600');
+        tState.setAttribute('fill', stateColor);
+        tState.textContent = stateLabel;
+        g.appendChild(tState);
+
+        if (slotCount === 4 && s.pageNo !== null) {
+          const tMod = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          tMod.setAttribute('x', x + boxW / 2);
+          tMod.setAttribute('y', y + 162);
+          tMod.setAttribute('text-anchor', 'middle');
+          tMod.setAttribute('font-size', '12');
+          tMod.setAttribute('fill', '#89938F');
+          tMod.setAttribute('class', 't-mono');
+          tMod.textContent = `${s.pageNo} % 4 = ${idx}`;
+          g.appendChild(tMod);
+        }
+
+        slotsGroup.appendChild(g);
+      });
+
+      wmText.textContent = `Next PageNo: ${nextPageNo} | LogwrtResult.Write: ${writtenUpTo < 0 ? 'None' : 'Page #' + writtenUpTo} | wal_buffers_full: ${buffersFull}`;
+    }
+
+    function insertOnePage() {
+      const idx = nextPageNo % slotCount;
+      const existing = slots[idx];
+      if (existing.pageNo !== null && existing.dirty) {
+        // Eviction triggered!
+        const oldPage = existing.pageNo;
+        buffersFull++;
+        writtenUpTo = Math.max(writtenUpTo, oldPage);
+        // Mark all pages <= writtenUpTo clean
+        slots.forEach(s => { if (s.pageNo !== null && s.pageNo <= writtenUpTo) s.dirty = false; });
+        slots[idx] = { pageNo: nextPageNo, dirty: true };
+        lastConflictSlot = idx;
+        highlightEvictSteps(true);
+        statusEl.innerHTML = `槽位 [${idx}] 旧页 #${oldPage} 未写出 → 前台被迫 XLogWrite！<strong>wal_buffers_full = ${buffersFull}</strong>`;
+      } else {
+        slots[idx] = { pageNo: nextPageNo, dirty: true };
+        lastConflictSlot = -1;
+        highlightEvictSteps(false);
+        statusEl.innerHTML = `WAL Page #${nextPageNo} 映射至 Slot [${idx}]（${nextPageNo} % ${slotCount}），正常写入 | <strong>wal_buffers_full = ${buffersFull}</strong>`;
+      }
+      nextPageNo++;
+      renderRing();
+    }
+
+    function runWalWriter() {
+      let maxDirty = -1;
+      slots.forEach(s => { if (s.pageNo !== null && s.dirty) maxDirty = Math.max(maxDirty, s.pageNo); });
+      if (maxDirty < 0) {
+        statusEl.innerHTML = `WAL Writer 检查：当前无未写出脏页 | <strong>wal_buffers_full = ${buffersFull}</strong>`;
+        return;
+      }
+      writtenUpTo = Math.max(writtenUpTo, maxDirty);
+      slots.forEach(s => { if (s.pageNo !== null && s.pageNo <= writtenUpTo) s.dirty = false; });
+      lastConflictSlot = -1;
+      highlightEvictSteps(false);
+      renderRing();
+      statusEl.innerHTML = `WAL Writer 后台写出至 Page #${writtenUpTo}，所有旧槽位已安全可复用 | <strong>wal_buffers_full = ${buffersFull}</strong>`;
+    }
+
+    function stopAuto() {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      btnAuto.textContent = '自动演示';
+      btnAuto.classList.remove('active-toggle');
+    }
+
+    btnInsert.addEventListener('click', () => { stopAuto(); insertOnePage(); });
+    btnWriter.addEventListener('click', () => { stopAuto(); runWalWriter(); });
+    btnReset.addEventListener('click', resetRing);
+    selSize.addEventListener('change', () => {
+      slotCount = Number(selSize.value);
+      resetRing();
+    });
+    btnAuto.addEventListener('click', () => {
+      if (autoTimer) { stopAuto(); return; }
+      btnAuto.textContent = '停止演示';
+      btnAuto.classList.add('active-toggle');
+      let tick = 0;
+      insertOnePage();
+      autoTimer = setInterval(() => {
+        tick++;
+        if (tick === 7) runWalWriter();
+        else insertOnePage();
+        if (tick >= 10) stopAuto();
+      }, 950);
+    });
+
+    resetRing();
+  })();
+
+  /* ==================== ANIMATION 3: SLIDE 09 THREE WRITE/FLUSH PATHS ==================== */
+  (function initFlushAnim() {
+    let insertPct = 73;
+    let writePct = 36;
+    let flushPct = 20;
+
+    const barInsert = document.getElementById('fl-bar-insert');
+    const barWrite = document.getElementById('fl-bar-write');
+    const barFlush = document.getElementById('fl-bar-flush');
+    const lblInsert = document.getElementById('fl-lbl-insert');
+    const lblWrite = document.getElementById('fl-lbl-write');
+    const lblFlush = document.getElementById('fl-lbl-flush');
+    const statusEl = document.getElementById('fl-status');
+
+    const boxSync = document.getElementById('fl-box-sync');
+    const boxWriter = document.getElementById('fl-box-writer');
+    const boxEvict = document.getElementById('fl-box-evict');
+    const boxWrite = document.getElementById('fl-box-write');
+    const boxFsync = document.getElementById('fl-box-fsync');
+
+    const TRACK_W = 1316;
+
+    function updateBars() {
+      const wIns = Math.round(TRACK_W * insertPct / 100);
+      const wWrt = Math.round(TRACK_W * writePct / 100);
+      const wFls = Math.round(TRACK_W * flushPct / 100);
+      barInsert.setAttribute('width', wIns);
+      barWrite.setAttribute('width', wWrt);
+      barFlush.setAttribute('width', wFls);
+      lblFlush.textContent = `Flush: ${flushPct}%`;
+      lblWrite.setAttribute('x', Math.max(138, 42 + wFls + 12));
+      lblWrite.textContent = `Write: ${writePct}%`;
+      lblInsert.setAttribute('x', Math.max(260, 42 + wWrt + 12));
+      lblInsert.textContent = `Insert: ${insertPct}%`;
+    }
+
+    function clearHighlights() {
+      boxSync.setAttribute('stroke-width', '1.5');
+      boxWriter.setAttribute('stroke-width', '1.5');
+      boxEvict.setAttribute('stroke-width', '1.5');
+      boxWrite.setAttribute('fill', '#2E6373');
+      boxFsync.setAttribute('fill', '#1E4B5A');
+    }
+
+    document.getElementById('fl-sync').addEventListener('click', () => {
+      clearHighlights();
+      boxSync.setAttribute('stroke-width', '3.5');
+      boxWrite.setAttribute('fill', '#245A6B');
+      boxFsync.setAttribute('fill', '#2F7A66');
+      insertPct = Math.min(96, insertPct + 8);
+      writePct = insertPct;
+      flushPct = insertPct;
+      updateBars();
+      statusEl.innerHTML = '同步提交 XLogFlush()：持 WALWriteLock 批量写出并 <strong>issue_xlog_fsync()</strong>，同批并发提交顺带组提交落盘！';
+    });
+
+    document.getElementById('fl-writer').addEventListener('click', () => {
+      clearHighlights();
+      boxWriter.setAttribute('stroke-width', '3.5');
+      boxWrite.setAttribute('fill', '#2F7A66');
+      insertPct = Math.min(96, insertPct + 6);
+      writePct = Math.min(insertPct, Math.max(writePct + 20, insertPct - 6));
+      flushPct = Math.min(writePct, flushPct + 16);
+      updateBars();
+      statusEl.innerHTML = 'WAL Writer 后台写出：按完整页边界推进 <strong>logWriteResult</strong>，并按 wal_writer_flush_after 节奏推进 <strong>logFlushResult</strong>';
+    });
+
+    document.getElementById('fl-evict').addEventListener('click', () => {
+      clearHighlights();
+      boxEvict.setAttribute('stroke-width', '3.5');
+      boxWrite.setAttribute('fill', '#BE653B');
+      insertPct = Math.min(96, insertPct + 10);
+      writePct = Math.min(insertPct, writePct + 22);
+      // Eviction primarily writes out to free buffer slots; flush may stay behind
+      updateBars();
+      statusEl.innerHTML = 'Buffer 满被动写出：只为腾空旧槽位，主要推进 <strong>logWriteResult</strong>，不改变同步提交的 fsync 约束';
+    });
+
+    document.getElementById('fl-reset').addEventListener('click', () => {
+      clearHighlights();
+      insertPct = 73;
+      writePct = 36;
+      flushPct = 20;
+      updateBars();
+      statusEl.textContent = '选择一条触发路径，观察 logInsertResult / logWriteResult / logFlushResult 三条水位线变化';
+    });
+
+    updateBars();
+  })();
+
+  /* ==================== INIT ==================== */
+  buildToc();
+  layoutStage();
+})();
+</script>
+</body>
+</html>

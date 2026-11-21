@@ -1,0 +1,3034 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL 重量锁</title>
+<style>
+  :root {
+    --bg: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --primary: #245A6B;
+    --primary-light: #E5EFF0;
+    --accent: #BE653B;
+    --accent-light: #F7E9DE;
+    --gain: #2F7A66;
+    --gain-light: #E3F1EC;
+    --gold: #AE8A3E;
+    --gold-light: #F6F0DF;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'Source Han Serif SC', Georgia, serif;
+    --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #E8E5DC;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #E8E5DC;
+  }
+
+  #workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #stage-area {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    background: #E3DFD5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #stage-viewport {
+    position: relative;
+    width: 1600px;
+    height: 900px;
+    transform-origin: center center;
+    background: var(--bg);
+    box-shadow: 0 2px 14px rgba(27, 43, 51, 0.12);
+    border: 1px solid var(--stroke);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Subtle blueprint grid lines on stage background */
+  #stage-viewport::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(217, 213, 203, 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.22) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 36px 64px 46px 64px;
+    display: none;
+    flex-direction: column;
+    z-index: 1;
+    background: transparent;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Top Strata Accent Bar */
+  .strata-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    display: flex;
+  }
+  .strata-bar span {
+    flex: 1;
+    height: 100%;
+  }
+
+  .slide-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--primary);
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 8px;
+    line-height: 1.3;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.16;
+    margin-bottom: 10px;
+    letter-spacing: 0.4px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    color: var(--ink-sub);
+    line-height: 1.45;
+    margin-bottom: 14px;
+    max-width: 1400px;
+  }
+
+  .slide-divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 14px;
+    flex-shrink: 0;
+  }
+
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    position: relative;
+  }
+
+  .ctrl-bar {
+    height: 40px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    flex-shrink: 0;
+  }
+
+  .ctrl-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-sub);
+    letter-spacing: 1px;
+    margin-right: 4px;
+    font-weight: 600;
+  }
+
+  .ctrl-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 4px 12px;
+    border: 1px solid var(--stroke);
+    background: var(--bg);
+    color: var(--ink);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1.3;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
+  .ctrl-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #F7F6F2;
+  }
+
+  .ctrl-btn.accent-btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .ctrl-btn.accent-btn.active,
+  .ctrl-btn.accent-btn:hover {
+    background: var(--accent);
+    color: #F7F6F2;
+  }
+
+  .ctrl-select {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid var(--stroke);
+    background: var(--bg);
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  .ctrl-status {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 460px;
+  }
+
+  .svg-frame {
+    width: 1400px;
+    height: 430px;
+    background: #FAF9F6;
+    border: 1px solid var(--stroke);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .diagram-zone.has-ctrl .svg-frame {
+    height: 382px;
+  }
+
+  .svg-frame svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .slide-next {
+    margin-top: 18px;
+    width: 1400px;
+    padding: 8px 16px;
+    border-left: 3px solid var(--accent);
+    background: rgba(241, 239, 233, 0.65);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .slide-next-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .slide-next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  .slide-footer {
+    position: absolute;
+    left: 64px;
+    right: 96px;
+    bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+  }
+
+  .slide-footer-right {
+    color: var(--ink-sub);
+    font-weight: 600;
+  }
+
+  /* Right-side In-page Notes Pane (NOT modal) */
+  #notes-pane {
+    width: 0;
+    flex: 0 0 0;
+    background: var(--bg);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.2s ease, flex-basis 0.2s ease;
+    user-select: text;
+  }
+
+  #notes-pane.open {
+    width: 440px;
+    flex: 0 0 440px;
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    padding: 14px 20px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .notes-mode-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    color: var(--primary);
+    background: var(--primary-light);
+    padding: 2px 8px;
+    border: 1px solid rgba(36, 90, 107, 0.25);
+  }
+
+  .notes-close-btn {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 3px 9px;
+    background: var(--bg);
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+  .notes-close-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  #notes-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 18px 20px 40px 20px;
+    line-height: 1.75;
+    font-size: 14.5px;
+    color: var(--ink);
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--stroke);
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .note-block.clickable {
+    cursor: pointer;
+  }
+
+  .note-block.current {
+    background: #FFFFFF;
+    border-color: var(--primary);
+    border-left: 4px solid var(--accent);
+  }
+
+  .note-block-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--stroke);
+  }
+
+  .note-page-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .note-page-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .note-para {
+    margin-bottom: 10px;
+    color: var(--ink-sub);
+    text-align: justify;
+  }
+  .note-para:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Bottom Shortcut HUD Bar (Always visible including Fullscreen, never overlaps stage) */
+  #hud-bar {
+    height: 44px;
+    flex: 0 0 44px;
+    background: var(--strata-1);
+    color: #EBF1EE;
+    border-top: 1px solid #133540;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    z-index: 30;
+  }
+
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(235, 241, 238, 0.08);
+    border: 1px solid rgba(207, 224, 220, 0.25);
+    color: #EBF1EE;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    font-family: var(--font-sans);
+  }
+
+  .hud-btn:hover {
+    background: rgba(235, 241, 238, 0.18);
+    border-color: #A4C4C6;
+  }
+
+  .hud-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #FFFFFF;
+  }
+
+  .hud-btn kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(27, 43, 51, 0.55);
+    border: 1px solid rgba(207, 224, 220, 0.35);
+    color: #CFE0DC;
+  }
+
+  .hud-btn.active kbd {
+    background: rgba(27, 43, 51, 0.35);
+    color: #FFFFFF;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .hud-page-indicator {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #CFE0DC;
+    min-width: 68px;
+    text-align: center;
+  }
+
+  .hud-progress-track {
+    width: 140px;
+    height: 4px;
+    background: rgba(207, 224, 220, 0.2);
+    overflow: hidden;
+  }
+
+  .hud-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 7%;
+    transition: width 0.2s ease;
+  }
+
+  /* TOC Drawer (G) — In-page overlay inside workspace */
+  #toc-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 390px;
+    background: var(--bg);
+    border-right: 1px solid var(--stroke);
+    z-index: 25;
+    display: none;
+    flex-direction: column;
+    box-shadow: 4px 0 18px rgba(27, 43, 51, 0.12);
+  }
+
+  #toc-panel.open {
+    display: flex;
+  }
+
+  .toc-header {
+    padding: 14px 20px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .toc-header-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .toc-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 10px 14px 24px 14px;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--stroke);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .toc-item:hover {
+    background: var(--bg-sub);
+  }
+
+  .toc-item.active {
+    background: var(--primary-light);
+    border-left: 3px solid var(--primary);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary);
+    width: 24px;
+    flex-shrink: 0;
+  }
+
+  .toc-item.active .toc-num {
+    color: var(--accent);
+  }
+
+  .toc-text {
+    font-size: 13.5px;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* SVG common styles */
+  svg {
+    fill: var(--ink);
+  }
+  svg text {
+    font-family: var(--font-sans);
+  }
+  svg text.mono {
+    font-family: var(--font-mono);
+  }
+  svg text.serif {
+    font-family: var(--font-serif);
+  }
+  .svg-node {
+    transition: opacity 0.25s ease, stroke 0.25s ease, fill 0.25s ease;
+  }
+  .svg-dim {
+    opacity: 0.28;
+  }
+  .svg-pulse {
+    stroke-width: 2.8 !important;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <!-- TOC In-page Left Drawer -->
+    <aside id="toc-panel" aria-label="演示文稿目录">
+      <div class="toc-header">
+        <span class="toc-header-title">目录索引 · 共 14 页</span>
+        <button class="notes-close-btn" id="btn-toc-close" type="button">关闭 [G]</button>
+      </div>
+      <div class="toc-list" id="toc-list"></div>
+    </aside>
+
+    <!-- Left 16:9 Vector-Scaled Stage Area -->
+    <main id="stage-area">
+      <div id="stage-viewport">
+
+        <!-- ==================== SLIDE 01: COVER ==================== -->
+        <section class="slide active" data-index="0" data-title="数据库筑基课 —— PostgreSQL 重量锁">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">DATABASE FOUNDATION COURSE · CONCURRENCY &amp; LOCK MANAGEMENT</div>
+          <h1 class="slide-title">数据库筑基课 —— PostgreSQL 重量锁</h1>
+          <p class="slide-lead">从共享锁表、位图冲突矩阵、Fast-Path 迁移到死锁等待图重排：按源码与官方文档剖解 Regular Lock 全链路机制。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left stratigraphic profile: 7 layers from SQL down to hardware spinlock -->
+                <rect x="28" y="22" width="840" height="386" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="48" y="50" class="mono" font-size="13" fill="#245A6B" font-weight="700" letter-spacing="2">POSTGRESQL 并发控制地层剖面（越深 ＝ 越底层）</text>
+
+                <!-- Layer 1 (Top / Shallowest) -->
+                <rect x="48" y="66" width="800" height="44" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+                <text x="66" y="93" font-size="15" font-weight="700" fill="#1B2B33">L1 应用事务层</text>
+                <text x="230" y="93" font-size="14" fill="#46585F">SQL 事务边界、DDL 窗口、lock_timeout / statement_timeout 治理</text>
+
+                <!-- Layer 2 -->
+                <rect x="48" y="114" width="800" height="44" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1"/>
+                <text x="66" y="141" font-size="15" font-weight="700" fill="#1B2B33">L2 MVCC 与元组行锁</text>
+                <text x="230" y="141" font-size="14" fill="#1B2B33">多版本读写不阻塞；行锁落盘元组头，冲突等待转为等待 transactionid</text>
+
+                <!-- Layer 3 (Highlighted: Heavyweight Lock) -->
+                <rect x="48" y="162" width="800" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="2.2"/>
+                <rect x="48" y="162" width="8" height="58" fill="#BE653B"/>
+                <text x="70" y="188" font-size="16" font-weight="700" fill="#BE653B">L3 重量锁（Regular / Heavyweight Lock）—— 本课核心剖面</text>
+                <text x="70" y="210" font-size="13.5" fill="#1B2B33">LOCKTAG 统一寻址 · 8 模式冲突矩阵 · Fast-Path 弱锁加速 · 等待队列 · 死锁检测 · 事务释放</text>
+
+                <!-- Layer 4 -->
+                <rect x="48" y="224" width="800" height="44" fill="#74A5AD" stroke="#47808D" stroke-width="1"/>
+                <text x="66" y="251" font-size="15" font-weight="700" fill="#FFFFFF">L4 谓词锁 SIReadLock</text>
+                <text x="230" y="251" font-size="14" fill="#F7F6F2">Serializable 隔离级别下记录读写依赖，不直接阻塞普通 SQL</text>
+
+                <!-- Layer 5 -->
+                <rect x="48" y="272" width="800" height="44" fill="#47808D" stroke="#2E6373" stroke-width="1"/>
+                <text x="66" y="299" font-size="15" font-weight="700" fill="#FFFFFF">L5 轻量锁 LWLock</text>
+                <text x="230" y="299" font-size="14" fill="#EBF1EE">保护共享内存结构（Buffer、锁表分区），短等待，无常规死锁检测</text>
+
+                <!-- Layer 6 -->
+                <rect x="48" y="320" width="800" height="44" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="66" y="347" font-size="15" font-weight="700" fill="#FFFFFF">L6 自旋锁 Spinlock</text>
+                <text x="230" y="347" font-size="14" fill="#CFE0DC">几十条指令级忙等互斥，保护原子状态字段，严禁长等待</text>
+
+                <!-- Layer 7 -->
+                <rect x="48" y="368" width="800" height="28" fill="#1E4B5A" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="66" y="387" class="mono" font-size="12.5" fill="#CFE0DC">L7 HARDWARE ATOMICS / SHARED MEMORY / OS PROCESS SCHEDULER</text>
+
+                <!-- Right Metadata & Scope Blueprint Card -->
+                <rect x="892" y="22" width="480" height="386" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="892" y="22" width="480" height="38" fill="#245A6B"/>
+                <text x="912" y="46" class="mono" font-size="13" fill="#F7F6F2" font-weight="700" letter-spacing="1.8">COURSE BLUEPRINT · 课程档案</text>
+
+                <text x="914" y="92" font-size="13" fill="#89938F" class="mono">AUTHOR / DATE</text>
+                <text x="914" y="116" font-size="18" font-weight="700" fill="#1B2B33">digoal ｜ 2026-06-08</text>
+                <line x1="914" y1="132" x2="1348" y2="132" stroke="#D9D5CB" stroke-width="1"/>
+
+                <text x="914" y="158" font-size="13" fill="#89938F" class="mono">SOURCE BASIS（核心源码依据）</text>
+                <text x="914" y="182" class="mono" font-size="13.5" fill="#245A6B">src/backend/storage/lmgr/lock.c</text>
+                <text x="914" y="204" class="mono" font-size="13.5" fill="#245A6B">src/backend/storage/lmgr/proc.c</text>
+                <text x="914" y="226" class="mono" font-size="13.5" fill="#245A6B">src/backend/storage/lmgr/deadlock.c</text>
+                <text x="914" y="248" class="mono" font-size="13.5" fill="#245A6B">src/include/storage/lockdefs.h &amp; locktag.h</text>
+                <text x="914" y="270" class="mono" font-size="13.5" fill="#245A6B">src/backend/utils/adt/lockfuncs.c</text>
+                <line x1="914" y1="288" x2="1348" y2="288" stroke="#D9D5CB" stroke-width="1"/>
+
+                <text x="914" y="314" font-size="13" fill="#89938F" class="mono">FIVE CORE QUESTIONS（五个核心问题）</text>
+                <text x="914" y="340" font-size="14" fill="#1B2B33">1. 锁什么？2. 怎么判冲突？3. 为什么级联等待？</text>
+                <text x="914" y="366" font-size="14" fill="#1B2B33">4. 死锁如何检测与重排？5. 线上如何排查治理？</text>
+                <text x="914" y="392" class="mono" font-size="12" fill="#BE653B">按 [N] 本页讲稿 · [T] 全文讲稿 · [G] 目录 · [F] 全屏</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">在拆解源码之前，先看一个生产里最常见的「普通动作叠加导致全线卡死」的锁事故。</span>
+          </div>
+          <div class="slide-footer">
+            <span>POSTGRESQL REGULAR LOCK · 工程蓝图</span>
+            <span class="slide-footer-right">01 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02: PRODUCTION INCIDENT ==================== -->
+        <section class="slide" data-index="1" data-title="生产事故还原：普通动作叠加如何引发全线阻塞">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">01 · BACKGROUND &amp; INCIDENT ANATOMY</div>
+          <h1 class="slide-title">生产事故还原：普通动作叠加如何引发全线阻塞</h1>
+          <p class="slide-lead">数据库并没有突然故障——只是「长事务持锁 + DDL 强锁排队 + 新请求被软阻塞」三个普通动作叠在了一起。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Timeline header axis -->
+                <line x1="60" y1="54" x2="1340" y2="54" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="1340,49 1354,54 1340,59" fill="#245A6B"/>
+                <text x="60" y="38" class="mono" font-size="13" fill="#245A6B" font-weight="700">T0 事故起点</text>
+                <text x="380" y="38" class="mono" font-size="13" fill="#BE653B" font-weight="700">T1 DDL 介入</text>
+                <text x="720" y="38" class="mono" font-size="13" fill="#BE653B" font-weight="700">T2 级联堆积</text>
+                <text x="1060" y="38" class="mono" font-size="13" fill="#46585F" font-weight="700">T3 运维观测盲区</text>
+
+                <!-- Vertical time ticks -->
+                <line x1="60" y1="48" x2="60" y2="60" stroke="#245A6B" stroke-width="2"/>
+                <line x1="380" y1="48" x2="380" y2="60" stroke="#BE653B" stroke-width="2"/>
+                <line x1="720" y1="48" x2="720" y2="60" stroke="#BE653B" stroke-width="2"/>
+                <line x1="1060" y1="48" x2="1060" y2="60" stroke="#46585F" stroke-width="2"/>
+
+                <!-- Stage 1 -->
+                <rect x="60" y="84" width="290" height="220" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="60" y="84" width="290" height="34" fill="#245A6B"/>
+                <text x="76" y="106" font-size="14" font-weight="700" fill="#FFFFFF">步骤 1：长事务开着不提交</text>
+                <text x="76" y="144" class="mono" font-size="13" fill="#1B2B33" font-weight="700">BEGIN; SELECT ...;</text>
+                <text x="76" y="172" font-size="14" fill="#46585F">状态：idle in transaction</text>
+                <text x="76" y="200" font-size="14" fill="#46585F">持锁：AccessShareLock</text>
+                <text x="76" y="226" font-size="14" fill="#46585F">（或持有事务 ID 锁）</text>
+                <rect x="76" y="248" width="258" height="38" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="90" y="272" font-size="13" fill="#245A6B">应用以为空闲，库内仍持锁</text>
+
+                <!-- Arrow 1 -> 2 -->
+                <path d="M 350 194 H 374" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="370,189 380,194 370,199" fill="#245A6B"/>
+
+                <!-- Stage 2 -->
+                <rect x="380" y="84" width="310" height="220" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.8"/>
+                <rect x="380" y="84" width="310" height="34" fill="#BE653B"/>
+                <text x="396" y="106" font-size="14" font-weight="700" fill="#FFFFFF">步骤 2：DDL 申请强锁被挡住</text>
+                <text x="396" y="144" class="mono" font-size="13" fill="#1B2B33" font-weight="700">ALTER TABLE ... ADD COLUMN</text>
+                <text x="396" y="172" font-size="14" fill="#1B2B33">申请：AccessExclusiveLock</text>
+                <text x="396" y="200" font-size="14" fill="#BE653B" font-weight="700">结果：与步骤 1 冲突（硬阻塞）</text>
+                <text x="396" y="226" font-size="14" fill="#46585F">进程挂入 LOCK.waitProcs 队列</text>
+                <rect x="396" y="248" width="278" height="38" fill="#FAF9F6" stroke="#BE653B"/>
+                <text x="410" y="272" font-size="13" fill="#BE653B">waitMask 标记强锁正在等待</text>
+
+                <!-- Arrow 2 -> 3 -->
+                <path d="M 690 194 H 714" stroke="#BE653B" stroke-width="2" fill="none"/>
+                <polygon points="710,189 720,194 710,199" fill="#BE653B"/>
+
+                <!-- Stage 3 -->
+                <rect x="720" y="84" width="310" height="220" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.8"/>
+                <rect x="720" y="84" width="310" height="34" fill="#BE653B"/>
+                <text x="736" y="106" font-size="14" font-weight="700" fill="#FFFFFF">步骤 3：新读写排在 DDL 后面</text>
+                <text x="736" y="144" class="mono" font-size="13" fill="#1B2B33" font-weight="700">SELECT / INSERT / UPDATE</text>
+                <text x="736" y="172" font-size="14" fill="#1B2B33">申请：AccessShare / RowExcl</text>
+                <text x="736" y="200" font-size="14" fill="#BE653B" font-weight="700">结果：与队首强锁冲突（软阻塞）</text>
+                <text x="736" y="226" font-size="14" fill="#46585F">本可与步骤 1 兼容，却被迫排队</text>
+                <rect x="736" y="248" width="278" height="38" fill="#FAF9F6" stroke="#BE653B"/>
+                <text x="750" y="272" font-size="13" fill="#BE653B">连接池迅速打满，业务雪崩</text>
+
+                <!-- Arrow 3 -> 4 -->
+                <path d="M 1030 194 H 1054" stroke="#46585F" stroke-width="2" fill="none"/>
+                <polygon points="1050,189 1060,194 1050,199" fill="#46585F"/>
+
+                <!-- Stage 4 -->
+                <rect x="1060" y="84" width="290" height="220" fill="#F1EFE9" stroke="#89938F" stroke-width="1.5"/>
+                <rect x="1060" y="84" width="290" height="34" fill="#46585F"/>
+                <text x="1076" y="106" font-size="14" font-weight="700" fill="#FFFFFF">步骤 4：只看表象找不到根因</text>
+                <text x="1076" y="144" class="mono" font-size="13" fill="#1B2B33" font-weight="700">wait_event_type = 'Lock'</text>
+                <text x="1076" y="172" font-size="14" fill="#46585F">监控只见大量 SQL 等锁</text>
+                <text x="1076" y="200" font-size="14" fill="#46585F">不知锁对象（LOCKTAG）</text>
+                <text x="1076" y="226" font-size="14" fill="#46585F">不知锁模式与完整阻塞链</text>
+                <rect x="1076" y="248" width="258" height="38" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="1090" y="272" font-size="13" fill="#1B2B33">盲目杀 DDL 或重启治标不治本</text>
+
+                <!-- Bottom Value vs Cost Summary Band -->
+                <rect x="60" y="330" width="630" height="72" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="80" y="356" font-size="14" font-weight="700" fill="#2F7A66">重量锁的价值</text>
+                <text x="80" y="382" font-size="14" fill="#1B2B33">把跨后端、跨事务的对象互斥变成「统一、可观测、可死锁检测、事务自动释放」的机制。</text>
+
+                <rect x="720" y="330" width="630" height="72" fill="#F6F0DF" stroke="#AE8A3E" stroke-width="1.2"/>
+                <text x="740" y="356" font-size="14" font-weight="700" fill="#AE8A3E">重量锁的代价边界</text>
+                <text x="740" y="382" font-size="14" fill="#1B2B33">访问共享锁表、维护等待队列、死锁检测成本高于轻量原语，仅在需要事务语义时启用。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">既然重量锁这么重，它到底在锁哪些对象？为什么说重量锁绝不等于「表锁」？</span>
+          </div>
+          <div class="slide-footer">
+            <span>背景与问题起点</span>
+            <span class="slide-footer-right">02 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03: LOCKTAG MAPPING ==================== -->
+        <section class="slide" data-index="2" data-title="它是什么：LOCKTAG 如何统一映射八类可锁对象">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">02 · DEFINITION &amp; LOCKTAG ENCODING</div>
+          <h1 class="slide-title">它是什么：LOCKTAG 如何统一映射八类可锁对象</h1>
+          <p class="slide-lead">重量锁是 regular lock manager 提供的共享内存锁机制：先用 LOCKTAG 统一编码对象，再用 LOCKMODE 判冲突。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Column: 4 grouped object categories (8 locktypes) -->
+                <text x="44" y="36" class="mono" font-size="13" fill="#245A6B" font-weight="700">1. SQL 可见对象与内部等待对象（pg_locks.locktype）</text>
+
+                <rect x="44" y="52" width="380" height="70" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.4"/>
+                <text x="62" y="78" font-size="15" font-weight="700" fill="#1B2B33">表与物理存储类</text>
+                <text x="62" y="104" class="mono" font-size="13" fill="#245A6B">relation · extend · page · tuple</text>
+
+                <rect x="44" y="134" width="380" height="70" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.4"/>
+                <text x="62" y="160" font-size="15" font-weight="700" fill="#1B2B33">事务等待类</text>
+                <text x="62" y="186" class="mono" font-size="13" fill="#245A6B">transactionid · virtualxid</text>
+
+                <rect x="44" y="216" width="380" height="70" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.4"/>
+                <text x="62" y="242" font-size="15" font-weight="700" fill="#1B2B33">通用数据库对象类</text>
+                <text x="62" y="268" class="mono" font-size="13" fill="#245A6B">object（classid + objid + objsubid）</text>
+
+                <rect x="44" y="298" width="380" height="70" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.4"/>
+                <text x="62" y="324" font-size="15" font-weight="700" fill="#1B2B33">应用自定义咨询锁</text>
+                <text x="62" y="350" class="mono" font-size="13" fill="#245A6B">advisory（database + key1 / key2）</text>
+
+                <!-- Orthogonal connectors Left -> Middle -->
+                <path d="M 424 87 H 480 V 175 H 526" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <path d="M 424 169 H 480" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <path d="M 424 251 H 480 V 175" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <path d="M 424 333 H 480 V 251" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <polygon points="520,170 532,175 520,180" fill="#245A6B"/>
+
+                <!-- Middle Column: LOCKTAG struct -->
+                <text x="536" y="36" class="mono" font-size="13" fill="#245A6B" font-weight="700">2. 统一编码为 LOCKTAG（locktag.h）</text>
+                <rect x="536" y="52" width="390" height="246" fill="#F1EFE9" stroke="#245A6B" stroke-width="2"/>
+                <rect x="536" y="52" width="390" height="36" fill="#245A6B"/>
+                <text x="554" y="75" class="mono" font-size="14" font-weight="700" fill="#FFFFFF">struct LOCKTAG（固定长度键）</text>
+
+                <rect x="554" y="102" width="354" height="34" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="568" y="124" class="mono" font-size="13" fill="#1B2B33">field1..field4 : uint32 × 4</text>
+
+                <rect x="554" y="144" width="354" height="34" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="568" y="166" class="mono" font-size="13" fill="#1B2B33">locktag_type   : uint8（对象类型）</text>
+
+                <rect x="554" y="186" width="354" height="34" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="568" y="208" class="mono" font-size="13" fill="#1B2B33">lockmethodid   : uint8（DEFAULT / USER）</text>
+
+                <text x="554" y="246" font-size="13.5" fill="#46585F">• relation：db OID + rel OID</text>
+                <text x="554" y="268" font-size="13.5" fill="#46585F">• transactionid：XID（行锁等待核心）</text>
+                <text x="554" y="288" font-size="13.5" fill="#46585F">• object：classid + objid + subid</text>
+
+                <!-- Orthogonal connector Middle -> Right -->
+                <path d="M 926 175 H 982" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="976,170 988,175 976,180" fill="#245A6B"/>
+
+                <!-- Right Column: Unified Lock Manager Decision -->
+                <text x="992" y="36" class="mono" font-size="13" fill="#245A6B" font-weight="700">3. 共享锁表统一裁决</text>
+                <rect x="992" y="52" width="364" height="246" fill="#EBF1EE" stroke="#47808D" stroke-width="1.6"/>
+                <rect x="992" y="52" width="364" height="36" fill="#47808D"/>
+                <text x="1010" y="75" class="mono" font-size="14" font-weight="700" fill="#FFFFFF">LOCKTAG + LOCKMODE</text>
+
+                <rect x="1010" y="104" width="328" height="44" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="1026" y="131" font-size="14" fill="#1B2B33">① 哈希定位共享分区与 LOCK 条目</text>
+
+                <rect x="1010" y="160" width="328" height="44" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="1026" y="187" font-size="14" fill="#1B2B33">② 查 LockConflicts[] 矩阵判兼容</text>
+
+                <rect x="1010" y="216" width="328" height="62" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="1026" y="242" font-size="14" fill="#2F7A66" font-weight="700">兼容 → 授予并记录持有者</text>
+                <text x="1026" y="264" font-size="14" fill="#BE653B" font-weight="700">冲突 → 等待 / NOWAIT / 超时 / 死锁</text>
+
+                <!-- Bottom Misconception Clarifier Band -->
+                <rect x="536" y="314" width="820" height="88" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.6"/>
+                <rect x="536" y="314" width="6" height="88" fill="#BE653B"/>
+                <text x="558" y="342" font-size="15" font-weight="700" fill="#BE653B">高频误解澄清：行级锁为什么不直接出现在 pg_locks 里？</text>
+                <text x="558" y="368" font-size="14" fill="#1B2B33">行级锁信息存储在磁盘元组头部（xmax / infomask），不占用普通共享内存锁槽；当进程 B 更新被 A 锁住的行时，</text>
+                <text x="558" y="390" font-size="14" fill="#1B2B33">B 会转为等待持锁事务 A 的 <tspan class="mono" font-weight="700" fill="#245A6B">transactionid</tspan> 重量锁（并在必要时短暂获取 tuple 锁排队）。</text>
+
+                <!-- Bottom-left MVCC boundary note -->
+                <rect x="44" y="380" width="440" height="22" fill="none"/>
+                <text x="44" y="396" font-size="13" fill="#46585F">注：MVCC 解决「读到哪个版本」，重量锁解决「对象能否同时改」。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">对象通过 LOCKTAG 统一寻址后，下一步就是核心问题：8 种锁模式之间，到底谁和谁冲突？</span>
+          </div>
+          <div class="slide-footer">
+            <span>LOCKTAG 对象统一抽象</span>
+            <span class="slide-footer-right">03 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04: CONFLICT MATRIX (INTERACTIVE) ==================== -->
+        <section class="slide" data-index="3" data-title="核心原理：8 种锁模式与 LockConflicts 位图矩阵">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">03.1 · LOCK MODES &amp; CONFLICT MATRIX</div>
+          <h1 class="slide-title">核心原理：8 种锁模式与 LockConflicts 位图矩阵</h1>
+          <p class="slide-lead">冲突判定不是一串 if/else，而是 lock.c 的位运算 conflictTab[req] &amp; lock-&gt;grantMask；语义以矩阵为准。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-ctrl">
+            <div class="ctrl-bar" id="s4-ctrl">
+              <span class="ctrl-label">冲突查询</span>
+              <label style="font-size:12.5px;color:#46585F;">已持有：</label>
+              <select class="ctrl-select" id="s4-held"></select>
+              <label style="font-size:12.5px;color:#46585F;">新请求：</label>
+              <select class="ctrl-select" id="s4-req"></select>
+              <button class="ctrl-btn" type="button" data-s4-preset="0,7">SELECT vs ALTER</button>
+              <button class="ctrl-btn" type="button" data-s4-preset="2,4">UPDATE vs CREATE INDEX</button>
+              <button class="ctrl-btn" type="button" data-s4-preset="2,3">UPDATE vs VACUUM</button>
+              <span class="ctrl-status" id="s4-status">点击矩阵格子或切换下拉选择验证位图冲突</span>
+            </div>
+            <div class="svg-frame">
+              <svg id="svg-s4" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">知道了冲突规则，这些 grantMask 和持有状态究竟存放在内存的哪些数据结构里？</span>
+          </div>
+          <div class="slide-footer">
+            <span>src/include/storage/lockdefs.h · lock.c</span>
+            <span class="slide-footer-right">04 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05: 3-TIER ARCHITECTURE ==================== -->
+        <section class="slide" data-index="4" data-title="三层状态架构：LOCALLOCK、LOCK 与 PROCLOCK">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">03.2 · THREE-TIER LOCK STATE ARCHITECTURE</div>
+          <h1 class="slide-title">三层状态架构：LOCALLOCK、LOCK 与 PROCLOCK</h1>
+          <p class="slide-lead">重量锁并非「一张共享大表」，而是通过本地私有与共享内存分层，在正确性与高并发写入成本之间取得折中。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Band: Backend Private Memory -->
+                <rect x="34" y="24" width="400" height="382" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.6"/>
+                <rect x="34" y="24" width="400" height="36" fill="#2E6373"/>
+                <text x="52" y="47" class="mono" font-size="13.5" font-weight="700" fill="#FFFFFF">BACKEND 私有内存（单进程无锁访问）</text>
+
+                <rect x="54" y="80" width="360" height="196" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.6"/>
+                <rect x="54" y="80" width="360" height="32" fill="#E5EFF0"/>
+                <text x="70" y="101" class="mono" font-size="14" font-weight="700" fill="#245A6B">LOCALLOCK（哈希表条目）</text>
+                <text x="70" y="134" class="mono" font-size="13" fill="#1B2B33">key: LOCKTAG + LOCKMODE</text>
+                <text x="70" y="160" font-size="14" fill="#46585F">• nLocks：本后端重复获取次数</text>
+                <text x="70" y="186" font-size="14" fill="#46585F">• lockOwners：归属 ResourceOwner</text>
+                <text x="70" y="212" font-size="14" fill="#46585F">• lock / proclock 指针缓存</text>
+                <text x="70" y="238" font-size="14" fill="#2F7A66" font-weight="700">同事务重复取同模式锁：只加本地计数</text>
+                <text x="70" y="260" font-size="13.5" fill="#2F7A66">无需争抢共享锁表分区 LWLock</text>
+
+                <rect x="54" y="294" width="360" height="92" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="70" y="320" font-size="14" font-weight="700" fill="#1B2B33">ResourceOwner 联动</text>
+                <text x="70" y="346" font-size="13.5" fill="#46585F">追踪事务 / 子事务 / Portal 持锁明细</text>
+                <text x="70" y="370" font-size="13.5" fill="#46585F">事务提交、报错回滚时精确自动释放</text>
+
+                <!-- Right Area: Shared Memory Lock Table -->
+                <rect x="486" y="24" width="880" height="382" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.8"/>
+                <rect x="486" y="24" width="880" height="36" fill="#1E4B5A"/>
+                <text x="504" y="47" class="mono" font-size="13.5" font-weight="700" fill="#FFFFFF">SHARED MEMORY 共享锁表（按 LOCKTAG 哈希分 16 分区，每分区配 LWLock）</text>
+
+                <!-- Shared LOCK box -->
+                <rect x="514" y="80" width="390" height="220" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.8"/>
+                <rect x="514" y="80" width="390" height="32" fill="#245A6B"/>
+                <text x="530" y="101" class="mono" font-size="14" font-weight="700" fill="#FFFFFF">LOCK（每个可锁对象一条）</text>
+                <text x="530" y="134" class="mono" font-size="13" fill="#1B2B33">tag: LOCKTAG</text>
+                <text x="530" y="160" class="mono" font-size="13" fill="#245A6B">grantMask / waitMask（位图）</text>
+                <text x="530" y="186" class="mono" font-size="13" fill="#46585F">requested[] / granted[]（按模式计数）</text>
+                <text x="530" y="212" class="mono" font-size="13" fill="#46585F">procLocks（关联所有 PROCLOCK 链表）</text>
+                <text x="530" y="238" class="mono" font-size="13" fill="#BE653B" font-weight="700">waitProcs（等待此对象的进程队列）</text>
+                <text x="530" y="274" font-size="13.5" fill="#46585F">职责：对象级总体状态与冲突仲裁中心</text>
+
+                <!-- Shared PROCLOCK box -->
+                <rect x="954" y="80" width="384" height="220" fill="#FAF9F6" stroke="#BE653B" stroke-width="1.8"/>
+                <rect x="954" y="80" width="384" height="32" fill="#BE653B"/>
+                <text x="970" y="101" class="mono" font-size="14" font-weight="700" fill="#FFFFFF">PROCLOCK（某后端 × 某 LOCK）</text>
+                <text x="970" y="134" class="mono" font-size="13" fill="#1B2B33">key: (LOCK *, PGPROC *)</text>
+                <text x="970" y="160" class="mono" font-size="13" fill="#2F7A66" font-weight="700">holdMask（该后端已持有模式位图）</text>
+                <text x="970" y="186" class="mono" font-size="13" fill="#46585F">releaseMask（待释放模式位图）</text>
+                <text x="970" y="212" class="mono" font-size="13" fill="#46585F">lockLink → 挂在 LOCK.procLocks</text>
+                <text x="970" y="238" class="mono" font-size="13" fill="#46585F">procLink → 挂在 PGPROC.myProcLocks</text>
+                <text x="970" y="274" font-size="13.5" fill="#46585F">职责：精确记录谁持有/等待哪把锁</text>
+
+                <!-- PGPROC bar at bottom of Shared Memory -->
+                <rect x="514" y="324" width="824" height="62" fill="#E5EFF0" stroke="#47808D" stroke-width="1.5"/>
+                <text x="534" y="350" class="mono" font-size="14" font-weight="700" fill="#1E4B5A">PGPROC（共享内存中的后端进程描述符）</text>
+                <text x="534" y="374" font-size="13.5" fill="#1B2B33">记录 myProcLocks 链表、waitLock / waitLockMode，以及用于弱 relation 锁加速的 Fast-Path 槽位。</text>
+
+                <!-- Orthogonal arrows -->
+                <!-- LOCALLOCK -> LOCK -->
+                <path d="M 414 146 H 506" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="502,141 514,146 502,151" fill="#245A6B"/>
+                <text x="430" y="136" class="mono" font-size="11.5" fill="#245A6B">指针</text>
+
+                <!-- LOCK <-> PROCLOCK -->
+                <path d="M 904 190 H 946" stroke="#BE653B" stroke-width="2" fill="none"/>
+                <polygon points="942,185 954,190 942,195" fill="#BE653B"/>
+                <polygon points="914,185 904,190 914,195" fill="#BE653B"/>
+
+                <!-- PROCLOCK -> PGPROC -->
+                <path d="M 1146 300 V 318" stroke="#47808D" stroke-width="2" fill="none"/>
+                <polygon points="1141,314 1146,324 1151,314" fill="#47808D"/>
+
+                <!-- LOCK waitProcs -> PGPROC -->
+                <path d="M 708 300 V 318" stroke="#BE653B" stroke-width="2" fill="none"/>
+                <polygon points="703,314 708,324 713,314" fill="#BE653B"/>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">三层结构搭好之后，高并发短 SQL 每次都进共享表还是太慢——这正是 Fast-Path 存在的理由。</span>
+          </div>
+          <div class="slide-footer">
+            <span>src/include/storage/lock.h · 三层状态模型</span>
+            <span class="slide-footer-right">05 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06: ACQUIRE PATH & FAST-PATH (INTERACTIVE) ==================== -->
+        <section class="slide" data-index="5" data-title="获取锁路径与 Fast-Path 强锁迁移机制">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">03.3 &amp; 03.4 · LOCKACQUIRE &amp; FAST-PATH</div>
+          <h1 class="slide-title">获取锁路径与 Fast-Path 强锁迁移机制</h1>
+          <p class="slide-lead">重量锁并非每次都走最重路径：已持锁只加本地计数，常见弱 relation 锁走 PGPROC Fast-Path，强锁来时先计数再迁移。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-ctrl">
+            <div class="ctrl-bar" id="s6-ctrl">
+              <span class="ctrl-label">路径演练</span>
+              <select class="ctrl-select" id="s6-scenario">
+                <option value="local">场景 1：已持有同模式锁（本地计数）</option>
+                <option value="fastpath" selected>场景 2：普通 SELECT 走 Fast-Path</option>
+                <option value="main_grant">场景 3：主共享锁表无冲突授予</option>
+                <option value="strong_evict">场景 4：ALTER 强锁迁移 Fast-Path 并等待</option>
+              </select>
+              <button class="ctrl-btn active" id="s6-play" type="button">播放</button>
+              <button class="ctrl-btn" id="s6-step" type="button">单步</button>
+              <button class="ctrl-btn" id="s6-reset" type="button">重置</button>
+              <span class="ctrl-status" id="s6-status">点击「播放」或「单步」查看 LockAcquireExtended() 执行路径</span>
+            </div>
+            <div class="svg-frame">
+              <svg id="svg-s6" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+                <!-- Row 1: Entry & Local Check -->
+                <g id="s6-n0" class="svg-node">
+                  <rect x="28" y="34" width="210" height="72" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.6"/>
+                  <text x="44" y="62" class="mono" font-size="13" font-weight="700" fill="#245A6B">1. LockAcquireExtended</text>
+                  <text x="44" y="86" font-size="13" fill="#46585F">校验 method/mode，查建 LOCALLOCK</text>
+                </g>
+
+                <path d="M 238 70 H 276" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <polygon points="272,65 282,70 272,75" fill="#245A6B"/>
+
+                <g id="s6-n1" class="svg-node">
+                  <rect x="282" y="34" width="210" height="72" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.6"/>
+                  <text x="298" y="62" font-size="14" font-weight="700" fill="#1B2B33">2. 本后端已持有同模式？</text>
+                  <text x="298" y="86" class="mono" font-size="12.5" fill="#46585F">locallock-&gt;nLocks &gt; 0</text>
+                </g>
+
+                <!-- Branch Up/Right: Local Grant -->
+                <path d="M 492 52 H 552" stroke="#2F7A66" stroke-width="1.8" fill="none"/>
+                <polygon points="548,47 558,52 548,57" fill="#2F7A66"/>
+                <text x="504" y="44" font-size="12" fill="#2F7A66" font-weight="700">是</text>
+
+                <g id="s6-n2" class="svg-node">
+                  <rect x="558" y="20" width="270" height="64" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.8"/>
+                  <text x="574" y="47" class="mono" font-size="13.5" font-weight="700" fill="#2F7A66">GrantLockLocal()</text>
+                  <text x="574" y="69" font-size="13" fill="#1B2B33">仅增本地计数，零共享内存写入</text>
+                </g>
+
+                <!-- Branch Down: Fast-Path Check -->
+                <path d="M 387 106 V 144" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <polygon points="382,140 387,150 392,140" fill="#245A6B"/>
+                <text x="396" y="132" font-size="12" fill="#46585F">否</text>
+
+                <g id="s6-n3" class="svg-node">
+                  <rect x="242" y="150" width="290" height="84" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.6"/>
+                  <text x="258" y="176" font-size="14" font-weight="700" fill="#1B2B33">3. 满足 Fast-Path 条件？</text>
+                  <text x="258" y="198" font-size="12.5" fill="#46585F">默认方法 · 非共享 relation · 3 种弱锁</text>
+                  <text x="258" y="218" class="mono" font-size="12" fill="#245A6B">StrongLockCount == 0 且槽位未满</text>
+                </g>
+
+                <!-- Branch Right: Fast-Path Grant -->
+                <path d="M 532 172 H 558" stroke="#2F7A66" stroke-width="1.8" fill="none"/>
+                <polygon points="554,167 564,172 554,177" fill="#2F7A66"/>
+                <text x="536" y="164" font-size="12" fill="#2F7A66" font-weight="700">是</text>
+
+                <g id="s6-n4" class="svg-node">
+                  <rect x="564" y="120" width="310" height="92" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.8"/>
+                  <text x="580" y="146" class="mono" font-size="13.5" font-weight="700" fill="#2F7A66">写入 PGPROC Fast-Path 槽</text>
+                  <text x="580" y="170" font-size="13" fill="#1B2B33">避开主锁表分区 LWLock 争抢</text>
+                  <text x="580" y="194" class="mono" font-size="12" fill="#46585F">默认 max_locks_per_xact=128 → 8 groups</text>
+                </g>
+
+                <!-- Strong Lock Migration Box (Top Right) -->
+                <g id="s6-n5" class="svg-node">
+                  <rect x="916" y="20" width="456" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.8"/>
+                  <text x="934" y="46" font-size="14" font-weight="700" fill="#BE653B">强 Relation 锁前置动作（防止漏判冲突）</text>
+                  <text x="934" y="70" font-size="13" fill="#1B2B33">① 增加 FastPathStrongRelationLocks 分区计数，阻止新弱锁走快路</text>
+                  <text x="934" y="94" font-size="13" fill="#1B2B33">② 扫描各后端 PGPROC Fast-Path 槽，将匹配弱锁迁移进主共享锁表</text>
+                  <text x="934" y="118" font-size="13" fill="#46585F">③ 确保后续冲突检查与死锁检测看到全局完整持锁视图</text>
+                </g>
+
+                <!-- Arrow from Fast-Path Check Down to Main Lock Table -->
+                <path d="M 387 234 V 274" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <polygon points="382,270 387,280 392,270" fill="#245A6B"/>
+                <text x="396" y="260" font-size="12" fill="#46585F">否 / 强锁</text>
+
+                <!-- Strong lock arrow down to step 4 -->
+                <path d="M 1144 134 V 248 H 736 V 274" stroke="#BE653B" stroke-width="1.6" stroke-dasharray="5,4" fill="none"/>
+                <polygon points="731,270 736,280 741,270" fill="#BE653B"/>
+
+                <!-- Row 3: Main Shared Lock Table & Conflict Decision -->
+                <g id="s6-n6" class="svg-node">
+                  <rect x="242" y="280" width="320" height="78" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.8"/>
+                  <text x="258" y="306" font-size="14" font-weight="700" fill="#1B2B33">4. 进入共享锁表分区</text>
+                  <text x="258" y="328" font-size="13" fill="#46585F">取分区 LWLock，查找或创建 LOCK &amp; PROCLOCK</text>
+                  <text x="258" y="348" class="mono" font-size="12" fill="#245A6B">先查 waitMask，再查 grantMask</text>
+                </g>
+
+                <path d="M 562 319 H 614" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+                <polygon points="610,314 620,319 610,324" fill="#245A6B"/>
+
+                <g id="s6-n7" class="svg-node">
+                  <rect x="620" y="280" width="230" height="78" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.6"/>
+                  <text x="636" y="308" font-size="14" font-weight="700" fill="#1B2B33">5. 存在冲突？</text>
+                  <text x="636" y="332" class="mono" font-size="12" fill="#46585F">LockCheckConflicts()</text>
+                </g>
+
+                <!-- No conflict -> GrantLock -->
+                <path d="M 850 298 H 910" stroke="#2F7A66" stroke-width="1.8" fill="none"/>
+                <polygon points="906,293 916,298 906,303" fill="#2F7A66"/>
+                <text x="868" y="290" font-size="12" fill="#2F7A66" font-weight="700">无</text>
+
+                <g id="s6-n8" class="svg-node">
+                  <rect x="916" y="264" width="456" height="44" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.8"/>
+                  <text x="934" y="291" font-size="14" font-weight="700" fill="#2F7A66">GrantLock() → 更新 grantMask / holdMask，立即返回</text>
+                </g>
+
+                <!-- Conflict -> JoinWaitQueue + ProcSleep -->
+                <path d="M 850 338 H 910" stroke="#BE653B" stroke-width="1.8" fill="none"/>
+                <polygon points="906,333 916,338 906,343" fill="#BE653B"/>
+                <text x="868" y="330" font-size="12" fill="#BE653B" font-weight="700">有</text>
+
+                <g id="s6-n9" class="svg-node">
+                  <rect x="916" y="318" width="456" height="44" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.8"/>
+                  <text x="934" y="345" font-size="14" font-weight="700" fill="#BE653B">JoinWaitQueue() → ProcSleep() 挂起等待（或 NOWAIT 报错）</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">看清了获取路径与 Fast-Path，再把重量锁放回整个 PostgreSQL 锁家族中横向比较，就能明白它为何「重得有理」。</span>
+          </div>
+          <div class="slide-footer">
+            <span>LockAcquireExtended · FastPathStrongRelationLocks</span>
+            <span class="slide-footer-right">06 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07: HORIZONTAL COMPARISON ==================== -->
+        <section class="slide" data-index="6" data-title="横向对比：五类锁原语的工程分工与地层边界">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">04 · LOCK FAMILY COMPARISON</div>
+          <h1 class="slide-title">横向对比：五类锁原语的工程分工与地层边界</h1>
+          <p class="slide-lead">重量锁的「重」不是缺陷，而是它承担了事务语义、等待队列、死锁检测与可观测性；每层锁各司其职。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Table Header -->
+                <rect x="24" y="20" width="1352" height="38" fill="#1E4B5A"/>
+                <text x="42" y="44" font-size="14" font-weight="700" fill="#FFFFFF">锁类型（由浅入深）</text>
+                <text x="254" y="44" font-size="14" font-weight="700" fill="#FFFFFF">主要目标与典型对象</text>
+                <text x="530" y="44" font-size="14" font-weight="700" fill="#FFFFFF">等待时长</text>
+                <text x="650" y="44" font-size="14" font-weight="700" fill="#FFFFFF">死锁检测</text>
+                <text x="800" y="44" font-size="14" font-weight="700" fill="#FFFFFF">释放与可观测性</text>
+                <text x="1114" y="44" font-size="14" font-weight="700" fill="#FFFFFF">禁止误用场景</text>
+
+                <!-- Row 1: Heavyweight Lock (Highlighted) -->
+                <rect x="24" y="60" width="1352" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.8"/>
+                <rect x="24" y="60" width="8" height="72" fill="#BE653B"/>
+                <text x="42" y="90" font-size="15" font-weight="700" fill="#BE653B">重量锁</text>
+                <text x="42" y="112" class="mono" font-size="12" fill="#BE653B">Regular / Heavyweight</text>
+                <text x="254" y="90" font-size="13.5" fill="#1B2B33">SQL 可见对象与内部等待对象</text>
+                <text x="254" y="112" class="mono" font-size="12" fill="#46585F">relation / xid / object / advisory</text>
+                <text x="530" y="100" font-size="13.5" fill="#1B2B33" font-weight="700">可较长</text>
+                <text x="650" y="100" font-size="13.5" fill="#2F7A66" font-weight="700">完整检测+重排</text>
+                <text x="800" y="90" font-size="13" fill="#1B2B33">事务/会话结束释放</text>
+                <text x="800" y="112" class="mono" font-size="12" fill="#245A6B">pg_locks / pg_blocking_pids()</text>
+                <text x="1114" y="98" font-size="13" fill="#BE653B">高频极短内核状态保护</text>
+
+                <!-- Row 2: Row-level Lock -->
+                <rect x="24" y="136" width="1352" height="66" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <rect x="24" y="136" width="8" height="66" fill="#A4C4C6"/>
+                <text x="42" y="164" font-size="15" font-weight="700" fill="#1B2B33">行级锁</text>
+                <text x="42" y="185" class="mono" font-size="12" fill="#46585F">Tuple / Row Lock</text>
+                <text x="254" y="164" font-size="13.5" fill="#1B2B33">防并发修改同一行</text>
+                <text x="254" y="185" class="mono" font-size="12" fill="#46585F">heap tuple（存磁盘元组头）</text>
+                <text x="530" y="174" font-size="13.5" fill="#1B2B33">可等事务结束</text>
+                <text x="650" y="174" font-size="13" fill="#245A6B">借 xid 参与检测</text>
+                <text x="800" y="164" font-size="13" fill="#1B2B33">事务结束释放</text>
+                <text x="800" y="185" font-size="12.5" fill="#46585F">本体通常不直接现于 pg_locks</text>
+                <text x="1114" y="174" font-size="13" fill="#46585F">保护表结构变更</text>
+
+                <!-- Row 3: Predicate Lock -->
+                <rect x="24" y="206" width="1352" height="66" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="206" width="8" height="66" fill="#74A5AD"/>
+                <text x="42" y="234" font-size="15" font-weight="700" fill="#1B2B33">谓词锁</text>
+                <text x="42" y="255" class="mono" font-size="12" fill="#46585F">SIReadLock</text>
+                <text x="254" y="234" font-size="13.5" fill="#1B2B33">Serializable 记录读写依赖</text>
+                <text x="254" y="255" class="mono" font-size="12" fill="#46585F">relation / page / tuple 谓词</text>
+                <text x="530" y="244" font-size="13.5" fill="#2F7A66">通常不阻塞</text>
+                <text x="650" y="244" font-size="13" fill="#46585F">SSI 冲突中止</text>
+                <text x="800" y="234" font-size="13" fill="#1B2B33">由 SSI 机制管理生命周期</text>
+                <text x="800" y="255" font-size="12.5" fill="#46585F">pg_locks 可见 SIReadLock</text>
+                <text x="1114" y="244" font-size="13" fill="#46585F">替代表锁或行锁</text>
+
+                <!-- Row 4: LWLock -->
+                <rect x="24" y="276" width="1352" height="66" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <rect x="24" y="276" width="8" height="66" fill="#47808D"/>
+                <text x="42" y="304" font-size="15" font-weight="700" fill="#1B2B33">轻量锁</text>
+                <text x="42" y="325" class="mono" font-size="12" fill="#46585F">LWLock</text>
+                <text x="254" y="304" font-size="13.5" fill="#1B2B33">保护共享内存数据结构</text>
+                <text x="254" y="325" class="mono" font-size="12" fill="#46585F">buffer / 锁表分区 / 共享结构</text>
+                <text x="530" y="314" font-size="13.5" fill="#1B2B33">应较短</text>
+                <text x="650" y="314" font-size="13" fill="#89938F">无常规检测</text>
+                <text x="800" y="304" font-size="13" fill="#1B2B33">error cleanup 自动释放</text>
+                <text x="800" y="325" font-size="12.5" fill="#46585F">wait_event 可见，非 pg_locks 主体</text>
+                <text x="1114" y="314" font-size="13" fill="#BE653B">用户 SQL 级长等待</text>
+
+                <!-- Row 5: Spinlock -->
+                <rect x="24" y="346" width="1352" height="66" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="346" width="8" height="66" fill="#1E4B5A"/>
+                <text x="42" y="374" font-size="15" font-weight="700" fill="#1B2B33">自旋锁</text>
+                <text x="42" y="395" class="mono" font-size="12" fill="#46585F">Spinlock</text>
+                <text x="254" y="374" font-size="13.5" fill="#1B2B33">极短临界区（几十条指令）</text>
+                <text x="254" y="395" class="mono" font-size="12" fill="#46585F">原子状态字段</text>
+                <text x="530" y="384" font-size="13.5" fill="#BE653B" font-weight="700">极短，忙等</text>
+                <text x="650" y="384" font-size="13" fill="#89938F">无检测</text>
+                <text x="800" y="374" font-size="13" fill="#1B2B33">无事务语义，不可抛错</text>
+                <text x="800" y="395" font-size="12.5" fill="#46585F">基本不可作为用户级对象观察</text>
+                <text x="1114" y="384" font-size="13" fill="#BE653B">任何可能长等待的逻辑</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">回到重量锁内部：当锁冲突发生、进程进入等待队列后，为什么一个 DDL 会把后续所有读请求一起拖垮？</span>
+          </div>
+          <div class="slide-footer">
+            <span>src/backend/storage/lmgr/README · 锁家族边界</span>
+            <span class="slide-footer-right">07 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08: WAIT QUEUE & CASCADE BLOCKING (INTERACTIVE) ==================== -->
+        <section class="slide" data-index="7" data-title="等待队列与唤醒：为什么普通 SELECT 会被「软阻塞」">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">03.5 · WAIT QUEUE &amp; PROCLOCKWAKEUP</div>
+          <h1 class="slide-title">等待队列与唤醒：为什么普通 SELECT 会被「软阻塞」</h1>
+          <p class="slide-lead">唤醒条件要求不与已授予锁冲突，且不与队列前方尚未唤醒的等待者冲突；这正是 DDL 级联阻塞的底层根源。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-ctrl">
+            <div class="ctrl-bar" id="s8-ctrl">
+              <span class="ctrl-label">队列模拟</span>
+              <select class="ctrl-select" id="s8-mode">
+                <option value="cascade" selected>演练 1：DDL 排队引发后续 SELECT 级联软阻塞</option>
+                <option value="jump">演练 2：已持锁者申请升级锁（JoinWaitQueue 插队）</option>
+              </select>
+              <button class="ctrl-btn active" id="s8-play" type="button">播放</button>
+              <button class="ctrl-btn" id="s8-step" type="button">单步</button>
+              <button class="ctrl-btn" id="s8-reset" type="button">重置</button>
+              <span class="ctrl-status" id="s8-status">点击「播放」或「单步」观察 LOCK.waitProcs 队列演化</span>
+            </div>
+            <div class="svg-frame">
+              <svg id="svg-s8" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">等待队列不仅会产生软阻塞，还会让等待关系形成环路——接下来看 PostgreSQL 如何检测并化解死锁。</span>
+          </div>
+          <div class="slide-footer">
+            <span>proc.c · JoinWaitQueue() &amp; ProcLockWakeup()</span>
+            <span class="slide-footer-right">08 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09: DEADLOCK & WFG (INTERACTIVE) ==================== -->
+        <section class="slide" data-index="8" data-title="死锁检测：等待图（WFG）、软边重排与硬死锁中止">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">03.6 · DEADLOCK DETECTION &amp; QUEUE REARRANGEMENT</div>
+          <h1 class="slide-title">死锁检测：等待图（WFG）、软边重排与硬死锁中止</h1>
+          <p class="slide-lead">采用乐观等待策略：超过 deadlock_timeout（默认 1 秒）才构图检测；若环路仅含软边，先尝试重排队列避免中止事务。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-ctrl">
+            <div class="ctrl-bar" id="s9-ctrl">
+              <span class="ctrl-label">死锁演练</span>
+              <select class="ctrl-select" id="s9-mode">
+                <option value="soft" selected>模式 1：软死锁（含队列顺序软边 → 重排队列无损化解）</option>
+                <option value="hard">模式 2：硬死锁（互相持有对方所需锁 → 中止一方事务）</option>
+              </select>
+              <button class="ctrl-btn active" id="s9-play" type="button">播放</button>
+              <button class="ctrl-btn" id="s9-step" type="button">单步</button>
+              <button class="ctrl-btn" id="s9-reset" type="button">重置</button>
+              <span class="ctrl-status" id="s9-status">点击「播放」或「单步」观察 deadlock.c 等待图分析</span>
+            </div>
+            <div class="svg-frame">
+              <svg id="svg-s9" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">核心机制全部剖解完毕，现在从工程视角盘点：这套重量锁机制带来的收益与必须支付的系统代价。</span>
+          </div>
+          <div class="slide-footer">
+            <span>src/backend/storage/lmgr/deadlock.c · deadlock_timeout</span>
+            <span class="slide-footer-right">09 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10: GAINS VS COSTS ==================== -->
+        <section class="slide" data-index="9" data-title="工程权衡：重量锁的五大收益与四大代价">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">05 · ENGINEERING TRADE-OFFS</div>
+          <h1 class="slide-title">工程权衡：重量锁的五大收益与四大代价</h1>
+          <p class="slide-lead">重量锁换来了统一正确性与可观测性，同时也带来了共享内存上限、级联排队、检测延迟与视图非快照约束。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Panel: 5 Gains -->
+                <rect x="30" y="22" width="648" height="386" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.6"/>
+                <rect x="30" y="22" width="648" height="38" fill="#2F7A66"/>
+                <text x="50" y="46" font-size="15" font-weight="700" fill="#FFFFFF">核心收益（WHY HEAVYWEIGHT LOCK PAYS OFF）</text>
+
+                <rect x="48" y="76" width="612" height="56" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="64" y="100" font-size="14.5" font-weight="700" fill="#2F7A66">1. 统一正确性</text>
+                <text x="64" y="121" font-size="13.5" fill="#1B2B33">DDL、DML、事务等待、咨询锁全部走同一冲突矩阵，语义无歧义。</text>
+
+                <rect x="48" y="140" width="612" height="56" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="64" y="164" font-size="14.5" font-weight="700" fill="#2F7A66">2. 事务级可恢复性</text>
+                <text x="64" y="185" font-size="13.5" fill="#1B2B33">普通事务锁在提交、报错回滚、子事务 abort 时由 ResourceOwner 自动释放。</text>
+
+                <rect x="48" y="204" width="612" height="56" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="64" y="228" font-size="14.5" font-weight="700" fill="#2F7A66">3. 完整可诊断性</text>
+                <text x="64" y="249" font-size="13.5" fill="#1B2B33">通过 pg_locks、pg_stat_activity、pg_blocking_pids() 精准定位阻塞链。</text>
+
+                <rect x="48" y="268" width="612" height="56" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="64" y="292" font-size="14.5" font-weight="700" fill="#2F7A66">4. 自动死锁化解</text>
+                <text x="64" y="313" font-size="13.5" fill="#1B2B33">等待超过 deadlock_timeout 后自动构图，优先队列重排，必要时打破环路。</text>
+
+                <rect x="48" y="332" width="612" height="56" fill="#FAF9F6" stroke="#A4C4C6"/>
+                <text x="64" y="356" font-size="14.5" font-weight="700" fill="#2F7A66">5. 高频弱锁优化空间</text>
+                <text x="64" y="377" font-size="13.5" fill="#1B2B33">普通读写通过 PGPROC Fast-Path 绕开主锁表分区争抢，兼顾吞吐。</text>
+
+                <!-- Center Divider Arrow -->
+                <line x1="700" y1="40" x2="700" y2="392" stroke="#D9D5CB" stroke-width="2" stroke-dasharray="6,4"/>
+
+                <!-- Right Panel: 4 Costs -->
+                <rect x="722" y="22" width="648" height="386" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.6"/>
+                <rect x="722" y="22" width="648" height="38" fill="#BE653B"/>
+                <text x="742" y="46" font-size="15" font-weight="700" fill="#FFFFFF">系统代价与边界（COSTS &amp; OPERATIONAL LIMITS）</text>
+
+                <rect x="740" y="76" width="612" height="72" fill="#FAF9F6" stroke="#BE653B"/>
+                <text x="756" y="102" font-size="14.5" font-weight="700" fill="#BE653B">1. 共享锁表内存容量限制</text>
+                <text x="756" y="124" font-size="13.5" fill="#1B2B33">max_locks_per_transaction（当前默认 128）按每进程/prepared xact 估算容量；</text>
+                <text x="756" y="142" font-size="13" fill="#46585F">它限制的是「对象锁」总量（如海量分区/索引），而非行锁数量。</text>
+
+                <rect x="740" y="158" width="612" height="70" fill="#FAF9F6" stroke="#BE653B"/>
+                <text x="756" y="184" font-size="14.5" font-weight="700" fill="#BE653B">2. 等待队列引发级联阻塞</text>
+                <text x="756" y="206" font-size="13.5" fill="#1B2B33">一个排队等待 AccessExclusiveLock 的 DDL，会把后续本无冲突的普通读请求全部挡住。</text>
+
+                <rect x="740" y="238" width="612" height="70" fill="#FAF9F6" stroke="#BE653B"/>
+                <text x="756" y="264" font-size="14.5" font-weight="700" fill="#BE653B">3. 死锁检测非即时（deadlock_timeout 默认 1s）</text>
+                <text x="756" y="286" font-size="13.5" fill="#1B2B33">调低有助于更快发现死锁，但会增加高并发正常等待时的无谓检测开销。</text>
+
+                <rect x="740" y="318" width="612" height="70" fill="#FAF9F6" stroke="#BE653B"/>
+                <text x="756" y="344" font-size="14.5" font-weight="700" fill="#BE653B">4. pg_locks 并非全局冻结快照</text>
+                <text x="756" y="366" font-size="13.5" fill="#1B2B33">Fast-Path 锁按后端逐个收集，查询期间锁状态可能已发生动态变化。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">纸上得来终觉浅，下面用两组最小可验证 SQL 实验，亲手复现 DDL 阻塞与行锁死锁。</span>
+          </div>
+          <div class="slide-footer">
+            <span>收益、代价与参数边界</span>
+            <span class="slide-footer-right">10 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11: HANDS-ON DEMO ==================== -->
+        <section class="slide" data-index="10" data-title="实操 DEMO：复现 DDL 阻塞与交叉更新死锁">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">06.1 - 06.3 · MINIMAL REPRODUCIBLE EXPERIMENTS</div>
+          <h1 class="slide-title">实操 DEMO：复现 DDL 阻塞与交叉更新死锁</h1>
+          <p class="slide-lead">在最小测试表 lock_demo 上分别观察「AccessShare vs AccessExclusive」与「交叉行更新引发死锁」。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Panel: Experiment A (DDL Blocking) -->
+                <rect x="28" y="20" width="664" height="390" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.6"/>
+                <rect x="28" y="20" width="664" height="36" fill="#245A6B"/>
+                <text x="46" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">实验 A：三会话复现 DDL 阻塞与 pg_blocking_pids() 观测</text>
+
+                <!-- Session A -->
+                <rect x="46" y="72" width="628" height="72" fill="#E5EFF0" stroke="#74A5AD"/>
+                <text x="62" y="96" class="mono" font-size="13" font-weight="700" fill="#245A6B">会话 A（持锁不提交）</text>
+                <text x="62" y="118" class="mono" font-size="12.5" fill="#1B2B33">BEGIN; SELECT * FROM lock_demo WHERE id = 1;</text>
+                <text x="62" y="136" font-size="12.5" fill="#2F7A66">→ 持有 AccessShareLock（granted = true）</text>
+
+                <!-- Session B -->
+                <rect x="46" y="156" width="628" height="72" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="62" y="180" class="mono" font-size="13" font-weight="700" fill="#BE653B">会话 B（DDL 被挡）</text>
+                <text x="62" y="202" class="mono" font-size="12.5" fill="#1B2B33">BEGIN; ALTER TABLE lock_demo ADD COLUMN note text;</text>
+                <text x="62" y="220" font-size="12.5" fill="#BE653B">→ 等待 AccessExclusiveLock（granted = false，wait_event_type = 'Lock'）</text>
+
+                <!-- Session C -->
+                <rect x="46" y="240" width="628" height="92" fill="#F1EFE9" stroke="#47808D"/>
+                <text x="62" y="264" class="mono" font-size="13" font-weight="700" fill="#1E4B5A">会话 C（观测核心字段）</text>
+                <text x="62" y="286" class="mono" font-size="12" fill="#1B2B33">SELECT a.pid, l.locktype, l.mode, l.granted, l.fastpath,</text>
+                <text x="62" y="304" class="mono" font-size="12" fill="#1B2B33">       pg_blocking_pids(a.pid) FROM pg_stat_activity a</text>
+                <text x="62" y="322" class="mono" font-size="12" fill="#1B2B33">LEFT JOIN pg_locks l ON l.pid = a.pid WHERE ...</text>
+
+                <rect x="46" y="344" width="628" height="50" fill="#E3F1EC" stroke="#2F7A66"/>
+                <text x="62" y="366" font-size="13" font-weight="700" fill="#2F7A66">验证要点：优先用 pg_blocking_pids() 替代手写 pg_locks 自连接，</text>
+                <text x="62" y="384" font-size="13" fill="#1B2B33">因为内置函数同时理解冲突矩阵硬阻塞与等待队列软阻塞。</text>
+
+                <!-- Right Panel: Experiment B (Deadlock) -->
+                <rect x="708" y="20" width="664" height="390" fill="#FAF9F6" stroke="#BE653B" stroke-width="1.6"/>
+                <rect x="708" y="20" width="664" height="36" fill="#BE653B"/>
+                <text x="726" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">实验 B：无显式 LOCK TABLE，交叉行更新同样触发死锁</text>
+
+                <!-- Two columns inside Experiment B -->
+                <rect x="728" y="72" width="298" height="32" fill="#245A6B"/>
+                <text x="830" y="93" class="mono" font-size="13" font-weight="700" fill="#FFFFFF">会话 A (XID 1)</text>
+
+                <rect x="1054" y="72" width="298" height="32" fill="#47808D"/>
+                <text x="1156" y="93" class="mono" font-size="13" font-weight="700" fill="#FFFFFF">会话 B (XID 2)</text>
+
+                <!-- Step 1 -->
+                <rect x="728" y="116" width="298" height="54" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="742" y="138" class="mono" font-size="12" fill="#1B2B33">T1: UPDATE lock_demo</text>
+                <text x="742" y="158" class="mono" font-size="12" fill="#2F7A66" font-weight="700">    WHERE id = 1;  -- 锁住行 1</text>
+
+                <!-- Step 2 -->
+                <rect x="1054" y="144" width="298" height="54" fill="#E5EFF0" stroke="#47808D"/>
+                <text x="1068" y="166" class="mono" font-size="12" fill="#1B2B33">T2: UPDATE lock_demo</text>
+                <text x="1068" y="186" class="mono" font-size="12" fill="#2F7A66" font-weight="700">    WHERE id = 2;  -- 锁住行 2</text>
+
+                <!-- Step 3 -->
+                <rect x="728" y="208" width="298" height="58" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="742" y="230" class="mono" font-size="12" fill="#1B2B33">T3: UPDATE lock_demo</text>
+                <text x="742" y="250" class="mono" font-size="12" fill="#BE653B" font-weight="700">    WHERE id = 2;  -- 等 XID 2</text>
+
+                <!-- Step 4 -->
+                <rect x="1054" y="238" width="298" height="58" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1068" y="260" class="mono" font-size="12" fill="#1B2B33">T4: UPDATE lock_demo</text>
+                <text x="1068" y="280" class="mono" font-size="12" fill="#BE653B" font-weight="700">    WHERE id = 1;  -- 等 XID 1</text>
+
+                <!-- Orthogonal cycle indicator -->
+                <path d="M 1026 237 H 1040 V 267 H 1054" stroke="#BE653B" stroke-width="2" fill="none"/>
+
+                <!-- Result box -->
+                <rect x="728" y="314" width="624" height="80" fill="#F6F0DF" stroke="#AE8A3E" stroke-width="1.5"/>
+                <text x="744" y="340" font-size="14" font-weight="700" fill="#AE8A3E">T5：超过 deadlock_timeout → ERROR: deadlock detected</text>
+                <text x="744" y="364" font-size="13" fill="#1B2B33">系统自动中止其中一方事务以释放环路；业务逻辑绝不能依赖「哪一方一定被杀」，</text>
+                <text x="744" y="384" font-size="13" fill="#1B2B33">治本之道是让所有事务按固定顺序（如 id 升序）访问多行。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">实验复现清楚后，真正在凌晨三点线上告警时，DBA 应该按怎样的标准闭环排查？</span>
+          </div>
+          <div class="slide-footer">
+            <span>最小复现实验 · 仅含可验证 SQL，不含伪造输出</span>
+            <span class="slide-footer-right">11 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12: OPS DIAGNOSIS LOOP ==================== -->
+        <section class="slide" data-index="11" data-title="生产排查闭环：从 wait_event='Lock' 到根因治理">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">06.4 &amp; 07 · PRODUCTION DIAGNOSIS LOOP</div>
+          <h1 class="slide-title">生产排查闭环：从 wait_event_type='Lock' 到根因治理</h1>
+          <p class="slide-lead">先用轻量 SQL 定位阻塞链与源头会话，再做分型止血；pg_terminate_backend() 只是止血钳，不是根治方案。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- 5-step closed loop across top -->
+                <!-- Step 1 -->
+                <rect x="34" y="36" width="234" height="148" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.6"/>
+                <rect x="34" y="36" width="234" height="32" fill="#245A6B"/>
+                <text x="50" y="57" font-size="14" font-weight="700" fill="#FFFFFF">1. 发现锁等待</text>
+                <text x="50" y="92" class="mono" font-size="12" fill="#1B2B33">pg_stat_activity</text>
+                <text x="50" y="114" class="mono" font-size="12" fill="#245A6B">wait_event_type='Lock'</text>
+                <text x="50" y="138" font-size="13" fill="#46585F">按 query_start 排序</text>
+                <text x="50" y="160" font-size="13" fill="#46585F">结合 log_lock_waits 日志</text>
+
+                <path d="M 268 110 H 302" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="298,105 308,110 298,115" fill="#245A6B"/>
+
+                <!-- Step 2 -->
+                <rect x="308" y="36" width="244" height="148" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.6"/>
+                <rect x="308" y="36" width="244" height="32" fill="#245A6B"/>
+                <text x="324" y="57" font-size="14" font-weight="700" fill="#FFFFFF">2. 展开阻塞链</text>
+                <text x="324" y="92" class="mono" font-size="12" fill="#245A6B" font-weight="700">unnest(pg_blocking_pids())</text>
+                <text x="324" y="116" font-size="13" fill="#1B2B33">关联等待者与阻塞者：</text>
+                <text x="324" y="138" class="mono" font-size="12" fill="#46585F">state / xact_start / query</text>
+                <text x="324" y="160" font-size="13" fill="#46585F">pid 为空则查 pg_prepared_xacts</text>
+
+                <path d="M 552 110 H 586" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="582,105 592,110 582,115" fill="#245A6B"/>
+
+                <!-- Step 3 -->
+                <rect x="592" y="36" width="244" height="148" fill="#F6F0DF" stroke="#AE8A3E" stroke-width="1.6"/>
+                <rect x="592" y="36" width="244" height="32" fill="#AE8A3E"/>
+                <text x="608" y="57" font-size="14" font-weight="700" fill="#FFFFFF">3. 根因分型定性</text>
+                <text x="608" y="92" font-size="13" fill="#1B2B33">• 长事务 / idle in xact</text>
+                <text x="608" y="114" font-size="13" fill="#1B2B33">• 强锁 DDL 排队阻塞</text>
+                <text x="608" y="136" font-size="13" fill="#1B2B33">• 批量作业 / Autovacuum</text>
+                <text x="608" y="158" font-size="13" fill="#1B2B33">• 连接池泄漏 / 2PC 残留</text>
+
+                <path d="M 836 110 H 870" stroke="#BE653B" stroke-width="2" fill="none"/>
+                <polygon points="866,105 876,110 866,115" fill="#BE653B"/>
+
+                <!-- Step 4 -->
+                <rect x="876" y="36" width="224" height="148" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.6"/>
+                <rect x="876" y="36" width="224" height="32" fill="#BE653B"/>
+                <text x="892" y="57" font-size="14" font-weight="700" fill="#FFFFFF">4. 精准应急止血</text>
+                <text x="892" y="92" font-size="13" fill="#1B2B33">优先取消等待中的强 DDL</text>
+                <text x="892" y="116" class="mono" font-size="12" fill="#BE653B">pg_cancel_backend()</text>
+                <text x="892" y="138" class="mono" font-size="12" fill="#BE653B">pg_terminate_backend()</text>
+                <text x="892" y="160" font-size="13" fill="#46585F">评估事务回滚代价后执行</text>
+
+                <path d="M 1100 110 H 1134" stroke="#2F7A66" stroke-width="2" fill="none"/>
+                <polygon points="1130,105 1140,110 1130,115" fill="#2F7A66"/>
+
+                <!-- Step 5 -->
+                <rect x="1140" y="36" width="226" height="148" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.6"/>
+                <rect x="1140" y="36" width="226" height="32" fill="#2F7A66"/>
+                <text x="1156" y="57" font-size="14" font-weight="700" fill="#FFFFFF">5. 长效机制治理</text>
+                <text x="1156" y="92" font-size="13" fill="#1B2B33">• 收缩业务事务边界</text>
+                <text x="1156" y="114" font-size="13" fill="#1B2B33">• DDL 加 lock_timeout</text>
+                <text x="1156" y="136" font-size="13" fill="#1B2B33">• 批处理分批提交</text>
+                <text x="1156" y="158" font-size="13" fill="#1B2B33">• 统一多行访问顺序</text>
+
+                <!-- Feedback loop orthogonal line (Step 5 -> Step 1) -->
+                <path d="M 1253 184 V 214 H 151 V 190" stroke="#2F7A66" stroke-width="1.8" stroke-dasharray="6,4" fill="none"/>
+                <polygon points="146,194 151,184 156,194" fill="#2F7A66"/>
+                <rect x="576" y="202" width="248" height="24" fill="#FAF9F6" stroke="#2F7A66"/>
+                <text x="594" y="219" font-size="12.5" font-weight="700" fill="#2F7A66">持续复盘与监控验证闭环</text>
+
+                <!-- Bottom Production SQL Panel -->
+                <rect x="34" y="242" width="1332" height="164" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="34" y="242" width="1332" height="30" fill="#1E4B5A"/>
+                <text x="52" y="262" class="mono" font-size="12.5" font-weight="700" fill="#FFFFFF">PRODUCTION TRIAGE SQL · 生产一线展开阻塞者标准模板</text>
+
+                <text x="52" y="294" class="mono" font-size="13" fill="#245A6B" font-weight="700">WITH waiting AS (</text>
+                <text x="52" y="315" class="mono" font-size="13" fill="#1B2B33">  SELECT pid, unnest(pg_blocking_pids(pid)) AS blocker_pid FROM pg_stat_activity WHERE wait_event_type = 'Lock'</text>
+                <text x="52" y="336" class="mono" font-size="13" fill="#245A6B" font-weight="700">)</text>
+                <text x="52" y="357" class="mono" font-size="13" fill="#1B2B33">SELECT w.pid AS waiting_pid, wa.query AS waiting_query, w.blocker_pid, ba.state, ba.xact_start, ba.query AS blocker_query</text>
+                <text x="52" y="378" class="mono" font-size="13" fill="#1B2B33">FROM waiting w JOIN pg_stat_activity wa ON wa.pid = w.pid JOIN pg_stat_activity ba ON ba.pid = w.blocker_pid</text>
+                <text x="52" y="397" class="mono" font-size="13" fill="#46585F">ORDER BY wa.query_start;</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">应急排查能救火，但真正减少锁事故需要架构师、DBA、业务开发者三个角色各守其责。</span>
+          </div>
+          <div class="slide-footer">
+            <span>生产排查闭环 · 诊断 SQL</span>
+            <span class="slide-footer-right">12 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13: BEST PRACTICES BY ROLE ==================== -->
+        <section class="slide" data-index="12" data-title="分角色最佳实践与重量锁适用边界">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">07 &amp; 08 · BEST PRACTICES &amp; SUITABILITY BOUNDARIES</div>
+          <h1 class="slide-title">分角色最佳实践与重量锁适用边界</h1>
+          <p class="slide-lead">把事务边界当架构设计，把超时策略放到作业级，把访问顺序写进开发规范，同时严守重量锁的适用边界。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- 3 Role Columns -->
+                <!-- Column 1: Architect -->
+                <rect x="28" y="20" width="434" height="278" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.6"/>
+                <rect x="28" y="20" width="434" height="36" fill="#245A6B"/>
+                <text x="46" y="43" font-size="15" font-weight="700" fill="#FFFFFF">架构师 · 边界与容量设计</text>
+
+                <text x="46" y="84" font-size="14" font-weight="700" fill="#1B2B33">1. 事务边界不跨外部耗时</text>
+                <text x="46" y="106" font-size="13" fill="#46585F">严禁让数据库事务横跨用户交互、RPC 调用或长计算。</text>
+
+                <text x="46" y="138" font-size="14" font-weight="700" fill="#1B2B33">2. 强锁 DDL 窗口与灰度</text>
+                <text x="46" y="160" font-size="13" fill="#46585F">高频 DDL、在线迁移与分区维护必须提前评估阻塞半径。</text>
+
+                <text x="46" y="192" font-size="14" font-weight="700" fill="#1B2B33">3. 避免单事务触碰海量对象</text>
+                <text x="46" y="214" font-size="13" fill="#46585F">控制单事务访问分区/索引数，防打爆共享锁表容量。</text>
+
+                <text x="46" y="246" font-size="14" font-weight="700" fill="#1B2B33">4. 先定位小对象、短事务完成</text>
+                <text x="46" y="268" font-size="13" fill="#46585F">避免「先锁大表再慢处理」，必要时配合幂等重试。</text>
+
+                <!-- Column 2: DBA -->
+                <rect x="482" y="20" width="434" height="278" fill="#FAF9F6" stroke="#2F7A66" stroke-width="1.6"/>
+                <rect x="482" y="20" width="434" height="36" fill="#2F7A66"/>
+                <text x="500" y="43" font-size="15" font-weight="700" fill="#FFFFFF">DBA · 观测与护栏配置</text>
+
+                <text x="500" y="84" font-size="14" font-weight="700" fill="#1B2B33">1. 按需开启 log_lock_waits</text>
+                <text x="500" y="106" font-size="13" fill="#46585F">等锁超 deadlock_timeout 自动记日志，快速识别慢因。</text>
+
+                <text x="500" y="138" font-size="14" font-weight="700" fill="#1B2B33">2. 优先使用 pg_blocking_pids()</text>
+                <text x="500" y="160" font-size="13" fill="#46585F">不轻信手写 pg_locks 自连接，准确识别软硬阻塞。</text>
+
+                <text x="500" y="192" font-size="14" font-weight="700" fill="#1B2B33">3. 作业级 lock_timeout + NOWAIT 预检</text>
+                <text x="500" y="214" font-size="13" fill="#46585F">不全局粗暴设短超时；DDL 拿不到锁即退，避免级联。</text>
+
+                <text x="500" y="246" font-size="14" font-weight="700" fill="#1B2B33">4. 遇共享内存不足先查对象膨胀</text>
+                <text x="500" y="268" font-size="13" fill="#46585F">排查单事务海量表/分区或 2PC 残留，再调参数。</text>
+
+                <!-- Column 3: Developer -->
+                <rect x="936" y="20" width="436" height="278" fill="#FAF9F6" stroke="#47808D" stroke-width="1.6"/>
+                <rect x="936" y="20" width="436" height="36" fill="#47808D"/>
+                <text x="954" y="43" font-size="15" font-weight="700" fill="#FFFFFF">业务开发者 · 编码与重试纪律</text>
+
+                <text x="954" y="84" font-size="14" font-weight="700" fill="#1B2B33">1. 固定顺序访问多行与多表</text>
+                <text x="954" y="106" font-size="13" fill="#46585F">一致的加锁顺序是消除应用层死锁最根本的方法。</text>
+
+                <text x="954" y="138" font-size="14" font-weight="700" fill="#1B2B33">2. 批处理分批提交</text>
+                <text x="954" y="160" font-size="13" fill="#46585F">长事务既持锁又拖慢 VACUUM、复制延迟与恢复窗口。</text>
+
+                <text x="954" y="192" font-size="14" font-weight="700" fill="#1B2B33">3. 区分 statement 与 lock_timeout</text>
+                <text x="954" y="214" font-size="13" fill="#46585F">前者限整句执行时长，后者只限等待锁的时间。</text>
+
+                <text x="954" y="246" font-size="14" font-weight="700" fill="#1B2B33">4. 幂等重试 + 慎用 FOR UPDATE</text>
+                <text x="954" y="268" font-size="13" fill="#46585F">捕获死锁/锁超时重试需保证幂等；勿滥用行锁查询。</text>
+
+                <!-- Bottom Suitability Boundary Band -->
+                <rect x="28" y="314" width="664" height="94" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.4"/>
+                <text x="46" y="340" font-size="14" font-weight="700" fill="#2F7A66">适合重量锁的场景</text>
+                <text x="46" y="364" font-size="13" fill="#1B2B33">• 表结构/索引/约束/触发器等 SQL 可见对象互斥保护</text>
+                <text x="46" y="386" font-size="13" fill="#1B2B33">• 事务等待（行更新/并发建索引）、跨会话咨询锁、需可取消/死锁检测场景</text>
+
+                <rect x="708" y="314" width="664" height="94" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.4"/>
+                <text x="726" y="340" font-size="14" font-weight="700" fill="#BE653B">不适合重量锁的场景</text>
+                <text x="726" y="364" font-size="13" fill="#1B2B33">• 几十条指令级内部临界区（应用 Spinlock / LWLock）</text>
+                <text x="726" y="386" font-size="13" fill="#1B2B33">• 试图替代 MVCC 做普通读写并发，或用表级强锁掩盖应用并发缺陷</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">最后，用一张「八大常见坑对照图」和五道思考题，完成本次重量锁筑基课的闭环校验。</span>
+          </div>
+          <div class="slide-footer">
+            <span>最佳实践与场景边界</span>
+            <span class="slide-footer-right">13 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14: 8 PITFALLS & QUESTIONS ==================== -->
+        <section class="slide" data-index="13" data-title="八大常见坑与课后自测思考题">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span><span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">09 &amp; 10 · COMMON PITFALLS &amp; REVIEW QUESTIONS</div>
+          <h1 class="slide-title">八大常见坑与课后自测思考题</h1>
+          <p class="slide-lead">把生产里最容易踩错的八个概念误区一次性排雷，并用五道底层问题检验是否真正打通重量锁全链路。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- 2x4 Pitfalls Grid (Top 310px) -->
+                <!-- Row 1 -->
+                <rect x="24" y="18" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="18" width="326" height="4" fill="#BE653B"/>
+                <text x="40" y="46" font-size="14" font-weight="700" fill="#BE653B">坑 1：把 ROW EXCLUSIVE 当行锁</text>
+                <text x="40" y="72" font-size="13" fill="#1B2B33">真相：它依然是表级锁！</text>
+                <text x="40" y="96" font-size="12.5" fill="#46585F">DML 对目标表取 RowExclusiveLock，</text>
+                <text x="40" y="116" font-size="12.5" fill="#46585F">行级锁本体存在磁盘元组头中。</text>
+
+                <rect x="366" y="18" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="366" y="18" width="326" height="4" fill="#BE653B"/>
+                <text x="382" y="46" font-size="14" font-weight="700" fill="#BE653B">坑 2：忽略等待中强锁的软阻塞</text>
+                <text x="382" y="72" font-size="13" fill="#1B2B33">真相：排队中的 DDL 会挡住新读。</text>
+                <text x="382" y="96" font-size="12.5" fill="#46585F">看到 SELECT 卡住，不代表它直接</text>
+                <text x="382" y="116" font-size="12.5" fill="#46585F">与最早的持锁者冲突。</text>
+
+                <rect x="708" y="18" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="708" y="18" width="326" height="4" fill="#BE653B"/>
+                <text x="724" y="46" font-size="14" font-weight="700" fill="#BE653B">坑 3：以为 idle in transaction 不持锁</text>
+                <text x="724" y="72" font-size="13" fill="#1B2B33">真相：事务没结束，锁就一直拿着。</text>
+                <text x="724" y="96" font-size="12.5" fill="#46585F">应用觉得没跑 SQL，数据库看到的</text>
+                <text x="724" y="116" font-size="12.5" fill="#46585F">却是事务仍活跃且占着锁。</text>
+
+                <rect x="1050" y="18" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="1050" y="18" width="326" height="4" fill="#BE653B"/>
+                <text x="1066" y="46" font-size="14" font-weight="700" fill="#BE653B">坑 4：只查 pg_locks 不查事务时间</text>
+                <text x="1066" y="72" font-size="13" fill="#1B2B33">真相：锁对象只告诉你卡在哪。</text>
+                <text x="1066" y="96" font-size="12.5" fill="#46585F">必须结合 xact_start、query_start、</text>
+                <text x="1066" y="116" font-size="12.5" fill="#46585F">state 与 query 才能定位根因。</text>
+
+                <!-- Row 2 -->
+                <rect x="24" y="164" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="24" y="164" width="326" height="4" fill="#AE8A3E"/>
+                <text x="40" y="192" font-size="14" font-weight="700" fill="#AE8A3E">坑 5：死锁后只重试，不修访问顺序</text>
+                <text x="40" y="218" font-size="13" fill="#1B2B33">真相：重试只能救单次请求。</text>
+                <text x="40" y="242" font-size="12.5" fill="#46585F">若多行/多表访问顺序不一致，</text>
+                <text x="40" y="262" font-size="12.5" fill="#46585F">死锁会在高峰期周期性复发。</text>
+
+                <rect x="366" y="164" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="366" y="164" width="326" height="4" fill="#AE8A3E"/>
+                <text x="382" y="192" font-size="14" font-weight="700" fill="#AE8A3E">坑 6：全局设置过短 lock_timeout</text>
+                <text x="382" y="218" font-size="13" fill="#1B2B33">真相：误伤正常维护与偶发等待。</text>
+                <text x="382" y="242" font-size="12.5" fill="#46585F">应放在具体 DDL、批处理或迁移</text>
+                <text x="382" y="262" font-size="12.5" fill="#46585F">的会话/角色级别，而非全局一刀切。</text>
+
+                <rect x="708" y="164" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="708" y="164" width="326" height="4" fill="#AE8A3E"/>
+                <text x="724" y="192" font-size="14" font-weight="700" fill="#AE8A3E">坑 7：以为 max_locks 限制行锁数</text>
+                <text x="724" y="218" font-size="13" fill="#1B2B33">真相：它只估算对象锁共享内存。</text>
+                <text x="724" y="242" font-size="12.5" fill="#46585F">针对表、分区、索引等对象锁总量；</text>
+                <text x="724" y="262" font-size="12.5" fill="#46585F">当前默认 128，旧版 64 勿直接套用。</text>
+
+                <rect x="1050" y="164" width="326" height="132" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="1050" y="164" width="326" height="4" fill="#AE8A3E"/>
+                <text x="1066" y="192" font-size="14" font-weight="700" fill="#AE8A3E">坑 8：忽略 prepared transaction</text>
+                <text x="1066" y="218" font-size="13" fill="#1B2B33">真相：两阶段提交残留会持续持锁。</text>
+                <text x="1066" y="242" font-size="12.5" fill="#46585F">这类记录在 pg_locks 中 pid 可能为</text>
+                <text x="1066" y="262" font-size="12.5" fill="#46585F">空，需关联 pg_prepared_xacts 排查。</text>
+
+                <!-- Bottom Review Questions Band -->
+                <rect x="24" y="310" width="1352" height="104" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="310" width="8" height="104" fill="#245A6B"/>
+                <text x="48" y="335" font-size="14" font-weight="700" fill="#245A6B">课后自测思考题（按 [N] 或 [T] 可对照完整推演讲稿复盘）</text>
+                <text x="48" y="361" font-size="13" fill="#1B2B33">Q1. MVCC 已允许读写并发，为何普通 SELECT 仍需 AccessShareLock？　Q2. 为何只有 AccessExclusiveLock 阻塞读，却会连累后续读排队？</text>
+                <text x="48" y="384" font-size="13" fill="#1B2B33">Q3. Fast-Path 为何必须配强锁计数？　Q4. pg_blocking_pids() 为何优于自连接？　Q5. 频繁 idle in transaction 持锁，根因在参数、SQL 还是事务模型？</text>
+                <text x="48" y="405" class="mono" font-size="11.5" fill="#46585F">扩展阅读：lmgr/README · lock.c · proc.c · deadlock.c · lockfuncs.c · doc/src/sgml/mvcc.sgml &amp; system-views.sgml</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">结语 · END</span>
+            <span class="slide-next-text">理解重量锁的底层地层，线上看到 wait_event_type='Lock' 时，你看到的就不再是黑盒，而是清晰的锁表与等待图。</span>
+          </div>
+          <div class="slide-footer">
+            <span>八大常见坑与课后复盘 · 完</span>
+            <span class="slide-footer-right">14 / 14</span>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Right In-Page Notes Pane (Toggled by N or T, never modal) -->
+    <aside id="notes-pane" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="notes-title" id="notes-title">本页讲稿</span>
+          <span class="notes-mode-badge" id="notes-badge">PAGE NOTES</span>
+        </div>
+        <button class="notes-close-btn" id="btn-notes-close" type="button">关闭</button>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+  </div>
+
+  <!-- Bottom Persistent Shortcut HUD Bar (Visible in normal & fullscreen modes) -->
+  <footer id="hud-bar" role="toolbar" aria-label="演说控制与快捷键栏">
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-prev" type="button" title="上一页">上一页 <kbd>←</kbd></button>
+      <span class="hud-page-indicator" id="hud-page">01 / 14</span>
+      <button class="hud-btn" id="btn-next" type="button" title="下一页">下一页 <kbd>→</kbd></button>
+      <div class="hud-progress-track" aria-hidden="true">
+        <div class="hud-progress-fill" id="hud-progress"></div>
+      </div>
+    </div>
+
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-toc" type="button">目录 <kbd>G</kbd></button>
+      <button class="hud-btn" id="btn-note" type="button">本页讲稿 <kbd>N</kbd></button>
+      <button class="hud-btn" id="btn-transcript" type="button">全文讲稿 <kbd>T</kbd></button>
+      <button class="hud-btn" id="btn-autoplay" type="button">自动播放 <kbd>P</kbd></button>
+      <button class="hud-btn" id="btn-fullscreen" type="button">全屏 <kbd>F</kbd></button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== 1. SPEAKER NOTES DATA (14 SLIDES) ==================== */
+  const NOTES = [
+    {
+      title: '数据库筑基课 —— PostgreSQL 重量锁',
+      paras: [
+        '大家好，欢迎来到「数据库筑基课」的重量锁专题。今天我们不讲空泛的概念，直接顺着 PostgreSQL 本地源码——主要是 src/backend/storage/lmgr/ 下的 lock.c、proc.c、deadlock.c，以及官方文档 mvcc.sgml 和 system-views.sgml——把重量锁从里到外剖开讲透。',
+        '大家看屏幕左侧这张地层剖面图。PostgreSQL 并不是只有一种锁：最底层是几十条指令级别的 Spinlock，往上是保护共享内存结构的 LWLock，再往上是 Serializable 隔离级别用的谓词锁 SIReadLock，而今天的主角「重量锁」——源码里叫 Regular Lock 或 Heavyweight Lock——正好处在承上启下的第三层。',
+        '今天整场分享围绕五个实证问题展开：它到底锁什么？冲突怎么判定？为什么会引发级联等待？死锁怎么检测并重排？以及线上出事时怎么排查治理。我们先从一个最真实的生产事故切入。'
+      ]
+    },
+    {
+      title: '生产事故还原：普通动作叠加如何引发全线阻塞',
+      paras: [
+        '在真实业务系统里，最常见的锁事故很少是因为「数据库突然坏了」，而是几个看起来再普通不过的动作叠在了一起。我们顺着图上的时间轴从左往右推演。',
+        'T0 时刻，一个业务长事务开着没提交，甚至处于 idle in transaction 状态，但它之前跑过一条普通 SELECT，因此手里一直捏着目标表的 AccessShareLock。T1 时刻，运维或发布脚本执行了一条 ALTER TABLE，它需要最高级别的 AccessExclusiveLock，因为与 AccessShareLock 冲突，被硬生生挡住，挂进了等待队列。',
+        '真正致命的是 T2 时刻：后续涌进来的普通 SELECT、INSERT、UPDATE，按理说和 T0 的读事务完全兼容，但因为它们与队列里正在等待的 AccessExclusiveLock 冲突，被迫排在 DDL 后面，瞬间把连接池打满。到了 T3 时刻，如果只盯着监控里的 wait_event_type = Lock，不看锁对象、锁模式和完整阻塞链，就很难定位真正根因。',
+        '这也顺带说明了重量锁的工程定位：它把跨后端、跨事务的对象互斥变成了统一、可观测、可死锁检测的机制，代价就是路径比轻量锁更重。那它到底在锁哪些对象呢？我们翻到下一页。'
+      ]
+    },
+    {
+      title: '它是什么：LOCKTAG 如何统一映射八类可锁对象',
+      paras: [
+        '很多人一听重量锁，下意识就把它等同于「表锁」，这是一个非常典型的误区。表锁只是重量锁里最常见的一类，绝不是全部。',
+        '大家看图左侧列出的 pg_locks.locktype：除了 relation，还有 extend、page、tuple、transactionid、virtualxid、object 和 advisory 咨询锁。重量锁之所以能用一套共享锁表管住这么多五花八门的对象，靠的就是中间这个固定长度的结构体——LOCKTAG。',
+        '关系锁把数据库 OID 和 relation OID 填进 LOCKTAG；事务等待把 XID 或虚拟事务 ID 填进去；通用对象锁填 classid、objid 和 subid；咨询锁填用户给的 key。这样编码完以后，右侧的共享锁表根本不用关心业务语义，只需要统一围绕「LOCKTAG + LOCKMODE」做哈希定位和冲突矩阵裁决。',
+        '这里还要特别强调底部陶橙色框里的澄清：行级锁本身存在磁盘元组头部，并不直接作为一条普通内存锁出现在 pg_locks 里；当你更新一行被别的事务挡住时，你在重量锁视图里看到的，其实是当前进程在等待持锁事务的 transactionid。既然对象已经通过 LOCKTAG 统一了，下一步就要看：8 种锁模式之间到底怎么判定冲突？'
+      ]
+    },
+    {
+      title: '核心原理：8 种锁模式与 LockConflicts 位图矩阵',
+      paras: [
+        'PostgreSQL 在 src/include/storage/lockdefs.h 里定义了 8 种标准重量锁模式，从最弱的 AccessShareLock 到最强的 AccessExclusiveLock。大家可以用图上方的下拉框或快捷按钮，现场点选任意组合来验证冲突结果。',
+        '从源码实现来看，lock.c 并没有写一堆冗长的 if/else，而是直接定义了一张位图表 LockConflicts[]。判定是否冲突时，LockCheckConflicts() 只需要做一次按位与运算：conflictTab[requested_mode] & lock->grantMask，结果非零就代表冲突，效率极高。',
+        '这里有一个必须纠正的经验误区：不要简单认为「锁模式编号越大就一定严格更强」。源码里虽然个别地方用数值高低做粗略判断，但注释也坦承这在语义上并不完美——比如 ShareUpdateExclusiveLock 与 RowExclusiveLock 彼此兼容，而 ShareLock 与 RowExclusiveLock 冲突。所以工程上永远以这张冲突矩阵为准。',
+        '好，冲突规则是用 grantMask 位图算出来的。那接下来的问题是：grantMask、持有者列表、等待队列，这些状态究竟存放在内存的哪几层结构里？'
+      ]
+    },
+    {
+      title: '三层状态架构：LOCALLOCK、LOCK 与 PROCLOCK',
+      paras: [
+        '如果把重量锁想象成共享内存里只有一张大哈希表，那高并发下每次重复访问同一张表都要抢共享锁表，性能早就崩了。PostgreSQL 的解法是图上展示的「本地一层 + 共享两层」三层状态模型。',
+        '最左侧是每个后端私有的 LOCALLOCK 哈希表，键是 LOCKTAG + LOCKMODE。它记录本后端对同一把锁重复获取了多少次（nLocks），以及归属哪个 ResourceOwner。同一个事务里反复查同一张表，只要本地已经持有相同模式，直接把本地计数加一就行，连共享内存都不必碰。',
+        '右侧是共享内存主锁表，按 LOCKTAG 哈希拆成多个分区，每个分区配一把 LWLock。里面分两层：LOCK 代表「每个可锁对象一条记录」，保存对象级的 grantMask、waitMask 和等待队列 waitProcs；PROCLOCK 代表「某个后端在某个 LOCK 上的关系」，保存该后端的 holdMask，同时双向挂到 LOCK 和底部 PGPROC 的链表上。',
+        '这种分层是典型的性能与正确性折中：共享表只留跨后端必须共享的状态，本地计数兜住重复获取和事务回滚清理。但问题还没完——如果是一万个不同短事务并发执行普通 SELECT，它们各自本地都没有缓存，全冲进共享锁表分区照样会堵死。PostgreSQL 怎么破这个局？下一页揭晓。'
+      ]
+    },
+    {
+      title: '获取锁路径与 Fast-Path 强锁迁移机制',
+      paras: [
+        '大家可以点一下上方的「播放」或「单步」按钮，跟着 LockAcquireExtended() 的执行路径走一遍，也可以切换四个不同场景对比路径差异。',
+        '进入获取锁流程后，第一关先查 LOCALLOCK，如果自己已经持有同模式，直接走 GrantLockLocal() 结束。如果没持有，第二关就看能不能走 Fast-Path——这是 PostgreSQL 9.2 引入的关键优化。只要满足默认锁方法、非共享 relation、且申请的是 AccessShare、RowShare、RowExclusive 这三种弱锁，同时当前分区没有强锁计数、槽位也没满，后端就直接把锁记在自己 PGPROC 的 Fast-Path 槽里，完全绕开主锁表分区 LWLock。',
+        '这里顺带核对一个源码细节：当前本地文档里 max_locks_per_transaction 默认值已经是 128，postinit.c 注释说明 128 对应每个后端 8 个 fast-path lock groups；以前老版本默认值 64 的老经验，现在不能直接硬套。',
+        '那如果此时来了一条需要 AccessExclusiveLock 的强 DDL，怎么保证不会漏掉散落在各后端 Fast-Path 槽里的弱锁？看图右上角的陶橙色模块：强锁会先递增 FastPathStrongRelationLocks 分区计数，堵住新弱锁走快路，然后把各后端槽里匹配的弱锁统一迁移进主共享锁表。这样平时读写极快，强锁来时冲突检测和死锁检测依然百分之百准确。'
+      ]
+    },
+    {
+      title: '横向对比：五类锁原语的工程分工与地层边界',
+      paras: [
+        '把重量锁的内部结构拆完之后，我们退后一步，把它放回 PostgreSQL 整个锁家族里横向对照。这张表按从上到下、由浅入深的地层顺序，对比了重量锁、行级锁、谓词锁、LWLock 和 Spinlock。',
+        '你会发现一个非常清晰的工程规律：越往下层，等待时间越短、语义越单一、开销越低；越往上层，等待时间越长、事务语义和可观测性越完整。',
+        'Spinlock 只保护几十条指令内的原子状态，忙等、无事务语义，严禁做任何可能长等待的逻辑；LWLock 保护 Buffer 和锁表分区这类共享内存结构，报错时能靠 error cleanup 释放，但没有常规死锁检测，绝不能拿来做 SQL 级长等待；SIReadLock 只服务于 Serializable 依赖追踪，通常不阻塞普通操作。',
+        '所以重量锁的「重」并不是设计笨拙，而是因为只有它同时扛起了事务级释放、等待队列、完整死锁检测以及 pg_locks 可观测性这四副担子。接下来，我们把镜头重新拉近到重量锁的等待队列，看它为什么会制造生产里最头疼的级联阻塞。'
+      ]
+    },
+    {
+      title: '等待队列与唤醒：为什么普通 SELECT 会被「软阻塞」',
+      paras: [
+        '现在请看图上的等待队列模拟器，大家可以点击「播放」或「单步」，依次观察 LOCK.waitProcs 的变化。',
+        '先看演练 1：会话 A 持有 AccessShareLock 没提交；会话 B 执行 ALTER TABLE 申请 AccessExclusiveLock，与 A 直接冲突，属于硬阻塞，进入等待队列排在队首。紧接着会话 C 和 D 发起普通 SELECT，它们虽然和 A 完全兼容，但与队列前方还没唤醒的 B 冲突——为了防止强锁 B 永远被源源不断的读请求饿死，C 和 D 必须排在 B 后面等待，这就是「软阻塞」。',
+        '当 A 终于提交后，ProcLockWakeup() 从队列头部扫描：唤醒一个等待者需要同时满足两个条件——既不与当前已授予锁冲突，也不与队列前方尚不能唤醒的等待者冲突。所以 A 提交后先唤醒 B；等 B 提交，C 和 D 才会一起被唤醒。',
+        '再切换演练 2，这里有个源码里的精妙细节：JoinWaitQueue() 并不是永远傻傻地插到队尾。如果当前进程已经持有某些锁，而队列前面有等待者正被自己挡着，系统会允许它插到第一个相关等待者前面，避免自己把自己堵进不必要的死锁。那如果队列顺序还是绕成了环，或者两个事务真就互相持锁卡死了呢？下一页看死锁检测。'
+      ]
+    },
+    {
+      title: '死锁检测：等待图（WFG）、软边重排与硬死锁中止',
+      paras: [
+        'PostgreSQL 处理死锁的核心哲学是「乐观等待」：拿到锁冲突时，不会立刻去跑昂贵的死锁检测，因为生产环境里绝大多数等锁很快就会自然解开。进程先安心睡眠，只有等到 deadlock_timeout——默认 1 秒——还没拿到锁，才唤醒 deadlock.c 构造 waits-for graph（等待图）。',
+        '等待图里有两种边：如果 A 等的锁正被 B 持有，这是一条实打实的「硬边（hard edge）」；如果 A 是因为队列顺序排在等待者 B 后面才被挡住，这是一条「软边（soft edge）」。从当前进程出发，如果顺着边能走回自己，就发现了环路。',
+        '大家可以用上方的模式切换，分别演练「软死锁」和「硬死锁」。在模式 1 软死锁里，因为环路包含等待队列顺序造成的软边，PostgreSQL 不会粗暴地直接杀事务，而是先尝试通过合法重排等待队列来消解软边——重排成功，所有事务无损继续！',
+        '只有在模式 2 硬死锁——比如两个事务互相持有对方需要的锁、全是硬边或者找不到合法重排方案——系统才会报告 deadlock detected，中止其中一个事务来打破僵局。至此，重量锁的全部核心原理就闭环了。'
+      ]
+    },
+    {
+      title: '工程权衡：重量锁的五大收益与四大代价',
+      paras: [
+        '学底层原理不能只背数据结构，必须落到工程权衡上。这一页我们把重量锁的收益和代价左右摊开对照。',
+        '左侧是五大收益：统一冲突规则保证正确性；ResourceOwner 保证事务提交或回滚时自动释放；pg_locks 和 pg_blocking_pids() 提供清晰诊断视角；超过 deadlock_timeout 自动打破死锁；再加上 Fast-Path 为高频弱锁保留了高性能通道。',
+        '右侧是四大必须正视的代价。第一，共享锁表有容量上限，由 max_locks_per_transaction（当前默认 128）按每进程和每 prepared transaction 估算——记住它限制的是表、分区、索引这类对象锁总量，而不是行锁数量。第二，等待队列会引发强锁级联阻塞。第三，死锁检测受 deadlock_timeout 延迟触发，调得过低会白白消耗 CPU。第四，pg_locks 并不是全局冻结快照，因为 Fast-Path 锁是逐个后端收集的，查表瞬间锁状态可能已在变化。',
+        '理论和权衡都清楚了，下一节我们直接上实操 SQL，看看怎么在本地最小环境里把这些现象亲手复现出来。'
+      ]
+    },
+    {
+      title: '实操 DEMO：复现 DDL 阻塞与交叉更新死锁',
+      paras: [
+        '这一页给出两组最小可验证的 SQL 实验。说明一下，本文档严格遵循实证原则，没有连接真实实例就不伪造假输出，所有 SQL 大家都可以直接在测试库里粘贴复现。',
+        '左侧实验 A 复现 DDL 阻塞：准备一张 10 行数据的 lock_demo 表。会话 A 开启事务查 id=1 且不提交，手里拿着 AccessShareLock；会话 B 执行 ALTER TABLE 加列，申请 AccessExclusiveLock，立刻挂起；此时在会话 C 联合查询 pg_stat_activity、pg_locks 和 pg_blocking_pids()。重点看三件事：A 的 granted 为 true，B 的 granted 为 false，而且一旦有会话 D 排在 B 后面，pg_blocking_pids() 能准确把阻塞链报出来，远比手写 pg_locks 自连接可靠。',
+        '右侧实验 B 复现死锁：全程没有任何显式 LOCK TABLE。会话 A 先更新 id=1，会话 B 先更新 id=2；紧接着 A 去更新 id=2 等 B 的事务结束，B 去更新 id=1 等 A 的事务结束。超过 deadlock_timeout 后，PostgreSQL 必然检测到硬死锁并中止其中一方。记住：业务代码千万不要假设「哪一方一定被中止」，根治办法是统一访问顺序。'
+      ]
+    },
+    {
+      title: '生产排查闭环：从 wait_event_type=\'Lock\' 到根因治理',
+      paras: [
+        '如果线上真的爆发锁等待告警，怎么做到临危不乱？大家看图上方这条五步排查闭环，以及下方可直接套用的生产排查 SQL。',
+        '第一步，先查 pg_stat_activity 里 wait_event_type = Lock 的会话，按 query_start 排序，同时结合 log_lock_waits 日志确认等待是否已超 deadlock_timeout。第二步，用下方这段 CTE 配合 unnest(pg_blocking_pids(pid)) 一键展开阻塞者，重点盯紧阻塞者的 state、xact_start 和 query——如果发现 pg_locks 里 pid 为空，别忘了去查 pg_prepared_xacts。',
+        '第三步是根因分型：源头到底是应用长事务、idle in transaction、强锁 DDL、大批量作业、autovacuum，还是连接池泄漏？定性清楚后，第四步才是应急止血——比如优先取消还在排队、尚未拿到锁的 DDL，或者在评估回滚代价后调用 pg_cancel_backend / pg_terminate_backend。',
+        '最后第五步最容易被忽略：止血钳用完必须回到长效治理，修事务边界、加作业级超时、改分批提交，否则下周同一时间事故还会重演。'
+      ]
+    },
+    {
+      title: '分角色最佳实践与重量锁适用边界',
+      paras: [
+        '长效治理光靠 DBA 一个人扛不住，需要架构师、DBA 和业务开发者三个角色各守一段防线。',
+        '架构师要管住「事务边界」和「对象规模」：绝不让数据库事务横跨用户交互或外部网络调用；高频 DDL 和分区维护必须有窗口和灰度；避免单个事务一口气扫几千张分区表把共享锁表打爆；高并发 OLTP 坚持先定位小对象、短事务完成。',
+        'DBA 要管住「观测」和「护栏」：善用 log_lock_waits 和 pg_blocking_pids()；把 lock_timeout 精准配在 DDL、迁移或批处理的会话/角色级别，绝不在 postgresql.conf 全局粗暴设短；执行强锁 DDL 前用 NOWAIT 或短 lock_timeout 做预检，拿不到锁立刻退出重试，宁可 DDL 失败也别拖垮线上读写。',
+        '业务开发者要守住「编码纪律」：多行多表按固定顺序访问；批处理分批提交；搞清 statement_timeout 限整句、lock_timeout 限等锁；重试机制必须配幂等；不要把 SELECT FOR UPDATE 当普通查询随手乱写。底部两块色带再次划清了重量锁的适用与禁用边界。'
+      ]
+    },
+    {
+      title: '八大常见坑与课后自测思考题',
+      paras: [
+        '最后一页，我们把日常沟通和线上故障里最高频的八个概念坑集中排一遍雷。',
+        '第一排四个坑偏「机制误解」：ROW EXCLUSIVE 名字带 row，但它本质仍是表级锁；排队中的强锁会软阻塞后续普通读；idle in transaction 只是没在跑新语句，事务没结束就依然持锁；只看 pg_locks 不看 xact_start 和 SQL，永远找不到为什么持锁这么久。',
+        '第二排四个坑偏「运维与编码误操作」：死锁后只加重试不修加锁顺序，高峰期只会反复撞车；全局设过短 lock_timeout 会误伤正常维护；max_locks_per_transaction 管的是共享对象锁容量而不是行锁数，且当前默认已是 128；两阶段提交的 prepared transaction 即使 pid 为空也会一直占着锁。',
+        '最下方留了五道课后思考题，涵盖 MVCC 与 AccessShareLock 的关系、强锁软阻塞、Fast-Path 强锁计数、pg_blocking_pids() 优势以及 idle in transaction 根因归属。如果你能顺着今天的地层剖面把这五道题自然讲清楚，PostgreSQL 重量锁这一关就真正筑牢了。感谢大家的聆听！'
+      ]
+    }
+  ];
+
+  /* ==================== 2. CORE NAVIGATION, SCALING & NOTES SYNC ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentIndex = 0;
+  let notesMode = 'closed'; // 'closed' | 'page' | 'full'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+  const AUTO_PLAY_MS = 9000;
+
+  const stageArea = document.getElementById('stage-area');
+  const stageViewport = document.getElementById('stage-viewport');
+  const notesPane = document.getElementById('notes-pane');
+  const notesTitle = document.getElementById('notes-title');
+  const notesBadge = document.getElementById('notes-badge');
+  const notesBody = document.getElementById('notes-body');
+  const tocPanel = document.getElementById('toc-panel');
+  const tocList = document.getElementById('toc-list');
+
+  const hudPage = document.getElementById('hud-page');
+  const hudProgress = document.getElementById('hud-progress');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToc = document.getElementById('btn-toc');
+  const btnTocClose = document.getElementById('btn-toc-close');
+  const btnNote = document.getElementById('btn-note');
+  const btnTranscript = document.getElementById('btn-transcript');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const btnNotesClose = document.getElementById('btn-notes-close');
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : '' + n;
+  }
+
+  function fitStage() {
+    const availW = stageArea.clientWidth;
+    const availH = stageArea.clientHeight;
+    if (availW <= 0 || availH <= 0) return;
+    const pad = 16;
+    const scale = Math.min((availW - pad) / 1600, (availH - pad) / 900);
+    stageViewport.style.transform = 'scale(' + Math.max(0.1, scale).toFixed(5) + ')';
+  }
+
+  function buildToc() {
+    tocList.innerHTML = '';
+    slides.forEach((s, idx) => {
+      const item = document.createElement('div');
+      item.className = 'toc-item' + (idx === currentIndex ? ' active' : '');
+      item.dataset.index = String(idx);
+      const num = document.createElement('span');
+      num.className = 'toc-num';
+      num.textContent = pad2(idx + 1);
+      const txt = document.createElement('span');
+      txt.className = 'toc-text';
+      txt.textContent = s.dataset.title || ('第 ' + (idx + 1) + ' 页');
+      item.appendChild(num);
+      item.appendChild(txt);
+      item.addEventListener('click', () => {
+        goToSlide(idx);
+        setToc(false);
+      });
+      tocList.appendChild(item);
+    });
+  }
+
+  function updateTocActive() {
+    const items = tocList.querySelectorAll('.toc-item');
+    items.forEach((el, idx) => {
+      el.classList.toggle('active', idx === currentIndex);
+    });
+  }
+
+  function renderNotes() {
+    if (notesMode === 'closed') {
+      notesPane.classList.remove('open');
+      btnNote.classList.remove('active');
+      btnTranscript.classList.remove('active');
+      setTimeout(fitStage, 220);
+      fitStage();
+      return;
+    }
+
+    notesPane.classList.add('open');
+    btnNote.classList.toggle('active', notesMode === 'page');
+    btnTranscript.classList.toggle('active', notesMode === 'full');
+
+    if (notesMode === 'page') {
+      notesTitle.textContent = '本页讲稿';
+      notesBadge.textContent = 'PAGE ' + pad2(currentIndex + 1);
+      notesBody.innerHTML = '';
+      const n = NOTES[currentIndex];
+      const blk = document.createElement('div');
+      blk.className = 'note-block current';
+      const head = document.createElement('div');
+      head.className = 'note-block-head';
+      head.innerHTML = '<span class="note-page-num">P' + pad2(currentIndex + 1) + '</span>' +
+        '<span class="note-page-title">' + escapeHtml(n.title) + '</span>';
+      blk.appendChild(head);
+      n.paras.forEach(p => {
+        const pe = document.createElement('p');
+        pe.className = 'note-para';
+        pe.textContent = p;
+        blk.appendChild(pe);
+      });
+      notesBody.appendChild(blk);
+      notesBody.scrollTop = 0;
+    } else if (notesMode === 'full') {
+      notesTitle.textContent = '全文讲稿';
+      notesBadge.textContent = 'ALL 14 PAGES';
+      // Build full transcript once if not already rendered in full mode
+      if (!notesBody.querySelector('[data-full-transcript="1"]')) {
+        notesBody.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.dataset.fullTranscript = '1';
+        NOTES.forEach((n, idx) => {
+          const blk = document.createElement('div');
+          blk.className = 'note-block clickable' + (idx === currentIndex ? ' current' : '');
+          blk.id = 'transcript-page-' + idx;
+          blk.dataset.page = String(idx);
+          const head = document.createElement('div');
+          head.className = 'note-block-head';
+          head.innerHTML = '<span class="note-page-num">P' + pad2(idx + 1) + '</span>' +
+            '<span class="note-page-title">' + escapeHtml(n.title) + '</span>';
+          blk.appendChild(head);
+          n.paras.forEach(p => {
+            const pe = document.createElement('p');
+            pe.className = 'note-para';
+            pe.textContent = p;
+            blk.appendChild(pe);
+          });
+          blk.addEventListener('click', () => {
+            goToSlide(idx);
+          });
+          wrap.appendChild(blk);
+        });
+        notesBody.appendChild(wrap);
+      }
+      syncFullTranscriptHighlight(true, true);
+    }
+
+    fitStage();
+    setTimeout(fitStage, 220);
+  }
+
+  function syncFullTranscriptHighlight(scrollNow, instant) {
+    const blocks = notesBody.querySelectorAll('.note-block[data-page]');
+    blocks.forEach(b => {
+      const idx = Number(b.dataset.page);
+      b.classList.toggle('current', idx === currentIndex);
+    });
+    if (scrollNow) {
+      const doScroll = (behavior) => {
+        const target = document.getElementById('transcript-page-' + currentIndex);
+        if (!target) return;
+        const containerTop = notesBody.getBoundingClientRect().top;
+        const targetTop = target.getBoundingClientRect().top;
+        const offset = targetTop - containerTop + notesBody.scrollTop - 12;
+        notesBody.scrollTo({ top: Math.max(0, offset), behavior });
+      };
+      doScroll(instant ? 'auto' : 'smooth');
+      if (instant) {
+        setTimeout(() => doScroll('auto'), 240);
+      }
+    }
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function setNotesMode(targetMode) {
+    if (notesMode === targetMode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = targetMode;
+    }
+    renderNotes();
+  }
+
+  function setToc(open) {
+    tocOpen = open;
+    tocPanel.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+      btnAutoplay.classList.remove('active');
+      btnAutoplay.innerHTML = '自动播放 <kbd>P</kbd>';
+    } else {
+      btnAutoplay.classList.add('active');
+      btnAutoplay.innerHTML = '停止播放 <kbd>P</kbd>';
+      autoPlayTimer = setInterval(() => {
+        if (currentIndex < totalSlides - 1) {
+          goToSlide(currentIndex + 1, true);
+        } else {
+          goToSlide(0, true);
+        }
+      }, AUTO_PLAY_MS);
+    }
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  function goToSlide(idx, fromAutoPlay) {
+    if (idx < 0) idx = 0;
+    if (idx >= totalSlides) idx = totalSlides - 1;
+    if (!fromAutoPlay && autoPlayTimer) {
+      // keep autoplay running if user didn't explicitly stop, or reset timer
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = setInterval(() => {
+        goToSlide((currentIndex + 1) % totalSlides, true);
+      }, AUTO_PLAY_MS);
+    }
+    slides[currentIndex].classList.remove('active');
+    currentIndex = idx;
+    slides[currentIndex].classList.add('active');
+
+    hudPage.textContent = pad2(currentIndex + 1) + ' / ' + pad2(totalSlides);
+    hudProgress.style.width = (((currentIndex + 1) / totalSlides) * 100).toFixed(2) + '%';
+    updateTocActive();
+
+    if (notesMode === 'page') {
+      renderNotes();
+    } else if (notesMode === 'full') {
+      syncFullTranscriptHighlight(true);
+    }
+  }
+
+  /* ==================== 3. SLIDE 04 INTERACTIVE CONFLICT MATRIX ==================== */
+  const LOCK_MODES = [
+    { short: 'AS', name: 'AccessShareLock', sql: '普通 SELECT' },
+    { short: 'RS', name: 'RowShareLock', sql: 'SELECT ... FOR UPDATE/SHARE' },
+    { short: 'RE', name: 'RowExclusiveLock', sql: 'INSERT / UPDATE / DELETE / MERGE' },
+    { short: 'SUE', name: 'ShareUpdateExclusive', sql: 'VACUUM / ANALYZE / CIC' },
+    { short: 'S', name: 'ShareLock', sql: '非并发 CREATE INDEX' },
+    { short: 'SRE', name: 'ShareRowExclusive', sql: 'CREATE TRIGGER / 部分 ALTER' },
+    { short: 'E', name: 'ExclusiveLock', sql: 'REFRESH MV CONCURRENTLY' },
+    { short: 'AE', name: 'AccessExclusiveLock', sql: 'DROP / TRUNCATE / VACUUM FULL / 多数 DDL' }
+  ];
+
+  // Exact PostgreSQL LockConflicts[] matrix (1 = conflict, 0 = compatible)
+  const CONFLICT_MATRIX = [
+    [0, 0, 0, 0, 0, 0, 0, 1], // AS
+    [0, 0, 0, 0, 0, 0, 1, 1], // RS
+    [0, 0, 0, 0, 1, 1, 1, 1], // RE
+    [0, 0, 0, 1, 1, 1, 1, 1], // SUE
+    [0, 0, 1, 1, 0, 1, 1, 1], // S
+    [0, 0, 1, 1, 1, 1, 1, 1], // SRE
+    [0, 1, 1, 1, 1, 1, 1, 1], // E
+    [1, 1, 1, 1, 1, 1, 1, 1]  // AE
+  ];
+
+  let s4HeldIdx = 0;
+  let s4ReqIdx = 7;
+
+  function initSlide04() {
+    const selHeld = document.getElementById('s4-held');
+    const selReq = document.getElementById('s4-req');
+    LOCK_MODES.forEach((m, i) => {
+      const o1 = document.createElement('option');
+      o1.value = String(i);
+      o1.textContent = (i + 1) + '. ' + m.short + ' (' + m.name + ')';
+      selHeld.appendChild(o1);
+      const o2 = o1.cloneNode(true);
+      selReq.appendChild(o2);
+    });
+    selHeld.value = String(s4HeldIdx);
+    selReq.value = String(s4ReqIdx);
+
+    selHeld.addEventListener('change', () => {
+      s4HeldIdx = Number(selHeld.value);
+      renderSlide04();
+    });
+    selReq.addEventListener('change', () => {
+      s4ReqIdx = Number(selReq.value);
+      renderSlide04();
+    });
+
+    document.querySelectorAll('[data-s4-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const parts = btn.dataset.s4Preset.split(',').map(Number);
+        s4HeldIdx = parts[0];
+        s4ReqIdx = parts[1];
+        selHeld.value = String(s4HeldIdx);
+        selReq.value = String(s4ReqIdx);
+        renderSlide04();
+      });
+    });
+
+    renderSlide04();
+  }
+
+  function renderSlide04() {
+    const svg = document.getElementById('svg-s4');
+    const status = document.getElementById('s4-status');
+    const conflict = CONFLICT_MATRIX[s4HeldIdx][s4ReqIdx] === 1;
+    const held = LOCK_MODES[s4HeldIdx];
+    const req = LOCK_MODES[s4ReqIdx];
+    status.textContent = held.short + ' × ' + req.short + ' → ' + (conflict ? '冲突（阻塞）' : '兼容（可并发）');
+    status.style.color = conflict ? '#BE653B' : '#2F7A66';
+
+    const startX = 246;
+    const startY = 58;
+    const cellW = 74;
+    const cellH = 36;
+
+    let html = '';
+    // Left Corner Header Cell (no overlap with AS/RS)
+    html += '<rect x="28" y="28" width="214" height="28" fill="#1E4B5A" stroke="#D9D5CB"/>';
+    html += '<text x="135" y="46" text-anchor="middle" class="mono" font-size="11.5" font-weight="700" fill="#FFFFFF">已持有 ↓ / 新请求 →</text>';
+
+    // Column headers
+    LOCK_MODES.forEach((m, c) => {
+      const x = startX + c * cellW;
+      const isReq = c === s4ReqIdx;
+      html += `<rect x="${x}" y="${startY - 30}" width="${cellW - 2}" height="28" fill="${isReq ? '#245A6B' : '#EBF1EE'}" stroke="#D9D5CB"/>`;
+      html += `<text x="${x + (cellW - 2) / 2}" y="${startY - 12}" text-anchor="middle" class="mono" font-size="12" font-weight="700" fill="${isReq ? '#FFFFFF' : '#1B2B33'}">${m.short}</text>`;
+    });
+
+    // Rows
+    LOCK_MODES.forEach((m, r) => {
+      const y = startY + r * cellH;
+      const isHeld = r === s4HeldIdx;
+      html += `<rect x="28" y="${y}" width="214" height="${cellH - 2}" fill="${isHeld ? '#245A6B' : '#F1EFE9'}" stroke="#D9D5CB"/>`;
+      html += `<text x="40" y="${y + 22}" class="mono" font-size="12" font-weight="700" fill="${isHeld ? '#FFFFFF' : '#1B2B33'}">${r + 1}. ${m.name}</text>`;
+
+      LOCK_MODES.forEach((_, c) => {
+        const x = startX + c * cellW;
+        const isConflict = CONFLICT_MATRIX[r][c] === 1;
+        const isSelected = r === s4HeldIdx && c === s4ReqIdx;
+        const isCross = r === s4HeldIdx || c === s4ReqIdx;
+        let fill = isConflict ? '#F7E9DE' : '#E3F1EC';
+        if (isSelected) fill = isConflict ? '#BE653B' : '#2F7A66';
+        const stroke = isSelected ? '#1B2B33' : (isCross ? '#245A6B' : '#D9D5CB');
+        const sw = isSelected ? 2.4 : (isCross ? 1.4 : 1);
+        const textFill = isSelected ? '#FFFFFF' : (isConflict ? '#BE653B' : '#2F7A66');
+        const label = isConflict ? '冲突' : '兼容';
+        html += `<g class="s4-cell" data-r="${r}" data-c="${c}" style="cursor:pointer;">`;
+        html += `<rect x="${x}" y="${y}" width="${cellW - 2}" height="${cellH - 2}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+        html += `<text x="${x + (cellW - 2) / 2}" y="${y + 22}" text-anchor="middle" font-size="12" font-weight="700" fill="${textFill}">${label}</text>`;
+        html += `</g>`;
+      });
+    });
+
+    // Right Inspector Panel (Bitmask + SQL Semantics)
+    const rx = 860;
+    const rw = 514;
+    html += `<rect x="${rx}" y="28" width="${rw}" height="328" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.6"/>`;
+    html += `<rect x="${rx}" y="28" width="${rw}" height="36" fill="${conflict ? '#BE653B' : '#2F7A66'}"/>`;
+    html += `<text x="${rx + 18}" y="51" font-size="14.5" font-weight="700" fill="#FFFFFF">位图裁决结果：${conflict ? '冲突 —— 请求必须等待或失败' : '兼容 —— 两个后端可并发执行'}</text>`;
+
+    // Bitmask visualization
+    const grantBits = LOCK_MODES.map((_, i) => i === s4HeldIdx ? '1' : '0').reverse().join('');
+    const confBits = LOCK_MODES.map((_, i) => CONFLICT_MATRIX[i][s4ReqIdx] === 1 ? '1' : '0').reverse().join('');
+    const andBits = LOCK_MODES.map((_, i) => (i === s4HeldIdx && CONFLICT_MATRIX[i][s4ReqIdx] === 1) ? '1' : '0').reverse().join('');
+
+    html += `<rect x="${rx + 18}" y="80" width="${rw - 36}" height="104" fill="#FAF9F6" stroke="#D9D5CB"/>`;
+    html += `<text x="${rx + 32}" y="104" class="mono" font-size="12.5" fill="#245A6B" font-weight="700">LockCheckConflicts() 位运算实证</text>`;
+    html += `<text x="${rx + 32}" y="128" class="mono" font-size="12.5" fill="#1B2B33">grantMask          : 0b${grantBits}  (${held.short})</text>`;
+    html += `<text x="${rx + 32}" y="148" class="mono" font-size="12.5" fill="#1B2B33">conflictTab[${req.short.padEnd(3, ' ')}]   : 0b${confBits}</text>`;
+    html += `<text x="${rx + 32}" y="170" class="mono" font-size="12.5" font-weight="700" fill="${conflict ? '#BE653B' : '#2F7A66'}">按位与 (&amp;) 结果     : 0b${andBits}  (${conflict ? '!= 0 冲突' : '== 0 放行'})</text>`;
+
+    // Typical SQL mapping
+    html += `<rect x="${rx + 18}" y="198" width="${rw - 36}" height="140" fill="#FAF9F6" stroke="#D9D5CB"/>`;
+    html += `<text x="${rx + 32}" y="224" font-size="13.5" font-weight="700" fill="#1B2B33">典型 SQL 对照</text>`;
+    html += `<text x="${rx + 32}" y="250" font-size="13" fill="#245A6B" font-weight="700">已持有：${held.name}</text>`;
+    html += `<text x="${rx + 32}" y="270" font-size="12.5" fill="#46585F">常见来源：${held.sql}</text>`;
+    html += `<text x="${rx + 32}" y="298" font-size="13" fill="#BE653B" font-weight="700">新请求：${req.name}</text>`;
+    html += `<text x="${rx + 32}" y="318" font-size="12.5" fill="#46585F">常见来源：${req.sql}</text>`;
+
+    svg.innerHTML = html;
+
+    svg.querySelectorAll('.s4-cell').forEach(g => {
+      g.addEventListener('click', () => {
+        s4HeldIdx = Number(g.dataset.r);
+        s4ReqIdx = Number(g.dataset.c);
+        document.getElementById('s4-held').value = String(s4HeldIdx);
+        document.getElementById('s4-req').value = String(s4ReqIdx);
+        renderSlide04();
+      });
+    });
+  }
+
+  /* ==================== 4. SLIDE 06 INTERACTIVE ACQUIRE PATH ==================== */
+  const S6_PATHS = {
+    local: {
+      steps: ['s6-n0', 's6-n1', 's6-n2'],
+      msgs: [
+        '步骤 1/3：校验锁方法与锁模式，在私有哈希表查找 LOCALLOCK',
+        '步骤 2/3：发现当前后端已持有相同模式（nLocks > 0）',
+        '步骤 3/3：直接调用 GrantLockLocal() 递增本地计数，零共享内存争抢！'
+      ]
+    },
+    fastpath: {
+      steps: ['s6-n0', 's6-n1', 's6-n3', 's6-n4'],
+      msgs: [
+        '步骤 1/4：校验并创建 LOCALLOCK 条目',
+        '步骤 2/4：当前后端尚未持有该模式，继续检查快路径',
+        '步骤 3/4：默认方法 + 非共享表 + AccessShareLock + StrongLockCount=0',
+        '步骤 4/4：写入 PGPROC Fast-Path 槽位，绕开主锁表分区 LWLock！'
+      ]
+    },
+    main_grant: {
+      steps: ['s6-n0', 's6-n1', 's6-n3', 's6-n6', 's6-n7', 's6-n8'],
+      msgs: [
+        '步骤 1/6：校验并定位 LOCALLOCK',
+        '步骤 2/6：本地未持有同模式锁',
+        '步骤 3/6：不满足 Fast-Path（如非 relation 或锁模式较强）',
+        '步骤 4/6：获取锁表分区 LWLock，查找/创建共享 LOCK 与 PROCLOCK',
+        '步骤 5/6：依次检查 waitMask 与 grantMask，判定无冲突',
+        '步骤 6/6：调用 GrantLock() 更新位图并立即返回！'
+      ]
+    },
+    strong_evict: {
+      steps: ['s6-n0', 's6-n1', 's6-n3', 's6-n5', 's6-n6', 's6-n7', 's6-n9'],
+      msgs: [
+        '步骤 1/7：ALTER TABLE 请求 AccessExclusiveLock',
+        '步骤 2/7：本地未持有该强锁',
+        '步骤 3/7：强锁禁止走 Fast-Path，触发强锁前置迁移协议',
+        '步骤 4/7：递增 StrongLockCount 并扫描迁移各后端 Fast-Path 弱锁进主表',
+        '步骤 5/7：进入主锁表分区，此时已能看到迁移过来的 AccessShareLock',
+        '步骤 6/7：LockCheckConflicts() 判定与已有弱锁冲突',
+        '步骤 7/7：调用 JoinWaitQueue() 挂入 waitProcs 并 ProcSleep() 等待！'
+      ]
+    }
+  };
+
+  let s6Timer = null;
+  let s6StepIdx = -1;
+
+  function initSlide06() {
+    const sel = document.getElementById('s6-scenario');
+    const btnPlay = document.getElementById('s6-play');
+    const btnStep = document.getElementById('s6-step');
+    const btnReset = document.getElementById('s6-reset');
+
+    function resetS6() {
+      if (s6Timer) { clearInterval(s6Timer); s6Timer = null; }
+      s6StepIdx = -1;
+      for (let i = 0; i <= 9; i++) {
+        const el = document.getElementById('s6-n' + i);
+        if (el) { el.classList.remove('svg-dim', 'svg-pulse'); }
+      }
+      document.getElementById('s6-status').textContent = '就绪：点击「播放」或「单步」查看当前场景路径';
+    }
+
+    function applyS6Step(idx) {
+      const cfg = S6_PATHS[sel.value];
+      const visited = new Set(cfg.steps.slice(0, idx + 1));
+      const currentId = cfg.steps[idx];
+      for (let i = 0; i <= 9; i++) {
+        const id = 's6-n' + i;
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.classList.toggle('svg-dim', !visited.has(id));
+        const rect = el.querySelector('rect');
+        if (rect) rect.classList.toggle('svg-pulse', id === currentId);
+      }
+      document.getElementById('s6-status').textContent = cfg.msgs[idx];
+    }
+
+    function nextS6Step() {
+      const cfg = S6_PATHS[sel.value];
+      if (s6StepIdx < cfg.steps.length - 1) {
+        s6StepIdx++;
+        applyS6Step(s6StepIdx);
+      } else {
+        if (s6Timer) { clearInterval(s6Timer); s6Timer = null; }
+      }
+    }
+
+    btnPlay.addEventListener('click', () => {
+      resetS6();
+      nextS6Step();
+      s6Timer = setInterval(nextS6Step, 1100);
+    });
+    btnStep.addEventListener('click', () => {
+      if (s6Timer) { clearInterval(s6Timer); s6Timer = null; }
+      const cfg = S6_PATHS[sel.value];
+      if (s6StepIdx >= cfg.steps.length - 1) s6StepIdx = -1;
+      nextS6Step();
+    });
+    btnReset.addEventListener('click', resetS6);
+    sel.addEventListener('change', resetS6);
+    resetS6();
+  }
+
+  /* ==================== 5. SLIDE 08 INTERACTIVE WAIT QUEUE ==================== */
+  const S8_FRAMES = {
+    cascade: [
+      {
+        status: '阶段 1/5：会话 A 持有 AccessShareLock（未提交），等待队列为空',
+        held: [{ id: 'A', sql: 'SELECT (长事务)', mode: 'AccessShare', color: '#2F7A66' }],
+        queue: [],
+        note: 'grantMask = AccessShare，waitMask = 0。所有普通读均可直接并发授予。'
+      },
+      {
+        status: '阶段 2/5：会话 B 执行 ALTER TABLE，因与 A 冲突进入 waitProcs（硬阻塞）',
+        held: [{ id: 'A', sql: 'SELECT (长事务)', mode: 'AccessShare', color: '#2F7A66' }],
+        queue: [{ id: 'B', sql: 'ALTER TABLE', mode: 'AccessExclusive', tag: '硬阻塞（等 A）', color: '#BE653B' }],
+        note: 'B 挂入队列，LOCK.waitMask 置位 AccessExclusive。'
+      },
+      {
+        status: '阶段 3/5：新会话 C、D 发起普通 SELECT，因与队首 B 冲突被迫排队（软阻塞）',
+        held: [{ id: 'A', sql: 'SELECT (长事务)', mode: 'AccessShare', color: '#2F7A66' }],
+        queue: [
+          { id: 'B', sql: 'ALTER TABLE', mode: 'AccessExclusive', tag: '硬阻塞（等 A）', color: '#BE653B' },
+          { id: 'C', sql: 'SELECT #2', mode: 'AccessShare', tag: '软阻塞（排 B 后）', color: '#AE8A3E' },
+          { id: 'D', sql: 'SELECT #3', mode: 'AccessShare', tag: '软阻塞（排 B 后）', color: '#AE8A3E' }
+        ],
+        note: 'C、D 与 A 兼容，但与队列中更早的 B 冲突，形成生产常见「级联阻塞」！'
+      },
+      {
+        status: '阶段 4/5：会话 A 提交释放锁 → ProcLockWakeup() 唤醒队首 B，C/D 仍等待 B',
+        held: [{ id: 'B', sql: 'ALTER TABLE (执行中)', mode: 'AccessExclusive', color: '#BE653B' }],
+        queue: [
+          { id: 'C', sql: 'SELECT #2', mode: 'AccessShare', tag: '等待 B 完成', color: '#AE8A3E' },
+          { id: 'D', sql: 'SELECT #3', mode: 'AccessShare', tag: '等待 B 完成', color: '#AE8A3E' }
+        ],
+        note: 'ProcLockWakeup() 唤醒 B 后，因 C/D 与 B 冲突，停止继续唤醒。'
+      },
+      {
+        status: '阶段 5/5：会话 B 提交释放锁 → ProcLockWakeup() 同时唤醒兼容的 C 和 D',
+        held: [
+          { id: 'C', sql: 'SELECT #2 (已唤醒)', mode: 'AccessShare', color: '#2F7A66' },
+          { id: 'D', sql: 'SELECT #3 (已唤醒)', mode: 'AccessShare', color: '#2F7A66' }
+        ],
+        queue: [],
+        note: 'C 与 D 彼此兼容且前方无未唤醒等待者，一次性并发唤醒恢复正常！'
+      }
+    ],
+    jump: [
+      {
+        status: '阶段 1/3：会话 A 已持有 AccessShareLock；会话 B 排队等待 AccessExclusiveLock',
+        held: [{ id: 'A', sql: '已持 AccessShare', mode: 'AccessShare', color: '#2F7A66' }],
+        queue: [{ id: 'B', sql: 'ALTER TABLE', mode: 'AccessExclusive', tag: '等待 A 释放', color: '#BE653B' }],
+        note: '若 A 此时再次申请升级锁（如 RowExclusiveLock），如果傻傻排到 B 后面，就会形成 A 等 B、B 等 A 的死锁！'
+      },
+      {
+        status: '阶段 2/3：JoinWaitQueue() 识别 A 已持有挡住 B 的锁，允许 A 插队到 B 之前',
+        held: [{ id: 'A', sql: '已持 AccessShare', mode: 'AccessShare', color: '#2F7A66' }],
+        queue: [
+          { id: 'A+', sql: 'A 申请 RowExclusive', mode: 'RowExclusive', tag: '插队至 B 之前', color: '#245A6B' },
+          { id: 'B', sql: 'ALTER TABLE', mode: 'AccessExclusive', tag: '仍在 A 之后', color: '#BE653B' }
+        ],
+        note: '由于 A+ 与当前已授予锁（只有 A 自己）兼容，且前方无冲突等待者，甚至可直接立即授予！'
+      },
+      {
+        status: '阶段 3/3：A 立即获得 RowExclusiveLock 并顺利提交，随后唤醒 B，避免无谓死锁',
+        held: [{ id: 'A', sql: '持有 AS + RE（无死锁）', mode: 'AS + RE', color: '#2F7A66' }],
+        queue: [{ id: 'B', sql: 'ALTER TABLE', mode: 'AccessExclusive', tag: '待 A 提交即唤醒', color: '#BE653B' }],
+        note: '这就是源码里 JoinWaitQueue() 不总是插队尾的工程原因：最大限度规避自发软死锁。'
+      }
+    ]
+  };
+
+  let s8Timer = null;
+  let s8Idx = 0;
+
+  function renderSlide08() {
+    const mode = document.getElementById('s8-mode').value;
+    const frames = S8_FRAMES[mode];
+    const f = frames[s8Idx];
+    const svg = document.getElementById('svg-s8');
+    document.getElementById('s8-status').textContent = f.status;
+
+    let html = '';
+    // Left Zone: Held Locks (grantMask)
+    html += `<rect x="28" y="24" width="420" height="254" fill="#E3F1EC" stroke="#2F7A66" stroke-width="1.6"/>`;
+    html += `<rect x="28" y="24" width="420" height="34" fill="#2F7A66"/>`;
+    html += `<text x="46" y="46" font-size="14" font-weight="700" fill="#FFFFFF">已授予持锁区（LOCK.grantMask）</text>`;
+
+    f.held.forEach((h, i) => {
+      const y = 76 + i * 86;
+      html += `<rect x="48" y="${y}" width="380" height="72" fill="#FAF9F6" stroke="${h.color}" stroke-width="1.8"/>`;
+      html += `<rect x="48" y="${y}" width="8" height="72" fill="${h.color}"/>`;
+      html += `<text x="70" y="${y + 28}" font-size="15" font-weight="700" fill="#1B2B33">会话 ${h.id}：${h.sql}</text>`;
+      html += `<text x="70" y="${y + 52}" class="mono" font-size="12.5" fill="${h.color}" font-weight="700">持有模式：${h.mode}</text>`;
+    });
+
+    // Connector Arrow between Held and Wait Queue
+    html += `<path d="M 448 150 H 502" stroke="#245A6B" stroke-width="2" fill="none"/>`;
+    html += `<polygon points="498,145 508,150 498,155" fill="#245A6B"/>`;
+    html += `<text x="454" y="138" class="mono" font-size="11.5" fill="#245A6B">队列</text>`;
+
+    // Right Zone: Wait Queue (LOCK.waitProcs)
+    html += `<rect x="508" y="24" width="864" height="254" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.6"/>`;
+    html += `<rect x="508" y="24" width="864" height="34" fill="#245A6B"/>`;
+    html += `<text x="526" y="46" font-size="14" font-weight="700" fill="#FFFFFF">等待队列（LOCK.waitProcs：队首在左 → 队尾在右）</text>`;
+
+    if (f.queue.length === 0) {
+      html += `<rect x="540" y="114" width="800" height="74" fill="#FAF9F6" stroke="#D9D5CB" stroke-dasharray="6,4"/>`;
+      html += `<text x="940" y="156" text-anchor="middle" font-size="15" fill="#89938F">当前等待队列为空（无阻塞进程）</text>`;
+    } else {
+      f.queue.forEach((q, i) => {
+        const x = 532 + i * 276;
+        if (i > 0) {
+          html += `<path d="M ${x - 24} 166 H ${x - 6}" stroke="#BE653B" stroke-width="2" fill="none"/>`;
+          html += `<polygon points="${x - 10},161 ${x},166 ${x - 10},171" fill="#BE653B"/>`;
+        }
+        html += `<rect x="${x}" y="88" width="252" height="156" fill="#FAF9F6" stroke="${q.color}" stroke-width="2"/>`;
+        html += `<rect x="${x}" y="88" width="252" height="32" fill="${q.color}"/>`;
+        html += `<text x="${x + 14}" y="109" class="mono" font-size="13" font-weight="700" fill="#FFFFFF">队位 #${i + 1} · 会话 ${q.id}</text>`;
+        html += `<text x="${x + 14}" y="146" font-size="14" font-weight="700" fill="#1B2B33">${q.sql}</text>`;
+        html += `<text x="${x + 14}" y="174" class="mono" font-size="12.5" fill="#245A6B">请求：${q.mode}</text>`;
+        html += `<rect x="${x + 14}" y="194" width="224" height="34" fill="#F1EFE9" stroke="${q.color}"/>`;
+        html += `<text x="${x + 26}" y="216" font-size="12.5" font-weight="700" fill="${q.color}">${q.tag}</text>`;
+      });
+    }
+
+    // Bottom Explanation Band
+    html += `<rect x="28" y="296" width="1344" height="66" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.4"/>`;
+    html += `<rect x="28" y="296" width="6" height="66" fill="#BE653B"/>`;
+    html += `<text x="48" y="324" font-size="13.5" font-weight="700" fill="#245A6B">当前机制解说（步骤 ${s8Idx + 1} / ${frames.length}）</text>`;
+    html += `<text x="48" y="348" font-size="14" fill="#1B2B33">${f.note}</text>`;
+
+    svg.innerHTML = html;
+  }
+
+  function initSlide08() {
+    const sel = document.getElementById('s8-mode');
+    const btnPlay = document.getElementById('s8-play');
+    const btnStep = document.getElementById('s8-step');
+    const btnReset = document.getElementById('s8-reset');
+
+    function stopS8() {
+      if (s8Timer) { clearInterval(s8Timer); s8Timer = null; }
+    }
+
+    btnPlay.addEventListener('click', () => {
+      stopS8();
+      s8Idx = 0;
+      renderSlide08();
+      s8Timer = setInterval(() => {
+        const frames = S8_FRAMES[sel.value];
+        if (s8Idx < frames.length - 1) {
+          s8Idx++;
+          renderSlide08();
+        } else {
+          stopS8();
+        }
+      }, 1600);
+    });
+
+    btnStep.addEventListener('click', () => {
+      stopS8();
+      const frames = S8_FRAMES[sel.value];
+      s8Idx = (s8Idx + 1) % frames.length;
+      renderSlide08();
+    });
+
+    btnReset.addEventListener('click', () => {
+      stopS8();
+      s8Idx = 0;
+      renderSlide08();
+    });
+
+    sel.addEventListener('change', () => {
+      stopS8();
+      s8Idx = 0;
+      renderSlide08();
+    });
+
+    renderSlide08();
+  }
+
+  /* ==================== 6. SLIDE 09 INTERACTIVE DEADLOCK WFG ==================== */
+  const S9_FRAMES = {
+    soft: [
+      {
+        status: '步骤 1/4：A 等队列前方的 B（软边），B 等 C 持有的锁（硬边），C 等 A 持有的锁（硬边）',
+        edges: ['ab-soft', 'bc-hard', 'ca-hard'],
+        rearranged: false,
+        aborted: false,
+        note: '等待时间超过 deadlock_timeout（默认 1s），deadlock.c 沿等待关系构图：发现 A → B → C → A 环路！'
+      },
+      {
+        status: '步骤 2/4：识别边类型 —— A → B 是队列顺序导致的「软边（Soft Edge）」',
+        edges: ['ab-soft', 'bc-hard', 'ca-hard'],
+        highlightSoft: true,
+        rearranged: false,
+        aborted: false,
+        note: 'A 并非与 B 已持有的锁冲突，只是因为排在等待者 B 后面才被挡住；因此存在队列重排空间。'
+      },
+      {
+        status: '步骤 3/4：deadlock.c 尝试重排等待队列，将 A 调至 B 之前以消除软边',
+        edges: ['bc-hard', 'ca-hard'],
+        rearranged: true,
+        aborted: false,
+        note: '重排后 A 不再等待 B，环路 A → B → C → A 被彻底打破，无需中止任何业务事务！'
+      },
+      {
+        status: '步骤 4/4：软死锁无损化解 —— A 获取锁并提交，随后 C 与 B 依次恢复执行',
+        edges: [],
+        rearranged: true,
+        aborted: false,
+        resolved: true,
+        note: '结论：PostgreSQL 的死锁检测并非见环就杀，只要存在合法队列重排，就会尽量保住所有事务。'
+      }
+    ],
+    hard: [
+      {
+        status: '步骤 1/3：事务 A 持有行 1 请求行 2；事务 B 持有行 2 请求行 1',
+        edges: ['ab-hard', 'ba-hard'],
+        rearranged: false,
+        aborted: false,
+        note: '两边都是实打实的持锁冲突（硬边 Hard Edge）：A 等待 B 的 XID，B 等待 A 的 XID。'
+      },
+      {
+        status: '步骤 2/3：超过 deadlock_timeout（1s）触发构图：全硬边环路，无任何可重排软边',
+        edges: ['ab-hard', 'ba-hard'],
+        highlightHard: true,
+        rearranged: false,
+        aborted: false,
+        note: '不存在任何等待队列顺序调整方案能消除硬边，判定为不可化解的硬死锁（Hard Deadlock）。'
+      },
+      {
+        status: '步骤 3/3：报告 ERROR: deadlock detected 并中止事务 B，释放其持锁让 A 继续执行',
+        edges: [],
+        rearranged: false,
+        aborted: true,
+        note: '被中止方自动回滚并释放全部锁；应用侧应统一多对象加锁顺序，并配幂等重试策略。'
+      }
+    ]
+  };
+
+  let s9Timer = null;
+  let s9Idx = 0;
+
+  function renderSlide09() {
+    const mode = document.getElementById('s9-mode').value;
+    const frames = S9_FRAMES[mode];
+    const f = frames[s9Idx];
+    const svg = document.getElementById('svg-s9');
+    document.getElementById('s9-status').textContent = f.status;
+
+    let html = '';
+    if (mode === 'soft') {
+      // 3-node orthogonal WFG layout (A top-left, B top-right, C bottom-center)
+      html += `<rect x="28" y="20" width="840" height="270" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.5"/>`;
+      html += `<text x="48" y="46" class="mono" font-size="13" font-weight="700" fill="#245A6B">WAITS-FOR GRAPH（含软边 Soft Edge 的 3 进程环路）</text>`;
+
+      // Nodes
+      const aFill = f.resolved ? '#E3F1EC' : '#E5EFF0';
+      const aStroke = f.resolved ? '#2F7A66' : '#245A6B';
+      html += `<rect x="88" y="74" width="210" height="72" fill="${aFill}" stroke="${aStroke}" stroke-width="2"/>`;
+      html += `<text x="104" y="102" font-size="15" font-weight="700" fill="#1B2B33">进程 A</text>`;
+      html += `<text x="104" y="126" font-size="13" fill="#46585F">${f.rearranged ? '已重排至队首，可继续' : '持锁 L2，排在 B 后面'}</text>`;
+
+      html += `<rect x="598" y="74" width="210" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>`;
+      html += `<text x="614" y="102" font-size="15" font-weight="700" fill="#1B2B33">进程 B</text>`;
+      html += `<text x="614" y="126" font-size="13" fill="#46585F">等待锁 L1（队列前方）</text>`;
+
+      html += `<rect x="342" y="196" width="210" height="72" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>`;
+      html += `<text x="358" y="224" font-size="15" font-weight="700" fill="#1B2B33">进程 C</text>`;
+      html += `<text x="358" y="248" font-size="13" fill="#46585F">持锁 L1，等待锁 L2</text>`;
+
+      // Edge A -> B (Soft Edge, dashed gold/terracotta)
+      if (f.edges.includes('ab-soft')) {
+        const sw = f.highlightSoft ? 3.2 : 2;
+        html += `<path d="M 298 110 H 590" stroke="#AE8A3E" stroke-width="${sw}" stroke-dasharray="7,5" fill="none"/>`;
+        html += `<polygon points="586,105 598,110 586,115" fill="#AE8A3E"/>`;
+        html += `<rect x="364" y="88" width="168" height="24" fill="#F6F0DF" stroke="#AE8A3E"/>`;
+        html += `<text x="448" y="104" text-anchor="middle" font-size="12" font-weight="700" fill="#AE8A3E">软边：队列顺序阻塞</text>`;
+      } else {
+        html += `<rect x="358" y="88" width="180" height="24" fill="#E3F1EC" stroke="#2F7A66"/>`;
+        html += `<text x="448" y="104" text-anchor="middle" font-size="12" font-weight="700" fill="#2F7A66">软边已通过重排消除</text>`;
+      }
+
+      // Edge B -> C (Hard Edge, orthogonal)
+      if (f.edges.includes('bc-hard')) {
+        html += `<path d="M 703 146 V 232 H 560" stroke="#BE653B" stroke-width="2" fill="none"/>`;
+        html += `<polygon points="564,227 552,232 564,237" fill="#BE653B"/>`;
+        html += `<text x="580" y="222" font-size="12" font-weight="700" fill="#BE653B">硬边：等 C 持有的 L1</text>`;
+      }
+
+      // Edge C -> A (Hard Edge, orthogonal)
+      if (f.edges.includes('ca-hard')) {
+        html += `<path d="M 342 232 H 193 V 154" stroke="#BE653B" stroke-width="2" fill="none"/>`;
+        html += `<polygon points="188,158 193,146 198,158" fill="#BE653B"/>`;
+        html += `<text x="206" y="222" font-size="12" font-weight="700" fill="#BE653B">硬边：等 A 持有的 L2</text>`;
+      }
+
+      // Right Legend & Verdict Box
+      html += `<rect x="892" y="20" width="480" height="270" fill="#F1EFE9" stroke="#D9D5CB"/>`;
+      html += `<rect x="892" y="20" width="480" height="36" fill="${f.rearranged ? '#2F7A66' : '#AE8A3E'}"/>`;
+      html += `<text x="910" y="43" font-size="14" font-weight="700" fill="#FFFFFF">${f.rearranged ? '处理结果：队列重排成功，零事务中止' : '检测中：发现含软边的死锁环路'}</text>`;
+      html += `<text x="912" y="88" font-size="13.5" font-weight="700" fill="#1B2B33">等待图边定义（deadlock.c）：</text>`;
+      html += `<line x1="912" y1="112" x2="962" y2="112" stroke="#BE653B" stroke-width="2.4"/>`;
+      html += `<text x="974" y="117" font-size="13" fill="#1B2B33">硬边（Hard Edge）：等待对方已持有的冲突锁</text>`;
+      html += `<line x1="912" y1="142" x2="962" y2="142" stroke="#AE8A3E" stroke-width="2.4" stroke-dasharray="6,4"/>`;
+      html += `<text x="974" y="147" font-size="13" fill="#1B2B33">软边（Soft Edge）：仅因队列顺序排在前方等待者之后</text>`;
+      html += `<rect x="912" y="172" width="440" height="96" fill="#FAF9F6" stroke="#D9D5CB"/>`;
+      html += `<text x="928" y="198" font-size="13" font-weight="700" fill="#245A6B">调度队列状态：</text>`;
+      html += `<text x="928" y="224" class="mono" font-size="13" fill="#1B2B33">${f.rearranged ? '重排后队列：[ A ] → [ B ]（打破环路）' : '重排前队列：[ B ] → [ A ]（形成软边）'}</text>`;
+      html += `<text x="928" y="250" font-size="12.5" fill="#46585F">触发门槛：deadlock_timeout = 1s（乐观等待策略）</text>`;
+    } else {
+      // 2-node Hard Deadlock WFG
+      html += `<rect x="28" y="20" width="840" height="270" fill="#FAF9F6" stroke="#BE653B" stroke-width="1.5"/>`;
+      html += `<text x="48" y="46" class="mono" font-size="13" font-weight="700" fill="#BE653B">WAITS-FOR GRAPH（纯硬边 Hard Deadlock 环路）</text>`;
+
+      html += `<rect x="86" y="104" width="236" height="108" fill="${f.aborted ? '#E3F1EC' : '#E5EFF0'}" stroke="${f.aborted ? '#2F7A66' : '#245A6B'}" stroke-width="2"/>`;
+      html += `<text x="104" y="134" font-size="15" font-weight="700" fill="#1B2B33">事务 A (XID 1)</text>`;
+      html += `<text x="104" y="160" font-size="13" fill="#2F7A66">持有：行 1 锁（XID 1）</text>`;
+      html += `<text x="104" y="186" font-size="13" fill="${f.aborted ? '#2F7A66' : '#BE653B'}" font-weight="700">${f.aborted ? '状态：获得行 2，继续提交' : '请求：行 2（等 XID 2）'}</text>`;
+
+      html += `<rect x="574" y="104" width="236" height="108" fill="${f.aborted ? '#F1EFE9' : '#F7E9DE'}" stroke="${f.aborted ? '#89938F' : '#BE653B'}" stroke-width="2"/>`;
+      html += `<text x="592" y="134" font-size="15" font-weight="700" fill="${f.aborted ? '#89938F' : '#1B2B33'}">事务 B (XID 2)</text>`;
+      html += `<text x="592" y="160" font-size="13" fill="${f.aborted ? '#89938F' : '#2F7A66'}">${f.aborted ? '已回滚并释放行 2' : '持有：行 2 锁（XID 2）'}</text>`;
+      html += `<text x="592" y="186" font-size="13" fill="#BE653B" font-weight="700">${f.aborted ? '状态：ABORTED (死锁牺牲者)' : '请求：行 1（等 XID 1）'}</text>`;
+
+      if (f.edges.includes('ab-hard')) {
+        const sw = f.highlightHard ? 3.2 : 2.2;
+        html += `<path d="M 322 132 H 566" stroke="#BE653B" stroke-width="${sw}" fill="none"/>`;
+        html += `<polygon points="562,127 574,132 562,137" fill="#BE653B"/>`;
+        html += `<text x="448" y="122" text-anchor="middle" font-size="12.5" font-weight="700" fill="#BE653B">硬边：A 等 B 释放行 2</text>`;
+      }
+      if (f.edges.includes('ba-hard')) {
+        const sw = f.highlightHard ? 3.2 : 2.2;
+        html += `<path d="M 574 184 H 330" stroke="#BE653B" stroke-width="${sw}" fill="none"/>`;
+        html += `<polygon points="334,179 322,184 334,189" fill="#BE653B"/>`;
+        html += `<text x="448" y="206" text-anchor="middle" font-size="12.5" font-weight="700" fill="#BE653B">硬边：B 等 A 释放行 1</text>`;
+      }
+
+      if (f.aborted) {
+        html += `<rect x="352" y="142" width="192" height="32" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.6"/>`;
+        html += `<text x="448" y="163" text-anchor="middle" class="mono" font-size="12.5" font-weight="700" fill="#BE653B">DEADLOCK BROKEN</text>`;
+      }
+
+      // Right Verdict Box
+      html += `<rect x="892" y="20" width="480" height="270" fill="#F1EFE9" stroke="#D9D5CB"/>`;
+      html += `<rect x="892" y="20" width="480" height="36" fill="#BE653B"/>`;
+      html += `<text x="910" y="43" font-size="14" font-weight="700" fill="#FFFFFF">${f.aborted ? '处理结果：中止一方事务打破硬死锁' : '检测中：纯硬边环路，无法重排'}</text>`;
+      html += `<text x="912" y="88" font-size="13.5" font-weight="700" fill="#1B2B33">工程要点：</text>`;
+      html += `<text x="912" y="118" font-size="13" fill="#1B2B33">1. 行级锁等待通过 transactionid 参与重量锁死锁检测。</text>`;
+      html += `<text x="912" y="148" font-size="13" fill="#1B2B33">2. 环路全是硬边时，任何队列重排都无法解除互等。</text>`;
+      html += `<text x="912" y="178" font-size="13" fill="#1B2B33">3. 系统随机/按检测触发者中止其中一方，返回错误：</text>`;
+      html += `<rect x="912" y="196" width="440" height="40" fill="#FAF9F6" stroke="#BE653B"/>`;
+      html += `<text x="928" y="221" class="mono" font-size="13" font-weight="700" fill="#BE653B">SQLSTATE 40P01 · ERROR: deadlock detected</text>`;
+      html += `<text x="912" y="264" font-size="12.5" fill="#46585F">防线：所有事务按固定顺序访问多行/多表 + 幂等重试。</text>`;
+    }
+
+    // Bottom Note
+    html += `<rect x="28" y="306" width="1344" height="58" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.4"/>`;
+    html += `<rect x="28" y="306" width="6" height="58" fill="#245A6B"/>`;
+    html += `<text x="48" y="330" font-size="13" font-weight="700" fill="#245A6B">死锁检测演练说明（步骤 ${s9Idx + 1} / ${frames.length}）</text>`;
+    html += `<text x="48" y="352" font-size="13.5" fill="#1B2B33">${f.note}</text>`;
+
+    svg.innerHTML = html;
+  }
+
+  function initSlide09() {
+    const sel = document.getElementById('s9-mode');
+    const btnPlay = document.getElementById('s9-play');
+    const btnStep = document.getElementById('s9-step');
+    const btnReset = document.getElementById('s9-reset');
+
+    function stopS9() {
+      if (s9Timer) { clearInterval(s9Timer); s9Timer = null; }
+    }
+
+    btnPlay.addEventListener('click', () => {
+      stopS9();
+      s9Idx = 0;
+      renderSlide09();
+      s9Timer = setInterval(() => {
+        const frames = S9_FRAMES[sel.value];
+        if (s9Idx < frames.length - 1) {
+          s9Idx++;
+          renderSlide09();
+        } else {
+          stopS9();
+        }
+      }, 1700);
+    });
+
+    btnStep.addEventListener('click', () => {
+      stopS9();
+      const frames = S9_FRAMES[sel.value];
+      s9Idx = (s9Idx + 1) % frames.length;
+      renderSlide09();
+    });
+
+    btnReset.addEventListener('click', () => {
+      stopS9();
+      s9Idx = 0;
+      renderSlide09();
+    });
+
+    sel.addEventListener('change', () => {
+      stopS9();
+      s9Idx = 0;
+      renderSlide09();
+    });
+
+    renderSlide09();
+  }
+
+  /* ==================== 7. EVENT BINDINGS & INIT ==================== */
+  btnPrev.addEventListener('click', () => goToSlide(currentIndex - 1));
+  btnNext.addEventListener('click', () => goToSlide(currentIndex + 1));
+  btnToc.addEventListener('click', () => setToc(!tocOpen));
+  btnTocClose.addEventListener('click', () => setToc(false));
+  btnNote.addEventListener('click', () => setNotesMode('page'));
+  btnTranscript.addEventListener('click', () => setNotesMode('full'));
+  btnNotesClose.addEventListener('click', () => {
+    notesMode = 'closed';
+    renderNotes();
+  });
+  btnAutoplay.addEventListener('click', toggleAutoPlay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('fullscreenchange', () => {
+    btnFullscreen.classList.toggle('active', Boolean(document.fullscreenElement));
+    fitStage();
+    setTimeout(fitStage, 150);
+  });
+
+  window.addEventListener('resize', fitStage);
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => fitStage());
+    ro.observe(stageArea);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      e.preventDefault();
+      goToSlide(currentIndex + 1);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      goToSlide(currentIndex - 1);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      setToc(!tocOpen);
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      setNotesMode('page');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      setNotesMode('full');
+    } else if (key === 'p' || key === 'P') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) setToc(false);
+    }
+  });
+
+  // Expose minimal test hooks on window for automated verification
+  window.__DECK__ = {
+    goToSlide,
+    getState: () => ({
+      currentIndex,
+      totalSlides,
+      notesMode,
+      tocOpen,
+      autoPlayRunning: Boolean(autoPlayTimer),
+      stageTransform: stageViewport.style.transform
+    })
+  };
+
+  buildToc();
+  initSlide04();
+  initSlide06();
+  initSlide08();
+  initSlide09();
+  goToSlide(0);
+  fitStage();
+})();
+</script>
+</body>
+</html>

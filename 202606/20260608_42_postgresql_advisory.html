@@ -1,0 +1,2956 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>数据库筑基课 —— PostgreSQL advisory 锁</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-mat: #E7E4DC;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terra: #BE653B;
+    --terra-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E2F0EC;
+    --gold: #AE8A3E;
+    --gold-light: #F5EFE0;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Menlo", "Monaco", "Consolas", monospace;
+    --hud-h: 46px;
+    --drawer-w: 430px;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-mat);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-mat);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Main workspace: stage on left, optional notes drawer on right */
+  #workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-mat);
+    transition: width 0.22s ease;
+  }
+
+  /* Fixed 16:9 stage 1600x900, vector-scaled via JS */
+  #stage-shell {
+    width: 1600px;
+    height: 900px;
+    position: relative;
+    transform-origin: center center;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    overflow: hidden;
+  }
+
+  /* Subtle blueprint grid lines on stage background */
+  #stage-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(217, 213, 203, 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.22) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Left stratigraphic bar accent */
+  .strata-rail {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    display: flex;
+    flex-direction: column;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .strata-rail span { flex: 1; display: block; }
+  .strata-rail .s7 { background: var(--strata-7); }
+  .strata-rail .s6 { background: var(--strata-6); }
+  .strata-rail .s5 { background: var(--strata-5); }
+  .strata-rail .s4 { background: var(--strata-4); }
+  .strata-rail .s3 { background: var(--strata-3); }
+  .strata-rail .s2 { background: var(--strata-2); }
+  .strata-rail .s1 { background: var(--strata-1); }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 40px 64px 28px 64px;
+    display: none;
+    flex-direction: column;
+    z-index: 1;
+  }
+  .slide.active {
+    display: flex;
+  }
+
+  .slide-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    text-transform: uppercase;
+    line-height: 18px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    line-height: 54px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+    letter-spacing: 0.4px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 28px;
+    color: var(--ink-sub);
+    margin-bottom: 14px;
+    max-width: 1400px;
+  }
+
+  .slide-divider {
+    width: 1472px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 14px;
+    flex-shrink: 0;
+  }
+
+  /* Dedicated non-overlapping interactive toolbar above SVG */
+  .sim-toolbar {
+    width: 1400px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 0 12px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    flex-shrink: 0;
+  }
+  .sim-toolbar-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    color: var(--indigo);
+    font-weight: 700;
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .sim-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 12px;
+    background: var(--bg-paper);
+    color: var(--ink);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .sim-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+  .sim-btn.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #FFFFFF;
+  }
+  .sim-btn.terra {
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+  .sim-btn.terra.active, .sim-btn.terra:hover {
+    background: var(--terra);
+    color: #FFFFFF;
+  }
+  .sim-btn.teal {
+    border-color: var(--teal);
+    color: var(--teal);
+  }
+  .sim-btn.teal.active, .sim-btn.teal:hover {
+    background: var(--teal);
+    color: #FFFFFF;
+  }
+  .sim-input {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    width: 118px;
+    padding: 4px 8px;
+    border: 1px solid var(--stroke);
+    background: #FFFFFF;
+    color: var(--ink);
+    outline: none;
+  }
+  .sim-input:focus {
+    border-color: var(--indigo);
+  }
+  .sim-status {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Diagram zone strictly 1400 x 430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    position: relative;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+  }
+  .diagram-zone svg {
+    width: 1400px;
+    height: 430px;
+    display: block;
+    overflow: visible;
+  }
+
+  /* Bottom NEXT callout */
+  .slide-next {
+    margin-top: auto;
+    margin-bottom: 14px;
+    width: 1400px;
+    padding: 8px 18px;
+    border-left: 3px solid var(--terra);
+    background: var(--bg-sub);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .slide-next-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--terra);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .slide-next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 28px;
+    color: var(--ink);
+  }
+
+  /* Footer inside 1600x900 stage */
+  .slide-footer {
+    width: 1472px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--stroke);
+    padding-top: 6px;
+    flex-shrink: 0;
+  }
+  .footer-meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 0.8px;
+  }
+  .footer-page {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--indigo);
+    letter-spacing: 1px;
+  }
+
+  /* Right-side in-page Notes / Full Transcript Drawer (never modal) */
+  #notes-drawer {
+    width: 0;
+    height: 100%;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+    flex-shrink: 0;
+    user-select: text;
+  }
+  #notes-drawer.open {
+    width: var(--drawer-w);
+    border-left-width: 1px;
+  }
+
+  .drawer-header {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .drawer-tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .drawer-tab {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+  .drawer-tab.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #FFFFFF;
+  }
+  .drawer-close {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+  .drawer-close:hover {
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px 32px 20px;
+    scroll-behavior: smooth;
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    border-left: 3px solid var(--stroke);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .note-block.active-note {
+    border-left-color: var(--terra);
+    background: var(--bg-sub);
+  }
+  .note-block-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+  .note-page-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+  }
+  .note-slide-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    flex: 1;
+  }
+  .note-paragraph {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.78;
+    color: var(--ink-sub);
+    margin-bottom: 10px;
+  }
+  .note-paragraph:last-child {
+    margin-bottom: 0;
+  }
+  .note-evidence {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: var(--indigo-light);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--indigo);
+  }
+
+  /* In-page TOC drawer (left-docked overlay inside workspace) */
+  #toc-panel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 390px;
+    background: var(--bg-paper);
+    border-right: 1px solid var(--stroke);
+    z-index: 30;
+    display: none;
+    flex-direction: column;
+  }
+  #toc-panel.open {
+    display: flex;
+  }
+  .toc-header {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .toc-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .toc-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .toc-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 12px;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+  }
+  .toc-item:hover {
+    background: var(--bg-sub);
+    border-color: var(--stroke);
+  }
+  .toc-item.active {
+    background: var(--indigo-light);
+    border-color: var(--indigo);
+  }
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+    width: 24px;
+    flex-shrink: 0;
+  }
+  .toc-text {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* Bottom HUD Bar - ALWAYS visible including in fullscreen */
+  #hud-bar {
+    height: var(--hud-h);
+    background: var(--bg-paper);
+    border-top: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    gap: 12px;
+    flex-shrink: 0;
+    z-index: 40;
+  }
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hud-btn {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 10px;
+    background: var(--bg-sub);
+    color: var(--ink);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .hud-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+  .hud-btn.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #FFFFFF;
+  }
+  .hud-btn.autoplay-on {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #FFFFFF;
+  }
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    border: 1px solid currentColor;
+    opacity: 0.78;
+    line-height: 1.2;
+  }
+  .hud-page {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    min-width: 64px;
+    text-align: center;
+  }
+  .hud-progress-wrap {
+    width: 120px;
+    height: 4px;
+    background: var(--stroke);
+    position: relative;
+    overflow: hidden;
+  }
+  .hud-progress-fill {
+    height: 100%;
+    background: var(--indigo);
+    width: 0%;
+    transition: width 0.2s ease;
+  }
+
+  /* Toast notification (non-blocking) */
+  #toast {
+    position: absolute;
+    bottom: 58px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--bg-paper);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 7px 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 50;
+  }
+  #toast.show {
+    opacity: 0.94;
+  }
+
+  /* SVG typography helper classes */
+  .svg-title { font-family: var(--font-serif); font-weight: 700; fill: #1B2B33; }
+  .svg-label { font-family: var(--font-sans); font-weight: 600; fill: #1B2B33; }
+  .svg-sub { font-family: var(--font-sans); font-weight: 400; fill: #46585F; }
+  .svg-muted { font-family: var(--font-sans); font-weight: 400; fill: #89938F; }
+  .svg-mono { font-family: var(--font-mono); font-weight: 600; fill: #1B2B33; }
+  .svg-mono-sub { font-family: var(--font-mono); font-weight: 400; fill: #46585F; }
+  .svg-white { font-family: var(--font-sans); font-weight: 600; fill: #F7F6F2; }
+  .svg-white-mono { font-family: var(--font-mono); font-weight: 600; fill: #F7F6F2; }
+
+  @keyframes pulseFlow {
+    0% { stroke-dashoffset: 24; }
+    100% { stroke-dashoffset: 0; }
+  }
+  .flow-anim {
+    stroke-dasharray: 8 4;
+    animation: pulseFlow 0.8s linear infinite;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <!-- Left TOC Overlay Panel -->
+    <aside id="toc-panel" aria-label="演说目录">
+      <div class="toc-header">
+        <span class="toc-title">目录 · 14 页演说索引</span>
+        <button class="drawer-close" id="btn-toc-close" type="button">ESC</button>
+      </div>
+      <div class="toc-list" id="toc-list"></div>
+    </aside>
+
+    <!-- Main 16:9 Stage Viewport -->
+    <main id="stage-viewport">
+      <div id="stage-shell">
+        <div class="strata-rail" aria-hidden="true">
+          <span class="s7"></span><span class="s6"></span><span class="s5"></span>
+          <span class="s4"></span><span class="s3"></span><span class="s2"></span><span class="s1"></span>
+        </div>
+
+        <!-- ==================== SLIDE 1 ==================== -->
+        <section class="slide active" data-slide="1" data-title="封面：PostgreSQL advisory 锁地层剖面">
+          <div class="slide-eyebrow">数据库筑基课 · 并发控制与锁管理器 · DIGOAL · 2026-06-08</div>
+          <h1 class="slide-title">PostgreSQL advisory 锁</h1>
+          <p class="slide-lead">从「同一租户同一时刻只跑一个对账任务」的工程诉求切入，自上而下剖开 SQL 封装、LOCKTAG 编码与内核锁管理器。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="advisory 锁七层地层剖面图">
+              <!-- Outer blueprint frame -->
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Left depth axis -->
+              <line x1="78" y1="22" x2="78" y2="408" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="73,400 83,400 78,410" fill="#245A6B"/>
+              <text x="40" y="42" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B">应用层</text>
+              <text x="40" y="220" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B">源码层</text>
+              <text x="40" y="396" text-anchor="middle" class="svg-mono" font-size="12" fill="#1E4B5A">内核层</text>
+
+              <!-- 7 Stratigraphic Bands (light -> deep) -->
+              <!-- Band 7: #EBF1EE -->
+              <rect x="104" y="18" width="940" height="50" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="122" y="48" class="svg-mono" font-size="13" fill="#245A6B">L1 · 工程问题</text>
+              <text x="275" y="48" class="svg-label" font-size="15">多 Worker 拉取 jobs 表，需对「租户 42 的对账任务」做应用级互斥（无稳定数据行）</text>
+
+              <!-- Band 6: #CFE0DC -->
+              <rect x="104" y="74" width="940" height="50" fill="#CFE0DC" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="122" y="104" class="svg-mono" font-size="13" fill="#1E4B5A">L2 · 应用协议</text>
+              <text x="275" y="104" class="svg-label" font-size="15">业务定义数字 Key 映射：双 int (namespace, tenant_id) 或单个 bigint —— 全入口自觉遵守</text>
+
+              <!-- Band 5: #A4C4C6 -->
+              <rect x="104" y="130" width="940" height="50" fill="#A4C4C6" stroke="#74A5AD" stroke-width="1"/>
+              <text x="122" y="160" class="svg-mono" font-size="13" fill="#1B2B33">L3 · SQL 薄封装</text>
+              <text x="275" y="160" class="svg-label" font-size="15">lockfuncs.c：pg_advisory_[try_][xact_]lock[_shared] 组合四维行为，直接调用 LockAcquire</text>
+
+              <!-- Band 4: #74A5AD -->
+              <rect x="104" y="186" width="940" height="50" fill="#74A5AD" stroke="#47808D" stroke-width="1"/>
+              <text x="122" y="216" class="svg-white-mono" font-size="13">L4 · LOCKTAG 编码</text>
+              <text x="275" y="216" class="svg-white" font-size="15">locktag.h：LOCKTAG_ADVISORY + USER_LOCKMETHOD(2) + (MyDatabaseId, f2, f3, space=1|2)</text>
+
+              <!-- Band 3: #47808D -->
+              <rect x="104" y="242" width="940" height="50" fill="#47808D" stroke="#2E6373" stroke-width="1"/>
+              <text x="122" y="272" class="svg-white-mono" font-size="13">L5 · 本地计数</text>
+              <text x="275" y="272" class="svg-white" font-size="15">后端本地 LOCALLOCK 记录 nLocks 与 owner —— 解释同会话重入必成功与叠加释放</text>
+
+              <!-- Band 2: #2E6373 -->
+              <rect x="104" y="298" width="940" height="50" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="122" y="328" class="svg-white-mono" font-size="13">L6 · 共享锁管理器</text>
+              <text x="275" y="328" class="svg-white" font-size="15">lock.c / proc.c：共享内存 LOCK &amp; PROCLOCK、LockConflicts[] 冲突表、死锁检测与释放语义</text>
+
+              <!-- Band 1: #1E4B5A -->
+              <rect x="104" y="354" width="940" height="52" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="122" y="385" class="svg-white-mono" font-size="13">L7 · 实例与 HA 边界</text>
+              <text x="275" y="385" class="svg-white" font-size="15">单库有效、共享内存有上限、不写 WAL 且不传播到 Standby（high-availability.sgml）</text>
+
+              <!-- Right evidence panel -->
+              <rect x="1072" y="18" width="308" height="388" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="1072" y="18" width="308" height="38" fill="#245A6B"/>
+              <text x="1090" y="42" class="svg-white-mono" font-size="13">核心源码与文档证据锚点</text>
+
+              <text x="1090" y="82" class="svg-mono" font-size="12.5" fill="#245A6B">官方文档（doc/src/sgml/）</text>
+              <text x="1090" y="106" class="svg-mono-sub" font-size="12">· mvcc.sgml (Advisory Locks)</text>
+              <text x="1090" y="128" class="svg-mono-sub" font-size="12">· func-admin.sgml (函数表)</text>
+              <text x="1090" y="150" class="svg-mono-sub" font-size="12">· system-views.sgml (pg_locks)</text>
+              <text x="1090" y="172" class="svg-mono-sub" font-size="12">· high-availability.sgml</text>
+
+              <line x1="1090" y1="194" x2="1362" y2="194" stroke="#D9D5CB" stroke-width="1"/>
+
+              <text x="1090" y="220" class="svg-mono" font-size="12.5" fill="#245A6B">核心源码（src/backend/）</text>
+              <text x="1090" y="244" class="svg-mono-sub" font-size="12">· utils/adt/lockfuncs.c</text>
+              <text x="1090" y="266" class="svg-mono-sub" font-size="12">· include/storage/locktag.h</text>
+              <text x="1090" y="288" class="svg-mono-sub" font-size="12">· storage/lmgr/README</text>
+              <text x="1090" y="310" class="svg-mono-sub" font-size="12">· storage/lmgr/lock.c &amp; proc.c</text>
+              <text x="1090" y="332" class="svg-mono-sub" font-size="12">· commands/discard.c</text>
+
+              <rect x="1090" y="352" width="272" height="38" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="1104" y="376" class="svg-label" font-size="12.5" fill="#BE653B">无基准测试数据：只讲实证机制边界</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">业务为什么不能只靠行锁，而自己建一张「锁表」又会付出哪些隐性代价？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">数据库筑基课 · PostgreSQL advisory 锁 · 地层剖面图谱</span>
+            <span class="footer-page">01 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 2 ==================== -->
+        <section class="slide" data-slide="2" data-title="一、它解决什么问题：应用协议 vs 数据约束">
+          <div class="slide-eyebrow">01 · 问题定位 · APPLICATION PROTOCOL VS DATA CONSTRAINT</div>
+          <h1 class="slide-title">锁「非行资源」：它是应用协议，不是数据约束</h1>
+          <p class="slide-lead">普通锁绑定 relation / tuple；advisory 锁避免「锁表膨胀与垃圾清理」，但只约束自觉拿锁的代码。</p>
+          <div class="slide-divider"></div>
+          <div class="sim-toolbar" id="sim2-bar">
+            <span class="sim-toolbar-label">协议演示</span>
+            <button class="sim-btn active" type="button" data-sim2="compliant">场景 A：合规 Worker 1 &amp; 2 互斥</button>
+            <button class="sim-btn terra" type="button" data-sim2="bypass">场景 B：旁路脚本绕过协议直接 UPDATE</button>
+            <span class="sim-status" id="sim2-status">当前：Worker 1 持有 key=42，Worker 2 遵守协议被阻塞</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="advisory 锁是应用协议不是数据约束示意图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Left column: 3 callers -->
+              <rect x="28" y="26" width="320" height="100" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="46" y="54" class="svg-label" font-size="16" fill="#2F7A66">Worker 1（合规入口）</text>
+              <text x="46" y="80" class="svg-mono-sub" font-size="12.5">1. pg_advisory_xact_lock(10, 42)</text>
+              <text x="46" y="104" class="svg-mono-sub" font-size="12.5">2. 执行租户 42 对账与 UPDATE</text>
+
+              <rect x="28" y="156" width="320" height="100" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="46" y="184" class="svg-label" font-size="16" fill="#245A6B">Worker 2（合规入口）</text>
+              <text x="46" y="210" class="svg-mono-sub" font-size="12.5">1. pg_advisory_xact_lock(10, 42)</text>
+              <text x="46" y="234" class="svg-sub" font-size="13" id="sim2-w2-text">结果：等待或 try-lock 返回 false</text>
+
+              <rect x="28" y="286" width="320" height="110" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="46" y="314" class="svg-label" font-size="16" fill="#BE653B">运维脚本 / 旁路服务（不拿锁）</text>
+              <text x="46" y="340" class="svg-mono-sub" font-size="12.5">跳过 advisory 锁，直接执行：</text>
+              <text x="46" y="364" class="svg-mono" font-size="12.5" fill="#BE653B">UPDATE orders SET ... WHERE tenant=42</text>
+
+              <!-- Center: Advisory Lock Gate -->
+              <rect x="470" y="26" width="370" height="230" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="470" y="26" width="370" height="40" fill="#245A6B"/>
+              <text x="490" y="52" class="svg-white-mono" font-size="14">PostgreSQL 锁管理器 · USER_LOCKMETHOD</text>
+              <text x="490" y="96" class="svg-label" font-size="15">锁管理器只认识数字标签：</text>
+              <rect x="490" y="112" width="330" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="506" y="135" class="svg-mono" font-size="13" fill="#245A6B">LOCKTAG_ADVISORY</text>
+              <text x="506" y="155" class="svg-mono-sub" font-size="12.5">db=oid, key=(10, 42), mode=Exclusive</text>
+              <text x="490" y="194" class="svg-sub" font-size="13.5">它不知道「租户 42」也不认识 orders 表；</text>
+              <text x="490" y="218" class="svg-sub" font-size="13.5">只对同库同 key 的 advisory 请求判定冲突。</text>
+
+              <!-- Bottom-center: Why not lock table? -->
+              <rect x="470" y="276" width="370" height="120" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="488" y="302" class="svg-label" font-size="14" fill="#1B2B33">对比自建锁表（app_locks）的 4 个代价</text>
+              <text x="488" y="326" class="svg-sub" font-size="12.5">1. 锁变业务数据，异常退出残留垃圾行</text>
+              <text x="488" y="346" class="svg-sub" font-size="12.5">2. 高频写删制造表/索引膨胀，加重 vacuum</text>
+              <text x="488" y="366" class="svg-sub" font-size="12.5">3. 卷入复制、备份、权限与审计复杂度</text>
+              <text x="488" y="386" class="svg-sub" font-size="12.5">4. 同样无法阻止旁路代码直接改业务表</text>
+
+              <!-- Right column: Business resource -->
+              <rect x="976" y="26" width="396" height="370" fill="#F1EFE9" stroke="#1B2B33" stroke-width="1.5"/>
+              <rect x="976" y="26" width="396" height="40" fill="#1E4B5A"/>
+              <text x="996" y="52" class="svg-white-mono" font-size="14">业务资源（非单行 / 跨表 / 外部对象）</text>
+
+              <rect x="998" y="88" width="352" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1016" y="114" class="svg-label" font-size="14.5">租户 42 对账临界区 / jobs / orders</text>
+              <text x="1016" y="140" class="svg-mono-sub" font-size="12.5" id="sim2-res-state">状态：Worker 1 独占执行中（安全互斥）</text>
+
+              <rect x="998" y="180" width="352" height="90" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1016" y="206" class="svg-label" font-size="14">典型「非行资源」场景</text>
+              <text x="1016" y="230" class="svg-sub" font-size="12.5">· 同用户单导出任务 / 同外部文件单导入</text>
+              <text x="1016" y="252" class="svg-sub" font-size="12.5">· 全局迁移单进程 / 跨表业务整体串行化</text>
+
+              <rect x="998" y="290" width="352" height="84" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="1016" y="316" class="svg-label" font-size="14" fill="#BE653B">核心边界结论（mvcc.sgml）</text>
+              <text x="1016" y="340" class="svg-sub" font-size="12.5">系统不强制业务使用 advisory 锁；</text>
+              <text x="1016" y="360" class="svg-sub" font-size="12.5">只要有入口不守协议，锁就退化为旁路标记。</text>
+
+              <!-- Orthogonal Connectors -->
+              <!-- Worker 1 -> Gate -> Resource -->
+              <path id="sim2-line-w1" d="M 348 76 H 470" stroke="#2F7A66" stroke-width="2.5" fill="none" class="flow-anim"/>
+              <polygon points="462,71 470,76 462,81" fill="#2F7A66"/>
+              <text x="408" y="66" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#2F7A66">GRANTED</text>
+
+              <path id="sim2-line-g2r" d="M 840 124 H 976" stroke="#2F7A66" stroke-width="2.5" fill="none" class="flow-anim"/>
+              <polygon points="968,119 976,124 968,129" fill="#2F7A66"/>
+              <text x="908" y="114" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#2F7A66">安全进入</text>
+
+              <!-- Worker 2 -> Gate (blocked) -->
+              <path id="sim2-line-w2" d="M 348 206 H 470" stroke="#245A6B" stroke-width="2" stroke-dasharray="5 4" fill="none"/>
+              <line x1="454" y1="196" x2="454" y2="216" stroke="#BE653B" stroke-width="3"/>
+              <text x="404" y="194" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#BE653B">BLOCKED</text>
+
+              <!-- Script C -> Bypasses Gate straight to Resource via bottom corridor -->
+              <path id="sim2-line-bypass" d="M 348 342 H 416 V 412 H 916 V 150 H 976" stroke="#89938F" stroke-width="2" fill="none" stroke-dasharray="6 4"/>
+              <polygon id="sim2-arrow-bypass" points="968,145 976,150 968,155" fill="#89938F"/>
+              <rect x="598" y="399" width="194" height="22" fill="#F7F6F2"/>
+              <text id="sim2-bypass-label" x="695" y="414" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#89938F">旁路通道（绕过锁管理器）</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">既然锁管理器只认数字标签，SQL 层提供了哪些函数维度，内核又如何编码 LOCKTAG？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：doc/src/sgml/mvcc.sgml · Advisory Locks</span>
+            <span class="footer-page">02 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 3 ==================== -->
+        <section class="slide" data-slide="3" data-title="二、它是什么：四维函数族与 LOCKTAG 编码">
+          <div class="slide-eyebrow">02 · 概念与编码 · FOUR DIMENSIONS &amp; LOCKTAG_ADVISORY</div>
+          <h1 class="slide-title">四维函数族与两套互不重叠的 Key Space</h1>
+          <p class="slide-lead">SQL 层组合 4 个正交维度；源码用 field4=1|2 区分单 bigint 与双 int4，二者永不撞锁。</p>
+          <div class="slide-divider"></div>
+          <div class="sim-toolbar" id="sim3-bar">
+            <span class="sim-toolbar-label">LOCKTAG 编码器</span>
+            <button class="sim-btn active" type="button" data-sim3-mode="int8">1 个 bigint</button>
+            <button class="sim-btn" type="button" data-sim3-mode="int4">2 个 int4</button>
+            <input class="sim-input" id="sim3-k1" type="number" value="1" aria-label="Key 1 或 bigint" />
+            <input class="sim-input" id="sim3-k2" type="number" value="42" style="display:none;" aria-label="Key 2" />
+            <button class="sim-btn terra" type="button" id="sim3-compare">对比 1::bigint 与 (0, 1)</button>
+            <span class="sim-status" id="sim3-status">field4 = 1（int8 空间）≠ field4 = 2（双 int4 空间）</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="四维函数矩阵与 LOCKTAG 编码图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Top Band: 4 Orthogonal Dimensions -->
+              <text x="24" y="28" class="svg-mono" font-size="12.5" fill="#245A6B">SQL 函数四维正交组合（func-admin.sgml）</text>
+
+              <!-- Dim 1 -->
+              <rect x="24" y="38" width="326" height="122" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="38" width="326" height="30" fill="#245A6B"/>
+              <text x="40" y="58" class="svg-white-mono" font-size="12.5">1. Key 形态（独立空间）</text>
+              <text x="40" y="92" class="svg-mono" font-size="12.5">单 bigint：pg_advisory_lock(42::bigint)</text>
+              <text x="40" y="118" class="svg-mono" font-size="12.5">双 int4 ：pg_advisory_lock(10, 42)</text>
+              <text x="40" y="144" class="svg-sub" font-size="12">双 int 更适合「命名空间 + 资源 ID」</text>
+
+              <!-- Dim 2 -->
+              <rect x="366" y="38" width="326" height="122" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="366" y="38" width="326" height="30" fill="#2E6373"/>
+              <text x="382" y="58" class="svg-white-mono" font-size="12.5">2. 生命周期（Scope）</text>
+              <text x="382" y="92" class="svg-mono" font-size="12.5">会话级：pg_advisory_lock(...)</text>
+              <text x="382" y="118" class="svg-mono" font-size="12.5">事务级：pg_advisory_xact_lock(...)</text>
+              <text x="382" y="144" class="svg-sub" font-size="12">事务级提交/回滚即放，无 unlock 函数</text>
+
+              <!-- Dim 3 -->
+              <rect x="708" y="38" width="326" height="122" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="708" y="38" width="326" height="30" fill="#47808D"/>
+              <text x="724" y="58" class="svg-white-mono" font-size="12.5">3. 锁模式（Mode）</text>
+              <text x="724" y="92" class="svg-mono" font-size="12.5">排他：pg_advisory_lock(...)</text>
+              <text x="724" y="118" class="svg-mono" font-size="12.5">共享：pg_advisory_lock_shared(...)</text>
+              <text x="724" y="144" class="svg-sub" font-size="12">底层映射 ExclusiveLock / ShareLock</text>
+
+              <!-- Dim 4 -->
+              <rect x="1050" y="38" width="326" height="122" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="1050" y="38" width="326" height="30" fill="#2F7A66"/>
+              <text x="1066" y="58" class="svg-white-mono" font-size="12.5">4. 等待行为（Wait）</text>
+              <text x="1066" y="92" class="svg-mono" font-size="12.5">阻塞：pg_advisory_lock(...)</text>
+              <text x="1066" y="118" class="svg-mono" font-size="12.5">非阻塞：pg_try_advisory_lock(...)</text>
+              <text x="1066" y="144" class="svg-sub" font-size="12">try 版立即返回 boolean，防线程挂死</text>
+
+              <!-- Divider between SQL and LOCKTAG -->
+              <line x1="24" y1="184" x2="1376" y2="184" stroke="#D9D5CB" stroke-width="1" stroke-dasharray="4 4"/>
+              <text x="24" y="210" class="svg-mono" font-size="12.5" fill="#1E4B5A">内核结构体编码：LOCKTAG_ADVISORY（locktag.h + lockfuncs.c）</text>
+              <text x="1376" y="210" text-anchor="end" class="svg-mono" font-size="12.5" fill="#BE653B" id="sim3-sql-preview">SQL: SELECT pg_advisory_lock(1::bigint);</text>
+
+              <!-- 6 LOCKTAG Fields -->
+              <rect x="24" y="224" width="210" height="96" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="40" y="248" class="svg-mono" font-size="12" fill="#245A6B">locktag_field1</text>
+              <text x="40" y="278" class="svg-mono" font-size="17" fill="#1B2B33">MyDatabaseId</text>
+              <text x="40" y="304" class="svg-sub" font-size="12">保证锁仅当前库有效</text>
+
+              <rect x="248" y="224" width="218" height="96" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="264" y="248" class="svg-mono" font-size="12" fill="#245A6B">locktag_field2</text>
+              <text x="264" y="278" class="svg-mono" font-size="17" fill="#1B2B33" id="sim3-f2">0</text>
+              <text x="264" y="304" class="svg-sub" font-size="12" id="sim3-f2-desc">int8 高 32 位</text>
+
+              <rect x="480" y="224" width="218" height="96" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="496" y="248" class="svg-mono" font-size="12" fill="#245A6B">locktag_field3</text>
+              <text x="496" y="278" class="svg-mono" font-size="17" fill="#1B2B33" id="sim3-f3">1</text>
+              <text x="496" y="304" class="svg-sub" font-size="12" id="sim3-f3-desc">int8 低 32 位</text>
+
+              <rect x="712" y="224" width="210" height="96" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="728" y="248" class="svg-mono" font-size="12" fill="#BE653B">locktag_field4</text>
+              <text x="728" y="278" class="svg-mono" font-size="17" fill="#BE653B" id="sim3-f4">1 (int8 空间)</text>
+              <text x="728" y="304" class="svg-sub" font-size="12">1=单 bigint / 2=双 int4</text>
+
+              <rect x="936" y="224" width="214" height="96" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+              <text x="952" y="248" class="svg-white-mono" font-size="12">locktag_type</text>
+              <text x="952" y="278" class="svg-white-mono" font-size="15">LOCKTAG_ADVISORY</text>
+              <text x="952" y="304" class="svg-white" font-size="12">枚举标识：用户咨询锁</text>
+
+              <rect x="1164" y="224" width="212" height="96" fill="#2E6373" stroke="#1E4B5A" stroke-width="1.5"/>
+              <text x="1180" y="248" class="svg-white-mono" font-size="12">locktag_lockmethodid</text>
+              <text x="1180" y="278" class="svg-white-mono" font-size="15">USER_LOCKMETHOD</text>
+              <text x="1180" y="304" class="svg-white" font-size="12">值 = 2（与默认锁正交）</text>
+
+              <!-- Orthogonal arrows down to pg_locks projection -->
+              <line x1="129" y1="320" x2="129" y2="356" stroke="#245A6B" stroke-width="1.5"/>
+              <polygon points="124,350 134,350 129,358" fill="#245A6B"/>
+              <line x1="357" y1="320" x2="357" y2="356" stroke="#245A6B" stroke-width="1.5"/>
+              <polygon points="352,350 362,350 357,358" fill="#245A6B"/>
+              <line x1="589" y1="320" x2="589" y2="356" stroke="#245A6B" stroke-width="1.5"/>
+              <polygon points="584,350 594,350 589,358" fill="#245A6B"/>
+              <line x1="817" y1="320" x2="817" y2="356" stroke="#BE653B" stroke-width="1.5"/>
+              <polygon points="812,350 822,350 817,358" fill="#BE653B"/>
+
+              <!-- pg_locks bar -->
+              <rect x="24" y="358" width="1352" height="52" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="40" y="389" class="svg-mono" font-size="13" fill="#245A6B">pg_locks 视图展示：</text>
+              <text x="206" y="389" class="svg-mono" font-size="13" id="sim3-pglocks">database = MyDatabaseId  |  classid = 0  |  objid = 1  |  objsubid = 1  |  locktype = 'advisory'</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">构造出 LOCKTAG_ADVISORY 之后，advisory 锁在 PostgreSQL 内核里走的是哪条执行路径？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：src/include/storage/locktag.h · src/backend/utils/adt/lockfuncs.c</span>
+            <span class="footer-page">03 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 4 ==================== -->
+        <section class="slide" data-slide="4" data-title="三、核心原理(1)：薄封装直入普通锁管理器">
+          <div class="slide-eyebrow">03 · 内核路径 · THIN WRAPPER TO HEAVYWEIGHT LOCK MANAGER</div>
+          <h1 class="slide-title">零独立锁表：SQL 函数只是 LockAcquire 的薄封装</h1>
+          <p class="slide-lead">advisory 锁没有自建等待队列或死锁检测器；它仅通过 4 个参数，完全复用普通 heavyweight lock 管理器。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="advisory 锁进入普通锁管理器的路径图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Left: SQL functions -->
+              <rect x="24" y="24" width="380" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="24" width="380" height="38" fill="#47808D"/>
+              <text x="42" y="48" class="svg-white-mono" font-size="13.5">1. SQL 入口（lockfuncs.c）</text>
+
+              <rect x="42" y="80" width="344" height="62" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="56" y="104" class="svg-mono" font-size="13" fill="#245A6B">pg_advisory_lock_int8(key)</text>
+              <text x="56" y="128" class="svg-mono-sub" font-size="12">ExclusiveLock | session=true | dontWait=false</text>
+
+              <rect x="42" y="158" width="344" height="62" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="56" y="182" class="svg-mono" font-size="13" fill="#2F7A66">pg_advisory_xact_lock_int8(key)</text>
+              <text x="56" y="206" class="svg-mono-sub" font-size="12">ExclusiveLock | session=false | dontWait=false</text>
+
+              <rect x="42" y="236" width="344" height="62" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="56" y="260" class="svg-mono" font-size="13" fill="#245A6B">pg_try_advisory_lock_shared_int4(k1,k2)</text>
+              <text x="56" y="284" class="svg-mono-sub" font-size="12">ShareLock     | session=true | dontWait=true</text>
+
+              <rect x="42" y="314" width="344" height="72" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1"/>
+              <text x="56" y="340" class="svg-label" font-size="13.5">统一前置步骤：</text>
+              <text x="56" y="364" class="svg-mono-sub" font-size="12">SET_LOCKTAG_INT64 / SET_LOCKTAG_INT32</text>
+
+              <!-- Orthogonal arrow 1 -> 2 -->
+              <path d="M 404 215 H 458" stroke="#245A6B" stroke-width="2.5" fill="none"/>
+              <polygon points="450,210 458,215 450,220" fill="#245A6B"/>
+
+              <!-- Middle: LockAcquire(4 params) -->
+              <rect x="458" y="24" width="414" height="382" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="458" y="24" width="414" height="38" fill="#245A6B"/>
+              <text x="476" y="48" class="svg-white-mono" font-size="13.5">2. 统一调用：LockAcquire()（lock.c）</text>
+
+              <rect x="476" y="80" width="378" height="44" fill="#1E4B5A"/>
+              <text x="665" y="107" text-anchor="middle" class="svg-white-mono" font-size="13">LockAcquire(&amp;tag, mode, sessionLock, dontWait)</text>
+
+              <rect x="476" y="140" width="378" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="492" y="162" class="svg-mono" font-size="13" fill="#245A6B">locktag</text>
+              <text x="606" y="162" class="svg-label" font-size="13">LOCKTAG_ADVISORY</text>
+              <text x="492" y="182" class="svg-sub" font-size="12">数据库 OID + key 字段 + key space 标记</text>
+
+              <rect x="476" y="204" width="378" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="492" y="226" class="svg-mono" font-size="13" fill="#245A6B">lockmode</text>
+              <text x="606" y="226" class="svg-label" font-size="13">ExclusiveLock / ShareLock</text>
+              <text x="492" y="246" class="svg-sub" font-size="12">直接沿用普通锁模式与冲突矩阵</text>
+
+              <rect x="476" y="268" width="378" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="492" y="290" class="svg-mono" font-size="13" fill="#BE653B">sessionLock</text>
+              <text x="606" y="290" class="svg-label" font-size="13">true=会话级 / false=事务级</text>
+              <text x="492" y="310" class="svg-sub" font-size="12">决定事务结束时 ProcReleaseLocks 是否释放</text>
+
+              <rect x="476" y="332" width="378" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="492" y="354" class="svg-mono" font-size="13" fill="#2F7A66">dontWait</text>
+              <text x="606" y="354" class="svg-label" font-size="13">true=try 立即返回 / false=阻塞</text>
+              <text x="492" y="374" class="svg-sub" font-size="12">决定拿不到锁时立刻返回 false 还是入等待队列</text>
+
+              <!-- Orthogonal arrow 2 -> 3 -->
+              <path d="M 872 215 H 926" stroke="#1E4B5A" stroke-width="2.5" fill="none"/>
+              <polygon points="918,210 926,215 918,220" fill="#1E4B5A"/>
+
+              <!-- Right: Heavyweight Lock Manager -->
+              <rect x="926" y="24" width="450" height="382" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="926" y="24" width="450" height="38" fill="#1E4B5A"/>
+              <text x="944" y="48" class="svg-white-mono" font-size="13.5">3. 复用普通 Heavyweight Lock 管理器</text>
+
+              <rect x="946" y="80" width="410" height="68" fill="#EBF1EE" stroke="#47808D" stroke-width="1"/>
+              <text x="964" y="106" class="svg-mono" font-size="13.5" fill="#1E4B5A">后端本地：LOCALLOCK 哈希表</text>
+              <text x="964" y="132" class="svg-sub" font-size="12.5">命中已持有计数 nLocks &gt; 0 时直接递增返回</text>
+
+              <line x1="1151" y1="148" x2="1151" y2="172" stroke="#245A6B" stroke-width="1.5"/>
+              <polygon points="1146,166 1156,166 1151,174" fill="#245A6B"/>
+
+              <rect x="946" y="174" width="410" height="86" fill="#CFE0DC" stroke="#2E6373" stroke-width="1"/>
+              <text x="964" y="200" class="svg-mono" font-size="13.5" fill="#1E4B5A">共享内存：LOCK 与 PROCLOCK 表</text>
+              <text x="964" y="224" class="svg-sub" font-size="12.5">· LOCK：按 LOCKTAG 唯一标识被锁对象</text>
+              <text x="964" y="244" class="svg-sub" font-size="12.5">· PROCLOCK：记录后端进程对 LOCK 的持有/等待</text>
+
+              <line x1="1151" y1="260" x2="1151" y2="284" stroke="#245A6B" stroke-width="1.5"/>
+              <polygon points="1146,278 1156,278 1151,286" fill="#245A6B"/>
+
+              <rect x="946" y="286" width="410" height="100" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="964" y="314" class="svg-white-mono" font-size="13.5">天然继承的四大内核能力</text>
+              <text x="964" y="340" class="svg-white" font-size="12.5">1. 等待队列与唤醒   2. deadlock_timeout 死锁检测</text>
+              <text x="964" y="366" class="svg-white" font-size="12.5">3. pg_locks 视图观测 4. pg_blocking_pids() 阻塞链</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">LOCK、PROCLOCK、LOCALLOCK 三层结构具体怎么配合？为何同一会话重复拿锁一定成功？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：src/backend/utils/adt/lockfuncs.c · src/backend/storage/lmgr/lock.c</span>
+            <span class="footer-page">04 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 5 ==================== -->
+        <section class="slide" data-slide="5" data-title="三、核心原理(2)：三层锁结构与重入叠加">
+          <div class="slide-eyebrow">03 · 数据结构 · LOCK / PROCLOCK / LOCALLOCK</div>
+          <h1 class="slide-title">三层锁结构：本地计数解释「重入必成」与「叠加释放」</h1>
+          <p class="slide-lead">共享内存只记「进程持有某模式」，重复次数留在后端本地 LOCALLOCK.nLocks —— 锁几次就得解几次。</p>
+          <div class="slide-divider"></div>
+          <div class="sim-toolbar" id="sim5-bar">
+            <span class="sim-toolbar-label">重入叠加沙盒（key=100）</span>
+            <button class="sim-btn teal" type="button" id="sim5-s1-lock">S1: pg_advisory_lock(100)</button>
+            <button class="sim-btn" type="button" id="sim5-s1-unlock">S1: pg_advisory_unlock(100)</button>
+            <button class="sim-btn terra" type="button" id="sim5-s2-lock">S2: pg_advisory_lock(100)</button>
+            <button class="sim-btn" type="button" id="sim5-reset">重置</button>
+            <span class="sim-status" id="sim5-status">提示：依次点击 S1 加锁 → S2 加锁 → S1 再次加锁 → S1 解锁两次</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LOCK PROCLOCK LOCALLOCK 交互示意图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Backend S1 -->
+              <rect x="28" y="26" width="420" height="176" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="28" y="26" width="420" height="36" fill="#2F7A66"/>
+              <text x="46" y="49" class="svg-white-mono" font-size="13.5">Backend S1（会话 1 本地内存）</text>
+              <text x="46" y="88" class="svg-mono" font-size="13" fill="#1B2B33">LOCALLOCK (key=100, ExclusiveLock)</text>
+              <rect x="46" y="102" width="180" height="46" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="60" y="131" class="svg-mono" font-size="16" fill="#2F7A66" id="sim5-s1-nlocks">nLocks = 1</text>
+              <rect x="240" y="102" width="190" height="46" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="254" y="131" class="svg-mono" font-size="14" fill="#1B2B33" id="sim5-s1-state">状态：GRANTED</text>
+              <text x="46" y="180" class="svg-sub" font-size="12.5" id="sim5-s1-note">nLocks &gt; 0 时重入直接本地 +1，不参与共享排队</text>
+
+              <!-- Backend S2 -->
+              <rect x="28" y="228" width="420" height="176" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="28" y="228" width="420" height="36" fill="#47808D"/>
+              <text x="46" y="251" class="svg-white-mono" font-size="13.5">Backend S2（会话 2 本地内存）</text>
+              <text x="46" y="290" class="svg-mono" font-size="13" fill="#1B2B33">LOCALLOCK (key=100, ExclusiveLock)</text>
+              <rect x="46" y="304" width="180" height="46" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="60" y="333" class="svg-mono" font-size="16" fill="#46585F" id="sim5-s2-nlocks">nLocks = 0</text>
+              <rect x="240" y="304" width="190" height="46" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="254" y="333" class="svg-mono" font-size="14" fill="#46585F" id="sim5-s2-state">状态：IDLE</text>
+              <text x="46" y="382" class="svg-sub" font-size="12.5" id="sim5-s2-note">尚未请求 key=100</text>
+
+              <!-- Orthogonal lines to Shared Memory -->
+              <path id="sim5-conn-s1" d="M 448 114 H 552" stroke="#2F7A66" stroke-width="2.5" fill="none"/>
+              <polygon id="sim5-arr-s1" points="544,109 552,114 544,119" fill="#2F7A66"/>
+              <text x="500" y="102" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#2F7A66" id="sim5-lbl-s1">HOLD</text>
+
+              <path id="sim5-conn-s2" d="M 448 316 H 552" stroke="#89938F" stroke-width="2" stroke-dasharray="5 4" fill="none"/>
+              <polygon id="sim5-arr-s2" points="544,311 552,316 544,321" fill="#89938F"/>
+              <text x="500" y="304" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#89938F" id="sim5-lbl-s2">NONE</text>
+
+              <!-- Shared Memory Box -->
+              <rect x="552" y="26" width="820" height="378" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="2"/>
+              <rect x="552" y="26" width="820" height="38" fill="#1E4B5A"/>
+              <text x="572" y="50" class="svg-white-mono" font-size="14">Shared Memory · 共享锁表（lmgr/README）</text>
+
+              <!-- PROCLOCK Column -->
+              <rect x="576" y="84" width="324" height="126" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5" id="sim5-pl1-box"/>
+              <text x="594" y="110" class="svg-mono" font-size="13" fill="#2F7A66">PROCLOCK (S1 ↔ key=100)</text>
+              <text x="594" y="138" class="svg-mono-sub" font-size="12.5" id="sim5-pl1-mask">holdMask = ExclusiveLock</text>
+              <text x="594" y="164" class="svg-sub" font-size="12.5">共享表只记录「是否持有」，</text>
+              <text x="594" y="186" class="svg-sub" font-size="12.5">不保存具体重入次数。</text>
+
+              <rect x="576" y="238" width="324" height="126" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5" id="sim5-pl2-box"/>
+              <text x="594" y="264" class="svg-mono" font-size="13" fill="#46585F" id="sim5-pl2-title">PROCLOCK (S2 ↔ key=100)</text>
+              <text x="594" y="292" class="svg-mono-sub" font-size="12.5" id="sim5-pl2-mask">holdMask = 0（未创建）</text>
+              <text x="594" y="318" class="svg-sub" font-size="12.5" id="sim5-pl2-desc">S2 发起请求后若冲突，</text>
+              <text x="594" y="340" class="svg-sub" font-size="12.5">将挂入 LOCK.waitProcs 队列。</text>
+
+              <!-- Orthogonal lines PROCLOCK -> LOCK -->
+              <path d="M 900 147 H 964 V 196 H 1004" stroke="#245A6B" stroke-width="2" fill="none"/>
+              <path d="M 900 301 H 964 V 248 H 1004" stroke="#245A6B" stroke-width="2" fill="none"/>
+
+              <!-- LOCK Object -->
+              <rect x="1004" y="84" width="344" height="280" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="1004" y="84" width="344" height="36" fill="#245A6B"/>
+              <text x="1022" y="107" class="svg-white-mono" font-size="13.5">LOCK 对象（全局唯一）</text>
+              <text x="1022" y="146" class="svg-mono" font-size="13" fill="#1B2B33">tag: ADVISORY(db, 0, 100, 1)</text>
+              <text x="1022" y="176" class="svg-mono-sub" font-size="12.5" id="sim5-lock-holder">grantMask: Exclusive (S1)</text>
+              <text x="1022" y="204" class="svg-mono-sub" font-size="12.5" id="sim5-lock-waiters">waitProcs: [空]</text>
+
+              <line x1="1022" y1="226" x2="1330" y2="226" stroke="#74A5AD" stroke-width="1"/>
+              <text x="1022" y="254" class="svg-label" font-size="13.5" fill="#1E4B5A">两条反直觉的实证规律：</text>
+              <text x="1022" y="280" class="svg-sub" font-size="12.5">1. 已持锁会话再次加锁总是成功，</text>
+              <text x="1022" y="300" class="svg-sub" font-size="12.5">   即使已有其他会话在排队等待。</text>
+              <text x="1022" y="328" class="svg-sub" font-size="12.5">2. 会话级锁叠加 N 次需 unlock N 次，</text>
+              <text x="1022" y="348" class="svg-sub" font-size="12.5">   减到 0 才真正释放并唤醒等待者。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">共享锁与排他锁的冲突矩阵怎么工作？为何 advisory 锁与普通表锁/行锁完全互不干扰？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：src/backend/storage/lmgr/README · doc/src/sgml/func/func-admin.sgml</span>
+            <span class="footer-page">05 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 6 ==================== -->
+        <section class="slide" data-slide="6" data-title="三、核心原理(3)：冲突矩阵与正交的 LockMethod">
+          <div class="slide-eyebrow">03 · 冲突与正交 · LOCKCONFLICTS[] &amp; USER_LOCKMETHOD</div>
+          <h1 class="slide-title">复用 ShareLock / ExclusiveLock，但与普通锁完全正交</h1>
+          <p class="slide-lead">USER_LOCKMETHOD(2) 与 DEFAULT_LOCKMETHOD(1) 彼此隔离，拿了 advisory 锁绝不阻挡普通 DML。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="锁模式冲突矩阵与正交 LockMethod 图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Left Panel: Conflict Matrix -->
+              <rect x="24" y="24" width="520" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="24" width="520" height="38" fill="#245A6B"/>
+              <text x="42" y="48" class="svg-white-mono" font-size="13.5">LockConflicts[] 冲突矩阵（lock.c）</text>
+
+              <!-- Matrix headers -->
+              <rect x="46" y="84" width="154" height="50" fill="#EBF1EE" stroke="#D9D5CB"/>
+              <text x="123" y="114" text-anchor="middle" class="svg-mono" font-size="12.5">已持有 \ 请求</text>
+
+              <rect x="200" y="84" width="160" height="50" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="280" y="106" text-anchor="middle" class="svg-mono" font-size="13" fill="#245A6B">ShareLock</text>
+              <text x="280" y="124" text-anchor="middle" class="svg-sub" font-size="11.5">(shared)</text>
+
+              <rect x="360" y="84" width="160" height="50" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="440" y="106" text-anchor="middle" class="svg-mono" font-size="13" fill="#245A6B">ExclusiveLock</text>
+              <text x="440" y="124" text-anchor="middle" class="svg-sub" font-size="11.5">(exclusive)</text>
+
+              <!-- Row 1: ShareLock -->
+              <rect x="46" y="134" width="154" height="74" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="123" y="166" text-anchor="middle" class="svg-mono" font-size="13" fill="#245A6B">ShareLock</text>
+              <text x="123" y="186" text-anchor="middle" class="svg-sub" font-size="11.5">共享读/并发</text>
+
+              <rect x="200" y="134" width="160" height="74" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="280" y="168" text-anchor="middle" class="svg-label" font-size="15" fill="#2F7A66">兼容 · 共存</text>
+              <text x="280" y="190" text-anchor="middle" class="svg-mono-sub" font-size="11.5">不阻塞</text>
+
+              <rect x="360" y="134" width="160" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="440" y="168" text-anchor="middle" class="svg-label" font-size="15" fill="#BE653B">冲突 · 等待</text>
+              <text x="440" y="190" text-anchor="middle" class="svg-mono-sub" font-size="11.5">或 try 返回 false</text>
+
+              <!-- Row 2: ExclusiveLock -->
+              <rect x="46" y="208" width="154" height="74" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="123" y="240" text-anchor="middle" class="svg-mono" font-size="13" fill="#245A6B">ExclusiveLock</text>
+              <text x="123" y="260" text-anchor="middle" class="svg-sub" font-size="11.5">排他独占</text>
+
+              <rect x="200" y="208" width="160" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="280" y="242" text-anchor="middle" class="svg-label" font-size="15" fill="#BE653B">冲突 · 等待</text>
+              <text x="280" y="264" text-anchor="middle" class="svg-mono-sub" font-size="11.5">或 try 返回 false</text>
+
+              <rect x="360" y="208" width="160" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="440" y="242" text-anchor="middle" class="svg-label" font-size="15" fill="#BE653B">冲突 · 等待</text>
+              <text x="440" y="264" text-anchor="middle" class="svg-mono-sub" font-size="11.5">或 try 返回 false</text>
+
+              <rect x="46" y="302" width="474" height="84" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="64" y="328" class="svg-label" font-size="13.5" fill="#1B2B33">为什么 SQL 只暴露两类模式？</text>
+              <text x="64" y="352" class="svg-sub" font-size="12.5">应用自定义资源不需要 DDL/表级 8 种锁模式；</text>
+              <text x="64" y="372" class="svg-sub" font-size="12.5">ShareLock 与 ExclusiveLock 足以覆盖读共享/写互斥语义。</text>
+
+              <!-- Right Panel: Orthogonal Lock Methods -->
+              <rect x="572" y="24" width="804" height="382" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="572" y="24" width="804" height="38" fill="#1E4B5A"/>
+              <text x="590" y="48" class="svg-white-mono" font-size="13.5">完全正交的两套 LockMethod（lmgr/README · User Locks）</text>
+
+              <!-- Lane 1: DEFAULT_LOCKMETHOD -->
+              <rect x="596" y="84" width="756" height="122" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="596" y="84" width="210" height="122" fill="#2E6373"/>
+              <text x="614" y="126" class="svg-white-mono" font-size="13">DEFAULT_LOCKMETHOD</text>
+              <text x="614" y="152" class="svg-white-mono" font-size="12">lockmethodid = 1</text>
+              <text x="614" y="178" class="svg-white" font-size="12">系统强制 · 数据锁</text>
+
+              <text x="826" y="114" class="svg-label" font-size="14.5">绑定对象：relation / tuple / transaction / object</text>
+              <text x="826" y="142" class="svg-mono-sub" font-size="12.5">示例：UPDATE orders SET status='done' WHERE id = 42;</text>
+              <text x="826" y="170" class="svg-sub" font-size="13">由执行器自动加行锁与表级 RowExclusiveLock，保护行一致。</text>
+
+              <!-- Orthogonal isolation wall -->
+              <line x1="596" y1="230" x2="1352" y2="230" stroke="#BE653B" stroke-width="2" stroke-dasharray="8 6"/>
+              <rect x="854" y="217" width="240" height="26" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="974" y="234" text-anchor="middle" class="svg-mono" font-size="12" fill="#BE653B">完全正交 · 互不触发冲突</text>
+
+              <!-- Lane 2: USER_LOCKMETHOD -->
+              <rect x="596" y="254" width="756" height="130" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="596" y="254" width="210" height="130" fill="#2F7A66"/>
+              <text x="614" y="298" class="svg-white-mono" font-size="13">USER_LOCKMETHOD</text>
+              <text x="614" y="324" class="svg-white-mono" font-size="12">lockmethodid = 2</text>
+              <text x="614" y="350" class="svg-white" font-size="12">应用协议 · 咨询锁</text>
+
+              <text x="826" y="284" class="svg-label" font-size="14.5">绑定对象：LOCKTAG_ADVISORY（纯数字 key）</text>
+              <text x="826" y="312" class="svg-mono-sub" font-size="12.5">示例：SELECT pg_advisory_lock(42);</text>
+              <text x="826" y="340" class="svg-sub" font-size="13">仅阻塞同样调用 advisory(42) 的会话；</text>
+              <text x="826" y="362" class="svg-label" font-size="13" fill="#BE653B">不会阻止另一会话直接执行 UPDATE orders WHERE id = 42。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">锁拿到以后何时释放？为什么说「事务级优先，会话级遇连接池极易泄漏」？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：src/backend/storage/lmgr/lock.c · src/backend/storage/lmgr/README</span>
+            <span class="footer-page">06 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 7 ==================== -->
+        <section class="slide" data-slide="7" data-title="三、核心原理(4)：事务级 vs 会话级与连接池陷阱">
+          <div class="slide-eyebrow">03 · 生命周期 · TRANSACTION VS SESSION LIFECYCLE</div>
+          <h1 class="slide-title">事务级优先：连接池归还不等于 Session 结束</h1>
+          <p class="slide-lead">ProcReleaseLocks() 在事务提交或回滚时释放事务级锁，却保留会话级锁——池化连接会将其带给下一个请求。</p>
+          <div class="slide-divider"></div>
+          <div class="sim-toolbar" id="sim7-bar">
+            <span class="sim-toolbar-label">生命周期推演</span>
+            <button class="sim-btn active" type="button" data-sim7="0">步骤 1：BEGIN + 拿锁</button>
+            <button class="sim-btn" type="button" data-sim7="1">步骤 2：异常 ROLLBACK</button>
+            <button class="sim-btn terra" type="button" data-sim7="2">步骤 3：归还连接池 → 请求 #2 复用</button>
+            <button class="sim-btn teal" type="button" data-sim7="3">步骤 4：DISCARD ALL / 断开连接</button>
+            <span class="sim-status" id="sim7-status">步骤 1：两条轨道同时在事务内拿到 key=42</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="事务级与会话级生命周期对比时间轴">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Vertical phase guidelines -->
+              <rect x="220" y="18" width="240" height="32" fill="#EBF1EE" stroke="#D9D5CB"/>
+              <text x="340" y="39" text-anchor="middle" class="svg-mono" font-size="12.5" fill="#1B2B33">1. BEGIN &amp; Acquire</text>
+
+              <rect x="480" y="18" width="240" height="32" fill="#EBF1EE" stroke="#D9D5CB"/>
+              <text x="600" y="39" text-anchor="middle" class="svg-mono" font-size="12.5" fill="#1B2B33">2. COMMIT / ROLLBACK</text>
+
+              <rect x="740" y="18" width="310" height="32" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="895" y="39" text-anchor="middle" class="svg-mono" font-size="12.5" fill="#BE653B">3. 归还连接池 → 请求 #2 复用</text>
+
+              <rect x="1070" y="18" width="304" height="32" fill="#E2F0EC" stroke="#2F7A66"/>
+              <text x="1222" y="39" text-anchor="middle" class="svg-mono" font-size="12.5" fill="#2F7A66">4. DISCARD ALL / Session 结束</text>
+
+              <!-- Active phase highlight column -->
+              <rect id="sim7-highlight" x="220" y="50" width="240" height="358" fill="#E5EFF0" opacity="0.45"/>
+
+              <line x1="470" y1="50" x2="470" y2="408" stroke="#D9D5CB" stroke-dasharray="4 4"/>
+              <line x1="730" y1="50" x2="730" y2="408" stroke="#D9D5CB" stroke-dasharray="4 4"/>
+              <line x1="1060" y1="50" x2="1060" y2="408" stroke="#D9D5CB" stroke-dasharray="4 4"/>
+
+              <!-- Track A: Transaction-level -->
+              <rect x="24" y="72" width="184" height="142" fill="#2F7A66"/>
+              <text x="40" y="106" class="svg-white" font-size="15">事务级锁（推荐）</text>
+              <text x="40" y="132" class="svg-white-mono" font-size="11.5">pg_advisory_xact_lock</text>
+              <text x="40" y="156" class="svg-white-mono" font-size="11.5">sessionLock = false</text>
+              <text x="40" y="190" class="svg-white" font-size="12">短临界区 / Web 请求</text>
+
+              <!-- Track A Bar -->
+              <rect x="234" y="102" width="224" height="50" fill="#2F7A66"/>
+              <text x="346" y="132" text-anchor="middle" class="svg-white-mono" font-size="13">持有 key=42</text>
+
+              <rect id="sim7-xact-rel" x="488" y="102" width="224" height="50" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="600" y="124" text-anchor="middle" class="svg-label" font-size="13" fill="#2F7A66">ProcReleaseLocks()</text>
+              <text x="600" y="143" text-anchor="middle" class="svg-mono-sub" font-size="11.5">自动释放 · 无需 unlock</text>
+
+              <rect x="752" y="102" width="286" height="50" fill="#F7F6F2" stroke="#D9D5CB" stroke-dasharray="4 3"/>
+              <text x="895" y="132" text-anchor="middle" class="svg-sub" font-size="13" fill="#2F7A66">连接干净 · 请求 #2 无残留锁</text>
+
+              <rect x="1082" y="102" width="280" height="50" fill="#F7F6F2" stroke="#D9D5CB" stroke-dasharray="4 3"/>
+              <text x="1222" y="132" text-anchor="middle" class="svg-muted" font-size="12.5">无额外清理负担</text>
+
+              <text x="234" y="190" class="svg-sub" font-size="13">实证（proc.c）：事务提交或回滚路径都会清理 transaction-level advisory locks，异常也不泄漏。</text>
+
+              <!-- Track B: Session-level -->
+              <rect x="24" y="242" width="184" height="156" fill="#BE653B"/>
+              <text x="40" y="276" class="svg-white" font-size="15">会话级锁（克制）</text>
+              <text x="40" y="302" class="svg-white-mono" font-size="11.5">pg_advisory_lock</text>
+              <text x="40" y="326" class="svg-white-mono" font-size="11.5">sessionLock = true</text>
+              <text x="40" y="360" class="svg-white" font-size="12">跨事务长租约协议</text>
+
+              <!-- Track B Continuous Bar across ROLLBACK and Pool Reuse -->
+              <rect x="234" y="268" width="224" height="50" fill="#245A6B"/>
+              <text x="346" y="298" text-anchor="middle" class="svg-white-mono" font-size="13">持有 key=42</text>
+
+              <rect id="sim7-sess-rb" x="458" y="268" width="272" height="50" fill="#AE8A3E"/>
+              <text x="594" y="290" text-anchor="middle" class="svg-white" font-size="13">ROLLBACK 后仍持有！</text>
+              <text x="594" y="309" text-anchor="middle" class="svg-white-mono" font-size="11.5">session-level holds 保留</text>
+
+              <rect id="sim7-sess-leak" x="730" y="268" width="320" height="50" fill="#BE653B"/>
+              <text x="890" y="290" text-anchor="middle" class="svg-white" font-size="13">连接池泄漏：请求 #2 继承未知锁</text>
+              <text x="890" y="309" text-anchor="middle" class="svg-white-mono" font-size="11.5">后端 Session 未断，锁持续占用</text>
+
+              <rect id="sim7-sess-clean" x="1082" y="268" width="280" height="50" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="1222" y="290" text-anchor="middle" class="svg-label" font-size="13" fill="#2F7A66">最终释放路径</text>
+              <text x="1222" y="309" text-anchor="middle" class="svg-mono-sub" font-size="11.5">unlock / DISCARD ALL / 断连</text>
+
+              <text x="234" y="356" class="svg-sub" font-size="13">实证（discard.c）：DISCARD ALL 调用 LockReleaseAll(USER_LOCKMETHOD, true) 清理会话级锁。</text>
+              <text x="234" y="382" class="svg-label" font-size="13" fill="#BE653B">提示：连接池 reset 需评估成本，Web 请求短临界区应直接选用事务级锁。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">既然复用普通锁管理器，多把 advisory 锁会不会死锁？锁数量多了又会撞到什么上限？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：src/backend/storage/lmgr/proc.c · src/backend/commands/discard.c</span>
+            <span class="footer-page">07 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 8 ==================== -->
+        <section class="slide" data-slide="8" data-title="三、核心原理(5)：死锁检测与共享内存上限">
+          <div class="slide-eyebrow">03 · 安全边界 · DEADLOCK DETECTION &amp; SHARED MEMORY LIMIT</div>
+          <h1 class="slide-title">会检测死锁但不会免死锁；锁对象消耗共享内存</h1>
+          <p class="slide-lead">等待超 deadlock_timeout (默认 1s) 才触发死锁检测；advisory 锁与普通锁共用同一共享内存池。</p>
+          <div class="slide-divider"></div>
+          <div class="sim-toolbar" id="sim8-bar">
+            <span class="sim-toolbar-label">多 Key 加锁推演</span>
+            <button class="sim-btn terra active" type="button" data-sim8="deadlock">错误：乱序加锁（S1: 1→2 / S2: 2→1）</button>
+            <button class="sim-btn teal" type="button" data-sim8="ordered">正确：升序加锁（S1: 1→2 / S2: 1→2）</button>
+            <span class="sim-status" id="sim8-status">结果：形成环路等待 → 1s 后触发 deadlock_detected 回滚一方</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="死锁检测与共享内存上限示意图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Left 60%: Deadlock vs Ordered -->
+              <rect x="24" y="24" width="836" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="24" width="836" height="38" fill="#245A6B"/>
+              <text x="42" y="48" class="svg-white-mono" font-size="13.5">乐观等待与死锁检测（lmgr/README · config.sgml）</text>
+
+              <!-- Session 1 Box -->
+              <rect x="56" y="92" width="230" height="104" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="74" y="120" class="svg-label" font-size="15" fill="#245A6B">会话 1（Tx 1）</text>
+              <text x="74" y="148" class="svg-mono-sub" font-size="12.5">1. xact_lock(1) → 持有</text>
+              <text x="74" y="174" class="svg-mono-sub" font-size="12.5" id="sim8-s1-step2">2. xact_lock(2) → 等待 S2</text>
+
+              <!-- Session 2 Box -->
+              <rect x="56" y="254" width="230" height="104" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="74" y="282" class="svg-label" font-size="15" fill="#245A6B">会话 2（Tx 2）</text>
+              <text x="74" y="310" class="svg-mono-sub" font-size="12.5" id="sim8-s2-step1">1. xact_lock(2) → 持有</text>
+              <text x="74" y="336" class="svg-mono-sub" font-size="12.5" id="sim8-s2-step2">2. xact_lock(1) → 等待 S1</text>
+
+              <!-- Key 1 Box -->
+              <rect x="446" y="92" width="160" height="104" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+              <text x="526" y="126" text-anchor="middle" class="svg-mono" font-size="16" fill="#1E4B5A">Key = 1</text>
+              <text x="526" y="154" text-anchor="middle" class="svg-sub" font-size="12.5" id="sim8-k1-owner">持有者：S1</text>
+              <text x="526" y="178" text-anchor="middle" class="svg-mono-sub" font-size="12" id="sim8-k1-wait">等待：S2</text>
+
+              <!-- Key 2 Box -->
+              <rect x="446" y="254" width="160" height="104" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+              <text x="526" y="288" text-anchor="middle" class="svg-mono" font-size="16" fill="#1E4B5A">Key = 2</text>
+              <text x="526" y="316" text-anchor="middle" class="svg-sub" font-size="12.5" id="sim8-k2-owner">持有者：S2</text>
+              <text x="526" y="340" text-anchor="middle" class="svg-mono-sub" font-size="12" id="sim8-k2-wait">等待：S1</text>
+
+              <!-- Orthogonal arrows (no diagonal crossings!) -->
+              <!-- S1 holds K1 -->
+              <path d="M 286 122 H 446" stroke="#2F7A66" stroke-width="2.5" fill="none"/>
+              <polygon points="438,117 446,122 438,127" fill="#2F7A66"/>
+              <text x="366" y="114" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#2F7A66">HOLD</text>
+
+              <!-- Dynamic Wait/Hold connectors -->
+              <path id="sim8-path-a" d="M 286 164 H 340 V 284 H 446" stroke="#BE653B" stroke-width="2.5" fill="none" class="flow-anim"/>
+              <polygon id="sim8-arr-a" points="438,279 446,284 438,289" fill="#BE653B"/>
+              <text id="sim8-lbl-a" x="394" y="274" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#BE653B">WAIT</text>
+
+              <path id="sim8-path-b" d="M 286 326 H 394 V 164 H 446" stroke="#BE653B" stroke-width="2.5" fill="none" class="flow-anim"/>
+              <polygon id="sim8-arr-b" points="438,159 446,164 438,169" fill="#BE653B"/>
+
+              <!-- Outcome Box -->
+              <rect id="sim8-outcome-box" x="636" y="92" width="200" height="266" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text id="sim8-outcome-title" x="652" y="124" class="svg-label" font-size="15" fill="#BE653B">死锁环路成立</text>
+              <text id="sim8-outcome-l1" x="652" y="158" class="svg-sub" font-size="12.5">1. 先乐观睡眠等待</text>
+              <text id="sim8-outcome-l2" x="652" y="184" class="svg-sub" font-size="12.5">2. 超 deadlock_timeout</text>
+              <text id="sim8-outcome-l3" x="652" y="206" class="svg-mono" font-size="12" fill="#BE653B">   (默认 1s) 才检测</text>
+              <text id="sim8-outcome-l4" x="652" y="238" class="svg-sub" font-size="12.5">3. 中止一方事务报错：</text>
+              <text id="sim8-outcome-l5" x="652" y="262" class="svg-mono" font-size="12" fill="#BE653B">   deadlock_detected</text>
+              <text id="sim8-outcome-l6" x="652" y="298" class="svg-label" font-size="12.5" fill="#1B2B33">解法：所有路径按 key</text>
+              <text id="sim8-outcome-l7" x="652" y="320" class="svg-label" font-size="12.5" fill="#1B2B33">升序排序，或用组合 key</text>
+
+              <!-- Right 38%: Shared Memory Limit -->
+              <rect x="884" y="24" width="492" height="382" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="884" y="24" width="492" height="38" fill="#1E4B5A"/>
+              <text x="902" y="48" class="svg-white-mono" font-size="13.5">共享内存锁池上限（mvcc.sgml · lock.c）</text>
+
+              <text x="904" y="92" class="svg-label" font-size="14.5">共享锁表容量由以下参数共同决定：</text>
+              <rect x="904" y="106" width="452" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="920" y="133" class="svg-mono" font-size="12.5" fill="#245A6B">max_locks_per_transaction × max_connections ...</text>
+
+              <!-- Memory bar visualization -->
+              <text x="904" y="182" class="svg-sub" font-size="13">普通锁与 advisory 锁共享同一块共享内存池：</text>
+              <rect x="904" y="196" width="452" height="44" fill="#F7F6F2" stroke="#1B2B33" stroke-width="1.5"/>
+              <rect x="905" y="197" width="180" height="42" fill="#2E6373"/>
+              <text x="995" y="223" text-anchor="middle" class="svg-white" font-size="12.5">普通表锁/对象锁</text>
+              <rect x="1085" y="197" width="186" height="42" fill="#47808D"/>
+              <text x="1178" y="223" text-anchor="middle" class="svg-white" font-size="12.5">海量 advisory key</text>
+              <rect x="1271" y="197" width="84" height="42" fill="#BE653B"/>
+              <text x="1313" y="223" text-anchor="middle" class="svg-white-mono" font-size="11.5">OOM 爆表</text>
+
+              <rect x="904" y="262" width="452" height="122" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="920" y="290" class="svg-mono" font-size="13" fill="#BE653B">ERROR: out of shared memory</text>
+              <text x="920" y="316" class="svg-sub" font-size="13">一旦耗尽，服务器将无法授予任何锁（含普通锁）！</text>
+              <text x="920" y="344" class="svg-label" font-size="13" fill="#1B2B33">工程原则：advisory 锁只适合控制并发入口，</text>
+              <text x="920" y="366" class="svg-label" font-size="13" fill="#1B2B33">不要给每一行/每个对象长期打一把锁。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">把 advisory 锁放进完整的并发控制工具箱，它和行锁、唯一约束、锁表、分布式锁该怎么选？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：doc/src/sgml/config.sgml · doc/src/sgml/mvcc.sgml · lock.c</span>
+            <span class="footer-page">08 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 9 ==================== -->
+        <section class="slide" data-slide="9" data-title="四、横向对比与五、收益代价全景">
+          <div class="slide-eyebrow">04-05 · 横向对比与效果 · TRADE-OFF MATRIX</div>
+          <h1 class="slide-title">五种互斥方案横评：核心差异在「谁负责正确性」</h1>
+          <p class="slide-lead">唯一约束与行锁由数据库强制保证；advisory 锁以应用自觉为前提，换取无表膨胀与非行资源表达力。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="五种互斥方案横向对比矩阵">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Table Header (y=12..54) -->
+              <rect x="16" y="12" width="158" height="40" fill="#1E4B5A"/>
+              <text x="30" y="37" class="svg-white-mono" font-size="12.5">对比维度</text>
+
+              <rect x="174" y="12" width="246" height="40" fill="#245A6B"/>
+              <text x="190" y="37" class="svg-white" font-size="14">advisory 锁（本文）</text>
+
+              <rect x="420" y="12" width="224" height="40" fill="#47808D"/>
+              <text x="436" y="37" class="svg-white" font-size="13.5">行锁 FOR UPDATE</text>
+
+              <rect x="644" y="12" width="224" height="40" fill="#47808D"/>
+              <text x="660" y="37" class="svg-white" font-size="13.5">唯一 / 排他约束</text>
+
+              <rect x="868" y="12" width="248" height="40" fill="#47808D"/>
+              <text x="884" y="37" class="svg-white" font-size="13.5">锁表 / 状态表</text>
+
+              <rect x="1116" y="12" width="268" height="40" fill="#47808D"/>
+              <text x="1132" y="37" class="svg-white" font-size="13.5">外部分布式锁</text>
+
+              <!-- Row 1: 锁对象 -->
+              <rect x="16" y="52" width="158" height="40" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="30" y="77" class="svg-label" font-size="13">锁对象</text>
+              <rect x="174" y="52" width="246" height="40" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="190" y="77" class="svg-label" font-size="13" fill="#245A6B">数字 key（无须实体行）</text>
+              <rect x="420" y="52" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="436" y="77" class="svg-sub" font-size="12.5">已存在的数据行 tuple</text>
+              <rect x="644" y="52" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="660" y="77" class="svg-sub" font-size="12.5">index / constraint</text>
+              <rect x="868" y="52" width="248" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="884" y="77" class="svg-sub" font-size="12.5">专用锁表中的记录行</text>
+              <rect x="1116" y="52" width="268" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="1132" y="77" class="svg-sub" font-size="12.5">外部协调系统 key</text>
+
+              <!-- Row 2: 数据库强制 -->
+              <rect x="16" y="92" width="158" height="40" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="30" y="117" class="svg-label" font-size="13">库是否强制</text>
+              <rect x="174" y="92" width="246" height="40" fill="#F7E9DE" stroke="#D9D5CB"/>
+              <text x="190" y="117" class="svg-label" font-size="13" fill="#BE653B">否，依赖应用自觉遵守</text>
+              <rect x="420" y="92" width="224" height="40" fill="#E2F0EC" stroke="#D9D5CB"/>
+              <text x="436" y="117" class="svg-label" font-size="12.5" fill="#2F7A66">对行修改强制生效</text>
+              <rect x="644" y="92" width="224" height="40" fill="#E2F0EC" stroke="#D9D5CB"/>
+              <text x="660" y="117" class="svg-label" font-size="12.5" fill="#2F7A66">是（强数据不变量）</text>
+              <rect x="868" y="92" width="248" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="884" y="117" class="svg-sub" font-size="12.5">取决于应用是否经锁表</text>
+              <rect x="1116" y="92" width="268" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="1132" y="117" class="svg-sub" font-size="12.5">取决于外部协议与租约</text>
+
+              <!-- Row 3: 异常清理 -->
+              <rect x="16" y="132" width="158" height="40" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="30" y="157" class="svg-label" font-size="13">异常清理</text>
+              <rect x="174" y="132" width="246" height="40" fill="#E2F0EC" stroke="#D9D5CB"/>
+              <text x="190" y="157" class="svg-label" font-size="12.5" fill="#2F7A66">事务级自动；断连自动</text>
+              <rect x="420" y="132" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="436" y="157" class="svg-sub" font-size="12.5">事务结束自动释放</text>
+              <rect x="644" y="132" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="660" y="157" class="svg-sub" font-size="12.5">无需清理锁对象</text>
+              <rect x="868" y="132" width="248" height="40" fill="#F7E9DE" stroke="#D9D5CB"/>
+              <text x="884" y="157" class="svg-sub" font-size="12.5" fill="#BE653B">需额外设计过期/清理</text>
+              <rect x="1116" y="132" width="268" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="1132" y="157" class="svg-sub" font-size="12.5">依赖 TTL / 心跳 / 续租</text>
+
+              <!-- Row 4: 表膨胀 -->
+              <rect x="16" y="172" width="158" height="40" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="30" y="197" class="svg-label" font-size="13">表膨胀风险</text>
+              <rect x="174" y="172" width="246" height="40" fill="#E2F0EC" stroke="#D9D5CB"/>
+              <text x="190" y="197" class="svg-label" font-size="12.5" fill="#2F7A66">无业务表 MVCC 死元组</text>
+              <rect x="420" y="172" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="436" y="197" class="svg-sub" font-size="12.5">不额外制造锁表膨胀</text>
+              <rect x="644" y="172" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="660" y="197" class="svg-sub" font-size="12.5">正常索引维护成本</text>
+              <rect x="868" y="172" width="248" height="40" fill="#F7E9DE" stroke="#D9D5CB"/>
+              <text x="884" y="197" class="svg-sub" font-size="12.5" fill="#BE653B">高频写删易引发膨胀</text>
+              <rect x="1116" y="172" width="268" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="1132" y="197" class="svg-sub" font-size="12.5">不影响数据库表</text>
+
+              <!-- Row 5: 跨库/主备 -->
+              <rect x="16" y="212" width="158" height="40" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="30" y="237" class="svg-label" font-size="13">跨库 / 跨节点</text>
+              <rect x="174" y="212" width="246" height="40" fill="#F7E9DE" stroke="#D9D5CB"/>
+              <text x="190" y="237" class="svg-label" font-size="12.5" fill="#BE653B">不适合（不写 WAL）</text>
+              <rect x="420" y="212" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="436" y="237" class="svg-sub" font-size="12.5">仅单库内有效</text>
+              <rect x="644" y="212" width="224" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="660" y="237" class="svg-sub" font-size="12.5">仅单库内有效</text>
+              <rect x="868" y="212" width="248" height="40" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="884" y="237" class="svg-sub" font-size="12.5">复制可看到状态行</text>
+              <rect x="1116" y="212" width="268" height="40" fill="#E2F0EC" stroke="#D9D5CB"/>
+              <text x="1132" y="237" class="svg-label" font-size="12.5" fill="#2F7A66">适合（需保证租约正确）</text>
+
+              <!-- Row 6: 最佳场景 -->
+              <rect x="16" y="252" width="158" height="44" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="30" y="279" class="svg-label" font-size="13">最适场景</text>
+              <rect x="174" y="252" width="246" height="44" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="190" y="279" class="svg-label" font-size="12.5" fill="#245A6B">单库短临界区/任务抢占</text>
+              <rect x="420" y="252" width="224" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="436" y="279" class="svg-sub" font-size="12.5">修改已存在行记录</text>
+              <rect x="644" y="252" width="224" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="660" y="279" class="svg-sub" font-size="12.5">唯一性/不重叠时间段</text>
+              <rect x="868" y="252" width="248" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="884" y="279" class="svg-sub" font-size="12.5">需审计与可查询锁状态</text>
+              <rect x="1116" y="252" width="268" height="44" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="1132" y="279" class="svg-sub" font-size="12.5">多实例/多系统协调</text>
+
+              <!-- Bottom Strip: Benefits vs Costs -->
+              <rect x="16" y="314" width="676" height="102" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="34" y="340" class="svg-label" font-size="14" fill="#2F7A66">三大机制收益（无虚构基准数字）</text>
+              <text x="34" y="366" class="svg-sub" font-size="12.5">1. 不写业务表、不产生 MVCC 死元组  2. 直接复用死锁检测与 pg_locks 观测</text>
+              <text x="34" y="392" class="svg-sub" font-size="12.5">3. 可表达非行资源（如全局汇总任务、外部文件导入权、租户 API 同步）</text>
+
+              <rect x="708" y="314" width="676" height="102" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="726" y="340" class="svg-label" font-size="14" fill="#BE653B">四大明确代价</text>
+              <text x="726" y="366" class="svg-sub" font-size="12.5">1. 消耗共享锁表内存  2. 会话级锁在连接池下极易泄漏  3. 不写 WAL 不传备库</text>
+              <text x="726" y="392" class="svg-sub" font-size="12.5">4. 不强制普通 DML；阻塞版可能挂死线程（在线服务宜用 try-lock + 退避）</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">看清了收益与代价，落到真实 SQL 代码里怎么写抢锁模板，又该如何避开 LIMIT 求值陷阱？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：doc/src/sgml/mvcc.sgml · high-availability.sgml</span>
+            <span class="footer-page">09 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-slide="10" data-title="六、实操 DEMO：Worker 抢锁模板与 LIMIT 陷阱">
+          <div class="slide-eyebrow">06 · 实操模板 · WORKER PATTERN &amp; LIMIT EVALUATION TRAP</div>
+          <h1 class="slide-title">安全抢锁模板：命名空间 + 事务级 try-lock + 子查询定界</h1>
+          <p class="slide-lead">用双 int (10, tenant_id) 显式隔离业务域；绝不把锁函数直接与 LIMIT 混写在同一层 SELECT。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Worker 抢锁模板与 LIMIT 陷阱对比图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Left Panel: Recommended Worker Template -->
+              <rect x="24" y="20" width="670" height="390" fill="#F1EFE9" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="24" y="20" width="670" height="38" fill="#2F7A66"/>
+              <text x="42" y="44" class="svg-white-mono" font-size="13.5">推荐模板：多 Worker 抢占租户任务（事务级 try-lock）</text>
+
+              <rect x="44" y="74" width="630" height="222" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="60" y="102" class="svg-mono" font-size="13" fill="#245A6B">BEGIN;</text>
+              <text x="60" y="126" class="svg-mono" font-size="13" fill="#1B2B33">WITH candidate AS (</text>
+              <text x="80" y="148" class="svg-mono-sub" font-size="12.5">SELECT id, tenant_id FROM jobs WHERE status = 'ready'</text>
+              <text x="80" y="170" class="svg-mono-sub" font-size="12.5">ORDER BY priority DESC, id LIMIT 1</text>
+              <text x="60" y="192" class="svg-mono" font-size="13" fill="#1B2B33">)</text>
+              <text x="60" y="216" class="svg-mono" font-size="13" fill="#2F7A66">SELECT pg_try_advisory_xact_lock(10, tenant_id) AS got_lock</text>
+              <text x="60" y="238" class="svg-mono" font-size="13" fill="#1B2B33">FROM candidate;</text>
+              <text x="60" y="264" class="svg-mono-sub" font-size="12">-- true  → 同事务标记 running 并 COMMIT（锁自动释放）</text>
+              <text x="60" y="284" class="svg-mono-sub" font-size="12">-- false → 回滚空事务，退避重试（绝不阻塞线程池）</text>
+
+              <!-- Design highlights -->
+              <rect x="44" y="310" width="306" height="84" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="60" y="336" class="svg-label" font-size="13.5" fill="#2F7A66">显式命名空间：(10, tenant_id)</text>
+              <text x="60" y="360" class="svg-sub" font-size="12">10 =「租户任务锁」，避免与 user_id /</text>
+              <text x="60" y="380" class="svg-sub" font-size="12">job_id 撞 key，比 hash 更易运维。</text>
+
+              <rect x="368" y="310" width="306" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="384" y="336" class="svg-label" font-size="13.5" fill="#245A6B">零 unlock 负担</text>
+              <text x="384" y="360" class="svg-sub" font-size="12">事务级锁随 COMMIT/ROLLBACK 释放，</text>
+              <text x="384" y="380" class="svg-sub" font-size="12">完全免疫连接池异常残留。</text>
+
+              <!-- Right Panel: LIMIT Trap -->
+              <rect x="716" y="20" width="660" height="390" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="716" y="20" width="660" height="38" fill="#BE653B"/>
+              <text x="734" y="44" class="svg-white-mono" font-size="13.5">官方警示：LIMIT 表达式求值顺序陷阱（mvcc.sgml）</text>
+
+              <!-- Dangerous SQL -->
+              <rect x="736" y="74" width="620" height="128" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="752" y="98" class="svg-label" font-size="13.5" fill="#BE653B">危险写法：锁函数与 LIMIT 同层</text>
+              <text x="752" y="124" class="svg-mono" font-size="12.5" fill="#1B2B33">SELECT pg_advisory_lock(id) FROM foo</text>
+              <text x="752" y="146" class="svg-mono" font-size="12.5" fill="#1B2B33">WHERE id &gt; 12345 LIMIT 100;</text>
+              <text x="752" y="174" class="svg-sub" font-size="12.5">风险：优化器/执行器可能在 LIMIT 截断前对更多行求值，</text>
+              <text x="752" y="193" class="svg-label" font-size="12.5" fill="#BE653B">导致拿到超额会话级锁且极难排查残留！</text>
+
+              <!-- Orthogonal arrow down -->
+              <line x1="1046" y1="202" x2="1046" y2="232" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="1041,226 1051,226 1046,234" fill="#2F7A66"/>
+              <text x="1060" y="222" class="svg-mono" font-size="12" fill="#2F7A66">改写为子查询定界</text>
+
+              <!-- Safe SQL -->
+              <rect x="736" y="234" width="620" height="160" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="752" y="258" class="svg-label" font-size="13.5" fill="#2F7A66">安全写法：先物化/定界候选集，再外层加锁</text>
+              <text x="752" y="284" class="svg-mono" font-size="12.5" fill="#1B2B33">SELECT pg_advisory_lock(q.id)</text>
+              <text x="752" y="306" class="svg-mono" font-size="12.5" fill="#1B2B33">FROM (</text>
+              <text x="772" y="328" class="svg-mono-sub" font-size="12.5">SELECT id FROM foo WHERE id &gt; 12345 ORDER BY id LIMIT 100</text>
+              <text x="752" y="350" class="svg-mono" font-size="12.5" fill="#1B2B33">) AS q;</text>
+              <text x="752" y="378" class="svg-sub" font-size="12.5">子查询先锁定「最多 100 个 id」集合，外层只对确定集合调用锁函数。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">代码上线后如果真的出现锁等待或会话级泄漏，如何通过 pg_locks 快速反解业务 Key 并定位阻塞源？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：doc/src/sgml/mvcc.sgml · 实操 SQL 按 PostgreSQL 官方签名编写</span>
+            <span class="footer-page">10 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="11" data-title="七、可观测性与排障路径：pg_locks 反解 Key">
+          <div class="slide-eyebrow">07 · 观测排障 · OBSERVABILITY &amp; KEY RECONSTRUCTION</div>
+          <h1 class="slide-title">排障闭环：从 pg_locks 还原 Key 并定位阻塞链</h1>
+          <p class="slide-lead">不能止步于 locktype='advisory'；按 objsubid 反解业务 Key，结合 pg_blocking_pids() 精准归因。</p>
+          <div class="slide-divider"></div>
+          <div class="sim-toolbar" id="sim11-bar">
+            <span class="sim-toolbar-label">pg_locks 反解器</span>
+            <button class="sim-btn active" type="button" data-sim11="ex1">示例 1：bigint = 42</button>
+            <button class="sim-btn" type="button" data-sim11="ex2">示例 2：高 32 位非零 bigint</button>
+            <button class="sim-btn teal" type="button" data-sim11="ex3">示例 3：双 int (10, 42)</button>
+            <span class="sim-status" id="sim11-status">反解公式：(classid::bigint &lt;&lt; 32) | objid::bigint = 42</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="advisory 锁观测与排障路径图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 4-stage pipeline across top -->
+              <!-- Stage 1 -->
+              <rect x="24" y="24" width="292" height="170" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="24" width="292" height="34" fill="#245A6B"/>
+              <text x="40" y="46" class="svg-white-mono" font-size="12.5">STEP 1 · 锁定 advisory 行</text>
+              <text x="40" y="84" class="svg-mono" font-size="12.5" fill="#1B2B33">FROM pg_locks</text>
+              <text x="40" y="106" class="svg-mono" font-size="12.5" fill="#245A6B">WHERE locktype = 'advisory'</text>
+              <text x="40" y="136" class="svg-sub" font-size="12">按 granted 排序，优先定位</text>
+              <text x="40" y="156" class="svg-sub" font-size="12">granted = false 的等待者。</text>
+              <text x="40" y="180" class="svg-label" font-size="11.5" fill="#BE653B">注意：勿秒级全量高频轮询</text>
+
+              <path d="M 316 109 H 362" stroke="#245A6B" stroke-width="2" fill="none"/>
+              <polygon points="354,104 362,109 354,114" fill="#245A6B"/>
+
+              <!-- Stage 2 -->
+              <rect x="362" y="24" width="318" height="170" fill="#F1EFE9" stroke="#2E6373" stroke-width="1.5"/>
+              <rect x="362" y="24" width="318" height="34" fill="#2E6373"/>
+              <text x="378" y="46" class="svg-white-mono" font-size="12.5">STEP 2 · 按 objsubid 反解 Key</text>
+              <text x="378" y="84" class="svg-mono" font-size="12" fill="#245A6B">objsubid = 1（单 bigint）：</text>
+              <text x="378" y="106" class="svg-mono-sub" font-size="11.5">(classid::bigint &lt;&lt; 32) | objid</text>
+              <text x="378" y="138" class="svg-mono" font-size="12" fill="#2F7A66">objsubid = 2（双 int4）：</text>
+              <text x="378" y="160" class="svg-mono-sub" font-size="11.5">namespace = classid, id = objid</text>
+              <text x="378" y="182" class="svg-sub" font-size="11.5">对齐应用层 key 协议表还原业务含义</text>
+
+              <path d="M 680 109 H 726" stroke="#245A6B" stroke-width="2" fill="none"/>
+              <polygon points="718,104 726,109 718,114" fill="#245A6B"/>
+
+              <!-- Stage 3 -->
+              <rect x="726" y="24" width="308" height="170" fill="#F1EFE9" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="726" y="24" width="308" height="34" fill="#47808D"/>
+              <text x="742" y="46" class="svg-white-mono" font-size="12.5">STEP 3 · 关联会话与阻塞链</text>
+              <text x="742" y="84" class="svg-mono" font-size="12.5" fill="#1B2B33">JOIN pg_stat_activity a</text>
+              <text x="742" y="106" class="svg-mono" font-size="12.5" fill="#245A6B">pg_blocking_pids(a.pid)</text>
+              <text x="742" y="136" class="svg-sub" font-size="12">核对 application_name、state、</text>
+              <text x="742" y="156" class="svg-sub" font-size="12">wait_event_type 与当前 SQL，</text>
+              <text x="742" y="178" class="svg-sub" font-size="12">定位真正持锁不放的源头 PID。</text>
+
+              <path d="M 1034 109 H 1080" stroke="#245A6B" stroke-width="2" fill="none"/>
+              <polygon points="1072,104 1080,109 1072,114" fill="#245A6B"/>
+
+              <!-- Stage 4 -->
+              <rect x="1080" y="24" width="296" height="170" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="1080" y="24" width="296" height="34" fill="#2F7A66"/>
+              <text x="1096" y="46" class="svg-white-mono" font-size="12.5">STEP 4 · 精准归因处置</text>
+              <text x="1096" y="84" class="svg-label" font-size="13">· 正常短等待 → 观察吞吐</text>
+              <text x="1096" y="112" class="svg-label" font-size="13">· 环路风险 → 核对拿锁顺序</text>
+              <text x="1096" y="140" class="svg-label" font-size="13" fill="#BE653B">· idle 长期持锁 → 查连接池泄漏</text>
+              <text x="1096" y="174" class="svg-sub" font-size="12">勿第一反应调大锁表参数掩盖泄漏</text>
+
+              <!-- Bottom Interactive Live Record Box -->
+              <rect x="24" y="226" width="1352" height="180" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="24" y="226" width="1352" height="34" fill="#1E4B5A"/>
+              <text x="42" y="248" class="svg-white-mono" font-size="13">实时反解视图模拟（system-views.sgml）</text>
+
+              <!-- Simulated pg_locks row -->
+              <rect x="44" y="276" width="150" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="58" y="298" class="svg-muted" font-size="11.5">locktype</text>
+              <text x="58" y="322" class="svg-mono" font-size="14" fill="#245A6B">'advisory'</text>
+
+              <rect x="206" y="276" width="160" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="220" y="298" class="svg-muted" font-size="11.5">classid (高32 / k1)</text>
+              <text x="220" y="322" class="svg-mono" font-size="15" id="sim11-classid">0</text>
+
+              <rect x="378" y="276" width="160" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="392" y="298" class="svg-muted" font-size="11.5">objid (低32 / k2)</text>
+              <text x="392" y="322" class="svg-mono" font-size="15" id="sim11-objid">42</text>
+
+              <rect x="550" y="276" width="150" height="58" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="564" y="298" class="svg-muted" font-size="11.5">objsubid</text>
+              <text x="564" y="322" class="svg-mono" font-size="15" fill="#BE653B" id="sim11-subid">1</text>
+
+              <!-- Arrow to reconstructed business meaning -->
+              <path d="M 700 305 H 756" stroke="#2F7A66" stroke-width="2.5" fill="none"/>
+              <polygon points="748,300 756,305 748,310" fill="#2F7A66"/>
+
+              <rect x="756" y="276" width="600" height="58" fill="#E2F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="774" y="298" class="svg-mono" font-size="11.5" fill="#2F7A66">还原后的业务 Key 语义</text>
+              <text x="774" y="322" class="svg-mono" font-size="14.5" fill="#1B2B33" id="sim11-result">bigint key = 42（来自 pg_advisory_lock(42::bigint)）</text>
+
+              <text x="44" y="380" class="svg-sub" font-size="13">注意（system-views.sgml）：pg_locks 从普通锁管理器与谓词锁管理器采集数据，排障按需查询即可，监控采集需控制频率。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">落地到团队协作中，架构师、DBA、业务开发各自要守住哪几条底线？高可用主备又有什么红线？</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：doc/src/sgml/system-views.sgml · pg_locks &amp; pg_blocking_pids()</span>
+            <span class="footer-page">11 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="12" data-title="七、三角色最佳实践与八、高可用红线">
+          <div class="slide-eyebrow">07-08 · 角色规范与高可用 · BEST PRACTICES &amp; HA BOUNDARY</div>
+          <h1 class="slide-title">三方协同规范，以及「不写 WAL」的高可用红线</h1>
+          <p class="slide-lead">架构师定约束与命名空间，DBA 管观测与泄漏，开发守事务级 try-lock；主备切忌指望跨节点互斥。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="三角色最佳实践与高可用边界图">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Top 3 role cards -->
+              <!-- Role 1: Architect -->
+              <rect x="24" y="20" width="434" height="236" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="20" width="434" height="38" fill="#245A6B"/>
+              <text x="42" y="44" class="svg-white" font-size="14.5">数据库架构师 · 定边界与协议</text>
+              <text x="42" y="86" class="svg-label" font-size="13.5">1. 强不变量交回数据库约束</text>
+              <text x="42" y="108" class="svg-sub" font-size="12.5">唯一性、排他时间段、外键用索引/约束保证。</text>
+              <text x="42" y="140" class="svg-label" font-size="13.5">2. 强制命名空间 Key 设计</text>
+              <text x="42" y="162" class="svg-sub" font-size="12.5">优先双 int (1, tenant_id) / (2, account_id)。</text>
+              <text x="42" y="194" class="svg-label" font-size="13.5">3. 按「业务不变量最小闭包」定粒度</text>
+              <text x="42" y="216" class="svg-sub" font-size="12.5">锁租户结算，不锁单条流水，也不锁全库。</text>
+
+              <!-- Role 2: DBA -->
+              <rect x="483" y="20" width="434" height="236" fill="#F1EFE9" stroke="#2E6373" stroke-width="1.5"/>
+              <rect x="483" y="20" width="434" height="38" fill="#2E6373"/>
+              <text x="501" y="44" class="svg-white" font-size="14.5">DBA · 建排障闭环与容量护栏</text>
+              <text x="501" y="86" class="svg-label" font-size="13.5">1. 纳入常规锁等待排障视图</text>
+              <text x="501" y="108" class="svg-sub" font-size="12.5">不只看 relation lock，联查 advisory + 阻塞链。</text>
+              <text x="501" y="140" class="svg-label" font-size="13.5">2. 见长期持锁先查泄漏而非调参</text>
+              <text x="501" y="162" class="svg-sub" font-size="12.5">调大 max_locks_per_transaction 治标不治本。</text>
+              <text x="501" y="194" class="svg-label" font-size="13.5">3. 控制 pg_locks 监控轮询频率</text>
+              <text x="501" y="216" class="svg-sub" font-size="12.5">避免高频全量扫描锁管理器影响线上性能。</text>
+
+              <!-- Role 3: Developer -->
+              <rect x="942" y="20" width="434" height="236" fill="#F1EFE9" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="942" y="20" width="434" height="38" fill="#2F7A66"/>
+              <text x="960" y="44" class="svg-white" font-size="14.5">业务开发者 · 守代码执行纪律</text>
+              <text x="960" y="86" class="svg-label" font-size="13.5">1. 短事务默认 pg_try_advisory_xact_lock</text>
+              <text x="960" y="108" class="svg-sub" font-size="12.5">在线请求用 try + 退避；后台阻塞须设超时。</text>
+              <text x="960" y="140" class="svg-label" font-size="13.5">2. 集中封装 Key 映射函数</text>
+              <text x="960" y="162" class="svg-sub" font-size="12.5">所有服务/脚本共用同一份映射，杜绝散落硬编码。</text>
+              <text x="960" y="194" class="svg-label" font-size="13.5">3. 多 Key 操作先统一排序再加锁</text>
+              <text x="960" y="216" class="svg-sub" font-size="12.5">捕获 deadlock_detected 后执行幂等重试。</text>
+
+              <!-- Bottom Band: HA Boundary -->
+              <rect x="24" y="276" width="1352" height="134" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="24" y="276" width="230" height="134" fill="#BE653B"/>
+              <text x="42" y="316" class="svg-white-mono" font-size="13">高可用红线</text>
+              <text x="42" y="344" class="svg-white" font-size="15">advisory locks</text>
+              <text x="42" y="368" class="svg-white" font-size="15">never WAL logged</text>
+              <text x="42" y="394" class="svg-white-mono" font-size="11">high-availability.sgml</text>
+
+              <!-- Primary box -->
+              <rect x="282" y="298" width="320" height="90" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+              <text x="300" y="324" class="svg-label" font-size="14.5" fill="#1E4B5A">Primary（主库）</text>
+              <text x="300" y="348" class="svg-mono-sub" font-size="12">持有 advisory_lock(10, 42)</text>
+              <text x="300" y="372" class="svg-sub" font-size="12">仅存在于主库共享内存中</text>
+
+              <!-- WAL stream arrow -->
+              <path d="M 602 343 H 774" stroke="#BE653B" stroke-width="2.5" stroke-dasharray="6 4" fill="none"/>
+              <polygon points="766,338 774,343 766,348" fill="#BE653B"/>
+              <rect x="620" y="314" width="136" height="22" fill="#F7E9DE"/>
+              <text x="688" y="330" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#BE653B">WAL 不含此锁</text>
+
+              <!-- Standby box -->
+              <rect x="774" y="298" width="320" height="90" fill="#F7F6F2" stroke="#47808D" stroke-width="1.5"/>
+              <text x="792" y="324" class="svg-label" font-size="14.5" fill="#47808D">Standby（备库）</text>
+              <text x="792" y="348" class="svg-mono-sub" font-size="12">备库上无此锁，且不阻塞 WAL 回放</text>
+              <text x="792" y="372" class="svg-sub" font-size="12">只与取得它的那台服务器有关</text>
+
+              <!-- Summary box -->
+              <rect x="1116" y="298" width="240" height="90" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="1132" y="326" class="svg-label" font-size="13.5" fill="#BE653B">架构含义：</text>
+              <text x="1132" y="350" class="svg-sub" font-size="12.5">不可用于主备互斥或</text>
+              <text x="1132" y="372" class="svg-sub" font-size="12.5">跨实例全局分布式锁。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">在真实线上系统里，开发者最容易踩进哪八个具体陷阱？我们把每个坑和解法配对清零。</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：doc/src/sgml/high-availability.sgml · 工程角色最佳实践</span>
+            <span class="footer-page">12 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-slide="13" data-title="九、生产环境八大常见坑与规避清单">
+          <div class="slide-eyebrow">09 · 避坑清单 · EIGHT PRODUCTION PITFALLS &amp; MITIGATIONS</div>
+          <h1 class="slide-title">生产八大陷阱：从「误当约束」到「并行受限」</h1>
+          <p class="slide-lead">陶橙为真实事故根因，青绿为对应工程解法——上线评审前逐条核对清零。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="生产八大常见坑与规避清单">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 4x2 Uniform Blueprint Grid -->
+              <!-- Cell 1 -->
+              <rect x="20" y="18" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="20" y="18" width="328" height="4" fill="#BE653B"/>
+              <text x="36" y="46" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 01</text>
+              <text x="36" y="72" class="svg-label" font-size="15">把 advisory 锁当数据约束</text>
+              <text x="36" y="100" class="svg-sub" font-size="12.5">不拿锁的代码仍可直接 DML 改数。</text>
+              <line x1="36" y1="122" x2="332" y2="122" stroke="#D9D5CB"/>
+              <text x="36" y="146" class="svg-label" font-size="12.5" fill="#2F7A66">规避：强不变量交给唯一/排他约束，</text>
+              <text x="36" y="168" class="svg-sub" font-size="12.5">advisory 锁只用于全入口可控协议。</text>
+
+              <!-- Cell 2 -->
+              <rect x="364" y="18" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="364" y="18" width="328" height="4" fill="#BE653B"/>
+              <text x="380" y="46" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 02</text>
+              <text x="380" y="72" class="svg-label" font-size="15">会话级锁遇到连接池复用</text>
+              <text x="380" y="100" class="svg-sub" font-size="12.5">连接归还不等于 Session 结束，锁残留。</text>
+              <line x1="380" y1="122" x2="676" y2="122" stroke="#D9D5CB"/>
+              <text x="380" y="146" class="svg-label" font-size="12.5" fill="#2F7A66">规避：优先事务级锁；必须用会话级时</text>
+              <text x="380" y="168" class="svg-sub" font-size="12.5">finally 释放或归还前 DISCARD ALL。</text>
+
+              <!-- Cell 3 -->
+              <rect x="708" y="18" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="708" y="18" width="328" height="4" fill="#BE653B"/>
+              <text x="724" y="46" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 03</text>
+              <text x="724" y="72" class="svg-label" font-size="15">阻塞等待拖垮应用线程池</text>
+              <text x="724" y="100" class="svg-sub" font-size="12.5">pg_advisory_lock() 无限等直到取消。</text>
+              <line x1="724" y1="122" x2="1020" y2="122" stroke="#D9D5CB"/>
+              <text x="724" y="146" class="svg-label" font-size="12.5" fill="#2F7A66">规避：在线路径用 try_xact_lock + 退避，</text>
+              <text x="724" y="168" class="svg-sub" font-size="12.5">后台任务配置 lock/statement timeout。</text>
+
+              <!-- Cell 4 -->
+              <rect x="1052" y="18" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="1052" y="18" width="328" height="4" fill="#BE653B"/>
+              <text x="1068" y="46" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 04</text>
+              <text x="1068" y="72" class="svg-label" font-size="15">多 Key 乱序加锁引发死锁</text>
+              <text x="1068" y="100" class="svg-sub" font-size="12.5">超 1s 才检出，且事务回滚需重试。</text>
+              <line x1="1068" y1="122" x2="1364" y2="122" stroke="#D9D5CB"/>
+              <text x="1068" y="146" class="svg-label" font-size="12.5" fill="#2F7A66">规避：所有多 key 升序排序或合并单 key，</text>
+              <text x="1068" y="168" class="svg-sub" font-size="12.5">捕获 deadlock_detected 幂等重试。</text>
+
+              <!-- Row 2 -->
+              <!-- Cell 5 -->
+              <rect x="20" y="224" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="20" y="224" width="328" height="4" fill="#BE653B"/>
+              <text x="36" y="252" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 05</text>
+              <text x="36" y="278" class="svg-label" font-size="15">在带 LIMIT 查询中直接调锁</text>
+              <text x="36" y="306" class="svg-sub" font-size="12.5">求值可能先于 LIMIT，拿到超额锁。</text>
+              <line x1="36" y1="328" x2="332" y2="328" stroke="#D9D5CB"/>
+              <text x="36" y="352" class="svg-label" font-size="12.5" fill="#2F7A66">规避：先用子查询确定候选 ID 集合，</text>
+              <text x="36" y="374" class="svg-sub" font-size="12.5">再在外层对确定集合调用锁函数。</text>
+
+              <!-- Cell 6 -->
+              <rect x="364" y="224" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="364" y="224" width="328" height="4" fill="#BE653B"/>
+              <text x="380" y="252" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 06</text>
+              <text x="380" y="278" class="svg-label" font-size="15">Key 设计缺乏命名空间</text>
+              <text x="380" y="306" class="svg-sub" font-size="12.5">tenant_id/user_id 裸用会互相误阻塞。</text>
+              <line x1="380" y1="328" x2="676" y2="328" stroke="#D9D5CB"/>
+              <text x="380" y="352" class="svg-label" font-size="12.5" fill="#2F7A66">规避：用双 int 第一位做 namespace，</text>
+              <text x="380" y="374" class="svg-sub" font-size="12.5">并集中在共享函数或公共库维护。</text>
+
+              <!-- Cell 7 -->
+              <rect x="708" y="224" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="708" y="224" width="328" height="4" fill="#BE653B"/>
+              <text x="724" y="252" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 07</text>
+              <text x="724" y="278" class="svg-label" font-size="15">锁数量随数据量无限增长</text>
+              <text x="724" y="306" class="svg-sub" font-size="12.5">与普通锁争共享内存，触发 OOM 爆表。</text>
+              <line x1="724" y1="328" x2="1020" y2="328" stroke="#D9D5CB"/>
+              <text x="724" y="352" class="svg-label" font-size="12.5" fill="#2F7A66">规避：只锁并发入口，绝不用 advisory</text>
+              <text x="724" y="374" class="svg-sub" font-size="12.5">锁替代缓存、业务状态表或队列系统。</text>
+
+              <!-- Cell 8 -->
+              <rect x="1052" y="224" width="328" height="188" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="1052" y="224" width="328" height="4" fill="#BE653B"/>
+              <text x="1068" y="252" class="svg-mono" font-size="12" fill="#BE653B">PITFALL 08</text>
+              <text x="1068" y="278" class="svg-label" font-size="15">忽略并行安全（proparallel='r'）</text>
+              <text x="1068" y="306" class="svg-sub" font-size="12.5">pg_proc.dat 标记为 parallel restricted。</text>
+              <line x1="1068" y1="328" x2="1364" y2="328" stroke="#D9D5CB"/>
+              <text x="1068" y="352" class="svg-label" font-size="12.5" fill="#2F7A66">规避：进入并行查询之前或之外加锁，</text>
+              <text x="1068" y="374" class="svg-sub" font-size="12.5">勿把锁函数混入复杂并行扫描表达式。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · NEXT</span>
+            <span class="slide-next-text">最后用四道准入决策闸门和六道架构思考题，把这套并发控制工具真正内化到你的工程实践里。</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">依据：src/include/catalog/pg_proc.dat · doc/src/sgml/mvcc.sgml</span>
+            <span class="footer-page">13 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-slide="14" data-title="十、四步选型决策树与六道思考题">
+          <div class="slide-eyebrow">10 · 决策收束 · DECISION FLOW &amp; REFLECTION</div>
+          <h1 class="slide-title">何时用 advisory 锁？四步决策与六道思考题</h1>
+          <p class="slide-lead">把「单库内、非强约束、非实体行、短临界区且全入口可控」作为四道准入闸门，理性落位。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="advisory 锁四步选型决策树与思考题">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Left: 4-Gate Orthogonal Decision Tree -->
+              <rect x="20" y="18" width="746" height="394" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="18" width="746" height="36" fill="#245A6B"/>
+              <text x="38" y="41" class="svg-white-mono" font-size="13">四步准入决策闸门（直交无交叉路径）</text>
+
+              <!-- Gate 1 -->
+              <rect x="42" y="70" width="336" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="58" y="101" class="svg-label" font-size="13.5">1. 需要跨实例 / 主备 / 多库互斥？</text>
+              <path d="M 378 96 H 466" stroke="#BE653B" stroke-width="2" fill="none"/>
+              <polygon points="458,91 466,96 458,101" fill="#BE653B"/>
+              <text x="422" y="88" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#BE653B">是</text>
+              <rect x="466" y="70" width="278" height="52" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="482" y="101" class="svg-label" font-size="13" fill="#BE653B">→ 外部分布式锁 / 跨库租约</text>
+
+              <!-- Down 1 -> 2 -->
+              <line x1="210" y1="122" x2="210" y2="148" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="205,142 215,142 210,150" fill="#245A6B"/>
+              <text x="224" y="140" class="svg-mono" font-size="11.5" fill="#245A6B">否</text>
+
+              <!-- Gate 2 -->
+              <rect x="42" y="150" width="336" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="58" y="181" class="svg-label" font-size="13.5">2. 属于强数据不变量（唯一/非负）？</text>
+              <path d="M 378 176 H 466" stroke="#BE653B" stroke-width="2" fill="none"/>
+              <polygon points="458,171 466,176 458,181" fill="#BE653B"/>
+              <text x="422" y="168" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#BE653B">是</text>
+              <rect x="466" y="150" width="278" height="52" fill="#E5EFF0" stroke="#245A6B"/>
+              <text x="482" y="181" class="svg-label" font-size="13" fill="#245A6B">→ 唯一索引 / 排他约束 / CHECK</text>
+
+              <!-- Down 2 -> 3 -->
+              <line x1="210" y1="202" x2="210" y2="228" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="205,222 215,222 210,230" fill="#245A6B"/>
+              <text x="224" y="220" class="svg-mono" font-size="11.5" fill="#245A6B">否</text>
+
+              <!-- Gate 3 -->
+              <rect x="42" y="230" width="336" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="58" y="261" class="svg-label" font-size="13.5">3. 资源对应已存在的稳定数据行？</text>
+              <path d="M 378 256 H 466" stroke="#AE8A3E" stroke-width="2" fill="none"/>
+              <polygon points="458,251 466,256 458,261" fill="#AE8A3E"/>
+              <text x="422" y="248" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#AE8A3E">是</text>
+              <rect x="466" y="230" width="278" height="52" fill="#F5EFE0" stroke="#AE8A3E"/>
+              <text x="482" y="261" class="svg-label" font-size="13" fill="#1B2B33">→ 行锁 SELECT ... FOR UPDATE</text>
+
+              <!-- Down 3 -> 4 -->
+              <line x1="210" y1="282" x2="210" y2="308" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="205,302 215,302 210,310" fill="#245A6B"/>
+              <text x="224" y="300" class="svg-mono" font-size="11.5" fill="#245A6B">否</text>
+
+              <!-- Gate 4 -->
+              <rect x="42" y="310" width="336" height="82" fill="#E2F0EC" stroke="#2F7A66" stroke-width="2"/>
+              <text x="58" y="338" class="svg-label" font-size="13.5" fill="#2F7A66">4. 短临界区 + 锁量可控 + 全入口守协议</text>
+              <text x="58" y="366" class="svg-mono" font-size="12.5" fill="#1B2B33">→ pg_try_advisory_xact_lock(ns, id)</text>
+
+              <path d="M 378 351 H 466" stroke="#BE653B" stroke-width="2" fill="none"/>
+              <polygon points="458,346 466,351 458,356" fill="#BE653B"/>
+              <text x="422" y="343" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#BE653B">否(长任务)</text>
+              <rect x="466" y="310" width="278" height="82" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="482" y="340" class="svg-label" font-size="13" fill="#46585F">→ 带心跳与超时的</text>
+              <text x="482" y="366" class="svg-label" font-size="13" fill="#46585F">   任务租约表（避免长会话锁）</text>
+
+              <!-- Right: 6 Extended Questions -->
+              <rect x="786" y="18" width="594" height="394" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="786" y="18" width="594" height="36" fill="#1E4B5A"/>
+              <text x="804" y="41" class="svg-white-mono" font-size="13">六道课后架构思考题（带回团队讨论）</text>
+
+              <text x="806" y="84" class="svg-label" font-size="13.5" fill="#245A6B">Q1.</text>
+              <text x="842" y="84" class="svg-sub" font-size="13">「同用户每日仅建一有效订单」该用 advisory、唯一索引还是组合？</text>
+
+              <text x="806" y="132" class="svg-label" font-size="13.5" fill="#245A6B">Q2.</text>
+              <text x="842" y="132" class="svg-sub" font-size="13">Java / Python / Go 共访一库时，key 协议应放在哪一层维护？</text>
+
+              <text x="806" y="180" class="svg-label" font-size="13.5" fill="#245A6B">Q3.</text>
+              <text x="842" y="180" class="svg-sub" font-size="13">什么时候选双 int key，什么时候选字符串 hash 成 bigint？</text>
+
+              <text x="806" y="228" class="svg-label" font-size="13.5" fill="#245A6B">Q4.</text>
+              <text x="842" y="228" class="svg-sub" font-size="13">主库拿 advisory 锁不阻塞备库查询，对读写分离意味着什么？</text>
+
+              <text x="806" y="276" class="svg-label" font-size="13.5" fill="#245A6B">Q5.</text>
+              <text x="842" y="276" class="svg-sub" font-size="13">任务跑超 30 分钟，该用会话级锁还是带心跳超时的租约表？</text>
+
+              <text x="806" y="324" class="svg-label" font-size="13.5" fill="#245A6B">Q6.</text>
+              <text x="842" y="324" class="svg-sub" font-size="13">单事务需锁多个租户时，如何设计加锁排序与死锁幂等重试？</text>
+
+              <rect x="806" y="352" width="554" height="42" fill="#EBF1EE" stroke="#74A5AD"/>
+              <text x="822" y="378" class="svg-mono" font-size="12" fill="#1E4B5A">源码核对：lockfuncs.c · locktag.h · lock.c · proc.c · discard.c · mvcc.sgml</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-tag">承接 · END</span>
+            <span class="slide-next-text">感谢聆听 —— 按 T 可回看完整连贯讲稿，按 G 可跳转任意一页复盘源码与交互沙盒。</span>
+          </div>
+          <div class="slide-footer">
+            <span class="footer-meta">数据库筑基课 · PostgreSQL advisory 锁 · 完</span>
+            <span class="footer-page">14 / 14</span>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Right-side In-page Notes / Transcript Drawer (never modal) -->
+    <aside id="notes-drawer" aria-label="演说讲稿面板">
+      <div class="drawer-header">
+        <div class="drawer-tabs">
+          <button class="drawer-tab active" id="tab-page-note" type="button">本页讲稿 (N)</button>
+          <button class="drawer-tab" id="tab-full-note" type="button">全文讲稿 (T)</button>
+        </div>
+        <button class="drawer-close" id="btn-drawer-close" type="button">关闭</button>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+    </aside>
+  </div>
+
+  <!-- Bottom Persistent Shortcut HUD Bar (stays visible in fullscreen) -->
+  <footer id="hud-bar" role="toolbar" aria-label="演说控制栏">
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-prev" type="button" title="上一页 (←)">← 上页</button>
+      <span class="hud-page" id="hud-page-indicator">01 / 14</span>
+      <button class="hud-btn" id="btn-next" type="button" title="下一页 (→ / Space)">下页 →</button>
+      <div class="hud-progress-wrap" aria-hidden="true">
+        <div class="hud-progress-fill" id="hud-progress-fill"></div>
+      </div>
+    </div>
+
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-toc" type="button"><span class="kbd">G</span> 目录</button>
+      <button class="hud-btn" id="btn-note" type="button"><span class="kbd">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="btn-transcript" type="button"><span class="kbd">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="btn-autoplay" type="button"><span class="kbd">A</span> 自动播放</button>
+      <button class="hud-btn" id="btn-fullscreen" type="button"><span class="kbd">F</span> 全屏</button>
+    </div>
+  </footer>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ==================== 1. SPEAKER NOTES (Logical, Conversational, Evidence-Based) ==================== */
+  const NOTES = [
+    {
+      slide: 1,
+      title: "开场：为什么从「租户 42 的对账任务」讲起？",
+      paragraphs: [
+        "各位好，欢迎来到数据库筑基课。今天我们聊 PostgreSQL 里一个非常实用、但又极容易被误解的并发控制工具——advisory 锁，中文常叫咨询锁或建议锁。",
+        "我们不从枯燥的概念定义开场，先看一个大家在业务里天天遇到的真实问题：系统里有一张后台任务表 jobs，好几个 worker 进程同时在拉任务。业务要求「同一个租户在同一时间只能跑一个对账任务」。这时候你第一反应可能是用行锁，但「租户 42 的对账任务」并不一定总有一行稳定存在的数据给你锁；如果自己建一张 tenant_locks 表来插记录抢锁，又会立刻惹出一堆麻烦——写热点、异常退出留垃圾行、高频删改造成表膨胀。",
+        "今天这 14 页，我们会像地质剖面一样，从最上层的业务问题一层一层往下切：先看 SQL 接口，再切进 lockfuncs.c 和 locktag.h 的编码，接着直抵普通锁管理器的 LOCALLOCK、LOCK 和 PROCLOCK，最后落到高可用红线与线上排障。所有结论都回到 PostgreSQL 官方文档和本地源码实证，不编造任何基准性能数字。"
+      ],
+      evidence: "源码主线：mvcc.sgml · func-admin.sgml · lockfuncs.c · locktag.h · lock.c · proc.c · high-availability.sgml"
+    },
+    {
+      slide: 2,
+      title: "一、它解决什么问题？应用协议，不是数据约束",
+      paragraphs: [
+        "承接刚才的痛点：PostgreSQL 普通锁绑定的都是数据库内置对象——表锁绑 relation，行锁绑 tuple，事务锁绑 xid。但业务里大量需要互斥的东西，根本不是某一行记录，比如「同一个用户只允许一个导出任务」「同一个外部 CSV 文件只能被一个 worker 导入」「全局迁移脚本只能跑一个实例」。",
+        "如果为了锁这些非行资源去建一张 app_locks 表，锁本身就变成了业务数据，你不仅要处理进程崩溃后的死锁记录清理，高频 INSERT/DELETE 还会制造大量 MVCC 死元组、拖累 autovacuum，甚至把锁表卷入备份和审计。",
+        "advisory 锁优雅地绕开了锁表膨胀，但你必须先认清它的第一性原理——大家看图里上方的交互按钮，点一下「场景 B」就能直观看到：PostgreSQL 锁管理器眼里只有数字 key，它根本不知道什么叫「租户 42」，更不知道 orders 表和 key 42 有什么关系。Worker 1 和 Worker 2 都遵守协议去拿锁，它们会完美互斥；可只要有一个运维脚本或者旁路服务不拿锁、直接 UPDATE orders，数据库绝不会替你拦住它。所以记住第一条铁律：advisory 锁是应用协议，不是数据约束。"
+      ],
+      evidence: "依据：doc/src/sgml/mvcc.sgml 明确说明 advisory locks 含义由应用定义，系统不强制业务使用。"
+    },
+    {
+      slide: 3,
+      title: "二、四维函数族与两套互不重叠的 Key Space",
+      paragraphs: [
+        "既然锁管理器只认数字 key，那 SQL 层到底给了我们哪些武器？其实特别规整，就是四个正交维度的排列组合：Key 形态选「单 bigint」还是「双 int4」；生命周期选「会话级」还是「事务级」；锁模式选「排他」还是「共享」；等待行为选「阻塞等待」还是「try 立即返回」。",
+        "这里有一个新手非常容易踩的细节：func-admin.sgml 专门强调，单个 64 位 bigint 和两个 32 位 int4 是两套完全不重叠的 key space。你可以点击上方的「对比 1::bigint 与 (0, 1)」按钮看底层编码变化。",
+        "打开源码 lockfuncs.c 和 locktag.h 一看就彻底明白了：LOCKTAG_ADVISORY 一共四个字段——field1 填 MyDatabaseId，所以 advisory 锁天然只对当前库有效；field2 和 field3 放 key 的高/低 32 位或者两个 int4；最关键的是 field4，单 bigint 填 1，双 int4 填 2！正因为 field4 不同，1::bigint 和 (0, 1) 在哈希表里是两把完全不相干的锁。而且你在 pg_locks 视图里看到的 database、classid、objid、objsubid，其实就是这四个字段的直接投影。"
+      ],
+      evidence: "依据：src/include/storage/locktag.h (USER_LOCKMETHOD=2) · src/backend/utils/adt/lockfuncs.c"
+    },
+    {
+      slide: 4,
+      title: "三、核心原理(1)：零独立锁表，薄封装直入 LockAcquire",
+      paragraphs: [
+        "搞清楚 LOCKTAG 怎么编码后，顺着源码往下走，你会发现一个让人非常安心的事实：PostgreSQL 并没有为 advisory 锁另起炉灶写一套等待队列或死锁检测器。",
+        "打开 lockfuncs.c，里面每一个 SQL 函数都短得惊人。不管你调的是会话级、事务级、共享还是 try 版，它干的活只有两步：第一步用 SET_LOCKTAG_INT64 或 SET_LOCKTAG_INT32 拼好 LOCKTAG；第二步直接调用普通锁管理器的 LockAcquire(&tag, lockmode, sessionLock, dontWait)。",
+        "就靠这四个参数，把所有行为解释得明明白白：lockmode 传 ExclusiveLock 或 ShareLock；sessionLock 传 true 就是会话级、false 就是事务级；dontWait 传 true 就是 try 版拿不到立刻返回 false、false 就是老老实实进等待队列。正因为复用的是普通 heavyweight lock 管理器，advisory 锁天然白嫖了 PostgreSQL 最成熟的等待队列、死锁检测、pg_locks 视图和 pg_blocking_pids() 阻塞链能力。"
+      ],
+      evidence: "依据：src/backend/utils/adt/lockfuncs.c · src/backend/storage/lmgr/lock.c"
+    },
+    {
+      slide: 5,
+      title: "三、核心原理(2)：三层锁结构与「重入必成、叠加释放」",
+      paragraphs: [
+        "既然走进了普通锁管理器，我们就得把 lmgr/README 里的三张核心表看透：共享内存里的 LOCK 表，按 LOCKTAG 唯一标识每个被锁对象；PROCLOCK 表记录某个后端进程和某个 LOCK 之间的持有或等待关系；而每个后端自己本地内存里，还有一张 LOCALLOCK 表，专门记「我自己对这把锁重复拿了几次」。",
+        "这个分层设计，直接解释了生产里两个经常把开发者绕晕的现象。大家可以在上方沙盒里亲自点一遍：先让 S1 拿锁，此时 S1 的 nLocks 变成 1；接着让 S2 请求同一把锁，S2 进入等待队列。现在关键来了——如果 S1 再次请求同一把锁，会被排队的 S2 拦住吗？不会！LockAcquire 看到本地 locallock->nLocks > 0，直接本地计数加到 2 就返回成功了。",
+        "第二个现象紧跟着发生：当 S1 调用一次 pg_advisory_unlock(100) 时，nLocks 只是从 2 减到 1，共享内存里的 PROCLOCK 纹丝不动，S2 依然在苦等！必须再调一次 unlock 把 nLocks 减到 0，才真正释放并唤醒 S2。所以在多层函数嵌套里用会话级锁，获取和释放次数一定要严格配对。"
+      ],
+      evidence: "依据：src/backend/storage/lmgr/README · doc/src/sgml/mvcc.sgml · func-admin.sgml"
+    },
+    {
+      slide: 6,
+      title: "三、核心原理(3)：冲突矩阵与完全正交的 LockMethod",
+      paragraphs: [
+        "看完重入计数，再来看冲突判定。SQL 层虽然只给你暴露了 shared 和 exclusive 两个词，底层其实直接映射到普通锁的 ShareLock 和 ExclusiveLock，走的是 lock.c 里现成的 LockConflicts[] 矩阵：Share 和 Share 兼容共存，其余任何涉及 Exclusive 的组合统统冲突。",
+        "但这里一定要划清界限：虽然共用了锁模式和锁管理器，普通表锁行锁走的是 DEFAULT_LOCKMETHOD（编号 1），而 advisory 锁走的是 USER_LOCKMETHOD（编号 2）。lmgr/README 的 User Locks 小节写得斩钉截铁——user locks 和 normal locks 是完全正交的，互不干扰。",
+        "这就再次从内核层面印证了我们第二页的结论：你在事务里先执行 SELECT pg_advisory_lock(42)，再 UPDATE orders WHERE id = 42，第一句根本挡不住另一个不拿 advisory 锁的会话去改同一行。两套 LockMethod 之间隔着一道墙，只有大家都走 USER_LOCKMETHOD 这一侧，互斥才成立。"
+      ],
+      evidence: "依据：src/backend/storage/lmgr/lock.c (LockConflicts[]) · src/backend/storage/lmgr/README (User Locks)"
+    },
+    {
+      slide: 7,
+      title: "三、核心原理(4)：事务级优先，会话级遇连接池极易泄漏",
+      paragraphs: [
+        "理清了怎么加锁、怎么冲突，接下来就是最容易出线上事故的环节——生命周期。advisory 锁分事务级和会话级，它们在事务结束时的命运截然不同。",
+        "大家可以依次点击上方的时间轴按钮看推演：事务级锁 pg_advisory_xact_lock 没有显式 unlock 函数，只要事务 COMMIT 或者发生异常 ROLLBACK，proc.c 里的 ProcReleaseLocks() 就会把它干干净净地释放掉，连接归还连接池时一尘不染。",
+        "反观会话级锁 pg_advisory_lock，即便事务报错回滚，session-level holds 依然稳稳地挂在这个后端进程上！在现代 Web 服务里，你代码里的「关闭连接」几乎都只是把连接还给连接池，PostgreSQL 后端 session 根本没断。下一个毫无关系的 HTTP 请求借到这条连接时，就会莫名其妙继承一把前任留下的锁，甚至引发诡异的互相阻塞或重入误判。虽然 discard.c 里 DISCARD ALL 会调用 LockReleaseAll(USER_LOCKMETHOD, true) 清理，但连接池做 reset 有额外开销。因此铁律很明确：短临界区无脑优先事务级锁，会话级锁务必极其克制。"
+      ],
+      evidence: "依据：src/backend/storage/lmgr/proc.c (ProcReleaseLocks) · src/backend/commands/discard.c"
+    },
+    {
+      slide: 8,
+      title: "三、核心原理(5)：死锁检测与共享内存上限",
+      paragraphs: [
+        "复用普通锁管理器还带来了两个必须正视的安全边界：死锁和内存。",
+        "先看死锁。很多人误以为用了 advisory 锁就不会死锁，其实只要会话 1 先拿 key 1 再拿 key 2，会话 2 先拿 key 2 再拿 key 1，立刻构成死锁环路。PostgreSQL 采用的是乐观等待策略：刚拿不到锁时先睡眠，不做昂贵的死锁扫描；只有等超过 deadlock_timeout（默认 1 秒）后，才唤醒检测器查环路并回滚其中一方。切到上方「正确：升序加锁」可以看到，只要所有代码路径约定按 key 升序拿锁，或者合并成一个组合 key，环路就不复存在。",
+        "再看右边这块共享内存锁池。mvcc.sgml 明确警告：advisory 锁和普通锁共用同一块共享内存，容量由 max_locks_per_transaction 和 max_connections 等参数决定。一旦你把 advisory 锁误用成「给每一行、每个用户都长期挂一把锁」，锁表一满，lock.c 就会报 out of shared memory，连正常的业务表锁都申请不到！所以它只适合守住并发入口，绝不能拿来当状态表用。"
+      ],
+      evidence: "依据：src/backend/storage/lmgr/README · doc/src/sgml/config.sgml · doc/src/sgml/mvcc.sgml"
+    },
+    {
+      slide: 9,
+      title: "四、横向对比与五、收益代价全景",
+      paragraphs: [
+        "把内核机制摸透之后，我们退后一步，把 advisory 锁放进整个并发控制工具箱里做一次横向对比。这张表里五个方案——advisory 锁、行锁、唯一/排他约束、自建锁表、外部分布式锁——最核心的分水岭就一句话：到底是谁来负责正确性？",
+        "唯一约束和行锁，是数据库替你强制兜底；而 advisory 锁是把正确性契约交给了应用，换来三个实实在在的机制收益：第一，不写业务表、不产生 MVCC 死元组，彻底告别锁表膨胀；第二，直接复用 PostgreSQL 的死锁检测和 pg_locks 观测；第三，能优雅表达没有稳定数据行的业务资源。",
+        "代价同样透明：占共享内存、连接池下会话级易泄漏、不写 WAL 也不传播到备库、不拦旁路 DML、阻塞版可能拖垮线程池。这里我们刻意不放任何虚构的 QPS 或微秒延迟数字，因为具体性能高度依赖锁冲突率、事务时长和共享内存争用，机制边界比拍脑袋的数字更重要。"
+      ],
+      evidence: "依据：doc/src/sgml/mvcc.sgml · doc/src/sgml/high-availability.sgml"
+    },
+    {
+      slide: 10,
+      title: "六、实操模板：Worker 抢锁与 LIMIT 求值陷阱",
+      paragraphs: [
+        "原则都清楚了，代码到底该怎么写？左边是我们在实战中最推荐的 worker 抢锁模板：开启事务后，先用 CTE 挑出一条待处理的 ready 任务，再用 pg_try_advisory_xact_lock(10, tenant_id) 尝试拿锁。注意两个细节：一是用双 int，第一位 10 显式代表「租户任务锁」命名空间，防止跟别处的 user_id、job_id 撞车；二是用 try 加事务级，拿到 true 就在同一事务里改状态提交、锁自动释放，拿到 false 就直接回滚退避，绝不挂死 worker 线程。",
+        "右边是一个非常隐蔽、但官方文档专门点名警告的坑——LIMIT 求值陷阱。如果你直接写 SELECT pg_advisory_lock(id) FROM foo WHERE id > 12345 LIMIT 100，千万别以为一定只锁 100 行！优化器和执行器的求值顺序可能导致锁函数在 LIMIT 截断前就被多调用了，如果是会话级锁，多出来的锁就会神不知鬼不觉地残留在连接里。正确写法是用子查询先把最多 100 个 id 定界物化出来，再在外层调用锁函数。"
+      ],
+      evidence: "依据：doc/src/sgml/mvcc.sgml（LIMIT 求值示例）· 按官方函数签名编写"
+    },
+    {
+      slide: 11,
+      title: "七、可观测性与排障路径：从 pg_locks 还原业务 Key",
+      paragraphs: [
+        "代码跑上线了，万一某天告警说出现大量锁等待，怎么查？千万不要只盯着 relation lock，也不要查到 locktype = 'advisory' 就停手了，因为光看一行 classid、objid 你根本不知道业务在锁什么。",
+        "看上方的四步排障闭环：第一步在 pg_locks 里过滤 locktype='advisory'，优先找 granted=false 的等待者；第二步根据 objsubid 反解业务 Key——大家可以点上方按钮切换三个示例体验一下：objsubid 等于 1 时，用 (classid::bigint << 32) | objid::bigint 拼回 64 位整数；objsubid 等于 2 时，classid 就是命名空间、objid 就是资源 ID。",
+        "第三步立刻关联 pg_stat_activity 和 pg_blocking_pids(pid)，顺藤摸瓜揪出真正持锁不放的源头进程、application_name 和 SQL；第四步对症下药：如果源头进程处于 idle 状态却长期占着锁，十有八九是连接池会话级锁泄漏，这时候千万别第一反应去调大 max_locks_per_transaction，治标不治本。另外记住 system-views.sgml 的提醒：pg_locks 采集锁管理器数据有开销，排障查没问题，别做秒级全量轮询。"
+      ],
+      evidence: "依据：doc/src/sgml/system-views.sgml（pg_locks 展示规则与性能说明）"
+    },
+    {
+      slide: 12,
+      title: "七、三角色最佳实践与八、高可用红线",
+      paragraphs: [
+        "把这套机制推广到整个研发团队，需要架构师、DBA 和业务开发各守其责。架构师把强一致不变量交回唯一索引和排他约束，定好双 int 命名空间规范，并按「业务不变量最小闭包」划定锁粒度；DBA 把 advisory 锁纳入排障手册，优先排查泄漏而非盲目调大内存参数；业务开发则把 key 映射封装成公共函数，短临界区默认事务级 try-lock，多 key 统一排序。",
+        "下半区这条陶橙色的高可用红线，必须单独拎出来再强调一遍：high-availability.sgml 明确写着——advisory locks never WAL logged。主库拿的 advisory 锁只留在主库共享内存里，根本不会写进 WAL，自然也不会同步到备库；反过来，备库上拿的 advisory 锁也不会干扰 WAL 回放。所以千万别试图用 advisory 锁去做主备之间的互斥，或者跨多个数据库实例的全局分布式锁。"
+      ],
+      evidence: "依据：doc/src/sgml/high-availability.sgml（advisory locks never WAL logged）"
+    },
+    {
+      slide: 13,
+      title: "九、生产环境八大陷阱与规避清单",
+      paragraphs: [
+        "这一页我们把线上最容易翻车的八个坑浓缩成一张工程核对表，前面七个坑我们在原理和实操里已经逐一拆透：误当数据约束、会话级遇连接池泄漏、阻塞锁拖垮线程池、多 key 乱序死锁、LIMIT 求值超额拿锁、裸用 ID 无命名空间、以及锁对象无限增长打爆共享内存。",
+        "特别提醒一下右下角第八个坑——并行安全标记。在源码 pg_proc.dat 里，advisory 锁函数的 proparallel 属性都是 'r'，也就是 parallel restricted（并行受限），它不能安全地下推到并行 worker 进程里执行。所以在工程实践上，尽量在进入复杂并行查询之前或之外完成加锁控制，别把拿锁函数混进复杂并行扫描的表达式里。"
+      ],
+      evidence: "依据：src/include/catalog/pg_proc.dat (proparallel => 'r') · doc/src/sgml/mvcc.sgml"
+    },
+    {
+      slide: 14,
+      title: "十、四步决策收束与六道架构思考题",
+      paragraphs: [
+        "最后我们用一张四步决策树把今天的内容彻底收束。下次你准备写 pg_advisory_lock 之前，先过这四道闸门：第一，要不要跨实例或主备？要的话直接选外部分布式锁或跨库租约；第二，是不是强数据不变量？是的话老老实实建唯一索引或排他约束；第三，有没有稳定存在的数据行？有的话优先行锁 FOR UPDATE；前三条都是否，且临界区短、锁数量可控、所有入口都能守协议，那就果断上 pg_try_advisory_xact_lock(ns, id)；如果任务动辄跑半小时以上，则改用带心跳超时的任务租约表。",
+        "右边留了六道非常贴近真实架构评审的思考题，比如多语言服务怎么统一维护 key 协议、主备读写分离下怎么看待 advisory 锁。欢迎按 T 回看全文讲稿，或者按 G 跳回任意一页再把交互沙盒演练一遍。谢谢大家！"
+      ],
+      evidence: "全篇核心源码已核对：lockfuncs.c · locktag.h · lock.c · proc.c · discard.c · pg_proc.dat · mvcc.sgml"
+    }
+  ];
+
+  /* ==================== 2. CORE STATE & DOM REFERENCES ==================== */
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const totalSlides = slides.length;
+  let currentIndex = 0; // 0-based
+  let drawerMode = null; // null | 'page' | 'full'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+  const AUTO_PLAY_MS = 10000;
+
+  const appEl = document.getElementById("app");
+  const viewportEl = document.getElementById("stage-viewport");
+  const stageShell = document.getElementById("stage-shell");
+  const notesDrawer = document.getElementById("notes-drawer");
+  const drawerBody = document.getElementById("drawer-body");
+  const tocPanel = document.getElementById("toc-panel");
+  const tocList = document.getElementById("toc-list");
+  const hudPage = document.getElementById("hud-page-indicator");
+  const hudFill = document.getElementById("hud-progress-fill");
+  const toastEl = document.getElementById("toast");
+
+  const btnPrev = document.getElementById("btn-prev");
+  const btnNext = document.getElementById("btn-next");
+  const btnToc = document.getElementById("btn-toc");
+  const btnTocClose = document.getElementById("btn-toc-close");
+  const btnNote = document.getElementById("btn-note");
+  const btnTranscript = document.getElementById("btn-transcript");
+  const btnAutoplay = document.getElementById("btn-autoplay");
+  const btnFullscreen = document.getElementById("btn-fullscreen");
+  const tabPageNote = document.getElementById("tab-page-note");
+  const tabFullNote = document.getElementById("tab-full-note");
+  const btnDrawerClose = document.getElementById("btn-drawer-close");
+
+  let toastTimer = null;
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+  }
+
+  /* ==================== 3. FIXED 16:9 VECTOR SCALING ==================== */
+  function updateStageScale() {
+    const padX = 24;
+    const padY = 20;
+    const availW = Math.max(200, viewportEl.clientWidth - padX);
+    const availH = Math.max(120, viewportEl.clientHeight - padY);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageShell.style.transform = `scale(${scale.toFixed(6)})`;
+  }
+
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => updateStageScale());
+    ro.observe(viewportEl);
+  }
+  window.addEventListener("resize", updateStageScale);
+  document.addEventListener("fullscreenchange", () => {
+    const isFs = !!document.fullscreenElement;
+    btnFullscreen.classList.toggle("active", isFs);
+    setTimeout(updateStageScale, 60);
+  });
+
+  /* ==================== 4. TOC & NOTES RENDERING ==================== */
+  function buildTOC() {
+    tocList.innerHTML = "";
+    slides.forEach((slideEl, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toc-item";
+      btn.dataset.idx = String(idx);
+      const numStr = String(idx + 1).padStart(2, "0");
+      const title = slideEl.getAttribute("data-title") || `第 ${numStr} 页`;
+      btn.innerHTML = `<span class="toc-num">${numStr}</span><span class="toc-text">${title}</span>`;
+      btn.addEventListener("click", () => {
+        goToSlide(idx);
+        setTocOpen(false);
+      });
+      tocList.appendChild(btn);
+    });
+  }
+
+  function renderNotesDrawer(scrollToCurrent) {
+    if (!drawerMode) return;
+    drawerBody.innerHTML = "";
+    const items = drawerMode === "page" ? [NOTES[currentIndex]] : NOTES;
+
+    items.forEach((n) => {
+      const block = document.createElement("article");
+      block.className = "note-block" + (n.slide - 1 === currentIndex ? " active-note" : "");
+      block.id = `note-slide-${n.slide}`;
+
+      const numStr = String(n.slide).padStart(2, "0");
+      let html = `<div class="note-block-head"><span class="note-page-num">P${numStr}</span><span class="note-slide-title">${n.title}</span></div>`;
+      n.paragraphs.forEach((p) => {
+        html += `<p class="note-paragraph">${p}</p>`;
+      });
+      if (n.evidence) {
+        html += `<div class="note-evidence">${n.evidence}</div>`;
+      }
+      block.innerHTML = html;
+
+      if (drawerMode === "full") {
+        block.addEventListener("click", () => {
+          if (currentIndex !== n.slide - 1) {
+            goToSlide(n.slide - 1);
+          }
+        });
+      }
+      drawerBody.appendChild(block);
+    });
+
+    if (drawerMode === "full" && scrollToCurrent) {
+      scrollTranscriptToCurrent();
+    } else if (drawerMode === "page") {
+      drawerBody.scrollTop = 0;
+    }
+  }
+
+  function scrollTranscriptToCurrent() {
+    if (drawerMode !== "full") return;
+    const allBlocks = drawerBody.querySelectorAll(".note-block");
+    allBlocks.forEach((el) => el.classList.remove("active-note"));
+    const target = document.getElementById(`note-slide-${currentIndex + 1}`);
+    if (target) {
+      target.classList.add("active-note");
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function setDrawerMode(nextMode) {
+    // Toggle behavior: pressing active mode closes drawer; switching mode keeps open
+    if (drawerMode === nextMode) {
+      drawerMode = null;
+    } else {
+      drawerMode = nextMode;
+    }
+    const isOpen = drawerMode !== null;
+    notesDrawer.classList.toggle("open", isOpen);
+    btnNote.classList.toggle("active", drawerMode === "page");
+    btnTranscript.classList.toggle("active", drawerMode === "full");
+    tabPageNote.classList.toggle("active", drawerMode === "page");
+    tabFullNote.classList.toggle("active", drawerMode === "full");
+
+    if (isOpen) {
+      renderNotesDrawer(true);
+    }
+    // Recalculate vector scale during and after width transition
+    updateStageScale();
+    setTimeout(updateStageScale, 240);
+  }
+
+  function setTocOpen(open) {
+    tocOpen = open;
+    tocPanel.classList.toggle("open", tocOpen);
+    btnToc.classList.toggle("active", tocOpen);
+    if (tocOpen) {
+      const activeItem = tocList.querySelector(".toc-item.active");
+      if (activeItem) activeItem.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  /* ==================== 5. SLIDE NAVIGATION & AUTO-PLAY ==================== */
+  function goToSlide(index) {
+    const clamped = Math.max(0, Math.min(totalSlides - 1, index));
+    currentIndex = clamped;
+
+    slides.forEach((el, idx) => {
+      el.classList.toggle("active", idx === currentIndex);
+    });
+
+    const curStr = String(currentIndex + 1).padStart(2, "0");
+    const totStr = String(totalSlides).padStart(2, "0");
+    hudPage.textContent = `${curStr} / ${totStr}`;
+    hudFill.style.width = `${((currentIndex + 1) / totalSlides) * 100}%`;
+
+    const tocItems = tocList.querySelectorAll(".toc-item");
+    tocItems.forEach((item, idx) => {
+      item.classList.toggle("active", idx === currentIndex);
+    });
+
+    if (drawerMode === "page") {
+      renderNotesDrawer(false);
+    } else if (drawerMode === "full") {
+      scrollTranscriptToCurrent();
+    }
+  }
+
+  function stopAutoPlay(silent) {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    btnAutoplay.classList.remove("autoplay-on");
+    btnAutoplay.innerHTML = `<span class="kbd">A</span> 自动播放`;
+    if (!silent) showToast("已停止自动播放");
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      stopAutoPlay(false);
+      return;
+    }
+    btnAutoplay.classList.add("autoplay-on");
+    btnAutoplay.innerHTML = `<span class="kbd">A</span> 播放中...`;
+    showToast("已开启自动播放（每 10 秒翻页）");
+    autoPlayTimer = setInterval(() => {
+      if (currentIndex < totalSlides - 1) {
+        goToSlide(currentIndex + 1);
+      } else {
+        stopAutoPlay(true);
+        showToast("已播放至最后一页");
+      }
+    }, AUTO_PLAY_MS);
+  }
+
+  function toggleFullscreen() {
+    try {
+      if (!document.fullscreenElement) {
+        if (appEl.requestFullscreen) {
+          appEl.requestFullscreen().catch(() => {
+            showToast("当前预览容器限制原生全屏，已保持满窗缩放");
+          });
+        } else {
+          showToast("当前浏览器不支持 Fullscreen API");
+        }
+      } else if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch (e) {
+      showToast("无法切换原生全屏");
+    }
+  }
+
+  /* ==================== 6. BUTTON & KEYBOARD BINDINGS ==================== */
+  btnPrev.addEventListener("click", () => { stopAutoPlay(true); goToSlide(currentIndex - 1); });
+  btnNext.addEventListener("click", () => { stopAutoPlay(true); goToSlide(currentIndex + 1); });
+  btnToc.addEventListener("click", () => setTocOpen(!tocOpen));
+  btnTocClose.addEventListener("click", () => setTocOpen(false));
+  btnNote.addEventListener("click", () => setDrawerMode("page"));
+  btnTranscript.addEventListener("click", () => setDrawerMode("full"));
+  tabPageNote.addEventListener("click", () => { if (drawerMode !== "page") setDrawerMode("page"); });
+  tabFullNote.addEventListener("click", () => { if (drawerMode !== "full") setDrawerMode("full"); });
+  btnDrawerClose.addEventListener("click", () => setDrawerMode(drawerMode));
+  btnAutoplay.addEventListener("click", toggleAutoPlay);
+  btnFullscreen.addEventListener("click", toggleFullscreen);
+
+  document.addEventListener("keydown", (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      if (e.key === "Escape") e.target.blur();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === "ArrowRight" || key === "PageDown" || key === " ") {
+      e.preventDefault();
+      stopAutoPlay(true);
+      goToSlide(currentIndex + 1);
+    } else if (key === "ArrowLeft" || key === "PageUp") {
+      e.preventDefault();
+      stopAutoPlay(true);
+      goToSlide(currentIndex - 1);
+    } else if (key === "Home") {
+      e.preventDefault();
+      stopAutoPlay(true);
+      goToSlide(0);
+    } else if (key === "End") {
+      e.preventDefault();
+      stopAutoPlay(true);
+      goToSlide(totalSlides - 1);
+    } else if (key === "g" || key === "G") {
+      e.preventDefault();
+      setTocOpen(!tocOpen);
+    } else if (key === "n" || key === "N") {
+      e.preventDefault();
+      setDrawerMode("page");
+    } else if (key === "t" || key === "T") {
+      e.preventDefault();
+      setDrawerMode("full");
+    } else if (key === "a" || key === "A") {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === "f" || key === "F") {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === "Escape") {
+      if (tocOpen) setTocOpen(false);
+      else if (drawerMode) setDrawerMode(drawerMode);
+    }
+  });
+
+  /* ==================== 7. INTERACTIVE SIMULATORS ==================== */
+
+  /* --- Slide 2: Application Protocol vs Bypass --- */
+  const sim2Btns = document.querySelectorAll("[data-sim2]");
+  const sim2Status = document.getElementById("sim2-status");
+  const sim2ResState = document.getElementById("sim2-res-state");
+  const sim2LineBypass = document.getElementById("sim2-line-bypass");
+  const sim2ArrowBypass = document.getElementById("sim2-arrow-bypass");
+  const sim2BypassLabel = document.getElementById("sim2-bypass-label");
+
+  function setSim2(mode) {
+    sim2Btns.forEach((b) => b.classList.toggle("active", b.dataset.sim2 === mode));
+    if (mode === "compliant") {
+      sim2LineBypass.setAttribute("stroke", "#89938F");
+      sim2LineBypass.classList.remove("flow-anim");
+      sim2ArrowBypass.setAttribute("fill", "#89938F");
+      sim2BypassLabel.setAttribute("fill", "#89938F");
+      sim2BypassLabel.textContent = "旁路通道（未触发）";
+      sim2ResState.textContent = "状态：Worker 1 独占执行中（安全互斥）";
+      sim2ResState.setAttribute("fill", "#2F7A66");
+      sim2Status.textContent = "当前：Worker 1 持有 key=(10,42)，Worker 2 遵守协议被阻塞";
+    } else {
+      sim2LineBypass.setAttribute("stroke", "#BE653B");
+      sim2LineBypass.classList.add("flow-anim");
+      sim2ArrowBypass.setAttribute("fill", "#BE653B");
+      sim2BypassLabel.setAttribute("fill", "#BE653B");
+      sim2BypassLabel.textContent = "旁路直接 UPDATE！锁管理器不拦截";
+      sim2ResState.textContent = "警报：旁路脚本已绕过 advisory 锁修改了租户 42！";
+      sim2ResState.setAttribute("fill", "#BE653B");
+      sim2Status.textContent = "结论：advisory 锁不是数据约束，所有入口必须统一遵守协议";
+    }
+  }
+  sim2Btns.forEach((b) => b.addEventListener("click", () => setSim2(b.dataset.sim2)));
+
+  /* --- Slide 3: LOCKTAG Encoder --- */
+  let sim3Mode = "int8";
+  const sim3ModeBtns = document.querySelectorAll("[data-sim3-mode]");
+  const sim3K1 = document.getElementById("sim3-k1");
+  const sim3K2 = document.getElementById("sim3-k2");
+  const sim3CompareBtn = document.getElementById("sim3-compare");
+  const sim3Status = document.getElementById("sim3-status");
+  const sim3SqlPreview = document.getElementById("sim3-sql-preview");
+  const sim3F2 = document.getElementById("sim3-f2");
+  const sim3F2Desc = document.getElementById("sim3-f2-desc");
+  const sim3F3 = document.getElementById("sim3-f3");
+  const sim3F3Desc = document.getElementById("sim3-f3-desc");
+  const sim3F4 = document.getElementById("sim3-f4");
+  const sim3PgLocks = document.getElementById("sim3-pglocks");
+
+  function updateSim3() {
+    if (sim3Mode === "int8") {
+      const raw = BigInt(parseInt(sim3K1.value || "0", 10) || 0);
+      const hi = Number((raw >> 32n) & 0xffffffffn) | 0;
+      const lo = Number(raw & 0xffffffffn) | 0;
+      sim3SqlPreview.textContent = `SQL: SELECT pg_advisory_lock(${raw.toString()}::bigint);`;
+      sim3F2.textContent = String(hi);
+      sim3F2Desc.textContent = "int8 高 32 位";
+      sim3F3.textContent = String(lo);
+      sim3F3Desc.textContent = "int8 低 32 位";
+      sim3F4.textContent = "1 (int8 空间)";
+      sim3PgLocks.textContent = `database = MyDatabaseId  |  classid = ${hi}  |  objid = ${lo}  |  objsubid = 1  |  locktype = 'advisory'`;
+      sim3Status.textContent = `单 bigint 空间：field4 = 1（与双 int4 永不重叠）`;
+    } else {
+      const k1 = parseInt(sim3K1.value || "0", 10) | 0;
+      const k2 = parseInt(sim3K2.value || "0", 10) | 0;
+      sim3SqlPreview.textContent = `SQL: SELECT pg_advisory_lock(${k1}, ${k2});`;
+      sim3F2.textContent = String(k1);
+      sim3F2Desc.textContent = "第 1 个 int4（namespace）";
+      sim3F3.textContent = String(k2);
+      sim3F3Desc.textContent = "第 2 个 int4（resource_id）";
+      sim3F4.textContent = "2 (双 int4 空间)";
+      sim3PgLocks.textContent = `database = MyDatabaseId  |  classid = ${k1}  |  objid = ${k2}  |  objsubid = 2  |  locktype = 'advisory'`;
+      sim3Status.textContent = `双 int4 空间：field4 = 2（即使值相同也不与 int8 撞锁）`;
+    }
+  }
+
+  sim3ModeBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sim3Mode = btn.dataset.sim3Mode;
+      sim3ModeBtns.forEach((b) => b.classList.toggle("active", b.dataset.sim3Mode === sim3Mode));
+      sim3K2.style.display = sim3Mode === "int4" ? "inline-block" : "none";
+      if (sim3Mode === "int4" && sim3K1.value === "1") {
+        sim3K1.value = "10";
+        sim3K2.value = "42";
+      }
+      updateSim3();
+    });
+  });
+  sim3K1.addEventListener("input", updateSim3);
+  sim3K2.addEventListener("input", updateSim3);
+
+  let compareToggle = false;
+  sim3CompareBtn.addEventListener("click", () => {
+    compareToggle = !compareToggle;
+    if (compareToggle) {
+      sim3Mode = "int4";
+      sim3K1.value = "0";
+      sim3K2.value = "1";
+    } else {
+      sim3Mode = "int8";
+      sim3K1.value = "1";
+    }
+    sim3ModeBtns.forEach((b) => b.classList.toggle("active", b.dataset.sim3Mode === sim3Mode));
+    sim3K2.style.display = sim3Mode === "int4" ? "inline-block" : "none";
+    updateSim3();
+    sim3Status.textContent = compareToggle
+      ? "对比：(0, 1) 的 field4=2，与 1::bigint (field4=1) 不是同一把锁！"
+      : "对比：1::bigint 的 field4=1，再点一次对比 (0, 1)";
+  });
+
+  /* --- Slide 5: LOCALLOCK Re-entrancy & Stacking Sandbox --- */
+  let s1Locks = 1;
+  let s2State = "IDLE"; // IDLE | WAITING | GRANTED
+  const sim5Status = document.getElementById("sim5-status");
+  const sim5S1NLocks = document.getElementById("sim5-s1-nlocks");
+  const sim5S1State = document.getElementById("sim5-s1-state");
+  const sim5S1Note = document.getElementById("sim5-s1-note");
+  const sim5S2NLocks = document.getElementById("sim5-s2-nlocks");
+  const sim5S2State = document.getElementById("sim5-s2-state");
+  const sim5S2Note = document.getElementById("sim5-s2-note");
+  const sim5ConnS1 = document.getElementById("sim5-conn-s1");
+  const sim5ArrS1 = document.getElementById("sim5-arr-s1");
+  const sim5LblS1 = document.getElementById("sim5-lbl-s1");
+  const sim5ConnS2 = document.getElementById("sim5-conn-s2");
+  const sim5ArrS2 = document.getElementById("sim5-arr-s2");
+  const sim5LblS2 = document.getElementById("sim5-lbl-s2");
+  const sim5Pl1Mask = document.getElementById("sim5-pl1-mask");
+  const sim5Pl2Mask = document.getElementById("sim5-pl2-mask");
+  const sim5Pl2Box = document.getElementById("sim5-pl2-box");
+  const sim5LockHolder = document.getElementById("sim5-lock-holder");
+  const sim5LockWaiters = document.getElementById("sim5-lock-waiters");
+
+  function renderSim5(msg) {
+    sim5S1NLocks.textContent = `nLocks = ${s1Locks}`;
+    sim5S1State.textContent = s1Locks > 0 ? "状态：GRANTED" : "状态：RELEASED";
+    sim5S1State.setAttribute("fill", s1Locks > 0 ? "#2F7A66" : "#46585F");
+    sim5Pl1Mask.textContent = s1Locks > 0 ? "holdMask = ExclusiveLock" : "holdMask = 0（已释放）";
+    sim5ConnS1.setAttribute("stroke", s1Locks > 0 ? "#2F7A66" : "#89938F");
+    sim5ArrS1.setAttribute("fill", s1Locks > 0 ? "#2F7A66" : "#89938F");
+    sim5LblS1.textContent = s1Locks > 0 ? `HOLD (×${s1Locks})` : "NONE";
+    sim5LblS1.setAttribute("fill", s1Locks > 0 ? "#2F7A66" : "#89938F");
+
+    if (s2State === "IDLE") {
+      sim5S2NLocks.textContent = "nLocks = 0";
+      sim5S2State.textContent = "状态：IDLE";
+      sim5S2State.setAttribute("fill", "#46585F");
+      sim5S2Note.textContent = "尚未请求 key=100";
+      sim5ConnS2.setAttribute("stroke", "#89938F");
+      sim5ConnS2.classList.remove("flow-anim");
+      sim5ArrS2.setAttribute("fill", "#89938F");
+      sim5LblS2.textContent = "NONE";
+      sim5LblS2.setAttribute("fill", "#89938F");
+      sim5Pl2Mask.textContent = "holdMask = 0（未创建）";
+      sim5Pl2Box.setAttribute("stroke", "#D9D5CB");
+    } else if (s2State === "WAITING") {
+      sim5S2NLocks.textContent = "nLocks = 0";
+      sim5S2State.textContent = "状态：WAITING";
+      sim5S2State.setAttribute("fill", "#BE653B");
+      sim5S2Note.textContent = "与 S1 冲突，已挂入 LOCK.waitProcs 睡眠等待";
+      sim5ConnS2.setAttribute("stroke", "#BE653B");
+      sim5ConnS2.classList.add("flow-anim");
+      sim5ArrS2.setAttribute("fill", "#BE653B");
+      sim5LblS2.textContent = "WAIT";
+      sim5LblS2.setAttribute("fill", "#BE653B");
+      sim5Pl2Mask.textContent = "waitLock = LOCK(100) 排队中";
+      sim5Pl2Box.setAttribute("stroke", "#BE653B");
+    } else {
+      sim5S2NLocks.textContent = "nLocks = 1";
+      sim5S2State.textContent = "状态：GRANTED";
+      sim5S2State.setAttribute("fill", "#2F7A66");
+      sim5S2Note.textContent = "S1 彻底释放后，S2 被唤醒并成功获得锁！";
+      sim5ConnS2.setAttribute("stroke", "#2F7A66");
+      sim5ConnS2.classList.remove("flow-anim");
+      sim5ArrS2.setAttribute("fill", "#2F7A66");
+      sim5LblS2.textContent = "HOLD (×1)";
+      sim5LblS2.setAttribute("fill", "#2F7A66");
+      sim5Pl2Mask.textContent = "holdMask = ExclusiveLock";
+      sim5Pl2Box.setAttribute("stroke", "#2F7A66");
+    }
+
+    if (s1Locks > 0) {
+      sim5LockHolder.textContent = "grantMask: Exclusive (S1)";
+      sim5LockWaiters.textContent = s2State === "WAITING" ? "waitProcs: [S2 等待中]" : "waitProcs: [空]";
+    } else if (s2State === "GRANTED") {
+      sim5LockHolder.textContent = "grantMask: Exclusive (S2)";
+      sim5LockWaiters.textContent = "waitProcs: [空]";
+    } else {
+      sim5LockHolder.textContent = "grantMask: 无持有者";
+      sim5LockWaiters.textContent = "waitProcs: [空]";
+    }
+
+    if (msg) sim5Status.textContent = msg;
+  }
+
+  document.getElementById("sim5-s1-lock").addEventListener("click", () => {
+    if (s2State === "GRANTED") {
+      renderSim5("当前由 S2 持有锁，点击「重置」可重新演练 S1 重入叠加");
+      return;
+    }
+    s1Locks += 1;
+    sim5S1Note.textContent = s1Locks > 1
+      ? `重入成功！本地 nLocks 增至 ${s1Locks}，不受 S2 排队影响`
+      : "首次获取成功，创建共享 LOCK / PROCLOCK";
+    renderSim5(`S1 再次加锁成功：LOCALLOCK.nLocks = ${s1Locks}（重入必成功）`);
+  });
+
+  document.getElementById("sim5-s1-unlock").addEventListener("click", () => {
+    if (s1Locks <= 0) {
+      renderSim5("S1 当前未持有 key=100，unlock 返回 false");
+      return;
+    }
+    s1Locks -= 1;
+    if (s1Locks > 0) {
+      sim5S1Note.textContent = `只释放 1 层，剩余 nLocks=${s1Locks}，S1 仍持有锁！`;
+      renderSim5(`S1 解锁一次：nLocks 降至 ${s1Locks}，共享锁未释放，等待者继续等`);
+    } else {
+      if (s2State === "WAITING") {
+        s2State = "GRANTED";
+        sim5S1Note.textContent = "nLocks 归零，释放 PROCLOCK 并唤醒等待者 S2";
+        renderSim5("S1 nLocks 归零彻底释放 → 自动唤醒等待队列中的 S2！");
+      } else {
+        sim5S1Note.textContent = "nLocks 归零，已彻底释放共享锁";
+        renderSim5("S1 nLocks 归零，key=100 已完全释放");
+      }
+    }
+  });
+
+  document.getElementById("sim5-s2-lock").addEventListener("click", () => {
+    if (s1Locks > 0) {
+      s2State = "WAITING";
+      renderSim5("S2 请求 key=100 与 S1 冲突 → 挂入 waitProcs（此时 S1 重入仍会成功）");
+    } else {
+      s2State = "GRANTED";
+      renderSim5("key=100 空闲 → S2 立即获得 ExclusiveLock");
+    }
+  });
+
+  document.getElementById("sim5-reset").addEventListener("click", () => {
+    s1Locks = 1;
+    s2State = "IDLE";
+    sim5S1Note.textContent = "nLocks > 0 时重入直接本地 +1，不参与共享排队";
+    renderSim5("已重置：S1 持有 key=100 (nLocks=1)，S2 空闲");
+  });
+
+  /* --- Slide 7: Lifecycle Timeline Stepper --- */
+  const sim7Btns = document.querySelectorAll("[data-sim7]");
+  const sim7Highlight = document.getElementById("sim7-highlight");
+  const sim7Status = document.getElementById("sim7-status");
+  const SIM7_STEPS = [
+    { x: 220, w: 240, fill: "#E5EFF0", msg: "步骤 1：两条轨道在事务内均获得 key=42" },
+    { x: 480, w: 240, fill: "#F5EFE0", msg: "步骤 2：异常 ROLLBACK —— 事务级自动释放，会话级依然保留！" },
+    { x: 740, w: 310, fill: "#F7E9DE", msg: "步骤 3：归还连接池 —— 会话级锁泄漏到下一个借用该连接的请求！" },
+    { x: 1070, w: 304, fill: "#E2F0EC", msg: "步骤 4：直到 unlock / DISCARD ALL / Session 断连才释放会话级锁" }
+  ];
+
+  function setSim7(stepIdx) {
+    const s = SIM7_STEPS[stepIdx] || SIM7_STEPS[0];
+    sim7Btns.forEach((b) => b.classList.toggle("active", Number(b.dataset.sim7) === stepIdx));
+    sim7Highlight.setAttribute("x", String(s.x));
+    sim7Highlight.setAttribute("width", String(s.w));
+    sim7Highlight.setAttribute("fill", s.fill);
+    sim7Status.textContent = s.msg;
+  }
+  sim7Btns.forEach((b) => b.addEventListener("click", () => setSim7(Number(b.dataset.sim7))));
+
+  /* --- Slide 8: Deadlock vs Ordered --- */
+  const sim8Btns = document.querySelectorAll("[data-sim8]");
+  const sim8Status = document.getElementById("sim8-status");
+  const sim8S1Step2 = document.getElementById("sim8-s1-step2");
+  const sim8S2Step1 = document.getElementById("sim8-s2-step1");
+  const sim8S2Step2 = document.getElementById("sim8-s2-step2");
+  const sim8K1Wait = document.getElementById("sim8-k1-wait");
+  const sim8K2Owner = document.getElementById("sim8-k2-owner");
+  const sim8K2Wait = document.getElementById("sim8-k2-wait");
+  const sim8PathA = document.getElementById("sim8-path-a");
+  const sim8ArrA = document.getElementById("sim8-arr-a");
+  const sim8LblA = document.getElementById("sim8-lbl-a");
+  const sim8PathB = document.getElementById("sim8-path-b");
+  const sim8ArrB = document.getElementById("sim8-arr-b");
+  const sim8OutBox = document.getElementById("sim8-outcome-box");
+  const sim8OutTitle = document.getElementById("sim8-outcome-title");
+  const sim8OutL1 = document.getElementById("sim8-outcome-l1");
+  const sim8OutL2 = document.getElementById("sim8-outcome-l2");
+  const sim8OutL3 = document.getElementById("sim8-outcome-l3");
+  const sim8OutL4 = document.getElementById("sim8-outcome-l4");
+  const sim8OutL5 = document.getElementById("sim8-outcome-l5");
+
+  function setSim8(mode) {
+    sim8Btns.forEach((b) => b.classList.toggle("active", b.dataset.sim8 === mode));
+    if (mode === "deadlock") {
+      sim8S1Step2.textContent = "2. xact_lock(2) → 等待 S2";
+      sim8S2Step1.textContent = "1. xact_lock(2) → 持有";
+      sim8S2Step2.textContent = "2. xact_lock(1) → 等待 S1";
+      sim8K1Wait.textContent = "等待：S2";
+      sim8K2Owner.textContent = "持有者：S2";
+      sim8K2Wait.textContent = "等待：S1";
+      sim8PathA.setAttribute("stroke", "#BE653B");
+      sim8PathA.classList.add("flow-anim");
+      sim8ArrA.setAttribute("fill", "#BE653B");
+      sim8LblA.textContent = "WAIT";
+      sim8LblA.setAttribute("fill", "#BE653B");
+      sim8PathB.setAttribute("stroke", "#BE653B");
+      sim8PathB.classList.add("flow-anim");
+      sim8ArrB.setAttribute("fill", "#BE653B");
+      sim8OutBox.setAttribute("fill", "#F7E9DE");
+      sim8OutBox.setAttribute("stroke", "#BE653B");
+      sim8OutTitle.textContent = "死锁环路成立";
+      sim8OutTitle.setAttribute("fill", "#BE653B");
+      sim8OutL1.textContent = "1. 先乐观睡眠等待";
+      sim8OutL2.textContent = "2. 超 deadlock_timeout";
+      sim8OutL3.textContent = "   (默认 1s) 才检测";
+      sim8OutL3.setAttribute("fill", "#BE653B");
+      sim8OutL4.textContent = "3. 中止一方事务报错：";
+      sim8OutL5.textContent = "   deadlock_detected";
+      sim8OutL5.setAttribute("fill", "#BE653B");
+      sim8Status.textContent = "结果：形成环路等待 → 1s 后触发 deadlock_detected 回滚一方";
+    } else {
+      sim8S1Step2.textContent = "2. xact_lock(2) → 直接持有";
+      sim8S2Step1.textContent = "1. xact_lock(1) → 串行等待";
+      sim8S2Step2.textContent = "2. S1 提交后依次拿 1 与 2";
+      sim8K1Wait.textContent = "等待：S2（无环路）";
+      sim8K2Owner.textContent = "持有者：S1";
+      sim8K2Wait.textContent = "等待：无";
+      sim8PathA.setAttribute("stroke", "#2F7A66");
+      sim8PathA.classList.remove("flow-anim");
+      sim8ArrA.setAttribute("fill", "#2F7A66");
+      sim8LblA.textContent = "HOLD";
+      sim8LblA.setAttribute("fill", "#2F7A66");
+      sim8PathB.setAttribute("stroke", "#245A6B");
+      sim8PathB.classList.add("flow-anim");
+      sim8ArrB.setAttribute("fill", "#245A6B");
+      sim8OutBox.setAttribute("fill", "#E2F0EC");
+      sim8OutBox.setAttribute("stroke", "#2F7A66");
+      sim8OutTitle.textContent = "无环路 · 安全串行";
+      sim8OutTitle.setAttribute("fill", "#2F7A66");
+      sim8OutL1.textContent = "1. S1 先拿到 key 1 与 2";
+      sim8OutL2.textContent = "2. S2 在 key 1 处短暂排队";
+      sim8OutL3.textContent = "   不占用 key 2，绝无环路";
+      sim8OutL3.setAttribute("fill", "#2F7A66");
+      sim8OutL4.textContent = "3. S1 COMMIT 后释放两锁";
+      sim8OutL5.textContent = "   S2 顺利完成，零回滚";
+      sim8OutL5.setAttribute("fill", "#2F7A66");
+      sim8Status.textContent = "结果：统一按 key 升序排序后，彻底消除死锁环路";
+    }
+  }
+  sim8Btns.forEach((b) => b.addEventListener("click", () => setSim8(b.dataset.sim8)));
+
+  /* --- Slide 11: pg_locks Key Reconstructor --- */
+  const sim11Btns = document.querySelectorAll("[data-sim11]");
+  const sim11ClassId = document.getElementById("sim11-classid");
+  const sim11ObjId = document.getElementById("sim11-objid");
+  const sim11SubId = document.getElementById("sim11-subid");
+  const sim11Result = document.getElementById("sim11-result");
+  const sim11Status = document.getElementById("sim11-status");
+
+  const SIM11_DATA = {
+    ex1: {
+      c: "0", o: "42", s: "1",
+      res: "bigint key = 42（来自 pg_advisory_lock(42::bigint)）",
+      st: "反解公式：(0::bigint << 32) | 42::bigint = 42"
+    },
+    ex2: {
+      c: "1", o: "42", s: "1",
+      res: "bigint key = 4294967338（高 32 位 = 1，低 32 位 = 42）",
+      st: "反解公式：(1::bigint << 32) | 42::bigint = 4294967338"
+    },
+    ex3: {
+      c: "10", o: "42", s: "2",
+      res: "双 int key = (namespace=10, tenant_id=42) → 租户 42 对账任务锁",
+      st: "objsubid = 2 无需位移拼接：classid 即命名空间，objid 即业务 ID"
+    }
+  };
+
+  function setSim11(key) {
+    const d = SIM11_DATA[key] || SIM11_DATA.ex1;
+    sim11Btns.forEach((b) => b.classList.toggle("active", b.dataset.sim11 === key));
+    sim11ClassId.textContent = d.c;
+    sim11ObjId.textContent = d.o;
+    sim11SubId.textContent = d.s;
+    sim11Result.textContent = d.res;
+    sim11Status.textContent = d.st;
+  }
+  sim11Btns.forEach((b) => b.addEventListener("click", () => setSim11(b.dataset.sim11)));
+
+  /* ==================== 8. INIT ==================== */
+  buildTOC();
+  goToSlide(0);
+  updateSim3();
+  updateStageScale();
+})();
+</script>
+</body>
+</html>

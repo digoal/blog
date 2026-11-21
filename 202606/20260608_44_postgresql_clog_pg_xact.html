@@ -1,0 +1,2773 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL CLOG (pg_xact) 工程蓝图</title>
+<style>
+  :root {
+    --bg: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --letterbox: #E5E2D9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --primary: #245A6B;
+    --primary-light: #E5EFF0;
+    --accent: #BE653B;
+    --accent-light: #F7E9DE;
+    --gain: #2F7A66;
+    --gain-light: #E6F2EE;
+    --gold: #AE8A3E;
+    --gold-light: #F6F0E1;
+    --s1: #1E4B5A;
+    --s2: #2E6373;
+    --s3: #47808D;
+    --s4: #74A5AD;
+    --s5: #A4C4C6;
+    --s6: #CFE0DC;
+    --s7: #EBF1EE;
+    --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', Georgia, serif;
+    --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+    --hud-h: 46px;
+    --drawer-w: 420px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: var(--letterbox);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    background: var(--letterbox);
+    position: relative;
+  }
+
+  #app:fullscreen, #app:-webkit-full-screen {
+    background: #1B2429;
+  }
+  #app:fullscreen #stage-viewport, #app:-webkit-full-screen #stage-viewport {
+    background: #1B2429;
+  }
+
+  #workspace {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Left: Proportional 16:9 Stage Viewport */
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background: var(--letterbox);
+    transition: background 0.2s ease;
+  }
+
+  #stage-scaler {
+    width: 1600px;
+    height: 900px;
+    position: relative;
+    transform-origin: center center;
+    flex-shrink: 0;
+    background: var(--bg);
+    border: 1px solid var(--stroke);
+    overflow: hidden;
+  }
+
+  /* Slide Fixed 1600x900 Canvas */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    padding: 40px 64px 32px 64px;
+    display: none;
+    flex-direction: column;
+    background: var(--bg);
+    background-image:
+      linear-gradient(to right, rgba(217, 213, 203, 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.22) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .slide.active {
+    display: flex;
+  }
+
+  /* Left stratigraphic margin rule */
+  .slide::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 10px;
+    background: linear-gradient(
+      to bottom,
+      var(--s7) 0% 14%,
+      var(--s6) 14% 28%,
+      var(--s5) 28% 42%,
+      var(--s4) 42% 57%,
+      var(--s3) 57% 71%,
+      var(--s2) 71% 86%,
+      var(--s1) 86% 100%
+    );
+  }
+
+  .slide-eyebrow {
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--primary);
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    line-height: 1.4;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .slide-eyebrow .tag-accent {
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.2;
+    margin-bottom: 12px;
+    letter-spacing: 0.4px;
+  }
+
+  .slide-lead {
+    font-size: 19px;
+    color: var(--ink-sub);
+    line-height: 1.5;
+    max-width: 1400px;
+    margin-bottom: 14px;
+    min-height: 56px;
+  }
+  .slide-lead strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .slide-lead code {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    padding: 1px 6px;
+    color: var(--primary);
+  }
+
+  .slide-divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Diagram Zone: Fixed 1400x430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    background: var(--bg);
+    border: 1px solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .diagram-toolbar {
+    height: 42px;
+    min-height: 42px;
+    padding: 0 16px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--ink-sub);
+    flex-shrink: 0;
+  }
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .toolbar-label {
+    font-size: 13px;
+    color: var(--ink-muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.5px;
+  }
+  .ctrl-btn {
+    height: 28px;
+    padding: 0 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .ctrl-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  .ctrl-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #FFFFFF;
+    font-weight: 600;
+  }
+  .ctrl-btn.accent-btn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #FFFFFF;
+    font-weight: 600;
+  }
+  .ctrl-btn.accent-btn:hover {
+    background: #A7552F;
+    border-color: #A7552F;
+  }
+  .ctrl-btn.gain-btn {
+    background: var(--gain);
+    border-color: var(--gain);
+    color: #FFFFFF;
+    font-weight: 600;
+  }
+  .ctrl-input {
+    height: 28px;
+    width: 126px;
+    padding: 0 8px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    background: #FFFFFF;
+    border: 1px solid var(--primary);
+    outline: none;
+  }
+
+  .svg-stage {
+    flex: 1;
+    width: 1400px;
+    min-height: 0;
+    display: block;
+    background: #FAF9F6;
+  }
+  .svg-stage svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Bottom NEXT & Footer */
+  .slide-next {
+    margin-top: auto;
+    padding: 8px 0 8px 18px;
+    border-left: 3px solid var(--accent);
+    width: 1400px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .next-label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+    flex-shrink: 0;
+  }
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  .slide-footer {
+    margin-top: 14px;
+    width: 1400px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+    border-top: 1px solid var(--stroke);
+    padding-top: 10px;
+  }
+  .slide-footer .page-num {
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  /* Right In-Page Notes / Transcript Drawer (NOT a modal) */
+  #side-pane {
+    width: 0;
+    height: 100%;
+    background: var(--bg);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  #side-pane.open {
+    width: var(--drawer-w);
+    border-left-width: 1px;
+  }
+  .pane-header {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .pane-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pane-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 6px;
+    background: var(--primary-light);
+    color: var(--primary);
+    border: 1px solid var(--s5);
+  }
+  .pane-close {
+    background: transparent;
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+    font-size: 13px;
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+  .pane-close:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  #pane-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 48px 22px;
+    position: relative;
+  }
+
+  .note-single-title {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 6px;
+    line-height: 1.35;
+  }
+  .note-single-meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--stroke);
+  }
+  .note-paragraph {
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--ink-sub);
+    margin-bottom: 14px;
+    text-align: justify;
+  }
+  .note-paragraph strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .note-evidence {
+    background: var(--bg-sub);
+    border-left: 3px solid var(--primary);
+    padding: 10px 14px;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--ink);
+    margin-top: 14px;
+  }
+
+  /* Full transcript items */
+  .transcript-item {
+    padding: 16px 16px 14px 16px;
+    margin-bottom: 14px;
+    border: 1px solid var(--stroke);
+    border-left: 4px solid var(--s5);
+    background: #FFFFFF;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .transcript-item:hover {
+    border-left-color: var(--primary);
+  }
+  .transcript-item.current {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    border-left: 4px solid var(--accent);
+  }
+  .transcript-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .transcript-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+  .transcript-item.current .transcript-num {
+    color: var(--accent);
+  }
+  .transcript-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .transcript-body p {
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--ink-sub);
+    margin-bottom: 10px;
+  }
+  .transcript-body p:last-child { margin-bottom: 0; }
+
+  /* TOC Panel (G) */
+  #toc-panel {
+    position: absolute;
+    left: 16px;
+    bottom: calc(var(--hud-h) + 12px);
+    width: 520px;
+    max-height: calc(100vh - var(--hud-h) - 40px);
+    background: var(--bg);
+    border: 1px solid var(--primary);
+    display: none;
+    flex-direction: column;
+    z-index: 40;
+  }
+  #toc-panel.open { display: flex; }
+  .toc-list {
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .toc-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 10px 18px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .toc-row:hover {
+    background: var(--bg-sub);
+  }
+  .toc-row.active {
+    background: var(--primary-light);
+    border-left-color: var(--accent);
+    font-weight: 600;
+  }
+  .toc-idx {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    width: 28px;
+    flex-shrink: 0;
+  }
+  .toc-name {
+    flex: 1;
+    line-height: 1.4;
+  }
+
+  /* Bottom Shortcut HUD Bar (always visible, including fullscreen) */
+  #hud-bar {
+    height: var(--hud-h);
+    min-height: var(--hud-h);
+    background: #1B2B33;
+    color: #EBF1EE;
+    border-top: 1px solid #2E6373;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    font-size: 13px;
+    z-index: 50;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .hud-left, .hud-center, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hud-btn {
+    height: 30px;
+    padding: 0 11px;
+    background: #243842;
+    color: #EBF1EE;
+    border: 1px solid #3D5A66;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .hud-btn:hover {
+    background: #2E6373;
+    border-color: #74A5AD;
+  }
+  .hud-btn.active {
+    background: var(--accent);
+    border-color: #E08A5E;
+    color: #FFFFFF;
+    font-weight: 600;
+  }
+  .hud-kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.22);
+    color: #CFE0DC;
+  }
+  .hud-btn.active .hud-kbd {
+    background: rgba(0,0,0,0.2);
+    color: #FFFFFF;
+  }
+  .hud-page {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #A4C4C6;
+    padding: 0 8px;
+  }
+  .hud-progress {
+    width: 110px;
+    height: 4px;
+    background: #2E444F;
+    position: relative;
+  }
+  .hud-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 8.33%;
+    transition: width 0.2s ease;
+  }
+
+  /* SVG Text & Animation helpers */
+  .svg-title { font-family: var(--font-serif); font-weight: 700; fill: #1B2B33; }
+  .svg-sans { font-family: var(--font-sans); fill: #1B2B33; }
+  .svg-sub { font-family: var(--font-sans); fill: #46585F; }
+  .svg-muted { font-family: var(--font-sans); fill: #89938F; }
+  .svg-mono { font-family: var(--font-mono); fill: #245A6B; }
+  .svg-white { font-family: var(--font-sans); fill: #FFFFFF; }
+  .svg-white-mono { font-family: var(--font-mono); fill: #EBF1EE; }
+  .anim-node { transition: opacity 0.25s, stroke 0.25s, fill 0.25s; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <!-- Left proportional 16:9 stage -->
+    <div id="stage-viewport">
+      <div id="stage-scaler">
+
+        <!-- ==================== SLIDE 1 ==================== -->
+        <section class="slide active" data-slide="0" data-title="破题：一张小表为何打满 SLRU？">
+          <div class="slide-eyebrow">
+            <span>01 / 12 · 数据库筑基课 · PostgreSQL CLOG (pg_xact)</span>
+            <span class="tag-accent">地层剖面 · 现场问题定位</span>
+          </div>
+          <h1 class="slide-title">为什么一张小表，也能把 SLRU 打满？</h1>
+          <p class="slide-lead">
+            <code>pg_xact</code>（源码模块 <code>clog.c</code>，PG 10 前称 <code>pg_clog</code>）不存业务数据，却决定每条行版本的 <code>xmin/xmax</code> 究竟是提交、中止、运行中还是子事务待定。五个常见 DBA 现场问题，全部指向这层 2 bit 状态剖面。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-stage">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 5-layer Stratigraphic Profile -->
+                <text x="24" y="22" class="svg-mono" font-size="13" font-weight="700">STRATA · PostgreSQL 事务状态五层剖面（浅→深）</text>
+                <text x="920" y="22" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">SYMPTOMS · DBA 现场五大典型症状</text>
+
+                <!-- Layer 1 -->
+                <rect x="24" y="34" width="816" height="66" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1.5"/>
+                <rect x="24" y="34" width="12" height="66" fill="#A4C4C6"/>
+                <text x="52" y="61" class="svg-title" font-size="18">L1 · 应用与会话提交层</text>
+                <text x="52" y="84" class="svg-sub" font-size="14">高并发短事务 COMMIT / 断线重连确认 / 事务生命周期起点</text>
+                <text x="822" y="72" text-anchor="end" class="svg-mono" font-size="13">pg_xact_status()</text>
+
+                <!-- Layer 2 -->
+                <rect x="24" y="112" width="816" height="66" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1.5"/>
+                <rect x="24" y="112" width="12" height="66" fill="#74A5AD"/>
+                <text x="52" y="139" class="svg-title" font-size="18">L2 · Heap 表存储与 MVCC 行头层</text>
+                <text x="52" y="162" class="svg-sub" font-size="14">每条 Tuple 记录 xmin / xmax 与少量 Hint Bit（本地缓存）</text>
+                <text x="822" y="150" text-anchor="end" class="svg-mono" font-size="13">heapam_visibility.c</text>
+
+                <!-- Layer 3 -->
+                <rect x="24" y="190" width="816" height="66" fill="#74A5AD" stroke="#47808D" stroke-width="1.5"/>
+                <rect x="24" y="190" width="12" height="66" fill="#47808D"/>
+                <text x="52" y="217" class="svg-white" font-size="18" font-weight="700">L3 · 共享内存协调与 SLRU 缓存层</text>
+                <text x="52" y="240" class="svg-white-mono" font-size="14">ProcArray 运行快照 + transaction SLRU（参数 transaction_buffers）</text>
+                <text x="822" y="228" text-anchor="end" class="svg-white-mono" font-size="13">pg_stat_slru</text>
+
+                <!-- Layer 4 -->
+                <rect x="24" y="268" width="816" height="66" fill="#2E6373" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="24" y="268" width="12" height="66" fill="#BE653B"/>
+                <text x="52" y="295" class="svg-white" font-size="18" font-weight="700">L4 · 事务状态持久索引层（PGDATA/pg_xact）</text>
+                <text x="52" y="318" class="svg-white-mono" font-size="14">每普通 XID 仅占 2 bit · 每 8KB 页 32,768 事务 · 每 256KB 段约 100 万事务</text>
+                <text x="822" y="306" text-anchor="end" class="svg-white-mono" font-size="13">clog.c</text>
+
+                <!-- Layer 5 -->
+                <rect x="24" y="346" width="816" height="66" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+                <rect x="24" y="346" width="12" height="66" fill="#1B2B33"/>
+                <text x="52" y="373" class="svg-white" font-size="18" font-weight="700">L5 · 崩溃恢复事实账本层（PGDATA/pg_wal）</text>
+                <text x="52" y="396" class="svg-white-mono" font-size="14">XactLogCommitRecord / CLOG_ZEROPAGE / CLOG_TRUNCATE（WAL 先行）</text>
+                <text x="822" y="384" text-anchor="end" class="svg-white-mono" font-size="13">xact.c</text>
+
+                <!-- Orthogonal connectors -->
+                <line x1="840" y1="67" x2="914" y2="67" stroke="#BE653B" stroke-width="1.5"/>
+                <polygon points="920,67 910,62 910,72" fill="#BE653B"/>
+                <line x1="840" y1="145" x2="914" y2="145" stroke="#245A6B" stroke-width="1.5"/>
+                <polygon points="920,145 910,140 910,150" fill="#245A6B"/>
+                <line x1="840" y1="223" x2="914" y2="223" stroke="#BE653B" stroke-width="1.5"/>
+                <polygon points="920,223 910,218 910,228" fill="#BE653B"/>
+                <line x1="840" y1="301" x2="914" y2="301" stroke="#BE653B" stroke-width="1.5"/>
+                <polygon points="920,301 910,296 910,306" fill="#BE653B"/>
+                <line x1="840" y1="379" x2="914" y2="379" stroke="#245A6B" stroke-width="1.5"/>
+                <polygon points="920,379 910,374 910,384" fill="#245A6B"/>
+
+                <!-- Right: 5 Symptom Cards -->
+                <rect x="920" y="34" width="456" height="66" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="938" y="61" class="svg-sans" font-size="15" font-weight="700" fill="#BE653B">问 1 · COMMIT 断线如何确认是否提交？</text>
+                <text x="938" y="84" class="svg-sub" font-size="13.5">pg_xact_status(xid8) 仅查近期未截断状态</text>
+
+                <rect x="920" y="112" width="456" height="66" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="938" y="139" class="svg-sans" font-size="15" font-weight="700">问 2 · 表不大为何 SELECT 突发大量 SLRU 读？</text>
+                <text x="938" y="162" class="svg-sub" font-size="13.5">旧行 Hint Bit 未置位，触发高频 pg_xact 兜底查询</text>
+
+                <rect x="920" y="190" width="456" height="66" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="938" y="217" class="svg-sans" font-size="15" font-weight="700" fill="#BE653B">问 3 · 高并发为何出现 XactSLRU / GroupUpdate？</text>
+                <text x="938" y="240" class="svg-sub" font-size="13.5">大量短事务同时争用同一页的 SLRU Bank Lock</text>
+
+                <rect x="920" y="268" width="456" height="66" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="938" y="295" class="svg-sans" font-size="15" font-weight="700" fill="#BE653B">问 4 · pg_xact 目录持续变大能否手删？</text>
+                <text x="938" y="318" class="svg-sub" font-size="13.5">严禁手删——必须靠 VACUUM 推进冻结边界截断</text>
+
+                <rect x="920" y="346" width="456" height="66" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="938" y="373" class="svg-sans" font-size="15" font-weight="700">问 5 · 明明已有 WAL，读 Tuple 为何还要查它？</text>
+                <text x="938" y="396" class="svg-sub" font-size="13.5">WAL 是顺序恢复账本，pg_xact 才是随机状态索引</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">既然 WAL 已经记录了每次提交，为什么 PostgreSQL 还要专门维护一层 2 bit 状态文件？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · digoal (2026-06-08) · 源码对照版</span>
+            <span class="page-num">01 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 2 ==================== -->
+        <section class="slide" data-slide="1" data-title="设计初衷：行版本与事务状态解耦">
+          <div class="slide-eyebrow">
+            <span>02 / 12 · 一、它解决什么问题</span>
+            <span class="tag-accent">架构权衡 · 引用与状态分离</span>
+          </div>
+          <h1 class="slide-title">为什么不能直接改数据页，也不能只靠查 WAL？</h1>
+          <p class="slide-lead">
+            MVCC 要求每次读取都回答四个问题：<code>xmin</code> 提交了吗、<code>xmax</code> 提交了吗、事务仍在运行吗、过老状态还存在吗。PostgreSQL 选择将「行版本引用 XID」与「XID 最终状态」彻底解耦。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-stage">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Col 1: Option A -->
+                <rect x="24" y="24" width="420" height="382" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <rect x="24" y="24" width="420" height="46" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="42" y="53" class="svg-title" font-size="18" fill="#BE653B">思路 A · 状态直接写死在每条 Tuple</text>
+
+                <rect x="52" y="94" width="364" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="70" y="119" class="svg-sans" font-size="15" font-weight="700">事务修改 100 万行数据页</text>
+                <text x="70" y="141" class="svg-sub" font-size="13.5">每行写入 xmin + 完整事务状态字段</text>
+
+                <line x1="234" y1="152" x2="234" y2="188" stroke="#BE653B" stroke-width="1.5"/>
+                <polygon points="234,194 229,184 239,184" fill="#BE653B"/>
+
+                <rect x="52" y="194" width="364" height="64" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="70" y="220" class="svg-sans" font-size="15" font-weight="700" fill="#BE653B">COMMIT / ABORT 时被迫反扫全表</text>
+                <text x="70" y="244" class="svg-sub" font-size="13.5">反复修改已落盘数据页，提交延迟爆炸</text>
+
+                <rect x="52" y="286" width="364" height="96" fill="#FAF9F6" stroke="#D9D5CB" stroke-dasharray="4 3"/>
+                <text x="70" y="314" class="svg-mono" font-size="13" fill="#BE653B">否决原因 · COST</text>
+                <text x="70" y="340" class="svg-sub" font-size="14">1. Tuple 行头显著膨胀，空间浪费</text>
+                <text x="70" y="364" class="svg-sub" font-size="14">2. 大事务提交变成灾难级随机写放大</text>
+
+                <!-- Col 2: Option B -->
+                <rect x="490" y="24" width="420" height="382" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <rect x="490" y="24" width="420" height="46" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="508" y="53" class="svg-title" font-size="18" fill="#BE653B">思路 B · 读取时直接检索 WAL 日志</text>
+
+                <rect x="518" y="94" width="364" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="536" y="119" class="svg-sans" font-size="15" font-weight="700">SELECT 扫到行版本 xmin = 884210</text>
+                <text x="536" y="141" class="svg-sub" font-size="13.5">尝试在 WAL 流中定位对应 Commit 记录</text>
+
+                <line x1="700" y1="152" x2="700" y2="188" stroke="#BE653B" stroke-width="1.5"/>
+                <polygon points="700,194 695,184 705,184" fill="#BE653B"/>
+
+                <rect x="518" y="194" width="364" height="64" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="536" y="220" class="svg-sans" font-size="15" font-weight="700" fill="#BE653B">WAL 按 LSN 追加，无按 XID 随机索引</text>
+                <text x="536" y="244" class="svg-sub" font-size="13.5">普通可见性判断退化为全日志检索</text>
+
+                <rect x="518" y="286" width="364" height="96" fill="#FAF9F6" stroke="#D9D5CB" stroke-dasharray="4 3"/>
+                <text x="536" y="314" class="svg-mono" font-size="13" fill="#BE653B">否决原因 · COST</text>
+                <text x="536" y="340" class="svg-sub" font-size="14">1. 高频可见性查询无法承受顺序扫日志</text>
+                <text x="536" y="364" class="svg-sub" font-size="14">2. 旧 WAL 归档回收后历史 XID 无法查</text>
+
+                <!-- Col 3: Option C (PostgreSQL) -->
+                <rect x="956" y="24" width="420" height="382" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.8"/>
+                <rect x="956" y="24" width="420" height="46" fill="#245A6B"/>
+                <text x="974" y="53" class="svg-white" font-size="18" font-weight="700">PG 架构 · 引用与 2 bit 状态表解耦</text>
+
+                <rect x="984" y="90" width="364" height="58" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="1002" y="114" class="svg-sans" font-size="15" font-weight="700">1. Heap Tuple 只存 xmin/xmax + Hint Bit</text>
+                <text x="1002" y="136" class="svg-sub" font-size="13.5">提交时不改数据页，零反扫写放大</text>
+
+                <line x1="1166" y1="148" x2="1166" y2="174" stroke="#245A6B" stroke-width="1.5"/>
+                <polygon points="1166,180 1161,170 1171,170" fill="#245A6B"/>
+
+                <rect x="984" y="180" width="364" height="62" fill="#2E6373"/>
+                <text x="1002" y="206" class="svg-white" font-size="15" font-weight="700">2. pg_xact 集中存每个 XID 的 2 bit 状态</text>
+                <text x="1002" y="229" class="svg-white-mono" font-size="13">O(1) 算术寻址 · SLRU 缓存 · 兜底查询</text>
+
+                <line x1="1166" y1="242" x2="1166" y2="268" stroke="#2F7A66" stroke-width="1.5"/>
+                <polygon points="1166,274 1161,264 1171,264" fill="#2F7A66"/>
+
+                <rect x="984" y="274" width="364" height="108" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="1002" y="302" class="svg-mono" font-size="13" fill="#2F7A66" font-weight="700">架构闭环 · GAIN</text>
+                <text x="1002" y="328" class="svg-sans" font-size="14">• 读路径先看 Hint Bit 与快照，极轻</text>
+                <text x="1002" y="352" class="svg-sans" font-size="14">• VACUUM 冻结旧 Tuple 后按段截断</text>
+                <text x="1002" y="372" class="svg-sub" font-size="12.5">代价：多了一套需维护、刷盘、监控的 SLRU</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">每个事务只占 2 bit，PostgreSQL 究竟怎样把一个 XID 精确映射到磁盘上的两位？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 解耦设计与架构权衡</span>
+            <span class="page-num">02 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 3 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="2" data-title="物理布局：XID 到 2 bit 的精确寻址">
+          <div class="slide-eyebrow">
+            <span>03 / 12 · 二、它是什么（clog.h / clog.c / slru.h）</span>
+            <span class="tag-accent">交互推演 · 2 bit 紧凑状态数组</span>
+          </div>
+          <h1 class="slide-title">2 bit 寻址：一个 XID 如何精确落到磁盘两位？</h1>
+          <p class="slide-lead">
+            <code>pg_xact</code> 不是表，而是按 XID 位置寻址的紧凑位数组。<code>CLOG_BITS_PER_XACT = 2</code>，1 字节存 4 个事务；典型 8KB 页覆盖 <strong>32,768</strong> 事务，每段 32 页（256KB）覆盖约 <strong>100 万</strong>事务。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">输入 XID:</span>
+                <input id="s3-xid" class="ctrl-input" type="number" min="3" max="2000000000" value="1048582" aria-label="输入事务号">
+                <button class="ctrl-btn" data-s3-preset="100">XID=100</button>
+                <button class="ctrl-btn" data-s3-preset="32768">XID=32768(跨页)</button>
+                <button class="ctrl-btn" data-s3-preset="1048582">XID=1048582(跨段)</button>
+              </div>
+              <div class="toolbar-group">
+                <span class="toolbar-label">BLCKSZ:</span>
+                <button class="ctrl-btn active" id="s3-blk-8">8KB</button>
+                <button class="ctrl-btn" id="s3-blk-32">32KB</button>
+                <button class="ctrl-btn accent-btn" id="s3-play">逐步演示</button>
+                <button class="ctrl-btn" id="s3-reset">重置</button>
+              </div>
+            </div>
+            <div class="svg-stage">
+              <svg id="svg-s3" viewBox="0 0 1400 388" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top 4-step addressing boxes -->
+                <g id="s3-box-0" class="anim-node">
+                  <rect x="24" y="20" width="290" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.8"/>
+                  <text x="42" y="46" class="svg-mono" font-size="13" font-weight="700">STEP 1 · 事务号 XID</text>
+                  <text id="s3-v-xid" x="42" y="88" class="svg-mono" font-size="30" font-weight="700" fill="#1B2B33">1048582</text>
+                  <text x="42" y="122" class="svg-sub" font-size="13.5">算术直达，无需 B-Tree 索引</text>
+                </g>
+
+                <line x1="314" y1="81" x2="354" y2="81" stroke="#245A6B" stroke-width="1.8"/>
+                <polygon points="360,81 350,76 350,86" fill="#245A6B"/>
+
+                <g id="s3-box-1" class="anim-node">
+                  <rect x="360" y="20" width="300" height="122" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.5"/>
+                  <text x="378" y="46" class="svg-mono" font-size="13" font-weight="700">STEP 2 · CLOG Page 页号</text>
+                  <text id="s3-v-page" x="378" y="88" class="svg-mono" font-size="28" font-weight="700" fill="#245A6B">Page 32</text>
+                  <text id="s3-f-page" x="378" y="122" class="svg-sub" font-size="13">floor(xid / 32768) · 每页 8KB</text>
+                </g>
+
+                <line x1="660" y1="81" x2="700" y2="81" stroke="#245A6B" stroke-width="1.8"/>
+                <polygon points="706,81 696,76 696,86" fill="#245A6B"/>
+
+                <g id="s3-box-2" class="anim-node">
+                  <rect x="706" y="20" width="300" height="122" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.5"/>
+                  <text x="724" y="46" class="svg-mono" font-size="13" font-weight="700">STEP 3 · SLRU 段文件</text>
+                  <text id="s3-v-seg" x="724" y="88" class="svg-mono" font-size="28" font-weight="700" fill="#245A6B">pg_xact/0001</text>
+                  <text id="s3-f-seg" x="724" y="122" class="svg-sub" font-size="13">seg = floor(page / 32) · 256KB/段</text>
+                </g>
+
+                <line x1="1006" y1="81" x2="1046" y2="81" stroke="#245A6B" stroke-width="1.8"/>
+                <polygon points="1052,81 1042,76 1042,86" fill="#245A6B"/>
+
+                <g id="s3-box-3" class="anim-node">
+                  <rect x="1052" y="20" width="324" height="122" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+                  <text x="1070" y="46" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">STEP 4 · 页内 Byte 与 Bit 位</text>
+                  <text id="s3-v-byte" x="1070" y="88" class="svg-mono" font-size="24" font-weight="700" fill="#BE653B">Byte 1 · Bits [4..5]</text>
+                  <text id="s3-f-byte" x="1070" y="122" class="svg-sub" font-size="13">rem = 6 → byte=1, slot=2 (×2 bit)</text>
+                </g>
+
+                <!-- Bottom Left: Single Byte 4-slot Diagram -->
+                <rect x="24" y="168" width="664" height="198" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="42" y="196" class="svg-title" font-size="16">单字节（1 Byte = 8 bit）内部布局 · CLOG_XACTS_PER_BYTE = 4</text>
+                <text id="s3-byte-caption" x="42" y="218" class="svg-sub" font-size="13.5">当前命中：Page 32 / Byte 1 的第 2 号槽位（Bits 4–5）</text>
+
+                <!-- 4 slots inside 1 byte -->
+                <g id="s3-slot-0">
+                  <rect x="42" y="236" width="146" height="84" fill="#F1EFE9" stroke="#A4C4C6" stroke-width="1.5"/>
+                  <text x="56" y="262" class="svg-mono" font-size="13">Slot 0 · bit 0-1</text>
+                  <text id="s3-sx-0" x="56" y="288" class="svg-sans" font-size="14" font-weight="700">XID 1048580</text>
+                  <text x="56" y="308" class="svg-mono" font-size="12" fill="#46585F">状态位: 01</text>
+                </g>
+                <g id="s3-slot-1">
+                  <rect x="202" y="236" width="146" height="84" fill="#F1EFE9" stroke="#A4C4C6" stroke-width="1.5"/>
+                  <text x="216" y="262" class="svg-mono" font-size="13">Slot 1 · bit 2-3</text>
+                  <text id="s3-sx-1" x="216" y="288" class="svg-sans" font-size="14" font-weight="700">XID 1048581</text>
+                  <text x="216" y="308" class="svg-mono" font-size="12" fill="#46585F">状态位: 01</text>
+                </g>
+                <g id="s3-slot-2">
+                  <rect x="362" y="236" width="146" height="84" fill="#F7E9DE" stroke="#BE653B" stroke-width="2.2"/>
+                  <text x="376" y="262" class="svg-mono" font-size="13" fill="#BE653B" font-weight="700">Slot 2 · bit 4-5</text>
+                  <text id="s3-sx-2" x="376" y="288" class="svg-sans" font-size="14" font-weight="700" fill="#BE653B">XID 1048582</text>
+                  <text x="376" y="308" class="svg-mono" font-size="12" fill="#BE653B">当前目标槽位</text>
+                </g>
+                <g id="s3-slot-3">
+                  <rect x="522" y="236" width="146" height="84" fill="#F1EFE9" stroke="#A4C4C6" stroke-width="1.5"/>
+                  <text x="536" y="262" class="svg-mono" font-size="13">Slot 3 · bit 6-7</text>
+                  <text id="s3-sx-3" x="536" y="288" class="svg-sans" font-size="14" font-weight="700">XID 1048583</text>
+                  <text x="536" y="308" class="svg-mono" font-size="12" fill="#46585F">状态位: 00</text>
+                </g>
+                <text x="42" y="348" class="svg-muted" font-size="13">空间实证（maintenance.sgml）：默认 2 亿 XID ≈ 50MB；最大 20 亿 XID ≈ 半 GB。</text>
+
+                <!-- Bottom Right: 4 Status Codes -->
+                <rect x="712" y="168" width="664" height="198" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="730" y="196" class="svg-title" font-size="16">4 种事务状态编码 · src/include/access/clog.h</text>
+
+                <rect x="730" y="212" width="628" height="32" fill="#F1EFE9"/>
+                <text x="744" y="233" class="svg-mono" font-size="13" font-weight="700">0x00</text>
+                <text x="802" y="233" class="svg-mono" font-size="13" fill="#1B2B33">TRANSACTION_STATUS_IN_PROGRESS</text>
+                <text x="1114" y="233" class="svg-sub" font-size="13">初始状态 / 尚未看到提交或中止</text>
+
+                <rect x="730" y="248" width="628" height="32" fill="#E6F2EE"/>
+                <text x="744" y="269" class="svg-mono" font-size="13" font-weight="700" fill="#2F7A66">0x01</text>
+                <text x="802" y="269" class="svg-mono" font-size="13" fill="#2F7A66">TRANSACTION_STATUS_COMMITTED</text>
+                <text x="1114" y="269" class="svg-sans" font-size="13">事务已最终提交</text>
+
+                <rect x="730" y="284" width="628" height="32" fill="#F7E9DE"/>
+                <text x="744" y="305" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">0x02</text>
+                <text x="802" y="305" class="svg-mono" font-size="13" fill="#BE653B">TRANSACTION_STATUS_ABORTED</text>
+                <text x="1114" y="305" class="svg-sans" font-size="13">事务已显式回滚中止</text>
+
+                <rect x="730" y="320" width="628" height="32" fill="#F6F0E1"/>
+                <text x="744" y="341" class="svg-mono" font-size="13" font-weight="700" fill="#AE8A3E">0x03</text>
+                <text x="802" y="341" class="svg-mono" font-size="13" fill="#AE8A3E">TRANSACTION_STATUS_SUB_COMMITTED</text>
+                <text x="1114" y="341" class="svg-sans" font-size="13">子事务已提交，待父事务落定</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">结构如此紧凑，那一个新事务从申请 XID 到最终把状态位写成 0x01，底层必须守住哪条写入顺序？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 2 bit 状态位物理寻址</span>
+            <span class="page-num">03 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 4 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="3" data-title="写入路径：先写 WAL 再改 pg_xact">
+          <div class="slide-eyebrow">
+            <span>04 / 12 · 三、核心原理（1–2）：XID 分配与提交路径</span>
+            <span class="tag-accent">交互动画 · WAL-before-data 铁律</span>
+          </div>
+          <h1 class="slide-title">先让 WAL 成为可恢复事实，再标记 pg_xact</h1>
+          <p class="slide-lead">
+            分配 XID 前，<code>GetNewTransactionId()</code> 在 <code>XidGenLock</code> 下先调 <code>ExtendCLOG()</code> 写 <code>CLOG_ZEROPAGE</code> WAL。提交时，同步与异步路径都要守住「<code>pg_xact</code> 脏页绝不能早于 commit WAL 落盘」。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">提交模式:</span>
+                <button class="ctrl-btn active" id="s4-mode-sync">同步提交 (synchronous_commit=on)</button>
+                <button class="ctrl-btn" id="s4-mode-async">异步提交 (synchronous_commit=off)</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="ctrl-btn accent-btn" id="s4-play">播放动画</button>
+                <button class="ctrl-btn" id="s4-step">单步推演</button>
+                <button class="ctrl-btn" id="s4-reset">重置</button>
+              </div>
+            </div>
+            <div class="svg-stage">
+              <svg id="svg-s4" viewBox="0 0 1400 388" xmlns="http://www.w3.org/2000/svg">
+                <!-- Band 1: ExtendCLOG -->
+                <rect x="24" y="16" width="1352" height="96" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1.2"/>
+                <text x="42" y="38" class="svg-mono" font-size="12.5" font-weight="700">前置阶段 · XID 首次写入分配（varsup.c）</text>
+
+                <g id="s4-n0" class="anim-node">
+                  <rect x="42" y="48" width="240" height="50" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="58" y="70" class="svg-sans" font-size="14" font-weight="700">首次写表申请 XID</text>
+                  <text x="58" y="88" class="svg-mono" font-size="12">GetNewTransactionId()</text>
+                </g>
+                <line x1="282" y1="73" x2="334" y2="73" stroke="#245A6B" stroke-width="1.5"/>
+                <polygon points="340,73 330,68 330,78" fill="#245A6B"/>
+
+                <g id="s4-n1" class="anim-node">
+                  <rect x="340" y="48" width="320" height="50" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="356" y="70" class="svg-sans" font-size="14" font-weight="700">持 XidGenLock 跨页扩展</text>
+                  <text x="356" y="88" class="svg-mono" font-size="12">ExtendCLOG(xid) · 清零新页</text>
+                </g>
+                <line x1="660" y1="73" x2="712" y2="73" stroke="#245A6B" stroke-width="1.5"/>
+                <polygon points="718,73 708,68 708,78" fill="#245A6B"/>
+
+                <g id="s4-n2" class="anim-node">
+                  <rect x="718" y="48" width="636" height="50" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="734" y="70" class="svg-sans" font-size="14" font-weight="700">写入 CLOG_ZEROPAGE WAL（防止后续更大 XID 先提交却无页可写）</text>
+                  <text x="734" y="88" class="svg-sub" font-size="12.5">注：页初始化有专有 WAL；具体提交/中止 bit 由事务 WAL 在 redo 重放</text>
+                </g>
+
+                <!-- Band 2: Commit Flow -->
+                <rect x="24" y="126" width="1352" height="244" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="42" y="150" class="svg-mono" font-size="12.5" font-weight="700">提交主路径 · RecordTransactionCommit()（xact.c → clog.c）</text>
+
+                <!-- Start Commit -->
+                <g id="s4-n3" class="anim-node">
+                  <rect x="42" y="206" width="236" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.6"/>
+                  <text x="58" y="234" class="svg-sans" font-size="15" font-weight="700">写 Commit WAL 记录</text>
+                  <text x="58" y="256" class="svg-mono" font-size="12.5">XactLogCommitRecord()</text>
+                  <text x="58" y="276" class="svg-sub" font-size="12.5">得到 LSN: XactLastRecEnd</text>
+                </g>
+
+                <!-- Orthogonal split -->
+                <path d="M 278 248 L 316 248 L 316 200 L 354 200" fill="none" stroke="#2F7A66" stroke-width="1.8"/>
+                <polygon points="360,200 350,195 350,205" fill="#2F7A66"/>
+                <path d="M 278 248 L 316 248 L 316 298 L 354 298" fill="none" stroke="#BE653B" stroke-width="1.8"/>
+                <polygon points="360,298 350,293 350,303" fill="#BE653B"/>
+
+                <!-- Upper Branch: Sync -->
+                <g id="s4-sync-1" class="anim-node">
+                  <rect x="360" y="164" width="310" height="72" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                  <text x="378" y="191" class="svg-sans" font-size="14.5" font-weight="700" fill="#2F7A66">同步：XLogFlush() 立即刷 WAL 盘</text>
+                  <text x="378" y="215" class="svg-sub" font-size="13">WAL 已持久化，满足崩溃恢复事实</text>
+                </g>
+                <line x1="670" y1="200" x2="722" y2="200" stroke="#2F7A66" stroke-width="1.8"/>
+                <polygon points="728,200 718,195 718,205" fill="#2F7A66"/>
+                <g id="s4-sync-2" class="anim-node">
+                  <rect x="728" y="164" width="340" height="72" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                  <text x="746" y="191" class="svg-sans" font-size="14.5" font-weight="700" fill="#2F7A66">TransactionIdCommitTree()</text>
+                  <text x="746" y="215" class="svg-sub" font-size="13">将 pg_xact 对应 2 bit 标记为 0x01</text>
+                </g>
+
+                <!-- Lower Branch: Async -->
+                <g id="s4-async-1" class="anim-node">
+                  <rect x="360" y="262" width="310" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                  <text x="378" y="289" class="svg-sans" font-size="14.5" font-weight="700" fill="#BE653B">异步：XLogSetAsyncXactLSN()</text>
+                  <text x="378" y="313" class="svg-sub" font-size="13">不立即 fsync，允许极短丢失窗口</text>
+                </g>
+                <line x1="670" y1="298" x2="722" y2="298" stroke="#BE653B" stroke-width="1.8"/>
+                <polygon points="728,298 718,293 718,303" fill="#BE653B"/>
+                <g id="s4-async-2" class="anim-node">
+                  <rect x="728" y="262" width="340" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                  <text x="746" y="289" class="svg-sans" font-size="14.5" font-weight="700" fill="#BE653B">TransactionIdAsyncCommitTree()</text>
+                  <text x="746" y="313" class="svg-sub" font-size="13">写 0x01 并在页内记 group_lsn 防抢跑</text>
+                </g>
+
+                <!-- Merge to Client/Disk Guard -->
+                <path d="M 1068 200 L 1104 200 L 1104 248 L 1134 248" fill="none" stroke="#245A6B" stroke-width="1.6"/>
+                <path d="M 1068 298 L 1104 298 L 1104 248 L 1134 248" fill="none" stroke="#245A6B" stroke-width="1.6"/>
+                <polygon points="1140,248 1130,243 1130,253" fill="#245A6B"/>
+
+                <g id="s4-end" class="anim-node">
+                  <rect x="1140" y="182" width="214" height="132" fill="#1E4B5A"/>
+                  <text x="1158" y="212" class="svg-white" font-size="15" font-weight="700">底线守卫</text>
+                  <text x="1158" y="238" class="svg-white-mono" font-size="12.5">SLRU 刷脏前检查</text>
+                  <text x="1158" y="260" class="svg-white-mono" font-size="12.5">group_lsn</text>
+                  <text x="1158" y="288" class="svg-white" font-size="12.5">绝不允许状态页</text>
+                  <text x="1158" y="306" class="svg-white" font-size="12.5">早于 WAL 落盘</text>
+                </g>
+
+                <!-- Status readout bar -->
+                <text id="s4-status" x="42" y="358" class="svg-mono" font-size="13" fill="#245A6B">当前模式：同步提交 · 点击「播放动画」或「单步推演」观察写入顺序</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">单个事务的提交顺序清楚了，但如果一个大事务带着跨 CLOG 页的子事务，怎么保证原子性？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 提交路径与 WAL-before-data</span>
+            <span class="page-num">04 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 5 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="4" data-title="子事务原子性：跨页三阶段提交">
+          <div class="slide-eyebrow">
+            <span>05 / 12 · 三、核心原理（3）：子事务与 SUB_COMMITTED</span>
+            <span class="tag-accent">交互步进 · 跨页原子性协议</span>
+          </div>
+          <h1 class="slide-title">跨页子事务如何靠三阶段提交守住原子性？</h1>
+          <p class="slide-lead">
+            当顶层 XID 与子事务落在不同 CLOG 页时，无法一次原子改写两页。<code>TransactionIdSetTreeStatus()</code> 用 <code>0x03 SUB_COMMITTED</code> 搭桥，配合 <code>pg_subtrans</code> 父子映射，杜绝并发读者误判。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">提交阶段:</span>
+                <button class="ctrl-btn active" data-s5-step="0">0 初始运行</button>
+                <button class="ctrl-btn" data-s5-step="1">1 跨页标 SUB_COMMITTED</button>
+                <button class="ctrl-btn" data-s5-step="2">2 顶层原子标 COMMITTED</button>
+                <button class="ctrl-btn" data-s5-step="3">3 回补跨页 COMMITTED</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="ctrl-btn accent-btn" id="s5-play">自动演示</button>
+                <button class="ctrl-btn" id="s5-reset">重置</button>
+              </div>
+            </div>
+            <div class="svg-stage">
+              <svg id="svg-s5" viewBox="0 0 1400 388" xmlns="http://www.w3.org/2000/svg">
+                <!-- Page N -->
+                <rect x="24" y="20" width="580" height="224" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.6"/>
+                <rect x="24" y="20" width="580" height="38" fill="#245A6B"/>
+                <text x="42" y="45" class="svg-white-mono" font-size="14" font-weight="700">CLOG Page N（顶层事务所在页）</text>
+
+                <!-- Top XID -->
+                <rect id="s5-top-box" x="48" y="80" width="248" height="136" fill="#F1EFE9" stroke="#74A5AD" stroke-width="1.6"/>
+                <text x="66" y="108" class="svg-mono" font-size="13">顶层主事务 Top XID</text>
+                <text x="66" y="136" class="svg-mono" font-size="22" font-weight="700" fill="#1B2B33">XID = 32766</text>
+                <text id="s5-top-st" x="66" y="174" class="svg-mono" font-size="15" font-weight="700" fill="#46585F">0x00 IN_PROGRESS</text>
+                <text x="66" y="200" class="svg-sub" font-size="12.5">原子落定锚点</text>
+
+                <!-- Same-page SubXID -->
+                <rect id="s5-same-box" x="328" y="80" width="252" height="136" fill="#F1EFE9" stroke="#74A5AD" stroke-width="1.6"/>
+                <text x="346" y="108" class="svg-mono" font-size="13">同页子事务 SubXID</text>
+                <text x="346" y="136" class="svg-mono" font-size="22" font-weight="700" fill="#1B2B33">XID = 32767</text>
+                <text id="s5-same-st" x="346" y="174" class="svg-mono" font-size="15" font-weight="700" fill="#46585F">0x00 IN_PROGRESS</text>
+                <text x="346" y="200" class="svg-sub" font-size="12.5">随顶层一次锁内同改</text>
+
+                <!-- Orthogonal link between Page N and Page N+1 -->
+                <line x1="604" y1="132" x2="668" y2="132" stroke="#AE8A3E" stroke-width="2" stroke-dasharray="6 4"/>
+                <text x="614" y="120" class="svg-mono" font-size="12" fill="#AE8A3E">跨页</text>
+
+                <!-- Page N+1 -->
+                <rect x="668" y="20" width="708" height="224" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.6"/>
+                <rect x="668" y="20" width="708" height="38" fill="#2E6373"/>
+                <text x="686" y="45" class="svg-white-mono" font-size="14" font-weight="700">CLOG Page N+1（跨页子事务所在页）+ pg_subtrans 映射</text>
+
+                <rect id="s5-cross1-box" x="692" y="80" width="248" height="100" fill="#F1EFE9" stroke="#A4C4C6" stroke-width="1.6"/>
+                <text x="710" y="106" class="svg-mono" font-size="13">跨页子事务 SubXID #1</text>
+                <text x="710" y="134" class="svg-mono" font-size="20" font-weight="700" fill="#1B2B33">XID = 32768</text>
+                <text id="s5-cross1-st" x="710" y="164" class="svg-mono" font-size="14" font-weight="700" fill="#46585F">0x00 IN_PROGRESS</text>
+
+                <rect id="s5-cross2-box" x="964" y="80" width="248" height="100" fill="#F1EFE9" stroke="#A4C4C6" stroke-width="1.6"/>
+                <text x="982" y="106" class="svg-mono" font-size="13">跨页子事务 SubXID #2</text>
+                <text x="982" y="134" class="svg-mono" font-size="20" font-weight="700" fill="#1B2B33">XID = 32769</text>
+                <text id="s5-cross2-st" x="982" y="164" class="svg-mono" font-size="14" font-weight="700" fill="#46585F">0x00 IN_PROGRESS</text>
+
+                <!-- pg_subtrans strip -->
+                <rect x="692" y="194" width="660" height="36" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.2"/>
+                <text x="710" y="217" class="svg-mono" font-size="13" fill="#1E4B5A">PGDATA/pg_subtrans 映射：32768 → 父 32766  |  32769 → 父 32766</text>
+
+                <!-- Right small note -->
+                <rect x="1230" y="80" width="122" height="100" fill="#F6F0E1" stroke="#AE8A3E" stroke-width="1.2"/>
+                <text x="1244" y="108" class="svg-mono" font-size="12" fill="#AE8A3E" font-weight="700">共享内存上限</text>
+                <text x="1244" y="136" class="svg-mono" font-size="22" font-weight="700" fill="#1B2B33">64 个</text>
+                <text x="1244" y="160" class="svg-sub" font-size="12">open subxid</text>
+
+                <!-- Bottom Reader Perspective Panel -->
+                <rect id="s5-reader-bg" x="24" y="266" width="1352" height="102" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text id="s5-phase-title" x="44" y="298" class="svg-title" font-size="18">阶段 0 · 事务运行中，尚未进入提交</text>
+                <text id="s5-phase-desc" x="44" y="328" class="svg-sans" font-size="15">并发读者查询任意 XID（32766～32769）均看到 IN_PROGRESS，全部不可见。</text>
+                <text id="s5-phase-why" x="44" y="354" class="svg-mono" font-size="13" fill="#245A6B">设计目的：绝不能让跨页子事务先于顶层 XID 变成独立 COMMITTED。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">单个事务的跨页提交解决了，但如果几百个短事务在同一毫秒涌向同一页，锁争用怎么办？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 子事务三阶段提交协议</span>
+            <span class="page-num">05 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 6 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="5" data-title="高并发提交：Group Update 批量写状态">
+          <div class="slide-eyebrow">
+            <span>06 / 12 · 三、核心原理（4）：高并发锁优化</span>
+            <span class="tag-accent">交互动画 · SLRU Bank Lock 批处理</span>
+          </div>
+          <h1 class="slide-title">高并发提交争锁：Group Update 如何合并写入？</h1>
+          <p class="slide-lead">
+            当多个短事务同时更新同一 CLOG 页且没能立即拿到 SLRU Bank Lock 时，<code>TransactionIdSetPageStatus()</code> 会让它们排队，由 <strong>Leader 一次持锁批量改 bit</strong>，减少锁来回交接。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">对比模式:</span>
+                <button class="ctrl-btn active" id="s6-mode-group">Group Update 批处理</button>
+                <button class="ctrl-btn" id="s6-mode-serial">传统逐个争锁</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="ctrl-btn accent-btn" id="s6-play">播放演示</button>
+                <button class="ctrl-btn" id="s6-reset">重置</button>
+              </div>
+            </div>
+            <div class="svg-stage">
+              <svg id="svg-s6" viewBox="0 0 1400 388" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 4 Concurrent Backends -->
+                <text x="24" y="24" class="svg-mono" font-size="13" font-weight="700">1. 并发提交进程（同 CLOG 页）</text>
+
+                <g id="s6-b1" class="anim-node">
+                  <rect x="24" y="38" width="300" height="62" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.6"/>
+                  <text x="42" y="64" class="svg-sans" font-size="15" font-weight="700">Backend 1 · XID 5001</text>
+                  <text id="s6-b1-st" x="42" y="86" class="svg-mono" font-size="12.5">待提交 · 尝试获取 Bank Lock</text>
+                </g>
+                <g id="s6-b2" class="anim-node">
+                  <rect x="24" y="114" width="300" height="62" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.4"/>
+                  <text x="42" y="140" class="svg-sans" font-size="15" font-weight="700">Backend 2 · XID 5002</text>
+                  <text id="s6-b2-st" x="42" y="162" class="svg-mono" font-size="12.5">待提交 · 子事务数 = 0 (≤5)</text>
+                </g>
+                <g id="s6-b3" class="anim-node">
+                  <rect x="24" y="190" width="300" height="62" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.4"/>
+                  <text x="42" y="216" class="svg-sans" font-size="15" font-weight="700">Backend 3 · XID 5003</text>
+                  <text id="s6-b3-st" x="42" y="238" class="svg-mono" font-size="12.5">待提交 · 子事务数 = 2 (≤5)</text>
+                </g>
+                <g id="s6-b4" class="anim-node">
+                  <rect x="24" y="266" width="300" height="62" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.4"/>
+                  <text x="42" y="292" class="svg-sans" font-size="15" font-weight="700">Backend 4 · XID 5004</text>
+                  <text id="s6-b4-st" x="42" y="314" class="svg-mono" font-size="12.5">待提交 · 子事务数 = 0 (≤5)</text>
+                </g>
+
+                <!-- Orthogonal connectors left -> middle -->
+                <path d="M 324 69 L 368 69 L 368 182 L 404 182" fill="none" stroke="#245A6B" stroke-width="1.5"/>
+                <path d="M 324 145 L 368 145" fill="none" stroke="#74A5AD" stroke-width="1.5"/>
+                <path d="M 324 221 L 368 221" fill="none" stroke="#74A5AD" stroke-width="1.5"/>
+                <path d="M 324 297 L 368 297 L 368 182" fill="none" stroke="#74A5AD" stroke-width="1.5"/>
+                <polygon points="410,182 400,177 400,187" fill="#245A6B"/>
+
+                <!-- Middle: SLRU Bank Lock & Queue -->
+                <text x="412" y="24" class="svg-mono" font-size="13" font-weight="700">2. SLRU Bank Lock 与等待队列</text>
+                <rect x="412" y="38" width="440" height="290" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.6"/>
+
+                <rect id="s6-lock-box" x="434" y="58" width="396" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.6"/>
+                <text x="452" y="84" class="svg-sans" font-size="15" font-weight="700" fill="#BE653B">SLRU Bank Lock（等待事件：XactSLRU / XactGroupUpdate）</text>
+                <text id="s6-lock-owner" x="452" y="108" class="svg-mono" font-size="13" fill="#1B2B33">当前持锁：空闲 · 锁交接计数：0 次</text>
+
+                <rect x="434" y="142" width="396" height="168" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="452" y="168" class="svg-mono" font-size="13" font-weight="700">触发 Group Update 的 4 项源码条件</text>
+                <text x="452" y="196" class="svg-sub" font-size="13.5">① 所有待更新 XID 位于同一个 CLOG Page</text>
+                <text x="452" y="222" class="svg-sub" font-size="13.5">② 当前事务 xid/subxids 与 MyProc 缓存一致</text>
+                <text x="452" y="248" class="svg-sub" font-size="13.5">③ 子事务数 ≤ THRESHOLD_SUBTRANS_CLOG_OPT (5)</text>
+                <text x="452" y="274" class="svg-sub" font-size="13.5">④ 没能立即拿到对应 SLRU Bank Lock</text>
+                <text x="452" y="298" class="svg-mono" font-size="12" fill="#2F7A66">满足即入队，由 Leader 批量调 SetPageStatusInternal</text>
+
+                <!-- Connector middle -> right -->
+                <line x1="852" y1="182" x2="906" y2="182" stroke="#2F7A66" stroke-width="1.8"/>
+                <polygon points="912,182 902,177 902,187" fill="#2F7A66"/>
+
+                <!-- Right: Target CLOG Page -->
+                <text x="914" y="24" class="svg-mono" font-size="13" font-weight="700">3. 目标 CLOG Page（批量改位）</text>
+                <rect x="914" y="38" width="462" height="290" fill="#EBF1EE" stroke="#2E6373" stroke-width="1.6"/>
+                <rect x="914" y="38" width="462" height="38" fill="#2E6373"/>
+                <text x="932" y="62" class="svg-white-mono" font-size="13.5" font-weight="700">SLRU Page Slot · Byte 1250（含 5001–5004）</text>
+
+                <rect id="s6-p1" x="936" y="96" width="200" height="84" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.5"/>
+                <text x="954" y="124" class="svg-mono" font-size="14" font-weight="700">XID 5001</text>
+                <text id="s6-p1-v" x="954" y="156" class="svg-mono" font-size="14" fill="#46585F">0x00 IN_PROGRESS</text>
+
+                <rect id="s6-p2" x="1154" y="96" width="200" height="84" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.5"/>
+                <text x="1172" y="124" class="svg-mono" font-size="14" font-weight="700">XID 5002</text>
+                <text id="s6-p2-v" x="1172" y="156" class="svg-mono" font-size="14" fill="#46585F">0x00 IN_PROGRESS</text>
+
+                <rect id="s6-p3" x="936" y="198" width="200" height="84" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.5"/>
+                <text x="954" y="226" class="svg-mono" font-size="14" font-weight="700">XID 5003</text>
+                <text id="s6-p3-v" x="954" y="258" class="svg-mono" font-size="14" fill="#46585F">0x00 IN_PROGRESS</text>
+
+                <rect id="s6-p4" x="1154" y="198" width="200" height="84" fill="#FFFFFF" stroke="#74A5AD" stroke-width="1.5"/>
+                <text x="1172" y="226" class="svg-mono" font-size="14" font-weight="700">XID 5004</text>
+                <text id="s6-p4-v" x="1172" y="258" class="svg-mono" font-size="14" fill="#46585F">0x00 IN_PROGRESS</text>
+
+                <text x="936" y="310" class="svg-sub" font-size="13">运维解读：看到 XactSLRU/GroupUpdate 不一定磁盘慢，常是同页锁争用</text>
+
+                <!-- Bottom status bar -->
+                <rect x="24" y="340" width="1352" height="34" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text id="s6-status" x="42" y="362" class="svg-mono" font-size="13" fill="#245A6B">当前模式：Group Update · 点击「播放演示」观察 1 次持锁批量更新 vs 4 次串行争锁</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">写入端已高效落定，那当查询真正扫到一条 Tuple 时，为什么不能一上来就直接查 pg_xact？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · Group Update 高并发批处理</span>
+            <span class="page-num">06 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 7 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="6" data-title="读取路径：Hint Bit、ProcArray 与 pg_xact 顺序">
+          <div class="slide-eyebrow">
+            <span>07 / 12 · 三、核心原理（5）：可见性判断顺序（heapam_visibility.c）</span>
+            <span class="tag-accent">交互推演 · 顺序铁律防提前可见</span>
+          </div>
+          <h1 class="slide-title">pg_xact 是兜底，查它之前必须先过 ProcArray</h1>
+          <p class="slide-lead">
+            提交瞬间存在极短窗口：<code>pg_xact</code> 已标 <code>COMMITTED</code>，但进程尚未从 ProcArray 清除 XID。若跳过运行态检查直接查 <code>pg_xact</code>，会把正在提交的事务提前看成已提交。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">演练场景:</span>
+                <button class="ctrl-btn active" data-s7-sc="0">场景 1 · Hint Bit 命中</button>
+                <button class="ctrl-btn" data-s7-sc="1">场景 2 · 正在提交窗口期</button>
+                <button class="ctrl-btn" data-s7-sc="2">场景 3 · 兜底查 pg_xact 并回写</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="ctrl-btn accent-btn" id="s7-play">播放推演</button>
+                <button class="ctrl-btn" id="s7-reset">重置</button>
+              </div>
+            </div>
+            <div class="svg-stage">
+              <svg id="svg-s7" viewBox="0 0 1400 388" xmlns="http://www.w3.org/2000/svg">
+                <!-- 4-stage pipeline -->
+                <g id="s7-st1" class="anim-node">
+                  <rect x="24" y="28" width="286" height="156" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.6"/>
+                  <rect x="24" y="28" width="286" height="34" fill="#245A6B"/>
+                  <text x="40" y="50" class="svg-white-mono" font-size="13" font-weight="700">1. Tuple Hint Bit</text>
+                  <text x="40" y="88" class="svg-sans" font-size="14.5" font-weight="700">检查行头标志位</text>
+                  <text x="40" y="112" class="svg-mono" font-size="12.5">HEAP_XMIN_COMMITTED</text>
+                  <text x="40" y="132" class="svg-mono" font-size="12.5">HEAP_XMIN_INVALID</text>
+                  <text x="40" y="166" class="svg-sub" font-size="13">命中即直接结论，零 SLRU 访问</text>
+                </g>
+
+                <line x1="310" y1="106" x2="362" y2="106" stroke="#245A6B" stroke-width="1.8"/>
+                <polygon points="368,106 358,101 358,111" fill="#245A6B"/>
+                <text x="316" y="96" class="svg-mono" font-size="11.5">未置位</text>
+
+                <g id="s7-st2" class="anim-node">
+                  <rect x="368" y="28" width="300" height="156" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.6"/>
+                  <rect x="368" y="28" width="300" height="34" fill="#BE653B"/>
+                  <text x="384" y="50" class="svg-white-mono" font-size="13" font-weight="700">2. ProcArray / 快照（必先！）</text>
+                  <text x="384" y="88" class="svg-sans" font-size="14.5" font-weight="700">先确认不在运行集合中</text>
+                  <text x="384" y="112" class="svg-mono" font-size="12.5">TransactionIdIsInProgress()</text>
+                  <text x="384" y="132" class="svg-mono" font-size="12.5">XidInMVCCSnapshot()</text>
+                  <text x="384" y="166" class="svg-sub" font-size="13" fill="#BE653B">仍在运行 → 判未提交，阻断误读</text>
+                </g>
+
+                <line x1="668" y1="106" x2="720" y2="106" stroke="#245A6B" stroke-width="1.8"/>
+                <polygon points="726,106 716,101 716,111" fill="#245A6B"/>
+                <text x="672" y="96" class="svg-mono" font-size="11.5">未运行</text>
+
+                <g id="s7-st3" class="anim-node">
+                  <rect x="726" y="28" width="308" height="156" fill="#FFFFFF" stroke="#2E6373" stroke-width="1.6"/>
+                  <rect x="726" y="28" width="308" height="34" fill="#2E6373"/>
+                  <text x="742" y="50" class="svg-white-mono" font-size="13" font-weight="700">3. 兜底查 pg_xact</text>
+                  <text x="742" y="88" class="svg-sans" font-size="14.5" font-weight="700">经单项缓存查 SLRU</text>
+                  <text x="742" y="112" class="svg-mono" font-size="12.5">TransactionIdDidCommit()</text>
+                  <text x="742" y="132" class="svg-mono" font-size="12.5">→ TransactionLogFetch()</text>
+                  <text x="742" y="166" class="svg-sub" font-size="13">→ TransactionIdGetStatus()</text>
+                </g>
+
+                <line x1="1034" y1="106" x2="1086" y2="106" stroke="#2F7A66" stroke-width="1.8"/>
+                <polygon points="1092,106 1082,101 1082,111" fill="#2F7A66"/>
+                <text x="1040" y="96" class="svg-mono" font-size="11.5" fill="#2F7A66">已定论</text>
+
+                <g id="s7-st4" class="anim-node">
+                  <rect x="1092" y="28" width="284" height="156" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.6"/>
+                  <rect x="1092" y="28" width="284" height="34" fill="#2F7A66"/>
+                  <text x="1108" y="50" class="svg-white-mono" font-size="13" font-weight="700">4. 回写 Hint Bit</text>
+                  <text x="1108" y="88" class="svg-sans" font-size="14.5" font-weight="700">加速后续所有扫描</text>
+                  <text x="1108" y="116" class="svg-sub" font-size="13">安全时回写行头标志位</text>
+                  <text x="1108" y="142" class="svg-sub" font-size="13" fill="#BE653B">副作用：纯 SELECT 首次读</text>
+                  <text x="1108" y="164" class="svg-sub" font-size="13" fill="#BE653B">老页也会把数据页标脏！</text>
+                </g>
+
+                <!-- Bottom Scenario Explanation -->
+                <rect id="s7-desc-box" x="24" y="216" width="1352" height="152" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text id="s7-desc-title" x="44" y="250" class="svg-title" font-size="19">场景 1 · Hint Bit 命中（最常见的极速路径）</text>
+                <text id="s7-desc-l1" x="44" y="284" class="svg-sans" font-size="15.5">路径：直接检查 Tuple Header，发现 HEAP_XMIN_COMMITTED 已置位，立刻返回可见结论。</text>
+                <text id="s7-desc-l2" x="44" y="314" class="svg-sub" font-size="14.5">实证意义：完全跳过 ProcArray 与 pg_xact SLRU 查询，这是 OLTP 大规模扫描依然轻量的关键缓存。</text>
+                <text id="s7-desc-l3" x="44" y="346" class="svg-mono" font-size="13" fill="#245A6B">代码位置：src/backend/access/heap/heapam_visibility.c</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">新事务不断分配 XID，pg_xact 会无限膨胀吗？系统怎么证明一段旧状态已经可以安全删除？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 可见性查询顺序约束</span>
+            <span class="page-num">07 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 8 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="7" data-title="截断闭环：VACUUM 冻结与安全删除边界">
+          <div class="slide-eyebrow">
+            <span>08 / 12 · 三、核心原理（6）：VACUUM 冻结与截断路径</span>
+            <span class="tag-accent">交互模拟 · 冻结边界与四步截断</span>
+          </div>
+          <h1 class="slide-title">VACUUM 冻结推进后，pg_xact 才能按段安全截断</h1>
+          <p class="slide-lead">
+            <code>vac_truncate_clog()</code> 扫描 <code>pg_database</code> 计算全集群最老 <code>datfrozenxid</code>，再由 <code>TruncateCLOG()</code> 严格按「推边界 → 刷 WAL → 删旧段」执行。任何长事务或复制槽卡住冻结，目录就无法收缩。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">运行态势:</span>
+                <button class="ctrl-btn active" id="s8-mode-ok">无阻塞 · 正常冻结截断</button>
+                <button class="ctrl-btn" id="s8-mode-block">存在阻塞 · 长事务 / 复制槽卡住</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="ctrl-btn accent-btn" id="s8-advance">推进冻结周期</button>
+                <button class="ctrl-btn" id="s8-reset">重置</button>
+              </div>
+            </div>
+            <div class="svg-stage">
+              <svg id="svg-s8" viewBox="0 0 1400 388" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top: Segment Timeline -->
+                <rect x="24" y="16" width="1352" height="168" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="42" y="40" class="svg-mono" font-size="13" font-weight="700">PGDATA/pg_xact 段文件生命周期（每段 32 页 · 256KB · 约 100 万事务）</text>
+
+                <!-- 6 segments -->
+                <g id="s8-seg-0">
+                  <rect x="42" y="58" width="196" height="66" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                  <text x="60" y="84" class="svg-mono" font-size="15" font-weight="700" fill="#2F7A66">段 0000</text>
+                  <text id="s8-seg-0-t" x="60" y="108" class="svg-sub" font-size="13">已冻结 · 可截断</text>
+                </g>
+                <g id="s8-seg-1">
+                  <rect x="256" y="58" width="196" height="66" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="274" y="84" class="svg-mono" font-size="15" font-weight="700">段 0001</text>
+                  <text id="s8-seg-1-t" x="274" y="108" class="svg-sub" font-size="13">保留 · 含活跃引用</text>
+                </g>
+                <g id="s8-seg-2">
+                  <rect x="470" y="58" width="196" height="66" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                  <text x="488" y="84" class="svg-mono" font-size="15" font-weight="700">段 0002</text>
+                  <text id="s8-seg-2-t" x="488" y="108" class="svg-sub" font-size="13">保留 · 含活跃引用</text>
+                </g>
+                <g id="s8-seg-3">
+                  <rect x="684" y="58" width="196" height="66" fill="#CFE0DC" stroke="#2E6373" stroke-width="1.5"/>
+                  <text x="702" y="84" class="svg-mono" font-size="15" font-weight="700">段 0003</text>
+                  <text id="s8-seg-3-t" x="702" y="108" class="svg-sub" font-size="13">保留 · 近期提交</text>
+                </g>
+                <g id="s8-seg-4">
+                  <rect x="898" y="58" width="196" height="66" fill="#CFE0DC" stroke="#2E6373" stroke-width="1.5"/>
+                  <text x="916" y="84" class="svg-mono" font-size="15" font-weight="700">段 0004</text>
+                  <text id="s8-seg-4-t" x="916" y="108" class="svg-sub" font-size="13">保留 · 近期提交</text>
+                </g>
+                <g id="s8-seg-5">
+                  <rect x="1112" y="58" width="240" height="66" fill="#2E6373" stroke="#1E4B5A" stroke-width="1.5"/>
+                  <text x="1130" y="84" class="svg-white-mono" font-size="15" font-weight="700">段 0005 (活跃写入)</text>
+                  <text x="1130" y="108" class="svg-white-mono" font-size="12.5">当前最新 XID 分配中</text>
+                </g>
+
+                <!-- Dynamic frozen boundary pointer -->
+                <g id="s8-pointer" transform="translate(247, 0)">
+                  <line x1="0" y1="50" x2="0" y2="146" stroke="#BE653B" stroke-width="2.5"/>
+                  <polygon points="0,132 -6,144 6,144" fill="#BE653B"/>
+                  <rect x="-112" y="144" width="224" height="28" fill="#BE653B"/>
+                  <text id="s8-ptr-label" x="0" y="163" text-anchor="middle" class="svg-white-mono" font-size="12.5" font-weight="700">min(datfrozenxid) 边界</text>
+                </g>
+
+                <!-- Bottom Left: TruncateCLOG 4 safe steps -->
+                <rect x="24" y="202" width="800" height="168" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="42" y="228" class="svg-title" font-size="16">TruncateCLOG() 安全截断四步铁律（clog.c）</text>
+
+                <rect x="42" y="244" width="174" height="86" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="54" y="268" class="svg-mono" font-size="12.5" font-weight="700">STEP 1</text>
+                <text x="54" y="292" class="svg-sans" font-size="13.5" font-weight="700">算 cutoff page</text>
+                <text x="54" y="314" class="svg-sub" font-size="12">确认目录有可删段</text>
+
+                <line x1="216" y1="287" x2="236" y2="287" stroke="#245A6B" stroke-width="1.5"/>
+                <polygon points="242,287 234,283 234,291" fill="#245A6B"/>
+
+                <rect x="242" y="244" width="174" height="86" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="254" y="268" class="svg-mono" font-size="12.5" font-weight="700">STEP 2</text>
+                <text x="254" y="292" class="svg-sans" font-size="13.5" font-weight="700">推 oldestClogXid</text>
+                <text x="254" y="314" class="svg-sub" font-size="12">阻断并发查已截断区</text>
+
+                <line x1="416" y1="287" x2="436" y2="287" stroke="#245A6B" stroke-width="1.5"/>
+                <polygon points="442,287 434,283 434,291" fill="#245A6B"/>
+
+                <rect x="442" y="244" width="174" height="86" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="454" y="268" class="svg-mono" font-size="12.5" font-weight="700">STEP 3</text>
+                <text x="454" y="292" class="svg-sans" font-size="13.5" font-weight="700">刷 TRUNCATE WAL</text>
+                <text x="454" y="314" class="svg-sub" font-size="12">写并 flush 截断日志</text>
+
+                <line x1="616" y1="287" x2="636" y2="287" stroke="#2F7A66" stroke-width="1.5"/>
+                <polygon points="642,287 634,283 634,291" fill="#2F7A66"/>
+
+                <rect x="642" y="244" width="164" height="86" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="654" y="268" class="svg-mono" font-size="12.5" font-weight="700" fill="#2F7A66">STEP 4</text>
+                <text x="654" y="292" class="svg-sans" font-size="13.5" font-weight="700" fill="#2F7A66">删除旧段文件</text>
+                <text x="654" y="314" class="svg-sub" font-size="12">SimpleLruTruncate</text>
+
+                <text id="s8-status" x="42" y="356" class="svg-mono" font-size="12.5" fill="#245A6B">当前状态：段 0000 已达冻结边界，点击「推进冻结周期」演示安全回收</text>
+
+                <!-- Bottom Right: Blockers & Hard Warning -->
+                <rect x="848" y="202" width="528" height="168" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.6"/>
+                <text x="868" y="230" class="svg-title" font-size="16" fill="#BE653B">为什么 pg_xact 缩不回去？三大阻塞钉子</text>
+                <text x="868" y="260" class="svg-sans" font-size="14">• 长事务 / 空闲事务（pg_stat_activity.backend_xmin）</text>
+                <text x="868" y="286" class="svg-sans" font-size="14">• 未结束的两阶段事务（pg_prepared_xacts）</text>
+                <text x="868" y="312" class="svg-sans" font-size="14">• 滞后的复制槽（pg_replication_slots.xmin / catalog_xmin）</text>
+                <rect x="868" y="328" width="488" height="28" fill="#BE653B"/>
+                <text x="882" y="347" class="svg-white" font-size="13" font-weight="700">红线：严禁手工 rm pg_xact 文件——绕过 WAL 与边界直接破坏可见性！</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">整个生命周期已打通，把 pg_xact 放回 PostgreSQL 事务家族中横向对比，它和 WAL、Hint Bit 各自守哪条边界？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · VACUUM 冻结与截断边界</span>
+            <span class="page-num">08 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 9 ==================== -->
+        <section class="slide" data-slide="8" data-title="横向对比：五大事务相关结构分工矩阵">
+          <div class="slide-eyebrow">
+            <span>09 / 12 · 四、横向对比</span>
+            <span class="tag-accent">全景分工 · 五角协同不越界</span>
+          </div>
+          <h1 class="slide-title">各司其职：账本、状态索引、本地缓存与父子表</h1>
+          <p class="slide-lead">
+            一句话看清五者分工：<strong>WAL 是恢复账本</strong>，<code>pg_xact</code> <strong>是状态索引</strong>，<strong>Hint Bit 是行级缓存</strong>，<code>pg_subtrans</code> <strong>是父子映射</strong>，<code>pg_commit_ts</code> <strong>是提交时间记录</strong>。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-stage">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Header Row -->
+                <rect x="24" y="20" width="1352" height="44" fill="#1E4B5A"/>
+                <text x="42" y="47" class="svg-white" font-size="14" font-weight="700">机制 / 目录</text>
+                <text x="234" y="47" class="svg-white" font-size="14" font-weight="700">核心目标</text>
+                <text x="486" y="47" class="svg-white" font-size="14" font-weight="700">数据粒度与存储位置</text>
+                <text x="774" y="47" class="svg-white" font-size="14" font-weight="700">崩溃恢复角色</text>
+                <text x="1056" y="47" class="svg-white" font-size="14" font-weight="700">边界 / 不能做什么</text>
+
+                <!-- Row 1: pg_xact -->
+                <rect x="24" y="64" width="1352" height="68" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.4"/>
+                <text x="42" y="94" class="svg-mono" font-size="15" font-weight="700" fill="#1E4B5A">pg_xact / CLOG</text>
+                <text x="42" y="116" class="svg-sub" font-size="12.5">状态索引（主角）</text>
+                <text x="234" y="102" class="svg-sans" font-size="14">快速回答 XID 提交或中止</text>
+                <text x="486" y="94" class="svg-sans" font-size="14">每普通 XID 2 bit</text>
+                <text x="486" y="116" class="svg-mono" font-size="12.5">PGDATA/pg_xact</text>
+                <text x="774" y="102" class="svg-sans" font-size="14">由 WAL 重建近期状态变化</text>
+                <text x="1056" y="102" class="svg-sans" font-size="14" fill="#BE653B">不能替代 WAL；严禁手工乱删</text>
+
+                <!-- Row 2: WAL -->
+                <rect x="24" y="132" width="1352" height="68" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="162" class="svg-mono" font-size="15" font-weight="700">WAL commit</text>
+                <text x="42" y="184" class="svg-sub" font-size="12.5">恢复账本</text>
+                <text x="234" y="170" class="svg-sans" font-size="14">崩溃恢复与物理复制真相日志</text>
+                <text x="486" y="162" class="svg-sans" font-size="14">每个事务结束记录</text>
+                <text x="486" y="184" class="svg-mono" font-size="12.5">PGDATA/pg_wal</text>
+                <text x="774" y="170" class="svg-sans" font-size="14" font-weight="700" fill="#2F7A66">主要事实来源（权威）</text>
+                <text x="1056" y="170" class="svg-sub" font-size="14">不适合每次可见性判断检索</text>
+
+                <!-- Row 3: Hint Bit -->
+                <rect x="24" y="200" width="1352" height="68" fill="#FAF9F6" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="230" class="svg-mono" font-size="15" font-weight="700">Heap Hint Bit</text>
+                <text x="42" y="252" class="svg-sub" font-size="12.5">行级本地缓存</text>
+                <text x="234" y="238" class="svg-sans" font-size="14">缓存单行关联事务的已定结论</text>
+                <text x="486" y="230" class="svg-sans" font-size="14">每条 Tuple Header 若干 bit</text>
+                <text x="486" y="252" class="svg-mono" font-size="12.5">Heap 数据页内</text>
+                <text x="774" y="238" class="svg-sub" font-size="14">可丢失或重设（纯缓存）</text>
+                <text x="1056" y="238" class="svg-sub" font-size="14">无法覆盖所有态；首次回写会标脏页</text>
+
+                <!-- Row 4: pg_subtrans -->
+                <rect x="24" y="268" width="1352" height="68" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="298" class="svg-mono" font-size="15" font-weight="700">pg_subtrans</text>
+                <text x="42" y="320" class="svg-sub" font-size="12.5">父子映射表</text>
+                <text x="234" y="306" class="svg-sans" font-size="14">子事务递归定位顶层父事务</text>
+                <text x="486" y="298" class="svg-sans" font-size="14">每个 subxid 的 parent xid</text>
+                <text x="486" y="320" class="svg-mono" font-size="12.5">PGDATA/pg_subtrans</text>
+                <text x="774" y="306" class="svg-sub" font-size="14">配合 WAL 与启动过程恢复</text>
+                <text x="1056" y="306" class="svg-sub" font-size="14">不能直接表示顶层提交状态</text>
+
+                <!-- Row 5: pg_commit_ts -->
+                <rect x="24" y="336" width="1352" height="68" fill="#FAF9F6" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="366" class="svg-mono" font-size="15" font-weight="700">pg_commit_ts</text>
+                <text x="42" y="388" class="svg-sub" font-size="12.5">提交时间戳</text>
+                <text x="234" y="374" class="svg-sans" font-size="14">查询事务提交时间与复制源</text>
+                <text x="486" y="366" class="svg-sans" font-size="14">每个事务时间戳 + origin</text>
+                <text x="486" y="388" class="svg-mono" font-size="12.5">PGDATA/pg_commit_ts</text>
+                <text x="774" y="374" class="svg-sub" font-size="14">由 commit record 数据恢复</text>
+                <text x="1056" y="374" class="svg-sub" font-size="14">开启后空间大增，无法查所有旧事务</text>
+
+                <!-- Vertical grid dividers -->
+                <line x1="216" y1="20" x2="216" y2="404" stroke="#D9D5CB" stroke-width="1"/>
+                <line x1="468" y1="20" x2="468" y2="404" stroke="#D9D5CB" stroke-width="1"/>
+                <line x1="756" y1="20" x2="756" y2="404" stroke="#D9D5CB" stroke-width="1"/>
+                <line x1="1038" y1="20" x2="1038" y2="404" stroke="#D9D5CB" stroke-width="1"/>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">分工明确的设计绝非没有成本——这套 2 bit 架构在生产中究竟带来了哪些收益，又埋下了哪些隐性代价？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 五大事务相关结构对比</span>
+            <span class="page-num">09 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-slide="9" data-title="效果评估：收益与工程代价权衡">
+          <div class="slide-eyebrow">
+            <span>10 / 12 · 五、效果如何</span>
+            <span class="tag-accent">工程权衡 · 收益与代价对照</span>
+          </div>
+          <h1 class="slide-title">2 bit 设计的工程权衡：省下了什么，付出了什么？</h1>
+          <p class="slide-lead">
+            每项工程设计都是交换：PostgreSQL 用极小的 2 bit 空间换来了轻量的 OLTP 读写路径，但把代价转移到了 SLRU 竞争、异步提交 LSN 防护、冻结保留边界与子事务溢出管理上。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-stage">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Column: Gains -->
+                <rect x="24" y="20" width="662" height="390" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.6"/>
+                <rect x="24" y="20" width="662" height="44" fill="#2F7A66"/>
+                <text x="44" y="48" class="svg-white" font-size="17" font-weight="700">核心收益 · 为什么这套设计经受住 30 年 OLTP 考验</text>
+
+                <rect x="44" y="80" width="622" height="70" fill="#E6F2EE" stroke="#A4C4C6" stroke-width="1.2"/>
+                <text x="62" y="106" class="svg-sans" font-size="15.5" font-weight="700" fill="#2F7A66">01 · 空间极省（2 bit / XID）</text>
+                <text x="62" y="132" class="svg-sub" font-size="14">单段 256KB 覆盖约 100 万事务；2 亿 XID ≈ 50MB，20 亿 ≈ 半 GB</text>
+
+                <rect x="44" y="162" width="622" height="70" fill="#FAF9F6" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="62" y="188" class="svg-sans" font-size="15.5" font-weight="700" fill="#2F7A66">02 · 可见性查询极快</text>
+                <text x="62" y="214" class="svg-sub" font-size="14">纯算术定位页/字节/位，叠加单项缓存与 Hint Bit 避免反复 SLRU I/O</text>
+
+                <rect x="44" y="244" width="622" height="70" fill="#E6F2EE" stroke="#A4C4C6" stroke-width="1.2"/>
+                <text x="62" y="270" class="svg-sans" font-size="15.5" font-weight="700" fill="#2F7A66">03 · 崩溃恢复语义清晰</text>
+                <text x="62" y="296" class="svg-sub" font-size="14">提交真相在 WAL；页初始化与截断有专有 WAL，状态位由 Redo 重放</text>
+
+                <rect x="44" y="326" width="622" height="70" fill="#FAF9F6" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="62" y="352" class="svg-sans" font-size="15.5" font-weight="700" fill="#2F7A66">04 · 高并发提交支持批处理</text>
+                <text x="62" y="378" class="svg-sub" font-size="14">Group Update 合并同页状态更新，显著降低 SLRU Bank Lock 交接开销</text>
+
+                <!-- Center divider line -->
+                <line x1="700" y1="20" x2="700" y2="410" stroke="#D9D5CB" stroke-width="1.5" stroke-dasharray="6 4"/>
+
+                <!-- Right Column: Costs -->
+                <rect x="714" y="20" width="662" height="390" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.6"/>
+                <rect x="714" y="20" width="662" height="44" fill="#BE653B"/>
+                <text x="734" y="48" class="svg-white" font-size="17" font-weight="700">隐性代价 · 生产上真正会咬人的四个边界</text>
+
+                <rect x="734" y="80" width="622" height="70" fill="#F7E9DE" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="752" y="106" class="svg-sans" font-size="15.5" font-weight="700" fill="#BE653B">01 · 引入 SLRU 竞争与磁盘 I/O</text>
+                <text x="752" y="132" class="svg-sub" font-size="14">大量旧行 Hint Bit 未置位时，transaction SLRU 读与锁等待飙升</text>
+
+                <rect x="734" y="162" width="622" height="70" fill="#FAF9F6" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="752" y="188" class="svg-sans" font-size="15.5" font-weight="700" fill="#BE653B">02 · 异步提交需额外 LSN 防护</text>
+                <text x="752" y="214" class="svg-sub" font-size="14">synchronous_commit=off 需维护页级 group_lsn，且有断电丢事务窗口</text>
+
+                <rect x="734" y="244" width="622" height="70" fill="#F7E9DE" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="752" y="270" class="svg-sans" font-size="15.5" font-weight="700" fill="#BE653B">03 · 长事务扩大状态保留边界</text>
+                <text x="752" y="296" class="svg-sub" font-size="14">datfrozenxid 停滞导致旧段无法截断；手工删除文件会直接毁坏可见性</text>
+
+                <rect x="734" y="326" width="622" height="70" fill="#FAF9F6" stroke="#D9D5CB" stroke-width="1.2"/>
+                <text x="752" y="352" class="svg-sans" font-size="15.5" font-weight="700" fill="#BE653B">04 · 子事务过多导致性能断崖</text>
+                <text x="752" y="378" class="svg-sub" font-size="14">每会话共享内存仅缓存 64 个 open subxid；超过 5 个退出 Group Update</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">看清了收益与代价，回到 DBA 终端前——面对异常，我们该按哪四步 SQL 拿到一手实证？</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 工程收益与代价分析</span>
+            <span class="page-num">10 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="10" data-title="实操诊断：四步观测与阻塞排查手册">
+          <div class="slide-eyebrow">
+            <span>11 / 12 · 六、实操 DEMO</span>
+            <span class="tag-accent">诊断流水线 · 只读实证不乱删</span>
+          </div>
+          <h1 class="slide-title">四步排障手册：从断线确认到定位冻结阻塞源</h1>
+          <p class="slide-lead">
+            排查 <code>pg_xact</code> 相关问题遵循固定因果链：先查单事务状态与 <code>transaction</code> SLRU 统计，再只读观测目录规模，最后顺着 <code>age(datfrozenxid)</code> 揪出真正拖住截断的元凶。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-stage">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Step 1 -->
+                <rect x="24" y="24" width="312" height="382" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.6"/>
+                <rect x="24" y="24" width="312" height="44" fill="#245A6B"/>
+                <text x="42" y="52" class="svg-white-mono" font-size="14.5" font-weight="700">STEP 01 · 事务状态确认</text>
+
+                <rect x="40" y="84" width="280" height="106" fill="#1B2B33"/>
+                <text x="52" y="108" class="svg-white-mono" font-size="12">BEGIN;</text>
+                <text x="52" y="128" class="svg-white-mono" font-size="12">SELECT pg_current_xact_id();</text>
+                <text x="52" y="148" class="svg-white-mono" font-size="12">COMMIT;</text>
+                <text x="52" y="172" class="svg-white-mono" font-size="12" fill="#A4C4C6">SELECT pg_xact_status(xid8);</text>
+
+                <text x="42" y="218" class="svg-sans" font-size="14" font-weight="700">返回值边界解读</text>
+                <text x="42" y="246" class="svg-sub" font-size="13.5">• committed / aborted</text>
+                <text x="42" y="270" class="svg-sub" font-size="13.5">• in progress（仍在运行）</text>
+                <text x="42" y="294" class="svg-sub" font-size="13.5" fill="#BE653B">• NULL：过老已截断，属正常</text>
+                <text x="42" y="340" class="svg-muted" font-size="12.5">提示：不可将其当永久审计库，</text>
+                <text x="42" y="360" class="svg-muted" font-size="12.5">业务断线需靠幂等键兜底。</text>
+
+                <line x1="336" y1="215" x2="366" y2="215" stroke="#245A6B" stroke-width="1.8"/>
+                <polygon points="372,215 362,210 362,220" fill="#245A6B"/>
+
+                <!-- Step 2 -->
+                <rect x="372" y="24" width="312" height="382" fill="#FFFFFF" stroke="#2E6373" stroke-width="1.6"/>
+                <rect x="372" y="24" width="312" height="44" fill="#2E6373"/>
+                <text x="390" y="52" class="svg-white-mono" font-size="14.5" font-weight="700">STEP 02 · SLRU 缓存画像</text>
+
+                <rect x="388" y="84" width="280" height="106" fill="#1B2B33"/>
+                <text x="400" y="114" class="svg-white-mono" font-size="12">SELECT *</text>
+                <text x="400" y="136" class="svg-white-mono" font-size="12">FROM pg_stat_slru</text>
+                <text x="400" y="158" class="svg-white-mono" font-size="12" fill="#A4C4C6">WHERE name = 'transaction';</text>
+
+                <text x="390" y="218" class="svg-sans" font-size="14" font-weight="700">五个必看趋势指标</text>
+                <text x="390" y="246" class="svg-sub" font-size="13.5">• blks_hit（内存命中）</text>
+                <text x="390" y="270" class="svg-sub" font-size="13.5">• blks_read（磁盘读升→查旧态）</text>
+                <text x="390" y="294" class="svg-sub" font-size="13.5">• blks_written / flushes</text>
+                <text x="390" y="318" class="svg-sub" font-size="13.5">• truncates（段截断次数）</text>
+                <text x="390" y="360" class="svg-muted" font-size="12.5">看趋势而非单点，配合等待事件分析</text>
+
+                <line x1="684" y1="215" x2="714" y2="215" stroke="#245A6B" stroke-width="1.8"/>
+                <polygon points="720,215 710,210 710,220" fill="#245A6B"/>
+
+                <!-- Step 3 -->
+                <rect x="720" y="24" width="312" height="382" fill="#FFFFFF" stroke="#47808D" stroke-width="1.6"/>
+                <rect x="720" y="24" width="312" height="44" fill="#47808D"/>
+                <text x="738" y="52" class="svg-white-mono" font-size="14.5" font-weight="700">STEP 03 · 目录只读观测</text>
+
+                <rect x="736" y="84" width="280" height="106" fill="#1B2B33"/>
+                <text x="748" y="114" class="svg-white-mono" font-size="12">SELECT count(*) AS files</text>
+                <text x="748" y="136" class="svg-white-mono" font-size="12">FROM pg_ls_dir('pg_xact')</text>
+                <text x="748" y="158" class="svg-white-mono" font-size="12" fill="#A4C4C6">AS f;</text>
+
+                <rect x="736" y="206" width="280" height="92" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="750" y="232" class="svg-sans" font-size="14" font-weight="700" fill="#BE653B">严禁手工清理目录</text>
+                <text x="750" y="256" class="svg-sub" font-size="13">文件数上升只是结果，</text>
+                <text x="750" y="278" class="svg-sub" font-size="13">不是根因！</text>
+
+                <text x="738" y="330" class="svg-sub" font-size="13">缺文件报错先保现场：排查误删、</text>
+                <text x="738" y="352" class="svg-sub" font-size="13">磁盘损坏或错误 pg_resetwal。</text>
+
+                <line x1="1032" y1="215" x2="1062" y2="215" stroke="#2F7A66" stroke-width="1.8"/>
+                <polygon points="1068,215 1058,210 1058,220" fill="#2F7A66"/>
+
+                <!-- Step 4 -->
+                <rect x="1068" y="24" width="308" height="382" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.6"/>
+                <rect x="1068" y="24" width="308" height="44" fill="#2F7A66"/>
+                <text x="1086" y="52" class="svg-white-mono" font-size="14.5" font-weight="700">STEP 04 · 揪出冻结阻塞源</text>
+
+                <rect x="1084" y="84" width="276" height="106" fill="#1B2B33"/>
+                <text x="1096" y="108" class="svg-white-mono" font-size="11.5">SELECT datname,</text>
+                <text x="1096" y="128" class="svg-white-mono" font-size="11.5">  age(datfrozenxid) AS age</text>
+                <text x="1096" y="148" class="svg-white-mono" font-size="11.5">FROM pg_database</text>
+                <text x="1096" y="168" class="svg-white-mono" font-size="11.5" fill="#A4C4C6">ORDER BY age DESC;</text>
+
+                <text x="1086" y="218" class="svg-sans" font-size="14" font-weight="700" fill="#2F7A66">三路下钻定位元凶</text>
+                <rect x="1084" y="232" width="276" height="42" fill="#FFFFFF" stroke="#2F7A66"/>
+                <text x="1096" y="258" class="svg-mono" font-size="12.5">1. pg_stat_activity (backend_xmin)</text>
+                <rect x="1084" y="284" width="276" height="42" fill="#FFFFFF" stroke="#2F7A66"/>
+                <text x="1096" y="310" class="svg-mono" font-size="12.5">2. pg_prepared_xacts</text>
+                <rect x="1084" y="336" width="276" height="42" fill="#FFFFFF" stroke="#2F7A66"/>
+                <text x="1096" y="362" class="svg-mono" font-size="12.5">3. pg_replication_slots (xmin)</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>
+            <span class="next-text">排障工具在手，最后把这些底层规律沉淀为架构师、DBA 与开发者的日常行动准则与避坑清单。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 四步诊断与阻塞排查</span>
+            <span class="page-num">11 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="11" data-title="最佳实践、七大常见坑与延伸思考">
+          <div class="slide-eyebrow">
+            <span>12 / 12 · 七至十、最佳实践、避坑清单与思考题</span>
+            <span class="tag-accent">敬畏内核边界 · 角色治理总图</span>
+          </div>
+          <h1 class="slide-title">敬畏内核边界：三角色行动准则与七大避坑清单</h1>
+          <p class="slide-lead">
+            <code>pg_xact</code> 不是用户可选开关，而是 MVCC 赖以运转的底层齿轮。尊重它的边界，才能在 OLTP 高并发下既跑得快又睡得安稳。
+          </p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-stage">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 3 Roles Best Practices -->
+                <text x="24" y="22" class="svg-mono" font-size="13" font-weight="700">BEST PRACTICES · 三角色行动准则</text>
+
+                <!-- Architect -->
+                <rect x="24" y="34" width="656" height="114" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="34" width="12" height="114" fill="#245A6B"/>
+                <text x="50" y="60" class="svg-title" font-size="17" fill="#245A6B">数据库架构师</text>
+                <text x="50" y="86" class="svg-sans" font-size="14">• 将事务年龄纳入容量模型（调大 freeze 参数会增加 pg_xact/commit_ts）</text>
+                <text x="50" y="110" class="svg-sans" font-size="14">• 约束长事务与复制槽，而非一味调大冻结阈值换时间</text>
+                <text x="50" y="134" class="svg-sans" font-size="14">• 事务提交分级：资金/不可逆动作禁用 synchronous_commit=off</text>
+
+                <!-- DBA -->
+                <rect x="24" y="162" width="656" height="114" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="24" y="162" width="12" height="114" fill="#2F7A66"/>
+                <text x="50" y="188" class="svg-title" font-size="17" fill="#2F7A66">DBA 运维</text>
+                <text x="50" y="214" class="svg-sans" font-size="14">• 严禁手工删除 pg_xact 文件；缺文件报错第一时间保全现场</text>
+                <text x="50" y="238" class="svg-sans" font-size="14">• 持续盯住 pg_stat_slru (name='transaction') 的读写刷盘趋势</text>
+                <text x="50" y="262" class="svg-sans" font-size="14">• 定期巡检 age(datfrozenxid)，防反 wraparound autovacuum 突袭</text>
+
+                <!-- Developer -->
+                <rect x="24" y="290" width="656" height="114" fill="#F6F0E1" stroke="#AE8A3E" stroke-width="1.5"/>
+                <rect x="24" y="290" width="12" height="114" fill="#AE8A3E"/>
+                <text x="50" y="316" class="svg-title" font-size="17" fill="#AE8A3E">业务开发者</text>
+                <text x="50" y="342" class="svg-sans" font-size="14">• 缩短事务持有时间：禁止事务内 RPC、人工等待或长时间 sleep</text>
+                <text x="50" y="366" class="svg-sans" font-size="14">• 警惕循环内 SAVEPOINT / PL/pgSQL EXCEPTION 制造海量 subxid</text>
+                <text x="50" y="390" class="svg-sans" font-size="14">• COMMIT 断线用业务幂等键 + 唯一约束确认，勿依赖 pg_xact_status</text>
+
+                <!-- Right: 7 Common Pitfalls -->
+                <text x="708" y="22" class="svg-mono" font-size="13" font-weight="700" fill="#BE653B">PITFALLS · 生产七大常见误区</text>
+                <rect x="708" y="34" width="668" height="370" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+
+                <g font-size="13.8">
+                  <rect x="724" y="48" width="28" height="24" fill="#BE653B"/><text x="738" y="65" text-anchor="middle" class="svg-white-mono" font-size="12">01</text>
+                  <text x="764" y="65" class="svg-sub"><tspan class="svg-sans" font-weight="700">把 pg_xact 当 WAL：</tspan>前者存状态位，后者才是恢复账本，互不替代</text>
+
+                  <line x1="724" y1="84" x2="1360" y2="84" stroke="#E5E2D9"/>
+                  <rect x="724" y="96" width="28" height="24" fill="#BE653B"/><text x="738" y="113" text-anchor="middle" class="svg-white-mono" font-size="12">02</text>
+                  <text x="764" y="113" class="svg-sub"><tspan class="svg-sans" font-weight="700">以为标 COMMITTED 即立即可见：</tspan>必须先查 ProcArray 排除运行态</text>
+
+                  <line x1="724" y1="132" x2="1360" y2="132" stroke="#E5E2D9"/>
+                  <rect x="724" y="144" width="28" height="24" fill="#BE653B"/><text x="738" y="161" text-anchor="middle" class="svg-white-mono" font-size="12">03</text>
+                  <text x="764" y="161" class="svg-sub"><tspan class="svg-sans" font-weight="700">忽略 Hint Bit 写放大：</tspan>纯 SELECT 首次读老页也会把数据页标脏</text>
+
+                  <line x1="724" y1="180" x2="1360" y2="180" stroke="#E5E2D9"/>
+                  <rect x="724" y="192" width="28" height="24" fill="#BE653B"/><text x="738" y="209" text-anchor="middle" class="svg-white-mono" font-size="12">04</text>
+                  <text x="764" y="209" class="svg-sub"><tspan class="svg-sans" font-weight="700">把 pg_xact_status() 当永久审计：</tspan>截断后返回 NULL 属正常设计</text>
+
+                  <line x1="724" y1="228" x2="1360" y2="228" stroke="#E5E2D9"/>
+                  <rect x="724" y="240" width="28" height="24" fill="#BE653B"/><text x="738" y="257" text-anchor="middle" class="svg-white-mono" font-size="12">05</text>
+                  <text x="764" y="257" class="svg-sub"><tspan class="svg-sans" font-weight="700">循环滥用子事务：</tspan>把压力隐蔽转移至 pg_subtrans 与 CLOG 路径</text>
+
+                  <line x1="724" y1="276" x2="1360" y2="276" stroke="#E5E2D9"/>
+                  <rect x="724" y="288" width="28" height="24" fill="#BE653B"/><text x="738" y="305" text-anchor="middle" class="svg-white-mono" font-size="12">06</text>
+                  <text x="764" y="305" class="svg-sub"><tspan class="svg-sans" font-weight="700">只盯目录大小不看冻结边界：</tspan>膨胀是表象，根因在 datfrozenxid</text>
+
+                  <line x1="724" y1="324" x2="1360" y2="324" stroke="#E5E2D9"/>
+                  <rect x="724" y="336" width="28" height="24" fill="#BE653B"/><text x="738" y="353" text-anchor="middle" class="svg-white-mono" font-size="12">07</text>
+                  <text x="764" y="353" class="svg-sub"><tspan class="svg-sans" font-weight="700">误读 ABORTED 状态：</tspan>崩溃事务仍显 IN_PROGRESS，靠排除法判未提交</text>
+                </g>
+
+                <rect x="724" y="370" width="636" height="24" fill="#EBF1EE"/>
+                <text x="736" y="387" class="svg-mono" font-size="12" fill="#1E4B5A">延伸思考：若 BLCKSZ 改为 32KB、或对比 DuckDB 单机分析引擎，事务状态设计将如何演进？</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">收束 · SUMMARY</span>
+            <span class="next-text">WAL 守恢复，pg_xact 守状态，Hint Bit 守速度，VACUUM 守边界——四层咬合，正是 PostgreSQL MVCC 稳健运行的地基。</span>
+          </div>
+          <div class="slide-footer">
+            <span>PostgreSQL 数据库筑基课 · 最佳实践与避坑总纲 · 全文完</span>
+            <span class="page-num">12 / 12</span>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <!-- Right In-Page Notes / Full Transcript Pane (NOT a modal) -->
+    <aside id="side-pane" aria-label="演讲稿侧栏">
+      <div class="pane-header">
+        <div class="pane-title">
+          <span id="pane-heading">本页讲稿</span>
+          <span id="pane-mode-badge" class="pane-badge">N</span>
+        </div>
+        <button class="pane-close" id="pane-close-btn" title="关闭讲稿">关闭</button>
+      </div>
+      <div id="pane-body"></div>
+    </aside>
+  </div>
+
+  <!-- TOC Drawer (G) -->
+  <div id="toc-panel" role="dialog" aria-label="演说目录">
+    <div class="pane-header">
+      <div class="pane-title">演说目录 <span class="pane-badge">G · 12 页</span></div>
+      <button class="pane-close" id="toc-close-btn">关闭</button>
+    </div>
+    <div class="toc-list" id="toc-list"></div>
+  </div>
+
+  <!-- Bottom Shortcut HUD (visible in normal and fullscreen modes) -->
+  <footer id="hud-bar">
+    <div class="hud-left">
+      <button class="hud-btn" id="btn-prev" title="上一页 (←)">← 上一页</button>
+      <span class="hud-page" id="hud-page">01 / 12</span>
+      <div class="hud-progress"><div class="hud-progress-fill" id="hud-progress-fill"></div></div>
+      <button class="hud-btn" id="btn-next" title="下一页 (→)">下一页 →</button>
+    </div>
+    <div class="hud-center">
+      <button class="hud-btn" id="btn-toc" title="目录 (G)">目录 <span class="hud-kbd">G</span></button>
+      <button class="hud-btn" id="btn-note" title="本页讲稿 (N)">本页讲稿 <span class="hud-kbd">N</span></button>
+      <button class="hud-btn" id="btn-transcript" title="全文讲稿 (T)">全文讲稿 <span class="hud-kbd">T</span></button>
+      <button class="hud-btn" id="btn-autoplay" title="自动播放 (A)">自动播放 <span class="hud-kbd">A</span></button>
+      <button class="hud-btn" id="btn-fullscreen" title="全屏 (F)">全屏 <span class="hud-kbd">F</span></button>
+    </div>
+    <div class="hud-right">
+      <span id="hud-autoplay-status" style="font-family:var(--font-mono);font-size:12px;color:#A4C4C6;"></span>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ==================== 1. LECTURE SCRIPTS (口语化 · 逻辑连绵 · 注重实证) ==================== */
+  const SCRIPTS = [
+    {
+      title: '破题：一张小表为何打满 SLRU？',
+      evidence: '源码依据：src/backend/access/transam/clog.c、src/include/access/slru.h；PostgreSQL 10 起目录由 pg_clog 更名为 pg_xact。',
+      paragraphs: [
+        '各位好，今天我们聊 PostgreSQL 数据库筑基课里一块非常小、但极其关键的底层齿轮——CLOG，也就是数据目录里的 pg_xact。',
+        '先从几个一线 DBA 经常撞上的怪现象说起：你有没有遇到过，明明表并不大，跑个 SELECT、VACUUM 或者逻辑复制，突然监控里冒出一堆 SLRU 读写？或者看到 pg_xact 目录越长越大，心里直犯嘀咕，这些旧文件能不能顺手 rm 掉？又或者应用在 COMMIT 那一刻断线了，急着确认刚才那笔事务到底成没成；高并发压测时，pg_stat_activity 里频繁冒出 XactSLRU、XactBuffer、XactGroupUpdate 等待。',
+        '把右边这五个现场问题往左边这张五层地层剖面一对应，你会发现它们全指向同一件事：PostgreSQL 把每个普通事务 XID 的最终状态压缩成了 2 bit，存进一个基于 SLRU 的磁盘目录里。源码里它至今叫 clog.c，磁盘上从 PG 10 起改名叫 pg_xact。顺着这条线索往下推，我们先来回答第一个根本问题：既然 WAL 已经记了每次提交，为什么还要专门多建一层状态文件？'
+      ]
+    },
+    {
+      title: '设计初衷：行版本与事务状态解耦',
+      evidence: '核心权衡：Heap Tuple 仅存 xmin/xmax 与 Hint Bit；pg_xact 集中存 2 bit 状态；VACUUM 冻结后按段截断。',
+      paragraphs: [
+        '承接刚才的问题，咱们用反证法推演一下。MVCC 的核心是每条行版本都带着 xmin 和 xmax。读取时数据库必须迅速回答：xmin 提交了吗？xmax 提交了吗？还在运行吗？太老的话状态文件还在不在？',
+        '如果不建 pg_xact，摆在架构师面前的就两条路。看左边思路 A：把提交状态直接写死在每条 Tuple 里。听着省事，但你想想，一个事务改了 100 万行，提交那一刻是不是得把这 100 万个散落在各处的数据页全翻出来再改一遍？行头膨胀不说，提交延迟直接爆炸。那看中间思路 B：干脆去查 WAL 吧。可 WAL 是按 LSN 顺序追加的恢复日志流，根本没有按 XID 随机查找的索引，每次 SELECT 可见性判断都去扫日志，OLTP 系统当场就瘫了。',
+        '所以 PostgreSQL 选了右边第三条路——引用与状态彻底解耦。Heap Tuple 只记 xmin/xmax 和几个 Hint Bit 缓存位，提交时绝不反扫数据页；所有 XID 的最终状态集中收进 pg_xact，每个事务只花 2 bit。虽然这多引入了一套需要刷盘、截断和监控的 SLRU 结构，但它换来了极轻的日常读写。那紧接着下一个问题自然就来了：只靠 2 bit，怎么把一个 XID 精确落到磁盘上的具体两位？'
+      ]
+    },
+    {
+      title: '物理布局：XID 到 2 bit 的精确寻址',
+      evidence: '实证常数：CLOG_BITS_PER_XACT=2，CLOG_XACTS_PER_BYTE=4，8KB 页覆盖 32,768 事务，32 页/段（256KB）约 100 万事务；2 亿 XID ≈ 50MB。',
+      paragraphs: [
+        '我们来看图上这个交互推演器，你可以直接在上方输入任意 XID，或者点一下「XID=32768(跨页)」、「XID=1048582(跨段)」看看它的落点。',
+        'pg_xact 本质上不是一张表，而是一个按 XID 下标直接算术寻址的紧凑位数组。源码 clog.h 里定义了 4 种状态，正好用 2 bit 表达：0x00 是 IN_PROGRESS，0x01 是 COMMITTED，0x02 是 ABORTED，0x03 是 SUB_COMMITTED。1 个字节 8 bit，刚好塞下 4 个事务。按典型 8KB 数据页算，一页 8192 字节乘以 4，正好覆盖 32,768 个事务。再往上，SLRU 默认每 32 页组成一个 256KB 的段文件，算下来一个段文件就能装约 100 万个事务！',
+        '这组实证数字直接解释了官方维护文档里的估算：默认 autovacuum_freeze_max_age 两亿事务，pg_xact 只占约 50MB；哪怕拉满到 20 亿事务，也不过半个 GB。而且它在共享内存里以 name=\'transaction\' 注册为 SLRU，受 transaction_buffers 控制。结构这么紧凑，那接下来我们就得追问：一个新事务从申请 XID 到把这两位写成 0x01，底层必须守住什么顺序，才能在断电崩溃时不撒谎？'
+      ]
+    },
+    {
+      title: '写入路径：先写 WAL 再改 pg_xact',
+      evidence: '源码实证：varsup.c GetNewTransactionId() → ExtendCLOG()；xact.c RecordTransactionCommit() → XLogFlush 或 group_lsn 防护。',
+      paragraphs: [
+        '这一页我们把写入链路拆成上下两段，大家也可以点「同步提交」和「异步提交」切换着播放动画。',
+        '先看上半段前置动作。PostgreSQL 不会在 BEGIN 一开始就发正式 XID，而是在事务首次写表时才调用 GetNewTransactionId()。如果新分配的 XID 刚好跨进一个新 CLOG 页的第一个位置，它必须在 XidGenLock 锁保护下，立刻调 ExtendCLOG() 清零新页并写一条 CLOG_ZEROPAGE WAL。为什么必须死守这把锁？你想，要是没锁住，后面拿到更大 XID 的事务先提交了，跑去改状态位时发现页还没初始化，整个就乱套了。',
+        '再看下半段提交主路径。RecordTransactionCommit() 第一步永远是写 XactLogCommitRecord() 进 WAL。如果是同步提交，必须先 XLogFlush() 把这条提交日志刷进磁盘，才调用 TransactionIdCommitTree() 把 pg_xact 标成 0x01。那异步提交 synchronous_commit=off 呢？它不是不写 WAL，而是允许先返回客户端再异步刷 WAL；可这带来一个隐患——万一 SLRU 提前把脏 CLOG 页刷盘了，机器一断电，磁盘上 pg_xact 显示已提交，WAL 里却找不到记录！所以 clog.c 在 CLOG 页上专门记了 group_lsn，脏页落盘前必须确认对应 LSN 的 WAL 已经持久化。这就是 WAL-before-data 铁律。单事务写顺了，但如果一个大事务带着跨 CLOG 页的子事务，两页没法一次锁改完，怎么保原子性？'
+      ]
+    },
+    {
+      title: '子事务原子性：跨页三阶段提交',
+      evidence: '源码实证：clog.c TransactionIdSetTreeStatus() 三阶段协议；pg_subtrans 父子映射；单会话共享内存最多缓 64 个 open subxid。',
+      paragraphs: [
+        '刚才那个问题非常精妙：顶层 XID 32766 落在 Page N，而它的子事务 32768、32769 跨到了 Page N+1。两张页不可能用一把页锁同时原子更新，如果你先改完 Page N+1 标成 COMMITTED，就在这一微秒，并发读者扫到 32768 就会误以为它已经独立提交了——可万一顶层事务还没落定甚至崩溃了呢？',
+        '点一下上方工具栏里的阶段 1、2、3，看看 TransactionIdSetTreeStatus() 是怎么用三阶段协议化解这个死结的。第一阶段，先把跨页的 32768、32769 标成 0x03 SUB_COMMITTED。这时并发读者看到 SUB_COMMITTED，不会直接当它提交，而是会去查 pg_subtrans 找到父事务 32766；父事务还是 IN_PROGRESS，所以对外一律不可见。',
+        '第二阶段，对顶层 32766 以及同页的 32767，在一次页锁内原子标记为 0x01 COMMITTED——就是这一步，全树事务瞬间对外原子生效！第三阶段，再回头把跨页的 32768、32769 补改成最终的 0x01 COMMITTED，省得以后每次都去绕道查 pg_subtrans。搞定了单事务跨页，我们再把并发度拉高：如果几百个短事务在同一毫秒冲向同一个 CLOG 页，大家抢一把 SLRU Bank Lock 怎么办？'
+      ]
+    },
+    {
+      title: '高并发提交：Group Update 批量写状态',
+      evidence: '源码实证：clog.c TransactionIdSetPageStatus()；阈值 THRESHOLD_SUBTRANS_CLOG_OPT = 5；对应等待事件 XactGroupUpdate / XactSLRU。',
+      paragraphs: [
+        '这一页直接解答开场第三个 DBA 现场疑问：高并发提交时看到的 XactGroupUpdate 和 XactSLRU 等待到底在干嘛。你可以切换「Group Update 批处理」和「传统逐个争锁」点播放对比一下。',
+        '传统做法下，Backend 1 到 4 要改同一个 CLOG 页，就得挨个抢锁、改两位、放锁、唤醒下一个，4 个事务要做 4 轮锁交接，CPU 全耗在上下文切换和缓存行抖动上。PostgreSQL 在 TransactionIdSetPageStatus() 里做了一个非常漂亮的搭便车优化：只要满足四个条件——都在同一 CLOG 页、MyProc 缓存一致、子事务数不超过源码阈值 5、且没能第一时间抢到 Bank Lock——后来的进程就乖乖排进等待队列。',
+        '队头的 Leader 拿到 Bank Lock 后，一口气把队列里所有成员的 XID 拿出来，批量调用 TransactionIdSetPageStatusInternal() 一次性改完状态位，然后释放锁，统一唤醒大家。这不改变任何事务语义，却把 N 次锁交接压成了 1 次。所以运维上看到这类等待，别急着怀疑磁盘坏了，先看看是不是极高并发短事务在同页排队。写路径全部走通，现在我们切换视角到读路径：一条 SELECT 扫到 Tuple 时，为什么严禁直接查 pg_xact？'
+      ]
+    },
+    {
+      title: '读取路径：Hint Bit、ProcArray 与 pg_xact 顺序',
+      evidence: '源码实证：heapam_visibility.c；顺序为 Hint Bit → ProcArray/MVCC Snapshot → TransactionLogFetch → pg_xact → 回写 Hint Bit。',
+      paragraphs: [
+        '这一页是理解 MVCC 可见性最容易踩坑的地方。我们先看上方三个场景，特别是「场景 2：正在提交窗口期」，建议点击播放细看。',
+        '在 PostgreSQL 里，事务提交是分步完成的：它先在 pg_xact 里把自己的状态位改成 0x01 COMMITTED，然后才去 ProcArray 共享内存数组里把自己的 XID 清掉。就在这两步之间的极短窗口里，如果一个读进程跳过 ProcArray 直接去查 pg_xact，它会看到 0x01，于是把这行提前当成已提交读了出来；可紧接着下一个快照检查发现该事务明明还在运行集合里，一致性就破功了！',
+        '因此 heapam_visibility.c 铁律规定了四步顺序：第一步先看 Tuple 行头的 Hint Bit，命中直接返回，这是最常见也最快的路径；第二步未命中时，必须先查 TransactionIdIsInProgress() 或 XidInMVCCSnapshot()，确认不在运行中；第三步才兜底调用 TransactionIdDidCommit()，经过单项缓存去查 pg_xact；第四步一旦确认提交或中止，在安全前提下把结果回写进 Hint Bit，造福后面的查询——顺带提醒一句，这也是为什么纯 SELECT 首次扫描老数据页时，竟然会产生数据页写放大的原因。读写都闭环了，最后一个核心机制是清理：XID 一直在涨，pg_xact 怎么安全瘦身？'
+      ]
+    },
+    {
+      title: '截断闭环：VACUUM 冻结与安全删除边界',
+      evidence: '源码实证：vacuum.c vac_truncate_clog() → clog.c TruncateCLOG()；顺序为算 cutoff → 推 oldestClogXid → 刷 CLOG_TRUNCATE WAL → SimpleLruTruncate。',
+      paragraphs: [
+        '前面开场有 DBA 问：pg_xact 越来越大，能不能手工把旧文件删了腾空间？看完这一页的交互模拟，你会彻底明白为什么绝不能碰。',
+        'pg_xact 能被截断的唯一前提，是全集群所有库里已经没有任何未冻结的 Tuple 再引用那些老 XID 了。vac_truncate_clog() 会扫一遍 pg_database，找出全集群最老的 datfrozenxid，然后调用 TruncateCLOG()。注意看左下角四步安全铁律：算完 cutoff page 之后，它必须先推进内存里的 oldestClogXid 边界，告诉所有并发查询「别再去摸已截断范围了」；接着写并 flush 一条 CLOG_TRUNCATE WAL 日志确保备库和崩溃恢复一致；最后一步才调 SimpleLruTruncate() 删除旧段文件。',
+        '你可以点上方切换「存在阻塞」，再点「推进冻结周期」试试看：只要库里挂着一个不提交的长事务、一个忘清理的两阶段 prepared transaction，或者一个断连滞后的复制槽，min(datfrozenxid) 就会被死死钉在原地，pg_xact 段文件一步也收不回去。手工 rm 绕开了 WAL 和边界保护，会把正常行版本的可见性查询直接变成缺文件报错。讲到这里，pg_xact 从生到死的全链路就闭环了，我们把它放回事务家族里做个横向对比。'
+      ]
+    },
+    {
+      title: '横向对比：五大事务相关结构分工矩阵',
+      evidence: '对照原文第四节：pg_xact、WAL commit record、Heap Hint Bit、pg_subtrans、pg_commit_ts 五大结构职责边界。',
+      paragraphs: [
+        '学内核最怕把几个名字长得像、目录挨在一起的结构混为一谈。这张蓝图矩阵把五个核心组件拉到同一张桌上，按核心目标、粒度位置、崩溃恢复角色和边界一字排开。',
+        '用一句话串起来最容易记：WAL 是崩溃恢复的权威账本，但不能拿来给每次查询做随机检索；pg_xact 是每事务 2 bit 的状态索引，靠 WAL 在崩溃后重建近期变化，所以它不能替代 WAL；Heap Hint Bit 是贴在每条数据行头上的本地缓存，丢了无所谓，只图查询快；pg_subtrans 专门记子事务的父子关系，撑起跨页原子提交；pg_commit_ts 则是可选的提交时间戳记录，开了会明显吃空间。',
+        '如果强行把它们揉成一个大而全的结构，要么空间膨胀，要么查询变慢，要么恢复语义纠缠不清。分而治之之后，我们就该客观盘点一下：这套 2 bit 设计在生产中究竟带来了多大收益，又必须付出哪些代价？'
+      ]
+    },
+    {
+      title: '效果评估：收益与工程代价权衡',
+      evidence: '实证数据：每段 256KB/约 100 万事务；2 亿 XID ≈ 50MB，20 亿 ≈ 半 GB；64 个 open subxid 缓存上限；Group Update 子事务阈值 5。',
+      paragraphs: [
+        '做架构评估，不能只夸好处不谈代价。左边青绿栏是这套设计经受住几十年 OLTP 考验的四项硬收益：第一是空间极省，2 亿事务只要约 50MB，哪怕顶到 20 亿也才半个 GB；第二是查询极快，纯算术寻址叠加单项缓存和 Hint Bit，把 SLRU I/O 压到极低；第三是恢复语义干净利落；第四是高并发下有 Group Update 批处理兜底。',
+        '但请务必盯紧右边陶橙栏的四项隐性代价，生产故障几乎全出在这里：第一，一旦业务让大量老行反复触发未置位 Hint Bit 查询，transaction SLRU 的 blks_read 和锁等待就会猛涨；第二，开了 synchronous_commit=off 并不是白捡吞吐，它既要求维护页级 group_lsn，又在断电时敞开了丢已返回事务的窗口；第三，长事务会把冻结边界死死拖住；第四，子事务一多，超过每会话 64 个共享内存缓存上限就会溢出到 pg_subtrans，超过 5 个还直接失去 Group Update 优化。看清了这些边界，那真出了问题，DBA 敲哪四条 SQL 最管用？'
+      ]
+    },
+    {
+      title: '实操诊断：四步观测与阻塞排查手册',
+      evidence: '实操 SQL：pg_xact_status(xid8)、pg_stat_slru (name=\'transaction\')、pg_ls_dir(\'pg_xact\')、age(datfrozenxid) 及三张阻塞视图。',
+      paragraphs: [
+        '这一页是一份可以直接带进值班室的四步排障流水线，严格按因果顺序排列。',
+        '第一步，如果是应用断线想确认近期某个 XID 到底提交没有，可以用 pg_xact_status(xid8)。但切记官方文档的边界说明：它只对尚未被截断的近期事务有效，太老的事务返回 NULL 是正常设计，别误判成数据库损坏。',
+        '第二步，查 pg_stat_slru WHERE name = \'transaction\'，重点看 blks_hit、blks_read、blks_written、flushes 和 truncates 的变化趋势。blks_read 猛涨往往说明大量扫描在查旧 XID 状态，而高并发短事务更多体现在锁等待和写出。',
+        '第三步，用 pg_ls_dir(\'pg_xact\') 统计文件数，仅作只读观察，千万别手痒删除；如果遇到缺文件报错，第一时间保全现场，排查是不是误删、磁盘坏块或误用 pg_resetwal。第四步直击根因：按 age(datfrozenxid) 倒序查 pg_database，找出年龄最高的库，再三路下钻查 pg_stat_activity 的 backend_xmin、pg_prepared_xacts 和 pg_replication_slots。至此，排障闭环已经完整，最后我们把全课沉淀为三个角色的日常准则。'
+      ]
+    },
+    {
+      title: '最佳实践、七大常见坑与延伸思考',
+      evidence: '完整覆盖原文第七、八、九、十节：架构师/DBA/开发者三角色准则 + 七大高频误区 + 延伸思考题。',
+      paragraphs: [
+        '最后一页，我们把整堂课的内核机理翻译成三个角色明天就能落地的动作。对架构师而言，事务年龄必须是容量模型的一部分，调大 autovacuum_freeze_max_age 只是换时间，治本要靠约束长事务，同时给提交延迟分级，资金与不可逆动作坚决不能开 synchronous_commit=off。',
+        '对 DBA 而言，守住三条底线：绝不手删 pg_xact、盯住 transaction SLRU 趋势、定期巡检 age(datfrozenxid)。对业务开发者而言，核心是缩短事务持有时间，别在事务里调远程 RPC 或长时间 sleep；更要警惕在循环里滥用 SAVEPOINT 和 PL/pgSQL EXCEPTION，那会悄悄把压力灌进 pg_subtrans 和 CLOG；至于 COMMIT 断线，最稳的永远是业务幂等键加唯一约束。',
+        '右边这七条误区清单，大家可以当作上线前和复盘时的自查表：别把 pg_xact 当 WAL，别以为标了 COMMITTED 就立即可见，别忽略纯 SELECT 回写 Hint Bit 的脏页开销，也别误读崩溃事务的 IN_PROGRESS 状态。最后留一道延伸思考题给大家：如果把 BLCKSZ 从 8KB 改成 32KB，或者对比 DuckDB 这类分析型引擎，事务状态存储的路线会怎么变？今天的筑基课到这里，感谢大家！'
+      ]
+    }
+  ];
+
+  /* ==================== 2. CORE DECK ENGINE ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentSlide = 0;
+  let paneMode = null; // null | 'note' | 'transcript'
+  let tocOpen = false;
+  let autoplayTimer = null;
+  let autoplayCountdown = 0;
+  const AUTOPLAY_SEC = 10;
+
+  const appEl = document.getElementById('app');
+  const viewportEl = document.getElementById('stage-viewport');
+  const scalerEl = document.getElementById('stage-scaler');
+  const sidePaneEl = document.getElementById('side-pane');
+  const paneHeadingEl = document.getElementById('pane-heading');
+  const paneBadgeEl = document.getElementById('pane-mode-badge');
+  const paneBodyEl = document.getElementById('pane-body');
+  const tocPanelEl = document.getElementById('toc-panel');
+  const tocListEl = document.getElementById('toc-list');
+  const hudPageEl = document.getElementById('hud-page');
+  const hudProgressEl = document.getElementById('hud-progress-fill');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNote = document.getElementById('btn-note');
+  const btnTranscript = document.getElementById('btn-transcript');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const hudAutoplayStatus = document.getElementById('hud-autoplay-status');
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  /* Proportional 16:9 Vector Scaling + Letterbox */
+  function rescaleStage() {
+    const rect = viewportEl.getBoundingClientRect();
+    const pad = 16;
+    const availW = Math.max(100, rect.width - pad);
+    const availH = Math.max(100, rect.height - pad);
+    const scale = Math.min(availW / 1600, availH / 900);
+    scalerEl.style.transform = 'scale(' + scale.toFixed(6) + ')';
+  }
+
+  function buildTOC() {
+    tocListEl.innerHTML = '';
+    slides.forEach((s, idx) => {
+      const row = document.createElement('div');
+      row.className = 'toc-row' + (idx === currentSlide ? ' active' : '');
+      row.dataset.idx = idx;
+      row.innerHTML = '<span class="toc-idx">' + pad2(idx + 1) + '</span><span class="toc-name">' + s.dataset.title + '</span>';
+      row.addEventListener('click', () => {
+        goToSlide(idx);
+        setTOC(false);
+      });
+      tocListEl.appendChild(row);
+    });
+  }
+
+  function updateTOCActive() {
+    const rows = tocListEl.querySelectorAll('.toc-row');
+    rows.forEach((r, idx) => r.classList.toggle('active', idx === currentSlide));
+  }
+
+  function renderNotePane() {
+    const sc = SCRIPTS[currentSlide];
+    paneHeadingEl.textContent = '本页讲稿';
+    paneBadgeEl.textContent = 'N · ' + pad2(currentSlide + 1) + '/' + pad2(totalSlides);
+    let html = '<div class="note-single-title">' + sc.title + '</div>';
+    html += '<div class="note-single-meta">SLIDE ' + pad2(currentSlide + 1) + ' / ' + pad2(totalSlides) + ' · 口语化推演讲稿</div>';
+    sc.paragraphs.forEach(p => {
+      html += '<p class="note-paragraph">' + p + '</p>';
+    });
+    html += '<div class="note-evidence"><strong>实证锚点：</strong>' + sc.evidence + '</div>';
+    paneBodyEl.innerHTML = html;
+    paneBodyEl.scrollTop = 0;
+  }
+
+  function renderTranscriptPane() {
+    paneHeadingEl.textContent = '全文讲稿';
+    paneBadgeEl.textContent = 'T · 全 12 页';
+    let html = '';
+    SCRIPTS.forEach((sc, idx) => {
+      html += '<div class="transcript-item' + (idx === currentSlide ? ' current' : '') + '" data-tidx="' + idx + '">';
+      html += '<div class="transcript-head"><span class="transcript-num">' + pad2(idx + 1) + '</span><span class="transcript-title">' + sc.title + '</span></div>';
+      html += '<div class="transcript-body">';
+      sc.paragraphs.forEach(p => { html += '<p>' + p + '</p>'; });
+      html += '</div></div>';
+    });
+    paneBodyEl.innerHTML = html;
+    paneBodyEl.querySelectorAll('.transcript-item').forEach(el => {
+      el.addEventListener('click', () => goToSlide(parseInt(el.dataset.tidx, 10)));
+    });
+    scrollTranscriptToCurrent(false);
+  }
+
+  function scrollTranscriptToCurrent(smooth) {
+    if (paneMode !== 'transcript') return;
+    const items = paneBodyEl.querySelectorAll('.transcript-item');
+    items.forEach((el, idx) => el.classList.toggle('current', idx === currentSlide));
+    const target = paneBodyEl.querySelector('.transcript-item[data-tidx="' + currentSlide + '"]');
+    if (target) {
+      const top = target.offsetTop - 16;
+      if (smooth && typeof paneBodyEl.scrollTo === 'function') {
+        paneBodyEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      } else {
+        paneBodyEl.scrollTop = Math.max(0, top);
+      }
+    }
+  }
+
+  function setPaneMode(mode) {
+    if (paneMode === mode) {
+      paneMode = null;
+    } else {
+      paneMode = mode;
+    }
+    sidePaneEl.classList.toggle('open', paneMode !== null);
+    btnNote.classList.toggle('active', paneMode === 'note');
+    btnTranscript.classList.toggle('active', paneMode === 'transcript');
+    if (paneMode === 'note') {
+      renderNotePane();
+    } else if (paneMode === 'transcript') {
+      renderTranscriptPane();
+    }
+    requestAnimationFrame(rescaleStage);
+  }
+
+  function setTOC(open) {
+    tocOpen = typeof open === 'boolean' ? open : !tocOpen;
+    tocPanelEl.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+    if (tocOpen) updateTOCActive();
+  }
+
+  function stopAutoplay() {
+    if (autoplayTimer) {
+      clearInterval(autoplayTimer);
+      autoplayTimer = null;
+    }
+    btnAutoplay.classList.remove('active');
+    hudAutoplayStatus.textContent = '';
+  }
+
+  function toggleAutoplay() {
+    if (autoplayTimer) {
+      stopAutoplay();
+      return;
+    }
+    btnAutoplay.classList.add('active');
+    autoplayCountdown = AUTOPLAY_SEC;
+    hudAutoplayStatus.textContent = 'AUTO ' + autoplayCountdown + 's';
+    autoplayTimer = setInterval(() => {
+      autoplayCountdown--;
+      if (autoplayCountdown <= 0) {
+        goToSlide((currentSlide + 1) % totalSlides);
+        autoplayCountdown = AUTOPLAY_SEC;
+      }
+      hudAutoplayStatus.textContent = 'AUTO ' + autoplayCountdown + 's';
+    }, 1000);
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      if (appEl.requestFullscreen) {
+        appEl.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  function goToSlide(idx) {
+    const next = Math.max(0, Math.min(totalSlides - 1, idx));
+    slides[currentSlide].classList.remove('active');
+    currentSlide = next;
+    slides[currentSlide].classList.add('active');
+    hudPageEl.textContent = pad2(currentSlide + 1) + ' / ' + pad2(totalSlides);
+    hudProgressEl.style.width = (((currentSlide + 1) / totalSlides) * 100).toFixed(2) + '%';
+    updateTOCActive();
+    if (paneMode === 'note') {
+      renderNotePane();
+    } else if (paneMode === 'transcript') {
+      scrollTranscriptToCurrent(true);
+    }
+  }
+
+  /* Bind HUD & Keyboard */
+  document.getElementById('btn-prev').addEventListener('click', () => goToSlide(currentSlide - 1));
+  document.getElementById('btn-next').addEventListener('click', () => goToSlide(currentSlide + 1));
+  btnToc.addEventListener('click', () => setTOC());
+  document.getElementById('toc-close-btn').addEventListener('click', () => setTOC(false));
+  btnNote.addEventListener('click', () => setPaneMode('note'));
+  btnTranscript.addEventListener('click', () => setPaneMode('transcript'));
+  document.getElementById('pane-close-btn').addEventListener('click', () => setPaneMode(paneMode));
+  btnAutoplay.addEventListener('click', toggleAutoplay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('fullscreenchange', () => {
+    btnFullscreen.classList.toggle('active', !!document.fullscreenElement);
+    requestAnimationFrame(rescaleStage);
+  });
+
+  window.addEventListener('resize', rescaleStage);
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea') {
+      if (e.key === 'Escape') e.target.blur();
+      return;
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      e.preventDefault(); goToSlide(currentSlide + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault(); goToSlide(currentSlide - 1);
+    } else if (e.key === 'Home') {
+      e.preventDefault(); goToSlide(0);
+    } else if (e.key === 'End') {
+      e.preventDefault(); goToSlide(totalSlides - 1);
+    } else if (k === 'g') {
+      e.preventDefault(); setTOC();
+    } else if (k === 'n') {
+      e.preventDefault(); setPaneMode('note');
+    } else if (k === 't') {
+      e.preventDefault(); setPaneMode('transcript');
+    } else if (k === 'a') {
+      e.preventDefault(); toggleAutoplay();
+    } else if (k === 'f') {
+      e.preventDefault(); toggleFullscreen();
+    } else if (e.key === 'Escape') {
+      if (tocOpen) setTOC(false);
+    }
+  });
+
+  /* ==================== 3. SLIDE 3 INTERACTIVE: XID ADDRESSING ==================== */
+  let s3BlkSize = 8192;
+  let s3Timer = null;
+  const s3Input = document.getElementById('s3-xid');
+
+  function updateS3(highlightStep) {
+    let xid = parseInt(s3Input.value, 10);
+    if (isNaN(xid) || xid < 3) xid = 3;
+    const xactsPerPage = s3BlkSize * 4;
+    const page = Math.floor(xid / xactsPerPage);
+    const seg = Math.floor(page / 32);
+    const rem = xid % xactsPerPage;
+    const byteOff = Math.floor(rem / 4);
+    const slot = rem % 4;
+    const bitStart = slot * 2;
+    const segHex = seg.toString(16).toUpperCase().padStart(4, '0');
+    const baseXid = xid - slot;
+
+    document.getElementById('s3-v-xid').textContent = String(xid);
+    document.getElementById('s3-v-page').textContent = 'Page ' + page;
+    document.getElementById('s3-f-page').textContent = 'floor(xid / ' + xactsPerPage + ') · 每页 ' + (s3BlkSize / 1024) + 'KB';
+    document.getElementById('s3-v-seg').textContent = 'pg_xact/' + segHex;
+    document.getElementById('s3-f-seg').textContent = 'seg = floor(' + page + ' / 32) · ' + ((s3BlkSize * 32) / 1024) + 'KB/段';
+    document.getElementById('s3-v-byte').textContent = 'Byte ' + byteOff + ' · Bits [' + bitStart + '..' + (bitStart + 1) + ']';
+    document.getElementById('s3-f-byte').textContent = 'rem = ' + rem + ' → byte=' + byteOff + ', slot=' + slot + ' (×2 bit)';
+    document.getElementById('s3-byte-caption').textContent = '当前命中：Page ' + page + ' / Byte ' + byteOff + ' 的第 ' + slot + ' 号槽位（Bits ' + bitStart + '–' + (bitStart + 1) + '）';
+
+    for (let i = 0; i < 4; i++) {
+      const g = document.getElementById('s3-slot-' + i);
+      const rect = g.querySelector('rect');
+      const texts = g.querySelectorAll('text');
+      document.getElementById('s3-sx-' + i).textContent = 'XID ' + (baseXid + i);
+      if (i === slot) {
+        rect.setAttribute('fill', '#F7E9DE');
+        rect.setAttribute('stroke', '#BE653B');
+        rect.setAttribute('stroke-width', '2.2');
+        texts[0].setAttribute('fill', '#BE653B');
+        texts[1].setAttribute('fill', '#BE653B');
+        texts[2].setAttribute('fill', '#BE653B');
+        texts[2].textContent = '当前目标槽位';
+      } else {
+        rect.setAttribute('fill', '#F1EFE9');
+        rect.setAttribute('stroke', '#A4C4C6');
+        rect.setAttribute('stroke-width', '1.5');
+        texts[0].setAttribute('fill', '#245A6B');
+        texts[1].setAttribute('fill', '#1B2B33');
+        texts[2].setAttribute('fill', '#46585F');
+        texts[2].textContent = i < slot ? '状态位: 01' : '状态位: 00';
+      }
+    }
+
+    for (let b = 0; b < 4; b++) {
+      const box = document.getElementById('s3-box-' + b);
+      const r = box.querySelector('rect');
+      if (highlightStep === undefined || highlightStep === null) {
+        box.style.opacity = '1';
+        r.setAttribute('stroke-width', b === 0 ? '1.8' : '1.5');
+      } else {
+        box.style.opacity = b <= highlightStep ? '1' : '0.35';
+        r.setAttribute('stroke-width', b === highlightStep ? '2.8' : '1.5');
+      }
+    }
+  }
+
+  s3Input.addEventListener('input', () => updateS3(null));
+  document.querySelectorAll('[data-s3-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      s3Input.value = btn.dataset.s3Preset;
+      updateS3(null);
+    });
+  });
+  document.getElementById('s3-blk-8').addEventListener('click', function() {
+    s3BlkSize = 8192;
+    this.classList.add('active');
+    document.getElementById('s3-blk-32').classList.remove('active');
+    updateS3(null);
+  });
+  document.getElementById('s3-blk-32').addEventListener('click', function() {
+    s3BlkSize = 32768;
+    this.classList.add('active');
+    document.getElementById('s3-blk-8').classList.remove('active');
+    updateS3(null);
+  });
+  document.getElementById('s3-play').addEventListener('click', () => {
+    if (s3Timer) clearInterval(s3Timer);
+    let step = 0;
+    updateS3(0);
+    s3Timer = setInterval(() => {
+      step++;
+      if (step > 3) {
+        clearInterval(s3Timer);
+        s3Timer = null;
+        updateS3(null);
+        return;
+      }
+      updateS3(step);
+    }, 650);
+  });
+  document.getElementById('s3-reset').addEventListener('click', () => {
+    if (s3Timer) { clearInterval(s3Timer); s3Timer = null; }
+    s3BlkSize = 8192;
+    s3Input.value = '1048582';
+    document.getElementById('s3-blk-8').classList.add('active');
+    document.getElementById('s3-blk-32').classList.remove('active');
+    updateS3(null);
+  });
+
+  /* ==================== 4. SLIDE 4 INTERACTIVE: COMMIT PATH ==================== */
+  let s4Mode = 'sync';
+  let s4StepIdx = -1;
+  let s4Timer = null;
+  const s4StepsSync = [
+    { ids: ['s4-n0'], msg: '步骤 1/6：事务首次修改数据，调用 GetNewTransactionId() 申请正式 XID。' },
+    { ids: ['s4-n1'], msg: '步骤 2/6：在 XidGenLock 锁保护下，跨页时调用 ExtendCLOG(xid) 清零新页。' },
+    { ids: ['s4-n2'], msg: '步骤 3/6：写入 CLOG_ZEROPAGE WAL，确保新页初始化可被崩溃恢复重放。' },
+    { ids: ['s4-n3'], msg: '步骤 4/6：事务执行 COMMIT，先调用 XactLogCommitRecord() 写入提交 WAL。' },
+    { ids: ['s4-sync-1'], msg: '步骤 5/6：[同步提交] 立即调用 XLogFlush(XactLastRecEnd) 将 WAL 刷入磁盘。' },
+    { ids: ['s4-sync-2', 's4-end'], msg: '步骤 6/6：[同步提交] WAL 落盘后调用 TransactionIdCommitTree() 将 pg_xact 标为 0x01。' }
+  ];
+  const s4StepsAsync = [
+    { ids: ['s4-n0'], msg: '步骤 1/6：事务首次修改数据，调用 GetNewTransactionId() 申请正式 XID。' },
+    { ids: ['s4-n1'], msg: '步骤 2/6：在 XidGenLock 锁保护下，跨页时调用 ExtendCLOG(xid) 清零新页。' },
+    { ids: ['s4-n2'], msg: '步骤 3/6：写入 CLOG_ZEROPAGE WAL，确保新页初始化可被崩溃恢复重放。' },
+    { ids: ['s4-n3'], msg: '步骤 4/6：事务执行 COMMIT，先调用 XactLogCommitRecord() 写入提交 WAL。' },
+    { ids: ['s4-async-1'], msg: '步骤 5/6：[异步提交] 调用 XLogSetAsyncXactLSN()，不等待磁盘 fsync 即可返回。' },
+    { ids: ['s4-async-2', 's4-end'], msg: '步骤 6/6：[异步提交] 标记 0x01 并在 CLOG 页记下 group_lsn，防止脏页早于 WAL 落盘！' }
+  ];
+  const s4AllIds = ['s4-n0', 's4-n1', 's4-n2', 's4-n3', 's4-sync-1', 's4-sync-2', 's4-async-1', 's4-async-2', 's4-end'];
+
+  function renderS4() {
+    const seq = s4Mode === 'sync' ? s4StepsSync : s4StepsAsync;
+    const inactiveBranch = s4Mode === 'sync' ? ['s4-async-1', 's4-async-2'] : ['s4-sync-1', 's4-sync-2'];
+    if (s4StepIdx < 0) {
+      s4AllIds.forEach(id => {
+        const el = document.getElementById(id);
+        el.style.opacity = inactiveBranch.includes(id) ? '0.32' : '1';
+      });
+      document.getElementById('s4-status').textContent =
+        '当前模式：' + (s4Mode === 'sync' ? '同步提交 (synchronous_commit=on)' : '异步提交 (synchronous_commit=off)') + ' · 点击「播放动画」或「单步推演」';
+      return;
+    }
+    const activeSet = new Set();
+    for (let i = 0; i <= s4StepIdx; i++) seq[i].ids.forEach(id => activeSet.add(id));
+    s4AllIds.forEach(id => {
+      const el = document.getElementById(id);
+      el.style.opacity = activeSet.has(id) ? '1' : '0.25';
+    });
+    document.getElementById('s4-status').textContent = seq[s4StepIdx].msg;
+  }
+
+  document.getElementById('s4-mode-sync').addEventListener('click', function() {
+    if (s4Timer) { clearInterval(s4Timer); s4Timer = null; }
+    s4Mode = 'sync'; s4StepIdx = -1;
+    this.classList.add('active');
+    document.getElementById('s4-mode-async').classList.remove('active');
+    renderS4();
+  });
+  document.getElementById('s4-mode-async').addEventListener('click', function() {
+    if (s4Timer) { clearInterval(s4Timer); s4Timer = null; }
+    s4Mode = 'async'; s4StepIdx = -1;
+    this.classList.add('active');
+    document.getElementById('s4-mode-sync').classList.remove('active');
+    renderS4();
+  });
+  document.getElementById('s4-step').addEventListener('click', () => {
+    if (s4Timer) { clearInterval(s4Timer); s4Timer = null; }
+    s4StepIdx = (s4StepIdx + 1) % 6;
+    renderS4();
+  });
+  document.getElementById('s4-play').addEventListener('click', () => {
+    if (s4Timer) clearInterval(s4Timer);
+    s4StepIdx = 0; renderS4();
+    s4Timer = setInterval(() => {
+      s4StepIdx++;
+      if (s4StepIdx >= 6) { clearInterval(s4Timer); s4Timer = null; return; }
+      renderS4();
+    }, 900);
+  });
+  document.getElementById('s4-reset').addEventListener('click', () => {
+    if (s4Timer) { clearInterval(s4Timer); s4Timer = null; }
+    s4StepIdx = -1; renderS4();
+  });
+
+  /* ==================== 5. SLIDE 5 INTERACTIVE: SUBTRANSACTION 3-PHASE ==================== */
+  let s5Phase = 0;
+  let s5Timer = null;
+  const s5Meta = [
+    {
+      top: ['0x00 IN_PROGRESS', '#F1EFE9', '#74A5AD', '#46585F'],
+      same: ['0x00 IN_PROGRESS', '#F1EFE9', '#74A5AD', '#46585F'],
+      cross: ['0x00 IN_PROGRESS', '#F1EFE9', '#A4C4C6', '#46585F'],
+      title: '阶段 0 · 事务运行中，尚未进入提交',
+      desc: '并发读者查询任意 XID（32766～32769）均看到 IN_PROGRESS，全部不可见。',
+      why: '设计目的：绝不能让跨页子事务先于顶层 XID 变成独立 COMMITTED。'
+    },
+    {
+      top: ['0x00 IN_PROGRESS', '#F1EFE9', '#74A5AD', '#46585F'],
+      same: ['0x00 IN_PROGRESS', '#F1EFE9', '#74A5AD', '#46585F'],
+      cross: ['0x03 SUB_COMMITTED', '#F6F0E1', '#AE8A3E', '#AE8A3E'],
+      title: '阶段 1 · 先把跨页子事务（32768、32769）标为 0x03 SUB_COMMITTED',
+      desc: '并发读者若扫到 32768，看到 SUB_COMMITTED 后递归查 pg_subtrans 找到父 32766；父仍在运行，故仍判不可见！',
+      why: '安全保证：提前铺路但不提前暴露可见性，彻底杜绝半截提交。'
+    },
+    {
+      top: ['0x01 COMMITTED', '#E6F2EE', '#2F7A66', '#2F7A66'],
+      same: ['0x01 COMMITTED', '#E6F2EE', '#2F7A66', '#2F7A66'],
+      cross: ['0x03 SUB_COMMITTED', '#F6F0E1', '#AE8A3E', '#AE8A3E'],
+      title: '阶段 2 · 顶层 32766 与同页 32767 在一次页锁内原子标为 0x01 COMMITTED',
+      desc: '这一瞬间全树事务原子生效！读者查 32768 看到 SUB_COMMITTED → 查父 32766 已 COMMITTED → 立刻判为已提交。',
+      why: '原子核心：整棵事务树的对外可见性只取决于顶层这一笔原子写。'
+    },
+    {
+      top: ['0x01 COMMITTED', '#E6F2EE', '#2F7A66', '#2F7A66'],
+      same: ['0x01 COMMITTED', '#E6F2EE', '#2F7A66', '#2F7A66'],
+      cross: ['0x01 COMMITTED', '#E6F2EE', '#2F7A66', '#2F7A66'],
+      title: '阶段 3 · 回头把跨页子事务（32768、32769）补改为最终 0x01 COMMITTED',
+      desc: '后续读者直接查 pg_xact 就能得出 COMMITTED 结论，不再需要绕道 pg_subtrans 递归查父事务。',
+      why: '收尾提速：消除长期查 pg_subtrans 的额外开销，三阶段圆满收官。'
+    }
+  ];
+
+  function renderS5(phase) {
+    s5Phase = phase;
+    const m = s5Meta[phase];
+    const apply = (boxId, stId, arr) => {
+      const box = document.getElementById(boxId);
+      const st = document.getElementById(stId);
+      box.setAttribute('fill', arr[1]);
+      box.setAttribute('stroke', arr[2]);
+      st.textContent = arr[0];
+      st.setAttribute('fill', arr[3]);
+    };
+    apply('s5-top-box', 's5-top-st', m.top);
+    apply('s5-same-box', 's5-same-st', m.same);
+    apply('s5-cross1-box', 's5-cross1-st', m.cross);
+    apply('s5-cross2-box', 's5-cross2-st', m.cross);
+    document.getElementById('s5-phase-title').textContent = m.title;
+    document.getElementById('s5-phase-desc').textContent = m.desc;
+    document.getElementById('s5-phase-why').textContent = m.why;
+    document.querySelectorAll('[data-s5-step]').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.s5Step, 10) === phase);
+    });
+  }
+
+  document.querySelectorAll('[data-s5-step]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (s5Timer) { clearInterval(s5Timer); s5Timer = null; }
+      renderS5(parseInt(btn.dataset.s5Step, 10));
+    });
+  });
+  document.getElementById('s5-play').addEventListener('click', () => {
+    if (s5Timer) clearInterval(s5Timer);
+    let p = 0; renderS5(0);
+    s5Timer = setInterval(() => {
+      p++;
+      if (p > 3) { clearInterval(s5Timer); s5Timer = null; return; }
+      renderS5(p);
+    }, 1100);
+  });
+  document.getElementById('s5-reset').addEventListener('click', () => {
+    if (s5Timer) { clearInterval(s5Timer); s5Timer = null; }
+    renderS5(0);
+  });
+
+  /* ==================== 6. SLIDE 6 INTERACTIVE: GROUP UPDATE ==================== */
+  let s6Mode = 'group';
+  let s6Timer = null;
+
+  function resetS6() {
+    if (s6Timer) { clearInterval(s6Timer); s6Timer = null; }
+    for (let i = 1; i <= 4; i++) {
+      const b = document.getElementById('s6-b' + i).querySelector('rect');
+      b.setAttribute('fill', i === 1 ? '#E5EFF0' : '#FFFFFF');
+      b.setAttribute('stroke', i === 1 ? '#245A6B' : '#74A5AD');
+      document.getElementById('s6-b' + i + '-st').textContent = i === 1 ? '待提交 · 尝试获取 Bank Lock' : '待提交 · 满足 Group 条件';
+      const p = document.getElementById('s6-p' + i);
+      p.setAttribute('fill', '#FFFFFF');
+      p.setAttribute('stroke', '#74A5AD');
+      const pv = document.getElementById('s6-p' + i + '-v');
+      pv.textContent = '0x00 IN_PROGRESS';
+      pv.setAttribute('fill', '#46585F');
+    }
+    document.getElementById('s6-lock-owner').textContent = '当前持锁：空闲 · 锁交接计数：0 次';
+    document.getElementById('s6-status').textContent =
+      '当前模式：' + (s6Mode === 'group' ? 'Group Update 批处理' : '传统逐个争锁') + ' · 点击「播放演示」观察差异';
+  }
+
+  document.getElementById('s6-mode-group').addEventListener('click', function() {
+    s6Mode = 'group';
+    this.classList.add('active');
+    document.getElementById('s6-mode-serial').classList.remove('active');
+    resetS6();
+  });
+  document.getElementById('s6-mode-serial').addEventListener('click', function() {
+    s6Mode = 'serial';
+    this.classList.add('active');
+    document.getElementById('s6-mode-group').classList.remove('active');
+    resetS6();
+  });
+  document.getElementById('s6-reset').addEventListener('click', resetS6);
+  document.getElementById('s6-play').addEventListener('click', () => {
+    resetS6();
+    let step = 0;
+    if (s6Mode === 'group') {
+      const runGroup = () => {
+        step++;
+        if (step === 1) {
+          document.getElementById('s6-b1-st').textContent = '成为 Leader · 拿到 Bank Lock';
+          document.getElementById('s6-b1').querySelector('rect').setAttribute('fill', '#E6F2EE');
+          for (let i = 2; i <= 4; i++) {
+            document.getElementById('s6-b' + i + '-st').textContent = '排队等待 (XactGroupUpdate)';
+            document.getElementById('s6-b' + i).querySelector('rect').setAttribute('fill', '#F7E9DE');
+          }
+          document.getElementById('s6-lock-owner').textContent = '当前持锁：Backend 1 (Leader) · 锁交接计数：1 次';
+          document.getElementById('s6-status').textContent = '阶段 1：Backend 2~4 未拿到锁，入队等待；Leader 持锁准备批量写。';
+        } else if (step === 2) {
+          for (let i = 1; i <= 4; i++) {
+            document.getElementById('s6-p' + i).setAttribute('fill', '#E6F2EE');
+            document.getElementById('s6-p' + i).setAttribute('stroke', '#2F7A66');
+            const pv = document.getElementById('s6-p' + i + '-v');
+            pv.textContent = '0x01 COMMITTED';
+            pv.setAttribute('fill', '#2F7A66');
+          }
+          document.getElementById('s6-status').textContent = '阶段 2：Leader 一次持锁内批量更新 5001–5004 共 4 个事务状态位！';
+        } else {
+          for (let i = 1; i <= 4; i++) {
+            document.getElementById('s6-b' + i).querySelector('rect').setAttribute('fill', '#E6F2EE');
+            document.getElementById('s6-b' + i + '-st').textContent = '已唤醒完成提交';
+          }
+          document.getElementById('s6-lock-owner').textContent = '当前持锁：已释放 · 总锁交接：仅 1 次（省下 3 次争用）';
+          document.getElementById('s6-status').textContent = '完成：仅 1 次 Bank Lock 交接，全部 4 个事务完成状态落定。';
+          clearInterval(s6Timer); s6Timer = null;
+        }
+      };
+      runGroup();
+      s6Timer = setInterval(runGroup, 1000);
+    } else {
+      const runSerial = () => {
+        step++;
+        if (step <= 4) {
+          document.getElementById('s6-b' + step).querySelector('rect').setAttribute('fill', '#F7E9DE');
+          document.getElementById('s6-b' + step + '-st').textContent = '抢锁 → 改 1 个 bit → 放锁';
+          document.getElementById('s6-p' + step).setAttribute('fill', '#E6F2EE');
+          document.getElementById('s6-p' + step).setAttribute('stroke', '#2F7A66');
+          const pv = document.getElementById('s6-p' + step + '-v');
+          pv.textContent = '0x01 COMMITTED';
+          pv.setAttribute('fill', '#2F7A66');
+          document.getElementById('s6-lock-owner').textContent = '当前持锁：Backend ' + step + ' · 锁交接计数：' + step + ' 次';
+          document.getElementById('s6-status').textContent = '串行第 ' + step + ' 轮：每次都要经历抢锁与唤醒开销。';
+        } else {
+          document.getElementById('s6-lock-owner').textContent = '当前持锁：已释放 · 总锁交接：4 次（高并发下争用剧烈）';
+          clearInterval(s6Timer); s6Timer = null;
+        }
+      };
+      runSerial();
+      s6Timer = setInterval(runSerial, 750);
+    }
+  });
+
+  /* ==================== 7. SLIDE 7 INTERACTIVE: VISIBILITY LOOKUP ==================== */
+  let s7Scenario = 0;
+  let s7Timer = null;
+  const s7Data = [
+    {
+      steps: [1],
+      title: '场景 1 · Hint Bit 命中（最常见的极速路径）',
+      l1: '路径：直接检查 Tuple Header，发现 HEAP_XMIN_COMMITTED 已置位，立刻返回可见结论。',
+      l2: '实证意义：完全跳过 ProcArray 与 pg_xact SLRU 查询，这是 OLTP 大规模扫描依然轻量的关键缓存。',
+      l3: '代码位置：src/backend/access/heap/heapam_visibility.c'
+    },
+    {
+      steps: [1, 2],
+      title: '场景 2 · 正在提交窗口期（ProcArray 阻断提前可见！）',
+      l1: '现象：事务 T 刚在 pg_xact 写入 0x01 COMMITTED，但还没从 ProcArray 清掉自己的 XID。',
+      l2: '关键防线：读者先查 TransactionIdIsInProgress() / XidInMVCCSnapshot()，命中运行中 → 直接判不可见，绝不越级查 pg_xact！',
+      l3: '反面教训：若跳过第 2 步直接查 pg_xact，会把尚未完全结束的事务提前暴露给快照。'
+    },
+    {
+      steps: [1, 2, 3, 4],
+      title: '场景 3 · 老 Tuple 未置 Hint Bit（兜底查 pg_xact 并回写）',
+      l1: '路径：Hint Bit 未置 → ProcArray 确认不在运行 → TransactionIdDidCommit() 经单项缓存查 pg_xact 得到 0x01。',
+      l2: '回写优化：确认已提交且安全时，顺手把 HEAP_XMIN_COMMITTED 写回 Tuple Header，后续扫描不再查 SLRU。',
+      l3: '运维提醒：这一步会把数据页标脏——所以纯 SELECT 首次扫老表，也可能触发磁盘写入！'
+    }
+  ];
+
+  function renderS7(activeUpTo) {
+    const sc = s7Data[s7Scenario];
+    for (let i = 1; i <= 4; i++) {
+      const el = document.getElementById('s7-st' + i);
+      if (activeUpTo === null) {
+        el.style.opacity = sc.steps.includes(i) ? '1' : '0.3';
+      } else {
+        el.style.opacity = (sc.steps.includes(i) && i <= activeUpTo) ? '1' : '0.25';
+      }
+    }
+    document.getElementById('s7-desc-title').textContent = sc.title;
+    document.getElementById('s7-desc-l1').textContent = sc.l1;
+    document.getElementById('s7-desc-l2').textContent = sc.l2;
+    document.getElementById('s7-desc-l3').textContent = sc.l3;
+    document.querySelectorAll('[data-s7-sc]').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.s7Sc, 10) === s7Scenario);
+    });
+  }
+
+  document.querySelectorAll('[data-s7-sc]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (s7Timer) { clearInterval(s7Timer); s7Timer = null; }
+      s7Scenario = parseInt(btn.dataset.s7Sc, 10);
+      renderS7(null);
+    });
+  });
+  document.getElementById('s7-play').addEventListener('click', () => {
+    if (s7Timer) clearInterval(s7Timer);
+    const steps = s7Data[s7Scenario].steps;
+    let idx = 0;
+    renderS7(steps[0]);
+    if (steps.length === 1) return;
+    s7Timer = setInterval(() => {
+      idx++;
+      if (idx >= steps.length) { clearInterval(s7Timer); s7Timer = null; return; }
+      renderS7(steps[idx]);
+    }, 750);
+  });
+  document.getElementById('s7-reset').addEventListener('click', () => {
+    if (s7Timer) { clearInterval(s7Timer); s7Timer = null; }
+    s7Scenario = 0;
+    renderS7(null);
+  });
+
+  /* ==================== 8. SLIDE 8 INTERACTIVE: VACUUM TRUNCATE ==================== */
+  let s8Blocked = false;
+  let s8CutCount = 1; // 1..4 segments frozen
+  const s8PtrX = [247, 461, 675, 889];
+
+  function renderS8() {
+    const ptr = document.getElementById('s8-pointer');
+    const effCut = s8Blocked ? 1 : s8CutCount;
+    ptr.setAttribute('transform', 'translate(' + s8PtrX[effCut - 1] + ', 0)');
+
+    for (let i = 0; i < 5; i++) {
+      const g = document.getElementById('s8-seg-' + i);
+      const r = g.querySelector('rect');
+      const t = document.getElementById('s8-seg-' + i + '-t');
+      if (i < effCut) {
+        if (!s8Blocked && effCut > 1 && i < effCut - 1) {
+          r.setAttribute('fill', '#F1EFE9');
+          r.setAttribute('stroke', '#D9D5CB');
+          t.textContent = '已安全截断删除';
+        } else {
+          r.setAttribute('fill', '#E6F2EE');
+          r.setAttribute('stroke', '#2F7A66');
+          t.textContent = '已冻结 · 可截断';
+        }
+      } else if (s8Blocked && i === 1) {
+        r.setAttribute('fill', '#F7E9DE');
+        r.setAttribute('stroke', '#BE653B');
+        t.textContent = '被长事务/复制槽卡住！';
+      } else {
+        r.setAttribute('fill', i >= 3 ? '#CFE0DC' : '#E5EFF0');
+        r.setAttribute('stroke', i >= 3 ? '#2E6373' : '#245A6B');
+        t.textContent = i >= 3 ? '保留 · 近期提交' : '保留 · 含活跃引用';
+      }
+    }
+
+    if (s8Blocked) {
+      document.getElementById('s8-ptr-label').textContent = '边界被卡死在段 0001！';
+      document.getElementById('s8-status').textContent = '阻塞告警：存在长事务或复制槽拖住 min(datfrozenxid)，推进冻结无效，pg_xact 无法继续截断。';
+    } else {
+      document.getElementById('s8-ptr-label').textContent = 'min(datfrozenxid) 边界';
+      document.getElementById('s8-status').textContent =
+        '正常推进（周期 ' + s8CutCount + '/4）：已推进 oldestClogXid 并刷 CLOG_TRUNCATE WAL，段 0000' + (s8CutCount > 1 ? '–000' + (s8CutCount - 1) : '') + ' 可安全回收。';
+    }
+  }
+
+  document.getElementById('s8-mode-ok').addEventListener('click', function() {
+    s8Blocked = false;
+    this.classList.add('active');
+    document.getElementById('s8-mode-block').classList.remove('active');
+    renderS8();
+  });
+  document.getElementById('s8-mode-block').addEventListener('click', function() {
+    s8Blocked = true;
+    this.classList.add('active');
+    document.getElementById('s8-mode-ok').classList.remove('active');
+    renderS8();
+  });
+  document.getElementById('s8-advance').addEventListener('click', () => {
+    if (!s8Blocked) {
+      s8CutCount = s8CutCount >= 4 ? 1 : s8CutCount + 1;
+    }
+    renderS8();
+  });
+  document.getElementById('s8-reset').addEventListener('click', () => {
+    s8Blocked = false;
+    s8CutCount = 1;
+    document.getElementById('s8-mode-ok').classList.add('active');
+    document.getElementById('s8-mode-block').classList.remove('active');
+    renderS8();
+  });
+
+  /* ==================== 9. INIT ==================== */
+  buildTOC();
+  updateS3(null);
+  renderS4();
+  renderS5(0);
+  resetS6();
+  renderS7(null);
+  renderS8();
+  rescaleStage();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,3038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— 内存上下文管理 (PostgreSQL MemoryContext)</title>
+<style>
+:root {
+  --bg: #F7F6F2;
+  --bg-sec: #F1EFE9;
+  --ink: #1B2B33;
+  --ink-sec: #46585F;
+  --ink-muted: #89938F;
+  --stroke: #D9D5CB;
+  --indigo: #245A6B;
+  --indigo-lt: #E5EFF0;
+  --terra: #BE653B;
+  --terra-lt: #F7E9DE;
+  --teal: #2F7A66;
+  --teal-lt: #E4F0EC;
+  --gold: #AE8A3E;
+  --gold-lt: #F4EFE2;
+  --s1: #1E4B5A;
+  --s2: #2E6373;
+  --s3: #47808D;
+  --s4: #74A5AD;
+  --s5: #A4C4C6;
+  --s6: #CFE0DC;
+  --s7: #EBF1EE;
+  --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'Source Han Serif SC', 'SimSun', serif;
+  --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  --hud-h: 46px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #E8E5DC;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app-root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #E4E0D6;
+  position: relative;
+}
+
+#main-workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+#stage-viewport {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #DDD9CE;
+  position: relative;
+  overflow: hidden;
+  transition: width 0.22s ease;
+}
+
+#stage-shell {
+  width: 1600px;
+  height: 900px;
+  transform-origin: center center;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #CFCAC0;
+  flex-shrink: 0;
+}
+
+/* Blueprint subtle coordinate grid on stage background */
+#stage-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(36, 90, 107, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(36, 90, 107, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* Left strata accent bar */
+#stage-shell::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(
+    to bottom,
+    var(--s1) 0% 14%,
+    var(--s2) 14% 28%,
+    var(--s3) 28% 42%,
+    var(--s4) 42% 57%,
+    var(--s5) 57% 71%,
+    var(--s6) 71% 85%,
+    var(--s7) 85% 100%
+  );
+  pointer-events: none;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+  padding: 48px 136px 36px 64px;
+  display: none;
+  flex-direction: column;
+  z-index: 1;
+}
+
+.slide.active {
+  display: flex;
+}
+
+.slide-eyebrow {
+  font-family: var(--font-mono), var(--font-sans);
+  font-size: 13px;
+  letter-spacing: 3.4px;
+  color: var(--indigo);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slide-eyebrow .tag-accent {
+  color: var(--terra);
+}
+
+.slide-title {
+  font-family: var(--font-serif);
+  font-size: 44px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 10px;
+  letter-spacing: 0.4px;
+}
+
+.slide-lead {
+  font-family: var(--font-sans);
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ink-sec);
+  margin-bottom: 16px;
+  max-width: 1400px;
+}
+
+.slide-divider {
+  width: 1400px;
+  height: 1px;
+  background: var(--stroke);
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.diagram-zone {
+  width: 1400px;
+  height: 430px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  margin-bottom: 22px;
+}
+
+.diagram-toolbar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--bg-sec);
+  border: 1px solid var(--stroke);
+  border-bottom: none;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-label {
+  font-family: var(--font-mono), var(--font-sans);
+  font-size: 12px;
+  color: var(--ink-sec);
+  letter-spacing: 0.6px;
+}
+
+.ctrl-btn {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 5px 12px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--stroke);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.ctrl-btn:hover {
+  border-color: var(--indigo);
+  background: var(--indigo-lt);
+}
+
+.ctrl-btn.active {
+  background: var(--indigo);
+  color: #FFFFFF;
+  border-color: var(--indigo);
+}
+
+.ctrl-btn.btn-terra.active,
+.ctrl-btn.btn-terra:hover {
+  border-color: var(--terra);
+}
+
+.ctrl-btn.btn-terra.active {
+  background: var(--terra);
+  color: #FFFFFF;
+}
+
+.ctrl-btn.btn-teal.active {
+  background: var(--teal);
+  color: #FFFFFF;
+  border-color: var(--teal);
+}
+
+.ctrl-range {
+  width: 150px;
+  accent-color: var(--indigo);
+  cursor: pointer;
+}
+
+.ctrl-status {
+  font-family: var(--font-mono), var(--font-sans);
+  font-size: 13px;
+  color: var(--indigo);
+  font-weight: 600;
+}
+
+.diagram-canvas {
+  width: 1400px;
+  flex: 1;
+  min-height: 0;
+  background: #FAF9F6;
+  border: 1px solid var(--stroke);
+  position: relative;
+  overflow: hidden;
+}
+
+.diagram-canvas svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.slide-next {
+  margin-top: auto;
+  padding: 8px 0 8px 16px;
+  border-left: 3px solid var(--terra);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.4;
+  color: var(--ink);
+  width: 1400px;
+}
+
+.slide-next .next-label {
+  font-family: var(--font-mono), var(--font-sans);
+  font-size: 13px;
+  letter-spacing: 2.2px;
+  color: var(--terra);
+  font-weight: 700;
+  margin-right: 12px;
+  vertical-align: 1px;
+}
+
+.slide-footer {
+  margin-top: 14px;
+  width: 1400px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono), var(--font-sans);
+  font-size: 12px;
+  color: var(--ink-muted);
+  border-top: 1px solid #E5E1D8;
+  padding-top: 10px;
+}
+
+.slide-footer .page-num {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-sec);
+  letter-spacing: 1px;
+}
+
+/* Right-side In-page Notes / Transcript Drawer */
+#notes-pane {
+  width: 0;
+  height: 100%;
+  background: var(--bg);
+  border-left: 0 solid var(--stroke);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.22s ease;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+#notes-pane.open {
+  width: 440px;
+  border-left: 2px solid var(--indigo);
+}
+
+.notes-header {
+  padding: 14px 20px;
+  background: var(--bg-sec);
+  border-bottom: 1px solid var(--stroke);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.notes-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.notes-tab {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  background: var(--bg);
+  color: var(--ink-sec);
+  border: 1px solid var(--stroke);
+  cursor: pointer;
+}
+
+.notes-tab.active {
+  background: var(--indigo);
+  color: #FFFFFF;
+  border-color: var(--indigo);
+}
+
+.notes-close {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--ink-sec);
+  border: 1px solid var(--stroke);
+  cursor: pointer;
+}
+
+.notes-close:hover {
+  border-color: var(--terra);
+  color: var(--terra);
+}
+
+#notes-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px 48px;
+  line-height: 1.78;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.note-card {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  background: #FAF9F6;
+  border: 1px solid var(--stroke);
+  border-left: 3px solid var(--stroke);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.note-card.current-page {
+  border-left: 4px solid var(--terra);
+  background: #FFFFFF;
+  border-color: var(--indigo);
+  border-left-color: var(--terra);
+}
+
+.note-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #EAE6DD;
+  cursor: pointer;
+}
+
+.note-card-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--indigo);
+  letter-spacing: 1px;
+}
+
+.note-card.current-page .note-card-num {
+  color: var(--terra);
+}
+
+.note-card-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  flex: 1;
+  margin-left: 10px;
+}
+
+.note-para {
+  margin-bottom: 12px;
+  text-align: justify;
+}
+
+.note-para:last-child {
+  margin-bottom: 0;
+}
+
+.note-evidence {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--indigo-lt);
+  border-left: 3px solid var(--indigo);
+  font-family: var(--font-mono), var(--font-sans);
+  font-size: 12.5px;
+  color: var(--ink-sec);
+  line-height: 1.55;
+}
+
+/* Directory / TOC In-Page Panel */
+#toc-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: var(--hud-h);
+  width: 420px;
+  background: var(--bg);
+  border-right: 2px solid var(--indigo);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-105%);
+  transition: transform 0.22s ease;
+}
+
+#toc-panel.open {
+  transform: translateX(0);
+}
+
+.toc-header {
+  padding: 16px 20px;
+  background: var(--bg-sec);
+  border-bottom: 1px solid var(--stroke);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toc-title {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.toc-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.toc-item {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 1px solid #EAE6DD;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.toc-item:hover {
+  background: var(--indigo-lt);
+}
+
+.toc-item.active {
+  background: var(--terra-lt);
+  border-left: 3px solid var(--terra);
+}
+
+.toc-num {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--indigo);
+  min-width: 26px;
+  padding-top: 2px;
+}
+
+.toc-item.active .toc-num {
+  color: var(--terra);
+}
+
+.toc-item-main {
+  flex: 1;
+}
+
+.toc-item-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.toc-item-sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* Bottom Shortcut HUD Bar (Dedicated Strip Outside Stage, Always Visible in Fullscreen) */
+#bottom-hud {
+  height: var(--hud-h);
+  width: 100%;
+  background: #1B2B33;
+  color: #EBF1EE;
+  border-top: 1px solid #2E6373;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  flex-shrink: 0;
+  z-index: 50;
+  user-select: none;
+}
+
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  background: #243842;
+  color: #EBF1EE;
+  border: 1px solid #3B5561;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.hud-btn:hover {
+  background: #2E6373;
+  border-color: #74A5AD;
+}
+
+.hud-btn.active {
+  background: var(--terra);
+  border-color: #E28B62;
+  color: #FFFFFF;
+}
+
+.hud-btn .kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+.hud-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #CFE0DC;
+}
+
+.hud-bar {
+  width: 140px;
+  height: 4px;
+  background: #2E444F;
+  position: relative;
+  overflow: hidden;
+}
+
+.hud-bar-fill {
+  height: 100%;
+  background: var(--terra);
+  width: 7%;
+  transition: width 0.2s ease;
+}
+
+.hud-autoplay-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #F4EFE2;
+  background: var(--gold);
+  padding: 2px 7px;
+  display: none;
+}
+
+.hud-autoplay-badge.on {
+  display: inline-block;
+}
+
+/* SVG Typography & Animation Helpers */
+.svg-title { font-family: var(--font-serif); font-weight: 700; fill: #1B2B33; }
+.svg-label { font-family: var(--font-sans); font-weight: 600; fill: #1B2B33; }
+.svg-body  { font-family: var(--font-sans); fill: #46585F; }
+.svg-muted { font-family: var(--font-sans); fill: #89938F; }
+.svg-mono  { font-family: var(--font-mono); fill: #1B2B33; }
+.svg-white { font-family: var(--font-sans); font-weight: 600; fill: #F7F6F2; }
+.svg-white-mono { font-family: var(--font-mono); fill: #EBF1EE; }
+
+@keyframes pulseStroke {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.35; }
+}
+.anim-pulse {
+  animation: pulseStroke 1.1s infinite ease-in-out;
+}
+</style>
+</head>
+<body>
+
+<!-- Shared SVG Marker Definitions (Zero Duplicate IDs) -->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;">
+  <defs>
+    <marker id="arr-indigo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#245A6B"/>
+    </marker>
+    <marker id="arr-terra" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#BE653B"/>
+    </marker>
+    <marker id="arr-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#2F7A66"/>
+    </marker>
+    <marker id="arr-gold" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#AE8A3E"/>
+    </marker>
+    <marker id="arr-ink" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#46585F"/>
+    </marker>
+  </defs>
+</svg>
+
+<div id="app-root">
+  <!-- In-page Directory / TOC Panel -->
+  <aside id="toc-panel" aria-label="演说目录">
+    <div class="toc-header">
+      <span class="toc-title">目录 · 内存上下文管理 (14 页)</span>
+      <button type="button" class="notes-close" id="btn-toc-close">关闭 G</button>
+    </div>
+    <div class="toc-list" id="toc-list"></div>
+  </aside>
+
+  <div id="main-workspace">
+    <!-- Left Vector-Scaled 16:9 Stage Viewport -->
+    <main id="stage-viewport">
+      <div id="stage-shell">
+
+        <!-- ==================== SLIDE 1 ==================== -->
+        <section class="slide active" data-slide="1">
+          <div class="slide-eyebrow">
+            <span>数据库筑基课 · 内核机制与执行器基础</span>
+            <span class="tag-accent">POSTGRESQL MEMORYCONTEXT</span>
+          </div>
+          <h1 class="slide-title">内存上下文管理：用生命周期树驯服长运行后端</h1>
+          <p class="slide-lead">一次扩展函数里的「小测试正常、长查询 OOM」事故，引出 PostgreSQL 内存纪律的四个基础命题。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: Incident strata diagram -->
+                <rect x="24" y="20" width="620" height="390" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="24" y="20" width="620" height="38" fill="#1E4B5A"/>
+                <text x="42" y="45" class="svg-white" font-size="16">真实工程切入：为什么加 pfree() 不是根本解法？</text>
+
+                <!-- Step 1 -->
+                <rect x="48" y="80" width="572" height="58" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.2"/>
+                <text x="66" y="104" class="svg-label" font-size="15">1. 扩展函数每处理一行调用 palloc() 构造临时字符串</text>
+                <text x="66" y="126" class="svg-body" font-size="13.5">开发者未关注 CurrentMemoryContext 指向——落入了函数缓存或查询级上下文</text>
+
+                <path d="M 334 138 L 334 162" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <!-- Step 2 -->
+                <rect x="48" y="166" width="572" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="66" y="190" class="svg-label" font-size="15" fill="#BE653B">2. 小测试通过，上线后单条长查询扫描数千万行</text>
+                <text x="66" y="212" class="svg-body" font-size="13.5">短寿命对象被强行提升为长寿命，Backend RSS 持续单调攀升直至 OOM</text>
+
+                <path d="M 334 224 L 334 248" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+
+                <!-- Step 3 -->
+                <rect x="48" y="252" width="572" height="66" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="66" y="276" class="svg-label" font-size="15" fill="#2F7A66">3. 正确工程修复：归位生命周期，而非零散打补丁</text>
+                <text x="66" y="300" class="svg-body" font-size="12.5">迁入 per-tuple 上下文，或自建临时上下文按轮次 MemoryContextReset()</text>
+
+                <!-- Strata legend strip -->
+                <rect x="48" y="340" width="81" height="48" fill="#1E4B5A"/>
+                <text x="88" y="369" text-anchor="middle" class="svg-white" font-size="12">Top</text>
+                <rect x="130" y="340" width="81" height="48" fill="#2E6373"/>
+                <text x="170" y="369" text-anchor="middle" class="svg-white" font-size="12">Cache</text>
+                <rect x="212" y="340" width="81" height="48" fill="#47808D"/>
+                <text x="252" y="369" text-anchor="middle" class="svg-white" font-size="12">Message</text>
+                <rect x="294" y="340" width="81" height="48" fill="#74A5AD"/>
+                <text x="334" y="369" text-anchor="middle" class="svg-white" font-size="12">TopTxn</text>
+                <rect x="376" y="340" width="81" height="48" fill="#A4C4C6"/>
+                <text x="416" y="369" text-anchor="middle" class="svg-label" font-size="12">Portal</text>
+                <rect x="458" y="340" width="81" height="48" fill="#CFE0DC"/>
+                <text x="498" y="369" text-anchor="middle" class="svg-label" font-size="12">Query</text>
+                <rect x="540" y="340" width="80" height="48" fill="#EBF1EE" stroke="#D9D5CB"/>
+                <text x="580" y="369" text-anchor="middle" class="svg-label" font-size="12">Tuple</text>
+
+                <!-- Right: 4 Core Questions -->
+                <rect x="676" y="20" width="700" height="390" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="676" y="20" width="700" height="38" fill="#245A6B"/>
+                <text x="694" y="45" class="svg-white" font-size="16">本课主线：拆解 PostgreSQL 源码背后的四个基础问题</text>
+
+                <rect x="700" y="76" width="652" height="68" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="700" y="76" width="6" height="68" fill="#245A6B"/>
+                <text x="722" y="104" class="svg-mono" font-size="14" font-weight="700" fill="#245A6B">Q1 · 分配归属</text>
+                <text x="722" y="128" class="svg-label" font-size="16">palloc() 到底把内存放到哪里？CurrentMemoryContext 如何决定命运？</text>
+
+                <rect x="700" y="158" width="652" height="68" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="700" y="158" width="6" height="68" fill="#2E6373"/>
+                <text x="722" y="186" class="svg-mono" font-size="14" font-weight="700" fill="#2E6373">Q2 · 释放解耦</text>
+                <text x="722" y="210" class="svg-label" font-size="16">为什么 pfree() 与 repalloc() 不依赖当前上下文？</text>
+
+                <rect x="700" y="240" width="652" height="68" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="700" y="240" width="6" height="68" fill="#2F7A66"/>
+                <text x="722" y="268" class="svg-mono" font-size="14" font-weight="700" fill="#2F7A66">Q3 · 批量回收</text>
+                <text x="722" y="292" class="svg-label" font-size="16">查询结束、事务结束、ereport(ERROR) 长跳转为何能可靠释放大量内存？</text>
+
+                <rect x="700" y="322" width="652" height="68" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="700" y="322" width="6" height="68" fill="#BE653B"/>
+                <text x="722" y="350" class="svg-mono" font-size="14" font-weight="700" fill="#BE653B">Q4 · 容量与观测</text>
+                <text x="722" y="374" class="svg-label" font-size="16">为什么 work_mem 没有超限，backend 进程仍可能占用大量内存？</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>要回答这四个问题，先看清传统 C 语言 malloc/free 在数据库内核里为何会失效。
+          </div>
+          <div class="slide-footer">
+            <span>来源：PostgreSQL 源码 mmgr/README · palloc.h · memutils.h · executor/README · digoal (2026-06-08)</span>
+            <span class="page-num">01 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 2 ==================== -->
+        <section class="slide" data-slide="2">
+          <div class="slide-eyebrow">
+            <span>01 · 问题本质</span>
+            <span class="tag-accent">LIFECYCLE VS POINTER</span>
+          </div>
+          <h1 class="slide-title">它解决的不是「替代 malloc」，而是生命周期管理</h1>
+          <p class="slide-lead">数据库后端长运行、多阶段、频繁异常长跳转，逐指针手工释放会在错误路径与高频调用中迅速失控。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Column: malloc/free -->
+                <rect x="24" y="20" width="640" height="390" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.4"/>
+                <rect x="24" y="20" width="640" height="40" fill="#BE653B"/>
+                <text x="44" y="46" class="svg-white" font-size="16">普通 C 堆管理：malloc() / free() —— 按单个指针追踪</text>
+
+                <rect x="50" y="82" width="170" height="52" fill="#FFFFFF" stroke="#BE653B"/>
+                <text x="135" y="105" text-anchor="middle" class="svg-mono" font-size="14" font-weight="700">malloc(p1..pn)</text>
+                <text x="135" y="124" text-anchor="middle" class="svg-body" font-size="12">表达式 / 投影 / 临时行</text>
+
+                <!-- Orthogonal branches -->
+                <path d="M 220 108 L 280 108 L 280 96 L 330 96" fill="none" stroke="#46585F" stroke-width="1.6" marker-end="url(#arr-ink)"/>
+                <path d="M 280 108 L 280 164 L 330 164" fill="none" stroke="#BE653B" stroke-width="1.6" marker-end="url(#arr-terra)"/>
+                <path d="M 280 164 L 280 232 L 330 232" fill="none" stroke="#BE653B" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arr-terra)"/>
+
+                <rect x="334" y="72" width="306" height="48" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="350" y="93" class="svg-label" font-size="13.5">正常返回路径：逐个 free(p1..pn)</text>
+                <text x="350" y="111" class="svg-body" font-size="12">代码繁琐，漏一个即成慢性泄漏</text>
+
+                <rect x="334" y="140" width="306" height="48" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="350" y="161" class="svg-label" font-size="13.5" fill="#BE653B">提前 return / 分支退出</text>
+                <text x="350" y="179" class="svg-body" font-size="12">每条分支必须重复编写清理逻辑</text>
+
+                <rect x="334" y="208" width="306" height="48" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="350" y="229" class="svg-label" font-size="13.5" fill="#BE653B">ereport(ERROR) siglongjmp 长跳转</text>
+                <text x="350" y="247" class="svg-body" font-size="12">跳过中间栈帧，手工 free() 彻底失效</text>
+
+                <rect x="50" y="286" width="590" height="104" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="68" y="312" class="svg-label" font-size="14" fill="#BE653B">五大内核痛点（为何普通堆扛不住）：</text>
+                <text x="68" y="336" class="svg-body" font-size="13">1. 查询期间大量极短寿命小对象　2. ERROR 长跳转绕过函数返回</text>
+                <text x="68" y="358" class="svg-body" font-size="13">3. 单 backend 跨多 SQL 长期运行　4. 扩展/AM 支持函数按行放大泄漏</text>
+                <text x="68" y="380" class="svg-body" font-size="13">5. 缓存 / Portal / 事务 / 子事务 / Tuple 生存期完全不同</text>
+
+                <!-- Center Divider Arrow -->
+                <path d="M 672 215 L 724 215" stroke="#245A6B" stroke-width="2.5" marker-end="url(#arr-indigo)"/>
+                <text x="698" y="202" text-anchor="middle" class="svg-mono" font-size="12" fill="#245A6B">范式转换</text>
+
+                <!-- Right Column: MemoryContext -->
+                <rect x="736" y="20" width="640" height="390" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.4"/>
+                <rect x="736" y="20" width="640" height="40" fill="#245A6B"/>
+                <text x="756" y="46" class="svg-white" font-size="16">PostgreSQL 答案：MemoryContext Arena Tree —— 按阶段边界回收</text>
+
+                <rect x="762" y="80" width="588" height="54" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="780" y="103" class="svg-label" font-size="14.5" fill="#245A6B">核心思想：把对象放进代表生命周期的上下文树</text>
+                <text x="780" y="124" class="svg-body" font-size="13">到边界时整棵子树 Reset / Delete；仅需提前复用或大对象时才逐个 pfree()</text>
+
+                <!-- 3 Pillars -->
+                <rect x="762" y="152" width="186" height="114" fill="#FFFFFF" stroke="#2F7A66"/>
+                <rect x="762" y="152" width="186" height="28" fill="#2F7A66"/>
+                <text x="855" y="171" text-anchor="middle" class="svg-white" font-size="13">错误安全</text>
+                <text x="776" y="202" class="svg-body" font-size="12.5">ERROR 跳回主循环后，</text>
+                <text x="776" y="222" class="svg-body" font-size="12.5">按事务/查询边界</text>
+                <text x="776" y="242" class="svg-body" font-size="12.5">整体回收，零遗漏。</text>
+
+                <rect x="963" y="152" width="186" height="114" fill="#FFFFFF" stroke="#245A6B"/>
+                <rect x="963" y="152" width="186" height="28" fill="#245A6B"/>
+                <text x="1056" y="171" text-anchor="middle" class="svg-white" font-size="13">统一接口与观测</text>
+                <text x="977" y="202" class="svg-body" font-size="12.5">四类分配器共用</text>
+                <text x="977" y="222" class="svg-body" font-size="12.5">虚函数表，并统一</text>
+                <text x="977" y="242" class="svg-body" font-size="12.5">暴露统计与日志。</text>
+
+                <rect x="1164" y="152" width="186" height="114" fill="#FFFFFF" stroke="#AE8A3E"/>
+                <rect x="1164" y="152" width="186" height="28" fill="#AE8A3E"/>
+                <text x="1257" y="171" text-anchor="middle" class="svg-white" font-size="13">明确的设计牺牲</text>
+                <text x="1178" y="202" class="svg-body" font-size="12.5">必须明确对象寿命；</text>
+                <text x="1178" y="222" class="svg-body" font-size="12.5">OOM 抛 ERROR；</text>
+                <text x="1178" y="242" class="svg-body" font-size="12.5">按 block 粗粒度统计。</text>
+
+                <rect x="762" y="286" width="588" height="104" fill="#E4F0EC" stroke="#2F7A66"/>
+                <text x="780" y="314" class="svg-title" font-size="17" fill="#1E4B5A">一句话定义：</text>
+                <text x="780" y="346" class="svg-label" font-size="16" fill="#245A6B">MemoryContext 是 PostgreSQL 用来把 C 内存分配</text>
+                <text x="780" y="372" class="svg-label" font-size="16" fill="#245A6B">绑定到数据库生命周期的 Arena Tree（内存区域树）。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>理解了「为什么要建树」，接下来直接翻开源码，看这棵树的数据结构与八大全局节点。
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/backend/utils/mmgr/README · Section 1</span>
+            <span class="page-num">02 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 3 ==================== -->
+        <section class="slide" data-slide="3">
+          <div class="slide-eyebrow">
+            <span>02 · 数据结构与全局地层</span>
+            <span class="tag-accent">MEMNODES.H · GLOBAL CONTEXTS</span>
+          </div>
+          <h1 class="slide-title">MemoryContextData 结构与八大全局上下文地层</h1>
+          <p class="slide-lead">颜色越深代表生命周期越底层；核心抽象用 C 虚函数表与父子链表构成整棵后端内存树。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: MemoryContextData Struct Blueprint -->
+                <rect x="24" y="18" width="460" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.4"/>
+                <rect x="24" y="18" width="460" height="38" fill="#1E4B5A"/>
+                <text x="42" y="43" class="svg-white-mono" font-size="14">struct MemoryContextData (memnodes.h)</text>
+
+                <!-- Struct fields -->
+                <rect x="42" y="70" width="424" height="40" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="56" y="95" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">type</text>
+                <text x="190" y="95" class="svg-body" font-size="13">AllocSet / Slab / Generation / Bump</text>
+
+                <rect x="42" y="116" width="424" height="40" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="56" y="141" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">isReset</text>
+                <text x="190" y="141" class="svg-body" font-size="13">自上次 reset 后是否尚未发生分配</text>
+
+                <rect x="42" y="162" width="424" height="40" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="56" y="187" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">mem_allocated</text>
+                <text x="190" y="187" class="svg-body" font-size="13">从底层分配器拿到的 block 总字节</text>
+
+                <rect x="42" y="208" width="424" height="40" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="56" y="233" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">methods *</text>
+                <text x="190" y="233" class="svg-label" font-size="13">MemoryContextMethods 虚函数表</text>
+
+                <rect x="42" y="254" width="424" height="46" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="56" y="274" class="svg-mono" font-size="12.5" font-weight="700" fill="#245A6B">parent / firstchild</text>
+                <text x="56" y="292" class="svg-mono" font-size="12.5" font-weight="700" fill="#245A6B">prevchild / nextchild</text>
+                <text x="224" y="282" class="svg-body" font-size="13">上下文树父子与兄弟链表</text>
+
+                <rect x="42" y="306" width="424" height="40" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="56" y="331" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">name / ident</text>
+                <text x="190" y="331" class="svg-body" font-size="13">统计视图与排障日志中的名称标识</text>
+
+                <rect x="42" y="352" width="424" height="44" fill="#F4EFE2" stroke="#AE8A3E"/>
+                <text x="56" y="379" class="svg-mono" font-size="13" font-weight="700" fill="#AE8A3E">reset_cbs *</text>
+                <text x="190" y="379" class="svg-label" font-size="13">reset/delete 前触发的资源回调链</text>
+
+                <!-- Right: 7-Level Stratigraphic Global Contexts -->
+                <rect x="516" y="18" width="860" height="394" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="516" y="18" width="860" height="38" fill="#245A6B"/>
+                <text x="536" y="43" class="svg-white" font-size="15">PostgreSQL 全局上下文地层剖面（越深＝越底层／越长寿）</text>
+
+                <!-- Band 1 -->
+                <rect x="536" y="68" width="820" height="44" fill="#1E4B5A"/>
+                <text x="554" y="95" class="svg-white-mono" font-size="13.5" font-weight="700">TopMemoryContext</text>
+                <text x="776" y="95" class="svg-white" font-size="13">Backend 进程级（根节点）</text>
+                <text x="1020" y="95" class="svg-white-mono" font-size="12.5">严禁放置业务临时对象</text>
+
+                <!-- Band 2 -->
+                <rect x="536" y="116" width="820" height="44" fill="#2E6373"/>
+                <text x="554" y="143" class="svg-white-mono" font-size="13.5" font-weight="700">ErrorContext / PostmasterContext</text>
+                <text x="860" y="143" class="svg-white" font-size="13">进程级错误保留 / fork 后释放</text>
+                <text x="1120" y="143" class="svg-white-mono" font-size="12.5">错误恢复保底内存</text>
+
+                <!-- Band 3 -->
+                <rect x="536" y="164" width="820" height="44" fill="#47808D"/>
+                <text x="554" y="191" class="svg-white-mono" font-size="13.5" font-weight="700">CacheMemoryContext</text>
+                <text x="776" y="191" class="svg-white" font-size="13">Backend 进程级常驻缓存</text>
+                <text x="1020" y="191" class="svg-white-mono" font-size="12.5">relcache / catcache / typcache</text>
+
+                <!-- Band 4 -->
+                <rect x="536" y="212" width="820" height="44" fill="#74A5AD"/>
+                <text x="554" y="239" class="svg-white-mono" font-size="13.5" font-weight="700">MessageContext</text>
+                <text x="776" y="239" class="svg-white" font-size="13">前端消息级（单条客户端命令）</text>
+                <text x="1020" y="239" class="svg-white-mono" font-size="12.5">简单查询 parse / plan 临时数据</text>
+
+                <!-- Band 5 -->
+                <rect x="536" y="260" width="820" height="44" fill="#A4C4C6"/>
+                <text x="554" y="287" class="svg-mono" font-size="13.5" font-weight="700">TopTransactionContext</text>
+                <text x="776" y="287" class="svg-label" font-size="13">顶层事务级</text>
+                <text x="1020" y="287" class="svg-body" font-size="12.5">事务提交或回滚结束时整棵释放</text>
+
+                <!-- Band 6 -->
+                <rect x="536" y="308" width="820" height="44" fill="#CFE0DC"/>
+                <text x="554" y="335" class="svg-mono" font-size="13.5" font-weight="700">CurTransactionContext</text>
+                <text x="776" y="335" class="svg-label" font-size="13">当前事务或子事务级</text>
+                <text x="1020" y="335" class="svg-body" font-size="12.5">SAVEPOINT 子事务下指向子上下文</text>
+
+                <!-- Band 7 -->
+                <rect x="536" y="356" width="820" height="44" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="554" y="383" class="svg-mono" font-size="13.5" font-weight="700">PortalContext / Executor / Expr</text>
+                <text x="820" y="383" class="svg-label" font-size="13">Portal / 查询 / 每行求值级</text>
+                <text x="1060" y="383" class="svg-label" font-size="12.5" fill="#2F7A66">高频创建与重置的最浅层</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>把上下文连成树之后，不同的清理 API 对「当前节点」与「子上下文」的破坏范围截然不同。
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/include/nodes/memnodes.h · src/include/utils/memutils.h</span>
+            <span class="page-num">03 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 4 (INTERACTIVE ANIMATION 1) ==================== -->
+        <section class="slide" data-slide="4">
+          <div class="slide-eyebrow">
+            <span>03 · 核心原理 3.1（交互仿真）</span>
+            <span class="tag-accent">TREE SEMANTICS · MCXT.C</span>
+          </div>
+          <h1 class="slide-title">生命周期树：Reset、ResetOnly 与 Delete 的精确边界</h1>
+          <p class="slide-lead">点击下方操作按钮观察子树变化——把短期对象错放到长寿命节点，不是漏写 free，而是生命周期越级。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">对 PortalContext 执行：</span>
+                <button type="button" class="ctrl-btn active" data-s4-op="init">初始状态</button>
+                <button type="button" class="ctrl-btn" data-s4-op="reset">MemoryContextReset</button>
+                <button type="button" class="ctrl-btn btn-terra" data-s4-op="resetOnly">MemoryContextResetOnly</button>
+                <button type="button" class="ctrl-btn" data-s4-op="delete">MemoryContextDelete</button>
+                <button type="button" class="ctrl-btn" data-s4-op="delChildren">DeleteChildren</button>
+                <button type="button" class="ctrl-btn btn-teal" data-s4-op="setParent">SetParent 提升</button>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="ctrl-btn" id="s4-play-btn">自动轮播</button>
+              </div>
+            </div>
+            <div class="diagram-canvas">
+              <svg id="s4-svg" viewBox="0 0 1400 384" xmlns="http://www.w3.org/2000/svg">
+                <!-- Orthogonal tree connectors -->
+                <path d="M 420 74 L 420 96 L 160 96 L 160 116" fill="none" stroke="#46585F" stroke-width="1.8"/>
+                <path d="M 420 74 L 420 116" fill="none" stroke="#46585F" stroke-width="1.8"/>
+                <path d="M 420 96 L 680 96 L 680 116" fill="none" stroke="#46585F" stroke-width="1.8"/>
+                <!-- Portal children connectors -->
+                <path id="s4-edge-c1" d="M 420 176 L 420 200 L 260 200 L 260 222" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+                <path id="s4-edge-c2" d="M 420 200 L 580 200 L 580 222" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+                <path id="s4-edge-gc" d="M 260 282 L 260 310" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+                <!-- Reparenting dashed edge (hidden by default) -->
+                <path id="s4-edge-reparent" d="M 680 176 L 680 252 L 664 252" fill="none" stroke="#2F7A66" stroke-width="2.2" stroke-dasharray="6 4" opacity="0" marker-end="url(#arr-teal)"/>
+
+                <!-- Root: TopMemoryContext -->
+                <rect x="290" y="20" width="260" height="54" fill="#1E4B5A"/>
+                <text x="420" y="44" text-anchor="middle" class="svg-white-mono" font-size="14" font-weight="700">TopMemoryContext</text>
+                <text x="420" y="63" text-anchor="middle" class="svg-white" font-size="12">根节点 · MemoryContextInit()</text>
+
+                <!-- Level 1 Left: TopTransactionContext -->
+                <rect x="50" y="116" width="220" height="60" fill="#47808D"/>
+                <text x="160" y="142" text-anchor="middle" class="svg-white-mono" font-size="13" font-weight="700">TopTransaction</text>
+                <text x="160" y="162" text-anchor="middle" class="svg-white" font-size="12">事务级（未受影响）</text>
+
+                <!-- Level 1 Center: Target Node PortalContext -->
+                <g id="s4-node-portal">
+                  <rect id="s4-rect-portal" x="300" y="116" width="240" height="60" fill="#245A6B" stroke="#1B2B33" stroke-width="2"/>
+                  <text id="s4-txt-portal1" x="420" y="141" text-anchor="middle" class="svg-white-mono" font-size="14" font-weight="700">PortalContext (目标)</text>
+                  <text id="s4-txt-portal2" x="420" y="162" text-anchor="middle" class="svg-white" font-size="12">已分配 128 KB · 节点存活</text>
+                </g>
+
+                <!-- Level 1 Right: CacheMemoryContext -->
+                <rect x="560" y="116" width="240" height="60" fill="#2E6373"/>
+                <text x="680" y="141" text-anchor="middle" class="svg-white-mono" font-size="13.5" font-weight="700">CacheMemoryContext</text>
+                <text x="680" y="162" text-anchor="middle" class="svg-white" font-size="12">长寿命缓存父节点</text>
+
+                <!-- Level 2 Left: ExecutorState -->
+                <g id="s4-node-exec">
+                  <rect id="s4-rect-exec" x="150" y="222" width="220" height="60" fill="#A4C4C6" stroke="#245A6B" stroke-width="1.5"/>
+                  <text id="s4-txt-exec1" x="260" y="247" text-anchor="middle" class="svg-mono" font-size="13.5" font-weight="700">ExecutorState</text>
+                  <text id="s4-txt-exec2" x="260" y="267" text-anchor="middle" class="svg-body" font-size="12">子上下文 · 已分配 512 KB</text>
+                </g>
+
+                <!-- Level 2 Right: TempBuildContext -->
+                <g id="s4-node-temp">
+                  <rect id="s4-rect-temp" x="470" y="222" width="220" height="60" fill="#CFE0DC" stroke="#245A6B" stroke-width="1.5"/>
+                  <text id="s4-txt-temp1" x="580" y="247" text-anchor="middle" class="svg-mono" font-size="13.5" font-weight="700">TempBuildContext</text>
+                  <text id="s4-txt-temp2" x="580" y="267" text-anchor="middle" class="svg-body" font-size="12">子上下文 · 已分配 64 KB</text>
+                </g>
+
+                <!-- Level 3: ExprContext -->
+                <g id="s4-node-expr">
+                  <rect id="s4-rect-expr" x="150" y="310" width="220" height="54" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+                  <text id="s4-txt-expr1" x="260" y="334" text-anchor="middle" class="svg-mono" font-size="13" font-weight="700">ExprContext (孙节点)</text>
+                  <text id="s4-txt-expr2" x="260" y="352" text-anchor="middle" class="svg-body" font-size="12">per-tuple · 已分配 16 KB</text>
+                </g>
+
+                <!-- Right Side: Explanation & Matrix Panel -->
+                <rect x="836" y="20" width="540" height="344" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <rect x="836" y="20" width="540" height="36" fill="#245A6B"/>
+                <text id="s4-panel-head" x="854" y="43" class="svg-white" font-size="14.5">当前操作：初始树状态（非递归自底向上清理机制）</text>
+
+                <text id="s4-desc-1" x="854" y="82" class="svg-label" font-size="14.5">PortalContext 挂载了两个子上下文与一个孙上下文。</text>
+                <text id="s4-desc-2" x="854" y="108" class="svg-body" font-size="13.5">点击上方按钮切换 API，对比「当前内存 / 子上下文 / 节点自身」三者命运。</text>
+                <text id="s4-desc-3" x="854" y="132" class="svg-body" font-size="13.5">mcxt.c 的 MemoryContextDelete 采用非递归自底向上删除，防错误路径爆栈。</text>
+
+                <!-- Compact comparison table inside SVG -->
+                <rect x="854" y="156" width="504" height="30" fill="#E5EFF0" stroke="#D9D5CB"/>
+                <text x="866" y="176" class="svg-mono" font-size="12" font-weight="700">API</text>
+                <text x="1058" y="176" class="svg-label" font-size="12">当前内存</text>
+                <text x="1156" y="176" class="svg-label" font-size="12">子上下文</text>
+                <text x="1256" y="176" class="svg-label" font-size="12">当前节点</text>
+
+                <rect id="s4-row-reset" x="854" y="186" width="504" height="36" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="866" y="209" class="svg-mono" font-size="12">MemoryContextReset</text>
+                <text x="1058" y="209" class="svg-label" font-size="12" fill="#2F7A66">释放</text>
+                <text x="1156" y="209" class="svg-label" font-size="12" fill="#BE653B">删除</text>
+                <text x="1256" y="209" class="svg-label" font-size="12" fill="#245A6B">保留</text>
+
+                <rect id="s4-row-resetOnly" x="854" y="222" width="504" height="36" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="866" y="245" class="svg-mono" font-size="12">MemoryContextResetOnly</text>
+                <text x="1058" y="245" class="svg-label" font-size="12" fill="#2F7A66">释放</text>
+                <text x="1156" y="245" class="svg-label" font-size="12" fill="#AE8A3E">不处理</text>
+                <text x="1256" y="245" class="svg-label" font-size="12" fill="#245A6B">保留</text>
+
+                <rect id="s4-row-delete" x="854" y="258" width="504" height="36" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="866" y="281" class="svg-mono" font-size="12">MemoryContextDelete</text>
+                <text x="1058" y="281" class="svg-label" font-size="12" fill="#2F7A66">释放</text>
+                <text x="1156" y="281" class="svg-label" font-size="12" fill="#BE653B">删除</text>
+                <text x="1256" y="281" class="svg-label" font-size="12" fill="#BE653B">删除</text>
+
+                <rect id="s4-row-delChildren" x="854" y="294" width="504" height="36" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="866" y="317" class="svg-mono" font-size="12">DeleteChildren</text>
+                <text x="1058" y="317" class="svg-label" font-size="12" fill="#AE8A3E">不处理</text>
+                <text x="1156" y="317" class="svg-label" font-size="12" fill="#BE653B">删除</text>
+                <text x="1256" y="317" class="svg-label" font-size="12" fill="#245A6B">保留</text>
+
+                <text x="854" y="352" class="svg-muted" font-size="12">常见踩坑：循环里建了子上下文，却只调用 ResetOnly(parent) 导致子上下文泄漏。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>树的清理规则清楚了，那么一次具体的 palloc() 与 pfree() 调用，在底层到底怎么找到对应的上下文？
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/backend/utils/mmgr/mcxt.c · mmgr/README</span>
+            <span class="page-num">04 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 5 (INTERACTIVE ANIMATION 2) ==================== -->
+        <section class="slide" data-slide="5">
+          <div class="slide-eyebrow">
+            <span>03 · 核心原理 3.2（交互演示）</span>
+            <span class="tag-accent">DISPATCH PATH · CHUNK HEADER</span>
+          </div>
+          <h1 class="slide-title">palloc() 走当前上下文，pfree() 走 Chunk Header</h1>
+          <p class="slide-lead">分配是「当前上下文驱动」，释放是「Chunk 自描述驱动」——这就是 pfree() 不受上下文切换影响的秘密。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">选择调用路径：</span>
+                <button type="button" class="ctrl-btn active" data-s5-mode="palloc">palloc(64) 分配路径</button>
+                <button type="button" class="ctrl-btn btn-teal" data-s5-mode="pfree">pfree(ptr) 释放路径</button>
+                <button type="button" class="ctrl-btn btn-terra" data-s5-mode="oom">OOM / 边界规则</button>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="ctrl-btn" id="s5-step-btn">单步推演</button>
+                <button type="button" class="ctrl-btn" id="s5-play-btn">播放路径</button>
+                <span class="ctrl-status" id="s5-status">就绪：点击播放或单步查看调度</span>
+              </div>
+            </div>
+            <div class="diagram-canvas">
+              <svg id="s5-svg" viewBox="0 0 1400 384" xmlns="http://www.w3.org/2000/svg">
+                <!-- TOP TRACK: palloc() -->
+                <rect x="24" y="18" width="1352" height="126" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="24" y="18" width="144" height="126" fill="#245A6B"/>
+                <text x="96" y="74" text-anchor="middle" class="svg-white-mono" font-size="16" font-weight="700">palloc()</text>
+                <text x="96" y="98" text-anchor="middle" class="svg-white" font-size="12.5">当前上下文驱动</text>
+
+                <rect id="s5-a1" x="196" y="44" width="210" height="74" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="301" y="73" text-anchor="middle" class="svg-mono" font-size="13.5" font-weight="700">CurrentMemoryContext</text>
+                <text x="301" y="96" text-anchor="middle" class="svg-body" font-size="11">MemoryContextSwitchTo 设置</text>
+
+                <path id="s5-ae1" d="M 406 81 L 466 81" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect id="s5-a2" x="472" y="44" width="210" height="74" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="577" y="73" text-anchor="middle" class="svg-mono" font-size="13.5" font-weight="700">methods-&gt;alloc()</text>
+                <text x="577" y="96" text-anchor="middle" class="svg-body" font-size="12">查虚函数表分派到具体分配器</text>
+
+                <path id="s5-ae2" d="M 682 81 L 742 81" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect id="s5-a3" x="748" y="44" width="250" height="74" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="873" y="73" text-anchor="middle" class="svg-mono" font-size="13.5" font-weight="700">写 8B uint64 Header</text>
+                <text x="873" y="96" text-anchor="middle" class="svg-body" font-size="12">在用户指针前编码 Method ID</text>
+
+                <path id="s5-ae3" d="M 998 81 L 1058 81" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <rect id="s5-a4" x="1064" y="44" width="286" height="74" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="1078" y="58" width="96" height="46" fill="#245A6B"/>
+                <text x="1126" y="86" text-anchor="middle" class="svg-white-mono" font-size="11.5">8B Header</text>
+                <rect x="1174" y="58" width="162" height="46" fill="#E4F0EC" stroke="#2F7A66"/>
+                <text x="1255" y="86" text-anchor="middle" class="svg-mono" font-size="12.5" font-weight="700">ptr → 用户数据区</text>
+
+                <!-- BOTTOM TRACK: pfree() -->
+                <rect x="24" y="160" width="1352" height="126" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="24" y="160" width="144" height="126" fill="#2F7A66"/>
+                <text x="96" y="216" text-anchor="middle" class="svg-white-mono" font-size="16" font-weight="700">pfree()</text>
+                <text x="96" y="240" text-anchor="middle" class="svg-white" font-size="12.5">Chunk 自描述驱动</text>
+
+                <rect id="s5-f1" x="196" y="186" width="210" height="74" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="301" y="215" text-anchor="middle" class="svg-mono" font-size="13.5" font-weight="700">ptr - 8 Bytes</text>
+                <text x="301" y="238" text-anchor="middle" class="svg-body" font-size="12">忽略 CurrentMemoryContext</text>
+
+                <path id="s5-fe1" d="M 406 223 L 466 223" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <rect id="s5-f2" x="472" y="186" width="260" height="74" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="602" y="215" text-anchor="middle" class="svg-mono" font-size="13" font-weight="700">GetMemoryChunkMethodID()</text>
+                <text x="602" y="238" text-anchor="middle" class="svg-body" font-size="12">从 chunk header 解码分配器编号</text>
+
+                <path id="s5-fe2" d="M 732 223 L 792 223" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <rect id="s5-f3" x="798" y="186" width="230" height="74" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="913" y="215" text-anchor="middle" class="svg-mono" font-size="13.5" font-weight="700">mcxt_methods[id]</text>
+                <text x="913" y="238" text-anchor="middle" class="svg-body" font-size="12">定位对应上下文类的 free_p</text>
+
+                <path id="s5-fe3" d="M 1028 223 L 1088 223" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <rect id="s5-f4" x="1094" y="186" width="256" height="74" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="1222" y="215" text-anchor="middle" class="svg-label" font-size="14" fill="#2F7A66">归还至原属上下文</text>
+                <text x="1222" y="238" text-anchor="middle" class="svg-body" font-size="12">禁止与系统 malloc/free 混用</text>
+
+                <!-- Bottom API Boundaries Strip -->
+                <rect id="s5-bound-box" x="24" y="302" width="1352" height="66" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.3"/>
+                <text x="44" y="328" class="svg-label" font-size="14" fill="#BE653B">必须牢记的 5 条 API 硬边界：</text>
+                <text x="260" y="328" class="svg-mono" font-size="12.5">1. palloc() OOM 抛 ERROR（非 NULL），需返回 NULL 用 MCXT_ALLOC_NO_OOM</text>
+                <text x="860" y="328" class="svg-mono" font-size="12.5">2. palloc(0) 合法，但不可解引用</text>
+                <text x="44" y="354" class="svg-mono" font-size="12.5">3. pfree(NULL) / repalloc(NULL) 非法</text>
+                <text x="404" y="354" class="svg-mono" font-size="12.5">4. 普通上限 MaxAllocSize = 1GB - 1，超大用 AllocHuge</text>
+                <text x="860" y="354" class="svg-mono" font-size="12.5">5. Critical Section 禁止分配（ErrorContext 例外）</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>palloc 管住了 PostgreSQL 内部的堆块，但如果扩展里还夹杂了临时文件或第三方 malloc 资源，上下文销毁时怎么办？
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/include/utils/palloc.h · src/backend/utils/mmgr/mcxt.c · memutils_memorychunk.h</span>
+            <span class="page-num">05 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 6 ==================== -->
+        <section class="slide" data-slide="6">
+          <div class="slide-eyebrow">
+            <span>03 · 核心原理 3.3</span>
+            <span class="tag-accent">RESET CALLBACK · PG 9.5+</span>
+          </div>
+          <h1 class="slide-title">Reset Callback：让内存上下文托管非内存资源</h1>
+          <p class="slide-lead">在上下文 Reset 或 Delete 前按注册逆序回调，并采用「先出队再调用」防错设计，打通外部资源回收。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: Registration -->
+                <rect x="24" y="24" width="380" height="382" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+                <rect x="24" y="24" width="380" height="38" fill="#245A6B"/>
+                <text x="44" y="49" class="svg-white" font-size="15">1. 注册回调（绑定同一上下文）</text>
+
+                <rect x="46" y="84" width="336" height="58" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="64" y="109" class="svg-mono" font-size="13" font-weight="700" fill="#245A6B">MemoryContextRegisterResetCallback</text>
+                <text x="64" y="130" class="svg-body" font-size="12.5">参数：(context, MemoryContextCallback *cb)</text>
+
+                <rect x="46" y="160" width="336" height="62" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="64" y="185" class="svg-label" font-size="12.5">规范：cb 结构体自身 palloc 在同一上下文</text>
+                <text x="64" y="208" class="svg-body" font-size="12.5">上下文清理完后 cb 随之释放，无需额外手工释放</text>
+
+                <rect x="46" y="240" width="336" height="146" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="64" y="266" class="svg-label" font-size="14" fill="#2F7A66">三大典型托管场景：</text>
+                <text x="64" y="296" class="svg-body" font-size="13">· 关闭 tuplesort 关联的临时磁盘文件</text>
+                <text x="64" y="324" class="svg-body" font-size="13">· 释放长寿命缓存对象的引用计数</text>
+                <text x="64" y="352" class="svg-body" font-size="13">· 清理第三方 C 库通过 malloc 分配的对象</text>
+
+                <!-- Orthogonal Arrow -->
+                <path d="M 404 215 L 456 215" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <!-- Center: LIFO Chain & Pop-before-call -->
+                <rect x="462" y="24" width="470" height="382" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1.4"/>
+                <rect x="462" y="24" width="470" height="38" fill="#AE8A3E"/>
+                <text x="482" y="49" class="svg-white" font-size="15">2. LIFO 回调链与「先弹出再调用」防重入</text>
+
+                <!-- Stack visual -->
+                <rect x="492" y="84" width="410" height="54" fill="#F4EFE2" stroke="#AE8A3E" stroke-width="1.5"/>
+                <text x="510" y="108" class="svg-mono" font-size="13" font-weight="700" fill="#AE8A3E">reset_cbs 链表头 → CB #3（后注册，先执行）</text>
+                <text x="510" y="128" class="svg-body" font-size="12">func(arg) 释放第三方库句柄</text>
+
+                <path d="M 697 138 L 697 162" stroke="#AE8A3E" stroke-width="1.8" marker-end="url(#arr-gold)"/>
+
+                <rect x="492" y="166" width="410" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="510" y="190" class="svg-mono" font-size="13" font-weight="700">CB #2（次执行）</text>
+                <text x="510" y="210" class="svg-body" font-size="12">func(arg) 递减缓存引用计数</text>
+
+                <path d="M 697 220 L 697 244" stroke="#AE8A3E" stroke-width="1.8" marker-end="url(#arr-gold)"/>
+
+                <rect x="492" y="248" width="410" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="510" y="272" class="svg-mono" font-size="13" font-weight="700">CB #1（先注册，最后执行）</text>
+                <text x="510" y="292" class="svg-body" font-size="12">func(arg) 关闭临时文件描述符</text>
+
+                <rect x="492" y="316" width="410" height="74" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="510" y="338" class="svg-label" font-size="13" fill="#BE653B">源码安全细节 (MemoryContextCallResetCallbacks)</text>
+                <text x="510" y="359" class="svg-body" font-size="12">先将 cb 从链表弹出，再调用 cb-&gt;func(cb-&gt;arg)：</text>
+                <text x="510" y="378" class="svg-body" font-size="12">防止回调内部抛 ERROR 后，二次清理重复触发同一回调。</text>
+
+                <!-- Orthogonal Arrow -->
+                <path d="M 932 215 L 984 215" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <!-- Right: Execution Order -->
+                <rect x="990" y="24" width="386" height="382" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.4"/>
+                <rect x="990" y="24" width="386" height="38" fill="#2F7A66"/>
+                <text x="1010" y="49" class="svg-white" font-size="15">3. Reset / Delete 触发时序</text>
+
+                <rect x="1016" y="90" width="334" height="58" fill="#FFFFFF" stroke="#245A6B"/>
+                <text x="1034" y="114" class="svg-label" font-size="14">Step A · 删除子上下文（若非 ResetOnly）</text>
+                <text x="1034" y="136" class="svg-body" font-size="12">子节点的 callback 先于父节点完成</text>
+
+                <path d="M 1183 148 L 1183 182" stroke="#2F7A66" stroke-width="1.8" marker-end="url(#arr-teal)"/>
+
+                <rect x="1016" y="186" width="334" height="58" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.6"/>
+                <text x="1034" y="210" class="svg-label" font-size="14" fill="#2F7A66">Step B · 执行本节点 reset_cbs</text>
+                <text x="1034" y="232" class="svg-body" font-size="12">此时上下文内存仍可读，回调可安全访问 arg</text>
+
+                <path d="M 1183 244 L 1183 278" stroke="#2F7A66" stroke-width="1.8" marker-end="url(#arr-teal)"/>
+
+                <rect x="1016" y="282" width="334" height="58" fill="#1E4B5A"/>
+                <text x="1034" y="306" class="svg-white" font-size="14">Step C · 释放底层 Memory Blocks</text>
+                <text x="1034" y="328" class="svg-white-mono" font-size="12">methods-&gt;reset() / delete_context()</text>
+
+                <text x="1016" y="376" class="svg-muted" font-size="12">注意：不替代 ResourceOwner（锁/buffer pin/smgr）</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>统一抽象层的机制已经齐备，下面深入底层——同一套虚函数表背后，四类分配器分别针对什么工作负载？
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/backend/utils/mmgr/mcxt.c · mmgr/README (PostgreSQL 9.5+)</span>
+            <span class="page-num">06 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 7 ==================== -->
+        <section class="slide" data-slide="7">
+          <div class="slide-eyebrow">
+            <span>03 · 核心原理 3.4 与横向对比 4.2</span>
+            <span class="tag-accent">FOUR ALLOCATORS · ASET / GEN / SLAB / BUMP</span>
+          </div>
+          <h1 class="slide-title">四类上下文实现：同一接口，四种分配策略</h1>
+          <p class="slide-lead">通用性与效率天然冲突——越贴近特定生命周期模式，单对象元数据越薄，同时对调用者的纪律要求越严。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Col 1: AllocSet -->
+                <rect x="20" y="18" width="326" height="394" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="20" y="18" width="326" height="48" fill="#1E4B5A"/>
+                <text x="38" y="42" class="svg-white-mono" font-size="16" font-weight="700">AllocSet (aset.c)</text>
+                <text x="38" y="59" class="svg-white" font-size="11.5">默认通用分配器 · 平衡 CPU 与碎片</text>
+
+                <!-- Mini layout graphic -->
+                <rect x="38" y="80" width="290" height="58" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="48" y="99" class="svg-mono" font-size="11" fill="#245A6B">Power-of-2 Freelist (8B..8KB)</text>
+                <rect x="48" y="108" width="36" height="18" fill="#245A6B"/>
+                <rect x="90" y="108" width="54" height="18" fill="#47808D"/>
+                <rect x="150" y="108" width="76" height="18" fill="#74A5AD"/>
+                <rect x="234" y="108" width="84" height="18" fill="#BE653B"/>
+                <text x="276" y="121" text-anchor="middle" class="svg-white-mono" font-size="10">&gt;8KB 独立块</text>
+
+                <text x="38" y="164" class="svg-label" font-size="13">单个 pfree / repalloc：</text>
+                <text x="190" y="164" class="svg-label" font-size="13" fill="#2F7A66">完全支持</text>
+                <text x="38" y="190" class="svg-label" font-size="13">关键阈值：</text>
+                <text x="38" y="210" class="svg-mono" font-size="11.5" fill="#245A6B">ALLOCSET_SEPARATE_THRESHOLD=8192</text>
+                <text x="38" y="232" class="svg-body" font-size="12">超过 8KB 单独 malloc，释放可还给 OS</text>
+                <line x1="38" y1="248" x2="328" y2="248" stroke="#D9D5CB"/>
+                <text x="38" y="270" class="svg-label" font-size="13">典型场景：</text>
+                <text x="38" y="292" class="svg-body" font-size="12.5">per-query / per-tuple / 缓存 / 临时上下文</text>
+                <rect x="38" y="316" width="290" height="80" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="50" y="338" class="svg-label" font-size="12.5" fill="#BE653B">主要风险：</text>
+                <text x="50" y="360" class="svg-body" font-size="12">长寿命上下文里小块 freelist 复用但不</text>
+                <text x="50" y="380" class="svg-body" font-size="12">归还 OS；reset 后仍保留 keeper block。</text>
+
+                <!-- Col 2: Generation -->
+                <rect x="364" y="18" width="326" height="394" fill="#F7F6F2" stroke="#2E6373" stroke-width="1.5"/>
+                <rect x="364" y="18" width="326" height="48" fill="#2E6373"/>
+                <text x="382" y="42" class="svg-white-mono" font-size="16" font-weight="700">Generation (generation.c)</text>
+                <text x="382" y="59" class="svg-white" font-size="11.5">同代 / FIFO 生命周期专用</text>
+
+                <rect x="382" y="80" width="290" height="58" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="392" y="99" class="svg-mono" font-size="11" fill="#2E6373">Block 内计数 · 整块空后整体回收</text>
+                <rect x="392" y="108" width="60" height="18" fill="#EBF1EE" stroke="#89938F" stroke-dasharray="3 2"/>
+                <rect x="458" y="108" width="60" height="18" fill="#EBF1EE" stroke="#89938F" stroke-dasharray="3 2"/>
+                <rect x="524" y="108" width="66" height="18" fill="#47808D"/>
+                <rect x="596" y="108" width="66" height="18" fill="#2E6373"/>
+
+                <text x="382" y="164" class="svg-label" font-size="13">单个 pfree：</text>
+                <text x="480" y="164" class="svg-label" font-size="13" fill="#AE8A3E">支持，不复用单个空洞</text>
+                <text x="382" y="190" class="svg-label" font-size="13">repalloc：</text>
+                <text x="480" y="190" class="svg-body" font-size="12.5">支持（通常新分配 + 复制）</text>
+                <text x="382" y="216" class="svg-body" font-size="12">按 block 维护 nchunks / nfreed 计数，</text>
+                <text x="382" y="234" class="svg-body" font-size="12">整块全部释放后立刻回收整块内存。</text>
+                <line x1="382" y1="248" x2="672" y2="248" stroke="#D9D5CB"/>
+                <text x="382" y="270" class="svg-label" font-size="13">典型场景：</text>
+                <text x="382" y="292" class="svg-body" font-size="12.5">tuplestore、逻辑解码 FIFO tuple 队列</text>
+                <rect x="382" y="316" width="290" height="80" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="394" y="338" class="svg-label" font-size="12.5" fill="#BE653B">主要风险：</text>
+                <text x="394" y="360" class="svg-body" font-size="12">非 FIFO 模式下，只要块内残留 1 个</text>
+                <text x="394" y="380" class="svg-body" font-size="12">长寿对象，整块内存都无法回收。</text>
+
+                <!-- Col 3: Slab -->
+                <rect x="708" y="18" width="326" height="394" fill="#F7F6F2" stroke="#47808D" stroke-width="1.5"/>
+                <rect x="708" y="18" width="326" height="48" fill="#47808D"/>
+                <text x="726" y="42" class="svg-white-mono" font-size="16" font-weight="700">Slab (slab.c)</text>
+                <text x="726" y="59" class="svg-white" font-size="11.5">海量等大小固定结构专用</text>
+
+                <rect x="726" y="80" width="290" height="58" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="736" y="99" class="svg-mono" font-size="11" fill="#47808D">固定 chunkSize 槽位 · 优先填最满块</text>
+                <rect x="736" y="108" width="48" height="18" fill="#47808D"/>
+                <rect x="788" y="108" width="48" height="18" fill="#47808D"/>
+                <rect x="840" y="108" width="48" height="18" fill="#E4F0EC" stroke="#2F7A66"/>
+                <rect x="892" y="108" width="48" height="18" fill="#47808D"/>
+                <rect x="944" y="108" width="48" height="18" fill="#47808D"/>
+
+                <text x="726" y="164" class="svg-label" font-size="13">单个 pfree：</text>
+                <text x="824" y="164" class="svg-label" font-size="13" fill="#2F7A66">支持，固定槽位原位复用</text>
+                <text x="726" y="190" class="svg-label" font-size="13">repalloc：</text>
+                <text x="824" y="190" class="svg-body" font-size="12.5">要求大小严格等于 chunkSize</text>
+                <text x="726" y="216" class="svg-body" font-size="12">无碎片烦恼，优先向最满 block 分配，</text>
+                <text x="726" y="234" class="svg-body" font-size="12">加速较空 block 彻底腾空并归还。</text>
+                <line x1="726" y1="248" x2="1016" y2="248" stroke="#D9D5CB"/>
+                <text x="726" y="270" class="svg-label" font-size="13">典型场景：</text>
+                <text x="726" y="292" class="svg-body" font-size="12.5">reorder buffer 固定结构对象池</text>
+                <rect x="726" y="316" width="290" height="80" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="738" y="338" class="svg-label" font-size="12.5" fill="#BE653B">主要风险：</text>
+                <text x="738" y="360" class="svg-body" font-size="12">对象尺寸一旦不一致就不适用，不能</text>
+                <text x="738" y="380" class="svg-body" font-size="12">暴露给需要变长分配的通用代码。</text>
+
+                <!-- Col 4: Bump -->
+                <rect x="1052" y="18" width="328" height="394" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="1052" y="18" width="328" height="48" fill="#2F7A66"/>
+                <text x="1070" y="42" class="svg-white-mono" font-size="16" font-weight="700">Bump (bump.c)</text>
+                <text x="1070" y="59" class="svg-white" font-size="11.5">极速顺序分配 · 只整体 Reset</text>
+
+                <rect x="1070" y="80" width="292" height="58" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="1080" y="99" class="svg-mono" font-size="11" fill="#2F7A66">顺序推进 freeptr · 无普通 chunk header</text>
+                <rect x="1080" y="108" width="42" height="18" fill="#2F7A66"/>
+                <rect x="1123" y="108" width="58" height="18" fill="#2F7A66"/>
+                <rect x="1182" y="108" width="34" height="18" fill="#2F7A66"/>
+                <rect x="1217" y="108" width="134" height="18" fill="#EBF1EE" stroke="#74A5AD"/>
+                <text x="1284" y="121" text-anchor="middle" class="svg-mono" font-size="10">freeptr →</text>
+
+                <text x="1070" y="164" class="svg-label" font-size="13">单个 pfree：</text>
+                <text x="1168" y="164" class="svg-label" font-size="13" fill="#BE653B">正常构建不支持</text>
+                <text x="1070" y="190" class="svg-label" font-size="13">repalloc：</text>
+                <text x="1168" y="190" class="svg-label" font-size="13" fill="#BE653B">正常构建不支持</text>
+                <text x="1070" y="216" class="svg-body" font-size="12">省去每个小对象的 8B header 开销，</text>
+                <text x="1070" y="234" class="svg-body" font-size="12">CPU 成本与空间碎片均为四者最低。</text>
+                <line x1="1070" y1="248" x2="1362" y2="248" stroke="#D9D5CB"/>
+                <text x="1070" y="270" class="svg-label" font-size="13">典型场景：</text>
+                <text x="1070" y="292" class="svg-body" font-size="12.5">tuplesort 排序行、hash aggregate tuple</text>
+                <rect x="1070" y="316" width="292" height="80" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1082" y="338" class="svg-label" font-size="12.5" fill="#BE653B">主要风险：</text>
+                <text x="1082" y="360" class="svg-body" font-size="12">指针绝不可暴露给通用 pfree / repalloc</text>
+                <text x="1082" y="380" class="svg-body" font-size="12">或 GetMemoryChunkSpace 路径。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>四类分配器如何落到真实的 SQL 执行中？看执行器如何编排 per-query、per-tuple 与算子专用上下文。
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/backend/utils/mmgr/aset.c · generation.c · slab.c · bump.c</span>
+            <span class="page-num">07 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 8 (INTERACTIVE ANIMATION 3) ==================== -->
+        <section class="slide" data-slide="8">
+          <div class="slide-eyebrow">
+            <span>03 · 核心原理 3.5（交互仿真）</span>
+            <span class="tag-accent">EXECUTOR · PER-QUERY VS PER-TUPLE</span>
+          </div>
+          <h1 class="slide-title">执行器内存路径：per-query 与 per-tuple 的分层纪律</h1>
+          <p class="slide-lead">拖动处理行数或切换分配目标，直观看懂「锯齿稳态」与「线性 OOM 爬坡」的本质差异。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">临时对象落点：</span>
+                <button type="button" class="ctrl-btn btn-teal active" data-s8-mode="pertuple">正确：ExprContext (per-tuple)</button>
+                <button type="button" class="ctrl-btn btn-terra" data-s8-mode="perquery">错误：ExecutorState (per-query)</button>
+                <span class="toolbar-label" style="margin-left:10px;">处理行数：</span>
+                <input type="range" class="ctrl-range" id="s8-rows" min="1" max="100" value="40">
+                <span class="ctrl-status" id="s8-rows-val">400 万行</span>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="ctrl-btn" id="s8-play-btn">播放执行过程</button>
+                <button type="button" class="ctrl-btn" id="s8-reset-btn">重置</button>
+              </div>
+            </div>
+            <div class="diagram-canvas">
+              <svg id="s8-svg" viewBox="0 0 1400 384" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: Executor Context Tree -->
+                <rect x="20" y="18" width="640" height="348" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <rect x="20" y="18" width="640" height="36" fill="#245A6B"/>
+                <text x="38" y="41" class="svg-white" font-size="14.5">执行器嵌套上下文树（execUtils.c / nodeHash.c / sort）</text>
+
+                <!-- Root: ExecutorState -->
+                <rect x="180" y="70" width="320" height="52" fill="#2E6373"/>
+                <text x="340" y="93" text-anchor="middle" class="svg-white-mono" font-size="14" font-weight="700">ExecutorState (per-query)</text>
+                <text x="340" y="112" text-anchor="middle" class="svg-white" font-size="11.5">CreateExecutorState() · 查询结束时整体释放</text>
+
+                <!-- Orthogonal connectors -->
+                <path d="M 340 122 L 340 144 L 130 144 L 130 166" fill="none" stroke="#245A6B" stroke-width="1.6"/>
+                <path d="M 340 144 L 340 166" fill="none" stroke="#245A6B" stroke-width="1.6"/>
+                <path d="M 340 144 L 548 144 L 548 166" fill="none" stroke="#245A6B" stroke-width="1.6"/>
+
+                <!-- Child 1: ExprContext -->
+                <rect id="s8-box-expr" x="36" y="166" width="188" height="82" fill="#E4F0EC" stroke="#2F7A66" stroke-width="2"/>
+                <text x="130" y="191" text-anchor="middle" class="svg-mono" font-size="13" font-weight="700" fill="#2F7A66">ExprContext</text>
+                <text x="130" y="212" text-anchor="middle" class="svg-body" font-size="11.5">per-tuple 上下文</text>
+                <text x="130" y="232" text-anchor="middle" class="svg-mono" font-size="11" fill="#2F7A66">ResetExprContext()</text>
+
+                <!-- Child 2: Hash Join -->
+                <rect x="244" y="166" width="192" height="82" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.4"/>
+                <text x="340" y="191" text-anchor="middle" class="svg-mono" font-size="12.5" font-weight="700" fill="#245A6B">HashJoin 子树</text>
+                <text x="340" y="212" text-anchor="middle" class="svg-body" font-size="11.5">HashTableContext</text>
+                <text x="340" y="232" text-anchor="middle" class="svg-body" font-size="11.5">Batch / Spill Context</text>
+
+                <!-- Child 3: Sort & Tuplestore -->
+                <rect x="456" y="166" width="184" height="82" fill="#EBF1EE" stroke="#47808D" stroke-width="1.4"/>
+                <text x="548" y="191" text-anchor="middle" class="svg-mono" font-size="12.5" font-weight="700" fill="#47808D">Sort / Tuplestore</text>
+                <text x="548" y="212" text-anchor="middle" class="svg-body" font-size="11.5">tuplesort → Bump</text>
+                <text x="548" y="232" text-anchor="middle" class="svg-body" font-size="11.5">tuplestore → Gen</text>
+
+                <!-- Bottom note in left panel -->
+                <rect x="36" y="268" width="604" height="80" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="54" y="294" class="svg-label" font-size="13.5" fill="#245A6B">源码印证：</text>
+                <text x="54" y="316" class="svg-body" font-size="12.5">· nodeResult.c / nodeHashjoin.c 每处理完一行即调用 ResetExprContext(econtext)</text>
+                <text x="54" y="336" class="svg-body" font-size="12.5">· 很多「内存泄漏」并非少写 pfree()，而是 MemoryContextSwitchTo() 选错上下文</text>
+
+                <!-- Right: Live Memory Profile Simulator Chart -->
+                <rect x="684" y="18" width="696" height="348" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <rect id="s8-chart-hdr" x="684" y="18" width="696" height="36" fill="#2F7A66"/>
+                <text id="s8-chart-title" x="702" y="41" class="svg-white" font-size="14.5">实时仿真：ExprContext 每行 Reset —— 内存呈低位锯齿稳态</text>
+
+                <!-- Plot axes -->
+                <rect x="736" y="74" width="620" height="196" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <!-- Horizontal grid lines -->
+                <line x1="736" y1="114" x2="1356" y2="114" stroke="#E8E4DC" stroke-dasharray="4 3"/>
+                <line x1="736" y1="166" x2="1356" y2="166" stroke="#E8E4DC" stroke-dasharray="4 3"/>
+                <line x1="736" y1="218" x2="1356" y2="218" stroke="#E8E4DC" stroke-dasharray="4 3"/>
+                <!-- OOM threshold line -->
+                <line x1="736" y1="96" x2="1356" y2="96" stroke="#BE653B" stroke-width="1.4" stroke-dasharray="6 4"/>
+                <text x="1348" y="90" text-anchor="end" class="svg-mono" font-size="11" fill="#BE653B">OOM 警戒线 (示意边界)</text>
+
+                <!-- Y-axis labels -->
+                <text x="728" y="100" text-anchor="end" class="svg-mono" font-size="11" fill="#89938F">高占用</text>
+                <text x="728" y="170" text-anchor="end" class="svg-mono" font-size="11" fill="#89938F">中占用</text>
+                <text x="728" y="266" text-anchor="end" class="svg-mono" font-size="11" fill="#89938F">0</text>
+                <text x="1046" y="288" text-anchor="middle" class="svg-mono" font-size="11.5" fill="#46585F">已处理元组进度 (Tuples Processed →)</text>
+
+                <!-- Dynamic polyline path -->
+                <path id="s8-wave-path" d="M 736 262 L 1356 262" fill="none" stroke="#2F7A66" stroke-width="2.6"/>
+                <circle id="s8-wave-dot" cx="736" cy="262" r="5" fill="#2F7A66"/>
+
+                <!-- Live readout strip -->
+                <rect x="704" y="302" width="656" height="48" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text id="s8-readout-1" x="722" y="331" class="svg-mono" font-size="13" font-weight="700" fill="#2F7A66">峰值上下文占用：恒定单行块 (Reset 清零)</text>
+                <text id="s8-readout-2" x="1342" y="331" text-anchor="end" class="svg-label" font-size="13" fill="#2F7A66">状态：安全可流式执行</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>机制很优雅，但任何工程架构都有两面——内存上下文带来哪些实打实的收益，又藏着哪些容易被误解的代价？
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/backend/executor/README · execUtils.c · nodeHash.c · tuplesort.c · tuplestore.c</span>
+            <span class="page-num">08 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 9 ==================== -->
+        <section class="slide" data-slide="9">
+          <div class="slide-eyebrow">
+            <span>04 · 效果与权衡</span>
+            <span class="tag-accent">GAINS VS REAL LIMITS</span>
+          </div>
+          <h1 class="slide-title">收益与代价：为什么 work_mem 没超仍可能高占内存？</h1>
+          <p class="slide-lead">MemoryContext 解决了生命周期与容错，但它不是全局内存配额上限，也不保证 Reset 后 OS RSS 立即回落。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 5 Gains -->
+                <rect x="24" y="20" width="664" height="390" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.4"/>
+                <rect x="24" y="20" width="664" height="40" fill="#2F7A66"/>
+                <text x="44" y="46" class="svg-white" font-size="16">工程收益：内存上下文带来的五项核心价值</text>
+
+                <rect x="44" y="76" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="44" y="76" width="5" height="54" fill="#2F7A66"/>
+                <text x="62" y="100" class="svg-label" font-size="14">1. 错误恢复更可靠</text>
+                <text x="62" y="121" class="svg-body" font-size="12.5">ereport(ERROR) 跳出深层调用栈，事务/查询/portal 边界仍能完整回收临时内存</text>
+
+                <rect x="44" y="140" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="44" y="140" width="5" height="54" fill="#2F7A66"/>
+                <text x="62" y="164" class="svg-label" font-size="14">2. 长查询执行更稳定</text>
+                <text x="62" y="185" class="svg-body" font-size="12.5">per-tuple 上下文按行清理表达式求值对象，消除逐行堆积风险</text>
+
+                <rect x="44" y="204" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="44" y="204" width="5" height="54" fill="#2F7A66"/>
+                <text x="62" y="228" class="svg-label" font-size="14">3. 扩展开发边界清晰</text>
+                <text x="62" y="249" class="svg-body" font-size="12.5">函数缓存、multi-call SRF、聚合状态、临时对象各归其位</text>
+
+                <rect x="44" y="268" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="44" y="268" width="5" height="54" fill="#2F7A66"/>
+                <text x="62" y="292" class="svg-label" font-size="14">4. 排障定位更直接</text>
+                <text x="62" y="313" class="svg-body" font-size="12.5">pg_backend_memory_contexts 直接暴露增长落在哪棵上下文子树</text>
+
+                <rect x="44" y="332" width="624" height="58" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="44" y="332" width="5" height="58" fill="#2F7A66"/>
+                <text x="62" y="356" class="svg-label" font-size="14">5. 分配器可按模式专精优化</text>
+                <text x="62" y="377" class="svg-body" font-size="12.5">固定尺寸选 Slab、FIFO 选 Generation、短寿命小对象选 Bump</text>
+
+                <!-- Right: 5 Costs & Limits -->
+                <rect x="712" y="20" width="664" height="390" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.4"/>
+                <rect x="712" y="20" width="664" height="40" fill="#BE653B"/>
+                <text x="732" y="46" class="svg-white" font-size="16">代价与限制：必须破除的五个认知误区</text>
+
+                <rect x="732" y="76" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="732" y="76" width="5" height="54" fill="#BE653B"/>
+                <text x="750" y="100" class="svg-label" font-size="14" fill="#BE653B">1. 不等于全局内存上限（回答 Q4）</text>
+                <text x="750" y="121" class="svg-body" font-size="12.5">单 backend 有多算子、多上下文与缓存，总占用还要乘以并发连接数</text>
+
+                <rect x="732" y="140" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="732" y="140" width="5" height="54" fill="#BE653B"/>
+                <text x="750" y="164" class="svg-label" font-size="14" fill="#BE653B">2. Reset 后 OS RSS 未必立刻下降</text>
+                <text x="750" y="185" class="svg-body" font-size="12.5">AllocSet 保留 keeper block，底层 glibc/malloc 也可能保留 arena 供复用</text>
+
+                <rect x="732" y="204" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="732" y="204" width="5" height="54" fill="#BE653B"/>
+                <text x="750" y="228" class="svg-label" font-size="14" fill="#BE653B">3. 非对象级精确 Profiler</text>
+                <text x="750" y="249" class="svg-body" font-size="12.5">统计围绕 block / free_chunks / used_bytes，不能当成每条 SQL 的对象图</text>
+
+                <rect x="732" y="268" width="624" height="54" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="732" y="268" width="5" height="54" fill="#BE653B"/>
+                <text x="750" y="292" class="svg-label" font-size="14" fill="#BE653B">4. 切错上下文比少写 pfree() 更隐蔽</text>
+                <text x="750" y="313" class="svg-body" font-size="12.5">开发者必须时刻清楚 CurrentMemoryContext 与对象应有寿命</text>
+
+                <rect x="732" y="332" width="624" height="58" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="732" y="332" width="5" height="58" fill="#BE653B"/>
+                <text x="750" y="356" class="svg-label" font-size="14" fill="#BE653B">5. 不替代 ResourceOwner</text>
+                <text x="750" y="377" class="svg-body" font-size="12.5">锁、buffer pin、文件、smgr、DSM 有独立机制，必要时借 reset callback 桥接</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>既然 OS RSS 可能会骗人，线上真的遇到 backend 内存暴涨时，如何用系统视图与信号日志形成排障闭环？
+          </div>
+          <div class="slide-footer">
+            <span>来源：Section 4.1 &amp; Section 5 · PostgreSQL 内存上下文权衡分析</span>
+            <span class="page-num">09 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 (INTERACTIVE ANIMATION 4) ==================== -->
+        <section class="slide" data-slide="10">
+          <div class="slide-eyebrow">
+            <span>05 · 可观测性与实操 DEMO（交互诊断）</span>
+            <span class="tag-accent">PG_BACKEND_MEMORY_CONTEXTS</span>
+          </div>
+          <h1 class="slide-title">排障闭环：先定 PID，再用 CTE 固定上下文树快照</h1>
+          <p class="slide-lead">点击下方热点子树切换诊断视图，看清为何必须用 CTE 固定 path、以及跨进程信号如何安全打日志。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">模拟异常热点子树：</span>
+                <button type="button" class="ctrl-btn active" data-s10-case="cache">CacheMemoryContext</button>
+                <button type="button" class="ctrl-btn" data-s10-case="exec">ExecutorState</button>
+                <button type="button" class="ctrl-btn" data-s10-case="expr">ExprContext</button>
+                <button type="button" class="ctrl-btn" data-s10-case="remote">跨进程信号诊断</button>
+              </div>
+              <div class="toolbar-group">
+                <button type="button" class="ctrl-btn" id="s10-play-btn">演示排障闭环</button>
+              </div>
+            </div>
+            <div class="diagram-canvas">
+              <svg id="s10-svg" viewBox="0 0 1400 384" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top Closed-Loop Pipeline (5 horizontal steps) -->
+                <rect id="s10-st1" x="24" y="20" width="236" height="68" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="142" y="48" text-anchor="middle" class="svg-label" font-size="14">1. OS 发现 RSS 异常</text>
+                <text x="142" y="70" text-anchor="middle" class="svg-body" font-size="12">不急着重启或盲猜</text>
+
+                <path d="M 260 54 L 298 54" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+                <rect id="s10-st2" x="304" y="20" width="236" height="68" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="422" y="48" text-anchor="middle" class="svg-label" font-size="14">2. pg_stat_activity</text>
+                <text x="422" y="70" text-anchor="middle" class="svg-body" font-size="12">定位目标 pid / SQL / 状态</text>
+
+                <path d="M 540 54 L 578 54" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+                <rect id="s10-st3" x="584" y="20" width="248" height="68" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="708" y="48" text-anchor="middle" class="svg-label" font-size="14">3. 采样上下文树</text>
+                <text x="708" y="70" text-anchor="middle" class="svg-body" font-size="12">CTE 固定视图或信号打日志</text>
+
+                <path d="M 832 54 L 870 54" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+                <rect id="s10-st4" x="876" y="20" width="236" height="68" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="994" y="48" text-anchor="middle" class="svg-label" font-size="14">4. 区分热点子树</text>
+                <text x="994" y="70" text-anchor="middle" class="svg-body" font-size="12">看 name / ident / used_bytes</text>
+
+                <path d="M 1112 54 L 1150 54" stroke="#2F7A66" stroke-width="1.8" marker-end="url(#arr-teal)"/>
+
+                <rect id="s10-st5" x="1156" y="20" width="220" height="68" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="1266" y="48" text-anchor="middle" class="svg-label" font-size="14" fill="#2F7A66">5. 回源确认边界</text>
+                <text x="1266" y="70" text-anchor="middle" class="svg-body" font-size="12">修正 SQL 或扩展上下文</text>
+
+                <!-- Bottom Left: Official SQL Blueprint -->
+                <rect x="24" y="110" width="700" height="256" fill="#1B2B33"/>
+                <rect x="24" y="110" width="700" height="32" fill="#2E6373"/>
+                <text id="s10-sql-head" x="40" y="131" class="svg-white-mono" font-size="12.5">官方推荐 SQL：用 CTE 固定一次视图读取（防止 path 临时编号抖动）</text>
+                <text id="s10-sql-1" x="42" y="168" class="svg-white-mono" font-size="13">WITH memory_contexts AS (</text>
+                <text id="s10-sql-2" x="42" y="192" class="svg-white-mono" font-size="13">    SELECT * FROM pg_backend_memory_contexts</text>
+                <text id="s10-sql-3" x="42" y="216" class="svg-white-mono" font-size="13">)</text>
+                <text id="s10-sql-4" x="42" y="240" class="svg-white-mono" font-size="13">SELECT c2.name AS root_context,</text>
+                <text id="s10-sql-5" x="42" y="264" class="svg-white-mono" font-size="13">       sum(c1.total_bytes) AS subtree_total,</text>
+                <text id="s10-sql-6" x="42" y="288" class="svg-white-mono" font-size="13">       sum(c1.used_bytes)  AS subtree_used</text>
+                <text id="s10-sql-7" x="42" y="312" class="svg-white-mono" font-size="13">FROM memory_contexts c1 JOIN memory_contexts c2</text>
+                <text id="s10-sql-8" x="42" y="336" class="svg-white-mono" font-size="13">  ON c1.path[c2.level] = c2.path[c2.level]</text>
+                <text id="s10-sql-9" x="42" y="356" class="svg-white-mono" font-size="13" fill="#F7E9DE">WHERE c2.name = 'CacheMemoryContext' GROUP BY c2.name;</text>
+
+                <!-- Bottom Right: Dynamic Diagnosis Card -->
+                <rect x="748" y="110" width="628" height="256" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.4"/>
+                <rect id="s10-diag-hdr" x="748" y="110" width="628" height="36" fill="#245A6B"/>
+                <text id="s10-diag-title" x="766" y="133" class="svg-white" font-size="14.5">诊断结论：CacheMemoryContext 子树持续增长</text>
+
+                <text id="s10-d1" x="768" y="176" class="svg-label" font-size="14.5">典型成因：海量分区/表导致的 relcache/catcache 膨胀，或扩展长期缓存。</text>
+                <text id="s10-d2" x="768" y="206" class="svg-body" font-size="13.5">· used_bytes = total_bytes - free_bytes，比单看 total_bytes 更接近有效占用。</text>
+                <text id="s10-d3" x="768" y="234" class="svg-body" font-size="13.5">· free_bytes 大不一定是泄漏，可能是保留 block 等待复用。</text>
+                <text id="s10-d4" x="768" y="262" class="svg-body" font-size="13.5">· 排查重点：连接生命周期、表数量、扩展是否错将临时数据写入缓存上下文。</text>
+
+                <rect x="768" y="286" width="588" height="62" fill="#E5EFF0" stroke="#245A6B"/>
+                <text id="s10-d5" x="784" y="311" class="svg-mono" font-size="12.5" font-weight="700" fill="#245A6B">源码机制 (mcxtfuncs.c)：</text>
+                <text id="s10-d6" x="784" y="335" class="svg-body" font-size="12.5">从 TopMemoryContext 非递归 BFS 生成 path；需超级用户或 pg_read_all_stats 权限。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>排查工具能帮我们定位到具体扩展或算子；而要从源头杜绝泄漏，C 扩展必须遵守三条安全切换范式。
+          </div>
+          <div class="slide-footer">
+            <span>来源：src/backend/utils/adt/mcxtfuncs.c · doc/src/sgml/system-views.sgml · func-admin.sgml</span>
+            <span class="page-num">10 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="11">
+          <div class="slide-eyebrow">
+            <span>06 · 实操 DEMO 6.4</span>
+            <span class="tag-accent">SAFE C EXTENSION PATTERNS</span>
+          </div>
+          <h1 class="slide-title">扩展开发的三条安全上下文切换模式</h1>
+          <p class="slide-lead">无论多复杂的扩展函数，只要守住「切完必还、异常必复、循环整重置」三条铁律，就能避免生命周期错位。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Panel 1: Basic Switch -->
+                <rect x="20" y="20" width="436" height="390" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.4"/>
+                <rect x="20" y="20" width="436" height="42" fill="#245A6B"/>
+                <text x="38" y="47" class="svg-white" font-size="15">模式一：成对切换与恢复（简单无异常路径）</text>
+
+                <rect x="38" y="80" width="400" height="196" fill="#1B2B33"/>
+                <text x="54" y="112" class="svg-white-mono" font-size="13">MemoryContext oldcontext;</text>
+                <text x="54" y="138" class="svg-white-mono" font-size="13">char *result;</text>
+                <text x="54" y="176" class="svg-white-mono" font-size="13" fill="#A4C4C6">oldcontext =</text>
+                <text x="54" y="200" class="svg-white-mono" font-size="13" fill="#A4C4C6">  MemoryContextSwitchTo(target_cxt);</text>
+                <text x="54" y="228" class="svg-white-mono" font-size="13">result = palloc(result_size);</text>
+                <text x="54" y="256" class="svg-white-mono" font-size="13" fill="#F7E9DE">MemoryContextSwitchTo(oldcontext);</text>
+
+                <rect x="38" y="294" width="400" height="98" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="54" y="320" class="svg-label" font-size="13.5" fill="#245A6B">适用范围与纪律：</text>
+                <text x="54" y="346" class="svg-body" font-size="12.5">· 中间只做纯分配或极简拷贝，不触发复杂回调。</text>
+                <text x="54" y="370" class="svg-body" font-size="12.5">· 切入后必须立刻切回 oldcontext，缩小窗口。</text>
+
+                <!-- Panel 2: PG_TRY / PG_FINALLY -->
+                <rect x="482" y="20" width="436" height="390" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1.4"/>
+                <rect x="482" y="20" width="436" height="42" fill="#AE8A3E"/>
+                <text x="500" y="47" class="svg-white" font-size="15">模式二：PG_TRY / PG_FINALLY 异常恢复</text>
+
+                <rect x="500" y="80" width="400" height="196" fill="#1B2B33"/>
+                <text x="516" y="108" class="svg-white-mono" font-size="12.5">oldcontext = MemoryContextSwitchTo(tmp);</text>
+                <text x="516" y="134" class="svg-white-mono" font-size="12.5" fill="#F4EFE2">PG_TRY(); {</text>
+                <text x="516" y="158" class="svg-white-mono" font-size="12.5">    do_work_that_may_error();</text>
+                <text x="516" y="182" class="svg-white-mono" font-size="12.5" fill="#F4EFE2">} PG_FINALLY(); {</text>
+                <text x="516" y="206" class="svg-white-mono" font-size="12.5" fill="#A4C4C6">    MemoryContextSwitchTo(oldcontext);</text>
+                <text x="516" y="230" class="svg-white-mono" font-size="12.5" fill="#F4EFE2">} PG_END_TRY();</text>
+
+                <rect x="500" y="294" width="400" height="98" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="516" y="320" class="svg-label" font-size="13.5" fill="#AE8A3E">为什么必须加 PG_FINALLY？</text>
+                <text x="516" y="346" class="svg-body" font-size="12.5">· 中间代码一旦 ereport(ERROR) 长跳转，普通恢复</text>
+                <text x="516" y="370" class="svg-body" font-size="12.5">  语句会被跳过，导致上层捕获后上下文错乱。</text>
+
+                <!-- Panel 3: Loop Temporary Context -->
+                <rect x="944" y="20" width="436" height="390" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.4"/>
+                <rect x="944" y="20" width="436" height="42" fill="#2F7A66"/>
+                <text x="962" y="47" class="svg-white" font-size="15">模式三：循环自建临时上下文 + 周期 Reset</text>
+
+                <rect x="962" y="80" width="400" height="196" fill="#1B2B33"/>
+                <text x="976" y="106" class="svg-white-mono" font-size="12">tmp = AllocSetContextCreate(Current, ...);</text>
+                <text x="976" y="130" class="svg-white-mono" font-size="12">for (int i = 0; i &lt; nitems; i++) {</text>
+                <text x="976" y="154" class="svg-white-mono" font-size="12">  old = MemoryContextSwitchTo(tmp);</text>
+                <text x="976" y="178" class="svg-white-mono" font-size="12">  build_temporary_objects(i);</text>
+                <text x="976" y="202" class="svg-white-mono" font-size="12">  MemoryContextSwitchTo(old);</text>
+                <text x="976" y="226" class="svg-white-mono" font-size="12" fill="#A4C4C6">  MemoryContextReset(tmp);</text>
+                <text x="976" y="250" class="svg-white-mono" font-size="12">} MemoryContextDelete(tmp);</text>
+
+                <rect x="962" y="294" width="400" height="98" fill="#E4F0EC" stroke="#2F7A66"/>
+                <text x="978" y="320" class="svg-label" font-size="13.5" fill="#2F7A66">解决开篇 OOM 事故的标准答案：</text>
+                <text x="978" y="346" class="svg-body" font-size="12.5">· 不靠循环里逐个 pfree()，而是每轮整体 Reset，</text>
+                <text x="978" y="370" class="svg-body" font-size="12.5">  循环结束后再 Delete 整个临时节点。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>代码规范之外，架构师、DBA 与业务开发者各自在生产系统里该建立怎样的内存管理最佳实践？
+          </div>
+          <div class="slide-footer">
+            <span>来源：Section 6.4 · PostgreSQL 扩展安全内存切换模式</span>
+            <span class="page-num">11 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="12">
+          <div class="slide-eyebrow">
+            <span>07 · 最佳实践</span>
+            <span class="tag-accent">ARCHITECT · DBA · APP DEVELOPER</span>
+          </div>
+          <h1 class="slide-title">三类工程角色的内存纪律分工图谱</h1>
+          <p class="slide-lead">数据库内存稳定性不是 DBA 一个人的事——容量规划、线上观测与 SQL/扩展写法构成三道防线。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Swimlane 1: Architect -->
+                <rect x="24" y="20" width="1352" height="118" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.3"/>
+                <rect x="24" y="20" width="210" height="118" fill="#1E4B5A"/>
+                <text x="129" y="72" text-anchor="middle" class="svg-white" font-size="17">数据库架构师</text>
+                <text x="129" y="98" text-anchor="middle" class="svg-white-mono" font-size="12">容量模型 · 插件评审</text>
+
+                <rect x="256" y="36" width="350" height="86" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="272" y="62" class="svg-label" font-size="14" fill="#1E4B5A">超越 work_mem × 并发数</text>
+                <text x="272" y="86" class="svg-body" font-size="12.5">容量评估必须计入 executor、hash/sort/spill、</text>
+                <text x="272" y="106" class="svg-body" font-size="12.5">缓存、逻辑解码及扩展自定义上下文。</text>
+
+                <rect x="626" y="36" width="350" height="86" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="642" y="62" class="svg-label" font-size="14" fill="#1E4B5A">常驻连接内存建模</text>
+                <text x="642" y="86" class="svg-body" font-size="12.5">对长连接、连接池、PL/pgSQL、C 扩展与复制</text>
+                <text x="642" y="106" class="svg-body" font-size="12.5">worker，把 backend 常驻内存纳入容量基线。</text>
+
+                <rect x="996" y="36" width="358" height="86" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="1012" y="62" class="svg-label" font-size="14" fill="#245A6B">插件引入评审清单</text>
+                <text x="1012" y="86" class="svg-body" font-size="12.5">强制要求说明对象归属：fn_mcxt / per-query /</text>
+                <text x="1012" y="106" class="svg-body" font-size="12.5">per-tuple / aggregate context 或自建上下文。</text>
+
+                <!-- Swimlane 2: DBA -->
+                <rect x="24" y="156" width="1352" height="118" fill="#F7F6F2" stroke="#2E6373" stroke-width="1.3"/>
+                <rect x="24" y="156" width="210" height="118" fill="#2E6373"/>
+                <text x="129" y="208" text-anchor="middle" class="svg-white" font-size="17">DBA / 运维</text>
+                <text x="129" y="234" text-anchor="middle" class="svg-white-mono" font-size="12">观测排障 · 边界守护</text>
+
+                <rect x="256" y="172" width="350" height="86" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="272" y="198" class="svg-label" font-size="14" fill="#2E6373">标准排障顺序</text>
+                <text x="272" y="222" class="svg-body" font-size="12.5">RSS 异常先定 pid、SQL 与等待事件，再采样</text>
+                <text x="272" y="242" class="svg-body" font-size="12.5">pg_backend_memory_contexts 或发日志信号。</text>
+
+                <rect x="626" y="172" width="350" height="86" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="642" y="198" class="svg-label" font-size="14" fill="#2E6373">区分 free_bytes 与真实泄漏</text>
+                <text x="642" y="222" class="svg-body" font-size="12.5">先确认块是否复用以及事务后是否回落；按</text>
+                <text x="642" y="242" class="svg-body" font-size="12.5">Cache / Executor / Expr / Hash 分类处置。</text>
+
+                <rect x="996" y="172" width="358" height="86" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="1012" y="198" class="svg-label" font-size="14" fill="#BE653B">严控长生命周期会话</text>
+                <text x="1012" y="222" class="svg-body" font-size="12.5">警惕 idle in transaction、长 cursor、长事务——</text>
+                <text x="1012" y="242" class="svg-body" font-size="12.5">既阻碍 VACUUM，又锁死关联上下文释放边界。</text>
+
+                <!-- Swimlane 3: App Developer -->
+                <rect x="24" y="292" width="1352" height="118" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.3"/>
+                <rect x="24" y="292" width="210" height="118" fill="#2F7A66"/>
+                <text x="129" y="344" text-anchor="middle" class="svg-white" font-size="17">业务与扩展开发者</text>
+                <text x="129" y="370" text-anchor="middle" class="svg-white-mono" font-size="12">SQL 形状 · UDF 寿命</text>
+
+                <rect x="256" y="308" width="350" height="86" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="272" y="334" class="svg-label" font-size="14" fill="#2F7A66">SQL 形状直接决定内存模式</text>
+                <text x="272" y="358" class="svg-body" font-size="12.5">大排序、大 Hash Join、大聚合、窗口函数、</text>
+                <text x="272" y="378" class="svg-body" font-size="12.5">物化 CTE、cursor 都会拉起各自工作上下文。</text>
+
+                <rect x="626" y="308" width="350" height="86" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <text x="642" y="334" class="svg-label" font-size="14" fill="#2F7A66">缩小非流式中间结果集</text>
+                <text x="642" y="358" class="svg-body" font-size="12.5">避免单条 SQL 构造巨大物化中间集；通过分批、</text>
+                <text x="642" y="378" class="svg-body" font-size="12.5">加索引、调整 Join 顺序控制单次内存峰值。</text>
+
+                <rect x="996" y="308" width="358" height="86" fill="#E4F0EC" stroke="#2F7A66"/>
+                <text x="1012" y="334" class="svg-label" font-size="14" fill="#2F7A66">UDF / C 扩展显式划分寿命</text>
+                <text x="1012" y="358" class="svg-body" font-size="12.5">写扩展前先回答：返回值、缓存、临时对象与</text>
+                <text x="1012" y="378" class="svg-body" font-size="12.5">聚合状态分别应该活到哪一个边界？</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>最后把高频踩坑一次性打包成排雷清单，划清 MemoryContext 的适用与不适用边界。
+          </div>
+          <div class="slide-footer">
+            <span>来源：Section 7 · 数据库架构师、DBA 与业务开发者最佳实践</span>
+            <span class="page-num">12 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-slide="13">
+          <div class="slide-eyebrow">
+            <span>08 · 适用边界与十大常见坑</span>
+            <span class="tag-accent">10 ENGINEERING PITFALLS</span>
+          </div>
+          <h1 class="slide-title">适用边界与工程中最容易踩的十个坑</h1>
+          <p class="slide-lead">适合有明确阶段边界的长运行进程；切忌与外部 malloc 混用、切忌让短命指针逃逸或误用专用分配器。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top suitability bar -->
+                <rect x="20" y="14" width="670" height="50" fill="#E4F0EC" stroke="#2F7A66"/>
+                <text x="36" y="36" class="svg-label" font-size="13" fill="#2F7A66">适合场景：</text>
+                <text x="112" y="36" class="svg-body" font-size="12.5">长运行进程 · 明确阶段边界(消息/事务/查询/行) · 海量小对象</text>
+                <text x="112" y="55" class="svg-body" font-size="12.5">复杂 ERROR 路径 · 按子系统统计与排障的运行时</text>
+
+                <rect x="710" y="14" width="670" height="50" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="726" y="36" class="svg-label" font-size="13" fill="#BE653B">慎用 / 禁用：</text>
+                <text x="816" y="36" class="svg-body" font-size="12.5">对象需交外部库独立释放 · 跨上下文保留短命指针 · 混用 malloc/pfree</text>
+                <text x="816" y="55" class="svg-body" font-size="12.5">变长对象误用 Slab · 指针暴露通用释放却用 Bump</text>
+
+                <!-- 2 x 5 Pitfalls Grid -->
+                <!-- Row 1 -->
+                <rect x="20" y="80" width="262" height="156" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="20" y="80" width="262" height="28" fill="#1E4B5A"/>
+                <text x="34" y="99" class="svg-white-mono" font-size="12">坑 01 · per-tuple 放错层</text>
+                <text x="34" y="130" class="svg-label" font-size="13">临时行落入 per-query/Top</text>
+                <text x="34" y="156" class="svg-body" font-size="12">长查询把微小占用按行放大成</text>
+                <text x="34" y="176" class="svg-body" font-size="12">OOM；应迁入 ExprContext 或</text>
+                <text x="34" y="196" class="svg-body" font-size="12">自建循环临时上下文。</text>
+
+                <rect x="294" y="80" width="262" height="156" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="294" y="80" width="262" height="28" fill="#2E6373"/>
+                <text x="308" y="99" class="svg-white-mono" font-size="12">坑 02 · 切换后忘恢复</text>
+                <text x="308" y="130" class="svg-label" font-size="13">遗漏切回 oldcontext</text>
+                <text x="308" y="156" class="svg-body" font-size="12">后续代码全落入错误上下文；</text>
+                <text x="308" y="176" class="svg-body" font-size="12">可能抛错的路径必须使用</text>
+                <text x="308" y="196" class="svg-body" font-size="12">PG_TRY / PG_FINALLY 兜底。</text>
+
+                <rect x="568" y="80" width="262" height="156" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="568" y="80" width="262" height="28" fill="#2E6373"/>
+                <text x="582" y="99" class="svg-white-mono" font-size="12">坑 03 · 误解 ResetOnly</text>
+                <text x="582" y="130" class="svg-label" font-size="13">以为它会清理子上下文</text>
+                <text x="582" y="156" class="svg-body" font-size="12">ResetOnly 不处理后代节点；</text>
+                <text x="582" y="176" class="svg-body" font-size="12">连子树一起清空必须调用</text>
+                <text x="582" y="196" class="svg-body" font-size="12">MemoryContextReset()。</text>
+
+                <rect x="842" y="80" width="262" height="156" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="842" y="80" width="262" height="28" fill="#47808D"/>
+                <text x="856" y="99" class="svg-white-mono" font-size="12">坑 04 · 判 palloc 返回 NULL</text>
+                <text x="856" y="130" class="svg-label" font-size="13">默认 OOM 直接抛 ERROR</text>
+                <text x="856" y="156" class="svg-body" font-size="12">普通 palloc() 不会返回 NULL；</text>
+                <text x="856" y="176" class="svg-body" font-size="12">仅当显式传入 NO_OOM 标志</text>
+                <text x="856" y="196" class="svg-body" font-size="12">时才需按 NULL 分支处理。</text>
+
+                <rect x="1116" y="80" width="264" height="156" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="1116" y="80" width="264" height="28" fill="#47808D"/>
+                <text x="1130" y="99" class="svg-white-mono" font-size="12">坑 05 · pfree(NULL) 非法</text>
+                <text x="1130" y="130" class="svg-label" font-size="13">不是标准 C 的安全 no-op</text>
+                <text x="1130" y="156" class="svg-body" font-size="12">PostgreSQL 不接受向 pfree()</text>
+                <text x="1130" y="176" class="svg-body" font-size="12">或 repalloc() 传 NULL，调用</text>
+                <text x="1130" y="196" class="svg-body" font-size="12">前需显式判空。</text>
+
+                <!-- Row 2 -->
+                <rect x="20" y="252" width="262" height="160" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="20" y="252" width="262" height="28" fill="#BE653B"/>
+                <text x="34" y="271" class="svg-white-mono" font-size="12">坑 06 · 长上下文高频创建</text>
+                <text x="34" y="302" class="svg-label" font-size="13">pfree 了 RSS 也不回落</text>
+                <text x="34" y="328" class="svg-body" font-size="12">freelist、keeper block 与 malloc</text>
+                <text x="34" y="348" class="svg-body" font-size="12">arena 会持有内存；短命对象</text>
+                <text x="34" y="368" class="svg-body" font-size="12">应进短上下文整体 reset。</text>
+
+                <rect x="294" y="252" width="262" height="160" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="294" y="252" width="262" height="28" fill="#BE653B"/>
+                <text x="308" y="271" class="svg-white-mono" font-size="12">坑 07 · Bump 指针外泄</text>
+                <text x="308" y="302" class="svg-label" font-size="13">暴露给通用释放路径报错</text>
+                <text x="308" y="328" class="svg-body" font-size="12">Bump 正常构建无 chunk header，</text>
+                <text x="308" y="348" class="svg-body" font-size="12">不能 pfree / repalloc，也不能</text>
+                <text x="308" y="368" class="svg-body" font-size="12">调用 GetMemoryChunkSpace。</text>
+
+                <rect x="568" y="252" width="262" height="160" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="568" y="252" width="262" height="28" fill="#AE8A3E"/>
+                <text x="582" y="271" class="svg-white-mono" font-size="12">坑 08 · 多次读取视图 path</text>
+                <text x="582" y="302" class="svg-label" font-size="13">path 是动态临时编号</text>
+                <text x="582" y="328" class="svg-body" font-size="12">查询运行中上下文在动态增删，</text>
+                <text x="582" y="348" class="svg-body" font-size="12">自连接统计子树必须用 CTE</text>
+                <text x="582" y="368" class="svg-body" font-size="12">固定一次扫描结果。</text>
+
+                <rect x="842" y="252" width="262" height="160" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="842" y="252" width="262" height="28" fill="#AE8A3E"/>
+                <text x="856" y="271" class="svg-white-mono" font-size="12">坑 09 · 只看 OS RSS</text>
+                <text x="856" y="302" class="svg-label" font-size="13">不看上下文树盲目调参</text>
+                <text x="856" y="328" class="svg-body" font-size="12">RSS 高可能是缓存、算子、</text>
+                <text x="856" y="348" class="svg-body" font-size="12">arena 或扩展泄漏，根因不同</text>
+                <text x="856" y="368" class="svg-body" font-size="12">处置手段完全相反。</text>
+
+                <rect x="1116" y="252" width="264" height="160" fill="#FFFFFF" stroke="#D9D5CB"/>
+                <rect x="1116" y="252" width="264" height="28" fill="#2F7A66"/>
+                <text x="1130" y="271" class="svg-white-mono" font-size="12">坑 10 · 外部库漏注册回调</text>
+                <text x="1130" y="302" class="svg-label" font-size="13">指望上下文释放 malloc</text>
+                <text x="1130" y="328" class="svg-body" font-size="12">MemoryContext 不会自动回收</text>
+                <text x="1130" y="348" class="svg-body" font-size="12">第三方库资源，必须注册</text>
+                <text x="1130" y="368" class="svg-body" font-size="12">reset callback 或显式清理。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">承接 · NEXT</span>收官之前，留出八道检验深度的思考题，以及一份按层次排列的 PostgreSQL 源码精读路线图。
+          </div>
+          <div class="slide-footer">
+            <span>来源：Section 8 &amp; Section 9 · 适用场景与十大工程避坑清单</span>
+            <span class="page-num">13 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-slide="14">
+          <div class="slide-eyebrow">
+            <span>09 · 思考题与源码阅读地图</span>
+            <span class="tag-accent">SELF-CHECK &amp; SOURCE CODE MAP</span>
+          </div>
+          <h1 class="slide-title">八道进阶思考题与本地源码精读路线</h1>
+          <p class="slide-lead">把概念落回代码与实验：沿着「设计总览 → 头文件接口 → 核心调度 → 四类分配器 → 执行器与观测」逐层精读。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-canvas">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 8 Extension Questions -->
+                <rect x="20" y="18" width="736" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+                <rect x="20" y="18" width="736" height="38" fill="#1E4B5A"/>
+                <text x="38" y="42" class="svg-white" font-size="15">课后思考与实验验证（8 题）</text>
+
+                <text x="38" y="84" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">01. </tspan>SRF 跨多次调用保存状态，应放 multi_call_memory_ctx、per-tuple 还是 Top？为什么？</text>
+                <text x="38" y="124" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">02. </tspan>为何 CurrentMemoryContext 最好指向短上下文？哪些代码可临时指向长寿命上下文？</text>
+                <text x="38" y="164" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">03. </tspan>CacheMemoryContext 持续增长与 ExecutorState 持续增长分别意味着什么？</text>
+                <text x="38" y="204" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">04. </tspan>AllocSet 的 8KB separate threshold 对大字符串反复 repalloc() 有什么意义？</text>
+                <text x="38" y="244" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">05. </tspan>为什么 BumpContext 更省内存与 CPU，却不能作为默认分配器？</text>
+                <text x="38" y="284" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">06. </tspan>先在临时上下文构造缓存，成功后 SetParent 挂到 CacheMemoryContext 是否更安全？</text>
+                <text x="38" y="324" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">07. </tspan>work_mem 限制了哪些算子的工作内存？哪些 backend 内存不直接受它限制？</text>
+                <text x="38" y="364" class="svg-body" font-size="13"><tspan class="svg-mono" font-weight="700" fill="#245A6B">08. </tspan>如何设计实验，让同一 C 函数分别在 per-tuple/per-query 泄漏并用视图观测差异？</text>
+
+                <!-- Right: Layered Source Reading Map -->
+                <rect x="780" y="18" width="600" height="394" fill="#F7F6F2" stroke="#D9D5CB"/>
+                <rect x="780" y="18" width="600" height="38" fill="#245A6B"/>
+                <text x="798" y="42" class="svg-white" font-size="15">PostgreSQL 本地源码精读路线（自顶向下）</text>
+
+                <rect x="802" y="72" width="556" height="52" fill="#1E4B5A"/>
+                <text x="820" y="94" class="svg-white-mono" font-size="13" font-weight="700">L1 · src/backend/utils/mmgr/README</text>
+                <text x="820" y="114" class="svg-white" font-size="12">设计总览：生命周期原则、Reset Callback 与错误路径哲学</text>
+
+                <path d="M 1080 124 L 1080 140" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <rect x="802" y="144" width="556" height="52" fill="#2E6373"/>
+                <text x="820" y="166" class="svg-white-mono" font-size="13" font-weight="700">L2 · include/utils/palloc.h · memutils.h · memnodes.h</text>
+                <text x="820" y="186" class="svg-white" font-size="12">抽象数据结构、虚函数表、MaxAllocSize 与 8KB 阈值定义</text>
+
+                <path d="M 1080 196 L 1080 212" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <rect x="802" y="216" width="556" height="52" fill="#47808D"/>
+                <text x="820" y="238" class="svg-white-mono" font-size="13" font-weight="700">L3 · mmgr/mcxt.c → aset.c / generation.c / slab.c / bump.c</text>
+                <text x="820" y="258" class="svg-white" font-size="12">mcxt_methods[] 调度、chunk header 编码与四类分配器实现</text>
+
+                <path d="M 1080 268 L 1080 284" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <rect x="802" y="288" width="556" height="52" fill="#A4C4C6"/>
+                <text x="820" y="310" class="svg-mono" font-size="13" font-weight="700">L4 · executor/README · execUtils.c · nodeHash.c</text>
+                <text x="820" y="330" class="svg-body" font-size="12">ExecutorState、ExprContext 与算子专用上下文编排</text>
+
+                <path d="M 1080 340 L 1080 354" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <rect x="802" y="356" width="556" height="44" fill="#EBF1EE" stroke="#2F7A66"/>
+                <text x="820" y="376" class="svg-mono" font-size="12.5" font-weight="700" fill="#2F7A66">L5 · adt/mcxtfuncs.c · system-views.sgml · func-admin.sgml</text>
+                <text x="820" y="393" class="svg-body" font-size="11.5">pg_backend_memory_contexts 与 pg_log_backend_memory_contexts(pid)</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-label">收官 · SUMMARY</span>把内存放进正确的生命周期地层，比在代码里到处补 pfree() 重要十倍。
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · 内存上下文管理 · PostgreSQL 源码主线完</span>
+            <span class="page-num">14 / 14</span>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Right-side In-page Speaker Notes / Full Transcript Drawer -->
+    <aside id="notes-pane" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div class="notes-tabs">
+          <button type="button" class="notes-tab active" id="tab-page-note">本页讲稿 (N)</button>
+          <button type="button" class="notes-tab" id="tab-full-note">全文讲稿 (T)</button>
+        </div>
+        <button type="button" class="notes-close" id="btn-notes-close">收起</button>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+  </div>
+
+  <!-- Dedicated Bottom Shortcut HUD Bar (Always Visible, Including Fullscreen) -->
+  <footer id="bottom-hud">
+    <div class="hud-group">
+      <button type="button" class="hud-btn" id="btn-prev" title="上一页 (←)">← 上一页</button>
+      <button type="button" class="hud-btn" id="btn-next" title="下一页 (→)">下一页 →</button>
+      <div class="hud-progress-wrap">
+        <span id="hud-page-text">01 / 14</span>
+        <div class="hud-bar"><div class="hud-bar-fill" id="hud-bar-fill"></div></div>
+      </div>
+      <span class="hud-autoplay-badge" id="hud-autoplay-badge">自动播放中</span>
+    </div>
+    <div class="hud-group">
+      <button type="button" class="hud-btn" id="btn-toc"><span class="kbd">G</span> 目录</button>
+      <button type="button" class="hud-btn" id="btn-note"><span class="kbd">N</span> 本页讲稿</button>
+      <button type="button" class="hud-btn" id="btn-transcript"><span class="kbd">T</span> 全文讲稿</button>
+      <button type="button" class="hud-btn" id="btn-autoplay"><span class="kbd">A</span> 自动播放</button>
+      <button type="button" class="hud-btn" id="btn-fullscreen"><span class="kbd">F</span> 全屏</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== SLIDE METADATA & ORAL LOGICAL TRANSCRIPTS ==================== */
+  var SLIDES = [
+    {
+      num: 1,
+      title: '内存上下文管理：用生命周期树驯服长运行后端',
+      sub: '真实 OOM 事故切入与四个核心问题',
+      notes: [
+        '各位好，欢迎来到数据库筑基课的「内存上下文管理」。今天我们不从枯燥的 API 列表讲起，而是先看一个在 PostgreSQL 生产环境里反复上演的真实事故：一位工程师写了一个 C 扩展函数，每处理一行数据就调用 palloc() 拼一个临时字符串。单元测试跑几百行完全正常，结果一上线，碰到一条扫描几千万行的查询，backend 进程的 RSS 一路飙升，最后直接被 OOM Killer 干掉。',
+        '很多人的第一反应是「是不是漏写 pfree() 了？」其实不然。真正的原因是：开发者没有留意 CurrentMemoryContext 当时指向的是函数缓存上下文或者查询级上下文。原本只该活一行的临时字符串，被强行抬升成了查询级甚至进程级对象。所以真正的修复，不是在循环里到处补 pfree()，而是把对象放进 per-tuple context，或者自建一个临时上下文按轮次整体 MemoryContextReset()。',
+        '顺着这起事故，整堂课我们要用 PostgreSQL 源码作为实证，把四个绕不开的基础问题彻底讲透：第一，palloc() 到底把内存放到了哪里？第二，为什么 pfree() 不依赖当前上下文？第三，查询结束、事务结束乃至报错退出时，大块内存怎么自动回收？第四，为什么 work_mem 明明没超，backend 还是可能吃掉海量内存？带着这四个问题，我们先看传统 malloc/free 为什么在数据库内核里行不通。'
+      ],
+      evidence: '源码回源：src/backend/utils/mmgr/README · src/include/utils/palloc.h · src/backend/executor/README'
+    },
+    {
+      num: 2,
+      title: '它解决的不是「替代 malloc」，而是生命周期管理',
+      sub: 'malloc/free 路径爆炸 vs MemoryContext Arena Tree',
+      notes: [
+        '承接刚才的问题：普通 C 程序写 malloc 配 free 看起来很自然，但放到数据库内核里就会立刻崩盘。为什么？大家看左侧这张路径图。第一，一条 SQL 执行期间会产生海量短命小对象——表达式求值、投影、临时 tuple、排序输入行；第二，也是最致命的，PostgreSQL 的错误处理走的是 ereport(ERROR) 配合 siglongjmp 长跳转，它根本不会按正常的函数栈逐层 return，你写在函数末尾的 free() 压根没机会执行。',
+        '再加上单个 backend 进程要长期运行、连续承接无数条 SQL，扩展函数和索引 AM 支持函数又会被执行器按行高频调用，只要有一点生命周期边界模糊，一次极小的泄漏就会被几千万行放大成灾难。更何况，缓存、portal、事务、子事务、查询、单行求值的寿命完全不同，不可能塞进同一个平坦的堆。',
+        '所以 PostgreSQL 给出的答案不是「换一个更快的 malloc」，而是用 MemoryContext 建一棵 Arena Tree（内存区域树）：把对象放进代表其生命周期的上下文里，到了阶段边界，整棵子树一键 Reset 或 Delete。当然，天下没有免费的午餐——它的代价也很明确：开发者必须清楚每个对象该活多久；palloc() 默认 OOM 会直接抛 ERROR 而不是返回 NULL；统计也是按 block 粗粒度做的。理解了「为什么要建树」，接下来我们翻开 memnodes.h，看看这棵树长什么样。'
+      ],
+      evidence: '实证依据：src/backend/utils/mmgr/README 指出成功的关键在于定义清晰的上下文生命周期边界。'
+    },
+    {
+      num: 3,
+      title: 'MemoryContextData 结构与八大全局上下文地层',
+      sub: 'memnodes.h 结构体与七阶寿命地层剖面',
+      notes: [
+        '打开 src/include/nodes/memnodes.h，MemoryContext 的本质非常干净。大家看左边这个结构体蓝图：MemoryContextData 里有七组核心字段——type 标明具体分配器类型，isReset 记录自上次重置后有没有新分配，mem_allocated 统计从底层拿到的 block 总字节，methods 指向 C 语言风格的虚函数表 MemoryContextMethods，parent 与 child 四个指针把所有上下文串成一棵树，name 和 ident 负责可观测性命名，reset_cbs 则挂着清理前的回调链。',
+        '再看右边这张地层剖面图——颜色越深代表越底层、寿命越长。最深处是进程级的 TopMemoryContext 根节点，以及专门为错误恢复留保底内存的 ErrorContext、fork 后适时释放的 PostmasterContext，还有存放 relcache/catcache/typcache 的 CacheMemoryContext。',
+        '往浅处走，依次是单条客户端命令级别的 MessageContext、顶层事务级的 TopTransactionContext、支持 SAVEPOINT 子事务的 CurTransactionContext，直到最浅层、周转最快的 PortalContext、查询级和每行求值上下文。把这些地层记在脑子里，后面排障看视图时，你一眼就能判断一个对象是不是「越层」了。接下来我们动动手，看看对这棵树做 Reset 和 Delete 到底有什么微妙差异。'
+      ],
+      evidence: '源码实证：src/include/nodes/memnodes.h (MemoryContextData) · src/include/utils/memutils.h (全局上下文声明)。'
+    },
+    {
+      num: 4,
+      title: '生命周期树：Reset、ResetOnly 与 Delete 的精确边界',
+      sub: '交互仿真：Reset / ResetOnly / Delete / DeleteChildren / SetParent',
+      notes: [
+        '这一页我们配了一个交互仿真器，大家可以点击上方按钮观察 PortalContext 及其子树的变化。首先看源码 mcxt.c 里的树语义：MemoryContextInit() 创建了 Top 和 Error 两个根，之后每次 MemoryContextCreate() 都把新节点挂到父节点的 child 链表上。',
+        '工程里最容易踩的坑，是把 MemoryContextReset() 和 MemoryContextResetOnly() 混为一谈。大家点一下 Reset：当前上下文的内存被释放，同时它的所有子上下文和孙上下文全部被删除，但 PortalContext 自身壳子保留着可以继续复用。再点一下 ResetOnly：当前内存释放了，可下面的 ExecutorState 和 TempBuildContext 原封不动！如果你在循环里建了临时子上下文，却只对父上下文调用 ResetOnly，子上下文就会越积越多。',
+        '再看 MemoryContextDelete()：它会释放当前内存、删掉所有后代，最后连自己也摘除。mcxt.c 里特意用非递归的方式自底向上删除子树，就是为了防止在错误恢复路径上栈太深导致二次崩溃。最后还有一个很巧妙的 MemoryContextSetParent()——点击「SetParent 提升」可以看到，我们可以先把对象在临时上下文里构造好，确认不会中途报错后，再一键改挂到 CacheMemoryContext 下，既安全又干净。树的操作讲完了，下一条问题来了：单次 palloc() 和 pfree() 到底是怎么路由的？'
+      ],
+      evidence: '源码实证：src/backend/utils/mmgr/mcxt.c 中的 MemoryContextReset / ResetOnly / Delete（非递归自底向上）/ SetParent。'
+    },
+    {
+      num: 5,
+      title: 'palloc() 走当前上下文，pfree() 走 Chunk Header',
+      sub: '交互演示：分配与释放双路径及 5 条 API 硬边界',
+      notes: [
+        '这一页直接回答开篇的 Q1 和 Q2。大家可以点「播放路径」或者「单步推演」来看两条截然不同的路线。先看上面的蓝色轨道：调用 palloc() 时，它直接读取全局变量 CurrentMemoryContext，通过虚函数表调用 methods->alloc()；具体分配器会在返回给你的用户指针前面，悄悄埋入一个 8 字节的 uint64 header，里面编码了当前分配器的 method ID。',
+        '这就直接解释了下面的青绿色轨道：为什么 pfree(ptr) 和 repalloc() 根本不管你现在切到了哪个 CurrentMemoryContext？因为拿到 ptr 之后，mcxt.c 往回退 8 个字节，通过 GetMemoryChunkMethodID(pointer) 读出 header 里的编号，直接去 mcxt_methods[] 数组里找到对应的 free_p 执行释放！分配靠「当前上下文驱动」，释放靠「chunk 自描述驱动」——这也解释了为什么绝对不能把 malloc 指针传给 pfree，或者把 palloc 指针传给 free。',
+        '底部的陶橙色边界框里有五条源码硬规则必须刻在肌肉记忆里：第一，palloc() 内存不足默认抛 ERROR，只有显式传 MCXT_ALLOC_NO_OOM 才会返回 NULL；第二，palloc(0) 是合法的，可以 pfree/repalloc 但不能解引用；第三，pfree(NULL) 是非法的；第四，普通分配上限 MaxAllocSize 是 1GB 减 1 字节，更大对象要走 MemoryContextAllocHuge()；第五，critical section 里通常禁止分配，只有 ErrorContext 例外。管住了 palloc 内存，那如果扩展里还拿着文件句柄或第三方 malloc 资源怎么办？看下一页。'
+      ],
+      evidence: '源码实证：src/include/utils/palloc.h · src/backend/utils/mmgr/mcxt.c · memutils_memorychunk.h · MaxAllocSize (1GB - 1)。'
+    },
+    {
+      num: 6,
+      title: 'Reset Callback：让内存上下文托管非内存资源',
+      sub: 'LIFO 逆序执行与「先弹出再调用」防重入机制',
+      notes: [
+        '从 PostgreSQL 9.5 开始，MemoryContext 不只管内存，还能通过 Reset Callback 顺带把非 palloc 资源一起兜住。比如 tuplesort 关联的临时磁盘文件、长寿命缓存对象的引用计数，或者你调用第三方 C 库通过标准 malloc 拿到的句柄，都可以用 MemoryContextRegisterResetCallback(context, cb) 挂到对应的上下文上。',
+        '这里有两个非常讲究的工程细节。第一，cb 结构体自身通常直接分配在同一个上下文里，这样上下文销毁时连回调结构体一起带走，省去额外的释放负担。第二，看中间金色区域：回调链是按 LIFO（后注册先执行）的逆序触发的，而且 mcxt.c 里的 MemoryContextCallResetCallbacks() 在执行回调函数前，会先把当前 cb 从链表里弹出，再去调 cb->func(cb->arg)。为什么要多这一步？试想如果回调函数内部抛了 ERROR，系统再次进入清理流程时，已经弹出的回调就不会被重复调用造成二次释放。',
+        '右侧展示了完整触发顺序：先删子上下文，再跑本节点的回调链——注意此时本节点的内存块还没释放，回调函数仍然可以安全读取 arg 数据——最后才真正归还底层内存块。当然，它并不能替代 PostgreSQL 的 ResourceOwner 机制，锁、buffer pin、smgr 这些核心资源仍然归 ResourceOwner 管，callback 只是把外部资源桥接到内存生命周期上的优雅工具。抽象层讲完，我们下潜到最底层，对比四类真正的内存分配器。'
+      ],
+      evidence: '源码实证：src/backend/utils/mmgr/mcxt.c (MemoryContextCallResetCallbacks 先出队后调用) · mmgr/README。'
+    },
+    {
+      num: 7,
+      title: '四类上下文实现：同一接口，四种分配策略',
+      sub: 'AllocSet / Generation / Slab / Bump 源码级横向对比',
+      notes: [
+        '在 memnodes.h 的 MemoryContextIsValid() 里，PostgreSQL 当前正式支持四类上下文实现：AllocSet、Generation、Slab 和 Bump。它们共用同一套 mcxt_methods[] 接口，但底层布局截然不同。核心权衡只有一句话：通用性和极致效率天然冲突。',
+        '第一列 AllocSet（aset.c）是默认通用分配器。小块走 2 的幂次 freelist，超过 ALLOCSET_SEPARATE_THRESHOLD（源码定义为 8192 字节）的大对象会单独向 malloc 申请 block，释放时能直接还给底层分配器。它什么场景都能扛，但风险在于长寿命上下文里，小块 freelist 会一直占位不降。',
+        '第二列 Generation（generation.c）专为 FIFO 同代生命周期设计，比如 tuplestore 和逻辑解码的 tuple 队列。它不复用单个空洞，而是记录每个 block 里还有多少活跃 chunk，整块清空就整块回收——前提是释放顺序符合 FIFO，否则留一个钉子户就会卡死整块内存。',
+        '第三列 Slab（slab.c）面向海量等大小对象，比如逻辑复制的 reorder buffer。所有槽位严格等于 chunkSize，且优先往最满的 block 里塞，让较空的 block 尽快腾空归还。第四列 Bump（bump.c）最激进：只顺序推进 freeptr，正常构建下连 8 字节 chunk header 都省掉了，CPU 和空间开销极低，用在 tuplesort 排序行和 hash aggregate 上非常香——但也正因没有 header，它根本不支持普通 pfree() 和 repalloc()，绝不能把 Bump 指针暴露给通用代码。了解了四类武器，下面看执行器是怎么把它们组合起来的。'
+      ],
+      evidence: '源码实证：aset.c (ALLOCSET_SEPARATE_THRESHOLD=8192) · generation.c · slab.c · bump.c。'
+    },
+    {
+      num: 8,
+      title: '执行器内存路径：per-query 与 per-tuple 的分层纪律',
+      sub: '交互仿真：锯齿稳态 vs 线性 OOM 爬坡',
+      notes: [
+        '现在回到执行器现场。翻开 src/backend/executor/README 和 execUtils.c，你会发现执行器绝不是一个大堆，而是一组严密嵌套的上下文：查询启动时 CreateExecutorState() 建起名为 ExecutorState 的 per-query 上下文；而每个表达式求值环境 ExprContext 下面，又挂着自己独立的 per-tuple 上下文。',
+        '在 nodeResult.c、nodeHashjoin.c 这些算子里，每算完一行就会调用 ResetExprContext(econtext) 把 per-tuple 清空。同时，Hash Join 会细分出 HashTableContext、HashBatchContext、HashSpillContext；tuplesort 在非 bounded sort 下启用 BumpContext 存 caller tuple；tuplestore 则直接写注释说明自己是 FIFO 模式，选用 GenerationContext。',
+        '大家可以操作上方的仿真控件：在默认的「正确：ExprContext (per-tuple)」模式下点播放，无论你把滑块拉到 1000 万行，右侧曲线始终在底部呈极低的锯齿稳态；但一旦切换到「错误：ExecutorState (per-query)」，哪怕每行只分配几十字节，随着行数增加，内存曲线直线冲破 OOM 警戒线！这就是开篇那起线上事故的完整复现——很多内存泄漏真不是少写 pfree()，而是 MemoryContextSwitchTo() 选错了地层。'
+      ],
+      evidence: '源码实证：src/backend/executor/README · execUtils.c · nodeResult.c · nodeHashjoin.c · nodeHash.c · tuplesort.c · tuplestore.c。'
+    },
+    {
+      num: 9,
+      title: '收益与代价：为什么 work_mem 没超仍可能高占内存？',
+      sub: '五项核心收益与五个必须破除的认知误区',
+      notes: [
+        '学完核心机制，我们必须保持工程冷静，把收益和限制摆在天平两端。左侧五项收益已经很清楚：ERROR 长跳转也能可靠回收、长查询靠 per-tuple 保持稳定、扩展开发边界清晰、排障能精准定位到子树、不同访问模式可以挑选专用分配器。',
+        '但右侧这五条限制，在生产事故里更值得反复敲警钟——尤其是第一条，直接回答了开篇的 Q4：为什么 work_mem 没超，backend 还是占了很多内存？因为 MemoryContext 根本不是全局内存上限！一条复杂 SQL 里可以同时并存多个排序/Hash 算子、多个上下文，再加上 CacheMemoryContext 和扩展自定义上下文，最后还要乘以几十上百个并发 backend。',
+        '第二条也常让人误判：为什么我明明 Reset 了上下文，top 里看 OS RSS 却没降？因为 AllocSet 会保留 keeper block 准备下次复用，底层的 malloc 也可能把空闲页留在 arena 里不立刻归还操作系统。此外，内存统计是 block 级的而非精确对象图，切错上下文比少写 pfree 更隐蔽，且它不替代 ResourceOwner。看清这些限制后，线上排障就不能只盯着 OS RSS 了，我们来看下一节的可观测性闭环。'
+      ],
+      evidence: '机制归纳：AllocSet keeper block 与底层 malloc arena 机制导致 Reset 与 OS RSS 下降并非同步事件。'
+    },
+    {
+      num: 10,
+      title: '排障闭环：先定 PID，再用 CTE 固定上下文树快照',
+      sub: '交互诊断：pg_backend_memory_contexts 与跨进程信号日志',
+      notes: [
+        '线上发现某个 backend RSS 异常飙高，标准排障闭环分五步：先别急着重启，用 pg_stat_activity 锁定 pid、SQL 和状态；接着采集它的上下文树；然后区分热点落在哪棵子树；最后回源确认代码边界。',
+        'PostgreSQL 给了两个官方入口：查当前会话用 pg_backend_memory_contexts 视图，查别的进程用 pg_log_backend_memory_contexts(pid) 函数。看左下角这段官方推荐 SQL，为什么要套一层 CTE？因为 mcxtfuncs.c 里的 pg_get_backend_memory_contexts() 是从 TopMemoryContext 做非递归广度优先遍历临时生成 path 编号的，查询跑着跑着上下文就在动态生灭，如果同一条 SQL 里读两次视图做自连接，path 编号可能对不上！用 CTE 固定一次快照，才能准确算出某棵子树的总占用。',
+        '大家可以点击上方按钮切换不同热点：如果涨在 CacheMemoryContext，重点查海量分区表缓存或扩展长期对象；如果涨在 ExecutorState，查当前复杂 SQL 算子；如果涨在 ExprContext，查单行表达式大对象。如果目标进程是另一个正在跑的 backend，点「跨进程信号诊断」：pg_log_backend_memory_contexts(pid) 并不会跨进程硬读内存，而是发信号置位 LogMemoryContextPending，等目标进程走到安全中断点后，调用 MemoryContextStatsDetail 把前 100 个子节点写进 server log，既安全又不会把日志打爆。'
+      ],
+      evidence: '源码实证：src/backend/utils/adt/mcxtfuncs.c · doc/src/sgml/system-views.sgml · func-admin.sgml。'
+    },
+    {
+      num: 11,
+      title: '扩展开发的三条安全上下文切换模式',
+      sub: '成对切换、PG_TRY/PG_FINALLY 与循环临时上下文',
+      notes: [
+        '排障工具能帮我们抓出问题，而写 C 扩展时，只要把这三种经过源码千锤百炼的切换模式用熟，就能从源头避免绝大多数内存事故。',
+        '模式一是成对切换：保存 MemoryContextSwitchTo(target_context) 返回的 oldcontext，分配完立刻切回。但注意，它只适用于中间绝对不会抛错的简单分配。只要中间调用了任何可能触发 ereport(ERROR) 的函数，就必须升级到模式二——用 PG_TRY() 和 PG_FINALLY() 包裹，确保哪怕中途长跳转，PG_FINALLY 里的切回语句也一定执行，不会把调用方的 CurrentMemoryContext 留在污染状态。',
+        '模式三则是开篇那起 OOM 事故的标准解法：在进入大循环之前，用 AllocSetContextCreate 创建一个临时上下文 tmpcontext；每一轮循环切进去构造所有临时对象，切回来，然后直接一句 MemoryContextReset(tmpcontext) 一键清场；整个循环结束后再 MemoryContextDelete(tmpcontext)。你看，全程不需要追踪几十个零散指针去逐个 pfree()，代码既干净，内存曲线又稳如泰山。'
+      ],
+      evidence: '工程范式：源自 PostgreSQL 内核与扩展通用实践（MemoryContextSwitchTo + PG_TRY/PG_FINALLY + 循环 Reset）。'
+    },
+    {
+      num: 12,
+      title: '三类工程角色的内存纪律分工图谱',
+      sub: '数据库架构师、DBA 与业务开发者的三道防线',
+      notes: [
+        '把视角从单段 C 代码拉高到整个生产团队，内存稳定性需要架构师、DBA 和业务开发者各守一摊。',
+        '对于数据库架构师，做容量规划时千万别再用「work_mem 乘以并发数」拍脑袋了——执行器、hash/sort/spill 子上下文、缓存、逻辑复制 worker 以及长连接池里的 backend 常驻内存都必须进入模型；引入第三方插件做技术评审时，要明确追问对方：你的对象分别落在 fn_mcxt、per-query、per-tuple、aggregate 还是自建上下文里？',
+        '对于 DBA，遇到 RSS 异常遵循「定 pid → 看视图或发日志信号 → 辨子树」的流程，千万别把 free_bytes 直接当成泄漏，要观察事务或查询结束后是否回落；同时严防 idle in transaction、长 cursor 和长事务，它们既拖垮 VACUUM，也会把对应上下文的释放边界无限拉长。',
+        '对于业务开发者，即便你一行 C 代码都不写，你的 SQL 形状也在直接操控执行器的内存拓扑——大排序、大 Hash Join、大聚合、窗口函数和物化 CTE 都会拉起对应的工作上下文。尽量通过加索引、分批、优化 Join 顺序把巨大的非流式中间结果压小，性能和内存往往会同时好转。'
+      ],
+      evidence: '实践总结：整合架构容量评审、DBA 线上可观测性与 SQL/UDF 生命周期纪律。'
+    },
+    {
+      num: 13,
+      title: '适用边界与工程中最容易踩的十个坑',
+      sub: '适用与禁区边界 + 十大高频排雷清单',
+      notes: [
+        '临近收官，我们把整套机制的适用边界和十个高频踩坑做成一张排雷清单。顶部划清了红绿线：凡是长运行进程、阶段边界清晰、海量小对象、错误路径复杂的系统，MemoryContext 是极佳选择；但凡需要把单个对象交给外部库独立释放、或者会把短命指针跨上下文长期保存的场景，就必须慎用或做显式拷贝与回调桥接。',
+        '下面十个坑，前五个集中在 API 认知：第一，把 per-tuple 对象放进 per-query 或 Top 导致 OOM；第二，切完上下文忘了恢复或没用 PG_FINALLY；第三，以为 ResetOnly 会删子上下文；第四，把 palloc() 当成会返回 NULL 去判空；第五，把 pfree(NULL) 当成标准 C 的安全空操作。',
+        '后五个则集中在底层机制与排障：第六，在长寿命上下文里高频分配又 pfree，结果 freelist 和 arena 导致 RSS 居高不下；第七，用了 BumpContext 却把指针暴露给通用释放逻辑；第八，不套 CTE 就自连接 pg_backend_memory_contexts 导致 path 错乱；第九，只盯 OS RSS 不看上下文树；第十，扩展调了第三方 malloc 却忘了注册 reset callback。上线前拿这十条过一遍，能避开九成以上的内存故障。'
+      ],
+      evidence: '排雷清单：逐条对应全文核心源码边界与生产排障实证（Section 8 & Section 9）。'
+    },
+    {
+      num: 14,
+      title: '八道进阶思考题与本地源码精读路线',
+      sub: '从概念理解走向源码精读与动手实验',
+      notes: [
+        '最后一页，我们留八道进阶思考题给大家做自检和动手实验。比如第 1 题，SRF 跨多次调用保存状态为什么必须放在 multi_call_memory_ctx？第 4 题，AllocSet 的 8KB separate threshold 对大字符串反复 repalloc() 意味着什么？第 6 题，先在临时上下文构造缓存、成功后 SetParent 挂到 CacheMemoryContext 为什么比直接构造更安全？特别是第 8 题，非常建议大家亲手写一个小 C 函数，分别在 per-tuple 和 per-query 里制造泄漏，然后用 pg_backend_memory_contexts 亲眼看一次对比。',
+        '右侧是一份按地层从浅入深的 PostgreSQL 本地源码精读路线：先读 mmgr/README 建立全局观，再看 palloc.h、memutils.h 和 memnodes.h 摸清接口与结构体，接着深入 mcxt.c 和四类分配器源码看清调度与布局，最后串联执行器 execUtils.c 与可观测性 mcxtfuncs.c。',
+        '整堂课浓缩成底部这一句话送给大家：把内存放进正确的生命周期地层，比在代码里到处补 pfree() 重要十倍。感谢聆听，欢迎结合源码继续交流！'
+      ],
+      evidence: '阅读索引：postgres/src/backend/utils/mmgr/ · executor/ · adt/mcxtfuncs.c · doc/src/sgml/'
+    }
+  ];
+
+  /* ==================== CORE STATE & DOM REFERENCES ==================== */
+  var currentSlide = 1;
+  var totalSlides = SLIDES.length;
+  var notesMode = 'closed'; // 'closed' | 'page' | 'full'
+  var tocOpen = false;
+  var autoPlayTimer = null;
+  var AUTOPLAY_MS = 6500;
+
+  var appRoot = document.getElementById('app-root');
+  var stageViewport = document.getElementById('stage-viewport');
+  var stageShell = document.getElementById('stage-shell');
+  var slideEls = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var notesPane = document.getElementById('notes-pane');
+  var notesBody = document.getElementById('notes-body');
+  var tocPanel = document.getElementById('toc-panel');
+  var tocList = document.getElementById('toc-list');
+
+  var btnPrev = document.getElementById('btn-prev');
+  var btnNext = document.getElementById('btn-next');
+  var btnToc = document.getElementById('btn-toc');
+  var btnTocClose = document.getElementById('btn-toc-close');
+  var btnNote = document.getElementById('btn-note');
+  var btnTranscript = document.getElementById('btn-transcript');
+  var btnAutoplay = document.getElementById('btn-autoplay');
+  var btnFullscreen = document.getElementById('btn-fullscreen');
+  var tabPageNote = document.getElementById('tab-page-note');
+  var tabFullNote = document.getElementById('tab-full-note');
+  var btnNotesClose = document.getElementById('btn-notes-close');
+  var hudPageText = document.getElementById('hud-page-text');
+  var hudBarFill = document.getElementById('hud-bar-fill');
+  var hudAutoplayBadge = document.getElementById('hud-autoplay-badge');
+
+  /* ==================== PROPORTIONAL VECTOR SCALING ==================== */
+  function updateStageScale() {
+    var rect = stageViewport.getBoundingClientRect();
+    var pad = 16;
+    var availW = Math.max(200, rect.width - pad * 2);
+    var availH = Math.max(120, rect.height - pad * 2);
+    var scale = Math.min(availW / 1600, availH / 900);
+    stageShell.style.transform = 'scale(' + scale.toFixed(5) + ')';
+  }
+
+  window.addEventListener('resize', updateStageScale);
+  document.addEventListener('fullscreenchange', function () {
+    btnFullscreen.classList.toggle('active', !!document.fullscreenElement);
+    setTimeout(updateStageScale, 60);
+    setTimeout(updateStageScale, 260);
+  });
+
+  /* ==================== TOC & SLIDE NAVIGATION ==================== */
+  function buildToc() {
+    tocList.innerHTML = '';
+    SLIDES.forEach(function (s) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toc-item' + (s.num === currentSlide ? ' active' : '');
+      btn.setAttribute('data-target-slide', String(s.num));
+      btn.innerHTML =
+        '<span class="toc-num">' + String(s.num).padStart(2, '0') + '</span>' +
+        '<span class="toc-item-main">' +
+          '<div class="toc-item-title">' + s.title + '</div>' +
+          '<div class="toc-item-sub">' + s.sub + '</div>' +
+        '</span>';
+      btn.addEventListener('click', function () {
+        goToSlide(s.num);
+        setTocOpen(false);
+      });
+      tocList.appendChild(btn);
+    });
+  }
+
+  function setTocOpen(open) {
+    tocOpen = !!open;
+    tocPanel.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  function goToSlide(n, fromAutoPlay) {
+    var target = Math.max(1, Math.min(totalSlides, n));
+    if (!fromAutoPlay && autoPlayTimer) {
+      stopAutoPlay();
+    }
+    currentSlide = target;
+    slideEls.forEach(function (el) {
+      el.classList.toggle('active', Number(el.getAttribute('data-slide')) === currentSlide);
+    });
+    hudPageText.textContent = String(currentSlide).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+    hudBarFill.style.width = ((currentSlide / totalSlides) * 100).toFixed(2) + '%';
+
+    // Update TOC active item
+    var items = tocList.querySelectorAll('.toc-item');
+    items.forEach(function (it) {
+      it.classList.toggle('active', Number(it.getAttribute('data-target-slide')) === currentSlide);
+    });
+
+    // Sync notes pane
+    if (notesMode === 'page') {
+      renderNotesContent();
+    } else if (notesMode === 'full') {
+      highlightAndScrollFullTranscript(true);
+    }
+  }
+
+  /* ==================== NOTES & FULL TRANSCRIPT PANE ==================== */
+  function buildNoteCardHtml(s, isCurrent) {
+    var paras = s.notes.map(function (p) {
+      return '<p class="note-para">' + p + '</p>';
+    }).join('');
+    return (
+      '<article class="note-card' + (isCurrent ? ' current-page' : '') + '" data-note-slide="' + s.num + '">' +
+        '<div class="note-card-head" data-jump-slide="' + s.num + '">' +
+          '<span class="note-card-num">P' + String(s.num).padStart(2, '0') + '</span>' +
+          '<span class="note-card-title">' + s.title + '</span>' +
+        '</div>' +
+        paras +
+        '<div class="note-evidence">' + s.evidence + '</div>' +
+      '</article>'
+    );
+  }
+
+  function renderNotesContent() {
+    if (notesMode === 'page') {
+      var s = SLIDES[currentSlide - 1];
+      notesBody.innerHTML = buildNoteCardHtml(s, true);
+      notesBody.scrollTop = 0;
+    } else if (notesMode === 'full') {
+      notesBody.innerHTML = SLIDES.map(function (s) {
+        return buildNoteCardHtml(s, s.num === currentSlide);
+      }).join('');
+      // Bind jump click on full transcript headers
+      var heads = notesBody.querySelectorAll('[data-jump-slide]');
+      heads.forEach(function (h) {
+        h.addEventListener('click', function () {
+          goToSlide(Number(h.getAttribute('data-jump-slide')));
+        });
+      });
+      highlightAndScrollFullTranscript(false);
+    }
+  }
+
+  function highlightAndScrollFullTranscript(smooth) {
+    var cards = notesBody.querySelectorAll('.note-card');
+    var activeCard = null;
+    cards.forEach(function (c) {
+      var isCurr = Number(c.getAttribute('data-note-slide')) === currentSlide;
+      c.classList.toggle('current-page', isCurr);
+      if (isCurr) activeCard = c;
+    });
+    if (activeCard) {
+      var topOffset = activeCard.offsetTop - notesBody.offsetTop - 16;
+      if (smooth && typeof notesBody.scrollTo === 'function') {
+        notesBody.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+      } else {
+        notesBody.scrollTop = Math.max(0, topOffset);
+      }
+    }
+  }
+
+  function setNotesMode(mode) {
+    if (notesMode === mode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = mode;
+    }
+    var isOpen = notesMode !== 'closed';
+    notesPane.classList.toggle('open', isOpen);
+    btnNote.classList.toggle('active', notesMode === 'page');
+    btnTranscript.classList.toggle('active', notesMode === 'full');
+    tabPageNote.classList.toggle('active', notesMode === 'page');
+    tabFullNote.classList.toggle('active', notesMode === 'full');
+
+    if (isOpen) {
+      renderNotesContent();
+    }
+    // Recalculate vector scale during & after CSS width transition
+    updateStageScale();
+    setTimeout(updateStageScale, 120);
+    setTimeout(updateStageScale, 250);
+  }
+
+  /* ==================== AUTO-PLAY & FULLSCREEN ==================== */
+  function startAutoPlay() {
+    stopAutoPlay();
+    btnAutoplay.classList.add('active');
+    hudAutoplayBadge.classList.add('on');
+    autoPlayTimer = setInterval(function () {
+      if (currentSlide < totalSlides) {
+        goToSlide(currentSlide + 1, true);
+      } else {
+        goToSlide(1, true);
+      }
+    }, AUTOPLAY_MS);
+  }
+
+  function stopAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    btnAutoplay.classList.remove('active');
+    hudAutoplayBadge.classList.remove('on');
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      stopAutoPlay();
+    } else {
+      startAutoPlay();
+    }
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      if (appRoot.requestFullscreen) {
+        appRoot.requestFullscreen().catch(function () {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(function () {});
+      }
+    }
+  }
+
+  /* ==================== HUD & KEYBOARD BINDINGS ==================== */
+  btnPrev.addEventListener('click', function () { goToSlide(currentSlide - 1); });
+  btnNext.addEventListener('click', function () { goToSlide(currentSlide + 1); });
+  btnToc.addEventListener('click', function () { setTocOpen(!tocOpen); });
+  btnTocClose.addEventListener('click', function () { setTocOpen(false); });
+  btnNote.addEventListener('click', function () { setNotesMode('page'); });
+  btnTranscript.addEventListener('click', function () { setNotesMode('full'); });
+  tabPageNote.addEventListener('click', function () { if (notesMode !== 'page') setNotesMode('page'); });
+  tabFullNote.addEventListener('click', function () { if (notesMode !== 'full') setNotesMode('full'); });
+  btnNotesClose.addEventListener('click', function () { setNotesMode(notesMode); });
+  btnAutoplay.addEventListener('click', toggleAutoPlay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+      return;
+    }
+    var key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      e.preventDefault();
+      goToSlide(currentSlide + 1);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      goToSlide(currentSlide - 1);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(1);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      setTocOpen(!tocOpen);
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      setNotesMode('page');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      setNotesMode('full');
+    } else if (key === 'a' || key === 'A') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) setTocOpen(false);
+    }
+  });
+
+  /* ==================== SLIDE 4 INTERACTIVE TREE SIMULATOR ==================== */
+  var s4Buttons = Array.prototype.slice.call(document.querySelectorAll('[data-s4-op]'));
+  var s4PlayBtn = document.getElementById('s4-play-btn');
+  var s4Timer = null;
+  var s4OpsOrder = ['init', 'reset', 'resetOnly', 'delete', 'delChildren', 'setParent'];
+
+  function applyS4Op(op) {
+    s4Buttons.forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-s4-op') === op);
+    });
+
+    var rectPortal = document.getElementById('s4-rect-portal');
+    var txtPortal2 = document.getElementById('s4-txt-portal2');
+    var nodeExec = document.getElementById('s4-node-exec');
+    var nodeTemp = document.getElementById('s4-node-temp');
+    var nodeExpr = document.getElementById('s4-node-expr');
+    var edgeC1 = document.getElementById('s4-edge-c1');
+    var edgeC2 = document.getElementById('s4-edge-c2');
+    var edgeGc = document.getElementById('s4-edge-gc');
+    var edgeReparent = document.getElementById('s4-edge-reparent');
+    var panelHead = document.getElementById('s4-panel-head');
+    var desc1 = document.getElementById('s4-desc-1');
+    var desc2 = document.getElementById('s4-desc-2');
+    var desc3 = document.getElementById('s4-desc-3');
+
+    // Reset row highlights
+    ['reset', 'resetOnly', 'delete', 'delChildren'].forEach(function (r) {
+      var row = document.getElementById('s4-row-' + r);
+      if (row) row.setAttribute('fill', r === op ? '#F7E9DE' : '#FFFFFF');
+    });
+
+    // Reset visual defaults
+    rectPortal.setAttribute('fill', '#245A6B');
+    rectPortal.setAttribute('opacity', '1');
+    rectPortal.removeAttribute('stroke-dasharray');
+    txtPortal2.textContent = '已分配 128 KB · 节点存活';
+    nodeExec.setAttribute('opacity', '1');
+    nodeTemp.setAttribute('opacity', '1');
+    nodeExpr.setAttribute('opacity', '1');
+    edgeC1.setAttribute('opacity', '1');
+    edgeC2.setAttribute('opacity', '1');
+    edgeGc.setAttribute('opacity', '1');
+    edgeReparent.setAttribute('opacity', '0');
+
+    if (op === 'init') {
+      panelHead.textContent = '当前操作：初始树状态（非递归自底向上清理机制）';
+      desc1.textContent = 'PortalContext 挂载了 ExecutorState、TempBuildContext 及孙节点 ExprContext。';
+      desc2.textContent = '点击上方按钮对比「当前内存 / 子上下文 / 节点自身」三者的不同处理边界。';
+      desc3.textContent = 'mcxt.c 中 Delete 使用非递归自底向上遍历，避免错误恢复路径栈溢出。';
+    } else if (op === 'reset') {
+      rectPortal.setAttribute('fill', '#2F7A66');
+      txtPortal2.textContent = '内存已清空 (0 KB) · 节点保留';
+      nodeExec.setAttribute('opacity', '0.18');
+      nodeTemp.setAttribute('opacity', '0.18');
+      nodeExpr.setAttribute('opacity', '0.18');
+      edgeC1.setAttribute('opacity', '0.18');
+      edgeC2.setAttribute('opacity', '0.18');
+      edgeGc.setAttribute('opacity', '0.18');
+      panelHead.textContent = 'MemoryContextReset(PortalContext)';
+      desc1.textContent = '先调用 MemoryContextDeleteChildren() 删除全部后代，再释放当前内存。';
+      desc2.textContent = 'PortalContext 节点本身保留（isReset = true），可继续在下一轮复用。';
+      desc3.textContent = '适用：循环临时上下文需要连同内部临时子上下文一起彻底清场。';
+    } else if (op === 'resetOnly') {
+      rectPortal.setAttribute('fill', '#2F7A66');
+      txtPortal2.textContent = '当前清空 (0 KB) · 子树未动！';
+      panelHead.textContent = 'MemoryContextResetOnly(PortalContext) —— 高频踩坑点';
+      desc1.textContent = '仅释放 PortalContext 自身内存，完全不触碰 ExecutorState 等子上下文！';
+      desc2.textContent = '如果循环中不断创建临时子上下文却只调 ResetOnly，子上下文会持续堆积。';
+      desc3.textContent = '仅当你明确希望保留子上下文、只清空父层草稿区时才使用 ResetOnly。';
+    } else if (op === 'delete') {
+      rectPortal.setAttribute('fill', '#BE653B');
+      rectPortal.setAttribute('opacity', '0.25');
+      rectPortal.setAttribute('stroke-dasharray', '5 3');
+      txtPortal2.textContent = '节点与子树已彻底销毁';
+      nodeExec.setAttribute('opacity', '0.15');
+      nodeTemp.setAttribute('opacity', '0.15');
+      nodeExpr.setAttribute('opacity', '0.15');
+      edgeC1.setAttribute('opacity', '0.15');
+      edgeC2.setAttribute('opacity', '0.15');
+      edgeGc.setAttribute('opacity', '0.15');
+      panelHead.textContent = 'MemoryContextDelete(PortalContext)';
+      desc1.textContent = '自底向上删除 ExprContext → ExecutorState / TempBuild → PortalContext。';
+      desc2.textContent = '当前内存释放、所有后代删除、PortalContext 节点自身也从父链表摘除。';
+      desc3.textContent = '调用后原指针失效，不可再对其 SwitchTo 或 Reset。';
+    } else if (op === 'delChildren') {
+      txtPortal2.textContent = '128 KB 保持不变 · 仅删子树';
+      nodeExec.setAttribute('opacity', '0.18');
+      nodeTemp.setAttribute('opacity', '0.18');
+      nodeExpr.setAttribute('opacity', '0.18');
+      edgeC1.setAttribute('opacity', '0.18');
+      edgeC2.setAttribute('opacity', '0.18');
+      edgeGc.setAttribute('opacity', '0.18');
+      panelHead.textContent = 'MemoryContextDeleteChildren(PortalContext)';
+      desc1.textContent = '只删除 PortalContext 下的所有子上下文及后代，不释放 PortalContext 自身内存。';
+      desc2.textContent = '适合父节点保存稳定元数据、但需要彻底销毁临时子阶段的场景。';
+      desc3.textContent = '与 ResetOnly 恰好互补：一个清自己留孩子，一个留自己删孩子。';
+    } else if (op === 'setParent') {
+      edgeC2.setAttribute('opacity', '0.18');
+      edgeReparent.setAttribute('opacity', '1');
+      panelHead.textContent = 'MemoryContextSetParent(TempBuild, CacheMemoryContext)';
+      desc1.textContent = 'TempBuildContext 从 PortalContext 摘下，重新挂载到长寿命 CacheMemoryContext。';
+      desc2.textContent = '典型技巧：先在短命临时上下文里构造缓存，若中途抛 ERROR 会自动回收。';
+      desc3.textContent = '待构造全部成功后，再一键 SetParent 提升生命周期，避免半成品污染缓存。';
+    }
+  }
+
+  s4Buttons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (s4Timer) { clearInterval(s4Timer); s4Timer = null; s4PlayBtn.classList.remove('active'); s4PlayBtn.textContent = '自动轮播'; }
+      applyS4Op(b.getAttribute('data-s4-op'));
+    });
+  });
+
+  s4PlayBtn.addEventListener('click', function () {
+    if (s4Timer) {
+      clearInterval(s4Timer);
+      s4Timer = null;
+      s4PlayBtn.classList.remove('active');
+      s4PlayBtn.textContent = '自动轮播';
+      return;
+    }
+    var idx = 1;
+    s4PlayBtn.classList.add('active');
+    s4PlayBtn.textContent = '停止轮播';
+    applyS4Op(s4OpsOrder[idx]);
+    s4Timer = setInterval(function () {
+      idx = (idx + 1) % s4OpsOrder.length;
+      applyS4Op(s4OpsOrder[idx]);
+    }, 1800);
+  });
+
+  /* ==================== SLIDE 5 INTERACTIVE DISPATCH ANIMATION ==================== */
+  var s5Mode = 'palloc';
+  var s5Step = 0;
+  var s5Timer = null;
+  var s5ModeBtns = Array.prototype.slice.call(document.querySelectorAll('[data-s5-mode]'));
+  var s5StepBtn = document.getElementById('s5-step-btn');
+  var s5PlayBtn = document.getElementById('s5-play-btn');
+  var s5Status = document.getElementById('s5-status');
+
+  var s5StepTexts = {
+    palloc: [
+      'palloc 步 1/4：读取全局 CurrentMemoryContext',
+      'palloc 步 2/4：查虚函数表调用 methods->alloc()',
+      'palloc 步 3/4：在用户数据前写入 8B uint64 Header（含 Method ID）',
+      'palloc 步 4/4：返回跳过 Header 的用户指针 ptr'
+    ],
+    pfree: [
+      'pfree 步 1/4：拿到 ptr 后退 8 字节，完全忽略 CurrentMemoryContext',
+      'pfree 步 2/4：GetMemoryChunkMethodID(ptr) 解码分配器编号',
+      'pfree 步 3/4：查全局表 mcxt_methods[id] 定位 free_p 函数',
+      'pfree 步 4/4：精准归还至对象原本所属的上下文'
+    ],
+    oom: [
+      '边界 1/2：默认 OOM 抛 ERROR（非 NULL）；pfree(NULL) 非法',
+      '边界 2/2：普通上限 1GB-1 (AllocHuge 突破)；Critical Section 禁分配'
+    ]
+  };
+
+  function renderS5Highlight() {
+    var allBoxes = ['s5-a1','s5-a2','s5-a3','s5-a4','s5-f1','s5-f2','s5-f3','s5-f4'];
+    allBoxes.forEach(function (id) {
+      var el = document.getElementById(id);
+      el.setAttribute('stroke-width', '1.5');
+      el.classList.remove('anim-pulse');
+    });
+    var boundBox = document.getElementById('s5-bound-box');
+    boundBox.setAttribute('stroke-width', '1.3');
+    boundBox.classList.remove('anim-pulse');
+
+    if (s5Mode === 'palloc' && s5Step > 0) {
+      var elA = document.getElementById('s5-a' + s5Step);
+      if (elA) { elA.setAttribute('stroke-width', '3.5'); elA.classList.add('anim-pulse'); }
+      s5Status.textContent = s5StepTexts.palloc[s5Step - 1];
+    } else if (s5Mode === 'pfree' && s5Step > 0) {
+      var elF = document.getElementById('s5-f' + s5Step);
+      if (elF) { elF.setAttribute('stroke-width', '3.5'); elF.classList.add('anim-pulse'); }
+      s5Status.textContent = s5StepTexts.pfree[s5Step - 1];
+    } else if (s5Mode === 'oom') {
+      boundBox.setAttribute('stroke-width', '3');
+      boundBox.classList.add('anim-pulse');
+      s5Status.textContent = s5StepTexts.oom[s5Step > 1 ? 1 : 0];
+    } else {
+      s5Status.textContent = '就绪：点击播放或单步查看调度';
+    }
+  }
+
+  s5ModeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (s5Timer) { clearInterval(s5Timer); s5Timer = null; s5PlayBtn.classList.remove('active'); s5PlayBtn.textContent = '播放路径'; }
+      s5Mode = b.getAttribute('data-s5-mode');
+      s5Step = 1;
+      s5ModeBtns.forEach(function (x) { x.classList.toggle('active', x === b); });
+      renderS5Highlight();
+    });
+  });
+
+  s5StepBtn.addEventListener('click', function () {
+    var maxSteps = s5Mode === 'oom' ? 2 : 4;
+    s5Step = (s5Step % maxSteps) + 1;
+    renderS5Highlight();
+  });
+
+  s5PlayBtn.addEventListener('click', function () {
+    if (s5Timer) {
+      clearInterval(s5Timer);
+      s5Timer = null;
+      s5PlayBtn.classList.remove('active');
+      s5PlayBtn.textContent = '播放路径';
+      return;
+    }
+    var maxSteps = s5Mode === 'oom' ? 2 : 4;
+    s5Step = 1;
+    renderS5Highlight();
+    s5PlayBtn.classList.add('active');
+    s5PlayBtn.textContent = '停止播放';
+    s5Timer = setInterval(function () {
+      s5Step = (s5Step % maxSteps) + 1;
+      renderS5Highlight();
+    }, 1100);
+  });
+
+  /* ==================== SLIDE 8 INTERACTIVE EXECUTOR SIMULATOR ==================== */
+  var s8Mode = 'pertuple';
+  var s8Progress = 100;
+  var s8Timer = null;
+  var s8ModeBtns = Array.prototype.slice.call(document.querySelectorAll('[data-s8-mode]'));
+  var s8RowsInput = document.getElementById('s8-rows');
+  var s8RowsVal = document.getElementById('s8-rows-val');
+  var s8PlayBtn = document.getElementById('s8-play-btn');
+  var s8ResetBtn = document.getElementById('s8-reset-btn');
+
+  function renderS8Chart() {
+    var rowUnits = Number(s8RowsInput.value); // 1..100 => 10万..1000万行
+    s8RowsVal.textContent = (rowUnits * 10) + ' 万行';
+
+    var chartHdr = document.getElementById('s8-chart-hdr');
+    var chartTitle = document.getElementById('s8-chart-title');
+    var wavePath = document.getElementById('s8-wave-path');
+    var waveDot = document.getElementById('s8-wave-dot');
+    var readout1 = document.getElementById('s8-readout-1');
+    var readout2 = document.getElementById('s8-readout-2');
+    var boxExpr = document.getElementById('s8-box-expr');
+
+    var startX = 736;
+    var spanW = 620;
+    var baseY = 262;
+    var steps = Math.max(2, Math.round((s8Progress / 100) * 28));
+    var d = 'M ' + startX + ' ' + baseY;
+    var lastX = startX;
+    var lastY = baseY;
+
+    if (s8Mode === 'pertuple') {
+      chartHdr.setAttribute('fill', '#2F7A66');
+      chartTitle.textContent = '实时仿真：ExprContext 每行 Reset —— 内存呈低位锯齿稳态';
+      wavePath.setAttribute('stroke', '#2F7A66');
+      waveDot.setAttribute('fill', '#2F7A66');
+      boxExpr.setAttribute('stroke', '#2F7A66');
+      boxExpr.setAttribute('stroke-width', '2.4');
+
+      for (var i = 1; i <= steps; i++) {
+        var x1 = startX + ((i - 0.35) / 28) * spanW;
+        var x2 = startX + (i / 28) * spanW;
+        d += ' L ' + x1.toFixed(1) + ' 238 L ' + x2.toFixed(1) + ' ' + baseY;
+        lastX = x2;
+        lastY = baseY;
+      }
+      readout1.setAttribute('fill', '#2F7A66');
+      readout2.setAttribute('fill', '#2F7A66');
+      readout1.textContent = '峰值上下文占用：恒定单行块（每行 ResetExprContext 清零）';
+      readout2.textContent = '状态：稳定运行（' + (rowUnits * 10) + ' 万行安全）';
+    } else {
+      chartHdr.setAttribute('fill', '#BE653B');
+      chartTitle.textContent = '实时仿真：误放 ExecutorState —— 内存随行数线性飙升触发 OOM';
+      wavePath.setAttribute('stroke', '#BE653B');
+      waveDot.setAttribute('fill', '#BE653B');
+      boxExpr.setAttribute('stroke', '#89938F');
+      boxExpr.setAttribute('stroke-width', '1.2');
+
+      var scaleFactor = Math.min(1.0, (rowUnits / 45));
+      for (var j = 1; j <= steps; j++) {
+        var frac = j / 28;
+        var x = startX + frac * spanW;
+        var rise = frac * 184 * scaleFactor;
+        var y = Math.max(78, baseY - rise);
+        d += ' L ' + x.toFixed(1) + ' ' + y.toFixed(1);
+        lastX = x;
+        lastY = y;
+      }
+      var hitOom = lastY <= 96;
+      readout1.setAttribute('fill', '#BE653B');
+      readout2.setAttribute('fill', '#BE653B');
+      readout1.textContent = hitOom
+        ? '峰值上下文占用：持续累积突破警戒线（查询结束前不释放）'
+        : '峰值上下文占用：随行数单调攀升（小测试易被掩盖）';
+      readout2.textContent = hitOom ? '状态：触发 OOM 风险！' : '状态：持续泄漏中（加大行数即 OOM）';
+    }
+
+    wavePath.setAttribute('d', d);
+    waveDot.setAttribute('cx', lastX.toFixed(1));
+    waveDot.setAttribute('cy', lastY.toFixed(1));
+  }
+
+  s8ModeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      s8Mode = b.getAttribute('data-s8-mode');
+      s8ModeBtns.forEach(function (x) { x.classList.toggle('active', x === b); });
+      renderS8Chart();
+    });
+  });
+
+  s8RowsInput.addEventListener('input', renderS8Chart);
+
+  s8PlayBtn.addEventListener('click', function () {
+    if (s8Timer) {
+      clearInterval(s8Timer);
+      s8Timer = null;
+      s8PlayBtn.classList.remove('active');
+      s8PlayBtn.textContent = '播放执行过程';
+      return;
+    }
+    s8Progress = 4;
+    s8PlayBtn.classList.add('active');
+    s8PlayBtn.textContent = '暂停仿真';
+    renderS8Chart();
+    s8Timer = setInterval(function () {
+      s8Progress += 5;
+      if (s8Progress > 100) {
+        s8Progress = 100;
+        clearInterval(s8Timer);
+        s8Timer = null;
+        s8PlayBtn.classList.remove('active');
+        s8PlayBtn.textContent = '播放执行过程';
+      }
+      renderS8Chart();
+    }, 90);
+  });
+
+  s8ResetBtn.addEventListener('click', function () {
+    if (s8Timer) { clearInterval(s8Timer); s8Timer = null; s8PlayBtn.classList.remove('active'); s8PlayBtn.textContent = '播放执行过程'; }
+    s8Progress = 100;
+    s8RowsInput.value = '40';
+    renderS8Chart();
+  });
+
+  /* ==================== SLIDE 10 INTERACTIVE DIAGNOSTIC INSPECTOR ==================== */
+  var s10Btns = Array.prototype.slice.call(document.querySelectorAll('[data-s10-case]'));
+  var s10PlayBtn = document.getElementById('s10-play-btn');
+  var s10Timer = null;
+
+  var S10_CASES = {
+    cache: {
+      hdr: '#245A6B',
+      title: '诊断结论：CacheMemoryContext 子树持续增长',
+      sqlHead: '官方推荐 SQL：用 CTE 固定一次视图读取（防止 path 临时编号抖动）',
+      sql9: "WHERE c2.name = 'CacheMemoryContext' GROUP BY c2.name;",
+      d1: '典型成因：海量分区/表导致的 relcache/catcache 膨胀，或扩展长期缓存对象。',
+      d2: '· used_bytes = total_bytes - free_bytes，比单看 total_bytes 更接近有效占用。',
+      d3: '· free_bytes 大不一定是泄漏，可能是上下文保留 block 等待后续复用。',
+      d4: '· 排查重点：连接生命周期、会话访问表规模、扩展是否把临时对象错放入缓存。',
+      d5: '源码机制 (mcxtfuncs.c)：',
+      d6: '从 TopMemoryContext 非递归 BFS 生成 path；需超级用户或 pg_read_all_stats 权限。'
+    },
+    exec: {
+      hdr: '#BE653B',
+      title: '诊断结论：ExecutorState / Hash / Sort 子树快速增长',
+      sqlHead: '查询当前 SQL 执行器上下文与算子子树占用（CTE 固定快照）',
+      sql9: "WHERE c2.name = 'ExecutorState' GROUP BY c2.name;",
+      d1: '典型成因：复杂 SQL 的 Hash Join / 大排序 / 物化 CTE，或扩展将逐行对象错放查询级。',
+      d2: '· 观察查询结束后该子树是否随 ExecutorState 销毁而整体回落。',
+      d3: '· 若单条长查询期间线性增长不停，优先排查扩展是否漏切 per-tuple 上下文。',
+      d4: '· SQL 层面可通过分批、加索引、优化 Join 顺序减小非流式中间结果集。',
+      d5: '执行器对照 (execUtils.c / nodeHash.c)：',
+      d6: 'ExecutorState 下挂 HashTableContext / HashBatchContext / HashSpillContext 等子上下文。'
+    },
+    expr: {
+      hdr: '#2F7A66',
+      title: '诊断结论：ExprContext (per-tuple) 瞬时峰值过高',
+      sqlHead: '定位表达式求值上下文（ORDER BY total_bytes DESC LIMIT 20）',
+      sql9: "WHERE c2.name = 'ExprContext' GROUP BY c2.name;",
+      d1: '典型成因：单行表达式构造超大数组/JSON/长文本，或算子漏调 ResetExprContext()。',
+      d2: '· 正常情况下 ExprContext 每处理完一行就会 Reset，不应持续累积。',
+      d3: '· 若看到 ExprContext 持续膨胀，需检查自定义算子或循环逻辑是否忘记重置。',
+      d4: '· 也可结合 total_nblocks 与 free_chunks 判断是否触发大对象独立 block 分配。',
+      d5: '清理契约 (nodeResult.c / nodeHashjoin.c)：',
+      d6: '每轮元组循环结束必须执行 ResetExprContext(econtext) 清空表达式临时内存。'
+    },
+    remote: {
+      hdr: '#AE8A3E',
+      title: '跨进程诊断：pg_log_backend_memory_contexts(pid)',
+      sqlHead: '远程诊断其它活跃 backend：先查 pg_stat_activity 拿 pid 再发信号',
+      sql9: 'SELECT pg_log_backend_memory_contexts(<target_pid>);  -- 输出至 Server Log',
+      d1: '工作机制：不直接跨进程读内存，而是向目标进程发送信号置位 LogMemoryContextPending。',
+      d2: '· 目标进程运行到安全中断点时，才调用 MemoryContextStatsDetail() 输出日志。',
+      d3: '· 源码默认限制深度 100 且每个父节点最多打印 100 个子节点（其余汇总），防日志打爆。',
+      d4: '· 默认需超级用户权限（可显式授权）；结果写入 PostgreSQL server log，不返回客户端。',
+      d5: '安全优势 (mcxt.c / func-admin.sgml)：',
+      d6: '无锁安全中断点输出，不影响目标 backend 正在执行的关键数据结构一致性。'
+    }
+  };
+
+  function applyS10Case(key) {
+    var cfg = S10_CASES[key] || S10_CASES.cache;
+    s10Btns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-s10-case') === key); });
+    document.getElementById('s10-diag-hdr').setAttribute('fill', cfg.hdr);
+    document.getElementById('s10-diag-title').textContent = cfg.title;
+    document.getElementById('s10-sql-head').textContent = cfg.sqlHead;
+    document.getElementById('s10-sql-9').textContent = cfg.sql9;
+    document.getElementById('s10-d1').textContent = cfg.d1;
+    document.getElementById('s10-d2').textContent = cfg.d2;
+    document.getElementById('s10-d3').textContent = cfg.d3;
+    document.getElementById('s10-d4').textContent = cfg.d4;
+    document.getElementById('s10-d5').textContent = cfg.d5;
+    document.getElementById('s10-d6').textContent = cfg.d6;
+  }
+
+  s10Btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      applyS10Case(b.getAttribute('data-s10-case'));
+    });
+  });
+
+  s10PlayBtn.addEventListener('click', function () {
+    if (s10Timer) {
+      clearInterval(s10Timer);
+      s10Timer = null;
+      s10PlayBtn.classList.remove('active');
+      s10PlayBtn.textContent = '演示排障闭环';
+      for (var k = 1; k <= 5; k++) {
+        document.getElementById('s10-st' + k).setAttribute('stroke-width', '1.5');
+      }
+      return;
+    }
+    var step = 1;
+    var caseKeys = ['cache', 'exec', 'expr', 'remote', 'cache'];
+    s10PlayBtn.classList.add('active');
+    s10PlayBtn.textContent = '停止演示';
+
+    function tick() {
+      for (var k = 1; k <= 5; k++) {
+        var box = document.getElementById('s10-st' + k);
+        box.setAttribute('stroke-width', k === step ? '3.4' : '1.5');
+      }
+      applyS10Case(caseKeys[step - 1]);
+      step = (step % 5) + 1;
+    }
+    tick();
+    s10Timer = setInterval(tick, 1400);
+  });
+
+  /* ==================== INIT ==================== */
+  buildToc();
+  goToSlide(1);
+  applyS4Op('init');
+  renderS5Highlight();
+  renderS8Chart();
+  applyS10Case('cache');
+  updateStageScale();
+})();
+</script>
+</body>
+</html>

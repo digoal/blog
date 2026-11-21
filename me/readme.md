@@ -27,7 +27,7 @@ digoal(德哥)
 title:
 zzz(digoal, 德哥):
 PostgreSQL 中国社区发起人之一
-agent-steward (Agent 大管家） 开源项目创始人
+[agent-steward (Agent 大管家）](https://github.com/digoal/agent-steward) 开源项目创始人
 数据库开源发展联盟(简称 COSDA)理事成员
 中国开源软件推进联盟PostgreSQL分会特聘资深领域专家
 中国开源软件推进联盟PostgreSQL分会ACED

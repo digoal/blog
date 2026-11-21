@@ -1,0 +1,2965 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL 轻量锁（LWLock）</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terra: #BE653B;
+    --terra-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E5F2EE;
+    --gold: #AE8A3E;
+    --gold-light: #F6F0E0;
+
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+
+    --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'STSong', 'SimSun', Georgia, serif;
+    --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, ui-monospace, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #E8E5DC;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* App shell: top viewport + bottom persistent HUD bar */
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #E5E2D9;
+  }
+
+  .workspace {
+    flex: 1 1 auto;
+    display: flex;
+    min-height: 0;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Left: Stage letterbox viewport */
+  .stage-viewport {
+    flex: 1 1 auto;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #E5E2D9;
+    transition: width 0.22s ease;
+  }
+
+  /* Fixed 1600x900 Stage */
+  .stage-scaler {
+    width: 1600px;
+    height: 900px;
+    position: relative;
+    transform-origin: center center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 18px rgba(27, 43, 51, 0.12);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    overflow: hidden;
+  }
+
+  /* Slide base */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    background: var(--bg-paper);
+    display: none;
+    padding: 46px 64px 40px 64px;
+    flex-direction: column;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Subtle blueprint registration ticks in corners */
+  .slide::before {
+    content: "";
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 14px;
+    height: 14px;
+    border-top: 1px solid var(--stroke);
+    border-left: 1px solid var(--stroke);
+    pointer-events: none;
+  }
+  .slide::after {
+    content: "";
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 14px;
+    height: 14px;
+    border-bottom: 1px solid var(--stroke);
+    border-right: 1px solid var(--stroke);
+    pointer-events: none;
+  }
+
+  /* Header block */
+  .slide-header {
+    width: 1472px;
+    flex-shrink: 0;
+  }
+
+  .eyebrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .strata-badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .strata-swatches {
+    display: inline-flex;
+    gap: 2px;
+  }
+  .strata-swatches span {
+    display: inline-block;
+    width: 10px;
+    height: 6px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    line-height: 1.22;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 12px;
+    letter-spacing: 0.4px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-sub);
+    margin-bottom: 18px;
+    max-width: 1400px;
+  }
+
+  .slide-divider {
+    width: 1472px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 18px;
+    flex-shrink: 0;
+  }
+
+  /* Diagram Zone: exact 1400x430 centered or left-aligned inside 1472 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    margin-left: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  /* Dedicated interactive control bar above SVG (never overlapping SVG) */
+  .anim-toolbar {
+    height: 42px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    flex-shrink: 0;
+  }
+
+  .anim-controls-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .anim-controls-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .anim-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1.2;
+  }
+
+  .anim-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+
+  .anim-btn.primary {
+    background: var(--indigo);
+    color: #FFFFFF;
+    border-color: var(--indigo);
+  }
+  .anim-btn.primary:hover {
+    background: #1E4B5A;
+    color: #FFFFFF;
+  }
+
+  .anim-btn.accent {
+    background: var(--terra-light);
+    color: var(--terra);
+    border-color: var(--terra);
+  }
+  .anim-btn.accent:hover {
+    background: var(--terra);
+    color: #FFFFFF;
+  }
+
+  .anim-btn.teal {
+    background: var(--teal-light);
+    color: var(--teal);
+    border-color: var(--teal);
+  }
+  .anim-btn.teal:hover {
+    background: var(--teal);
+    color: #FFFFFF;
+  }
+
+  .anim-select {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+
+  .anim-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-sub);
+    white-space: nowrap;
+  }
+
+  .diagram-svg {
+    width: 1400px;
+    height: 430px;
+    display: block;
+    background: var(--bg-paper);
+  }
+
+  .diagram-zone.has-toolbar .diagram-svg {
+    height: 382px;
+  }
+
+  /* Bottom NEXT & Footer */
+  .slide-bottom {
+    margin-top: auto;
+    width: 1472px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-top: 16px;
+    border-top: 1px solid var(--stroke);
+    flex-shrink: 0;
+  }
+
+  .next-box {
+    border-left: 3px solid var(--terra);
+    padding: 2px 0 2px 16px;
+    max-width: 1200px;
+  }
+
+  .next-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2.2px;
+    color: var(--terra);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.35;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .page-meta {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  .page-meta .page-num {
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 16px;
+  }
+
+  /* Right Pane: Speaker Notes / Full Transcript (In-page split, NEVER modal) */
+  .notes-pane {
+    width: 0;
+    height: 100%;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+    flex-shrink: 0;
+    user-select: text;
+  }
+
+  .notes-pane.open {
+    width: 420px;
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    padding: 14px 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .notes-mode-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    padding: 2px 7px;
+    background: var(--indigo-light);
+    color: var(--indigo);
+    font-weight: 600;
+  }
+
+  .notes-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .notes-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pane-btn {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .pane-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+  .pane-btn.active {
+    background: var(--indigo);
+    color: #FFFFFF;
+    border-color: var(--indigo);
+  }
+
+  .notes-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 18px 20px 36px 20px;
+    scroll-behavior: smooth;
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--stroke);
+    transition: border-color 0.18s, background 0.18s;
+  }
+
+  .note-block.clickable {
+    cursor: pointer;
+  }
+
+  .note-block.clickable:hover {
+    background: var(--bg-sub);
+  }
+
+  .note-block.current {
+    border-left-color: var(--terra);
+    background: #FBF9F4;
+    border-color: #CFC8BA;
+    border-left-width: 3px;
+  }
+
+  .note-block-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .note-slide-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--indigo);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .note-slide-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    flex: 1;
+  }
+
+  .note-text {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.78;
+    color: var(--ink-sub);
+  }
+
+  .note-text p {
+    margin-bottom: 10px;
+  }
+  .note-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-evidence {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--stroke);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  /* TOC Drawer (Left in-page slide-over, toggled by G) */
+  .toc-drawer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 380px;
+    background: var(--bg-paper);
+    border-right: 1px solid var(--stroke);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 4px 0 18px rgba(27, 43, 51, 0.12);
+  }
+
+  .toc-drawer.open {
+    transform: translateX(0);
+  }
+
+  .toc-header {
+    padding: 14px 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toc-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px 24px 12px;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    margin-bottom: 4px;
+    text-align: left;
+    width: 100%;
+    background: transparent;
+  }
+
+  .toc-item:hover {
+    background: var(--bg-sub);
+    border-color: var(--stroke);
+  }
+
+  .toc-item.active {
+    background: var(--indigo-light);
+    border-left-color: var(--indigo);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+    padding-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+
+  .toc-item-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+
+  /* Bottom Persistent Shortcut Bar (also visible in Fullscreen) */
+  .hud-bar {
+    height: 44px;
+    background: var(--ink);
+    color: #EBF1EE;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    flex-shrink: 0;
+    z-index: 40;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    border-top: 1px solid #2E6373;
+  }
+
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    background: rgba(255, 255, 255, 0.06);
+    color: #EBF1EE;
+    border: 1px solid rgba(207, 224, 220, 0.25);
+    padding: 4px 10px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .hud-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #A4C4C6;
+  }
+
+  .hud-btn.active {
+    background: var(--terra);
+    border-color: var(--terra);
+    color: #FFFFFF;
+  }
+
+  .hud-kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .hud-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #CFE0DC;
+  }
+
+  .hud-progress-bar {
+    width: 120px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    position: relative;
+  }
+
+  .hud-progress-fill {
+    height: 100%;
+    background: var(--terra);
+    width: 7%;
+    transition: width 0.2s ease;
+  }
+
+  .autoplay-indicator {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #F6F0E0;
+    display: none;
+  }
+  .autoplay-indicator.visible {
+    display: inline-block;
+  }
+
+  /* SVG typography defaults */
+  svg text {
+    font-family: var(--font-sans);
+  }
+  svg .svg-serif {
+    font-family: var(--font-serif);
+  }
+  svg .svg-mono {
+    font-family: var(--font-mono);
+  }
+
+  /* Highlight transition for animated SVG nodes */
+  .anim-node {
+    transition: fill 0.22s ease, stroke 0.22s ease, opacity 0.22s ease;
+  }
+  .anim-edge {
+    transition: stroke 0.22s ease, stroke-width 0.22s ease, opacity 0.22s ease;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+  <div class="workspace" id="workspace">
+    <!-- Left TOC Drawer (Key: G) -->
+    <aside class="toc-drawer" id="tocDrawer" aria-label="课程目录">
+      <div class="toc-header">
+        <div class="notes-title-group">
+          <span class="notes-mode-tag">TOC · G</span>
+          <span class="notes-title">演说目录（14 页）</span>
+        </div>
+        <button class="pane-btn" id="tocCloseBtn" type="button">关闭</button>
+      </div>
+      <div class="toc-list" id="tocList"></div>
+    </aside>
+
+    <!-- Main 16:9 Stage Viewport -->
+    <main class="stage-viewport" id="stageViewport">
+      <div class="stage-scaler" id="stageScaler">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-slide="1" data-title="数据库筑基课 —— PostgreSQL 轻量锁（LWLock）">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">DATABASE FOUNDATION COURSE · POSTGRESQL KERNEL CONCURRENCY</span>
+              <span class="strata-badge">STRATA PROFILE
+                <span class="strata-swatches">
+                  <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+                </span>
+              </span>
+            </div>
+            <h1 class="slide-title">数据库筑基课 —— PostgreSQL 轻量锁（LWLock）</h1>
+            <p class="slide-lead">从线上「wait_event_type = &apos;LWLock&apos;」运维现场切入，沿地层剖面穿透共享内存并发控制的源码机制、热点路径与诊断方法。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Stratigraphic Profile: 7 Layers from Surface (shallow) to Deep Kernel -->
+              <text x="16" y="24" font-size="13" fill="#46585F" class="svg-mono" font-weight="600">POSTGRESQL 并发控制地层剖面（自上而下，越深越底层）</text>
+
+              <!-- Layer 7 (Shallowest) -->
+              <rect x="16" y="38" width="900" height="46" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="34" y="66" font-size="15" fill="#1B2B33" font-weight="700">L1 · 应用 SQL 与会话层</text>
+              <text x="326" y="66" font-size="14" fill="#46585F">业务事务、DDL / DML、连接池并发与查询执行</text>
+              <text x="746" y="66" font-size="12" fill="#89938F" class="svg-mono">SQL / Client Backends</text>
+
+              <!-- Layer 6 -->
+              <rect x="16" y="88" width="900" height="46" fill="#CFE0DC" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="34" y="116" font-size="15" fill="#1B2B33" font-weight="700">L2 · Predicate Lock（谓词锁）</text>
+              <text x="326" y="116" font-size="14" fill="#1B2B33">Serializable 隔离级别读写冲突检测（SSI）</text>
+              <text x="746" y="116" font-size="12" fill="#46585F" class="svg-mono">SIReadLock</text>
+
+              <!-- Layer 5 -->
+              <rect x="16" y="138" width="900" height="46" fill="#A4C4C6" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="34" y="166" font-size="15" fill="#1B2B33" font-weight="700">L3 · Heavyweight Lock（常规重锁）</text>
+              <text x="326" y="166" font-size="14" fill="#1B2B33">保护表、行、事务 ID 等 SQL 可见对象，带死锁检测</text>
+              <text x="746" y="166" font-size="12" fill="#1B2B33" class="svg-mono">pg_locks / Lock</text>
+
+              <!-- Layer 4: LWLock HIGHLIGHTED -->
+              <rect x="16" y="190" width="900" height="62" fill="#245A6B" stroke="#BE653B" stroke-width="2.5"/>
+              <rect x="16" y="190" width="8" height="62" fill="#BE653B"/>
+              <text x="38" y="217" font-size="18" fill="#FFFFFF" font-weight="700" class="svg-serif">L4 · LWLock（轻量锁）—— 本课核心研究层</text>
+              <text x="38" y="240" font-size="14" fill="#E5EFF0">保护多进程共享内存数据结构：ProcArray / BufferMapping / WALInsert / WALWrite / LockManager</text>
+              <text x="752" y="226" font-size="13" fill="#F7E9DE" class="svg-mono" font-weight="700">lwlock.c / lwlock.h</text>
+
+              <!-- Layer 3 -->
+              <rect x="16" y="258" width="900" height="46" fill="#47808D" stroke="#2E6373" stroke-width="1"/>
+              <text x="34" y="286" font-size="15" fill="#FFFFFF" font-weight="700">L5 · Spinlock（自旋锁）</text>
+              <text x="326" y="286" font-size="14" fill="#EBF1EE">极短 CPU 临界区（数十条指令内），忙等不睡眠</text>
+              <text x="746" y="286" font-size="12" fill="#CFE0DC" class="svg-mono">s_lock.h</text>
+
+              <!-- Layer 2 -->
+              <rect x="16" y="308" width="900" height="46" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="34" y="336" font-size="15" fill="#FFFFFF" font-weight="700">L6 · 共享内存与原子操作</text>
+              <text x="326" y="336" font-size="14" fill="#EBF1EE">Shared Buffers、MainLWLockArray、32 位 CAS 原子指令</text>
+              <text x="746" y="336" font-size="12" fill="#CFE0DC" class="svg-mono">pg_atomic_uint32</text>
+
+              <!-- Layer 1 (Deepest) -->
+              <rect x="16" y="358" width="900" height="46" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="34" y="386" font-size="15" fill="#FFFFFF" font-weight="700">L7 · 操作系统内核原语</text>
+              <text x="326" y="386" font-size="14" fill="#CFE0DC">PGSemaphore 信号量睡眠与进程唤醒调度</text>
+              <text x="746" y="386" font-size="12" fill="#A4C4C6" class="svg-mono">PGSemaphoreLock</text>
+
+              <!-- Orthogonal connector from L4 to Right Evidence Panel -->
+              <path d="M 916 221 H 968" fill="none" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="968,216 978,221 968,226" fill="#BE653B"/>
+
+              <!-- Right Column: Course Metadata & Source Anchors -->
+              <rect x="980" y="38" width="404" height="366" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="980" y="38" width="404" height="36" fill="#245A6B"/>
+              <text x="998" y="61" font-size="14" fill="#FFFFFF" font-weight="700" class="svg-mono">COURSE METADATA · 源码实证锚点</text>
+
+              <text x="998" y="102" font-size="13" fill="#89938F" class="svg-mono">AUTHOR / DATE</text>
+              <text x="998" y="124" font-size="16" fill="#1B2B33" font-weight="700">digoal · 2026-06-08</text>
+
+              <line x1="998" y1="142" x2="1366" y2="142" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="998" y="166" font-size="13" fill="#89938F" class="svg-mono">PRIMARY SOURCE EVIDENCE</text>
+              <text x="998" y="190" font-size="13.5" fill="#1B2B33" class="svg-mono">• src/backend/storage/lmgr/README</text>
+              <text x="998" y="214" font-size="13.5" fill="#1B2B33" class="svg-mono">• src/backend/storage/lmgr/lwlock.c</text>
+              <text x="998" y="238" font-size="13.5" fill="#1B2B33" class="svg-mono">• src/include/storage/lwlock.h</text>
+              <text x="998" y="262" font-size="13.5" fill="#1B2B33" class="svg-mono">• src/include/storage/lwlocklist.h</text>
+              <text x="998" y="286" font-size="13.5" fill="#1B2B33" class="svg-mono">• bufmgr.c / procarray.c / xlog.c</text>
+              <text x="998" y="310" font-size="13.5" fill="#1B2B33" class="svg-mono">• doc/src/sgml/monitoring.sgml</text>
+
+              <line x1="998" y1="328" x2="1366" y2="328" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="998" y="354" font-size="13" fill="#BE653B" font-weight="700">核心命题</text>
+              <text x="998" y="378" font-size="14" fill="#46585F">LWLock 不是「更好的表锁」，而是保护共享</text>
+              <text x="998" y="396" font-size="14" fill="#46585F">内存数据结构的内核级工程折中。</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">业务高峰期应用报「数据库锁住了」，为什么只盯 pg_locks 反而会彻底走偏？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">01</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-slide="2" data-title="运维现场误判：LWLock 不是表锁或行锁">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">01 · OPERATIONAL CONTEXT · REAL-WORLD ENTRY</span>
+              <span class="strata-badge">SYMPTOM VS ROOT CAUSE</span>
+            </div>
+            <h1 class="slide-title">运维现场误判：LWLock 不是表锁或行锁</h1>
+            <p class="slide-lead">高峰期 pg_stat_activity 出现大量 wait_event_type = &apos;LWLock&apos; 时，若套用表锁/行锁排障惯性，往往杀错会话、无功而返。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Trigger Box -->
+              <rect x="16" y="130" width="290" height="170" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="16" y="130" width="290" height="34" fill="#245A6B"/>
+              <text x="32" y="152" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">高峰期现场告警</text>
+              <text x="32" y="188" font-size="16" fill="#1B2B33" font-weight="700">应用报错：「数据库锁住了」</text>
+              <text x="32" y="216" font-size="13.5" fill="#245A6B" class="svg-mono">wait_event_type = 'LWLock'</text>
+              <text x="32" y="242" font-size="13" fill="#46585F">wait_event 集中出现：</text>
+              <text x="32" y="264" font-size="12.5" fill="#1B2B33" class="svg-mono">ProcArray / BufferMapping</text>
+              <text x="32" y="284" font-size="12.5" fill="#1B2B33" class="svg-mono">WALInsert / WALWrite / LockManager</text>
+
+              <!-- Orthogonal Split Connectors -->
+              <path d="M 306 185 H 360 V 105 H 416" fill="none" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="416,100 426,105 416,110" fill="#BE653B"/>
+
+              <path d="M 306 245 H 360 V 325 H 416" fill="none" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="416,320 426,325 416,330" fill="#2F7A66"/>
+
+              <!-- Top Branch: Wrong Path (Terracotta) -->
+              <rect x="428" y="26" width="956" height="162" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="428" y="26" width="8" height="162" fill="#BE653B"/>
+              <text x="454" y="54" font-size="15" fill="#BE653B" font-weight="700">误判路径：把 LWLock 当成普通 SQL 锁（LOCK TABLE / 行锁 / 死锁）</text>
+
+              <rect x="454" y="72" width="210" height="92" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="470" y="98" font-size="14" fill="#1B2B33" font-weight="700">1. 只盯 pg_locks</text>
+              <text x="470" y="122" font-size="13" fill="#46585F">查不到 BufferMapping</text>
+              <text x="470" y="142" font-size="13" fill="#46585F">或 ProcArray 锁对象</text>
+
+              <path d="M 664 118 H 706" fill="none" stroke="#BE653B" stroke-width="1.8"/>
+              <polygon points="706,113 716,118 706,123" fill="#BE653B"/>
+
+              <rect x="718" y="72" width="230" height="92" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="734" y="98" font-size="14" fill="#1B2B33" font-weight="700">2. 盲目杀会话 / 加索引</text>
+              <text x="734" y="122" font-size="13" fill="#46585F">误杀无辜业务连接；</text>
+              <text x="734" y="142" font-size="13" fill="#46585F">乱加索引反增 WAL 写放大</text>
+
+              <path d="M 948 118 H 990" fill="none" stroke="#BE653B" stroke-width="1.8"/>
+              <polygon points="990,113 1000,118 990,123" fill="#BE653B"/>
+
+              <rect x="1002" y="72" width="358" height="92" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="1018" y="98" font-size="14" fill="#BE653B" font-weight="700">后果：根因完全漏诊</text>
+              <text x="1018" y="122" font-size="13" fill="#46585F">忽视共享缓冲区、事务快照、WAL 刷盘</text>
+              <text x="1018" y="142" font-size="13" fill="#46585F">等真正发生争用的内核共享内存子系统</text>
+
+              <!-- Bottom Branch: Correct Path (Teal) -->
+              <rect x="428" y="222" width="956" height="182" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="428" y="222" width="8" height="182" fill="#2F7A66"/>
+              <text x="454" y="250" font-size="15" fill="#2F7A66" font-weight="700">正确路径：按 wait_event 类别回溯对应的内核共享内存子系统</text>
+
+              <rect x="454" y="268" width="210" height="114" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="470" y="294" font-size="14" fill="#1B2B33" font-weight="700">1. 识别边界</text>
+              <text x="470" y="318" font-size="13" fill="#46585F">SQL 可能触发它，</text>
+              <text x="470" y="338" font-size="13" fill="#46585F">但用户无法用 SQL</text>
+              <text x="470" y="358" font-size="13" fill="#46585F">直接申请核心 LWLock</text>
+
+              <path d="M 664 325 H 706" fill="none" stroke="#2F7A66" stroke-width="1.8"/>
+              <polygon points="706,320 716,325 706,330" fill="#2F7A66"/>
+
+              <rect x="718" y="268" width="256" height="114" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="734" y="294" font-size="14" fill="#1B2B33" font-weight="700">2. 拆解 wait_event 名称</text>
+              <text x="734" y="318" font-size="13" fill="#46585F">• ProcArray → 快照与连接</text>
+              <text x="734" y="338" font-size="13" fill="#46585F">• BufferMapping → 缓存映射</text>
+              <text x="734" y="358" font-size="13" fill="#46585F">• WALInsert/Write → 日志管线</text>
+
+              <path d="M 974 325 H 1016" fill="none" stroke="#2F7A66" stroke-width="1.8"/>
+              <polygon points="1016,320 1026,325 1016,330" fill="#2F7A66"/>
+
+              <rect x="1028" y="268" width="332" height="114" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="1044" y="294" font-size="14" fill="#2F7A66" font-weight="700">3. 治本：降低共享结构争用</text>
+              <text x="1044" y="318" font-size="13" fill="#46585F">结合缓存命中、I/O 延迟、提交密度、</text>
+              <text x="1044" y="338" font-size="13" fill="#46585F">连接池上限与热点访问模式系统治理</text>
+              <text x="1044" y="362" font-size="12" fill="#89938F" class="svg-mono">wait_event 是入口，不是结论</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">既然多进程必须互斥访问共享内存，为什么 PostgreSQL 不能直接用 Spinlock 或常规重锁解决？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">02</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-slide="3" data-title="为什么需要中间层：Spinlock 与重锁之间的工程夹缝">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">02 · DESIGN RATIONALE · ENGINEERING TRADEOFF</span>
+              <span class="strata-badge">lmgr/README</span>
+            </div>
+            <h1 class="slide-title">为什么需要中间层：Spinlock 与重锁之间的工程夹缝</h1>
+            <p class="slide-lead">共享内存访问「高频、短临界区、跨进程」；Spinlock 稍长就烧 CPU，重锁语义太重，LWLock 正是卡在中间的工程折中。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top Context Strip: 3 Shared Memory Characteristics -->
+              <rect x="16" y="10" width="1368" height="58" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="34" y="44" font-size="15" fill="#245A6B" font-weight="700">多进程共享内存结构的三大特征</text>
+              <line x1="296" y1="22" x2="296" y2="56" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="320" y="44" font-size="14" fill="#1B2B33"><tspan font-weight="700" fill="#245A6B">① 访问极高频</tspan>（每次查页、取快照、写 WAL）</text>
+              <text x="690" y="44" font-size="14" fill="#1B2B33"><tspan font-weight="700" fill="#245A6B">② 临界区很短</tspan>（内存哈希查找/数组更新）</text>
+              <text x="1030" y="44" font-size="14" fill="#1B2B33"><tspan font-weight="700" fill="#245A6B">③ 跨后端进程互斥</tspan>（非单进程线程锁）</text>
+
+              <!-- Three Horizontal Columns Comparing Spinlock | LWLock | Heavyweight Lock -->
+              <!-- Left: Spinlock (Too Light / Burns CPU) -->
+              <rect x="16" y="92" width="420" height="318" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="16" y="92" width="420" height="44" fill="#47808D"/>
+              <text x="34" y="120" font-size="17" fill="#FFFFFF" font-weight="700">Spinlock（自旋锁）· 过轻</text>
+
+              <text x="34" y="168" font-size="14" fill="#1B2B33" font-weight="700">适用边界（lmgr/README 明确指出）</text>
+              <text x="34" y="192" font-size="13.5" fill="#46585F">• 仅适合极短临界区（几十条指令以内）</text>
+              <text x="34" y="216" font-size="13.5" fill="#46585F">• 严禁跨内核调用或可能睡眠的路径</text>
+
+              <rect x="34" y="242" width="384" height="148" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="50" y="268" font-size="14" fill="#BE653B" font-weight="700">用于共享内存结构时的代价</text>
+              <text x="50" y="294" font-size="13.5" fill="#1B2B33">• 等待者持续忙等（Busy-wait），浪费 CPU</text>
+              <text x="50" y="318" font-size="13.5" fill="#1B2B33">• 不支持共享/排他读写分离模式</text>
+              <text x="50" y="342" font-size="13.5" fill="#1B2B33">• 无可观测 wait_event，线上难诊断</text>
+              <text x="50" y="366" font-size="13.5" fill="#1B2B33">• 临界区稍长即引发严重 CPU 飙升</text>
+
+              <!-- Center: LWLock (Sweet Spot) -->
+              <rect x="470" y="84" width="460" height="334" fill="#E5EFF0" stroke="#245A6B" stroke-width="2.5"/>
+              <rect x="470" y="84" width="460" height="48" fill="#245A6B"/>
+              <text x="490" y="114" font-size="18" fill="#FFFFFF" font-weight="700" class="svg-serif">LWLock（轻量锁）· 精准中间层</text>
+
+              <rect x="490" y="148" width="420" height="122" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1"/>
+              <text x="506" y="172" font-size="14" fill="#2F7A66" font-weight="700">核心收益（保留必要能力）</text>
+              <text x="506" y="196" font-size="13.5" fill="#1B2B33">• 适配稍长共享内存临界区，支持共享/排他</text>
+              <text x="506" y="220" font-size="13.5" fill="#1B2B33">• 无竞争走原子快路径，高频调用开销极低</text>
+              <text x="506" y="244" font-size="13.5" fill="#1B2B33">• 竞争失败后信号量睡眠，不持续空烧 CPU</text>
+
+              <rect x="490" y="284" width="420" height="118" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="506" y="308" font-size="14" fill="#BE653B" font-weight="700">刻意牺牲（换取极致轻量）</text>
+              <text x="506" y="332" font-size="13.5" fill="#1B2B33">• 无死锁检测，依赖内核固定加锁顺序</text>
+              <text x="506" y="356" font-size="13.5" fill="#1B2B33">• 无用户级等待语义与 lock_timeout</text>
+              <text x="506" y="380" font-size="13.5" fill="#1B2B33">• 持锁/等锁推迟 query cancel / die 中断</text>
+
+              <!-- Right: Heavyweight Lock (Too Heavy) -->
+              <rect x="964" y="92" width="420" height="318" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="964" y="92" width="420" height="44" fill="#74A5AD"/>
+              <text x="982" y="120" font-size="17" fill="#FFFFFF" font-weight="700">Heavyweight Lock（常规锁）· 过重</text>
+
+              <text x="982" y="168" font-size="14" fill="#1B2B33" font-weight="700">面向 SQL 可见对象的完备机制</text>
+              <text x="982" y="192" font-size="13.5" fill="#46585F">• 支持 8 种锁模式与冲突矩阵</text>
+              <text x="982" y="216" font-size="13.5" fill="#46585F">• 支持死锁检测、事务结束自动释放</text>
+
+              <rect x="982" y="242" width="384" height="148" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="998" y="268" font-size="14" fill="#BE653B" font-weight="700">用于高频内部路径时的代价</text>
+              <text x="998" y="294" font-size="13.5" fill="#1B2B33">• 每次查 buffer hash 或扫快照都走锁管理器</text>
+              <text x="998" y="318" font-size="13.5" fill="#1B2B33">• 锁表哈希维护与内存管理成本过高</text>
+              <text x="998" y="342" font-size="13.5" fill="#1B2B33">• 实际上 Heavyweight Lock 管理器自身</text>
+              <text x="998" y="366" font-size="13.5" fill="#1B2B33">  的共享哈希表正是由 LWLock 保护的</text>
+
+              <!-- Connectors pointing inward to LWLock -->
+              <path d="M 436 250 H 460" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="460,245 470,250 460,255" fill="#245A6B"/>
+              <path d="M 964 250 H 940" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="940,245 930,250 940,255" fill="#245A6B"/>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">明确了工程定位，打开 src/include/storage/lwlock.h，LWLock 的数据结构究竟有多精简？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">03</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 04 ==================== -->
+        <section class="slide" data-slide="4" data-title="LWLock 解剖：极简结构、两种模式与 Cache Line 对齐">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">03 · DATA STRUCTURE &amp; LOCK MODES</span>
+              <span class="strata-badge">src/include/storage/lwlock.h</span>
+            </div>
+            <h1 class="slide-title">LWLock 解剖：极简结构、两种模式与 Cache Line 对齐</h1>
+            <p class="slide-lead">LWLock 结构体仅含 tranche、state、waiters 三个核心成员，外层用 LWLockPadded 填充至缓存行以缓解多核伪共享。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Half: LWLockPadded Memory Layout -->
+              <text x="16" y="24" font-size="14" fill="#245A6B" font-weight="700" class="svg-mono">STRUCT LWLockPadded · 共享内存对齐布局</text>
+
+              <rect x="16" y="38" width="650" height="368" fill="#F1EFE9" stroke="#245A6B" stroke-width="2"/>
+              <rect x="16" y="38" width="650" height="36" fill="#245A6B"/>
+              <text x="34" y="61" font-size="14" fill="#FFFFFF" class="svg-mono" font-weight="700">union LWLockPadded { LWLock lock; char pad[LWLOCK_PADDED_SIZE]; }</text>
+
+              <!-- Field 1: tranche -->
+              <rect x="38" y="92" width="606" height="68" fill="#F7F6F2" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="38" y="92" width="146" height="68" fill="#E5EFF0" stroke="#47808D" stroke-width="1"/>
+              <text x="54" y="122" font-size="14" fill="#245A6B" class="svg-mono" font-weight="700">uint16 tranche</text>
+              <text x="54" y="144" font-size="12" fill="#89938F" class="svg-mono">用途分类标识</text>
+              <text x="202" y="122" font-size="14" fill="#1B2B33" font-weight="700">锁用途分类（非锁模式）</text>
+              <text x="202" y="146" font-size="13" fill="#46585F">经 GetLWLockIdentifier() 映射为 pg_stat_activity.wait_event 名称</text>
+
+              <!-- Field 2: state -->
+              <rect x="38" y="174" width="606" height="72" fill="#F7F6F2" stroke="#245A6B" stroke-width="2"/>
+              <rect x="38" y="174" width="146" height="72" fill="#245A6B"/>
+              <text x="54" y="206" font-size="14" fill="#FFFFFF" class="svg-mono" font-weight="700">atomic state</text>
+              <text x="54" y="228" font-size="12" fill="#CFE0DC" class="svg-mono">32 位原子状态字</text>
+              <text x="202" y="204" font-size="14" fill="#1B2B33" font-weight="700">无锁快路径核心：单字承载计数与标志</text>
+              <text x="202" y="228" font-size="13" fill="#46585F">同时记录共享持有者数量、排他哨兵值及等待队列内部标志</text>
+
+              <!-- Field 3: waiters -->
+              <rect x="38" y="260" width="606" height="68" fill="#F7F6F2" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="38" y="260" width="146" height="68" fill="#E5EFF0" stroke="#47808D" stroke-width="1"/>
+              <text x="54" y="290" font-size="14" fill="#245A6B" class="svg-mono" font-weight="700">proclist waiters</text>
+              <text x="54" y="312" font-size="12" fill="#89938F" class="svg-mono">等待者链表</text>
+              <text x="202" y="290" font-size="14" fill="#1B2B33" font-weight="700">挂起等待的 PGPROC 双向链表</text>
+              <text x="202" y="314" font-size="13" fill="#46585F">竞争失败的后端进程入队并睡眠，释放时按序唤醒</text>
+
+              <!-- Field 4: Cache line padding -->
+              <rect x="38" y="342" width="606" height="46" fill="#F6F0E0" stroke="#AE8A3E" stroke-width="1" stroke-dasharray="6,4"/>
+              <text x="56" y="370" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#AE8A3E">Cache Line Padding（缓存行填充）</tspan>：避免主数组中相邻热锁落入同一缓存行引发伪共享</text>
+
+              <!-- Right Half: Lock Modes & Compatibility -->
+              <text x="706" y="24" font-size="14" fill="#245A6B" font-weight="700" class="svg-mono">LWLOCK MODES · 获取模式与冲突语义</text>
+
+              <!-- Mode 1: LW_SHARED -->
+              <rect x="706" y="38" width="678" height="114" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="706" y="38" width="8" height="114" fill="#2F7A66"/>
+              <text x="732" y="68" font-size="16" fill="#2F7A66" class="svg-mono" font-weight="700">LW_SHARED（共享模式 · 读锁）</text>
+              <text x="732" y="96" font-size="14" fill="#1B2B33">• 多个后端读者可同时持有，仅与排他持有者互斥</text>
+              <text x="732" y="122" font-size="13.5" fill="#46585F">• 典型路径：查 BufferMapping、GetSnapshotData() 取快照、读共享状态</text>
+
+              <!-- Mode 2: LW_EXCLUSIVE -->
+              <rect x="706" y="166" width="678" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="706" y="166" width="8" height="114" fill="#BE653B"/>
+              <text x="732" y="196" font-size="16" fill="#BE653B" class="svg-mono" font-weight="700">LW_EXCLUSIVE（排他模式 · 写锁）</text>
+              <text x="732" y="224" font-size="14" fill="#1B2B33">• 独占持有，与任何共享或排他持有者都冲突</text>
+              <text x="732" y="250" font-size="13.5" fill="#46585F">• 典型路径：修改共享哈希、事务退出更新 ProcArray、替换 WAL buffer 映射</text>
+
+              <!-- Mode 3: LW_WAIT_UNTIL_FREE -->
+              <rect x="706" y="294" width="678" height="112" fill="#F6F0E0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="706" y="294" width="8" height="112" fill="#AE8A3E"/>
+              <text x="732" y="324" font-size="16" fill="#AE8A3E" class="svg-mono" font-weight="700">LW_WAIT_UNTIL_FREE（内部等待模式）</text>
+              <text x="732" y="352" font-size="14" fill="#1B2B33">• 不供 LWLockAcquire() 直接调用，用于「只等释放或变量推进」</text>
+              <text x="732" y="378" font-size="13.5" fill="#46585F">• 典型路径：WAL 插入进度等待（LWLockWaitForVar 等待 insertingAt 推进）</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">旧实现每次拿 LWLock 都要先抢 Spinlock，如今仅凭一个 32 位原子 state 是如何做到的？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">04</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE ANIMATION 1: CAS STATE WORD) ==================== -->
+        <section class="slide" data-slide="5" data-title="32 位原子状态字：CAS 实现无锁快路径">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">04 · CORE MECHANISM I · ATOMIC STATE WORD (INTERACTIVE)</span>
+              <span class="strata-badge">src/backend/storage/lmgr/lwlock.c</span>
+            </div>
+            <h1 class="slide-title">32 位原子状态字：CAS 实现无锁快路径</h1>
+            <p class="slide-lead">高位存等待与队列标志，低位用共享计数与排他哨兵互斥表达占用；点击上方按钮演练 CAS 状态跃迁。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-toolbar">
+            <div class="anim-toolbar" id="s5Toolbar">
+              <div class="anim-controls-left">
+                <button class="anim-btn teal" id="s5BtnShared" type="button">+ 共享获取 (LW_SHARED)</button>
+                <button class="anim-btn accent" id="s5BtnExcl" type="button">+ 排他获取 (LW_EXCLUSIVE)</button>
+                <button class="anim-btn" id="s5BtnRelease" type="button">- 释放锁 (LWLockRelease)</button>
+                <button class="anim-btn primary" id="s5BtnAuto" type="button">自动演示</button>
+                <button class="anim-btn" id="s5BtnReset" type="button">重置</button>
+              </div>
+              <div class="anim-controls-right">
+                <span class="anim-status" id="s5Status">当前状态：空闲（state = 0x00000000）</span>
+              </div>
+            </div>
+            <svg class="diagram-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg" id="s5Svg">
+              <!-- Bitfield Layout Header -->
+              <text x="16" y="22" font-size="13" fill="#46585F" class="svg-mono" font-weight="600">pg_atomic_uint32 state · 32-BIT LAYOUT（高位内部标志 | 排他哨兵 | 共享持有计数）</text>
+
+              <!-- Bit 31..28 Flags -->
+              <rect id="s5BitHasWaiters" x="16" y="34" width="210" height="86" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5" class="anim-node"/>
+              <text x="30" y="58" font-size="12" fill="#89938F" class="svg-mono">HIGH FLAG</text>
+              <text x="30" y="80" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">HAS_WAITERS</text>
+              <text id="s5ValHasWaiters" x="30" y="104" font-size="13" fill="#46585F" class="svg-mono">bit = 0（无等待者）</text>
+
+              <rect id="s5BitReleaseOk" x="234" y="34" width="210" height="86" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5" class="anim-node"/>
+              <text x="248" y="58" font-size="12" fill="#46585F" class="svg-mono">HIGH FLAG</text>
+              <text x="248" y="80" font-size="14" fill="#245A6B" class="svg-mono" font-weight="700">RELEASE_OK</text>
+              <text id="s5ValReleaseOk" x="248" y="104" font-size="13" fill="#245A6B" class="svg-mono">bit = 1（允许唤醒）</text>
+
+              <rect id="s5BitLocked" x="452" y="34" width="210" height="86" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5" class="anim-node"/>
+              <text x="466" y="58" font-size="12" fill="#89938F" class="svg-mono">WAITLIST GUARD</text>
+              <text x="466" y="80" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">FLAG_LOCKED</text>
+              <text id="s5ValLocked" x="466" y="104" font-size="13" fill="#46585F" class="svg-mono">bit = 0（队列未锁）</text>
+
+              <!-- Exclusive Sentinel -->
+              <rect id="s5BitExcl" x="678" y="34" width="280" height="86" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5" class="anim-node"/>
+              <text x="694" y="58" font-size="12" fill="#89938F" class="svg-mono">EXCLUSIVE SENTINEL</text>
+              <text x="694" y="80" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">LW_VAL_EXCLUSIVE</text>
+              <text id="s5ValExcl" x="694" y="104" font-size="13" fill="#46585F" class="svg-mono">0（无排他持有者）</text>
+
+              <!-- Shared Counter -->
+              <rect id="s5BitShared" x="966" y="34" width="418" height="86" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5" class="anim-node"/>
+              <text x="982" y="58" font-size="12" fill="#89938F" class="svg-mono">LOW BITS · SHARED LOCK COUNT</text>
+              <text x="982" y="80" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">Shared Holders Counter</text>
+              <text id="s5ValShared" x="982" y="104" font-size="13" fill="#46585F" class="svg-mono">count = 0（当前共享读者数）</text>
+
+              <!-- Orthogonal connector down to CAS Decision Box -->
+              <path d="M 818 120 V 154" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+              <path d="M 1175 120 V 154" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+              <path d="M 121 120 V 154" fill="none" stroke="#89938F" stroke-width="1.5"/>
+
+              <!-- Middle Live Simulation Panel -->
+              <rect x="16" y="156" width="884" height="128" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="16" y="156" width="884" height="30" fill="#245A6B"/>
+              <text x="32" y="176" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">CAS 原子尝试实时日志（Compare-and-Exchange）</text>
+
+              <text id="s5LogAction" x="34" y="214" font-size="15" fill="#1B2B33" font-weight="700">等待操作：请点击上方按钮模拟并发获取或释放</text>
+              <text id="s5LogDetail" x="34" y="242" font-size="13.5" fill="#46585F">• 共享获取：只要无排他持有者，CAS 递增共享计数即可直接成功（无须拿 Spinlock）</text>
+              <text id="s5LogDetail2" x="34" y="266" font-size="13.5" fill="#46585F">• 排他获取：仅当共享计数与排他哨兵均为 0 时才能写入排他哨兵，否则失败并置 HAS_WAITERS</text>
+
+              <!-- Right Box: Waiters & Non-Recursive Constraint -->
+              <rect x="920" y="156" width="464" height="128" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="920" y="156" width="464" height="30" fill="#47808D"/>
+              <text x="936" y="176" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">等待队列与非递归约束</text>
+              <text id="s5WaitersText" x="936" y="212" font-size="14" fill="#1B2B33" font-weight="700">等待队列 waiters：0 个阻塞后端</text>
+              <text x="936" y="238" font-size="13" fill="#46585F">• 队列操作仅靠 FLAG_LOCKED 短暂互斥</text>
+              <text x="936" y="262" font-size="13" fill="#BE653B">• 非递归锁：held_lwlocks 仅用于释放与 ERROR 恢复</text>
+
+              <!-- Bottom Summary Strip -->
+              <rect x="16" y="302" width="1368" height="66" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="34" y="330" font-size="14" fill="#245A6B" font-weight="700">工程结论（为什么高频路径够快）</text>
+              <text x="34" y="354" font-size="13.5" fill="#1B2B33">无竞争时仅执行少量用户态原子 CAS 指令，避免旧版每次加锁先抢 Spinlock 导致的多核总线抖动；真正进入睡眠只在竞争发生时触发。</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">当 CAS 原子尝试失败后，为什么不能「失败就直接入队睡眠」？直接睡会埋下什么致命竞态？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">05</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 06 (INTERACTIVE ANIMATION 2: TWO-PHASE ACQUIRE) ==================== -->
+        <section class="slide" data-slide="6" data-title="两阶段获取与唤醒分离：彻底规避「睡丢」竞态">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">05 · CORE MECHANISM II · TWO-PHASE ACQUIRE (INTERACTIVE)</span>
+              <span class="strata-badge">LWLockAcquire() · lwlock.c</span>
+            </div>
+            <h1 class="slide-title">两阶段获取与唤醒分离：彻底规避「睡丢」竞态</h1>
+            <p class="slide-lead">失败后先入队，再做第二次原子尝试；若仍失败才调用 PGSemaphoreLock() 睡眠，醒来后重新竞争而非直接授锁。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-toolbar">
+            <div class="anim-toolbar" id="s6Toolbar">
+              <div class="anim-controls-left">
+                <select class="anim-select" id="s6Scenario" aria-label="选择演示场景">
+                  <option value="fast">场景 1：无竞争快路径（一次成功）</option>
+                  <option value="race">场景 2：防睡丢路径（入队后二次成功撤销队列）</option>
+                  <option value="sleep" selected>场景 3：完整竞争路径（睡眠 → 唤醒 → 重新竞争）</option>
+                </select>
+                <button class="anim-btn primary" id="s6BtnPlay" type="button">播放</button>
+                <button class="anim-btn" id="s6BtnStep" type="button">单步推进</button>
+                <button class="anim-btn" id="s6BtnReset" type="button">重置</button>
+              </div>
+              <div class="anim-controls-right">
+                <span class="anim-status" id="s6Status">步骤 0 / 5：就绪</span>
+              </div>
+            </div>
+            <svg class="diagram-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg" id="s6Svg">
+              <!-- Step 1: Attempt 1 -->
+              <rect id="s6N1" x="16" y="42" width="210" height="84" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5" class="anim-node"/>
+              <text x="32" y="68" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">STEP 1 · 原子尝试 #1</text>
+              <text x="32" y="92" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">LWLockAttemptLock()</text>
+              <text x="32" y="114" font-size="12.5" fill="#46585F">CAS 直接尝试获取锁</text>
+
+              <!-- Fast path success arrow up/right -->
+              <path id="s6E1ok" d="M 121 42 V 16 H 1160 V 42" fill="none" stroke="#2F7A66" stroke-width="1.5" stroke-dasharray="5,4" class="anim-edge"/>
+              <polygon points="1155,42 1160,52 1165,42" fill="#2F7A66"/>
+              <rect x="520" y="5" width="210" height="22" fill="#F7F6F2"/>
+              <text x="530" y="20" font-size="12" fill="#2F7A66" font-weight="700">无竞争成功：直接进入临界区</text>
+
+              <!-- Fail -> Step 2 -->
+              <path id="s6E12" d="M 226 84 H 284" fill="none" stroke="#89938F" stroke-width="1.8" class="anim-edge"/>
+              <polygon points="284,79 294,84 284,89" fill="#89938F"/>
+              <text x="236" y="74" font-size="11.5" fill="#BE653B" font-weight="700">失败</text>
+
+              <!-- Step 2: Queue Self -->
+              <rect id="s6N2" x="296" y="42" width="210" height="84" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5" class="anim-node"/>
+              <text x="312" y="68" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">STEP 2 · 先入等待队列</text>
+              <text x="312" y="92" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">LWLockQueueSelf()</text>
+              <text x="312" y="114" font-size="12.5" fill="#46585F">将 PGPROC 挂入 waiters</text>
+
+              <!-- Step 2 -> Step 3 -->
+              <path id="s6E23" d="M 506 84 H 564" fill="none" stroke="#89938F" stroke-width="1.8" class="anim-edge"/>
+              <polygon points="564,79 574,84 564,89" fill="#89938F"/>
+
+              <!-- Step 3: Attempt 2 (Critical Anti-Lost-Wakeup Check) -->
+              <rect id="s6N3" x="576" y="42" width="234" height="84" fill="#F6F0E0" stroke="#AE8A3E" stroke-width="2" class="anim-node"/>
+              <text x="592" y="68" font-size="12" fill="#AE8A3E" class="svg-mono" font-weight="700">STEP 3 · 关键二次检查</text>
+              <text x="592" y="92" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">LWLockAttemptLock()</text>
+              <text x="592" y="114" font-size="12.5" fill="#46585F">防入队瞬间持锁者刚释放</text>
+
+              <!-- Step 3 Success -> Dequeue -->
+              <path id="s6E3deq" d="M 693 126 V 176 H 870" fill="none" stroke="#2F7A66" stroke-width="1.8" class="anim-edge"/>
+              <polygon points="870,171 880,176 870,181" fill="#2F7A66"/>
+              <text x="706" y="166" font-size="12" fill="#2F7A66" font-weight="700">二次成功 → 撤销入队</text>
+
+              <rect id="s6NDeq" x="882" y="142" width="218" height="68" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5" class="anim-node"/>
+              <text x="898" y="168" font-size="13.5" fill="#2F7A66" class="svg-mono" font-weight="700">LWLockDequeueSelf()</text>
+              <text x="898" y="192" font-size="12.5" fill="#1B2B33">从 waiters 移除并拿锁返回</text>
+
+              <path d="M 1100 176 H 1270 V 136" fill="none" stroke="#2F7A66" stroke-width="1.5"/>
+              <polygon points="1265,136 1270,126 1275,136" fill="#2F7A66"/>
+
+              <!-- Step 3 Fail -> Step 4 Sleep -->
+              <path id="s6E34" d="M 810 84 H 880" fill="none" stroke="#BE653B" stroke-width="1.8" class="anim-edge"/>
+              <polygon points="880,79 890,84 880,89" fill="#BE653B"/>
+              <text x="824" y="74" font-size="11.5" fill="#BE653B" font-weight="700">仍失败</text>
+
+              <rect id="s6N4" x="892" y="42" width="218" height="84" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5" class="anim-node"/>
+              <text x="908" y="68" font-size="12" fill="#BE653B" class="svg-mono" font-weight="700">STEP 4 · 信号量睡眠</text>
+              <text x="908" y="92" font-size="14" fill="#1B2B33" class="svg-mono" font-weight="700">PGSemaphoreLock()</text>
+              <text x="908" y="114" font-size="12.5" fill="#46585F">让出 CPU，不持续忙等</text>
+
+              <!-- Final Acquired Node -->
+              <rect id="s6NWin" x="1150" y="52" width="234" height="74" fill="#E5F2EE" stroke="#2F7A66" stroke-width="2" class="anim-node"/>
+              <text x="1166" y="80" font-size="14" fill="#2F7A66" font-weight="700">成功持有 LWLock</text>
+              <text x="1166" y="106" font-size="12.5" fill="#1B2B33">进入共享内存短临界区</text>
+
+              <!-- Wakeup & Re-compete Loop -->
+              <path id="s6E45" d="M 1001 126 V 262 H 640" fill="none" stroke="#245A6B" stroke-width="1.8" class="anim-edge"/>
+              <polygon points="640,257 630,262 640,267" fill="#245A6B"/>
+
+              <rect id="s6N5" x="348" y="226" width="280" height="72" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5" class="anim-node"/>
+              <text x="364" y="252" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">STEP 5 · 释放者唤醒（非直接授锁）</text>
+              <text x="364" y="276" font-size="13.5" fill="#1B2B33" class="svg-mono" font-weight="700">LWLockWakeup() → 醒来重新竞争</text>
+
+              <!-- Loop back to Step 1 -->
+              <path id="s6E51" d="M 348 262 H 121 V 136" fill="none" stroke="#245A6B" stroke-width="1.8" class="anim-edge"/>
+              <polygon points="116,136 121,126 126,136" fill="#245A6B"/>
+              <rect x="148" y="250" width="168" height="22" fill="#F7F6F2"/>
+              <text x="156" y="265" font-size="12" fill="#245A6B" font-weight="700">循环回到 AttemptLock()</text>
+
+              <!-- Live Explanation Footer inside SVG -->
+              <rect x="16" y="314" width="1368" height="58" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text id="s6Explain" x="34" y="348" font-size="14" fill="#1B2B33">提示：点击「播放」或「单步推进」，观察两阶段检查如何避免「判断失败与入队之间持锁者已释放」导致的永久睡丢。</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">单把 LWLock 的原理已经透彻；内核里有上百把轻量锁，它们如何组织、分区并映射出可读的 wait_event？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">06</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 07 ==================== -->
+        <section class="slide" data-slide="7" data-title="Tranche 与 MainLWLockArray：命名分组与分区降竞争">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">06 · TRANCHE &amp; SHARED MEMORY LAYOUT</span>
+              <span class="strata-badge">lwlock.h · lwlocklist.h · xfunc.sgml</span>
+            </div>
+            <h1 class="slide-title">Tranche 与 MainLWLockArray：命名分组与分区降竞争</h1>
+            <p class="slide-lead">启动时在共享内存初始化 MainLWLockArray，通过分区拆散热点，并用 tranche 将同类锁映射为统一的 wait_event 名称。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Main Array Title -->
+              <text x="16" y="24" font-size="14" fill="#245A6B" class="svg-mono" font-weight="700">MAINLWLOCKARRAY · 共享内存连续数组布局（按 LWLockPadded 对齐）</text>
+
+              <!-- Segment 1: Individual Predefined Locks -->
+              <rect x="16" y="40" width="380" height="148" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+              <text x="34" y="68" font-size="15" fill="#FFFFFF" font-weight="700">前段：预定义单个 LWLock</text>
+              <text x="34" y="92" font-size="12" fill="#CFE0DC" class="svg-mono">src/include/storage/lwlocklist.h</text>
+              <rect x="34" y="106" width="80" height="32" fill="#F7F6F2"/>
+              <text x="42" y="127" font-size="12" fill="#1B2B33" class="svg-mono" font-weight="700">ProcArray</text>
+              <rect x="122" y="106" width="76" height="32" fill="#F7F6F2"/>
+              <text x="134" y="127" font-size="12" fill="#1B2B33" class="svg-mono" font-weight="700">XidGen</text>
+              <rect x="206" y="106" width="80" height="32" fill="#F7F6F2"/>
+              <text x="215" y="127" font-size="12" fill="#1B2B33" class="svg-mono" font-weight="700">WALWrite</text>
+              <rect x="294" y="106" width="88" height="32" fill="#F7F6F2"/>
+              <text x="300" y="127" font-size="11.5" fill="#1B2B33" class="svg-mono" font-weight="700">ControlFile</text>
+              <text x="34" y="168" font-size="12.5" fill="#EBF1EE">全局单一职责结构，每个槽位独立命名</text>
+
+              <!-- Segment 2: Built-in Partitioned Tranches -->
+              <rect x="408" y="40" width="600" height="148" fill="#2E6373" stroke="#1E4B5A" stroke-width="1.5"/>
+              <text x="426" y="68" font-size="15" fill="#FFFFFF" font-weight="700">中段：内置分区 Tranche（拆散单点竞争）</text>
+              <text x="426" y="92" font-size="12" fill="#CFE0DC" class="svg-mono">src/include/storage/lwlock.h · 固定分区常数</text>
+
+              <rect x="426" y="106" width="166" height="62" fill="#E5EFF0"/>
+              <text x="438" y="130" font-size="13" fill="#245A6B" class="svg-mono" font-weight="700">BufferMapping</text>
+              <text x="438" y="152" font-size="12.5" fill="#1B2B33" class="svg-mono">128 分区锁</text>
+
+              <rect x="602" y="106" width="136" height="62" fill="#E5EFF0"/>
+              <text x="614" y="130" font-size="13" fill="#245A6B" class="svg-mono" font-weight="700">LockManager</text>
+              <text x="614" y="152" font-size="12.5" fill="#1B2B33" class="svg-mono">16 分区锁</text>
+
+              <rect x="748" y="106" width="140" height="62" fill="#E5EFF0"/>
+              <text x="758" y="130" font-size="12.5" fill="#245A6B" class="svg-mono" font-weight="700">PredicateLock</text>
+              <text x="758" y="152" font-size="12.5" fill="#1B2B33" class="svg-mono">16 分区锁</text>
+
+              <rect x="898" y="106" width="96" height="62" fill="#E5EFF0"/>
+              <text x="908" y="130" font-size="12.5" fill="#245A6B" class="svg-mono" font-weight="700">WALInsert</text>
+              <text x="908" y="152" font-size="12.5" fill="#1B2B33" class="svg-mono">8 把锁</text>
+
+              <!-- Segment 3: Extension Named Tranches -->
+              <rect x="1020" y="40" width="364" height="148" fill="#47808D" stroke="#2E6373" stroke-width="1.5"/>
+              <text x="1038" y="68" font-size="15" fill="#FFFFFF" font-weight="700">后段/扩展：命名 Tranche</text>
+              <text x="1038" y="92" font-size="12" fill="#EBF1EE" class="svg-mono">doc/src/sgml/xfunc.sgml</text>
+              <rect x="1038" y="106" width="328" height="62" fill="#F7F6F2"/>
+              <text x="1050" y="128" font-size="12" fill="#1B2B33" class="svg-mono">• 启动期：RequestNamedLWLockTranche()</text>
+              <text x="1050" y="152" font-size="12" fill="#1B2B33" class="svg-mono">• 运行期：LWLockNewTrancheId() + Init</text>
+
+              <!-- Orthogonal Connectors down to Observability Mapping -->
+              <path d="M 206 188 V 230 H 700 V 256" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+              <path d="M 700 188 V 256" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+              <path d="M 1202 188 V 230 H 700" fill="none" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="695,256 700,266 705,256" fill="#245A6B"/>
+
+              <!-- Bottom Mapping & Engineering Boundary -->
+              <rect x="16" y="268" width="844" height="142" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="36" y="298" font-size="16" fill="#245A6B" font-weight="700">Tranche 观测映射：GetLWLockIdentifier() → pg_stat_activity.wait_event</text>
+              <text x="36" y="328" font-size="14" fill="#1B2B33">• Tranche 是「命名与分组机制」，决定监控里看到的 wait_event 类别名（如 BufferMapping、LockManager）</text>
+              <text x="36" y="356" font-size="14" fill="#1B2B33">• 观测粒度边界：wait_event 显示的是用途分组名，通常不会直接告诉你具体卡在 128 个中的第几个分区</text>
+              <text x="36" y="384" font-size="13.5" fill="#46585F">• 配合 pg_wait_events 字典表，可直接查到每个内置 tranche 的官方说明</text>
+
+              <rect x="880" y="268" width="504" height="142" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="880" y="268" width="8" height="142" fill="#BE653B"/>
+              <text x="904" y="298" font-size="15" fill="#BE653B" font-weight="700">扩展作者使用 LWLock 的硬边界</text>
+              <text x="904" y="328" font-size="13.5" fill="#1B2B33">1. 仅用于保护扩展自有共享内存结构，临界区必须极短</text>
+              <text x="904" y="356" font-size="13.5" fill="#1B2B33">2. 必须规定严格固定的加锁顺序，防止无检测死锁</text>
+              <text x="904" y="384" font-size="13.5" fill="#1B2B33">3. 严禁在持锁期间做慢 I/O、网络调用或复杂 SQL</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">看懂了 128 分区的布局，我们钻进第一条线上高频热点路径 —— BufferMapping。</div>
+            </div>
+            <div class="page-meta"><span class="page-num">07</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-slide="8" data-title="典型路径一：BufferMapping 共享缓冲区映射竞争">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">07 · HOTSPOT PATH I · SHARED BUFFER MAPPING</span>
+              <span class="strata-badge">bufmgr.c · buf_internals.h</span>
+            </div>
+            <h1 class="slide-title">典型路径一：BufferMapping 共享缓冲区映射竞争</h1>
+            <p class="slide-lead">查找缓存页只需分区共享锁，但未命中并插入或淘汰旧映射时必须升级为排他锁，这正是高并发缓存抖动的根源。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Input: BufferTag -->
+              <rect x="16" y="132" width="214" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <text x="32" y="162" font-size="13" fill="#245A6B" class="svg-mono" font-weight="700">INPUT · 磁盘块定位</text>
+              <text x="32" y="190" font-size="16" fill="#1B2B33" class="svg-mono" font-weight="700">BufferTag</text>
+              <text x="32" y="216" font-size="13" fill="#46585F">(RelFileLocator,</text>
+              <text x="32" y="236" font-size="13" fill="#46585F"> ForkNumber, BlockNum)</text>
+
+              <!-- Arrow to Hash Partition -->
+              <path d="M 230 193 H 278" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="278,188 288,193 278,198" fill="#245A6B"/>
+
+              <!-- Hash Partition Router -->
+              <rect x="290" y="114" width="236" height="158" fill="#245A6B" stroke="#1E4B5A" stroke-width="1.5"/>
+              <text x="308" y="146" font-size="13" fill="#CFE0DC" class="svg-mono">HASH PARTITIONING</text>
+              <text x="308" y="176" font-size="15" fill="#FFFFFF" class="svg-mono" font-weight="700">BufMappingPartitionLock()</text>
+              <text x="308" y="206" font-size="13.5" fill="#EBF1EE">hash(BufferTag) % 128</text>
+              <text x="308" y="232" font-size="13" fill="#CFE0DC">定位到 128 把分区锁之一</text>
+              <text x="308" y="254" font-size="12" fill="#F7E9DE" class="svg-mono">NUM_BUFFER_PARTITIONS = 128</text>
+
+              <!-- Split to Hit (Top) & Miss/Replace (Bottom) -->
+              <path d="M 526 160 H 572 V 82 H 612" fill="none" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="612,77 622,82 612,87" fill="#2F7A66"/>
+
+              <path d="M 526 226 H 572 V 260 H 612" fill="none" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="612,255 622,260 612,265" fill="#BE653B"/>
+
+              <!-- Top Branch: Cache Hit (LW_SHARED) -->
+              <rect x="624" y="24" width="760" height="118" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="624" y="24" width="8" height="118" fill="#2F7A66"/>
+              <text x="648" y="52" font-size="15" fill="#2F7A66" font-weight="700">命中路径（并发友好）：持分区锁 LW_SHARED</text>
+
+              <rect x="648" y="68" width="230" height="58" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="662" y="92" font-size="13.5" fill="#1B2B33" font-weight="700">1. 查 Shared Buffer Hash</text>
+              <text x="662" y="112" font-size="12.5" fill="#46585F">多后端可同时拿 LW_SHARED</text>
+
+              <path d="M 878 97 H 916" fill="none" stroke="#2F7A66" stroke-width="1.8"/>
+              <polygon points="916,92 926,97 916,102" fill="#2F7A66"/>
+
+              <rect x="928" y="68" width="206" height="58" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="942" y="92" font-size="13.5" fill="#1B2B33" font-weight="700">2. 命中目标 Buffer Slot</text>
+              <text x="942" y="112" font-size="12.5" fill="#46585F">Pin 页面并立刻释放锁</text>
+
+              <path d="M 1134 97 H 1172" fill="none" stroke="#2F7A66" stroke-width="1.8"/>
+              <polygon points="1172,92 1182,97 1172,102" fill="#2F7A66"/>
+
+              <rect x="1184" y="68" width="182" height="58" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1"/>
+              <text x="1198" y="92" font-size="13.5" fill="#2F7A66" font-weight="700">极低争用</text>
+              <text x="1198" y="112" font-size="12.5" fill="#46585F">临界区仅纳秒级查找</text>
+
+              <!-- Bottom Branch: Miss & Replace (LW_EXCLUSIVE) -->
+              <rect x="624" y="164" width="760" height="162" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="624" y="164" width="8" height="162" fill="#BE653B"/>
+              <text x="648" y="192" font-size="15" fill="#BE653B" font-weight="700">未命中 / 淘汰替换路径（热点源头）：需升级为分区锁 LW_EXCLUSIVE</text>
+
+              <rect x="648" y="210" width="212" height="96" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="662" y="234" font-size="13.5" fill="#1B2B33" font-weight="700">1. 释放 S 锁</text>
+              <text x="662" y="256" font-size="12.5" fill="#46585F">寻找 Victim Buffer</text>
+              <text x="662" y="278" font-size="12.5" fill="#46585F">（淘汰旧页需先删旧映射）</text>
+
+              <path d="M 860 258 H 896" fill="none" stroke="#BE653B" stroke-width="1.8"/>
+              <polygon points="896,253 906,258 896,263" fill="#BE653B"/>
+
+              <rect x="908" y="210" width="222" height="96" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="922" y="234" font-size="13.5" fill="#BE653B" font-weight="700">2. 持 LW_EXCLUSIVE</text>
+              <text x="922" y="256" font-size="12.5" fill="#46585F">插入新映射或删旧映射</text>
+              <text x="922" y="278" font-size="12.5" fill="#46585F">阻塞同分区所有读写</text>
+
+              <path d="M 1130 258 H 1166" fill="none" stroke="#BE653B" stroke-width="1.8"/>
+              <polygon points="1166,253 1176,258 1166,263" fill="#BE653B"/>
+
+              <rect x="1178" y="210" width="188" height="96" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="1192" y="234" font-size="13.5" fill="#BE653B" font-weight="700">3. 暴露热点等待</text>
+              <text x="1192" y="256" font-size="12.5" fill="#1B2B33" class="svg-mono">LWLock:</text>
+              <text x="1192" y="278" font-size="12.5" fill="#1B2B33" class="svg-mono">BufferMapping</text>
+
+              <!-- Bottom Root Cause Strip -->
+              <rect x="16" y="346" width="1368" height="68" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="34" y="374" font-size="14" fill="#245A6B" font-weight="700">常见上层诱因（绝非「某张表被锁」）</text>
+              <text x="34" y="398" font-size="13.5" fill="#1B2B33">随机访问过于分散 · 工作集超过 shared_buffers · 热点块高频替换 · 表/索引膨胀 · 需联动缓存命中率、I/O 与 checkpoint 综合排查</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">看完了缓存映射路径，另一大线上常客 ProcArray 又是如何在 MVCC 快照与事务提交间发生碰撞的？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">08</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 09 (INTERACTIVE ANIMATION 3: PROCARRAY MVCC) ==================== -->
+        <section class="slide" data-slide="9" data-title="典型路径二：ProcArray 快照扫描与事务退出协同">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">08 · HOTSPOT PATH II · PROCARRAY &amp; MVCC (INTERACTIVE)</span>
+              <span class="strata-badge">procarray.c · access/transam/README</span>
+            </div>
+            <h1 class="slide-title">典型路径二：ProcArray 快照扫描与事务退出协同</h1>
+            <p class="slide-lead">取快照持 LW_SHARED 并行扫描 dense arrays；含 XID 事务退出须持 LW_EXCLUSIVE，防止快照中途丢失活跃事务。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-toolbar">
+            <div class="anim-toolbar" id="s9Toolbar">
+              <div class="anim-controls-left">
+                <button class="anim-btn teal" id="s9BtnSnap" type="button">并发取快照 GetSnapshotData (S)</button>
+                <button class="anim-btn accent" id="s9BtnCommit" type="button">写事务提交退出 (X)</button>
+                <button class="anim-btn" id="s9BtnRo" type="button">只读无 XID 事务退出</button>
+                <button class="anim-btn primary" id="s9BtnAuto" type="button">自动演示</button>
+                <button class="anim-btn" id="s9BtnReset" type="button">重置</button>
+              </div>
+              <div class="anim-controls-right">
+                <span class="anim-status" id="s9Status">当前：ProcArrayLock 空闲</span>
+              </div>
+            </div>
+            <svg class="diagram-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg" id="s9Svg">
+              <!-- Left: 3 Backend Operation Lanes -->
+              <rect id="s9LaneSnap" x="16" y="20" width="380" height="94" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5" class="anim-node"/>
+              <text x="34" y="46" font-size="14" fill="#2F7A66" font-weight="700">路径 A · GetSnapshotData()</text>
+              <text x="34" y="70" font-size="13" fill="#1B2B33">申请 ProcArrayLock（LW_SHARED）</text>
+              <text x="34" y="94" font-size="12.5" fill="#46585F">多后端可并行扫描，计算 xmin / xmax / running XIDs</text>
+
+              <rect id="s9LaneCommit" x="16" y="130" width="380" height="94" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5" class="anim-node"/>
+              <text x="34" y="156" font-size="14" fill="#BE653B" font-weight="700">路径 B · 含 XID 事务提交退出</text>
+              <text x="34" y="180" font-size="13" fill="#1B2B33">申请 ProcArrayLock（LW_EXCLUSIVE）</text>
+              <text x="34" y="204" font-size="12.5" fill="#46585F">ProcArrayEndTransaction 清理自身 XID，与快照互斥</text>
+
+              <rect id="s9LaneRo" x="16" y="240" width="380" height="94" fill="#F1EFE9" stroke="#89938F" stroke-width="1.5" class="anim-node"/>
+              <text x="34" y="266" font-size="14" fill="#46585F" font-weight="700">路径 C · 只读无 XID 事务退出</text>
+              <text x="34" y="290" font-size="13" fill="#1B2B33">未分配 XID，不影响他人快照可见性</text>
+              <text x="34" y="314" font-size="12.5" fill="#46585F">通常无需执行同样的 ProcArray 排他清理动作</text>
+
+              <!-- Orthogonal Connectors to Gate -->
+              <path id="s9EdgeSnap" d="M 396 67 H 460 V 140 H 504" fill="none" stroke="#2F7A66" stroke-width="2" class="anim-edge"/>
+              <polygon points="504,135 514,140 504,145" fill="#2F7A66"/>
+
+              <path id="s9EdgeCommit" d="M 396 177 H 504" fill="none" stroke="#BE653B" stroke-width="2" class="anim-edge"/>
+              <polygon points="504,172 514,177 504,182" fill="#BE653B"/>
+
+              <path id="s9EdgeRo" d="M 396 287 H 1004" fill="none" stroke="#89938F" stroke-width="1.5" stroke-dasharray="5,4" class="anim-edge"/>
+              <polygon points="1004,282 1014,287 1004,292" fill="#89938F"/>
+              <rect x="612" y="275" width="220" height="22" fill="#F7F6F2"/>
+              <text x="622" y="290" font-size="12" fill="#46585F" class="svg-mono">绕过 ProcArrayLock 排他清理</text>
+
+              <!-- Center: ProcArrayLock Gate -->
+              <rect id="s9Gate" x="516" y="76" width="256" height="162" fill="#245A6B" stroke="#1E4B5A" stroke-width="2" class="anim-node"/>
+              <text x="536" y="108" font-size="13" fill="#CFE0DC" class="svg-mono">GLOBAL SINGLE LWLOCK</text>
+              <text x="536" y="138" font-size="19" fill="#FFFFFF" class="svg-mono" font-weight="700">ProcArrayLock</text>
+              <rect x="536" y="156" width="216" height="62" fill="#F7F6F2"/>
+              <text id="s9GateMode" x="550" y="182" font-size="13.5" fill="#245A6B" class="svg-mono" font-weight="700">MODE: FREE</text>
+              <text id="s9GateCount" x="550" y="206" font-size="12.5" fill="#46585F">并行快照：0 | 等待退出：0</text>
+
+              <!-- Connector Gate -> Dense Arrays -->
+              <path d="M 772 157 H 834" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="834,152 844,157 834,162" fill="#245A6B"/>
+
+              <!-- Right: ProcArray Dense Arrays -->
+              <rect x="846" y="20" width="538" height="236" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="846" y="20" width="538" height="32" fill="#2E6373"/>
+              <text x="864" y="41" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">PROCARRAY · DENSE ARRAYS（活跃事务数组）</text>
+
+              <text x="864" y="76" font-size="13" fill="#46585F">紧凑数组布局（减少扫描与 cacheline ping-pong）：</text>
+              <rect id="s9Slot1" x="864" y="92" width="118" height="54" fill="#E5EFF0" stroke="#245A6B" stroke-width="1" class="anim-node"/>
+              <text x="878" y="116" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">XID #1041</text>
+              <text x="878" y="136" font-size="11.5" fill="#46585F">运行中</text>
+
+              <rect id="s9Slot2" x="992" y="92" width="118" height="54" fill="#E5EFF0" stroke="#245A6B" stroke-width="1" class="anim-node"/>
+              <text x="1006" y="116" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">XID #1042</text>
+              <text id="s9Slot2Txt" x="1006" y="136" font-size="11.5" fill="#46585F">运行中</text>
+
+              <rect id="s9Slot3" x="1120" y="92" width="118" height="54" fill="#E5EFF0" stroke="#245A6B" stroke-width="1" class="anim-node"/>
+              <text x="1134" y="116" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">XID #1043</text>
+              <text x="1134" y="136" font-size="11.5" fill="#46585F">运行中</text>
+
+              <rect id="s9Slot4" x="1248" y="92" width="118" height="54" fill="#F6F0E0" stroke="#AE8A3E" stroke-width="1" class="anim-node"/>
+              <text x="1262" y="116" font-size="12" fill="#AE8A3E" class="svg-mono" font-weight="700">XID #1044</text>
+              <text x="1262" y="136" font-size="11.5" fill="#46585F">长事务锚定</text>
+
+              <text x="864" y="178" font-size="13.5" fill="#1B2B33" font-weight="700">为什么快照与事务退出必须互斥？</text>
+              <text x="864" y="202" font-size="13" fill="#46585F">• 严禁一个事务在别人取快照的中途从 running set 中消失</text>
+              <text x="864" y="226" font-size="13" fill="#46585F">• 高连接数 + 短事务集中提交风暴 → 大量 LWLock:ProcArray</text>
+
+              <!-- Right bottom RO exit box -->
+              <rect id="s9RoDone" x="1016" y="266" width="368" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1" class="anim-node"/>
+              <text x="1032" y="293" font-size="13" fill="#46585F">只读事务直接结束：零 ProcArrayLock 写争用</text>
+
+              <!-- Live Explanation Strip -->
+              <rect x="16" y="340" width="1368" height="36" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text id="s9Explain" x="32" y="363" font-size="13.5" fill="#1B2B33">演示说明：依次点击上方按钮，体会并发取快照（S 共享）如何与含 XID 写事务提交（X 排他）互相牵制。</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">看完了内存读路径与 MVCC 元数据，再看写入命脉 WAL：为什么 WALInsert 有 8 把锁而 WALWrite 只有一把？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">09</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-slide="10" data-title="典型路径三：WALInsert 并发复制与 WALWrite 顺序落盘">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">09 · HOTSPOT PATH III · WAL PIPELINE</span>
+              <span class="strata-badge">src/backend/access/transam/xlog.c</span>
+            </div>
+            <h1 class="slide-title">典型路径三：WALInsert 并发复制与 WALWrite 顺序落盘</h1>
+            <p class="slide-lead">WAL 写入拆分「内存并发插入（8 把 WALInsert 锁）」与「顺序持久化落盘（WALWrite 锁）」，并用 insertingAt 协调推进。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Stage 1: Space Reservation -->
+              <rect x="16" y="42" width="230" height="254" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="16" y="42" width="230" height="36" fill="#2E6373"/>
+              <text x="32" y="65" font-size="13.5" fill="#FFFFFF" class="svg-mono" font-weight="700">STAGE 1 · 预留空间</text>
+              <text x="32" y="106" font-size="15" fill="#1B2B33" font-weight="700">多后端并发写 WAL</text>
+              <text x="32" y="134" font-size="13.5" fill="#46585F">• 先预留目标 LSN 区间</text>
+              <text x="32" y="160" font-size="13.5" fill="#46585F">• 再进入第二步并行复制</text>
+              <rect x="32" y="188" width="198" height="86" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="44" y="212" font-size="12.5" fill="#245A6B" class="svg-mono" font-weight="700">页面切换时：</text>
+              <text x="44" y="236" font-size="12.5" fill="#1B2B33" class="svg-mono">WALBufMapping</text>
+              <text x="44" y="258" font-size="12" fill="#46585F">保护 WAL Buffer 页映射替换</text>
+
+              <!-- Arrow 1 -> 2 -->
+              <path d="M 246 169 H 294" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="294,164 304,169 294,174" fill="#245A6B"/>
+
+              <!-- Stage 2: 8 WALInsert Locks -->
+              <rect x="306" y="42" width="512" height="254" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="306" y="42" width="512" height="36" fill="#245A6B"/>
+              <text x="324" y="65" font-size="13.5" fill="#FFFFFF" class="svg-mono" font-weight="700">STAGE 2 · 内存并发复制（NUM_XLOGINSERT_LOCKS = 8）</text>
+
+              <!-- 8 lock slots in 2x4 grid -->
+              <rect x="326" y="94" width="108" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="336" y="114" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #0</text>
+              <text x="336" y="130" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <rect x="446" y="94" width="108" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="456" y="114" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #1</text>
+              <text x="456" y="130" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <rect x="566" y="94" width="108" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="576" y="114" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #2</text>
+              <text x="576" y="130" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <rect x="686" y="94" width="112" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="696" y="114" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #3</text>
+              <text x="696" y="130" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <rect x="326" y="148" width="108" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="336" y="168" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #4</text>
+              <text x="336" y="184" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <rect x="446" y="148" width="108" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="456" y="168" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #5</text>
+              <text x="456" y="184" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <rect x="566" y="148" width="108" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="576" y="168" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #6</text>
+              <text x="576" y="184" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <rect x="686" y="148" width="112" height="44" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="696" y="168" font-size="12" fill="#245A6B" class="svg-mono" font-weight="700">Insert #7</text>
+              <text x="696" y="184" font-size="11" fill="#46585F" class="svg-mono">insertingAt</text>
+
+              <!-- WaitForVar note inside Stage 2 -->
+              <rect x="326" y="206" width="472" height="74" fill="#F6F0E0" stroke="#AE8A3E" stroke-width="1"/>
+              <text x="342" y="230" font-size="13.5" fill="#1B2B33" font-weight="700">为什么定为 8 把（xlog.c 源码权衡）？</text>
+              <text x="342" y="252" font-size="12.5" fill="#46585F">• 锁越多 → 内存并发复制越高，但 WAL flush 需遍历全部插入锁，CPU 开销上升</text>
+              <text x="342" y="270" font-size="12.5" fill="#46585F">• 等待者通过 LWLockWaitForVar() 等待 insertingAt 推进或锁释放</text>
+
+              <!-- Arrow 2 -> 3 -->
+              <path d="M 818 169 H 868" fill="none" stroke="#BE653B" stroke-width="2"/>
+              <polygon points="868,164 878,169 868,174" fill="#BE653B"/>
+
+              <!-- Stage 3: WALWrite Serialized Flush -->
+              <rect x="880" y="42" width="504" height="254" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+              <rect x="880" y="42" width="504" height="36" fill="#BE653B"/>
+              <text x="898" y="65" font-size="13.5" fill="#FFFFFF" class="svg-mono" font-weight="700">STAGE 3 · 顺序写盘与刷盘（WALWriteLock）</text>
+
+              <text x="900" y="106" font-size="15" fill="#1B2B33" font-weight="700">持久化必须保序：单把 WALWrite 锁串行化</text>
+              <text x="900" y="134" font-size="13.5" fill="#46585F">• 先等待目标 LSN 前的所有 WALInsert 完成复制</text>
+              <text x="900" y="160" font-size="13.5" fill="#46585F">• 持 WALWrite 锁将 WAL Buffer 顺序写出并 fsync 落盘</text>
+
+              <rect x="900" y="182" width="464" height="96" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="916" y="208" font-size="13.5" fill="#BE653B" font-weight="700">线上出现 WALInsert vs WALWrite 的诊断分流</text>
+              <text x="916" y="232" font-size="12" fill="#1B2B33">• WALInsert → 偏内存日志生成速率、小事务密度、写入并发</text>
+              <text x="916" y="256" font-size="12" fill="#1B2B33">• WALWrite → 偏存储延迟、fsync、同步提交、checkpoint 与复制</text>
+
+              <!-- Bottom Contrast Strip -->
+              <rect x="16" y="320" width="1368" height="90" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="34" y="350" font-size="15" fill="#245A6B" font-weight="700">架构本质对比：内存并发 vs 持久化顺序</text>
+              <text x="34" y="378" font-size="14" fill="#1B2B33">WALInsert 拆出 8 把锁，释放了多核向 WAL Buffer 拷贝字节的 CPU 并行度；而 WALWrite 仍需串行保护磁盘写入序列，</text>
+              <text x="34" y="398" font-size="14" fill="#1B2B33">因此看到 WAL 相关等待时，不能只看单条 SQL，必须同步核查提交频率、批量策略与底层存储延迟。</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">看遍了三大热点路径，把 LWLock 放回 PostgreSQL 四大进程间锁矩阵里，它们的边界与代价一目了然。</div>
+            </div>
+            <div class="page-meta"><span class="page-num">10</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="11" data-title="横向对比与收益代价：四类锁的职责边界与工程权衡">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">10 · HORIZONTAL COMPARISON &amp; ENGINEERING TRADEOFFS</span>
+              <span class="strata-badge">FOUR INTER-PROCESS LOCK FAMILIES</span>
+            </div>
+            <h1 class="slide-title">横向对比与收益代价：四类锁的职责边界与工程权衡</h1>
+            <p class="slide-lead">四类锁不是「谁更高级」，而是保护对象不同；LWLock 用放弃死锁检测和锁超时，换取了内核高频路径的高吞吐。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Comparison Matrix Table (16..1384, y: 8..296) -->
+              <!-- Header Row -->
+              <rect x="16" y="8" width="160" height="40" fill="#1E4B5A"/>
+              <rect x="176" y="8" width="320" height="40" fill="#245A6B"/>
+              <rect x="496" y="8" width="280" height="40" fill="#2E6373"/>
+              <rect x="776" y="8" width="310" height="40" fill="#47808D"/>
+              <rect x="1086" y="8" width="298" height="40" fill="#74A5AD"/>
+
+              <text x="32" y="33" font-size="14" fill="#FFFFFF" font-weight="700">对比维度</text>
+              <text x="194" y="33" font-size="14" fill="#FFFFFF" font-weight="700">LWLock（轻量锁）</text>
+              <text x="514" y="33" font-size="14" fill="#FFFFFF" font-weight="700">Spinlock（自旋锁）</text>
+              <text x="794" y="33" font-size="14" fill="#FFFFFF" font-weight="700">Heavyweight Lock（常规锁）</text>
+              <text x="1104" y="33" font-size="14" fill="#FFFFFF" font-weight="700">Predicate Lock（谓词锁）</text>
+
+              <!-- Row 1: Target -->
+              <rect x="16" y="48" width="160" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="176" y="48" width="320" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <rect x="496" y="48" width="280" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="776" y="48" width="310" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="1086" y="48" width="298" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="32" y="74" font-size="13.5" fill="#1B2B33" font-weight="700">保护目标</text>
+              <text x="194" y="74" font-size="13" fill="#1B2B33" font-weight="700">共享内存数据结构（ProcArray 等）</text>
+              <text x="514" y="74" font-size="13" fill="#46585F">极短内部状态字段</text>
+              <text x="794" y="74" font-size="13" fill="#46585F">SQL 可见对象（表/行/事务 ID）</text>
+              <text x="1104" y="74" font-size="13" fill="#46585F">Serializable 读写依赖（SSI）</text>
+
+              <!-- Row 2: Wait Mode -->
+              <rect x="16" y="90" width="160" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="176" y="90" width="320" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <rect x="496" y="90" width="280" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="776" y="90" width="310" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="1086" y="90" width="298" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="32" y="116" font-size="13.5" fill="#1B2B33" font-weight="700">等待方式</text>
+              <text x="194" y="116" font-size="13" fill="#1B2B33">竞争时信号量睡眠，释放时唤醒</text>
+              <text x="514" y="116" font-size="13" fill="#BE653B">忙等（Busy-wait，烧 CPU）</text>
+              <text x="794" y="116" font-size="13" fill="#46585F">锁管理器等待队列</text>
+              <text x="1104" y="116" font-size="13" fill="#46585F">记录依赖，冲突时序列化失败</text>
+
+              <!-- Row 3: Modes & Deadlock -->
+              <rect x="16" y="132" width="160" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="176" y="132" width="320" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <rect x="496" y="132" width="280" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="776" y="132" width="310" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="1086" y="132" width="298" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="32" y="158" font-size="13.5" fill="#1B2B33" font-weight="700">模式 / 死锁检测</text>
+              <text x="194" y="158" font-size="13" fill="#1B2B33">共享/排他 · <tspan fill="#BE653B" font-weight="700">无死锁检测</tspan></text>
+              <text x="514" y="158" font-size="13" fill="#46585F">互斥 · 无死锁检测</text>
+              <text x="794" y="158" font-size="13" fill="#2F7A66" font-weight="700">多模式冲突矩阵 · 有死锁检测</text>
+              <text x="1104" y="158" font-size="13" fill="#46585F">SSI 冲突检测（非死锁检测）</text>
+
+              <!-- Row 4: Release & Visibility -->
+              <rect x="16" y="174" width="160" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="176" y="174" width="320" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <rect x="496" y="174" width="280" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="776" y="174" width="310" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="1086" y="174" width="298" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="32" y="200" font-size="13.5" fill="#1B2B33" font-weight="700">自动释放 / 可见性</text>
+              <text x="194" y="200" font-size="13" fill="#1B2B33">ERROR 释放 · wait_event 间接可见</text>
+              <text x="514" y="200" font-size="13" fill="#46585F">无高级恢复 · 基本不可见</text>
+              <text x="794" y="200" font-size="13" fill="#46585F">事务结束释放 · pg_locks 可见</text>
+              <text x="1104" y="200" font-size="13" fill="#46585F">事务结束清理 · 部分视图可见</text>
+
+              <!-- Row 5: Unsuitable -->
+              <rect x="16" y="216" width="160" height="42" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="176" y="216" width="320" height="42" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <rect x="496" y="216" width="280" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="776" y="216" width="310" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="1086" y="216" width="298" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="32" y="242" font-size="13.5" fill="#1B2B33" font-weight="700">不适合场景</text>
+              <text x="194" y="242" font-size="13" fill="#BE653B">业务互斥、长等待、复杂死锁</text>
+              <text x="514" y="242" font-size="13" fill="#46585F">任何可能睡眠或 I/O 路径</text>
+              <text x="794" y="242" font-size="13" fill="#46585F">高频内部微临界区</text>
+              <text x="1104" y="242" font-size="13" fill="#46585F">替代普通锁或业务互斥</text>
+
+              <!-- Bottom 2-Column Gains vs Costs Summary -->
+              <rect x="16" y="276" width="676" height="142" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="16" y="276" width="8" height="142" fill="#2F7A66"/>
+              <text x="40" y="304" font-size="15" fill="#2F7A66" font-weight="700">LWLock 的六项核心收益</text>
+              <text x="40" y="330" font-size="13.5" fill="#1B2B33">• 无竞争走 CAS 原子快路径，开销极低</text>
+              <text x="40" y="354" font-size="13.5" fill="#1B2B33">• 共享模式天然适配读多写少；竞争睡眠不空烧 CPU</text>
+              <text x="40" y="378" font-size="13.5" fill="#1B2B33">• tranche 暴露等待类别；LWLockReleaseAll() 保障 ERROR 恢复</text>
+              <text x="40" y="402" font-size="13.5" fill="#1B2B33">• 支持分区拆散单点竞争（128 / 16 / 8）</text>
+
+              <rect x="708" y="276" width="676" height="142" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="708" y="276" width="8" height="142" fill="#BE653B"/>
+              <text x="732" y="304" font-size="15" fill="#BE653B" font-weight="700">LWLock 的五项固有代价</text>
+              <text x="732" y="330" font-size="13.5" fill="#1B2B33">• 无死锁检测，必须靠固定锁序和短临界区自律</text>
+              <text x="732" y="354" font-size="13.5" fill="#1B2B33">• 无 lock_timeout 语义；等锁期间推迟 cancel / die 中断</text>
+              <text x="732" y="378" font-size="13.5" fill="#1B2B33">• 分组 wait_event 不直接指出具体分区或具体 relation block</text>
+              <text x="732" y="402" font-size="13.5" fill="#1B2B33">• 高频共享结构仍存在多核 cache line 抖动，热点无法彻底消失</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">原理与边界全部打通后，回到 DBA 终端：线上到底该用哪几条 SQL 与观测链路精准定位？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">11</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="12" data-title="实操观测路径：wait_event 只是入口，子系统才是根因">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">11 · OBSERVABILITY &amp; DIAGNOSTIC PIPELINE</span>
+              <span class="strata-badge">monitoring.sgml · pg_stat_activity · pg_wait_events</span>
+            </div>
+            <h1 class="slide-title">实操观测路径：wait_event 只是入口，子系统才是根因</h1>
+            <p class="slide-lead">优先用 pg_stat_activity 高频采样与 pg_wait_events 字典分类，再对齐 TPS、I/O 与 WAL 时间线，切忌一开始就跳内核探针。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top 4-Step Pipeline -->
+              <rect x="16" y="16" width="300" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="16" y="16" width="300" height="30" fill="#245A6B"/>
+              <text x="30" y="36" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">1. 高频聚合采样</text>
+              <text x="30" y="64" font-size="13.5" fill="#1B2B33" class="svg-mono" font-weight="700">pg_stat_activity</text>
+              <text x="30" y="88" font-size="12.5" fill="#46585F">按 wait_event 分组统计等待数</text>
+              <text x="30" y="110" font-size="12.5" fill="#46585F">建议外部监控 ≤1s 连续采样，</text>
+              <text x="30" y="128" font-size="12.5" fill="#46585F">避免单次瞬时快照漏掉短抖动</text>
+
+              <path d="M 316 77 H 356" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="356,72 366,77 356,82" fill="#245A6B"/>
+
+              <rect x="368" y="16" width="290" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="368" y="16" width="290" height="30" fill="#2E6373"/>
+              <text x="382" y="36" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">2. 字典语义确认</text>
+              <text x="382" y="64" font-size="13.5" fill="#1B2B33" class="svg-mono" font-weight="700">pg_wait_events</text>
+              <text x="382" y="88" font-size="12.5" fill="#46585F">查 type = 'LWLock' 官方描述</text>
+              <text x="382" y="110" font-size="12.5" fill="#46585F">把事件名精准翻译为被保护</text>
+              <text x="382" y="128" font-size="12.5" fill="#46585F">的内核共享资源对象</text>
+
+              <path d="M 658 77 H 698" fill="none" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="698,72 708,77 698,82" fill="#245A6B"/>
+
+              <rect x="710" y="16" width="320" height="122" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="710" y="16" width="320" height="30" fill="#2F7A66"/>
+              <text x="724" y="36" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">3. 分路核查子系统证据</text>
+              <text x="724" y="62" font-size="12.5" fill="#1B2B33">• ProcArray → 连接数 / 事务年龄 / 快照</text>
+              <text x="724" y="84" font-size="12.5" fill="#1B2B33">• BufferMapping → 命中率 / 随机 I/O</text>
+              <text x="724" y="106" font-size="12.5" fill="#1B2B33">• WALInsert/Write → 提交密度 / 存储</text>
+              <text x="724" y="128" font-size="12.5" fill="#1B2B33">• LockManager → 再回头查 pg_locks</text>
+
+              <path d="M 1030 77 H 1070" fill="none" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="1070,72 1080,77 1070,82" fill="#2F7A66"/>
+
+              <rect x="1082" y="16" width="302" height="122" fill="#F1EFE9" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="1082" y="16" width="302" height="30" fill="#AE8A3E"/>
+              <text x="1096" y="36" font-size="13" fill="#FFFFFF" class="svg-mono" font-weight="700">4. 时间线关联与底层探针</text>
+              <text x="1096" y="64" font-size="12.5" fill="#1B2B33">• 对齐 TPS / WAL / I/O / Checkpoint</text>
+              <text x="1096" y="86" font-size="12.5" fill="#1B2B33">• 区分「持续热点」与「瞬时尖峰」</text>
+              <text x="1096" y="110" font-size="12" fill="#46585F">• 底层备选：DTrace/SystemTap 探针</text>
+              <text x="1096" y="128" font-size="12" fill="#89938F">  (trace_lwlocks 仅 LOCK_DEBUG 可用)</text>
+
+              <!-- Bottom Left: Copy-ready Diagnostic SQL -->
+              <rect x="16" y="164" width="840" height="250" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+              <rect x="16" y="164" width="840" height="32" fill="#1B2B33"/>
+              <text x="34" y="185" font-size="12.5" fill="#CFE0DC" class="svg-mono" font-weight="700">DIAGNOSTIC SQL · 高峰期 LWLock 聚合采样模板</text>
+              <text x="34" y="222" font-size="13.5" fill="#A4C4C6" class="svg-mono">SELECT wait_event,</text>
+              <text x="34" y="246" font-size="13.5" fill="#EBF1EE" class="svg-mono">       count(*)                       AS waiting_backends,</text>
+              <text x="34" y="270" font-size="13.5" fill="#EBF1EE" class="svg-mono">       min(now() - query_start)       AS shortest_query_age,</text>
+              <text x="34" y="294" font-size="13.5" fill="#EBF1EE" class="svg-mono">       max(now() - query_start)       AS longest_query_age</text>
+              <text x="34" y="318" font-size="13.5" fill="#A4C4C6" class="svg-mono">FROM   pg_stat_activity</text>
+              <text x="34" y="342" font-size="13.5" fill="#F7E9DE" class="svg-mono">WHERE  wait_event_type = 'LWLock'</text>
+              <text x="34" y="366" font-size="13.5" fill="#A4C4C6" class="svg-mono">GROUP BY wait_event</text>
+              <text x="34" y="390" font-size="13.5" fill="#A4C4C6" class="svg-mono">ORDER BY waiting_backends DESC, wait_event;</text>
+
+              <!-- Bottom Right: Critical Warning about LOCK TABLE -->
+              <rect x="876" y="164" width="508" height="250" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="876" y="164" width="8" height="250" fill="#BE653B"/>
+              <text x="902" y="196" font-size="16" fill="#BE653B" font-weight="700">实操边界提醒：不要用 LOCK TABLE 复现 LWLock</text>
+
+              <rect x="902" y="214" width="460" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="918" y="240" font-size="13.5" fill="#1B2B33" class="svg-mono">BEGIN;</text>
+              <text x="918" y="264" font-size="13.5" fill="#BE653B" class="svg-mono">LOCK TABLE t IN ACCESS EXCLUSIVE MODE;</text>
+
+              <text x="902" y="310" font-size="14" fill="#1B2B33">• 这条 SQL 制造的是 Heavyweight Lock 等待</text>
+              <text x="902" y="336" font-size="14" fill="#1B2B33">• 被阻塞会话看到的是 <tspan class="svg-mono" fill="#245A6B" font-weight="700">wait_event_type = 'Lock'</tspan></text>
+              <text x="902" y="362" font-size="14" fill="#1B2B33">• 复现 LWLock 需要通过高并发压测触发共享</text>
+              <text x="902" y="386" font-size="14" fill="#1B2B33">  内存热点（高并发快照、缓存替换或高频提交）</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">观测手段就位之后，架构师、DBA 与业务开发者分别该采取哪些治本动作，LWLock 的适用边界又在哪里？</div>
+            </div>
+            <div class="page-meta"><span class="page-num">12</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-slide="13" data-title="分角色最佳实践与适用边界">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">12 · ROLE-BASED BEST PRACTICES &amp; FIT BOUNDARIES</span>
+              <span class="strata-badge">ARCHITECT · DBA · DEVELOPER</span>
+            </div>
+            <h1 class="slide-title">分角色最佳实践与适用边界</h1>
+            <p class="slide-lead">治本的核心在于「减少共享热点」而非盲调参数；LWLock 仅服务于内核与扩展的短内存临界区，严禁当作业务互斥锁。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top 3 Role Columns -->
+              <!-- Role 1: Architect -->
+              <rect x="16" y="10" width="442" height="226" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="16" y="10" width="442" height="36" fill="#245A6B"/>
+              <text x="34" y="33" font-size="15" fill="#FFFFFF" font-weight="700">数据库架构师 · 消解共享热点</text>
+              <text x="34" y="72" font-size="13.5" fill="#1B2B33">• 视 LWLock 为「共享内存热点信号」而非业务锁冲突</text>
+              <text x="34" y="100" font-size="13.5" fill="#1B2B33">• 计数器/库存/余额热点：采用分片计数、批量合并</text>
+              <text x="34" y="128" font-size="13.5" fill="#1B2B33">• 严控活跃连接数，避免数千后端打爆 ProcArray</text>
+              <text x="34" y="156" font-size="13.5" fill="#1B2B33">• WAL 压力大时联合评估提交频率、同步策略与存储</text>
+              <text x="34" y="186" font-size="13" fill="#BE653B">警示：盲目调大单个参数往往只是把热点移到别处</text>
+
+              <!-- Role 2: DBA -->
+              <rect x="478" y="10" width="444" height="226" fill="#F7F6F2" stroke="#2E6373" stroke-width="1.5"/>
+              <rect x="478" y="10" width="444" height="36" fill="#2E6373"/>
+              <text x="496" y="33" font-size="15" fill="#FFFFFF" font-weight="700">DBA · 五步分路诊断治理</text>
+              <text x="496" y="72" font-size="13.5" fill="#1B2B33">1. 先分 wait_event_type（Lock / LWLock / IO / IPC）</text>
+              <text x="496" y="100" font-size="13.5" fill="#1B2B33">2. 对 LWLock 按 wait_event 分类，绝不混看总量</text>
+              <text x="496" y="128" font-size="13.5" fill="#1B2B33">3. 查 pg_wait_events 确认被保护对象</text>
+              <text x="496" y="156" font-size="13.5" fill="#1B2B33">4. 回到对应子系统核查证据（连接/缓存/WAL/锁表）</text>
+              <text x="496" y="186" font-size="13.5" fill="#1B2B33">5. 用时间序列区分持续热点与瞬时尖峰</text>
+
+              <!-- Role 3: App Developer -->
+              <rect x="942" y="10" width="442" height="226" fill="#F7F6F2" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="942" y="10" width="442" height="36" fill="#47808D"/>
+              <text x="960" y="33" font-size="15" fill="#FFFFFF" font-weight="700">业务开发者 · 避免制造热点</text>
+              <text x="960" y="72" font-size="13.5" fill="#1B2B33">• 事务尽量短，不在事务内等用户输入、HTTP 或 RPC</text>
+              <text x="960" y="100" font-size="13.5" fill="#1B2B33">• 不无限扩张连接池，数据库并发并非越多越好</text>
+              <text x="960" y="128" font-size="13.5" fill="#1B2B33">• 批量写入合理合并提交，避免每行一事务放大压力</text>
+              <text x="960" y="156" font-size="13.5" fill="#1B2B33">• 避开业务高峰执行 DDL，防止连带冲击内部锁表</text>
+              <text x="960" y="186" font-size="13.5" fill="#2F7A66">协作：遇到 LWLock 先把 wait_event 发给 DBA 定界</text>
+
+              <!-- Bottom 2-Column Fit vs Unfit Boundary -->
+              <rect x="16" y="256" width="676" height="162" fill="#E5F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="16" y="256" width="8" height="162" fill="#2F7A66"/>
+              <text x="40" y="286" font-size="15" fill="#2F7A66" font-weight="700">适合使用 LWLock 的场景</text>
+              <text x="40" y="314" font-size="13.5" fill="#1B2B33">• PostgreSQL 内核及扩展保护共享内存数据结构</text>
+              <text x="40" y="340" font-size="13.5" fill="#1B2B33">• 访问高频、临界区极短（纯内存读写）、需要共享/排他模式</text>
+              <text x="40" y="366" font-size="13.5" fill="#1B2B33">• 调用路径可严格保证固定锁序、无死锁、等待可控</text>
+              <text x="40" y="392" font-size="13" fill="#46585F">正例：扩展维护共享统计哈希表，读拿 S、写拿 X，不执行 SQL/I/O</text>
+
+              <rect x="708" y="256" width="676" height="162" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="708" y="256" width="8" height="162" fill="#BE653B"/>
+              <text x="732" y="286" font-size="15" fill="#BE653B" font-weight="700">严禁使用 LWLock 的场景</text>
+              <text x="732" y="314" font-size="13.5" fill="#1B2B33">• 用户业务互斥（如「一笔订单同一时刻只由一个 worker 处理」）</text>
+              <text x="732" y="340" font-size="13.5" fill="#1B2B33">• 长时间持锁等待外部服务、慢磁盘 I/O 或网络调用</text>
+              <text x="732" y="366" font-size="13.5" fill="#1B2B33">• 需要死锁检测、超时、事务结束自动释放或表/行 SQL 语义</text>
+              <text x="732" y="392" font-size="13" fill="#2F7A66">替代方案：行锁、唯一约束、advisory lock、队列、状态机或外部协调</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">承接 · NEXT</div>
+              <div class="next-text">最后用七个真实高频误区做一次反向体检，把容易踩坑的边界彻底钉牢。</div>
+            </div>
+            <div class="page-meta"><span class="page-num">13</span> / 14</div>
+          </footer>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-slide="14" data-title="七大常见坑与延伸思考">
+          <header class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">13 · SEVEN PITFALLS AUDIT &amp; EXTENDED THINKING</span>
+              <span class="strata-badge">COURSE CLOSING · SECTION 9 &amp; 10</span>
+            </div>
+            <h1 class="slide-title">七大常见坑与延伸思考</h1>
+            <p class="slide-lead">把运维、调优与扩展开发中最常混淆的七个误区逐一纠偏，并留出四个直指内核设计权衡的课后思考题。</p>
+          </header>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Column: 7 Pitfalls Audit List -->
+              <text x="16" y="22" font-size="14" fill="#BE653B" class="svg-mono" font-weight="700">SEVEN COMMON PITFALLS · 误区纠偏清单</text>
+
+              <!-- Pitfall 1 -->
+              <rect x="16" y="34" width="886" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="16" y="34" width="6" height="48" fill="#BE653B"/>
+              <text x="34" y="63" font-size="13.5" fill="#BE653B" font-weight="700">01 把 LWLock 当表锁</text>
+              <text x="236" y="63" font-size="13.5" fill="#1B2B33">表锁是 wait_event_type = 'Lock'；LWLock 仅代表内部共享资源等待</text>
+
+              <!-- Pitfall 2 -->
+              <rect x="16" y="88" width="886" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="16" y="88" width="6" height="48" fill="#BE653B"/>
+              <text x="34" y="117" font-size="13.5" fill="#BE653B" font-weight="700">02 排障只看 pg_locks</text>
+              <text x="236" y="117" font-size="13.5" fill="#1B2B33">pg_locks 不覆盖 ProcArray / BufferMapping，须结合 wait_events 与 I/O</text>
+
+              <!-- Pitfall 3 -->
+              <rect x="16" y="142" width="886" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="16" y="142" width="6" height="48" fill="#BE653B"/>
+              <text x="34" y="171" font-size="13.5" fill="#BE653B" font-weight="700">03 迷信 lock_timeout</text>
+              <text x="236" y="171" font-size="13.5" fill="#1B2B33">lock_timeout 不治 LWLock，等锁期间还会推迟 cancel / die 中断</text>
+
+              <!-- Pitfall 4 -->
+              <rect x="16" y="196" width="886" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="16" y="196" width="6" height="48" fill="#BE653B"/>
+              <text x="34" y="225" font-size="13.5" fill="#BE653B" font-weight="700">04 盲调 shared_buffers</text>
+              <text x="236" y="225" font-size="13.5" fill="#1B2B33">可能只移动热点或加重 checkpoint，须联合命中率、工作集与膨胀判断</text>
+
+              <!-- Pitfall 5 -->
+              <rect x="16" y="250" width="886" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="16" y="250" width="6" height="48" fill="#BE653B"/>
+              <text x="34" y="279" font-size="13.5" fill="#BE653B" font-weight="700">05 ProcArray 只怪长事务</text>
+              <text x="236" y="279" font-size="13.5" fill="#1B2B33">高连接数、短事务风暴、集中提交与高频取快照同样会打爆 ProcArray</text>
+
+              <!-- Pitfall 6 -->
+              <rect x="16" y="304" width="886" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="16" y="304" width="6" height="48" fill="#BE653B"/>
+              <text x="34" y="333" font-size="13.5" fill="#BE653B" font-weight="700">06 扩展持锁做慢操作</text>
+              <text x="236" y="333" font-size="13.5" fill="#1B2B33">持锁只读写必要共享字段，复制到本地后立刻释放，再做 SQL 或 I/O</text>
+
+              <!-- Pitfall 7 -->
+              <rect x="16" y="358" width="886" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="16" y="358" width="6" height="48" fill="#BE653B"/>
+              <text x="34" y="387" font-size="13.5" fill="#BE653B" font-weight="700">07 忽略固定加锁顺序</text>
+              <text x="236" y="387" font-size="13.5" fill="#1B2B33">LWLock 无死锁检测，两路径反序加锁即永久卡死，必须明文固化顺序</text>
+
+              <!-- Right Column: Extended Questions & Source Index -->
+              <text x="926" y="22" font-size="14" fill="#245A6B" class="svg-mono" font-weight="700">EXTENDED QUESTIONS · 延伸思考</text>
+
+              <rect x="926" y="34" width="458" height="258" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="944" y="66" font-size="13.5" fill="#1B2B33" font-weight="700">Q1 · 分片计数权衡</text>
+              <text x="944" y="88" font-size="12.5" fill="#46585F">全局计数器改为 128 分片后，正确性与统计延迟怎么变？</text>
+
+              <text x="944" y="122" font-size="13.5" fill="#1B2B33" font-weight="700">Q2 · 128 分区是否越多越好</text>
+              <text x="944" y="144" font-size="12.5" fill="#46585F">BufferMapping 增加分区会抬高哪些 CPU、内存与遍历成本？</text>
+
+              <text x="944" y="178" font-size="13.5" fill="#1B2B33" font-weight="700">Q3 · 内存并发 vs 持久顺序</text>
+              <text x="944" y="200" font-size="12.5" fill="#46585F">WALInsert 多锁与 WALWrite 串行反映了怎样的系统本质？</text>
+
+              <text x="944" y="234" font-size="13.5" fill="#1B2B33" font-weight="700">Q4 · 扩展同步原语选型</text>
+              <text x="944" y="256" font-size="12.5" fill="#46585F">atomics / LWLock / CV / latch / 重锁 / advisory lock 怎么选？</text>
+
+              <rect x="926" y="308" width="458" height="98" fill="#1E4B5A" stroke="#1B2B33"/>
+              <text x="944" y="336" font-size="13" fill="#CFE0DC" class="svg-mono" font-weight="700">RECOMMENDED SOURCE READING</text>
+              <text x="944" y="362" font-size="12.5" fill="#FFFFFF" class="svg-mono">lwlock.c · lwlock.h · lwlocklist.h · lmgr/README</text>
+              <text x="944" y="386" font-size="12.5" fill="#A4C4C6" class="svg-mono">bufmgr.c · procarray.c · xlog.c · monitoring.sgml</text>
+            </svg>
+          </div>
+          <footer class="slide-bottom">
+            <div class="next-box">
+              <div class="next-label">结语 · SUMMARY</div>
+              <div class="next-text">LWLock 的使命不是消灭竞争，而是在内核高频路径上把正确性、等待成本与可观测性压进工程甜点区。</div>
+            </div>
+            <div class="page-meta"><span class="page-num">14</span> / 14</div>
+          </footer>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Right In-Page Split Pane: Speaker Notes (N) / Full Transcript (T) -->
+    <aside class="notes-pane" id="notesPane" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div class="notes-title-group">
+          <span class="notes-mode-tag" id="notesModeTag">NOTES · N</span>
+          <span class="notes-title" id="notesPaneTitle">本页讲稿</span>
+        </div>
+        <div class="notes-header-actions">
+          <button class="pane-btn" id="btnSwitchSingle" type="button">本页 N</button>
+          <button class="pane-btn" id="btnSwitchFull" type="button">全文 T</button>
+          <button class="pane-btn" id="btnCloseNotes" type="button">关闭</button>
+        </div>
+      </div>
+      <div class="notes-body" id="notesBody"></div>
+    </aside>
+  </div>
+
+  <!-- Bottom Persistent Shortcut HUD Bar (Stays visible in Fullscreen) -->
+  <footer class="hud-bar" id="hudBar">
+    <div class="hud-group">
+      <button class="hud-btn" id="hudPrev" type="button" title="上一页 (←)">← 上一页</button>
+      <button class="hud-btn" id="hudNext" type="button" title="下一页 (→ / Space)">下一页 →</button>
+      <div class="hud-progress-wrap">
+        <span id="hudPageText">01 / 14</span>
+        <div class="hud-progress-bar"><div class="hud-progress-fill" id="hudProgressFill"></div></div>
+      </div>
+    </div>
+
+    <div class="hud-group">
+      <button class="hud-btn" id="hudToc" type="button"><span class="hud-kbd">G</span> 目录</button>
+      <button class="hud-btn" id="hudNote" type="button"><span class="hud-kbd">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="hudTranscript" type="button"><span class="hud-kbd">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="hudAutoplay" type="button"><span class="hud-kbd">P</span> 自动播放</button>
+      <span class="autoplay-indicator" id="autoplayIndicator">AUTO 12s</span>
+      <button class="hud-btn" id="hudFullscreen" type="button"><span class="hud-kbd">F</span> 全屏</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function() {
+  "use strict";
+
+  /* ==================== 1. SPEAKER NOTES DATA (LOGICAL, CONVERSATIONAL, EVIDENCE-BASED) ==================== */
+  const SPEAKER_NOTES = [
+    {
+      slide: 1,
+      title: "数据库筑基课 —— PostgreSQL 轻量锁（LWLock）",
+      paragraphs: [
+        "各位好，欢迎来到《数据库筑基课》的内核并发控制专题，今天我们专门把 PostgreSQL 里的「轻量锁」——也就是 LWLock——从头到尾剖开讲透。",
+        "大家看这张地层剖面图。平时写业务 SQL，我们接触到的锁大多停留在上层，比如表锁、行锁、或者 Serializable 下的谓词锁。但只要你往深一层钻，落到 L4 这一层，就会撞见 LWLock。它不像重锁那样保护一张表或一行数据，而是直接贴在共享内存数据结构之上，比如 ProcArray、BufferMapping、WALInsert 和 WALWrite。",
+        "今天整场分享的每一个结论，都不是凭空拍脑袋，全部对照 PostgreSQL 官方源码——包括 lwlock.c、lwlock.h、lmgr/README、bufmgr.c、procarray.c 和 xlog.c——一层一层推演出来。我们要建立一个最核心的认知：LWLock 不是『更好的表锁』，它是内核为了保护共享内存做出的工程折中。"
+      ],
+      evidence: "实证锚点：postgres/src/backend/storage/lmgr/README、lwlock.c、lwlock.h、lwlocklist.h、monitoring.sgml"
+    },
+    {
+      slide: 2,
+      title: "运维现场误判：LWLock 不是表锁或行锁",
+      paragraphs: [
+        "为什么要专门花一节课讲轻量锁？我们直接看一个最真实的运维现场。业务高峰期，应用同学冲过来说「数据库锁住了」，DBA 打开 pg_stat_activity，一眼扫过去，满屏都是 wait_event_type 等于 LWLock，后面的 wait_event 可能是 ProcArray、BufferMapping、WALInsert、WALWrite 或者 LockManager。",
+        "这时候最容易踩的坑，就是走上面的陶橙色误判路径：下意识把它当成 LOCK TABLE 或者行锁死锁去查。你去查 pg_locks，发现根本找不到谁锁了某张表；一着急就开始杀会话、或者盲目加索引，结果杀错了正常业务，多加的索引反而放大了 WAL 写入，问题越治越重。",
+        "正确的思路在下面的青绿色路径。你要记住一条铁律：用户 SQL 确实会触发 LWLock，但用户永远不能用 SQL 直接申请核心 LWLock。看到 LWLock，必须立刻按 wait_event 的名字分流，去查它背后对应的共享内存子系统。明白了现场痛点，下一个自然的问题就来了：既然多进程访问共享内存必须加锁，PostgreSQL 为什么偏偏要造出 LWLock 这一层？"
+      ],
+      evidence: "实证锚点：pg_stat_activity.wait_event_type = 'LWLock' 与 pg_locks 的职责隔离"
+    },
+    {
+      slide: 3,
+      title: "为什么需要中间层：Spinlock 与重锁之间的工程夹缝",
+      paragraphs: [
+        "我们沿着逻辑往下推。PostgreSQL 是经典的多进程架构，一个客户端连接对应一个后端进程，大家要同时读写共享内存里的页面映射表、活跃事务数组、WAL 缓冲区。这些访问有三个硬特征：极其高频、临界区很短、并且必须跨进程互斥。",
+        "如果全用最底层的 Spinlock 行不行？不行。源码 lmgr/README 写得很清楚：Spinlock 只适合几十条指令以内的极短临界区，超过这个长度或者跨越内核调用，等待者就会在 CPU 上死转忙等，高并发下 CPU 直接被空烧打满。",
+        "那全用 Heavyweight Lock 常规重锁行不行？也不行。常规锁要维护八种锁模式、冲突矩阵、死锁检测、事务级自动释放，如果每次查一下共享缓存哈希表都要走一遍重锁管理器，开销高到不可接受——甚至重锁管理器自己的共享哈希表，都得反过来靠 LWLock 保护。",
+        "所以 LWLock 就是卡在中间的精准工程折中：它比 Spinlock 扛得住稍长的临界区，竞争失败会睡眠不烧 CPU；同时它果断砍掉了死锁检测和普通锁超时，甚至在等锁期间推迟 query cancel 和 die 中断，以此换取极致的轻量。既然定位清楚了，我们翻开 lwlock.h，看看它的数据结构到底精简到什么程度。"
+      ],
+      evidence: "实证锚点：src/backend/storage/lmgr/README（Spinlock 几十条指令边界与中断推迟说明）"
+    },
+    {
+      slide: 4,
+      title: "LWLock 解剖：极简结构、两种模式与 Cache Line 对齐",
+      paragraphs: [
+        "打开 src/include/storage/lwlock.h，你会发现 LWLock 结构体小得出奇，核心就三个字段：tranche 负责记录用途分类，用来映射监控里的等待事件名；state 是一个 32 位原子状态字，承载所有的占锁计数与内部标志；waiters 是一个 PGPROC 双向链表，用来挂起竞争失败的等待进程。",
+        "细心的同学会注意到外面还包了一层 union LWLockPadded。为什么要特意把一把这么小的锁填充到整个缓存行大小？因为主 LWLock 数组里相邻的锁可能都非常热，如果不做缓存行对齐，两把毫不相干的锁落在同一个 CPU Cache Line 里，多核并发修改就会引发严重的伪共享，性能直接掉一截。",
+        "再看右边的使用模式。正常调用只有两种：LW_SHARED 共享读锁，多个后端可以并行持有，比如查缓存映射、取快照；LW_EXCLUSIVE 排他写锁，谁都进不来，比如修改哈希表、更新 ProcArray。此外还有一个内部模式 LW_WAIT_UNTIL_FREE，它不给普通 LWLockAcquire 用，而是给『只等别人推进进度、自己不一定要拿锁』的场景用，后面讲 WAL 时我们会再次见到它。接下来，我们直接把显微镜对准最核心的 32 位 state 状态字。"
+      ],
+      evidence: "实证锚点：src/include/storage/lwlock.h（LWLock、LWLockPadded、LWLockMode）"
+    },
+    {
+      slide: 5,
+      title: "32 位原子状态字：CAS 实现无锁快路径",
+      paragraphs: [
+        "在早期的 PostgreSQL 实现里，每次获取 LWLock 之前，还得先拿一把内部的 Spinlock 来保护状态修改。这在高频共享读场景下开销太大了。所以现代实现做了一次非常漂亮的重构：用一个 32 位原子变量 state，靠 Compare-and-Exchange 原子指令直接修改状态。",
+        "大家可以点一下上方的交互按钮来亲眼验证。高位保留了三个内部标志：HAS_WAITERS 表示队列里有人在等，RELEASE_OK 控制唤醒节奏，FLAG_LOCKED 仅用来极短暂地锁住 waiters 链表本身。低位则用来表达锁占用：共享获取时，只要没有排他哨兵，CAS 直接把共享计数加一；排他获取时，必须等到整个锁完全空闲，才能把 LW_VAL_EXCLUSIVE 哨兵写进去。",
+        "你可以多点几次「共享获取」，会发现它一路绿灯并行递增；但只要此时再点「排他获取」，CAS 立刻失败，并把 HAS_WAITERS 置为 1、将后端压入等待队列。同时还要记住：LWLock 不是递归锁，进程本地的 held_lwlocks 数组只是为了方便释放和 ERROR 异常恢复，绝不意味着可以重复对同一把锁加锁。那么问题来了：当 CAS 第一次尝试失败后，为什么不能直接挂进队列就去睡觉？"
+      ],
+      evidence: "实证锚点：src/backend/storage/lmgr/lwlock.c（state 位域布局、CAS 快路径、held_lwlocks）"
+    },
+    {
+      slide: 6,
+      title: "两阶段获取与唤醒分离：彻底规避「睡丢」竞态",
+      paragraphs: [
+        "这页图揭示的是并发编程里最经典的防「睡丢」设计。试想一下：假如进程 A 执行 LWLockAttemptLock 失败了，它转身准备去入队睡眠；就在「判断失败」到「完成入队」这短短几个纳秒的空档里，原本持锁的进程 B 恰好释放了锁。B 回头一看等待队列是空的，谁也没唤醒就走了。接着 A 慢半拍入队并调用信号量睡眠——完了，再也没人来叫醒 A，它就永久睡死了。",
+        "PostgreSQL 用两阶段检查彻底堵死了这个竞态。大家可以在上方切换「场景 2」和「场景 3」单步推进：第一步先原子尝试；失败后，第二步调用 LWLockQueueSelf 把自己放进 waiters 队列；关键就在第三步——入队之后，必须再做一次 LWLockAttemptLock！如果这次居然成功了，说明刚才确实撞上了释放窗口，立刻调用 LWLockDequeueSelf 把自己撤出队列，拿锁走人。",
+        "只有第二次尝试依然失败，才放心调用 PGSemaphoreLock 进入睡眠。而且你看底部第五步：持锁者释放时调用 LWLockWakeup 唤醒等待者，但「唤醒」不等于「直接把锁交给你」，醒来的进程要回到第一步重新竞争。这种唤醒与授予分离的设计，避免了每次释放都强制触发上下文切换，但也再次提醒我们：由于没有死锁检测，所有调用者必须死守固定锁顺序。"
+      ],
+      evidence: "实证锚点：src/backend/storage/lmgr/lwlock.c（LWLockAcquire、LWLockQueueSelf、LWLockDequeueSelf、LWLockWakeup）"
+    },
+    {
+      slide: 7,
+      title: "Tranche 与 MainLWLockArray：命名分组与分区降竞争",
+      paragraphs: [
+        "单把锁的内部机制讲透了，我们把视角拉远，看看整个数据库实例里几百把 LWLock 是怎么排兵布阵的。PostgreSQL 启动时，会在共享内存里初始化一块连续的 MainLWLockArray 数组。",
+        "数组前段是预定义的单个锁，定义在 lwlocklist.h 里，比如 ProcArray、XidGen、WALWrite、ControlFile，各管一摊全局结构。数组中间是按用途拆分的内置分区锁，专门用来打散热点：BufferMapping 拆了 128 个分区，LockManager 和 PredicateLockManager 各拆了 16 个分区，WALInsert 有 8 把。后段和扩展区则留给插件，扩展可以在启动期用 RequestNamedLWLockTranche，或者在运行期用 LWLockNewTrancheId 申请自己的命名锁组。",
+        "这些分组的编号就是 tranche。当某个后端卡在锁上时，GetLWLockIdentifier 会把 tranche 翻译成你在 pg_stat_activity 里看到的 wait_event 名称。这里有一个很重要的观测边界：wait_event 告诉你的是用途分组名，比如 BufferMapping，它不会直接告诉你具体卡在 128 个分区里的第几个。下面我们就逐个钻进线上最常见的三条热点路径，先看 BufferMapping。"
+      ],
+      evidence: "实证锚点：lwlock.h（NUM_BUFFER_PARTITIONS=128、NUM_LOCK_PARTITIONS=16）、lwlocklist.h、doc/src/sgml/xfunc.sgml"
+    },
+    {
+      slide: 8,
+      title: "典型路径一：BufferMapping 共享缓冲区映射竞争",
+      paragraphs: [
+        "Shared Buffers 本质上是一个大内存池，PostgreSQL 需要一张全局映射表，回答「某个磁盘块现在躺在哪个 buffer slot 里」。如果整张映射表只用一把锁，高并发查询瞬间就会撞车，所以 buf_internals.h 对 BufferTag 做哈希，映射到 128 个 BufferMapping 分区锁上。",
+        "看图里的两条分支。如果访问的页面已经在缓存里，走上面的青绿色命中路径：后端只需要拿对应分区锁的 LW_SHARED，查到槽位、Pin 住页面就立刻释放，大家并行查完全不打架。",
+        "真正制造热点的，是下面的陶橙色未命中与淘汰路径。一旦缓存没命中，或者需要把旧页换出去，后端必须先释放共享锁，找到一个 victim buffer，然后回头申请同一个分区锁的 LW_EXCLUSIVE 排他锁，去删除旧映射、插入新映射。只要工作集远大于缓存、随机读太散、热点块高频换入换出或者表严重膨胀，排他锁就会频频阻塞同分区的所有查询，监控里立刻飙出大量 LWLock:BufferMapping。所以它跟『锁表』毫无关系，根因在缓存与访问模式。"
+      ],
+      evidence: "实证锚点：src/include/storage/buf_internals.h（BufMappingPartitionLock）、src/backend/storage/buffer/bufmgr.c"
+    },
+    {
+      slide: 9,
+      title: "典型路径二：ProcArray 快照扫描与事务退出协同",
+      paragraphs: [
+        "第二条高频热点路径是 ProcArray，它直接关系到 PostgreSQL 引以为傲的 MVCC 快照正确性。access/transam/README 里写了一条铁律：绝对不能让一个事务在别人正在取快照的中途，悄悄从活跃事务集合里消失。",
+        "为了守住这条红线，procarray.c 用一把全局 ProcArrayLock 来协调两类动作。大家可以点一下上方的交互演示：当业务查询调用 GetSnapshotData 取快照时，拿的是 LW_SHARED 共享锁，多个后端可以并行扫描紧凑排列的 dense arrays，算出 xmin、xmax 和运行中的 XID 列表。但只要一个分配了 XID 的写事务准备提交退出，ProcArrayEndTransaction 就必须拿到 LW_EXCLUSIVE 排他锁，把自己的 XID 干净地清掉。",
+        "有趣的是第三条路径：如果是一个纯只读、从未分配 XID 的事务，它退出时不影响任何人的可见性判断，通常也就不需要抢这把排他锁。这就解释了为什么线上看到 LWLock:ProcArray 时，不能只盯着一两个长事务——只要活跃连接数太高、短写事务提交密度如暴雨般密集，共享快照和排他退出就会在 ProcArrayLock 门口严重堵车。"
+      ],
+      evidence: "实证锚点：src/backend/storage/ipc/procarray.c（GetSnapshotData、ProcArrayEndTransaction）、access/transam/README"
+    },
+    {
+      slide: 10,
+      title: "典型路径三：WALInsert 并发复制与 WALWrite 顺序落盘",
+      paragraphs: [
+        "看完了读缓存和事务快照，我们再看写入命脉 WAL。WAL 路径上有三类核心轻量锁：WALInsert、WALWrite 和负责切换页映射的 WALBufMapping。",
+        "大家看图里清晰的流水线分段。向 WAL 写日志分为两步：先预留好目标 LSN 空间，再把日志字节拷贝到 WAL Buffer。第二步允许多个后端并行，xlog.c 里定义了 NUM_XLOGINSERT_LOCKS 等于 8。为什么是 8 把，不是 80 把？源码注释给出了一笔非常实在的账：插入锁越多，内存并发复制越爽，但每次 WAL 刷盘时都要遍历所有插入锁检查进度，锁太多反而会拖慢 flush 的 CPU 开销。而且每把插入锁上还带着一个 insertingAt 进度变量，其他需要等日志写完的进程，会用 LWLockWaitForVar 去等这个进度推进。",
+        "到了第三阶段真正落盘时，持久化必须严格保序，所以 WALWrite 只有一把锁，串行完成写出和 fsync。这就直接划出了诊断分水岭：看到 WALInsert 等待，多半是内存日志生成太猛、小事务太密；看到 WALWrite 等待，就要立刻去查存储延迟、fsync、同步提交、checkpoint 和复制确认。"
+      ],
+      evidence: "实证锚点：src/backend/access/transam/xlog.c（NUM_XLOGINSERT_LOCKS = 8、insertingAt、LWLockWaitForVar）"
+    },
+    {
+      slide: 11,
+      title: "横向对比与收益代价：四类锁的职责边界与工程权衡",
+      paragraphs: [
+        "三条经典路径走完，我们退后一步，把 PostgreSQL 的四类进程间锁并排放进这张工程矩阵里做一次总复盘。大家记住：这张表比的不是谁比谁高级，而是各自的保护对象截然不同。",
+        "Spinlock 护极短状态，靠忙等；LWLock 护共享内存结构，靠 CAS 快路径加信号量睡眠；Heavyweight Lock 护表、行等 SQL 可见对象，带完备的冲突矩阵、死锁检测和 pg_locks 可见性；Predicate Lock 则专职 Serializable 下的读写冲突检测。",
+        "下方两块汇总了 LWLock 的全部收益与代价。它换来了无竞争极速、读多写少并行、睡眠省 CPU、tranche 可观测、ERROR 自动清理以及分区扩展能力；但你也必须坦然接受它的五项代价：无死锁检测、不认 lock_timeout、等锁期间推迟中断、分组事件不指明具体分区、以及多核高频结构下难以根除的 cache line 抖动。工程上没有银弹，LWLock 只是把权衡压到了最合适的甜点区。"
+      ],
+      evidence: "实证锚点：lmgr/README 四类锁对比、lwlock.c（LWLockReleaseAll 错误恢复）、proc.h（dense array 布局）"
+    },
+    {
+      slide: 12,
+      title: "实操观测路径：wait_event 只是入口，子系统才是根因",
+      paragraphs: [
+        "理论落地到生产，DBA 拿到终端究竟该怎么查？我们把整套实操方法浓缩成上面这条四步诊断流水线。",
+        "第一步，用左下角这段聚合 SQL 对 pg_stat_activity 做高频采样。注意，单次查询只是瞬时快照，很容易漏掉毫秒级的锁抖动，生产环境务必由外部监控按 1 秒甚至更短周期持续采集。第二步，拿事件名查 pg_wait_events 字典表，确认它保护的内核资源。第三步，按事件类型分路核查子系统证据，只有看到 LockManager 时才回头结合 pg_locks 查对象锁。第四步，把等待曲线和 TPS、WAL 写入量、磁盘 I/O、checkpoint 放在同一条时间线上对齐，分清是持续热点还是瞬时尖峰。至于 DTrace 探针或仅限 LOCK_DEBUG 编译的 trace_lwlocks，普通排障完全不必一开始就上。",
+        "最后特意标红一个实操误区：千万不要在测试库里敲 LOCK TABLE 去尝试复现 LWLock，那只会产生 wait_event_type = 'Lock' 的重锁等待。要复现 LWLock，必须用高并发压测去冲击缓存映射、快照数组或 WAL 管线。"
+      ],
+      evidence: "实证锚点：doc/src/sgml/monitoring.sgml、doc/src/sgml/config.sgml（trace_lwlocks）、pg_stat_activity 与 pg_wait_events"
+    },
+    {
+      slide: 13,
+      title: "分角色最佳实践与适用边界",
+      paragraphs: [
+        "查出根因之后，治理从来不是 DBA 一个人的事，需要架构师、DBA 和业务开发者协同把共享热点降下来。",
+        "对架构师来说，不要把 LWLock 简单解读成「参数配小了」，调大单个参数很多时候只是把热点从一处挪到另一处；真正有效的是分片计数、批量合并、控制活跃连接数上限，以及把提交策略和存储延迟打包评估。对 DBA 来说，坚持五步分路诊断，绝不把所有等待混在一起看总量。对业务开发者来说，虽不需要手写 LWLock，但要管住事务长度——别在事务里等外部 HTTP 或慢 RPC，别让连接池无限膨胀，批量写入合理合并提交，避开高峰做 DDL。",
+        "最底下的青绿与陶橙对比，划清了 LWLock 的适用红线：它只适合内核和扩展保护极短的内存临界区；凡是业务级互斥、长耗时 I/O 或需要死锁检测与超时的需求，请乖乖回到行锁、唯一约束、advisory lock 或外部队列系统。"
+      ],
+      evidence: "实证锚点：xfunc.sgml 扩展使用边界与生产高并发治理实践"
+    },
+    {
+      slide: 14,
+      title: "七大常见坑与延伸思考",
+      paragraphs: [
+        "来到最后一页，我们用七个线上最常踩的坑做一次反向体检，帮大家把今天的所有知识点彻底钉牢。",
+        "前五个是运维排障坑：第一，别把 LWLock 当表锁；第二，别只盯 pg_locks；第三，别指望 lock_timeout 能救 LWLock，等锁期间连 cancel 中断都会推迟；第四，看到 BufferMapping 别无脑放大 shared_buffers，要综合看命中率、膨胀和 checkpoint；第五，看到 ProcArray 别只怪长事务，高连接数和短事务提交风暴同样致命。后两个是扩展开发坑：第六，绝不在持 LWLock 期间做内存分配、SQL 或慢 I/O，应该把字段拷到本地立刻放锁；第七，绝不忽略固定锁序，因为这里没有任何死锁检测兜底。",
+        "右侧留了四个延伸思考题和核心源码索引，欢迎大家课后结合源码继续推演。记住最后一句话：LWLock 的使命从来不是消灭竞争，而是在内核高频路径上，把正确性、等待成本、观测能力与实现复杂度压进一个最稳健的工程区间。感谢大家的聆听！"
+      ],
+      evidence: "实证锚点：全篇第九节常见坑（9.1–9.7）、第十节扩展问题与第十一节核心源码索引"
+    }
+  ];
+
+  /* ==================== 2. CORE DECK STATE & NAVIGATION ==================== */
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const totalSlides = slides.length;
+  let currentIndex = 0;
+  let notesMode = null; // null | 'single' | 'full'
+  let tocOpen = false;
+  let autoplayTimer = null;
+  const AUTOPLAY_MS = 12000;
+
+  const stageViewport = document.getElementById("stageViewport");
+  const stageScaler = document.getElementById("stageScaler");
+  const notesPane = document.getElementById("notesPane");
+  const notesBody = document.getElementById("notesBody");
+  const notesModeTag = document.getElementById("notesModeTag");
+  const notesPaneTitle = document.getElementById("notesPaneTitle");
+  const tocDrawer = document.getElementById("tocDrawer");
+  const tocList = document.getElementById("tocList");
+
+  const hudPageText = document.getElementById("hudPageText");
+  const hudProgressFill = document.getElementById("hudProgressFill");
+  const hudToc = document.getElementById("hudToc");
+  const hudNote = document.getElementById("hudNote");
+  const hudTranscript = document.getElementById("hudTranscript");
+  const hudAutoplay = document.getElementById("hudAutoplay");
+  const hudFullscreen = document.getElementById("hudFullscreen");
+  const autoplayIndicator = document.getElementById("autoplayIndicator");
+  const btnSwitchSingle = document.getElementById("btnSwitchSingle");
+  const btnSwitchFull = document.getElementById("btnSwitchFull");
+
+  function pad2(n) {
+    return n < 10 ? "0" + n : "" + n;
+  }
+
+  /* Proportional 16:9 Stage Vector Scaling (zero reflow, clean letterbox) */
+  function rescaleStage() {
+    const rect = stageViewport.getBoundingClientRect();
+    const padX = 24;
+    const padY = 20;
+    const availW = Math.max(200, rect.width - padX);
+    const availH = Math.max(120, rect.height - padY);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageScaler.style.transform = "scale(" + scale.toFixed(5) + ")";
+  }
+
+  /* Build TOC items */
+  function buildToc() {
+    tocList.innerHTML = "";
+    SPEAKER_NOTES.forEach((item, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toc-item" + (idx === currentIndex ? " active" : "");
+      btn.dataset.idx = idx;
+      const eyebrowEl = slides[idx].querySelector(".eyebrow");
+      const subText = eyebrowEl ? eyebrowEl.textContent : "";
+      btn.innerHTML =
+        '<span class="toc-num">' + pad2(item.slide) + '</span>' +
+        '<div><div class="toc-item-title">' + item.title + '</div>' +
+        '<div class="toc-item-sub">' + subText + '</div></div>';
+      btn.addEventListener("click", () => {
+        goToSlide(idx);
+        setTocOpen(false);
+      });
+      tocList.appendChild(btn);
+    });
+  }
+
+  function updateTocActive() {
+    const items = tocList.querySelectorAll(".toc-item");
+    items.forEach((el, idx) => {
+      el.classList.toggle("active", idx === currentIndex);
+    });
+  }
+
+  function setTocOpen(open) {
+    tocOpen = open;
+    tocDrawer.classList.toggle("open", tocOpen);
+    hudToc.classList.toggle("active", tocOpen);
+  }
+
+  /* Render Notes Pane (In-Page Split, Auto-Scroll Sync) */
+  function renderNotesPane(scrollToCurrent) {
+    if (!notesMode) {
+      notesPane.classList.remove("open");
+      hudNote.classList.remove("active");
+      hudTranscript.classList.remove("active");
+      setTimeout(rescaleStage, 240);
+      rescaleStage();
+      return;
+    }
+
+    notesPane.classList.add("open");
+    hudNote.classList.toggle("active", notesMode === "single");
+    hudTranscript.classList.toggle("active", notesMode === "full");
+    btnSwitchSingle.classList.toggle("active", notesMode === "single");
+    btnSwitchFull.classList.toggle("active", notesMode === "full");
+
+    if (notesMode === "single") {
+      notesModeTag.textContent = "NOTES · N";
+      notesPaneTitle.textContent = "本页讲稿（第 " + pad2(currentIndex + 1) + " 页）";
+      const data = SPEAKER_NOTES[currentIndex];
+      notesBody.innerHTML =
+        '<article class="note-block current" data-note-idx="' + currentIndex + '">' +
+          '<div class="note-block-head">' +
+            '<span class="note-slide-num">PAGE ' + pad2(data.slide) + '</span>' +
+            '<span class="note-slide-title">' + data.title + '</span>' +
+          '</div>' +
+          '<div class="note-text">' + data.paragraphs.map(p => '<p>' + p + '</p>').join("") + '</div>' +
+          '<div class="note-evidence">' + data.evidence + '</div>' +
+        '</article>';
+      notesBody.scrollTop = 0;
+    } else if (notesMode === "full") {
+      notesModeTag.textContent = "FULL · T";
+      notesPaneTitle.textContent = "全文讲稿（自动同步当前页）";
+      const existingBlocks = notesBody.querySelectorAll(".note-block[data-full='1']");
+      if (existingBlocks.length !== totalSlides) {
+        notesBody.innerHTML = SPEAKER_NOTES.map((data, idx) =>
+          '<article class="note-block clickable' + (idx === currentIndex ? ' current' : '') + '" data-full="1" data-note-idx="' + idx + '" id="transcript-slide-' + idx + '">' +
+            '<div class="note-block-head">' +
+              '<span class="note-slide-num">PAGE ' + pad2(data.slide) + '</span>' +
+              '<span class="note-slide-title">' + data.title + '</span>' +
+            '</div>' +
+            '<div class="note-text">' + data.paragraphs.map(p => '<p>' + p + '</p>').join("") + '</div>' +
+            '<div class="note-evidence">' + data.evidence + '</div>' +
+          '</article>'
+        ).join("");
+        notesBody.querySelectorAll(".note-block[data-full='1']").forEach((el) => {
+          el.addEventListener("click", () => {
+            const targetIdx = parseInt(el.dataset.noteIdx, 10);
+            if (!isNaN(targetIdx)) goToSlide(targetIdx);
+          });
+        });
+      } else {
+        existingBlocks.forEach((el, idx) => {
+          el.classList.toggle("current", idx === currentIndex);
+        });
+      }
+
+      if (scrollToCurrent) {
+        const activeEl = document.getElementById("transcript-slide-" + currentIndex);
+        if (activeEl) {
+          requestAnimationFrame(() => {
+            const targetTop = Math.max(0, activeEl.offsetTop - 14);
+            notesBody.scrollTo({ top: targetTop, behavior: "smooth" });
+          });
+        }
+      }
+    }
+
+    rescaleStage();
+    setTimeout(rescaleStage, 240);
+  }
+
+  function toggleNotesMode(mode) {
+    if (notesMode === mode) {
+      notesMode = null;
+    } else {
+      notesMode = mode;
+    }
+    renderNotesPane(true);
+  }
+
+  function goToSlide(idx) {
+    if (idx < 0) idx = 0;
+    if (idx >= totalSlides) idx = totalSlides - 1;
+    slides[currentIndex].classList.remove("active");
+    currentIndex = idx;
+    slides[currentIndex].classList.add("active");
+
+    hudPageText.textContent = pad2(currentIndex + 1) + " / " + pad2(totalSlides);
+    hudProgressFill.style.width = (((currentIndex + 1) / totalSlides) * 100).toFixed(2) + "%";
+    updateTocActive();
+
+    if (notesMode) {
+      renderNotesPane(true);
+    }
+  }
+
+  function nextSlide() {
+    if (currentIndex < totalSlides - 1) {
+      goToSlide(currentIndex + 1);
+    } else if (autoplayTimer) {
+      stopAutoplay();
+    }
+  }
+
+  function prevSlide() {
+    if (currentIndex > 0) {
+      goToSlide(currentIndex - 1);
+    }
+  }
+
+  /* Auto-Play */
+  function startAutoplay() {
+    if (autoplayTimer) return;
+    hudAutoplay.classList.add("active");
+    autoplayIndicator.classList.add("visible");
+    autoplayTimer = setInterval(() => {
+      if (currentIndex < totalSlides - 1) {
+        goToSlide(currentIndex + 1);
+      } else {
+        stopAutoplay();
+      }
+    }, AUTOPLAY_MS);
+  }
+
+  function stopAutoplay() {
+    if (autoplayTimer) {
+      clearInterval(autoplayTimer);
+      autoplayTimer = null;
+    }
+    hudAutoplay.classList.remove("active");
+    autoplayIndicator.classList.remove("visible");
+  }
+
+  function toggleAutoplay() {
+    if (autoplayTimer) {
+      stopAutoplay();
+    } else {
+      if (currentIndex === totalSlides - 1) goToSlide(0);
+      startAutoplay();
+    }
+  }
+
+  /* Fullscreen (F) — bottom HUD remains inside #appShell so it stays visible */
+  function toggleFullscreen() {
+    const target = document.getElementById("appShell");
+    if (!document.fullscreenElement) {
+      if (target.requestFullscreen) {
+        target.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  document.addEventListener("fullscreenchange", () => {
+    hudFullscreen.classList.toggle("active", Boolean(document.fullscreenElement));
+    setTimeout(rescaleStage, 60);
+    setTimeout(rescaleStage, 260);
+  });
+
+  /* Button Event Wiring */
+  document.getElementById("hudPrev").addEventListener("click", prevSlide);
+  document.getElementById("hudNext").addEventListener("click", nextSlide);
+  hudToc.addEventListener("click", () => setTocOpen(!tocOpen));
+  document.getElementById("tocCloseBtn").addEventListener("click", () => setTocOpen(false));
+  hudNote.addEventListener("click", () => toggleNotesMode("single"));
+  hudTranscript.addEventListener("click", () => toggleNotesMode("full"));
+  btnSwitchSingle.addEventListener("click", () => { notesMode = "single"; renderNotesPane(true); });
+  btnSwitchFull.addEventListener("click", () => { notesMode = "full"; renderNotesPane(true); });
+  document.getElementById("btnCloseNotes").addEventListener("click", () => { notesMode = null; renderNotesPane(false); });
+  hudAutoplay.addEventListener("click", toggleAutoplay);
+  hudFullscreen.addEventListener("click", toggleFullscreen);
+
+  /* Keyboard Shortcuts */
+  document.addEventListener("keydown", (e) => {
+    const tag = e.target && e.target.tagName ? e.target.tagName.toUpperCase() : "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const k = e.key;
+    if (k === "ArrowRight" || k === "PageDown" || k === " ") {
+      e.preventDefault();
+      nextSlide();
+    } else if (k === "ArrowLeft" || k === "PageUp") {
+      e.preventDefault();
+      prevSlide();
+    } else if (k === "Home") {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (k === "End") {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (k === "g" || k === "G") {
+      e.preventDefault();
+      setTocOpen(!tocOpen);
+    } else if (k === "n" || k === "N") {
+      e.preventDefault();
+      toggleNotesMode("single");
+    } else if (k === "t" || k === "T") {
+      e.preventDefault();
+      toggleNotesMode("full");
+    } else if (k === "p" || k === "P") {
+      e.preventDefault();
+      toggleAutoplay();
+    } else if (k === "f" || k === "F") {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (k === "Escape") {
+      if (tocOpen) setTocOpen(false);
+      else if (notesMode) { notesMode = null; renderNotesPane(false); }
+    }
+  });
+
+  window.addEventListener("resize", rescaleStage);
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(rescaleStage).observe(stageViewport);
+  }
+
+  /* ==================== 3. SLIDE 05 INTERACTIVE ANIMATION: CAS STATE WORD ==================== */
+  const s5 = {
+    shared: 0,
+    excl: false,
+    waiters: 0,
+    autoTimer: null,
+    autoStep: 0
+  };
+
+  function s5Render(actionText, detail1, detail2) {
+    const hasWaiters = s5.waiters > 0;
+    const bitHasWaiters = document.getElementById("s5BitHasWaiters");
+    const valHasWaiters = document.getElementById("s5ValHasWaiters");
+    const bitExcl = document.getElementById("s5BitExcl");
+    const valExcl = document.getElementById("s5ValExcl");
+    const bitShared = document.getElementById("s5BitShared");
+    const valShared = document.getElementById("s5ValShared");
+    const waitersText = document.getElementById("s5WaitersText");
+    const status = document.getElementById("s5Status");
+
+    bitHasWaiters.setAttribute("fill", hasWaiters ? "#F7E9DE" : "#F1EFE9");
+    bitHasWaiters.setAttribute("stroke", hasWaiters ? "#BE653B" : "#D9D5CB");
+    valHasWaiters.textContent = hasWaiters ? "bit = 1（有等待者）" : "bit = 0（无等待者）";
+
+    bitExcl.setAttribute("fill", s5.excl ? "#F7E9DE" : "#F1EFE9");
+    bitExcl.setAttribute("stroke", s5.excl ? "#BE653B" : "#D9D5CB");
+    valExcl.textContent = s5.excl ? "1（排他哨兵置位）" : "0（无排他持有者）";
+
+    bitShared.setAttribute("fill", s5.shared > 0 ? "#E5F2EE" : "#F1EFE9");
+    bitShared.setAttribute("stroke", s5.shared > 0 ? "#2F7A66" : "#D9D5CB");
+    valShared.textContent = "count = " + s5.shared + "（当前共享读者数）";
+
+    waitersText.textContent = "等待队列 waiters：" + s5.waiters + " 个阻塞后端";
+
+    const modeDesc = s5.excl
+      ? "排他持有（LW_EXCLUSIVE）"
+      : (s5.shared > 0 ? "共享持有 ×" + s5.shared : "空闲（state = 0）");
+    status.textContent = "当前状态：" + modeDesc + (hasWaiters ? " · 等待者 " + s5.waiters : "");
+
+    if (actionText) document.getElementById("s5LogAction").textContent = actionText;
+    if (detail1) document.getElementById("s5LogDetail").textContent = detail1;
+    if (detail2) document.getElementById("s5LogDetail2").textContent = detail2;
+  }
+
+  function s5AcquireShared() {
+    if (!s5.excl) {
+      s5.shared += 1;
+      s5Render(
+        "CAS 成功：LW_SHARED 获取通过（共享计数 → " + s5.shared + "）",
+        "• 检测 LW_VAL_EXCLUSIVE == 0，直接原子递增共享计数，无须加 Spinlock。",
+        "• 多个读路径（如查 BufferMapping、取快照）可同时处于共享持有状态。"
+      );
+    } else {
+      s5.waiters += 1;
+      s5Render(
+        "CAS 失败：当前处于 LW_EXCLUSIVE，共享请求转入等待队列",
+        "• 检测到排他哨兵已置位，原子设置 HAS_WAITERS = 1 并将 PGPROC 挂入 waiters。",
+        "• 随后进入二次检查与 PGSemaphoreLock() 睡眠，避免忙等空烧 CPU。"
+      );
+    }
+  }
+
+  function s5AcquireExcl() {
+    if (!s5.excl && s5.shared === 0) {
+      s5.excl = true;
+      s5Render(
+        "CAS 成功：LW_EXCLUSIVE 获取通过（写入排他哨兵）",
+        "• 仅当锁完全空闲（共享计数 = 0 且无排他）时，CAS 才能写入 LW_VAL_EXCLUSIVE。",
+        "• 此时后续所有共享或排他请求均会冲突并转入等待路径。"
+      );
+    } else {
+      s5.waiters += 1;
+      s5Render(
+        "CAS 失败：锁已被占用，排他请求置 HAS_WAITERS 并入队",
+        "• 排他模式要求独占，当前已有 " + (s5.excl ? "排他持有者" : s5.shared + " 个共享持有者") + "。",
+        "• 该后端入队等待，待现有持有者释放后由 LWLockWakeup() 唤醒并重新竞争。"
+      );
+    }
+  }
+
+  function s5Release() {
+    if (s5.excl) {
+      s5.excl = false;
+      const woke = s5.waiters > 0;
+      if (woke) s5.waiters = Math.max(0, s5.waiters - 1);
+      s5Render(
+        "释放完成：清除 LW_VAL_EXCLUSIVE" + (woke ? " 并唤醒等待队列" : ""),
+        "• 原子清除排他哨兵位，锁恢复空闲状态。",
+        woke ? "• 检测到 HAS_WAITERS = 1，触发 LWLockWakeup() 唤醒等待者重新竞争。" : "• 无等待者，直接返回，零额外开销。"
+      );
+    } else if (s5.shared > 0) {
+      s5.shared -= 1;
+      const woke = s5.shared === 0 && s5.waiters > 0;
+      if (woke) s5.waiters = Math.max(0, s5.waiters - 1);
+      s5Render(
+        "释放完成：共享计数递减至 " + s5.shared + (woke ? "，唤醒等待排他者" : ""),
+        "• 原子将共享持有者计数减 1。",
+        woke ? "• 最后一个共享读者退出且 HAS_WAITERS = 1，调用 LWLockWakeup() 唤醒等待者。" : "• 若仍有其他读者持有，排他等待者继续保持睡眠。"
+      );
+    } else {
+      s5Render(
+        "当前锁已处于空闲状态，无需释放",
+        "• 请点击「共享获取」或「排他获取」演练 CAS 状态跃迁。",
+        "• 也可点击「自动演示」观看完整并发序列。"
+      );
+    }
+  }
+
+  function s5StopAuto() {
+    if (s5.autoTimer) {
+      clearInterval(s5.autoTimer);
+      s5.autoTimer = null;
+      document.getElementById("s5BtnAuto").textContent = "自动演示";
+    }
+  }
+
+  function s5Reset() {
+    s5StopAuto();
+    s5.shared = 0;
+    s5.excl = false;
+    s5.waiters = 0;
+    s5Render(
+      "等待操作：请点击上方按钮模拟并发获取或释放",
+      "• 共享获取：只要无排他持有者，CAS 递增共享计数即可直接成功（无须拿 Spinlock）",
+      "• 排他获取：仅当共享计数与排他哨兵均为 0 时才能写入排他哨兵，否则失败并置 HAS_WAITERS"
+    );
+  }
+
+  document.getElementById("s5BtnShared").addEventListener("click", () => { s5StopAuto(); s5AcquireShared(); });
+  document.getElementById("s5BtnExcl").addEventListener("click", () => { s5StopAuto(); s5AcquireExcl(); });
+  document.getElementById("s5BtnRelease").addEventListener("click", () => { s5StopAuto(); s5Release(); });
+  document.getElementById("s5BtnReset").addEventListener("click", s5Reset);
+  document.getElementById("s5BtnAuto").addEventListener("click", () => {
+    if (s5.autoTimer) {
+      s5StopAuto();
+      return;
+    }
+    s5Reset();
+    const seq = [s5AcquireShared, s5AcquireShared, s5AcquireExcl, s5Release, s5Release, s5AcquireExcl, s5Release];
+    s5.autoStep = 0;
+    document.getElementById("s5BtnAuto").textContent = "停止演示";
+    seq[0]();
+    s5.autoStep = 1;
+    s5.autoTimer = setInterval(() => {
+      if (s5.autoStep >= seq.length) {
+        s5StopAuto();
+        return;
+      }
+      seq[s5.autoStep]();
+      s5.autoStep += 1;
+    }, 1500);
+  });
+
+  /* ==================== 4. SLIDE 06 INTERACTIVE ANIMATION: TWO-PHASE ACQUIRE ==================== */
+  const s6StepsByScenario = {
+    fast: [
+      { active: ["s6N1"], msg: "步骤 1/2：调用 LWLockAttemptLock()，CAS 原子尝试一次成功！" },
+      { active: ["s6NWin"], msg: "步骤 2/2：无竞争快路径直接持有 LWLock 并进入临界区，未触碰队列或信号量。" }
+    ],
+    race: [
+      { active: ["s6N1"], msg: "步骤 1/4：首次 LWLockAttemptLock() 失败（此时持锁者正准备释放）。" },
+      { active: ["s6N2"], msg: "步骤 2/4：调用 LWLockQueueSelf() 将当前 PGPROC 挂入 waiters 等待队列。" },
+      { active: ["s6N3"], msg: "步骤 3/4：关键二次检查！入队后再试一次 LWLockAttemptLock()，恰逢前持有者已释放，尝试成功！" },
+      { active: ["s6NDeq", "s6NWin"], msg: "步骤 4/4：调用 LWLockDequeueSelf() 撤销队列记录并持有锁——彻底避免永久睡丢。" }
+    ],
+    sleep: [
+      { active: ["s6N1"], msg: "步骤 1/5：首次 LWLockAttemptLock() 竞争失败，锁仍被其他后端占用。" },
+      { active: ["s6N2"], msg: "步骤 2/5：调用 LWLockQueueSelf() 将自身挂入 waiters 队列并置 HAS_WAITERS。" },
+      { active: ["s6N3"], msg: "步骤 3/5：入队后执行第二次 LWLockAttemptLock()，确认锁依然被占用。" },
+      { active: ["s6N4"], msg: "步骤 4/5：安心调用 PGSemaphoreLock() 睡眠让出 CPU，不会睡丢也不空烧 CPU。" },
+      { active: ["s6N5", "s6NWin"], msg: "步骤 5/5：持锁者释放并调用 LWLockWakeup() 唤醒等待者，醒来后重新竞争拿到 LWLock。" }
+    ]
+  };
+
+  const s6AllNodes = ["s6N1", "s6N2", "s6N3", "s6N4", "s6N5", "s6NDeq", "s6NWin"];
+  let s6StepIdx = -1;
+  let s6Timer = null;
+
+  function s6ClearHighlights() {
+    s6AllNodes.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.setAttribute("stroke-width", id === "s6N3" || id === "s6NWin" ? "2" : "1.5");
+      el.style.opacity = "1";
+    });
+  }
+
+  function s6RenderStep() {
+    const scen = document.getElementById("s6Scenario").value;
+    const steps = s6StepsByScenario[scen];
+    const status = document.getElementById("s6Status");
+    const explain = document.getElementById("s6Explain");
+
+    if (s6StepIdx < 0) {
+      s6ClearHighlights();
+      status.textContent = "步骤 0 / " + steps.length + "：就绪";
+      explain.textContent = "提示：点击「播放」或「单步推进」，观察两阶段检查如何避免「判断失败与入队之间持锁者已释放」导致的永久睡丢。";
+      return;
+    }
+
+    const cur = steps[s6StepIdx];
+    s6AllNodes.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const isAct = cur.active.includes(id);
+      el.setAttribute("stroke-width", isAct ? "3.5" : "1.2");
+      el.style.opacity = isAct ? "1" : "0.42";
+    });
+    status.textContent = "步骤 " + (s6StepIdx + 1) + " / " + steps.length;
+    explain.textContent = cur.msg;
+  }
+
+  function s6Stop() {
+    if (s6Timer) {
+      clearInterval(s6Timer);
+      s6Timer = null;
+      document.getElementById("s6BtnPlay").textContent = "播放";
+    }
+  }
+
+  function s6Step() {
+    const scen = document.getElementById("s6Scenario").value;
+    const steps = s6StepsByScenario[scen];
+    s6StepIdx = (s6StepIdx + 1) % steps.length;
+    s6RenderStep();
+  }
+
+  function s6Reset() {
+    s6Stop();
+    s6StepIdx = -1;
+    s6RenderStep();
+  }
+
+  document.getElementById("s6Scenario").addEventListener("change", s6Reset);
+  document.getElementById("s6BtnStep").addEventListener("click", () => { s6Stop(); s6Step(); });
+  document.getElementById("s6BtnReset").addEventListener("click", s6Reset);
+  document.getElementById("s6BtnPlay").addEventListener("click", () => {
+    if (s6Timer) {
+      s6Stop();
+      return;
+    }
+    const scen = document.getElementById("s6Scenario").value;
+    const steps = s6StepsByScenario[scen];
+    if (s6StepIdx >= steps.length - 1) s6StepIdx = -1;
+    document.getElementById("s6BtnPlay").textContent = "暂停";
+    s6Step();
+    s6Timer = setInterval(() => {
+      if (s6StepIdx >= steps.length - 1) {
+        s6Stop();
+        return;
+      }
+      s6Step();
+    }, 1700);
+  });
+
+  /* ==================== 5. SLIDE 09 INTERACTIVE ANIMATION: PROCARRAY MVCC ==================== */
+  const s9 = {
+    readers: 0,
+    xPending: false,
+    xHeld: false,
+    autoTimer: null
+  };
+
+  function s9Render(msg) {
+    const gate = document.getElementById("s9Gate");
+    const gateMode = document.getElementById("s9GateMode");
+    const gateCount = document.getElementById("s9GateCount");
+    const status = document.getElementById("s9Status");
+    const explain = document.getElementById("s9Explain");
+    const slot2 = document.getElementById("s9Slot2");
+    const slot2Txt = document.getElementById("s9Slot2Txt");
+
+    if (s9.xHeld) {
+      gate.setAttribute("fill", "#BE653B");
+      gateMode.textContent = "MODE: LW_EXCLUSIVE";
+      gateMode.setAttribute("fill", "#BE653B");
+      gateCount.textContent = "写事务清理 XID 中（阻塞新快照）";
+      status.textContent = "当前：ProcArrayLock 排他占用（X）";
+      slot2.setAttribute("fill", "#F7E9DE");
+      slot2Txt.textContent = "清理 XID 中";
+    } else if (s9.readers > 0) {
+      gate.setAttribute("fill", "#2F7A66");
+      gateMode.textContent = "MODE: LW_SHARED ×" + s9.readers;
+      gateMode.setAttribute("fill", "#2F7A66");
+      gateCount.textContent = "并行快照：" + s9.readers + " | 等待退出：" + (s9.xPending ? "1" : "0");
+      status.textContent = "当前：并行取快照 ×" + s9.readers + (s9.xPending ? "（写提交排队中）" : "");
+      slot2.setAttribute("fill", "#E5F2EE");
+      slot2Txt.textContent = "快照扫描中";
+    } else {
+      gate.setAttribute("fill", "#245A6B");
+      gateMode.textContent = "MODE: FREE";
+      gateMode.setAttribute("fill", "#245A6B");
+      gateCount.textContent = "并行快照：0 | 等待退出：0";
+      status.textContent = "当前：ProcArrayLock 空闲";
+      slot2.setAttribute("fill", "#E5EFF0");
+      slot2Txt.textContent = "运行中";
+    }
+    if (msg) explain.textContent = msg;
+  }
+
+  function s9StopAuto() {
+    if (s9.autoTimer) {
+      clearInterval(s9.autoTimer);
+      s9.autoTimer = null;
+      document.getElementById("s9BtnAuto").textContent = "自动演示";
+    }
+  }
+
+  function s9Reset() {
+    s9StopAuto();
+    s9.readers = 0;
+    s9.xPending = false;
+    s9.xHeld = false;
+    document.getElementById("s9RoDone").setAttribute("fill", "#F1EFE9");
+    s9Render("演示说明：依次点击上方按钮，体会并发取快照（S 共享）如何与含 XID 写事务提交（X 排他）互相牵制。");
+  }
+
+  function s9ActionSnap() {
+    if (s9.xHeld) {
+      s9.xHeld = false;
+      s9.readers = 1;
+      s9Render("写事务退出释放 X 锁后，GetSnapshotData() 立刻持 LW_SHARED 扫描 dense arrays，拿到一致的 running set。");
+    } else {
+      s9.readers += 1;
+      s9Render("GetSnapshotData() 获取 LW_SHARED 成功（当前并行快照数：" + s9.readers + "）——多后端可并发取快照，互不阻塞。");
+    }
+  }
+
+  function s9ActionCommit() {
+    if (s9.readers > 0) {
+      s9.xPending = true;
+      s9Render("含 XID 写事务调用 ProcArrayEndTransaction 申请 LW_EXCLUSIVE：因尚有 " + s9.readers + " 个快照正在扫描，必须等待并暴露 LWLock:ProcArray！");
+      setTimeout(() => {
+        if (!s9.xPending) return;
+        s9.readers = 0;
+        s9.xPending = false;
+        s9.xHeld = true;
+        s9Render("并行快照扫描完毕释放 S 锁 → 写事务立即获得 LW_EXCLUSIVE，安全清理自身 XID，杜绝快照中途事务凭空消失。");
+      }, 1100);
+    } else {
+      s9.xHeld = true;
+      s9Render("ProcArrayLock 空闲：含 XID 写事务直接拿到 LW_EXCLUSIVE，安全更新 ProcArray 并清理自身 XID。");
+    }
+  }
+
+  function s9ActionRo() {
+    const roBox = document.getElementById("s9RoDone");
+    roBox.setAttribute("fill", "#E5F2EE");
+    s9Render("只读且未分配 XID 的事务结束：因其不影响他人快照的活跃事务集合，直接退出，零 ProcArrayLock 排他竞争。");
+    setTimeout(() => { roBox.setAttribute("fill", "#F1EFE9"); }, 1400);
+  }
+
+  document.getElementById("s9BtnSnap").addEventListener("click", () => { s9StopAuto(); s9ActionSnap(); });
+  document.getElementById("s9BtnCommit").addEventListener("click", () => { s9StopAuto(); s9ActionCommit(); });
+  document.getElementById("s9BtnRo").addEventListener("click", () => { s9StopAuto(); s9ActionRo(); });
+  document.getElementById("s9BtnReset").addEventListener("click", s9Reset);
+  document.getElementById("s9BtnAuto").addEventListener("click", () => {
+    if (s9.autoTimer) {
+      s9StopAuto();
+      return;
+    }
+    s9Reset();
+    const seq = [s9ActionSnap, s9ActionSnap, s9ActionCommit, s9ActionRo, s9Reset];
+    let step = 0;
+    document.getElementById("s9BtnAuto").textContent = "停止演示";
+    seq[0]();
+    step = 1;
+    s9.autoTimer = setInterval(() => {
+      if (step >= seq.length) {
+        s9StopAuto();
+        return;
+      }
+      seq[step]();
+      step += 1;
+    }, 2200);
+  });
+
+  /* ==================== 6. INITIALIZATION ==================== */
+  buildToc();
+  goToSlide(0);
+  rescaleStage();
+  s5Reset();
+  s6Reset();
+  s9Reset();
+})();
+</script>
+</body>
+</html>

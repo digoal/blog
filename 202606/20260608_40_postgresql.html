@@ -1,0 +1,3006 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— 事务 · PostgreSQL 内核机制与工程边界</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-backdrop: #E5E2D9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terracotta: #BE653B;
+    --terracotta-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E4F2EC;
+    --gold: #AE8A3E;
+    --gold-light: #F5EEDB;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "STSong", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+    --hud-h: 44px;
+    --notes-w: 440px;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-backdrop);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* App Shell: main area + fixed bottom HUD (never overlaps 1600x900 stage, visible in fullscreen) */
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-backdrop);
+  }
+
+  #workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Left Stage Viewport (letterboxes fixed 1600x900 stage) */
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--bg-backdrop);
+  }
+
+  #stage-frame {
+    width: 1600px;
+    height: 900px;
+    position: relative;
+    transform-origin: center center;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    box-shadow: 0 2px 14px rgba(27, 43, 51, 0.08);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Slide Canvas */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    padding: 40px 64px 36px 64px;
+    display: none;
+    flex-direction: column;
+    background: var(--bg-paper);
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Subtle blueprint top strata bar */
+  .strata-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    display: flex;
+  }
+  .strata-bar span { flex: 1; height: 100%; }
+
+  /* Header block */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.18;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    color: var(--ink-sub);
+    line-height: 1.48;
+    max-width: 1400px;
+    min-height: 56px;
+  }
+
+  .divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin: 12px 0 14px 0;
+    flex-shrink: 0;
+  }
+
+  /* Diagram Zone: strictly 1400 x 430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+  }
+
+  /* Non-overlapping interactive toolbar above SVG */
+  .ctrl-bar {
+    height: 44px;
+    margin-bottom: 8px;
+    padding: 0 12px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .ctrl-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-sub);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 5px 12px;
+    background: var(--bg-paper);
+    color: var(--ink);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+
+  .ctrl-btn.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .ctrl-btn.accent {
+    background: var(--terracotta);
+    border-color: var(--terracotta);
+    color: #F7F6F2;
+  }
+
+  .ctrl-btn.teal {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #F7F6F2;
+  }
+
+  .ctrl-input {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    width: 84px;
+    padding: 4px 8px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink);
+    outline: none;
+  }
+
+  .ctrl-input:focus {
+    border-color: var(--indigo);
+  }
+
+  .ctrl-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    padding: 4px 8px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    white-space: nowrap;
+  }
+
+  .ctrl-check input {
+    accent-color: var(--terracotta);
+    cursor: pointer;
+  }
+
+  .ctrl-sep {
+    width: 1px;
+    height: 22px;
+    background: var(--stroke);
+    margin: 0 2px;
+  }
+
+  .ctrl-status {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--indigo);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .svg-host {
+    width: 1400px;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+  }
+
+  .svg-host svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Bottom Next Bridge */
+  .next-bridge {
+    margin-top: 22px;
+    width: 1400px;
+    border-left: 3px solid var(--terracotta);
+    padding: 6px 0 6px 18px;
+    flex-shrink: 0;
+  }
+
+  .next-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2.6px;
+    color: var(--terracotta);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink);
+    line-height: 1.42;
+  }
+
+  /* Slide Page Footer */
+  .slide-footer {
+    margin-top: auto;
+    width: 1400px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid var(--stroke);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+  }
+
+  .slide-footer .page-num {
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  /* Right-side In-Page Notes Drawer */
+  #notes-pane {
+    width: 0;
+    height: 100%;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+    user-select: text;
+  }
+
+  #notes-pane.open {
+    width: var(--notes-w);
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    padding: 14px 20px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .notes-mode-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .notes-tab {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-tab.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .notes-close {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 3px 8px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+    margin-left: 6px;
+  }
+
+  .notes-close:hover {
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+  }
+
+  #notes-body {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px 28px 20px;
+  }
+
+  .note-card {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--stroke);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .note-card.active {
+    background: #FFFFFF;
+    border-color: var(--indigo);
+    border-left: 3px solid var(--terracotta);
+  }
+
+  .note-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .note-card-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+  }
+
+  .note-card-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    flex: 1;
+  }
+
+  .note-card-body p {
+    font-size: 14px;
+    line-height: 1.72;
+    color: var(--ink-sub);
+    margin-bottom: 10px;
+  }
+
+  .note-card-body p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-card-body code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--indigo-light);
+    color: var(--indigo);
+    padding: 1px 4px;
+  }
+
+  .note-evidence {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--stroke);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  /* TOC In-page Overlay (G) */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(27, 43, 51, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  .toc-panel {
+    width: min(1040px, 92vw);
+    max-height: 82vh;
+    background: var(--bg-paper);
+    border: 1px solid var(--indigo);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toc-head {
+    padding: 16px 24px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .toc-head h2 {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink);
+  }
+
+  .toc-grid {
+    padding: 18px 24px 24px 24px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .toc-item {
+    padding: 12px 14px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--indigo);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .toc-item:hover {
+    border-color: var(--indigo);
+    background: var(--indigo-light);
+  }
+
+  .toc-item.current {
+    background: var(--terracotta-light);
+    border-color: var(--terracotta);
+    border-left-color: var(--terracotta);
+  }
+
+  .toc-item-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--indigo);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .toc-item.current .toc-item-num {
+    color: var(--terracotta);
+  }
+
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+
+  /* Bottom Shortcut HUD Bar (always visible including fullscreen) */
+  #hud-bar {
+    height: var(--hud-h);
+    background: #1B2B33;
+    color: #EBF1EE;
+    border-top: 1px solid #2E6373;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    gap: 12px;
+    flex-shrink: 0;
+    z-index: 60;
+  }
+
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: #EBF1EE;
+    background: #243944;
+    border: 1px solid #3B5561;
+    padding: 5px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+
+  .hud-btn:hover {
+    background: #2E6373;
+    border-color: #74A5AD;
+  }
+
+  .hud-btn.active {
+    background: var(--terracotta);
+    border-color: #DF875C;
+    color: #FFFFFF;
+  }
+
+  .hud-key {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.22);
+    color: #FFFFFF;
+  }
+
+  .hud-progress {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #CFE0DC;
+    min-width: 72px;
+    text-align: center;
+  }
+
+  .hud-toast {
+    font-size: 12px;
+    color: #F5EEDB;
+    font-family: var(--font-mono);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .hud-toast.show {
+    opacity: 1;
+  }
+
+  /* SVG global typography */
+  svg text {
+    font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  }
+  svg .svg-serif {
+    font-family: "Songti SC", "Noto Serif CJK SC", "STSong", serif;
+  }
+  svg .svg-mono {
+    font-family: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <div id="stage-viewport">
+      <div id="stage-frame">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-slide="1" data-title="事务不是 BEGIN; COMMIT;，而是系统边界">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">01 / 15 · 数据库筑基课 —— 事务 · 问题切入</div>
+          <h1 class="slide-title">事务不是 BEGIN; COMMIT;，而是七层系统边界</h1>
+          <p class="slide-lead">把扣款、加款、写流水包进同一个事务并不自动带来正确性——并发一致、膨胀控制、崩溃持久与复制延迟，全压在 PostgreSQL 七层内核地层之上。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-indigo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M0 1 L8 5 L0 9 Z" fill="#245A6B"/>
+                  </marker>
+                  <marker id="arr-terra" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M0 1 L8 5 L0 9 Z" fill="#BE653B"/>
+                  </marker>
+                  <marker id="arr-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M0 1 L8 5 L0 9 Z" fill="#2F7A66"/>
+                  </marker>
+                </defs>
+                <!-- Left: 7-layer Stratigraphic Profile -->
+                <text x="0" y="18" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">POSTGRESQL 事务七层地层剖面（由浅入深）</text>
+                <!-- Layer 7 (top) -->
+                <rect x="0" y="32" width="660" height="48" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+                <text x="18" y="61" font-size="15" font-weight="700" fill="#1B2B33">L7 应用契约层</text>
+                <text x="175" y="61" font-size="14" fill="#46585F">BEGIN / COMMIT / ROLLBACK / SAVEPOINT / 隔离级别声明</text>
+                <!-- Layer 6 -->
+                <rect x="0" y="88" width="660" height="48" fill="#CFE0DC" stroke="#245A6B" stroke-width="1"/>
+                <text x="18" y="117" font-size="15" font-weight="700" fill="#1B2B33">L6 状态机控制层</text>
+                <text x="175" y="117" font-size="14" fill="#1B2B33">xact.c · 延迟分配 XID · VXID 与子事务栈管理</text>
+                <!-- Layer 5 -->
+                <rect x="0" y="144" width="660" height="48" fill="#A4C4C6" stroke="#245A6B" stroke-width="1"/>
+                <text x="18" y="173" font-size="15" font-weight="700" fill="#1B2B33">L5 快照与可见性层</text>
+                <text x="175" y="173" font-size="14" fill="#1B2B33">procarray.c / snapmgr.c / heapam_visibility.c（MVCC）</text>
+                <!-- Layer 4 -->
+                <rect x="0" y="200" width="660" height="48" fill="#74A5AD" stroke="#245A6B" stroke-width="1"/>
+                <text x="18" y="229" font-size="15" font-weight="700" fill="#1B2B33">L4 冲突检测层</text>
+                <text x="175" y="229" font-size="14" fill="#1B2B33">行锁 / 表锁 / 谓词锁 SIReadLock / SSI 危险结构检测</text>
+                <!-- Layer 3 -->
+                <rect x="0" y="256" width="660" height="48" fill="#47808D" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="18" y="285" font-size="15" font-weight="700" fill="#F7F6F2">L3 提交账本层</text>
+                <text x="175" y="285" font-size="14" fill="#EBF1EE">clog.c（pg_xact 2-bit 状态）· subtrans.c（父子映射）</text>
+                <!-- Layer 2 -->
+                <rect x="0" y="312" width="660" height="48" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="18" y="341" font-size="15" font-weight="700" fill="#F7F6F2">L2 持久与复制层</text>
+                <text x="175" y="341" font-size="14" fill="#EBF1EE">WAL Commit Record · XLogFlush · synchronous_commit</text>
+                <!-- Layer 1 (bottom) -->
+                <rect x="0" y="368" width="660" height="48" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+                <text x="18" y="397" font-size="15" font-weight="700" fill="#F7F6F2">L1 清理与冻结层</text>
+                <text x="175" y="397" font-size="14" fill="#CFE0DC">VACUUM · OldestXmin · relfrozenxid · 32 位 XID 环绕防线</text>
+
+                <!-- Orthogonal connectors from strata to incidents -->
+                <path d="M660 168 H700 V92 H730" fill="none" stroke="#BE653B" stroke-width="1.6" marker-end="url(#arr-terra)"/>
+                <path d="M660 224 H700 V92" fill="none" stroke="#BE653B" stroke-width="1.6"/>
+                <path d="M660 392 H700 V218 H730" fill="none" stroke="#BE653B" stroke-width="1.6" marker-end="url(#arr-terra)"/>
+                <path d="M660 336 H712 V344 H730" fill="none" stroke="#BE653B" stroke-width="1.6" marker-end="url(#arr-terra)"/>
+
+                <!-- Right: 3 Production Incidents + 4 Core Questions -->
+                <text x="736" y="18" font-size="13" font-weight="700" fill="#BE653B" class="svg-mono">三类高频线上事故 → 倒逼回答四个底层问题</text>
+
+                <rect x="736" y="32" width="664" height="112" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="754" y="58" font-size="16" font-weight="700" fill="#BE653B">事故 1 · 高并发下库存、余额、额度偶发不一致</text>
+                <text x="754" y="84" font-size="14" fill="#1B2B33">以为包进事务就天然串行，实际落入语句级快照或写偏斜盲区。</text>
+                <text x="754" y="122" font-size="13.5" font-weight="600" fill="#245A6B">追问 ① 语句看到哪个版本？  追问 ② 行版本何时对谁可见？</text>
+
+                <rect x="736" y="160" width="664" height="112" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="754" y="186" font-size="16" font-weight="700" fill="#BE653B">事故 2 · 长报表查询拖住 VACUUM，表与索引持续膨胀</text>
+                <text x="754" y="212" font-size="14" fill="#1B2B33">报表快照钉死清理水位，旧行版本无法回收，写入延迟随之攀升。</text>
+                <text x="754" y="250" font-size="13.5" font-weight="600" fill="#245A6B">追问 ④ 为什么一个长事务会影响整个实例的清理边界？</text>
+
+                <rect x="736" y="288" width="664" height="128" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="754" y="314" font-size="16" font-weight="700" fill="#BE653B">事故 3 · 关闭 synchronous_commit 追吞吐，崩溃后已成功交易消失</text>
+                <text x="754" y="340" font-size="14" fill="#1B2B33">WAL 尚未刷盘即向客户端返回成功，故障恢复后等价于干净回滚。</text>
+                <text x="754" y="378" font-size="13.5" font-weight="600" fill="#245A6B">追问 ③ 一个提交究竟在哪个节点才算「真的持久」？</text>
+                <text x="754" y="402" font-size="12.5" fill="#46585F" class="svg-mono">主线依据：PostgreSQL 源码 xact.c / procarray.c / snapmgr.c / clog.c / README-SSI</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">既然事务横跨七层内核机制，我们先从一条最常见的扣库存 SQL 入手，看看它必须同时兑现哪四大工程契约。</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · 事务（digoal · 2026-06-08）</span>
+            <span class="page-num">01 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-slide="2" data-title="从扣库存 SQL 到 ACID 四大内核契约">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">02 / 15 · 问题定义与核心契约</div>
+          <h1 class="slide-title">把业务动作映射为可验证的状态转移：ACID 的内核落点</h1>
+          <p class="slide-lead">事务不是简单的「SQL 打包」，而是用 MVCC、WAL、锁与清理机制共同守住业务状态；但数据库只懂声明式约束，不会自动理解跨行规则。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: SQL Example -->
+                <text x="0" y="18" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">典型场景：扣库存 + 写流水（4 条语句背后的 5 个工程追问）</text>
+                <rect x="0" y="30" width="470" height="236" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="58" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">BEGIN;</text>
+                <text x="18" y="88" font-size="13.5" fill="#1B2B33" class="svg-mono">SELECT stock FROM sku WHERE id = 42;</text>
+                <text x="18" y="118" font-size="13.5" fill="#1B2B33" class="svg-mono">UPDATE sku SET stock = stock - 1</text>
+                <text x="18" y="140" font-size="13.5" fill="#1B2B33" class="svg-mono">  WHERE id = 42 AND stock &gt; 0;</text>
+                <text x="18" y="170" font-size="13.5" fill="#1B2B33" class="svg-mono">INSERT INTO order_log(order_id, sku_id, action)</text>
+                <text x="18" y="192" font-size="13.5" fill="#1B2B33" class="svg-mono">  VALUES (1001, 42, 'buy');</text>
+                <text x="18" y="222" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">COMMIT;</text>
+                <line x1="18" y1="238" x2="452" y2="238" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="18" y="256" font-size="12.5" fill="#46585F">并发读写、半途报错、提交后崩溃、长报表滞留、聚合校验</text>
+
+                <!-- Bottom Left: Explicit Cost Box -->
+                <rect x="0" y="284" width="470" height="136" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="18" y="310" font-size="15" font-weight="700" fill="#BE653B">必须清醒认识的两项硬代价</text>
+                <text x="18" y="338" font-size="13.5" fill="#1B2B33">1. 一致性 ≠ 数据库自动理解业务规则：跨行/跨表聚合约束</text>
+                <text x="34" y="360" font-size="13.5" fill="#46585F">必须由隔离级别、显式锁或约束模型主动兜底。</text>
+                <text x="18" y="388" font-size="13.5" fill="#1B2B33">2. MVCC 制造旧版本：事务越长、隔离越强、同步越严，</text>
+                <text x="34" y="408" font-size="13.5" fill="#46585F">空间回收、重试与提交延迟代价同步上升。</text>
+
+                <!-- Orthogonal connector -->
+                <path d="M470 148 H506 V68 H532" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+                <path d="M506 148 V168 H532" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+                <path d="M506 168 V268 H532" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+                <path d="M506 268 V368 H532" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+
+                <!-- Right: ACID 4 rows -->
+                <text x="538" y="18" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">ACID 属性 → POSTGRESQL 内核实现机制对照</text>
+
+                <rect x="538" y="30" width="862" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="538" y="30" width="170" height="84" fill="#245A6B"/>
+                <text x="556" y="66" font-size="18" font-weight="700" fill="#F7F6F2" class="svg-serif">原子性</text>
+                <text x="556" y="92" font-size="12.5" fill="#CFE0DC" class="svg-mono">Atomicity</text>
+                <text x="726" y="62" font-size="15" font-weight="700" fill="#1B2B33">要么全部生效，要么彻底撤销（中途报错不留半成品）</text>
+                <text x="726" y="90" font-size="13.5" fill="#46585F">内核落点：事务状态机、WAL、abort 清理路径、SAVEPOINT 子事务栈</text>
+
+                <rect x="538" y="130" width="862" height="84" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1.2"/>
+                <rect x="538" y="130" width="170" height="84" fill="#AE8A3E"/>
+                <text x="556" y="166" font-size="18" font-weight="700" fill="#F7F6F2" class="svg-serif">一致性</text>
+                <text x="556" y="192" font-size="12.5" fill="#F5EEDB" class="svg-mono">Consistency</text>
+                <text x="726" y="162" font-size="15" font-weight="700" fill="#1B2B33">同时守住数据库声明式约束与跨行/跨表业务不变量</text>
+                <text x="726" y="190" font-size="13.5" fill="#46585F">内核落点：唯一/外键/CHECK 约束、触发器、显式锁或 Serializable</text>
+
+                <rect x="538" y="230" width="862" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="538" y="230" width="170" height="84" fill="#2E6373"/>
+                <text x="556" y="266" font-size="18" font-weight="700" fill="#F7F6F2" class="svg-serif">隔离性</text>
+                <text x="556" y="292" font-size="12.5" fill="#CFE0DC" class="svg-mono">Isolation</text>
+                <text x="726" y="262" font-size="15" font-weight="700" fill="#1B2B33">并发执行互不产生非法观察，普通读写彼此不阻塞</text>
+                <text x="726" y="290" font-size="13.5" fill="#46585F">内核落点：MVCC 快照、行锁、表锁、谓词锁（SIReadLock）、SSI</text>
+
+                <rect x="538" y="330" width="862" height="90" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="538" y="330" width="170" height="90" fill="#2F7A66"/>
+                <text x="556" y="368" font-size="18" font-weight="700" fill="#F7F6F2" class="svg-serif">持久性</text>
+                <text x="556" y="394" font-size="12.5" fill="#E4F2EC" class="svg-mono">Durability</text>
+                <text x="726" y="364" font-size="15" font-weight="700" fill="#1B2B33">提交成功后进程崩溃或断电仍可完整恢复状态</text>
+                <text x="726" y="392" font-size="13.5" fill="#46585F">内核落点：WAL、XLogFlush、pg_xact、checkpoint、同步复制确认</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">要同时兑现 ACID 四个契约，PostgreSQL 内核首先得把用户的 BEGIN / COMMIT 翻译成一套严谨的状态机。</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：doc/src/sgml/xact.sgml · ACID 内核映射</span>
+            <span class="page-num">02 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="3" data-title="事务生命周期：延迟分配 XID 与状态机">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">03 / 15 · 核心原理 3.1 · 事务生命周期（可交互步进）</div>
+          <h1 class="slide-title">用户看到事务块，内核看到状态机与延迟 XID 分配</h1>
+          <p class="slide-lead">启动事务只分配虚拟事务号 VXID；只有首次写数据库才分配全局 32 位 XID，大量只读短事务因此不消耗全局 XID 与 pg_xact 空间。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="ctrl-bar" id="s3-ctrl">
+              <span class="ctrl-label">路径选择：</span>
+              <button class="ctrl-btn active" data-s3-mode="write">写入提交路径</button>
+              <button class="ctrl-btn" data-s3-mode="readonly">只读查询路径</button>
+              <button class="ctrl-btn" data-s3-mode="abort">异常回滚路径</button>
+              <span class="ctrl-sep"></span>
+              <button class="ctrl-btn" id="s3-play">播放推演</button>
+              <button class="ctrl-btn" id="s3-step">下一步</button>
+              <button class="ctrl-btn" id="s3-reset">重置</button>
+              <span class="ctrl-status" id="s3-status">当前：步骤 1 / 5 · StartTransaction 仅分配 VXID</span>
+            </div>
+            <div class="svg-host">
+              <svg id="s3-svg" viewBox="0 0 1400 378" xmlns="http://www.w3.org/2000/svg">
+                <!-- 3 architectural strata bands -->
+                <rect x="0" y="4" width="1400" height="58" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="16" y="38" font-size="13.5" font-weight="700" fill="#245A6B">层 1 · 用户命令</text>
+                <text x="170" y="38" font-size="13.5" fill="#46585F" class="svg-mono">BEGIN / START TRANSACTION  ──  SELECT / DML / SAVEPOINT  ──  COMMIT / ROLLBACK</text>
+
+                <rect x="0" y="68" width="1400" height="54" fill="#CFE0DC" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="16" y="100" font-size="13.5" font-weight="700" fill="#1B2B33">层 2 · 主循环控制</text>
+                <text x="170" y="100" font-size="13.5" fill="#1B2B33" class="svg-mono">StartTransactionCommand()  →  执行查询  →  CommitTransactionCommand() / AbortCurrentTransaction()</text>
+
+                <rect x="0" y="128" width="1400" height="246" fill="#F1EFE9" stroke="#245A6B" stroke-width="1"/>
+                <text x="16" y="154" font-size="13.5" font-weight="700" fill="#245A6B">层 3 · 底层状态机（src/backend/access/transam/xact.c）</text>
+
+                <!-- Step 1: StartTransaction -->
+                <g id="s3-n1">
+                  <rect x="24" y="172" width="224" height="92" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+                  <text x="40" y="198" font-size="14" font-weight="700" fill="#1B2B33">1. StartTransaction()</text>
+                  <text x="40" y="220" font-size="12.5" fill="#46585F">初始化状态/资源 owner</text>
+                  <text x="40" y="240" font-size="12.5" fill="#2F7A66" font-weight="700">仅分配 VXID（不占 XID）</text>
+                </g>
+
+                <!-- Connector 1 -> 2 -->
+                <path d="M248 218 H286" fill="none" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+                <!-- Step 2: First Write Decision / AssignTransactionId -->
+                <g id="s3-n2">
+                  <rect x="292" y="172" width="248" height="92" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="308" y="198" font-size="14" font-weight="700" fill="#1B2B33">2. 首次写入触发分配</text>
+                  <text x="308" y="220" font-size="12.5" fill="#46585F" class="svg-mono">AssignTransactionId()</text>
+                  <text x="308" y="240" font-size="12.5" fill="#46585F">父先得 XID，子 XID 晚于父</text>
+                </g>
+
+                <!-- Connector 2 -> 3 -->
+                <path d="M540 218 H578" fill="none" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+                <!-- Step 3: Commit Pre-commit + WAL/pg_xact -->
+                <g id="s3-n3">
+                  <rect x="584" y="172" width="256" height="92" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="600" y="198" font-size="14" font-weight="700" fill="#1B2B33">3. 预提交与持久落盘</text>
+                  <text x="600" y="220" font-size="12.5" fill="#46585F">WAL Commit Record 刷盘</text>
+                  <text x="600" y="240" font-size="12.5" fill="#46585F">pg_xact 标记 committed</text>
+                </g>
+
+                <!-- Connector 3 -> 4 -->
+                <path d="M840 218 H878" fill="none" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+                <!-- Step 4: ProcArray Exit -->
+                <g id="s3-n4">
+                  <rect x="884" y="172" width="228" height="92" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="900" y="198" font-size="14" font-weight="700" fill="#1B2B33">4. 退出 ProcArray</text>
+                  <text x="900" y="220" font-size="12.5" fill="#46585F">其他会话不再视为活跃</text>
+                  <text x="900" y="240" font-size="12.5" fill="#46585F">修改正式对外可见</text>
+                </g>
+
+                <!-- Connector 4 -> 5 -->
+                <path d="M1112 218 H1148" fill="none" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+                <!-- Step 5: Release Locks & Resources -->
+                <g id="s3-n5">
+                  <rect x="1154" y="172" width="222" height="92" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="1170" y="198" font-size="14" font-weight="700" fill="#1B2B33">5. 释放锁与资源</text>
+                  <text x="1170" y="220" font-size="12.5" fill="#46585F">释放表锁/行锁/缓冲</text>
+                  <text x="1170" y="240" font-size="12.5" fill="#46585F">事务状态归位 IDLE</text>
+                </g>
+
+                <!-- Bottom Abort & Observation Strip -->
+                <path d="M416 264 V290 H584" fill="none" stroke="#BE653B" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arr-terra)"/>
+                <g id="s3-abort">
+                  <rect x="584" y="282" width="528" height="76" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                  <text x="600" y="308" font-size="14" font-weight="700" fill="#BE653B">回滚路径 AbortTransaction()：先释共享资源，避免阻塞他人</text>
+                  <text x="600" y="334" font-size="13" fill="#1B2B33">优先释放锁与 ProcArray 占位，随后再做本地内存与临时资源清理。</text>
+                </g>
+
+                <rect x="24" y="282" width="516" height="76" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="40" y="308" font-size="14" font-weight="700" fill="#2F7A66">观测铁律：避免无害查询意外消耗 XID</text>
+                <text x="40" y="334" font-size="13" fill="#1B2B33" class="svg-mono">用 pg_current_xact_id_if_assigned()，勿用 pg_current_xact_id()</text>
+
+                <rect x="1132" y="282" width="244" height="76" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1.2"/>
+                <text x="1148" y="308" font-size="14" font-weight="700" fill="#AE8A3E">32 位 XID 与 xid8</text>
+                <text x="1148" y="334" font-size="12.5" fill="#1B2B33">XID 会环绕；xid8 含 epoch</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">事务拿到编号后，并发读写的下一道难题是：同一时刻几十个事务都在跑，一条语句究竟该看到哪份数据？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：src/backend/access/transam/README · xact.c</span>
+            <span class="page-num">03 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="4" data-title="MVCC 快照：记录谁还在跑，不是拷贝数据">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">04 / 15 · 核心原理 3.2 · MVCC 快照（可交互演算）</div>
+          <h1 class="slide-title">快照不复制数据，而是给活跃事务拍一张「谁还在跑」名单</h1>
+          <p class="slide-lead">GetSnapshotData() 扫描 ProcArray 算出 xmin、xmax 与活跃数组 xip[]；任何行版本的可见性，都靠这把三段标尺快速裁决。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="ctrl-bar">
+              <span class="ctrl-label">快照场景：</span>
+              <button class="ctrl-btn active" data-s4-preset="normal">标准并发（xmin=102, xmax=108）</button>
+              <button class="ctrl-btn" data-s4-preset="longtx">长事务钉死（xmin=95, xmax=108）</button>
+              <button class="ctrl-btn" data-s4-preset="overflow">子事务溢出（suboverflowed=true）</button>
+              <span class="ctrl-sep"></span>
+              <span class="ctrl-label">测试 XID：</span>
+              <input class="ctrl-input" id="s4-xid-input" type="number" value="105" min="80" max="120">
+              <button class="ctrl-btn accent" id="s4-eval">判定</button>
+              <span class="ctrl-status" id="s4-result">XID 105 ∈ xip[] → 仍在运行（不可见）</span>
+            </div>
+            <div class="svg-host">
+              <svg id="s4-svg" viewBox="0 0 1400 378" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top: SnapshotData struct box -->
+                <rect x="0" y="6" width="1400" height="78" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="32" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">struct SnapshotData（src/include/utils/snapshot.h）</text>
+                <text x="18" y="62" font-size="14" fill="#1B2B33" class="svg-mono" id="s4-struct-line">xmin = 102  |  xmax = 108  |  xip[] = [102, 105]  |  suboverflowed = false  |  curcid = 2</text>
+
+                <!-- Middle: XID Axis 3 Zones -->
+                <text x="0" y="114" font-size="13.5" font-weight="700" fill="#1B2B33">XID 三段判定标尺（点击「判定」或切换场景实时演算）</text>
+
+                <!-- Zone 1: < xmin -->
+                <rect id="s4-z1" x="0" y="128" width="410" height="118" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="18" y="156" font-size="16" font-weight="700" fill="#2F7A66">区间 A：XID &lt; xmin</text>
+                <text x="18" y="184" font-size="13.5" fill="#1B2B33">所有早于 xmin 的事务必然已结束</text>
+                <text x="18" y="208" font-size="13.5" fill="#46585F">快速路径：若已提交则对本快照可见</text>
+                <text x="18" y="232" font-size="12.5" fill="#2F7A66" class="svg-mono" id="s4-z1-range">范围：XID &lt; 102</text>
+
+                <!-- Zone 2: [xmin, xmax) -->
+                <rect id="s4-z2" x="430" y="128" width="540" height="118" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1.5"/>
+                <text x="448" y="156" font-size="16" font-weight="700" fill="#AE8A3E">区间 B：xmin ≤ XID &lt; xmax（排查 xip / subxip）</text>
+                <text x="448" y="184" font-size="13.5" fill="#1B2B33" id="s4-z2-desc">在 xip[] 中 → 快照时仍在运行（不可见）；不在 → 已结束</text>
+                <text x="448" y="208" font-size="13.5" fill="#46585F" id="s4-z2-sub">子事务未溢出：直接查 subxip[] 即可完成判定</text>
+                <text x="448" y="232" font-size="12.5" fill="#AE8A3E" class="svg-mono" id="s4-z2-range">范围：102 ≤ XID &lt; 108 · 活跃 xip = [102, 105]</text>
+
+                <!-- Zone 3: >= xmax -->
+                <rect id="s4-z3" x="990" y="128" width="410" height="118" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="1008" y="156" font-size="16" font-weight="700" fill="#BE653B">区间 C：XID ≥ xmax</text>
+                <text x="1008" y="184" font-size="13.5" fill="#1B2B33">快照之后才分配的「未来事务」</text>
+                <text x="1008" y="208" font-size="13.5" fill="#46585F">一律不可见（即便它随后很快提交）</text>
+                <text x="1008" y="232" font-size="12.5" fill="#BE653B" class="svg-mono" id="s4-z3-range">范围：XID ≥ 108</text>
+
+                <!-- Bottom: Verdict & ProcArray source -->
+                <rect x="0" y="268" width="880" height="98" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="296" font-size="14" font-weight="700" fill="#245A6B">当前裁决追踪</text>
+                <text x="18" y="324" font-size="15" font-weight="700" fill="#1B2B33" id="s4-trace-main">测试 XID = 105 → 落入区间 B [102, 108) → 命中活跃数组 xip[] → 判定不可见</text>
+                <text x="18" y="350" font-size="13" fill="#46585F" id="s4-trace-sub">读不阻塞写、写不阻塞读：读者只需比对快照数组，无需对行加共享读锁。</text>
+
+                <rect x="900" y="268" width="500" height="98" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="918" y="296" font-size="14" font-weight="700" fill="#BE653B">suboverflowed 性能告警</text>
+                <text x="918" y="324" font-size="13.5" fill="#1B2B33">若子事务数组溢出，快照无法直接识别 subxid，</text>
+                <text x="918" y="348" font-size="13.5" fill="#46585F">必须额外查 pg_subtrans 追溯顶层 XID，代价陡增。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">有了快照这把三段标尺，内核还要逐行拆解堆表里的元组头，才能决定「这一行版本到底给不给你看」。</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：procarray.c · snapmgr.c · snapshot.h</span>
+            <span class="page-num">04 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="5" data-title="行版本可见性：HeapTupleSatisfiesMVCC 判定树">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">05 / 15 · 核心原理 3.3 · 行版本可见性（可交互判定）</div>
+          <h1 class="slide-title">一行不是一个版本：UPDATE 生成新版本，旧版本留给旧快照</h1>
+          <p class="slide-lead">Heap 表更新不原地覆盖，而是用元组头 xmin、xmax 与 hint bits 记录生老病死；HeapTupleSatisfiesMVCC() 按 5 条规则裁决可见性。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="ctrl-bar">
+              <span class="ctrl-label">行版本状态：</span>
+              <button class="ctrl-btn active" data-s5-case="0">① xmin 未提交/在跑</button>
+              <button class="ctrl-btn" data-s5-case="1">② xmin 已提交，xmax 无效</button>
+              <button class="ctrl-btn" data-s5-case="2">③ xmax 仅锁行</button>
+              <button class="ctrl-btn" data-s5-case="3">④ xmax 已提交且可见</button>
+              <button class="ctrl-btn" data-s5-case="4">⑤ xmax 仍在运行</button>
+              <span class="ctrl-status" id="s5-verdict">结论：不可见</span>
+            </div>
+            <div class="svg-host">
+              <svg id="s5-svg" viewBox="0 0 1400 378" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: Heap Tuple Header Anatomy -->
+                <rect x="0" y="6" width="440" height="366" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="34" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">HEAP 元组版本链（非原地覆盖）</text>
+
+                <!-- Version 1 -->
+                <rect x="18" y="50" width="404" height="114" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="34" y="76" font-size="14.5" font-weight="700" fill="#1B2B33">旧版本 Tuple v1（stock = 10）</text>
+                <rect x="28" y="88" width="150" height="30" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <text x="36" y="108" font-size="11.5" fill="#245A6B" class="svg-mono" id="s5-xmin-box">xmin = 105</text>
+                <rect x="184" y="88" width="150" height="30" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="192" y="108" font-size="11.5" fill="#BE653B" class="svg-mono" id="s5-xmax-box">xmax = 0</text>
+                <rect x="340" y="88" width="72" height="30" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1"/>
+                <text x="348" y="108" font-size="11.5" fill="#AE8A3E" class="svg-mono">hints</text>
+                <text x="34" y="146" font-size="12.5" fill="#46585F">hint bits 缓存提交/回滚态，减少反复查 pg_xact</text>
+
+                <!-- Vertical arrow v1 -> v2 -->
+                <path d="M220 164 V194" fill="none" stroke="#BE653B" stroke-width="1.6" marker-end="url(#arr-terra)"/>
+                <text x="234" y="184" font-size="12" fill="#BE653B">UPDATE 产生新版本</text>
+
+                <!-- Version 2 -->
+                <rect x="18" y="200" width="404" height="76" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="34" y="226" font-size="14.5" font-weight="700" fill="#2F7A66">新版本 Tuple v2（stock = 9）</text>
+                <text x="34" y="254" font-size="13" fill="#1B2B33" class="svg-mono">xmin = 106  |  xmax = 0 (未删除/更新)</text>
+
+                <!-- Explanation note -->
+                <rect x="18" y="292" width="404" height="64" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="34" y="318" font-size="13.5" font-weight="700" fill="#BE653B">膨胀的根源</text>
+                <text x="34" y="342" font-size="12.5" fill="#1B2B33">v1 提交后不能立刻删除，因旧快照可能仍需读取它。</text>
+
+                <!-- Right: Decision Flowchart -->
+                <text x="470" y="24" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">HeapTupleSatisfiesMVCC() 正交判定流</text>
+
+                <!-- Node A: Check xmin -->
+                <rect id="s5-qa" x="470" y="40" width="320" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+                <text x="488" y="68" font-size="15" font-weight="700" fill="#1B2B33">步骤 1：检查插入者 xmin</text>
+                <text x="488" y="94" font-size="13" fill="#46585F">是否已提交且对当前快照可见？</text>
+
+                <!-- Branch No -> Invisible -->
+                <path id="s5-p-no1" d="M630 124 V246 H470" fill="none" stroke="#BE653B" stroke-width="2.4" marker-end="url(#arr-terra)"/>
+                <text x="640" y="168" font-size="13" font-weight="700" fill="#BE653B">否（未提交或在跑）</text>
+
+                <!-- Branch Yes -> Node B -->
+                <path id="s5-p-yes1" d="M790 82 H856" fill="none" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+                <text x="798" y="72" font-size="12.5" font-weight="700" fill="#2F7A66">是</text>
+
+                <rect id="s5-qb" x="862" y="40" width="538" height="84" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="880" y="68" font-size="15" font-weight="700" fill="#1B2B33">步骤 2：检查删除/更新者 xmax</text>
+                <text x="880" y="94" font-size="13" fill="#46585F">无效 / 仅锁行 / 已提交且可见 / 快照时仍在运行？</text>
+
+                <!-- Vertical stem from Node B -->
+                <path d="M1130 124 V162" fill="none" stroke="#245A6B" stroke-width="1.6"/>
+                <path d="M960 162 H1300" fill="none" stroke="#245A6B" stroke-width="1.6"/>
+                <path id="s5-p-vis" d="M960 162 V204" fill="none" stroke="#2F7A66" stroke-width="1.6" marker-end="url(#arr-teal)"/>
+                <path id="s5-p-inv2" d="M1300 162 V204" fill="none" stroke="#BE653B" stroke-width="1.6" marker-end="url(#arr-terra)"/>
+
+                <!-- Result boxes -->
+                <rect id="s5-res-inv1" x="470" y="210" width="260" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+                <text x="488" y="240" font-size="16" font-weight="700" fill="#BE653B">不可见（未诞生）</text>
+                <text x="488" y="264" font-size="12.5" fill="#46585F">情况 ①：xmin 未提交或在跑</text>
+
+                <rect id="s5-res-vis" x="760" y="210" width="370" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="778" y="240" font-size="16" font-weight="700" fill="#2F7A66">可见（对该快照有效）</text>
+                <text x="778" y="264" font-size="12.5" fill="#46585F">情况 ② xmax 无效 · ③ 仅锁行 · ⑤ xmax 仍在运行</text>
+
+                <rect id="s5-res-inv2" x="1156" y="210" width="244" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="1174" y="240" font-size="16" font-weight="700" fill="#BE653B">不可见（已消亡）</text>
+                <text x="1174" y="264" font-size="12.5" fill="#46585F">情况 ④：xmax 已提交可见</text>
+
+                <!-- Dynamic Detail Banner -->
+                <rect x="470" y="302" width="930" height="70" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="488" y="330" font-size="15" font-weight="700" fill="#1B2B33" id="s5-detail-title">情况 ①：xmin 未提交或在快照中仍运行 → 当前快照不可见</text>
+                <text x="488" y="356" font-size="13.5" fill="#46585F" id="s5-detail-sub">PostgreSQL 绝不产生脏读：未提交的插入或更新对其他事务完全隐身。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">同一套可见性规则，仅仅改变「什么时候取快照」，就会在隔离级别上分化出截然不同的并发行为。</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：src/backend/access/heap/heapam_visibility.c</span>
+            <span class="page-num">05 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="6" data-title="隔离级别分界：Read Committed 与 Repeatable Read">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">06 / 15 · 核心原理 3.4 · 隔离级别快照边界（可交互时间轴）</div>
+          <h1 class="slide-title">快照边界决定你会看到什么：语句级刷新 vs 事务级定格</h1>
+          <p class="slide-lead">PostgreSQL 内部实质实现三档隔离级别（READ UNCOMMITTED 按 READ COMMITTED 处理）；关键分水岭在于 GetTransactionSnapshot() 是否复用首份快照。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="ctrl-bar">
+              <span class="ctrl-label">隔离级别：</span>
+              <button class="ctrl-btn active" data-s6-iso="rc">Read Committed（每句新快照）</button>
+              <button class="ctrl-btn" data-s6-iso="rr">Repeatable Read（事务首句快照）</button>
+              <span class="ctrl-sep"></span>
+              <button class="ctrl-btn" id="s6-play">播放双会话交错</button>
+              <button class="ctrl-btn" id="s6-step">下一步</button>
+              <button class="ctrl-btn" id="s6-reset">重置</button>
+              <span class="ctrl-status" id="s6-status">初始值 v = 10 · 等待执行</span>
+            </div>
+            <div class="svg-host">
+              <svg id="s6-svg" viewBox="0 0 1400 378" xmlns="http://www.w3.org/2000/svg">
+                <!-- Timeline Header -->
+                <rect x="0" y="6" width="1400" height="232" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <!-- Lanes -->
+                <line x1="150" y1="6" x2="150" y2="238" stroke="#D9D5CB" stroke-width="1"/>
+                <line x1="0" y1="122" x2="1400" y2="122" stroke="#D9D5CB" stroke-width="1" stroke-dasharray="4 4"/>
+                <text x="20" y="68" font-size="16" font-weight="700" fill="#245A6B">会话 A</text>
+                <text x="20" y="92" font-size="12.5" fill="#46585F" id="s6-lane-label">READ COMMITTED</text>
+                <text x="20" y="182" font-size="16" font-weight="700" fill="#BE653B">会话 B</text>
+                <text x="20" y="206" font-size="12.5" fill="#46585F">并发写入提交</text>
+
+                <!-- Step 1: A SELECT 1 -->
+                <g id="s6-b1">
+                  <rect x="180" y="26" width="270" height="76" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+                  <text x="196" y="52" font-size="13.5" font-weight="700" fill="#1B2B33" class="svg-mono">T1: SELECT v FROM tx_demo</text>
+                  <text x="196" y="74" font-size="12.5" fill="#245A6B">调用 GetSnapshotData() → S1</text>
+                  <text x="196" y="94" font-size="13" font-weight="700" fill="#2F7A66">读到 v = 10</text>
+                </g>
+
+                <!-- Step 2: B UPDATE + COMMIT -->
+                <g id="s6-b2">
+                  <rect x="500" y="142" width="320" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="516" y="168" font-size="13.5" font-weight="700" fill="#1B2B33" class="svg-mono">T2: UPDATE tx_demo SET v = 20</text>
+                  <text x="516" y="190" font-size="13" fill="#BE653B" class="svg-mono">COMMIT;（新版本已提交）</text>
+                  <text x="516" y="210" font-size="12" fill="#46585F">生成元组 v2（xmin = XID_B）</text>
+                </g>
+
+                <!-- Step 3: A SELECT 2 -->
+                <g id="s6-b3">
+                  <rect x="880" y="26" width="490" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="896" y="52" font-size="13.5" font-weight="700" fill="#1B2B33" class="svg-mono">T3: 再次 SELECT v FROM tx_demo</text>
+                  <text x="896" y="74" font-size="12.5" fill="#46585F" id="s6-b3-snap">重新取快照 S2（已包含会话 B 提交）</text>
+                  <text x="896" y="94" font-size="13.5" font-weight="700" fill="#BE653B" id="s6-b3-val">结果：读到 v = 20（同事务两次读结果不同）</text>
+                </g>
+
+                <!-- Orthogonal timeline arrows -->
+                <path d="M450 64 H476 V180 H496" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+                <path d="M820 180 H850 V64 H876" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+
+                <!-- Bottom: 3-tier comparison strip -->
+                <rect x="0" y="254" width="454" height="118" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="16" y="280" font-size="15" font-weight="700" fill="#245A6B">Read Committed（默认）</text>
+                <text x="16" y="306" font-size="13" fill="#1B2B33">• 每条语句取新快照，成本最低</text>
+                <text x="16" y="330" font-size="13" fill="#1B2B33">• 写冲突：等待后重查新版本与 WHERE</text>
+                <text x="16" y="354" font-size="13" fill="#BE653B">• 风险：复杂条件更新可能观察不一致</text>
+
+                <rect x="472" y="254" width="454" height="118" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1.2"/>
+                <text x="488" y="280" font-size="15" font-weight="700" fill="#AE8A3E">Repeatable Read（Snapshot Isolation）</text>
+                <text x="488" y="306" font-size="13" fill="#1B2B33">• 首条非控制语句取快照，PG 中无幻读</text>
+                <text x="488" y="330" font-size="13" fill="#1B2B33">• 写冲突：可能报 concurrent update 错误</text>
+                <text x="488" y="354" font-size="13" fill="#BE653B">• 风险：仍可能发生写偏斜等串行化异常</text>
+
+                <rect x="944" y="254" width="456" height="118" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="960" y="280" font-size="15" font-weight="700" fill="#2F7A66">Serializable（SI + SSI）</text>
+                <text x="960" y="306" font-size="13" fill="#1B2B33">• 事务快照 + 谓词锁监控 rw-conflict</text>
+                <text x="960" y="330" font-size="13" fill="#1B2B33">• 成功提交结果必等价于某个串行顺序</text>
+                <text x="960" y="354" font-size="13" fill="#BE653B">• 前提：应用必须捕获 40001 完整重试</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">既然 Repeatable Read 已经定格了整场事务的快照，为什么还会出现「两位医生同时请假」的写偏斜异常？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：doc/src/sgml/mvcc.sgml · snapmgr.c IsolationUsesXactSnapshot()</span>
+            <span class="page-num">06 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="7" data-title="Serializable 与 SSI：捕捉 rw-conflict 危险结构">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">07 / 15 · 核心原理 3.5 · Serializable 与 SSI（可交互演示）</div>
+          <h1 class="slide-title">Serializable 不是加大锁，而是用 SSI 拦截危险结构</h1>
+          <p class="slide-lead">PostgreSQL 不采用传统严格两阶段锁，而是在快照隔离上挂 SIReadLock 追踪读写反依赖，发现 Tin → Tpivot → Tout 危险结构即回滚。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="ctrl-bar">
+              <span class="ctrl-label">写偏斜演练（值班医生 ≥ 1 人）：</span>
+              <button class="ctrl-btn accent" id="s7-play">播放冲突检测</button>
+              <button class="ctrl-btn" id="s7-step">下一步</button>
+              <button class="ctrl-btn" id="s7-reset">重置</button>
+              <span class="ctrl-status" id="s7-status">初始状态：医生 a、b 均在班（on_call = true）</span>
+            </div>
+            <div class="svg-host">
+              <svg id="s7-svg" viewBox="0 0 1400 378" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: Duty table concurrent execution -->
+                <rect x="0" y="6" width="760" height="366" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="34" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">场景：医生排班表 duty（规则：至少留 1 人 on_call = true）</text>
+
+                <!-- Session A box -->
+                <rect id="s7-a1" x="18" y="52" width="346" height="84" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="34" y="78" font-size="14" font-weight="700" fill="#245A6B">事务 A（医生 a 请假）</text>
+                <text x="34" y="102" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT count(*) WHERE on_call → 2</text>
+                <text x="34" y="124" font-size="12.5" fill="#2F7A66">挂上 SIReadLock（不阻塞任何写）</text>
+
+                <!-- Session B box -->
+                <rect id="s7-b1" x="396" y="52" width="346" height="84" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="412" y="78" font-size="14" font-weight="700" fill="#245A6B">事务 B（医生 b 请假）</text>
+                <text x="412" y="102" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT count(*) WHERE on_call → 2</text>
+                <text x="412" y="124" font-size="12.5" fill="#2F7A66">挂上 SIReadLock（不阻塞任何写）</text>
+
+                <!-- Vertical arrows -->
+                <path d="M191 136 V164" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+                <path d="M569 136 V164" fill="none" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-indigo)"/>
+
+                <!-- Updates -->
+                <rect id="s7-a2" x="18" y="170" width="346" height="82" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="34" y="196" font-size="13" font-weight="700" fill="#1B2B33" class="svg-mono">UPDATE duty SET on_call=false</text>
+                <text x="34" y="216" font-size="13" fill="#1B2B33" class="svg-mono">  WHERE doctor = 'a';  COMMIT;</text>
+                <text x="34" y="240" font-size="12.5" fill="#BE653B">写入命中 B 的 SIReadLock → 产生 B ─rw→ A</text>
+
+                <rect id="s7-b2" x="396" y="170" width="346" height="82" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="412" y="196" font-size="13" font-weight="700" fill="#1B2B33" class="svg-mono">UPDATE duty SET on_call=false</text>
+                <text x="412" y="216" font-size="13" fill="#1B2B33" class="svg-mono">  WHERE doctor = 'b';  COMMIT;</text>
+                <text x="412" y="240" font-size="12.5" fill="#BE653B">写入命中 A 的 SIReadLock → 产生 A ─rw→ B</text>
+
+                <!-- Bottom outcome banner -->
+                <rect id="s7-outcome" x="18" y="272" width="724" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="34" y="300" font-size="15" font-weight="700" fill="#1B2B33" id="s7-out-title">Repeatable Read 会让两笔更新双双成功 → 无人值班（写偏斜）</text>
+                <text x="34" y="330" font-size="13.5" fill="#46585F" id="s7-out-sub">点击「播放冲突检测」观察 Serializable 下的 SSI 拦截与 40001 完整重试。</text>
+
+                <!-- Right: SSI Dangerous Structure Graph -->
+                <rect x="784" y="6" width="616" height="224" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="804" y="34" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">SSI 危险结构（src/backend/storage/lmgr/README-SSI）</text>
+
+                <rect id="s7-g1" x="808" y="62" width="144" height="66" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="854" y="92" font-size="15" font-weight="700" fill="#1B2B33" class="svg-mono">T_in</text>
+                <text x="826" y="114" font-size="12" fill="#46585F">先读旧快照</text>
+
+                <path id="s7-rw1" d="M952 95 H1016" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+                <text x="960" y="84" font-size="11.5" font-weight="700" fill="#BE653B" class="svg-mono">rw-dep</text>
+
+                <rect id="s7-g2" x="1022" y="62" width="144" height="66" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1.5"/>
+                <text x="1054" y="92" font-size="15" font-weight="700" fill="#1B2B33" class="svg-mono">T_pivot</text>
+                <text x="1040" y="114" font-size="12" fill="#46585F">中间枢轴事务</text>
+
+                <path id="s7-rw2" d="M1166 95 H1230" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+                <text x="1174" y="84" font-size="11.5" font-weight="700" fill="#BE653B" class="svg-mono">rw-dep</text>
+
+                <rect id="s7-g3" x="1236" y="62" width="144" height="66" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="1278" y="92" font-size="15" font-weight="700" fill="#1B2B33" class="svg-mono">T_out</text>
+                <text x="1254" y="114" font-size="12" fill="#46585F">最先提交者</text>
+
+                <text x="804" y="164" font-size="13.5" fill="#1B2B33">一旦出现两个相邻 rw-conflict 边且 T_out 先提交，</text>
+                <text x="804" y="188" font-size="13.5" fill="#1B2B33">即回滚其中一个事务并抛出 SQLSTATE 40001。</text>
+                <text x="804" y="214" font-size="12.5" fill="#46585F">注意：应用必须从 BEGIN 前完整重试，绝不能只重试最后一条 SQL。</text>
+
+                <!-- Bottom Right: DEFERRABLE tip -->
+                <rect x="784" y="246" width="616" height="126" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="804" y="274" font-size="15" font-weight="700" fill="#2F7A66">长报表专用：SERIALIZABLE READ ONLY DEFERRABLE</text>
+                <text x="804" y="302" font-size="13.5" fill="#1B2B33">• 启动时先等待一个「安全快照」，随后执行零 SSI 冲突开销。</text>
+                <text x="804" y="328" font-size="13.5" fill="#1B2B33">• 避免长报表被 40001 取消，也不必退回加表锁。</text>
+                <text x="804" y="354" font-size="13" fill="#46585F">工程权衡：相比显式表锁/大量 FOR UPDATE，SSI 反而可能减少阻塞。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">隔离性解决了并发读写的正确性，但提交那一刻如果主机突然断电，PostgreSQL 凭什么证明「这笔交易真的落盘了」？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：src/backend/storage/lmgr/README-SSI · predicate.c</span>
+            <span class="page-num">07 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="8" data-title="提交与持久化路径：WAL 先行，pg_xact 随后">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">08 / 15 · 核心原理 3.6 · 提交与持久化路径（可交互模式对比）</div>
+          <h1 class="slide-title">提交不是改个标记位：WAL 先行、pg_xact 随后、最后对外可见</h1>
+          <p class="slide-lead">RecordTransactionCommit() 必须让崩溃恢复能证明事务已提交；临界区会延迟 checkpoint，避免 WAL 与 pg_xact 出现不一致窗口。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="ctrl-bar">
+              <span class="ctrl-label">synchronous_commit 模式：</span>
+              <button class="ctrl-btn active" data-s8-mode="on">on（本地 WAL 刷盘）</button>
+              <button class="ctrl-btn" data-s8-mode="off">off（异步提交）</button>
+              <button class="ctrl-btn" data-s8-mode="remote_apply">remote_apply（备库回放确认）</button>
+              <span class="ctrl-sep"></span>
+              <button class="ctrl-btn" id="s8-play">播放提交流水线</button>
+              <button class="ctrl-btn" id="s8-reset">重置</button>
+              <span class="ctrl-status" id="s8-status">模式：on · 本地 WAL 刷盘后返回成功</span>
+            </div>
+            <div class="svg-host">
+              <svg id="s8-svg" viewBox="0 0 1400 378" xmlns="http://www.w3.org/2000/svg">
+                <!-- Critical Section Enclosure -->
+                <rect x="234" y="10" width="698" height="176" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2" stroke-dasharray="6 4"/>
+                <text x="250" y="34" font-size="13" font-weight="700" fill="#BE653B" class="svg-mono">COMMIT CRITICAL SECTION（延迟 checkpoint，杜绝 WAL 已提交但 pg_xact 未落盘窗口）</text>
+
+                <!-- 6 Pipeline Steps -->
+                <g id="s8-p1">
+                  <rect x="0" y="54" width="204" height="114" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+                  <text x="16" y="82" font-size="14" font-weight="700" fill="#1B2B33">1. 收集提交信息</text>
+                  <text x="16" y="106" font-size="12.5" fill="#46585F">待删文件、子事务、</text>
+                  <text x="16" y="126" font-size="12.5" fill="#46585F">缓存失效消息汇总</text>
+                </g>
+                <path d="M204 111 H244" fill="none" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <g id="s8-p2">
+                  <rect x="250" y="54" width="204" height="114" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="266" y="82" font-size="14" font-weight="700" fill="#1B2B33">2. 写 WAL 提交记录</text>
+                  <text x="266" y="106" font-size="12" fill="#46585F" class="svg-mono">XactLogCommitRecord()</text>
+                  <text x="266" y="128" font-size="12.5" fill="#46585F">崩溃恢复的唯一真凭</text>
+                </g>
+                <path d="M454 111 H484" fill="none" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <g id="s8-p3">
+                  <rect x="490" y="54" width="204" height="114" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="506" y="82" font-size="14" font-weight="700" fill="#1B2B33">3. WAL 刷盘判定</text>
+                  <text x="506" y="106" font-size="12" fill="#46585F" class="svg-mono" id="s8-p3-sub">XLogFlush() 同步刷盘</text>
+                  <text x="506" y="128" font-size="12.5" fill="#BE653B" id="s8-p3-note">等待落盘再继续</text>
+                </g>
+                <path d="M694 111 H714" fill="none" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <g id="s8-p4">
+                  <rect x="720" y="54" width="198" height="114" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="736" y="82" font-size="14" font-weight="700" fill="#1B2B33">4. 更新 pg_xact</text>
+                  <text x="736" y="106" font-size="12" fill="#46585F" class="svg-mono" id="s8-p4-sub">CommitTree()</text>
+                  <text x="736" y="128" font-size="12.5" fill="#46585F">主/子事务置 committed</text>
+                </g>
+                <path d="M918 111 H954" fill="none" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <g id="s8-p5">
+                  <rect x="960" y="54" width="204" height="114" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="976" y="82" font-size="14" font-weight="700" fill="#1B2B33">5. 同步复制等待</text>
+                  <text x="976" y="106" font-size="12" fill="#46585F" class="svg-mono">SyncRepWaitForLSN()</text>
+                  <text x="976" y="128" font-size="12.5" fill="#46585F" id="s8-p5-note">按需等待备库确认</text>
+                </g>
+                <path d="M1164 111 H1190" fill="none" stroke="#245A6B" stroke-width="1.6" marker-end="url(#arr-indigo)"/>
+
+                <g id="s8-p6">
+                  <rect x="1196" y="54" width="204" height="114" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <text x="1212" y="82" font-size="14" font-weight="700" fill="#1B2B33">6. 退出 ProcArray</text>
+                  <text x="1212" y="106" font-size="12.5" fill="#46585F">释放锁与内存资源</text>
+                  <text x="1212" y="128" font-size="12.5" fill="#2F7A66">向客户端返回 COMMIT</text>
+                </g>
+
+                <!-- Bottom: Mode Semantic Breakdown -->
+                <rect x="0" y="210" width="900" height="158" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="238" font-size="15" font-weight="700" fill="#245A6B" id="s8-sem-title">当前模式语义：synchronous_commit = on</text>
+                <text x="18" y="270" font-size="14" fill="#1B2B33" id="s8-sem-l1">• 持久性保障：本地 WAL 刷盘完成后才向客户端返回成功，单机崩溃不丢已确认交易。</text>
+                <text x="18" y="300" font-size="14" fill="#1B2B33" id="s8-sem-l2">• 一致性保障：WAL 永远先于数据页与 pg_xact，故障重启可按 WAL 重放恢复。</text>
+                <text x="18" y="330" font-size="14" fill="#46585F" id="s8-sem-l3">• 延迟代价：每次写事务提交都包含一次本地 WAL 刷盘等待。</text>
+
+                <rect x="920" y="210" width="480" height="158" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="938" y="238" font-size="15" font-weight="700" fill="#BE653B">澄清对 off 模式的常见误解</text>
+                <text x="938" y="270" font-size="13.5" fill="#1B2B33">synchronous_commit = off 不会破坏数据库结构一致性！</text>
+                <text x="938" y="298" font-size="13.5" fill="#1B2B33">它真正的风险是：崩溃后可能丢失少量「已返回成功」</text>
+                <text x="938" y="322" font-size="13.5" fill="#1B2B33">的最近事务，库内状态等价于它们干净回滚。</text>
+                <text x="938" y="350" font-size="12.5" fill="#BE653B">→ 适用于可重放事件，绝不用于核心账务。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">提交状态写进了 pg_xact，但如果一个事务里套了成百上千个 SAVEPOINT 或异常捕获，内核如何追踪它们的父子归属？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：xact.c RecordTransactionCommit() · doc/src/sgml/config.sgml</span>
+            <span class="page-num">08 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 ==================== -->
+        <section class="slide" data-slide="9" data-title="pg_xact 与 pg_subtrans：2-bit 账本与 64 子事务红线">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">09 / 15 · 核心原理 3.7 · 提交账本与子事务树</div>
+          <h1 class="slide-title">pg_xact 是 2-bit 位图账本，子事务超 64 个将击穿缓存</h1>
+          <p class="slide-lead">clog.c 用每事务 2 bit 紧凑记录提交态，subtrans.c 维护父子映射；但 PGPROC 仅缓存 64 个 subxid，循环里滥用 EXCEPTION 不是免费控制流。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Upper Half: pg_xact (CLOG) Bit Layout -->
+                <rect x="0" y="6" width="1400" height="176" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="34" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">上层账本：pg_xact / CLOG（src/backend/access/transam/clog.c）</text>
+
+                <!-- 1 Byte = 4 Transactions visual -->
+                <rect x="18" y="52" width="150" height="62" fill="#245A6B" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="34" y="78" font-size="13.5" font-weight="700" fill="#F7F6F2" class="svg-mono">XID n · 2 bit</text>
+                <text x="34" y="100" font-size="12" fill="#CFE0DC">IN_PROGRESS</text>
+
+                <rect x="168" y="52" width="150" height="62" fill="#2F7A66" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="184" y="78" font-size="13.5" font-weight="700" fill="#F7F6F2" class="svg-mono">XID n+1 · 2 bit</text>
+                <text x="184" y="100" font-size="12" fill="#E4F2EC">COMMITTED</text>
+
+                <rect x="318" y="52" width="150" height="62" fill="#BE653B" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="334" y="78" font-size="13.5" font-weight="700" fill="#F7F6F2" class="svg-mono">XID n+2 · 2 bit</text>
+                <text x="334" y="100" font-size="12" fill="#F7E9DE">ABORTED</text>
+
+                <rect x="468" y="52" width="150" height="62" fill="#AE8A3E" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="484" y="78" font-size="13.5" font-weight="700" fill="#F7F6F2" class="svg-mono">XID n+3 · 2 bit</text>
+                <text x="484" y="100" font-size="12" fill="#F5EEDB">SUB_COMMITTED</text>
+
+                <text x="18" y="142" font-size="13" fill="#1B2B33" class="svg-mono">1 Byte = 4 个事务状态  │  1 个 BLCKSZ 页面 = BLCKSZ × 4 个事务状态</text>
+                <text x="18" y="166" font-size="13" fill="#46585F">提交时调用 TransactionIdSetTreeStatus() 将顶层事务与所有子事务树状态一并落位。</text>
+
+                <!-- Right stats box inside upper -->
+                <rect x="650" y="52" width="730" height="114" fill="#FFFFFF" stroke="#245A6B" stroke-width="1"/>
+                <text x="668" y="80" font-size="14.5" font-weight="700" fill="#245A6B">为什么子 XID 必须晚于父 XID 分配？</text>
+                <text x="668" y="108" font-size="13.5" fill="#1B2B33">AssignTransactionId() 保证：若子事务申请 XID，父事务必须先获得 XID。</text>
+                <text x="668" y="134" font-size="13.5" fill="#46585F">这确保扫描快照与可见性判断时，父事务编号始终小于子事务，避免状态树错乱。</text>
+
+                <!-- Lower Half: PGPROC 64-slot cache & pg_subtrans overflow -->
+                <rect x="0" y="200" width="1400" height="224" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="18" y="228" font-size="14" font-weight="700" fill="#BE653B" class="svg-mono">下层红线：PGPROC 子事务缓存上限与 pg_subtrans 穿透（proc.h / subtrans.c）</text>
+
+                <!-- Fast Path <= 64 -->
+                <rect x="18" y="246" width="520" height="156" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="36" y="274" font-size="15" font-weight="700" fill="#2F7A66">安全区：子事务数 ≤ 64（PGPROC_MAX_CACHED_SUBXIDS）</text>
+                <text x="36" y="304" font-size="13.5" fill="#1B2B33">• 所有活跃 subxid 完整缓存在 PGPROC 数组中。</text>
+                <text x="36" y="330" font-size="13.5" fill="#1B2B33">• GetSnapshotData() 直接拷贝进快照 subxip[]。</text>
+                <text x="36" y="356" font-size="13.5" fill="#1B2B33">• 可见性判断在内存快照内直接闭环，不惊动 pg_subtrans。</text>
+                <text x="36" y="384" font-size="12.5" fill="#2F7A66" class="svg-mono">suboverflowed = false</text>
+
+                <!-- Orthogonal arrow to overflow -->
+                <path d="M538 324 H606" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+                <text x="546" y="314" font-size="12" font-weight="700" fill="#BE653B">&gt; 64 溢出</text>
+
+                <!-- Slow Path > 64 -->
+                <rect x="612" y="246" width="770" height="156" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="630" y="274" font-size="15" font-weight="700" fill="#BE653B">溢出区：suboverflowed = true → 穿透查询 pg_subtrans</text>
+                <text x="630" y="304" font-size="13.5" fill="#1B2B33">• 快照装不下完整子事务名单，每次可见性判定被迫查 pg_subtrans 逐级找父 XID。</text>
+                <text x="630" y="330" font-size="13.5" fill="#1B2B33">• pg_subtrans 只保留当前打开事务所需映射，高并发下易成 SLRU 争用热点。</text>
+                <text x="630" y="358" font-size="14" font-weight="700" fill="#1B2B33">工程禁令：勿在单事务内建上千 SAVEPOINT，勿在 PL/pgSQL 高频循环里用 EXCEPTION 当普通分支！</text>
+                <text x="630" y="384" font-size="12.5" fill="#BE653B" class="svg-mono">src/include/storage/proc.h: #define PGPROC_MAX_CACHED_SUBXIDS 64</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">写事务不断消耗 32 位 XID，旧行版本不断在堆表堆积；接下来最关键的问题是：谁决定这些旧版本何时能被清理？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：clog.c · subtrans.c · src/include/storage/proc.h</span>
+            <span class="page-num">09 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 (INTERACTIVE) ==================== -->
+        <section class="slide" data-slide="10" data-title="VACUUM 边界与 XID 冻结：谁钉住了 OldestXmin">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">10 / 15 · 核心原理 3.8 · VACUUM 与 XID 冻结（可交互边界推演）</div>
+          <h1 class="slide-title">事务越长，垃圾越久：四类「钉子户」如何拖垮清理与冻结</h1>
+          <p class="slide-lead">HeapTupleSatisfiesVacuum() 以 OldestXmin 为红线；只要有任意快照、prepared 事务或复制槽钉住边界，旧版本就只能滞留膨胀并威胁 XID 环绕。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="ctrl-bar">
+              <span class="ctrl-label">勾选在线「钉子户」：</span>
+              <label class="ctrl-check"><input type="checkbox" class="s10-chk" value="idle" checked> idle in transaction</label>
+              <label class="ctrl-check"><input type="checkbox" class="s10-chk" value="report"> 30 分钟长报表</label>
+              <label class="ctrl-check"><input type="checkbox" class="s10-chk" value="prepared"> 老 prepared transaction</label>
+              <label class="ctrl-check"><input type="checkbox" class="s10-chk" value="slot"> 停滞逻辑复制槽</label>
+              <button class="ctrl-btn" id="s10-clear">全部清除</button>
+              <span class="ctrl-status" id="s10-status">OldestXmin 被钉在 1000 · 膨胀风险：高</span>
+            </div>
+            <div class="svg-host">
+              <svg id="s10-svg" viewBox="0 0 1400 378" xmlns="http://www.w3.org/2000/svg">
+                <!-- Timeline / XID Horizon Bar -->
+                <rect x="0" y="8" width="1400" height="190" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="34" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">XID 推进轴与 OldestXmin 清理边界（32 位 XID 满 40 亿环绕）</text>
+
+                <!-- Base horizontal axis -->
+                <rect x="24" y="64" width="1352" height="50" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+                <!-- Cleanable zone -->
+                <rect id="s10-clean-bar" x="24" y="64" width="320" height="50" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1"/>
+                <text id="s10-clean-txt" x="38" y="94" font-size="13.5" font-weight="700" fill="#2F7A66">可安全回收 / 冻结区（DEAD）</text>
+                <!-- Blocked zone -->
+                <rect id="s10-block-bar" x="344" y="64" width="1032" height="50" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text id="s10-block-txt" x="364" y="94" font-size="13.5" font-weight="700" fill="#BE653B">HEAPTUPLE_RECENTLY_DEAD 滞留区：VACUUM 暂时不能移除！</text>
+
+                <!-- OldestXmin Pin line -->
+                <line id="s10-pin-line" x1="344" y1="50" x2="344" y2="146" stroke="#BE653B" stroke-width="3"/>
+                <rect id="s10-pin-tag" x="256" y="148" width="176" height="32" fill="#BE653B"/>
+                <text id="s10-pin-txt" x="272" y="169" font-size="13" font-weight="700" fill="#FFFFFF" class="svg-mono">OldestXmin 钉死</text>
+
+                <!-- Current XID marker -->
+                <line x1="1376" y1="50" x2="1376" y2="146" stroke="#245A6B" stroke-width="2"/>
+                <text x="1264" y="168" font-size="12.5" font-weight="700" fill="#245A6B" class="svg-mono">当前最新 XID</text>
+
+                <!-- Bottom Left: Active Blockers Diagnostic -->
+                <rect x="0" y="216" width="720" height="156" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="244" font-size="15" font-weight="700" fill="#245A6B">当前清理边界诊断</text>
+                <text x="18" y="274" font-size="14" font-weight="700" fill="#BE653B" id="s10-diag-1">活跃阻塞源：idle in transaction</text>
+                <text x="18" y="302" font-size="13.5" fill="#1B2B33" id="s10-diag-2">后果：旧版本停留在 RECENTLY_DEAD，表与索引持续膨胀，写入延迟上升。</text>
+                <text x="18" y="330" font-size="13.5" fill="#46585F" id="s10-diag-3">若长期不解除：冻结无法推进 → 触发 anti-wraparound autovacuum → 甚至拒绝分配新 XID。</text>
+                <text x="18" y="358" font-size="12.5" fill="#2F7A66" class="svg-mono" id="s10-diag-cmd">排查视图：pg_stat_activity / pg_prepared_xacts / pg_replication_slots</text>
+
+                <!-- Bottom Right: Freeze Watermarks -->
+                <rect x="740" y="216" width="660" height="156" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="758" y="244" font-size="15" font-weight="700" fill="#245A6B">防 XID 环绕的四大核心水位参数</text>
+                <text x="758" y="274" font-size="13.5" fill="#1B2B33" class="svg-mono">1. relfrozenxid / datfrozenxid</text>
+                <text x="1034" y="274" font-size="13" fill="#46585F">表/库级最老未冻结 XID 锚点</text>
+                <text x="758" y="302" font-size="13.5" fill="#1B2B33" class="svg-mono">2. vacuum_freeze_min_age</text>
+                <text x="1034" y="302" font-size="13" fill="#46585F">行版本达到该年龄才标记冻结</text>
+                <text x="758" y="330" font-size="13.5" fill="#1B2B33" class="svg-mono">3. vacuum_freeze_table_age</text>
+                <text x="1034" y="330" font-size="13" fill="#46585F">触发全表积极冻结扫描的阈值</text>
+                <text x="758" y="358" font-size="13.5" fill="#1B2B33" class="svg-mono">4. autovacuum_freeze_max_age</text>
+                <text x="1034" y="358" font-size="13" fill="#BE653B">强制 anti-wraparound 清理上限</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">看清了 PostgreSQL 整套 MVCC + SSI + VACUUM 的闭环后，把它放到数据库并发控制坐标系里，它的取舍究竟在哪？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：doc/src/sgml/maintenance.sgml · HeapTupleSatisfiesVacuum()</span>
+            <span class="page-num">10 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-slide="11" data-title="横向对比与权衡：MVCC + SSI vs Strict 2PL">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">11 / 15 · 横向对比与效果权衡</div>
+          <h1 class="slide-title">MVCC 不是永远更优：它是把「锁等待」换成「版本治理」</h1>
+          <p class="slide-lead">与传统严格两阶段锁相比，PostgreSQL 用多版本换取读写互不阻塞；收益有多清晰，膨胀、冻结、重试与同步延迟的代价就有多明确。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Upper: Comparison Matrix Table -->
+                <rect x="0" y="6" width="1400" height="236" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                <!-- Header row -->
+                <rect x="0" y="6" width="1400" height="40" fill="#1E4B5A"/>
+                <text x="18" y="31" font-size="14" font-weight="700" fill="#F7F6F2">对比维度</text>
+                <text x="230" y="31" font-size="14" font-weight="700" fill="#F7F6F2">PostgreSQL MVCC + SSI</text>
+                <text x="820" y="31" font-size="14" font-weight="700" fill="#F7F6F2">传统 Strict 2PL（严格两阶段锁思路）</text>
+
+                <!-- Row 1 -->
+                <rect x="0" y="46" width="1400" height="38" fill="#F7F6F2"/>
+                <line x1="0" y1="84" x2="1400" y2="84" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="18" y="70" font-size="13.5" font-weight="700" fill="#245A6B">核心策略</text>
+                <text x="230" y="70" font-size="13.5" fill="#1B2B33">高并发读写不互阻，必要时通过 SSI 检测异常并回滚</text>
+                <text x="820" y="70" font-size="13.5" fill="#1B2B33">通过阻塞冲突访问来保证严格串行化</text>
+
+                <!-- Row 2 -->
+                <rect x="0" y="84" width="1400" height="38" fill="#FFFFFF"/>
+                <line x1="0" y1="122" x2="1400" y2="122" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="18" y="108" font-size="13.5" font-weight="700" fill="#245A6B">读 / 写代价</text>
+                <text x="230" y="108" font-size="13.5" fill="#1B2B33">读查快照与可见性（可能查 pg_xact）；写生新版本 + WAL + VACUUM</text>
+                <text x="820" y="108" font-size="13.5" fill="#1B2B33">读加锁可能阻塞写；原地或锁保护更新，旧版本压力小</text>
+
+                <!-- Row 3 -->
+                <rect x="0" y="122" width="1400" height="38" fill="#F7F6F2"/>
+                <line x1="0" y1="160" x2="1400" y2="160" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="18" y="146" font-size="13.5" font-weight="700" fill="#245A6B">主要瓶颈形态</text>
+                <text x="230" y="146" font-size="13.5" fill="#1B2B33">旧版本堆积、表/索引膨胀、XID 冻结与谓词锁升级</text>
+                <text x="820" y="146" font-size="13.5" fill="#1B2B33">锁等待链条拉长、死锁检测与并发度骤降</text>
+
+                <!-- Row 4 -->
+                <rect x="0" y="160" width="1400" height="38" fill="#FFFFFF"/>
+                <line x1="0" y1="198" x2="1400" y2="198" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="18" y="184" font-size="13.5" font-weight="700" fill="#2F7A66">适合场景</text>
+                <text x="230" y="184" font-size="13.5" fill="#1B2B33">OLTP 混合读写、报表与交易并存系统</text>
+                <text x="820" y="184" font-size="13.5" fill="#1B2B33">强冲突短事务、业务宁愿等待也不愿写重试逻辑</text>
+
+                <!-- Row 5 -->
+                <rect x="0" y="198" width="1400" height="44" fill="#F7E9DE"/>
+                <text x="18" y="224" font-size="13.5" font-weight="700" fill="#BE653B">不适合场景</text>
+                <text x="230" y="224" font-size="13.5" fill="#1B2B33">超长事务、不清理复制槽、无完整重试的 Serializable</text>
+                <text x="820" y="224" font-size="13.5" fill="#1B2B33">高并发长读、多读少写混合型系统</text>
+
+                <!-- Vertical column borders -->
+                <line x1="210" y1="6" x2="210" y2="242" stroke="#D9D5CB" stroke-width="1"/>
+                <line x1="800" y1="6" x2="800" y2="242" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Lower: Gains vs Costs Balance -->
+                <rect x="0" y="260" width="688" height="162" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="18" y="288" font-size="15.5" font-weight="700" fill="#2F7A66">机制收益（为什么选它）</text>
+                <text x="18" y="316" font-size="13.5" fill="#1B2B33">1. 普通查询与写入互不阻塞，读多写多仍保高并发。</text>
+                <text x="18" y="342" font-size="13.5" fill="#1B2B33">2. 读者始终看到一致快照，绝无半更新中间态。</text>
+                <text x="18" y="368" font-size="13.5" fill="#1B2B33">3. WAL 顺序写兼顾崩溃恢复，避开同步随机刷数据页。</text>
+                <text x="18" y="394" font-size="13.5" fill="#1B2B33">4. SAVEPOINT 精细回滚 + Serializable 靠重试实现串行化。</text>
+
+                <rect x="712" y="260" width="688" height="162" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="730" y="288" font-size="15.5" font-weight="700" fill="#BE653B">工程代价（必须提前付账）</text>
+                <text x="730" y="316" font-size="13.5" fill="#1B2B33">1. 更新/删除产生旧版本，高度依赖 VACUUM 与冻结治理。</text>
+                <text x="730" y="342" font-size="13.5" fill="#1B2B33">2. hint bits、pg_xact、pg_subtrans、ProcArray 成为高并发热点。</text>
+                <text x="730" y="368" font-size="13.5" fill="#1B2B33">3. 长事务、2PC、复制槽钉住 xmin；谓词锁升级推高 40001。</text>
+                <text x="730" y="394" font-size="13.5" fill="#1B2B33">4. 同步提交与 remote_apply 直接计入提交延迟（切勿凭空承诺数字）。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">机制与权衡全部对齐后，如何在自己的测试库里用最少几条 SQL，亲手把这套原理验证出来？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：原文第四、五章 · 横向对比与机制权衡（无虚构基准数字）</span>
+            <span class="page-num">11 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="12" data-title="实操验证与线上观测探针">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">12 / 15 · 实操 DEMO 与诊断探针</div>
+          <h1 class="slide-title">开两个 psql 会话即可复现：3 组隔离实验 + 2 组只读探针</h1>
+          <p class="slide-lead">纸上谈兵不如亲手观测：通过双会话交错验证快照刷新、写偏斜 40001 与 SIReadLock，并用无害函数观测 XID 与冻结年龄。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 3 Dual-session experiments -->
+                <text x="0" y="18" font-size="13.5" font-weight="700" fill="#245A6B" class="svg-mono">左侧：3 组双会话最小验证实验（6.1 ～ 6.3）</text>
+
+                <rect x="0" y="30" width="670" height="118" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="18" y="56" font-size="15" font-weight="700" fill="#245A6B">实验 6.1 · Read Committed 每句取新快照</text>
+                <text x="18" y="84" font-size="13" fill="#1B2B33" class="svg-mono">会话 A: BEGIN; SELECT v (10) → [等 B 提交] → SELECT v (20)</text>
+                <text x="18" y="108" font-size="13" fill="#46585F" class="svg-mono">会话 B: BEGIN; UPDATE tx_demo SET v = 20; COMMIT;</text>
+                <text x="18" y="134" font-size="12.5" fill="#2F7A66">验证点：同事务内第二次查询立即看到 B 已提交的新值。</text>
+
+                <rect x="0" y="162" width="670" height="118" fill="#F5EEDB" stroke="#AE8A3E" stroke-width="1.2"/>
+                <text x="18" y="188" font-size="15" font-weight="700" fill="#AE8A3E">实验 6.2 · Repeatable Read 固定事务快照</text>
+                <text x="18" y="216" font-size="13" fill="#1B2B33" class="svg-mono">会话 A: BEGIN ISOLATION LEVEL REPEATABLE READ; SELECT v</text>
+                <text x="18" y="240" font-size="13" fill="#46585F" class="svg-mono">会话 B: UPDATE tx_demo SET v = 30; COMMIT;</text>
+                <text x="18" y="266" font-size="12.5" fill="#2F7A66">验证点：会话 A 两次读取保持一致，屏蔽后提交修改。</text>
+
+                <rect x="0" y="294" width="670" height="128" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="18" y="320" font-size="15" font-weight="700" fill="#BE653B">实验 6.3 · Serializable 写偏斜触发 40001</text>
+                <text x="18" y="348" font-size="13" fill="#1B2B33" class="svg-mono">会话 A/B 同时: SELECT count(*) WHERE on_call; 各改自己为 false</text>
+                <text x="18" y="374" font-size="13" fill="#1B2B33">预期：其中一方报错 SQLSTATE 40001（serialization failure）。</text>
+                <text x="18" y="402" font-size="12.5" font-weight="700" fill="#BE653B">验证点：必须完整重试整个事务块，不可只重试 UPDATE/COMMIT。</text>
+
+                <!-- Right: 2 Diagnostic Probes -->
+                <text x="700" y="18" font-size="13.5" font-weight="700" fill="#2F7A66" class="svg-mono">右侧：2 组生产级只读观测探针（6.4 ～ 6.5）</text>
+
+                <rect x="700" y="30" width="700" height="224" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="718" y="56" font-size="15" font-weight="700" fill="#245A6B">探针 6.4 · 观测当前快照、活跃 xmin 与表冻结年龄</text>
+                <text x="718" y="86" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT pg_current_xact_id_if_assigned(), pg_current_snapshot();</text>
+                <text x="718" y="110" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT pid, state, backend_xid, backend_xmin, xact_start</text>
+                <text x="718" y="130" font-size="12.5" fill="#1B2B33" class="svg-mono">  FROM pg_stat_activity WHERE backend_xmin IS NOT NULL;</text>
+                <text x="718" y="156" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT datname, age(datfrozenxid) FROM pg_database ORDER BY 2 DESC;</text>
+                <text x="718" y="180" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT c.oid::regclass, greatest(age(c.relfrozenxid),</text>
+                <text x="718" y="200" font-size="12.5" fill="#1B2B33" class="svg-mono">  age(t.relfrozenxid)) FROM pg_class c LEFT JOIN pg_class t ...;</text>
+                <rect x="718" y="214" width="664" height="28" fill="#E4F2EC"/>
+                <text x="728" y="233" font-size="12.5" font-weight="700" fill="#2F7A66">红线：观测必用 pg_current_xact_id_if_assigned()，避开强制分配 XID。</text>
+
+                <rect x="700" y="270" width="700" height="152" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="718" y="298" font-size="15" font-weight="700" fill="#245A6B">探针 6.5 · 在 pg_locks 中检查 Serializable 谓词锁</text>
+                <text x="718" y="326" font-size="12.5" fill="#1B2B33" class="svg-mono">BEGIN ISOLATION LEVEL SERIALIZABLE;</text>
+                <text x="718" y="348" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT * FROM tx_demo WHERE v &gt;= 10;</text>
+                <text x="718" y="370" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT locktype, mode, relation::regclass, page, tuple</text>
+                <text x="718" y="390" font-size="12.5" fill="#1B2B33" class="svg-mono">  FROM pg_locks WHERE mode = 'SIReadLock';</text>
+                <text x="718" y="412" font-size="12.5" fill="#46585F">说明：粒度随执行计划变化（tuple / page / relation），用于检测依赖但不阻塞写。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">验证与观测工具握在手里之后，如何把这套底线落地为架构师、DBA 与业务开发者的日常工程规范？</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：原文第六章 · 实操 DEMO（6.1 ～ 6.5）</span>
+            <span class="page-num">12 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-slide="13" data-title="分角色最佳实践：架构师、DBA 与业务开发者">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">13 / 15 · 最佳实践 · 三层工程防线</div>
+          <h1 class="slide-title">把内核边界变成团队契约：三类角色各守一条防线</h1>
+          <p class="slide-lead">事务问题从来不是某一个人的锅——架构层定不变量、运维层管清理水位、代码层守短事务与重试语义，缺一不可。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Col 1: Architect -->
+                <rect x="0" y="6" width="448" height="418" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="0" y="6" width="448" height="48" fill="#1E4B5A"/>
+                <text x="18" y="36" font-size="17" font-weight="700" fill="#F7F6F2" class="svg-serif">数据库架构师 · 定边界与模型</text>
+
+                <text x="18" y="84" font-size="14" font-weight="700" fill="#245A6B">1. 业务不变量优先下沉为声明式约束</text>
+                <text x="18" y="106" font-size="13" fill="#46585F">唯一/外键/CHECK/排他约束能声明就别靠应用查。</text>
+
+                <line x1="18" y1="122" x2="430" y2="122" stroke="#D9D5CB"/>
+                <text x="18" y="148" font-size="14" font-weight="700" fill="#245A6B">2. 跨行聚合规则显式选型</text>
+                <text x="18" y="170" font-size="13" fill="#46585F">Serializable + 重试、显式锁或物化约束表，</text>
+                <text x="18" y="190" font-size="13" fill="#46585F">绝不默认 Read Committed 足够。</text>
+
+                <line x1="18" y1="206" x2="430" y2="206" stroke="#D9D5CB"/>
+                <text x="18" y="232" font-size="14" font-weight="700" fill="#245A6B">3. 连接池严格限制活跃事务数</text>
+                <text x="18" y="254" font-size="13" fill="#46585F">防止并发长事务拖垮快照与锁内存。</text>
+
+                <line x1="18" y1="270" x2="430" y2="270" stroke="#D9D5CB"/>
+                <text x="18" y="296" font-size="14" font-weight="700" fill="#245A6B">4. 报表与导出专用隔离策略</text>
+                <text x="18" y="318" font-size="13" fill="#46585F">用 REPEATABLE READ 或 DEFERRABLE 只读。</text>
+
+                <line x1="18" y1="334" x2="430" y2="334" stroke="#D9D5CB"/>
+                <text x="18" y="360" font-size="14" font-weight="700" fill="#245A6B">5. 为复制槽与 CDC 设保留上限</text>
+                <text x="18" y="382" font-size="13" fill="#46585F">防 xmin / catalog_xmin 长期锁死系统目录。</text>
+
+                <!-- Col 2: DBA -->
+                <rect x="476" y="6" width="448" height="418" fill="#F1EFE9" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="476" y="6" width="448" height="48" fill="#2F7A66"/>
+                <text x="494" y="36" font-size="17" font-weight="700" fill="#F7F6F2" class="svg-serif">DBA · 守水位与持久契约</text>
+
+                <text x="494" y="84" font-size="14" font-weight="700" fill="#2F7A66">1. 把 idle in transaction 当故障信号</text>
+                <text x="494" y="106" font-size="13" fill="#46585F">务必配置 idle_in_transaction_session_timeout。</text>
+
+                <line x1="494" y1="122" x2="906" y2="122" stroke="#D9D5CB"/>
+                <text x="494" y="148" font-size="14" font-weight="700" fill="#2F7A66">2. 持续盯紧四类 xmin 与年龄指标</text>
+                <text x="494" y="170" font-size="13" fill="#46585F">backend_xmin、prepared_xacts、replication_slots、</text>
+                <text x="494" y="190" font-size="13" fill="#46585F">age(datfrozenxid / relfrozenxid / relminmxid)。</text>
+
+                <line x1="494" y1="206" x2="906" y2="206" stroke="#D9D5CB"/>
+                <text x="494" y="232" font-size="14" font-weight="700" fill="#2F7A66">3. 大表定制 autovacuum 与冻结窗口</text>
+                <text x="494" y="254" font-size="13" fill="#46585F">调优 scale_factor / threshold，不等强行冻结。</text>
+
+                <line x1="494" y1="270" x2="906" y2="270" stroke="#D9D5CB"/>
+                <text x="494" y="296" font-size="14" font-weight="700" fill="#2F7A66">4. 明确 synchronous_commit 语义契约</text>
+                <text x="494" y="318" font-size="13" fill="#46585F">关闭前必须让业务签字确认「可丢近期已返回」。</text>
+
+                <line x1="494" y1="334" x2="906" y2="334" stroke="#D9D5CB"/>
+                <text x="494" y="360" font-size="14" font-weight="700" fill="#2F7A66">5. 大批处理强制分段幂等提交</text>
+                <text x="494" y="382" font-size="13" fill="#46585F">避开单事务持有海量锁、旧版本与 WAL 峰值。</text>
+
+                <!-- Col 3: Developer -->
+                <rect x="952" y="6" width="448" height="418" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.2"/>
+                <rect x="952" y="6" width="448" height="48" fill="#BE653B"/>
+                <text x="970" y="36" font-size="17" font-weight="700" fill="#F7F6F2" class="svg-serif">业务开发者 · 写短事务与重试</text>
+
+                <text x="970" y="84" font-size="14" font-weight="700" fill="#BE653B">1. 事务极短，严禁夹带外部等待</text>
+                <text x="970" y="106" font-size="13" fill="#46585F">禁止在事务内等 HTTP、用户输入或人工审批。</text>
+
+                <line x1="970" y1="122" x2="1382" y2="122" stroke="#D9D5CB"/>
+                <text x="970" y="148" font-size="14" font-weight="700" fill="#BE653B">2. 捕获 40001 / 死锁必重试整事务</text>
+                <text x="970" y="170" font-size="13" fill="#46585F">从 BEGIN 前重跑整个事务函数，不重跑单 SQL。</text>
+
+                <line x1="970" y1="186" x2="1382" y2="186" stroke="#D9D5CB"/>
+                <text x="970" y="212" font-size="14" font-weight="700" fill="#BE653B">3. 用 ON CONFLICT 替代「先查再插」</text>
+                <text x="970" y="234" font-size="13" fill="#46585F">队列消费用 FOR UPDATE SKIP LOCKED 明确抢锁。</text>
+
+                <line x1="970" y1="250" x2="1382" y2="250" stroke="#D9D5CB"/>
+                <text x="970" y="276" font-size="14" font-weight="700" fill="#BE653B">4. 避免循环内 PL/pgSQL EXCEPTION</text>
+                <text x="970" y="298" font-size="13" fill="#46585F">它会隐式制造大量子事务，拖慢全局可见性检查。</text>
+
+                <line x1="970" y1="314" x2="1382" y2="314" stroke="#D9D5CB"/>
+                <text x="970" y="340" font-size="14" font-weight="700" fill="#BE653B">5. 放弃 SELECT max(id)+1 与连续序列幻想</text>
+                <text x="970" y="362" font-size="13" fill="#46585F">序列不随回滚倒退；连续编号须独立建模补偿。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">守住正面防线之后，还要一眼识别哪些场景天然不适合硬套事务，以及线上反复踩中的十大认知暗礁。</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：原文第七章 · 面向架构师 / DBA / 业务开发者的最佳实践</span>
+            <span class="page-num">13 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-slide="14" data-title="适用边界与十大高频暗礁">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">14 / 15 · 场景边界与避坑清单</div>
+          <h1 class="slide-title">适用与谨慎边界，以及线上最高频的十大事务暗礁</h1>
+          <p class="slide-lead">绝大多数线上事故都源于把默认行为当成理所当然——对照这张暗礁清单逐项排查，能在上线前挡住九成隐蔽隐患。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Column: Fit vs Caution -->
+                <rect x="0" y="6" width="370" height="200" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="16" y="34" font-size="15" font-weight="700" fill="#2F7A66">适合的场景</text>
+                <text x="16" y="64" font-size="13" fill="#1B2B33">• 短事务、高并发混合读写 OLTP</text>
+                <text x="16" y="90" font-size="13" fill="#1B2B33">• 显式约束 / SSI 保护的业务不变量</text>
+                <text x="16" y="116" font-size="13" fill="#1B2B33">• RR / 导出快照支撑的一致性报表</text>
+                <text x="16" y="142" font-size="13" fill="#1B2B33">• WAL + 同步复制高持久需求系统</text>
+                <text x="16" y="168" font-size="13" fill="#1B2B33">• SAVEPOINT 局部回滚的复杂流程</text>
+
+                <rect x="0" y="220" width="370" height="204" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="16" y="248" font-size="15" font-weight="700" fill="#BE653B">不适合 / 务必谨慎</text>
+                <text x="16" y="278" font-size="13" fill="#1B2B33">• 超长交互式事务（拖垮清理）</text>
+                <text x="16" y="304" font-size="13" fill="#1B2B33">• 应用不能重试却强开 Serializable</text>
+                <text x="16" y="330" font-size="13" fill="#1B2B33">• 异常驱动的海量子事务循环</text>
+                <text x="16" y="356" font-size="13" fill="#1B2B33">• 高写大表但 autovacuum 受限</text>
+                <text x="16" y="382" font-size="13" fill="#1B2B33">• 序列当连续号 / 账务关同步提交</text>
+
+                <!-- Right: 10 Common Pitfalls in 2x5 Grid -->
+                <text x="394" y="20" font-size="13.5" font-weight="700" fill="#BE653B" class="svg-mono">线上十大高频暗礁与纠偏要点（1 ～ 10）</text>
+
+                <!-- Row 1 -->
+                <rect x="394" y="30" width="494" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="410" y="54" font-size="13.5" font-weight="700" fill="#1B2B33">01 · 以为 Read Committed 有固定视图</text>
+                <text x="410" y="80" font-size="12.5" fill="#46585F">纠偏：它每句取新快照，固定视图请选 RR 或 Serializable。</text>
+
+                <rect x="904" y="30" width="496" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="920" y="54" font-size="13.5" font-weight="700" fill="#1B2B33">02 · 以为 Repeatable Read 等同真正串行</text>
+                <text x="920" y="80" font-size="12.5" fill="#46585F">纠偏：SI 仍有写偏斜，跨行约束须用 Serializable 或锁。</text>
+
+                <!-- Row 2 -->
+                <rect x="394" y="110" width="494" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="410" y="134" font-size="13.5" font-weight="700" fill="#1B2B33">03 · 收到 40001 只重试最后一条 SQL</text>
+                <text x="410" y="160" font-size="12.5" fill="#46585F">纠偏：前置读取条件已变，必须从 BEGIN 前完整重跑。</text>
+
+                <rect x="904" y="110" width="496" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="920" y="134" font-size="13.5" font-weight="700" fill="#1B2B33">04 · 长事务挂在连接池里（idle in tx）</text>
+                <text x="920" y="160" font-size="12.5" fill="#46585F">纠偏：事务作用域与连接借还严格绑定并设超时切断。</text>
+
+                <!-- Row 3 -->
+                <rect x="394" y="190" width="494" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="410" y="214" font-size="13.5" font-weight="700" fill="#1B2B33">05 · prepared transaction 长期不结束</text>
+                <text x="410" y="240" font-size="12.5" fill="#46585F">纠偏：2PC 预备态必须极短，老事务会长期钉死清理。</text>
+
+                <rect x="904" y="190" width="496" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="920" y="214" font-size="13.5" font-weight="700" fill="#1B2B33">06 · 逻辑复制槽停摆无人消费</text>
+                <text x="920" y="240" font-size="12.5" fill="#46585F">纠偏：会固定 catalog_xmin 拖垮目录清理，不用即删。</text>
+
+                <!-- Row 4 -->
+                <rect x="394" y="270" width="494" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="410" y="294" font-size="13.5" font-weight="700" fill="#1B2B33">07 · 滥用 SAVEPOINT / EXCEPTION 循环</text>
+                <text x="410" y="320" font-size="12.5" fill="#46585F">纠偏：超过 64 个触发 subxid 溢出，拖慢可见性判定。</text>
+
+                <rect x="904" y="270" width="496" height="72" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="920" y="294" font-size="13.5" font-weight="700" fill="#1B2B33">08 · 把 VACUUM FREEZE 当万能按钮</text>
+                <text x="920" y="320" font-size="12.5" fill="#46585F">纠偏：病根常在长事务、复制槽或 autovacuum 成本上限。</text>
+
+                <!-- Row 5 -->
+                <rect x="394" y="350" width="494" height="74" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="410" y="374" font-size="13.5" font-weight="700" fill="#1B2B33">09 · 关同步提交却对外宣称「绝不丢数据」</text>
+                <text x="410" y="400" font-size="12.5" fill="#46585F">纠偏：off 可丢近期已返回事务，只配可补偿低价值事件。</text>
+
+                <rect x="904" y="350" width="496" height="74" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="920" y="374" font-size="13.5" font-weight="700" fill="#1B2B33">10 · 忘记序列是非事务性的</text>
+                <text x="920" y="400" font-size="12.5" fill="#46585F">纠偏：nextval() 回滚不归还，连续号需独立设计建模。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">承接 · NEXT</div>
+            <div class="next-text">走到最后一页，我们把开篇提出的四个底层问题彻底闭环，并留下七道工程追问供你在真实业务里继续深挖。</div>
+          </div>
+          <div class="slide-footer">
+            <span>依据：原文第八、九章 · 适用边界与十大常见坑</span>
+            <span class="page-num">14 / 15</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 15 ==================== -->
+        <section class="slide" data-slide="15" data-title="课程收束：四问闭环与七道工程追问">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span><span style="background:#2E6373"></span><span style="background:#47808D"></span><span style="background:#74A5AD"></span><span style="background:#A4C4C6"></span><span style="background:#CFE0DC"></span><span style="background:#EBF1EE"></span>
+          </div>
+          <div class="eyebrow">15 / 15 · 课程收束 · 复盘与扩展思考</div>
+          <h1 class="slide-title">四问闭环，带着七道工程追问回到你的生产库</h1>
+          <p class="slide-lead">把「版本、可见性、持久性、清理边界」刻进设计直觉，才算真正筑牢 PostgreSQL 事务的底层地基。</p>
+          <div class="divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-host">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 4 Core Questions Closed Loop -->
+                <rect x="0" y="6" width="540" height="418" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="0" y="6" width="540" height="44" fill="#1E4B5A"/>
+                <text x="18" y="34" font-size="16" font-weight="700" fill="#F7F6F2" class="svg-serif">开篇四问 · 内核级闭环答案</text>
+
+                <text x="18" y="80" font-size="14" font-weight="700" fill="#245A6B">① 语句看到哪个数据库版本？</text>
+                <text x="18" y="104" font-size="13" fill="#1B2B33">由隔离级别决定快照时机：RC 每句刷新，RR/SSI 事务首句定格。</text>
+
+                <line x1="18" y1="122" x2="522" y2="122" stroke="#A4C4C6"/>
+                <text x="18" y="150" font-size="14" font-weight="700" fill="#245A6B">② 行版本什么时候对谁可见？</text>
+                <text x="18" y="174" font-size="13" fill="#1B2B33">HeapTupleSatisfiesMVCC 比对 xmin/xmax、pg_xact 与快照 xip[]。</text>
+
+                <line x1="18" y1="192" x2="522" y2="192" stroke="#A4C4C6"/>
+                <text x="18" y="220" font-size="14" font-weight="700" fill="#245A6B">③ 提交什么时候算「真的持久」？</text>
+                <text x="18" y="244" font-size="13" fill="#1B2B33">WAL Commit Record 按 synchronous_commit 刷盘/同步确认后才算数。</text>
+
+                <line x1="18" y1="262" x2="522" y2="262" stroke="#A4C4C6"/>
+                <text x="18" y="290" font-size="14" font-weight="700" fill="#245A6B">④ 长事务为何拖垮全库清理？</text>
+                <text x="18" y="314" font-size="13" fill="#1B2B33">它钉住 OldestXmin，旧版本滞留膨胀并阻挡 relfrozenxid 冻结推进。</text>
+
+                <rect x="18" y="340" width="504" height="68" fill="#FFFFFF" stroke="#245A6B" stroke-width="1"/>
+                <text x="34" y="366" font-size="13" font-weight="700" fill="#245A6B">延伸源码与论文索引</text>
+                <text x="34" y="390" font-size="12" fill="#46585F" class="svg-mono">Cahill SIGMOD 2008 (SSI) · Berenson 1995 · pg doc mvcc/xact/wal</text>
+
+                <!-- Right: 7 Open Engineering Questions -->
+                <rect x="564" y="6" width="836" height="418" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="564" y="6" width="836" height="44" fill="#245A6B"/>
+                <text x="582" y="34" font-size="16" font-weight="700" fill="#F7F6F2" class="svg-serif">课后七道工程追问（带着问题审视你的系统）</text>
+
+                <text x="582" y="80" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">Q1.</tspan> 为什么 PostgreSQL 选 MVCC + SSI，而不是把所有 Serializable 都做成 Strict 2PL？</text>
+                <line x1="582" y1="96" x2="1382" y2="96" stroke="#D9D5CB"/>
+
+                <text x="582" y="124" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">Q2.</tspan> 「每班至少留一名医生值班」：你会选唯一约束、显式锁、Serializable 还是重构表模型？</text>
+                <line x1="582" y1="140" x2="1382" y2="140" stroke="#D9D5CB"/>
+
+                <text x="582" y="168" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">Q3.</tspan> 面对 10TB 高频更新表，如何联动 relfrozenxid、膨胀、autovacuum 日志与复制槽定位病根？</text>
+                <line x1="582" y1="184" x2="1382" y2="184" stroke="#D9D5CB"/>
+
+                <text x="582" y="212" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">Q4.</tspan> 为什么 synchronous_commit=off 不会损坏库结构，却会丢失「已返回成功」的交易？</text>
+                <line x1="582" y1="228" x2="1382" y2="228" stroke="#D9D5CB"/>
+
+                <text x="582" y="256" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">Q5.</tspan> 在应用架构里，40001 事务重试究竟该包在 DAO、Service、消费者还是全链路幂等层？</text>
+                <line x1="582" y1="272" x2="1382" y2="272" stroke="#D9D5CB"/>
+
+                <text x="582" y="300" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">Q6.</tspan> 子事务为何必须保证子 XID 晚于父 XID？如果顺序反过来，可见性判定会遇到什么麻烦？</text>
+                <line x1="582" y1="316" x2="1382" y2="316" stroke="#D9D5CB"/>
+
+                <text x="582" y="344" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">Q7.</tspan> 为什么 SIReadLock 与普通锁都现身 pg_locks，但 SIReadLock 却从不阻塞写入？</text>
+
+                <rect x="582" y="366" width="800" height="42" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1"/>
+                <text x="598" y="392" font-size="13.5" font-weight="700" fill="#2F7A66">实操建议：在测试库中逐一跑通第 12 页的 5 组实验，再对照你的核心交易链路做一次事务体检。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-bridge">
+            <div class="next-tag">收束 · FINISH</div>
+            <div class="next-text">本讲完结——按 G 可随时打开目录跳回任意章节复盘，按 T 可在右侧展开全文讲稿并随页联动。</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · 事务 · PostgreSQL 内核与工程边界</span>
+            <span class="page-num">15 / 15</span>
+          </div>
+        </section>
+
+      </div><!-- /stage-frame -->
+    </div><!-- /stage-viewport -->
+
+    <!-- Right-Side In-Page Notes Pane (Never modal, vector-scales stage left) -->
+    <aside id="notes-pane" aria-label="演讲讲稿">
+      <div class="notes-header">
+        <span class="notes-title" id="notes-pane-title">本页讲稿</span>
+        <div class="notes-mode-tabs">
+          <button class="notes-tab" id="tab-mode-n" title="快捷键 N">本页 N</button>
+          <button class="notes-tab" id="tab-mode-t" title="快捷键 T">全文 T</button>
+          <button class="notes-close" id="btn-notes-close" title="关闭 Esc">×</button>
+        </div>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+
+    <!-- In-Page TOC Overlay (G) -->
+    <div id="toc-overlay" role="dialog" aria-label="目录">
+      <div class="toc-panel">
+        <div class="toc-head">
+          <h2>目录 · 数据库筑基课 —— 事务（共 15 页）</h2>
+          <button class="ctrl-btn" id="btn-toc-close">关闭 (G / Esc)</button>
+        </div>
+        <div class="toc-grid" id="toc-grid"></div>
+      </div>
+    </div>
+  </div><!-- /workspace -->
+
+  <!-- Fixed Bottom Shortcut HUD Bar (Always visible, including Fullscreen) -->
+  <footer id="hud-bar">
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-prev" title="上一页">← 上一页</button>
+      <span class="hud-progress" id="hud-progress">01 / 15</span>
+      <button class="hud-btn" id="btn-next" title="下一页">下一页 →</button>
+    </div>
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-toc"><span class="hud-key">G</span> 目录</button>
+      <button class="hud-btn" id="btn-note-page"><span class="hud-key">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="btn-note-all"><span class="hud-key">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="btn-autoplay"><span class="hud-key">A</span> 自动播放</button>
+      <button class="hud-btn" id="btn-fullscreen"><span class="hud-key">F</span> 全屏</button>
+    </div>
+    <div class="hud-group">
+      <span class="hud-toast" id="hud-toast"></span>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ================= 1. SPEAKER NOTES DATA (15 SLIDES) ================= */
+  const NOTES = [
+    {
+      slide: 1,
+      title: '事务不是 BEGIN; COMMIT;，而是七层系统边界',
+      paragraphs: [
+        '大家好，今天我们讲数据库筑基课里最容易被误解、也最容易在生产环境埋雷的一块地基——「事务」。很多应用开发者对事务的直觉停留在语法层：把扣款、加款、写流水几条 SQL 包在 <code>BEGIN</code> 和 <code>COMMIT</code> 之间，就觉得万事大吉了。',
+        '但线上的真实事故往往专门打脸这种直觉。大家看右边这三类经典故障：第一，高并发抢购或转账时，库存、余额偶发对不上；第二，跑了一个半小时的报表查询，结果整个核心交易表和索引疯狂膨胀、写入延迟飙升；第三，为了追求高吞吐把 <code>synchronous_commit</code> 关掉，机器一宕机，少量已经给前端返回「成功」的交易凭空消失了。',
+        '这三类事故都不是 SQL 写错了，而是因为我们没有往下看透左边的七层地层：从应用命令往下，依次经过状态机、MVCC 快照、SSI 冲突检测、pg_xact 提交账本、WAL 持久层，一直压到底层的 VACUUM 与 XID 冻结防线。今天整堂课，我们就以 PostgreSQL 源码为主线，把这四个底层问题一步步推演清楚。'
+      ],
+      evidence: '实证锚点：doc/src/sgml/mvcc.sgml · xact.sgml · wal.sgml · xact.c · procarray.c'
+    },
+    {
+      slide: 2,
+      title: '从扣库存 SQL 到 ACID 四大内核契约',
+      paragraphs: [
+        '我们先拿左边这段最普通的扣库存 SQL 做解剖：查库存、扣库存、写订单流水，最后提交。短短四条语句，其实逼着数据库同时回答五个工程问题：并发抢购会不会互相污染读到的库存？半途报错已写的流水怎么撤？提交后进程崩溃订单还在不在？长报表会不会卡死旧版本清理？如果业务规则是「先读聚合再写入」，Repeatable Read 够不够？',
+        '把这五个问题收束起来，就是大家耳熟能详的 ACID，但在 PostgreSQL 里每一个字母都有硬核的内核落点。原子性靠状态机、WAL 和 abort 清理；隔离性靠 MVCC 快照、锁与 SSI；持久性靠 WAL 刷盘与 <code>pg_xact</code>。',
+        '这里我特别想提醒左下角的第一条红线：一致性并不是数据库自动能读懂你的业务规则。唯一键、外键、CHECK 这类声明式约束数据库能替你兜底；但像「两个账户总余额不变」或「医生排班至少留一人」这种跨行跨表规则，必须靠你正确选型隔离级别、锁或约束模型。而且 MVCC 的代价同样明确——读写不互阻的另一面，就是旧版本膨胀与清理成本。'
+      ],
+      evidence: '实证锚点：doc/src/sgml/xact.sgml · ACID 内核机制映射'
+    },
+    {
+      slide: 3,
+      title: '事务生命周期：延迟分配 XID 与状态机',
+      paragraphs: [
+        '理解了契约，我们正式潜入第一层内核——事务生命周期。在 <code>src/backend/access/transam/README</code> 里，PostgreSQL 把事务拆成三层：用户命令、主循环控制和底层状态机。我们可以在上方工具栏点击「播放推演」，跟着状态机走一遍。',
+        '最精妙的设计在第一步到第二步之间：调用 <code>StartTransaction()</code> 时，内核只分配一个本地的虚拟事务号 VXID，并不会分配全局的 32 位 XID。直到你的事务第一次修改数据库，<code>AssignTransactionId()</code> 才会真正发号；而且如果子事务需要 XID，父事务必须先拿到 XID，确保子 XID 晚于父 XID。',
+        '为什么要这么折腾？因为线上大量请求都是只读短事务！延迟分配让只读事务完全不消耗宝贵的 32 位全局 XID，大大减缓环绕压力，也减轻 <code>pg_xact</code> 负担。顺手记住左下角的工程铁律：平时做只读观测千万别调 <code>pg_current_xact_id()</code>，它会强行分配 XID；一定要用 <code>pg_current_xact_id_if_assigned()</code>。另外切换一下「异常回滚路径」可以看到，回滚时会优先释放锁和 ProcArray 占位，不让故障事务继续卡住别人。'
+      ],
+      evidence: '实证锚点：src/backend/access/transam/xact.c · StartTransaction() · AssignTransactionId()'
+    },
+    {
+      slide: 4,
+      title: 'MVCC 快照：记录谁还在跑，不是拷贝数据',
+      paragraphs: [
+        '事务有了编号之后，紧接着就是第二个核心追问：同一时刻几十个并发事务在跑，我的查询到底该看到哪份数据？很多初学者以为「拍快照」是把数据拷贝了一份，其实完全不是——PostgreSQL 的快照轻量得多，它只是给活跃事务拍了一张「谁还在跑」的名单。',
+        '源码 <code>procarray.c</code> 的 <code>GetSnapshotData()</code> 会扫描 <code>ProcArray</code>，算出三个核心坐标：<code>xmin</code> 代表所有比它小的事务都结束了；<code>xmax</code> 代表所有大于等于它的都是未来事务，一律不可见；夹在中间的区间，就看它有没有落在活跃数组 <code>xip[]</code> 里。大家可以在上方输入框随便填一个 XID 点「判定」，亲手验证这三段标尺。',
+        '切到「长事务钉死」场景，你会发现只要有一个老事务 95 没结束，整把标尺的 <code>xmin</code> 就被死死拖回 95；再切到「子事务溢出」场景，一旦 <code>suboverflowed</code> 变成 true，快照装不下完整子事务名单，每次判定都要穿透去查 <code>pg_subtrans</code> 找父 XID，查询开销就会明显抬升。'
+      ],
+      evidence: '实证锚点：src/include/utils/snapshot.h · procarray.c GetSnapshotData() · snapmgr.c'
+    },
+    {
+      slide: 5,
+      title: '行版本可见性：HeapTupleSatisfiesMVCC 判定树',
+      paragraphs: [
+        '快照标尺拿在手里，接下来就要落到堆表的每一行数据上。在 PostgreSQL 的 heap 表里，<code>UPDATE</code> 从来不是原地覆盖，而是把旧版本标上 <code>xmax</code>，再新写一个带新 <code>xmin</code> 的版本。你可以把 <code>xmin</code> 理解为这一行版本的「出生证」，把 <code>xmax</code> 理解为「死亡证明」。',
+        '上方有五种典型状态，大家点一遍就能彻底吃透 <code>HeapTupleSatisfiesMVCC()</code> 的逻辑。第一步先看出生证 <code>xmin</code>：如果创建者还没提交，或者在快照时还在跑，直接判「不可见」，这保证了绝无脏读。',
+        '第二步如果出生证合法，再看死亡证明 <code>xmax</code>：如果 <code>xmax</code> 无效、或者仅仅是锁行（不是真删改）、或者删除者在拍快照时还在跑，那么对当前快照来说「删除尚未发生」，这一行依然「可见」；只有当 <code>xmax</code> 已经提交且对快照可见，这行版本才正式「不可见」。为了避免每次都去翻 <code>pg_xact</code> 账本，元组头里还有 <code>hint bits</code> 缓存提交态。这也直接解释了为什么更新会制造膨胀——旧版本提交后不能立刻删，因为旧快照可能还指着它看。'
+      ],
+      evidence: '实证锚点：src/backend/access/heap/heapam_visibility.c · HeapTupleSatisfiesMVCC()'
+    },
+    {
+      slide: 6,
+      title: '隔离级别分界：Read Committed 与 Repeatable Read',
+      paragraphs: [
+        '大家看，底层可见性判定函数是完全同一套，那为什么不同隔离级别表现完全不同？答案非常简单：仅仅取决于 <code>snapmgr.c</code> 里的 <code>GetTransactionSnapshot()</code> 什么时候重新拍快照。',
+        'PostgreSQL 虽然兼容 SQL 标准的四个名字，但内部实质只实现三档，<code>READ UNCOMMITTED</code> 直接按 <code>READ COMMITTED</code> 处理。我们点击上方的「播放双会话交错」来对比：在默认 Read Committed 下，会话 A 第一次读到 10，期间会话 B 把值改成 20 并提交，会话 A 第二次查询时会重新调用 <code>GetSnapshotData()</code> 拿到新快照 S2，于是读到了 20。',
+        '现在把隔离级别切换成「Repeatable Read」再跑一遍：<code>IsolationUsesXactSnapshot()</code> 生效，会话 A 整场事务牢牢复用第一条非控制语句拍下的快照 S1，即便会话 B 早就提交了 20，会话 A 第二次读到的依然是 10。而且在 PostgreSQL 的实现里，Repeatable Read 天然也不会出现幻读。但注意看底部中间卡片的陶橙色提醒：视图稳定，并不等于真正串行。'
+      ],
+      evidence: '实证锚点：doc/src/sgml/mvcc.sgml · snapmgr.c IsolationUsesXactSnapshot()'
+    },
+    {
+      slide: 7,
+      title: 'Serializable 与 SSI：捕捉 rw-conflict 危险结构',
+      paragraphs: [
+        '为什么说 Repeatable Read 的稳定视图不等于真正串行？看左边这个经典的医生排班模型：规则要求每个班次至少留一名医生值班，现在医生 a 和 b 都在班。事务 A 查到在班人数是 2，决定请假把自己改成 false；同一时刻事务 B 也查到 2，也把自己改成 false。',
+        '在 Repeatable Read 下，两笔更新改的是不同行，写锁完全不冲突，双双提交成功，结果整个医院没人值班——这就是典型的「写偏斜」异常。',
+        '点击「播放冲突检测」，看 PostgreSQL 的 Serializable 是怎么破局的。它并没有退回传统两阶段锁去把表锁死，而是在快照隔离上引入了 SSI（Serializable Snapshot Isolation）。两边的 <code>SELECT</code> 会挂上 <code>SIReadLock</code> 谓词锁，它从不阻塞写，只负责记账：一旦检测到 A 与 B 之间形成相互的读写反依赖，在冲突图里构成 <code>Tin → Tpivot → Tout</code> 危险结构，内核就会果断回滚其中一方并抛出 SQLSTATE <code>40001</code>。所以工程上用 Serializable 必须配套完整事务重试；而对长报表，则可以用右下角的 <code>SERIALIZABLE READ ONLY DEFERRABLE</code> 等待安全快照，零冲突跑完。'
+      ],
+      evidence: '实证锚点：src/backend/storage/lmgr/README-SSI · predicate.c'
+    },
+    {
+      slide: 8,
+      title: '提交与持久化路径：WAL 先行，pg_xact 随后',
+      paragraphs: [
+        '聊完并发与隔离，我们来回答第三个底层问题：按了 <code>COMMIT</code>，数据库究竟干了什么才算「真的持久」？绝对不是在内存里把一个状态变量改成 committed 就完事了，核心在于崩溃恢复时能拿出铁证。',
+        '点击「播放提交流水线」，跟着 <code>xact.c</code> 的 <code>RecordTransactionCommit()</code> 走一遍六步流程：收集待删文件和子事务信息 → 进入提交临界区，写 WAL 提交记录 <code>XactLogCommitRecord()</code> → 按 <code>synchronous_commit</code> 决定是否立即 <code>XLogFlush()</code> 刷盘 → 更新 <code>pg_xact</code> 树状态 → 如需同步复制则等待备库 LSN → 最后退出 <code>ProcArray</code> 并释放锁，修改才正式对其他会话可见。',
+        '注意红虚线框出的「提交临界区」：它会刻意延迟 checkpoint，防止出现「WAL 已有提交记录但 <code>pg_xact</code> 还没落盘」的撕裂窗口。再切换上方模式到 <code>off</code>：关闭同步提交并不会把数据库写坏，因为 WAL 依然保证结构一致性；但它允许刷盘前先返回成功，崩溃后最近少量已返回的交易会等价于干净回滚。这就是为什么绝不能把 <code>off</code> 当作无风险加速开关用在核心账务上。'
+      ],
+      evidence: '实证锚点：src/backend/access/transam/xact.c · RecordTransactionCommit() · config.sgml'
+    },
+    {
+      slide: 9,
+      title: 'pg_xact 与 pg_subtrans：2-bit 账本与 64 子事务红线',
+      paragraphs: [
+        '刚才提到提交状态写进 <code>pg_xact</code>，我们把这层地层再放大看看。源码 <code>clog.c</code> 至今还沿用历史名字 CLOG，它的布局极度紧凑：每个事务状态只占 2 个 bit（进行中、已提交、已回滚、子提交），1 个字节存 4 个事务，一个 8KB 数据页就能存 32768 个事务状态。提交时 <code>TransactionIdSetTreeStatus()</code> 会把主事务和子事务树的状态一口气原子写定。',
+        '再看下半部分最容易被业务代码踩穿的红线：<code>src/include/storage/proc.h</code> 里写死了 <code>PGPROC_MAX_CACHED_SUBXIDS = 64</code>。只要单个大事务里的子事务不超过 64 个，一切都在内存快照里高速闭环。',
+        '一旦超过 64 个，就会触发 <code>suboverflowed = true</code>，从此其他并发会话做可见性判定时，被迫不断穿透去查 <code>pg_subtrans</code> 逐级向上追溯父 XID，高并发下极易打爆 SLRU 锁争用。所以请一定记住：不要在单事务里建上千个 <code>SAVEPOINT</code>，更不要在 PL/pgSQL 的高频循环里把 <code>BEGIN ... EXCEPTION</code> 当作普通 if-else 分支来写！'
+      ],
+      evidence: '实证锚点：src/backend/access/transam/clog.c · subtrans.c · src/include/storage/proc.h'
+    },
+    {
+      slide: 10,
+      title: 'VACUUM 边界与 XID 冻结：谁钉住了 OldestXmin',
+      paragraphs: [
+        '现在来到最底层、也是线上 DBA 最头疼的一层：VACUUM 清理与 XID 冻结。前面我们知道更新会留下旧行版本，<code>HeapTupleSatisfiesVacuum()</code> 清理时不是看「我能不能看到这行」，而是看「全库还有没有任何可能存活的事务能看到这行」——这个全局红线就是 <code>OldestXmin</code>。',
+        '大家可以勾选或取消上方的四个「钉子户」复选框实时感受一下：无论是连接池里挂着的 <code>idle in transaction</code>、跑了半小时的长报表、忘了提交的老 2PC <code>prepared transaction</code>，还是没人消费的逻辑复制槽，只要有一个在线，<code>OldestXmin</code> 就会被死死钉在过去。',
+        '红线右边所有被删改的旧版本都会停留在 <code>HEAPTUPLE_RECENTLY_DEAD</code>，VACUUM 根本无权回收，表和索引一路膨胀。更严重的是，32 位 XID 跑满 40 亿就会环绕，如果冻结水位 <code>relfrozenxid</code> 长期推不动，系统就会被迫触发激进的 anti-wraparound autovacuum，极端情况下甚至直接拒绝分配新 XID 导致全库停写。'
+      ],
+      evidence: '实证锚点：doc/src/sgml/maintenance.sgml · HeapTupleSatisfiesVacuum()'
+    },
+    {
+      slide: 11,
+      title: '横向对比与权衡：MVCC + SSI vs Strict 2PL',
+      paragraphs: [
+        '把七层地层全部拆开之后，我们退后一步做个全局横向对比：PostgreSQL 的 MVCC + SSI，和传统的严格两阶段锁（Strict 2PL）到底怎么选？',
+        '看上方矩阵，本质上这是一笔架构交易：Strict 2PL 用「阻塞等待」换取原地更新与较少空间碎片，适合强冲突短事务、且业务不愿写重试代码的场景；而 PostgreSQL 的 MVCC + SSI 用「多版本空间与治理成本」换取了读写互不阻塞，天然适合 OLTP 与报表并存的混合负载。',
+        '下半部把收益与代价摆在天平两边，大家可以清晰看到每一份收益背后的账单：读写不阻塞对应旧版本与 VACUUM 治理；SSI 不阻塞写对应谓词锁升级与 40001 重试；WAL 顺序写对应同步提交与 <code>remote_apply</code> 的延迟权衡。这里我也坚持一个严谨原则：脱离具体硬件与压测环境，绝不编造任何吞吐或延迟百分比数字，只给可验证的机制与权衡逻辑。'
+      ],
+      evidence: '实证锚点：原文第四、五章 · 隔离级别与并发模型权衡分析'
+    },
+    {
+      slide: 12,
+      title: '实操验证与线上观测探针',
+      paragraphs: [
+        '光听原理不够扎实，这一页给大家准备了一套「开两个 psql 窗口就能亲手跑通」的最小验证脚本与线上只读诊断探针。',
+        '左边三组实验分别对应我们刚才讲的核心机制：实验 6.1 和 6.2 用同一张 <code>tx_demo</code> 表对比 Read Committed 的语句级新快照与 Repeatable Read 的事务级定格快照；实验 6.3 用 <code>duty</code> 医生排班表亲手复现 Serializable 下的 <code>40001</code> 写偏斜拦截，验证为什么必须从 <code>BEGIN</code> 前完整重试。',
+        '右边两组探针建议直接收进你的 DBA 常用脚本库：6.4 用 <code>pg_current_xact_id_if_assigned()</code> 安全查看事务号，配合 <code>pg_stat_activity</code> 抓出钉住 <code>backend_xmin</code> 的会话，再按 <code>age(relfrozenxid)</code> 给大表和 TOAST 表做冻结年龄排序；6.5 教你直接在 <code>pg_locks</code> 里过滤 <code>mode = \'SIReadLock\'</code>，亲眼看到谓词锁的 tuple、page 或 relation 粒度。'
+      ],
+      evidence: '实证锚点：原文第六章 · 实操 DEMO（6.1 ～ 6.5）'
+    },
+    {
+      slide: 13,
+      title: '分角色最佳实践：架构师、DBA 与业务开发者',
+      paragraphs: [
+        '把原理和探针真正落地到团队，需要架构师、DBA 和业务开发者各自守好一条防线。',
+        '左列是数据库架构师的防线：凡是能写成唯一键、外键、CHECK 或排他约束的业务不变量，坚决下沉到数据库声明，别靠应用「先查再判」；跨行聚合规则必须显式选择 Serializable 重试、显式锁或物化约束表；同时管好连接池活跃数、报表专用隔离与逻辑复制槽保留策略。',
+        '中间是 DBA 的防线：把 <code>idle in transaction</code> 直接当故障告警，配好超时参数；持续监控四类 xmin 与冻结年龄；大表提前定制 autovacuum 参数；关闭 <code>synchronous_commit</code> 前必须与业务对齐语义契约；大批处理必须分段幂等提交。右边是业务开发者的防线：事务里严禁等 HTTP 或人工审批；遇 40001 重试整个事务函数；用 <code>ON CONFLICT</code> 消灭竞态，用 <code>SKIP LOCKED</code> 做队列，远离循环内 <code>EXCEPTION</code>，也别幻想序列回滚会倒退。'
+      ],
+      evidence: '实证锚点：原文第七章 · 分角色工程最佳实践'
+    },
+    {
+      slide: 14,
+      title: '适用边界与十大高频暗礁',
+      paragraphs: [
+        '知道正确做法之后，我们还要划清适用边界，并且把线上最高频的十个认知误区摆在台面上。左边明确列出了五类适合场景与五类必须谨慎的场景——记住，只要应用层不具备整事务重试能力，就别盲目把 Serializable 当成保险箱；只要业务是核心账务，就别碰 <code>synchronous_commit = off</code>。',
+        '右边这十个暗礁几乎覆盖了 90% 的真实工单：比如 01 以为 Read Committed 有固定视图，02 以为 Repeatable Read 就是真正串行，03 收到 40001 只重跑最后一条 SQL，04 连接池里漏出 <code>idle in transaction</code>，05 老 2PC prepared 事务长期悬空，06 没人消费的逻辑复制槽拖垮系统目录。',
+        '还有 07 循环滥用 SAVEPOINT/EXCEPTION 击穿 64 槽缓存，08 把 <code>VACUUM FREEZE</code> 当万能按钮却不治长事务病根，09 误解异步提交的丢失边界，以及 10 忘记 <code>nextval()</code> 的非事务性。上线前拿这十条做一次 Checklist，能省下无数次半夜救火。'
+      ],
+      evidence: '实证锚点：原文第八、九章 · 适用边界与十大常见坑'
+    },
+    {
+      slide: 15,
+      title: '课程收束：四问闭环与七道工程追问',
+      paragraphs: [
+        '走到最后一页，我们回头把开篇抛出的四个底层问题彻底闭环：语句看哪个版本？靠隔离级别决定快照时机；行版本何时可见？靠 <code>HeapTupleSatisfiesMVCC</code> 比对元组头、账本与快照；提交何时真持久？靠 WAL 按 <code>synchronous_commit</code> 落盘确认；长事务为何拖垮全库？因为它钉死 <code>OldestXmin</code> 阻断清理与冻结。',
+        '右边这七道工程追问，是我留给大家带回自己生产系统的作业。比如面对 10TB 高频更新表，怎么把 <code>relfrozenxid</code>、膨胀、autovacuum 日志和复制槽串成一条诊断链？在你们的微服务框架里，<code>40001</code> 事务重试究竟该包在 DAO、Service 还是全链路幂等层？',
+        '左下角也列出了深入阅读的经典文献与源码入口，包括 Cahill 2008 年 SIGMOD 的 SSI 论文和 Berenson 1995 年对 ANSI 隔离级别的经典批判。本讲到此完结，你可以随时按 G 跳回任意一页重温图表，或者在右侧全文讲稿里点击任意章节联动跳转。谢谢大家！'
+      ],
+      evidence: '实证锚点：原文第十、十一章 · 扩展问题与论文/源码索引'
+    }
+  ];
+
+  /* ================= 2. CORE NAVIGATION & SCALING ================= */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentIdx = 0; // 0-based
+  let notesMode = null; // null | 'page' | 'all'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+  let toastTimer = null;
+
+  const stageViewport = document.getElementById('stage-viewport');
+  const stageFrame = document.getElementById('stage-frame');
+  const notesPane = document.getElementById('notes-pane');
+  const notesPaneTitle = document.getElementById('notes-pane-title');
+  const notesBody = document.getElementById('notes-body');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const tocGrid = document.getElementById('toc-grid');
+  const hudProgress = document.getElementById('hud-progress');
+  const hudToast = document.getElementById('hud-toast');
+
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNotePage = document.getElementById('btn-note-page');
+  const btnNoteAll = document.getElementById('btn-note-all');
+  const btnAutoPlay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const tabModeN = document.getElementById('tab-mode-n');
+  const tabModeT = document.getElementById('tab-mode-t');
+  const btnNotesClose = document.getElementById('btn-notes-close');
+  const btnTocClose = document.getElementById('btn-toc-close');
+
+  function showToast(msg) {
+    hudToast.textContent = msg;
+    hudToast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => hudToast.classList.remove('show'), 2200);
+  }
+
+  function resizeStage() {
+    const rect = stageViewport.getBoundingClientRect();
+    const pad = 16;
+    const availW = Math.max(100, rect.width - pad);
+    const availH = Math.max(100, rect.height - pad);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageFrame.style.transform = 'scale(' + scale.toFixed(5) + ')';
+  }
+
+  const ro = new ResizeObserver(() => resizeStage());
+  ro.observe(stageViewport);
+  window.addEventListener('resize', resizeStage);
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : String(n);
+  }
+
+  function goToSlide(idx, opts) {
+    const clamped = Math.max(0, Math.min(totalSlides - 1, idx));
+    currentIdx = clamped;
+    slides.forEach((el, i) => el.classList.toggle('active', i === currentIdx));
+    hudProgress.textContent = pad2(currentIdx + 1) + ' / ' + pad2(totalSlides);
+    updateTocHighlight();
+    if (notesMode === 'page') {
+      renderNotes();
+    } else if (notesMode === 'all') {
+      syncFullTranscript(opts && opts.instant);
+    }
+  }
+
+  /* ================= 3. TOC (G) ================= */
+  function buildToc() {
+    tocGrid.innerHTML = '';
+    slides.forEach((s, i) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'toc-item' + (i === currentIdx ? ' current' : '');
+      item.innerHTML =
+        '<div class="toc-item-num">SLIDE ' + pad2(i + 1) + '</div>' +
+        '<div class="toc-item-title">' + s.getAttribute('data-title') + '</div>';
+      item.addEventListener('click', () => {
+        goToSlide(i);
+        setToc(false);
+      });
+      tocGrid.appendChild(item);
+    });
+  }
+
+  function updateTocHighlight() {
+    const items = tocGrid.querySelectorAll('.toc-item');
+    items.forEach((it, i) => it.classList.toggle('current', i === currentIdx));
+  }
+
+  function setToc(open) {
+    tocOpen = open;
+    tocOverlay.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  /* ================= 4. RIGHT-SIDE NOTES PANE (N / T) ================= */
+  function buildNoteCard(note, isActive) {
+    const card = document.createElement('div');
+    card.className = 'note-card' + (isActive ? ' active' : '');
+    card.setAttribute('data-note-slide', String(note.slide - 1));
+    const paras = note.paragraphs.map(p => '<p>' + p + '</p>').join('');
+    card.innerHTML =
+      '<div class="note-card-head">' +
+        '<span class="note-card-num">' + pad2(note.slide) + ' / ' + pad2(totalSlides) + '</span>' +
+        '<span class="note-card-title">' + note.title + '</span>' +
+      '</div>' +
+      '<div class="note-card-body">' + paras + '</div>' +
+      '<div class="note-evidence">' + note.evidence + '</div>';
+    if (notesMode === 'all') {
+      card.addEventListener('click', () => {
+        goToSlide(note.slide - 1);
+      });
+    }
+    return card;
+  }
+
+  function renderNotes() {
+    notesBody.innerHTML = '';
+    if (notesMode === 'page') {
+      notesPaneTitle.textContent = '本页讲稿（' + pad2(currentIdx + 1) + ' / ' + pad2(totalSlides) + '）';
+      notesBody.appendChild(buildNoteCard(NOTES[currentIdx], true));
+      notesBody.scrollTop = 0;
+    } else if (notesMode === 'all') {
+      notesPaneTitle.textContent = '全文讲稿（随页自动联动）';
+      NOTES.forEach((n, i) => {
+        notesBody.appendChild(buildNoteCard(n, i === currentIdx));
+      });
+      requestAnimationFrame(() => syncFullTranscript(true));
+    }
+  }
+
+  function syncFullTranscript(instant) {
+    const cards = notesBody.querySelectorAll('.note-card');
+    let target = null;
+    cards.forEach((c, i) => {
+      const isCur = i === currentIdx;
+      c.classList.toggle('active', isCur);
+      if (isCur) target = c;
+    });
+    if (target) {
+      const bodyRect = notesBody.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const nextTop = Math.max(0, notesBody.scrollTop + (targetRect.top - bodyRect.top) - 14);
+      if (instant) {
+        notesBody.scrollTop = nextTop;
+      } else {
+        notesBody.scrollTo({ top: nextTop, behavior: 'smooth' });
+      }
+    }
+  }
+
+  function toggleNotesMode(targetMode) {
+    if (notesMode === targetMode) {
+      notesMode = null;
+    } else {
+      notesMode = targetMode;
+    }
+    const isOpen = notesMode !== null;
+    notesPane.classList.toggle('open', isOpen);
+    btnNotePage.classList.toggle('active', notesMode === 'page');
+    btnNoteAll.classList.toggle('active', notesMode === 'all');
+    tabModeN.classList.toggle('active', notesMode === 'page');
+    tabModeT.classList.toggle('active', notesMode === 'all');
+    if (isOpen) {
+      renderNotes();
+    }
+    // Re-scale left 16:9 stage immediately after layout shift
+    requestAnimationFrame(resizeStage);
+  }
+
+  /* ================= 5. AUTO-PLAY (A) & FULLSCREEN (F) ================= */
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+      btnAutoPlay.classList.remove('active');
+      showToast('已暂停自动播放');
+    } else {
+      btnAutoPlay.classList.add('active');
+      showToast('已开启自动播放（每 7 秒翻页）');
+      autoPlayTimer = setInterval(() => {
+        if (currentIdx < totalSlides - 1) {
+          goToSlide(currentIdx + 1);
+        } else {
+          goToSlide(0);
+        }
+      }, 7000);
+    }
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().then(() => {
+          btnFullscreen.classList.add('active');
+        }).catch(() => {
+          showToast('当前预览容器限制原生全屏，已保持满屏布局');
+        });
+      } else {
+        showToast('浏览器不支持 Fullscreen API');
+      }
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    btnFullscreen.classList.toggle('active', Boolean(document.fullscreenElement));
+    requestAnimationFrame(resizeStage);
+  });
+
+  /* ================= 6. EVENT BINDINGS & KEYBOARD SHORTCUTS ================= */
+  btnPrev.addEventListener('click', () => goToSlide(currentIdx - 1));
+  btnNext.addEventListener('click', () => goToSlide(currentIdx + 1));
+  btnToc.addEventListener('click', () => setToc(!tocOpen));
+  btnTocClose.addEventListener('click', () => setToc(false));
+  tocOverlay.addEventListener('click', (e) => { if (e.target === tocOverlay) setToc(false); });
+  btnNotePage.addEventListener('click', () => toggleNotesMode('page'));
+  btnNoteAll.addEventListener('click', () => toggleNotesMode('all'));
+  tabModeN.addEventListener('click', () => { if (notesMode !== 'page') toggleNotesMode('page'); });
+  tabModeT.addEventListener('click', () => { if (notesMode !== 'all') toggleNotesMode('all'); });
+  btnNotesClose.addEventListener('click', () => { if (notesMode) toggleNotesMode(notesMode); });
+  btnAutoPlay.addEventListener('click', toggleAutoPlay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea') {
+      if (e.key === 'Enter' && e.target.id === 's4-xid-input') {
+        evalSlide4();
+      }
+      return;
+    }
+    const key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      e.preventDefault();
+      goToSlide(currentIdx + 1);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      goToSlide(currentIdx - 1);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      setToc(!tocOpen);
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      toggleNotesMode('page');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      toggleNotesMode('all');
+    } else if (key === 'a' || key === 'A') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) setToc(false);
+      else if (notesMode) toggleNotesMode(notesMode);
+    }
+  });
+
+  /* ================= 7. INTERACTIVE ANIMATIONS ================= */
+
+  /* --- Slide 03: Transaction Lifecycle --- */
+  let s3Mode = 'write';
+  let s3Step = 0;
+  let s3Timer = null;
+  const s3Paths = {
+    write: [
+      { id: 's3-n1', msg: '步骤 1/5：StartTransaction() 仅分配 VXID，不占全局 XID' },
+      { id: 's3-n2', msg: '步骤 2/5：首次写表触发 AssignTransactionId() 分配永久 XID' },
+      { id: 's3-n3', msg: '步骤 3/5：写入 WAL Commit Record 并更新 pg_xact 为 committed' },
+      { id: 's3-n4', msg: '步骤 4/5：退出 ProcArray，其他并发会话正式看到修改' },
+      { id: 's3-n5', msg: '步骤 5/5：释放锁与内存资源，事务状态归位 IDLE' }
+    ],
+    readonly: [
+      { id: 's3-n1', msg: '步骤 1/3：StartTransaction() 仅分配 VXID，全程零 XID 消耗' },
+      { id: 's3-n4', msg: '步骤 2/3：跳过 XID 分配与 WAL 提交，直接退出 ProcArray' },
+      { id: 's3-n5', msg: '步骤 3/3：释放查询锁与快照资源，零 pg_xact 写入压力' }
+    ],
+    abort: [
+      { id: 's3-n1', msg: '步骤 1/3：StartTransaction() 启动事务并分配 VXID' },
+      { id: 's3-n2', msg: '步骤 2/3：写入后中途报错，转入 AbortTransaction() 路径' },
+      { id: 's3-abort', msg: '步骤 3/3：优先释放锁与 ProcArray 占位，避免阻塞其他会话' }
+    ]
+  };
+
+  function renderS3() {
+    const allIds = ['s3-n1', 's3-n2', 's3-n3', 's3-n4', 's3-n5', 's3-abort'];
+    const path = s3Paths[s3Mode];
+    const activeId = path[s3Step].id;
+    allIds.forEach(id => {
+      const rect = document.querySelector('#' + id + ' rect');
+      if (!rect) return;
+      if (id === activeId) {
+        rect.setAttribute('fill', id === 's3-abort' ? '#F7E9DE' : '#E5EFF0');
+        rect.setAttribute('stroke', id === 's3-abort' ? '#BE653B' : '#245A6B');
+        rect.setAttribute('stroke-width', '2.5');
+      } else {
+        rect.setAttribute('fill', id === 's3-abort' ? '#F7F6F2' : '#F7F6F2');
+        rect.setAttribute('stroke', '#D9D5CB');
+        rect.setAttribute('stroke-width', '1.2');
+      }
+    });
+    document.getElementById('s3-status').textContent = path[s3Step].msg;
+  }
+
+  document.querySelectorAll('[data-s3-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      clearInterval(s3Timer); s3Timer = null;
+      s3Mode = btn.getAttribute('data-s3-mode');
+      s3Step = 0;
+      document.querySelectorAll('[data-s3-mode]').forEach(b => b.classList.toggle('active', b === btn));
+      renderS3();
+    });
+  });
+
+  document.getElementById('s3-step').addEventListener('click', () => {
+    const path = s3Paths[s3Mode];
+    s3Step = (s3Step + 1) % path.length;
+    renderS3();
+  });
+
+  document.getElementById('s3-play').addEventListener('click', () => {
+    clearInterval(s3Timer);
+    s3Step = 0;
+    renderS3();
+    const path = s3Paths[s3Mode];
+    s3Timer = setInterval(() => {
+      if (s3Step < path.length - 1) {
+        s3Step++;
+        renderS3();
+      } else {
+        clearInterval(s3Timer); s3Timer = null;
+      }
+    }, 1100);
+  });
+
+  document.getElementById('s3-reset').addEventListener('click', () => {
+    clearInterval(s3Timer); s3Timer = null;
+    s3Step = 0;
+    renderS3();
+  });
+
+  /* --- Slide 04: MVCC Snapshot Evaluator --- */
+  const s4Presets = {
+    normal: { xmin: 102, xmax: 108, xip: [102, 105], overflow: false },
+    longtx: { xmin: 95, xmax: 108, xip: [95, 102, 105], overflow: false },
+    overflow: { xmin: 102, xmax: 108, xip: [102, 105], overflow: true }
+  };
+  let s4Cur = s4Presets.normal;
+
+  function evalSlide4() {
+    const raw = parseInt(document.getElementById('s4-xid-input').value, 10);
+    const xid = isNaN(raw) ? 105 : raw;
+    const { xmin, xmax, xip, overflow } = s4Cur;
+
+    document.getElementById('s4-struct-line').textContent =
+      'xmin = ' + xmin + '  |  xmax = ' + xmax + '  |  xip[] = [' + xip.join(', ') + ']  |  suboverflowed = ' + overflow + '  |  curcid = 2';
+    document.getElementById('s4-z1-range').textContent = '范围：XID < ' + xmin;
+    document.getElementById('s4-z2-range').textContent = '范围：' + xmin + ' ≤ XID < ' + xmax + ' · 活跃 xip = [' + xip.join(', ') + ']';
+    document.getElementById('s4-z3-range').textContent = '范围：XID ≥ ' + xmax;
+    document.getElementById('s4-z2-sub').textContent = overflow
+      ? '已溢出（suboverflowed=true）：需穿透 pg_subtrans 追溯父 XID！'
+      : '子事务未溢出：直接查 subxip[] 即可完成判定';
+
+    const z1 = document.getElementById('s4-z1');
+    const z2 = document.getElementById('s4-z2');
+    const z3 = document.getElementById('s4-z3');
+    [z1, z2, z3].forEach(z => z.setAttribute('stroke-width', '1.2'));
+
+    let shortMsg = '', mainMsg = '', subMsg = '';
+    if (xid < xmin) {
+      z1.setAttribute('stroke-width', '3.2');
+      shortMsg = 'XID ' + xid + ' < xmin → 已结束（若已提交则可见）';
+      mainMsg = '测试 XID = ' + xid + ' → 落入区间 A（< ' + xmin + '）→ 快照前必已结束，若已提交则可见';
+      subMsg = '快速排除路径：无需扫描 xip[] 活跃数组。';
+    } else if (xid >= xmax) {
+      z3.setAttribute('stroke-width', '3.2');
+      shortMsg = 'XID ' + xid + ' ≥ xmax → 未来事务（不可见）';
+      mainMsg = '测试 XID = ' + xid + ' → 落入区间 C（≥ ' + xmax + '）→ 快照之后分配，一律不可见';
+      subMsg = '即便该事务在拍完快照后瞬间提交，对本快照依然完全隐身。';
+    } else {
+      z2.setAttribute('stroke-width', '3.2');
+      const running = xip.includes(xid);
+      if (running) {
+        shortMsg = 'XID ' + xid + ' ∈ xip[] → 仍在运行（不可见）';
+        mainMsg = '测试 XID = ' + xid + ' → 落入区间 B [' + xmin + ', ' + xmax + ') → 命中 xip[] → 不可见';
+        subMsg = overflow ? '注意：因 suboverflowed=true，若涉及子事务还须查 pg_subtrans。' : '读不阻塞写：读者直接按快照名单判定，无需加读锁。';
+      } else {
+        shortMsg = 'XID ' + xid + ' ∉ xip[] → 已结束（若已提交则可见）';
+        mainMsg = '测试 XID = ' + xid + ' → 落入区间 B [' + xmin + ', ' + xmax + ') → 未在 xip[] 中 → 已结束，若提交则可见';
+        subMsg = overflow ? '注意：子事务溢出状态下，若该 XID 为 subxid 仍需查 pg_subtrans 确认顶层事务。' : '在区间内但已离开活跃数组，按 pg_xact 提交态决定可见性。';
+      }
+    }
+    document.getElementById('s4-result').textContent = shortMsg;
+    document.getElementById('s4-trace-main').textContent = mainMsg;
+    document.getElementById('s4-trace-sub').textContent = subMsg;
+  }
+
+  document.querySelectorAll('[data-s4-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      s4Cur = s4Presets[btn.getAttribute('data-s4-preset')];
+      document.querySelectorAll('[data-s4-preset]').forEach(b => b.classList.toggle('active', b === btn));
+      evalSlide4();
+    });
+  });
+  document.getElementById('s4-eval').addEventListener('click', evalSlide4);
+
+  /* --- Slide 05: Heap Tuple Visibility --- */
+  const s5Cases = [
+    {
+      xmin: 'xmin = 105 (运行中)', xmax: 'xmax = 0',
+      verdict: '结论：不可见', target: 's5-res-inv1',
+      title: '情况 ①：xmin 未提交或在快照中仍运行 → 当前快照不可见',
+      sub: 'PostgreSQL 绝不产生脏读：未提交的插入或更新对其他事务完全隐身。'
+    },
+    {
+      xmin: 'xmin = 100 (已提交)', xmax: 'xmax = 0 (无效)',
+      verdict: '结论：可见', target: 's5-res-vis',
+      title: '情况 ②：xmin 已提交且不在快照活跃集中，xmax 无效 → 可见',
+      sub: '最常见的正常读取路径：元组已生效且尚未被任何事务删除或更新。'
+    },
+    {
+      xmin: 'xmin = 100 (已提交)', xmax: 'xmax = 104 (仅锁行)',
+      verdict: '结论：可见', target: 's5-res-vis',
+      title: '情况 ③：xmin 可见，xmax 仅为行锁（如 SELECT FOR UPDATE）→ 可见',
+      sub: '行锁借用 xmax 字段标记，并不代表行版本已被删除，普通快照读依然可见。'
+    },
+    {
+      xmin: 'xmin = 100 (已提交)', xmax: 'xmax = 101 (已提交)',
+      verdict: '结论：不可见', target: 's5-res-inv2',
+      title: '情况 ④：xmin 可见，但 xmax 已提交且对当前快照可见 → 不可见',
+      sub: '删除或更新在拍快照前已生效，当前读者将跳过旧版本，转看更新后的新版本。'
+    },
+    {
+      xmin: 'xmin = 100 (已提交)', xmax: 'xmax = 105 (运行中)',
+      verdict: '结论：可见', target: 's5-res-vis',
+      title: '情况 ⑤：xmin 可见，xmax 在拍快照时仍运行 → 可见',
+      sub: '对该快照而言删除/更新尚未发生，因此旧版本必须继续保留，这也是膨胀的根源。'
+    }
+  ];
+
+  function renderS5(idx) {
+    const c = s5Cases[idx];
+    document.getElementById('s5-xmin-box').textContent = c.xmin;
+    document.getElementById('s5-xmax-box').textContent = c.xmax;
+    document.getElementById('s5-verdict').textContent = c.verdict;
+    document.getElementById('s5-detail-title').textContent = c.title;
+    document.getElementById('s5-detail-sub').textContent = c.sub;
+
+    ['s5-res-inv1', 's5-res-vis', 's5-res-inv2'].forEach(id => {
+      const r = document.getElementById(id);
+      if (id === c.target) {
+        r.setAttribute('fill', id === 's5-res-vis' ? '#E4F2EC' : '#F7E9DE');
+        r.setAttribute('stroke', id === 's5-res-vis' ? '#2F7A66' : '#BE653B');
+        r.setAttribute('stroke-width', '2.5');
+      } else {
+        r.setAttribute('fill', '#F7F6F2');
+        r.setAttribute('stroke', '#D9D5CB');
+        r.setAttribute('stroke-width', '1.2');
+      }
+    });
+    const qb = document.getElementById('s5-qb');
+    qb.setAttribute('fill', idx === 0 ? '#F7F6F2' : '#E5EFF0');
+    qb.setAttribute('stroke', idx === 0 ? '#D9D5CB' : '#245A6B');
+    qb.setAttribute('stroke-width', idx === 0 ? '1.2' : '2');
+  }
+
+  document.querySelectorAll('[data-s5-case]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.getAttribute('data-s5-case'), 10);
+      document.querySelectorAll('[data-s5-case]').forEach(b => b.classList.toggle('active', b === btn));
+      renderS5(idx);
+    });
+  });
+
+  /* --- Slide 06: Isolation Levels RC vs RR --- */
+  let s6Iso = 'rc';
+  let s6Step = 0; // 0, 1, 2, 3
+  let s6Timer = null;
+
+  function renderS6() {
+    const isRC = s6Iso === 'rc';
+    document.getElementById('s6-lane-label').textContent = isRC ? 'READ COMMITTED' : 'REPEATABLE READ';
+    document.getElementById('s6-b3-snap').textContent = isRC
+      ? '重新调用 GetSnapshotData() 取新快照 S2（含会话 B 提交）'
+      : '复用事务首句快照 S1（屏蔽会话 B 后续提交）';
+    document.getElementById('s6-b3-val').textContent = isRC
+      ? '结果：读到 v = 20（同事务两次查询结果不同）'
+      : '结果：仍读到 v = 10（事务内视图稳定，无不可重复读）';
+    document.getElementById('s6-b3-val').setAttribute('fill', isRC ? '#BE653B' : '#2F7A66');
+
+    const ids = ['s6-b1', 's6-b2', 's6-b3'];
+    ids.forEach((id, i) => {
+      const rect = document.querySelector('#' + id + ' rect');
+      if (s6Step === i + 1) {
+        rect.setAttribute('fill', i === 1 ? '#F7E9DE' : '#E5EFF0');
+        rect.setAttribute('stroke', i === 1 ? '#BE653B' : '#245A6B');
+        rect.setAttribute('stroke-width', '2.5');
+      } else {
+        rect.setAttribute('fill', '#FFFFFF');
+        rect.setAttribute('stroke', '#D9D5CB');
+        rect.setAttribute('stroke-width', '1.2');
+      }
+    });
+
+    const statusMap = [
+      '初始值 v = 10 · 隔离级别：' + (isRC ? 'Read Committed' : 'Repeatable Read'),
+      'T1：会话 A 首次查询拍下快照 S1，读到 v = 10',
+      'T2：会话 B 更新 v = 20 并 COMMIT，生成新元组版本',
+      isRC ? 'T3：RC 重拍快照 S2 → 读到 v = 20' : 'T3：RR 复用快照 S1 → 仍读到 v = 10'
+    ];
+    document.getElementById('s6-status').textContent = statusMap[s6Step];
+  }
+
+  document.querySelectorAll('[data-s6-iso]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      clearInterval(s6Timer); s6Timer = null;
+      s6Iso = btn.getAttribute('data-s6-iso');
+      s6Step = 3;
+      document.querySelectorAll('[data-s6-iso]').forEach(b => b.classList.toggle('active', b === btn));
+      renderS6();
+    });
+  });
+
+  document.getElementById('s6-step').addEventListener('click', () => {
+    s6Step = (s6Step + 1) % 4;
+    renderS6();
+  });
+
+  document.getElementById('s6-play').addEventListener('click', () => {
+    clearInterval(s6Timer);
+    s6Step = 1;
+    renderS6();
+    s6Timer = setInterval(() => {
+      if (s6Step < 3) { s6Step++; renderS6(); }
+      else { clearInterval(s6Timer); s6Timer = null; }
+    }, 1100);
+  });
+
+  document.getElementById('s6-reset').addEventListener('click', () => {
+    clearInterval(s6Timer); s6Timer = null;
+    s6Step = 0;
+    renderS6();
+  });
+
+  /* --- Slide 07: SSI Write-Skew Detection --- */
+  let s7Step = 0; // 0..4
+  let s7Timer = null;
+
+  function renderS7() {
+    const boxes = ['s7-a1', 's7-b1', 's7-a2', 's7-b2'];
+    boxes.forEach(id => {
+      const r = document.getElementById(id);
+      r.setAttribute('fill', '#FFFFFF');
+      r.setAttribute('stroke', '#D9D5CB');
+      r.setAttribute('stroke-width', '1.2');
+    });
+    const out = document.getElementById('s7-outcome');
+    const outTitle = document.getElementById('s7-out-title');
+    const outSub = document.getElementById('s7-out-sub');
+    const st = document.getElementById('s7-status');
+
+    if (s7Step === 0) {
+      out.setAttribute('fill', '#E5EFF0'); out.setAttribute('stroke', '#245A6B');
+      outTitle.textContent = 'Repeatable Read 会让两笔更新双双成功 → 无人值班（写偏斜）';
+      outSub.textContent = '点击「播放冲突检测」观察 Serializable 下的 SSI 拦截与 40001 完整重试。';
+      st.textContent = '初始状态：医生 a、b 均在班（on_call = true）';
+    } else if (s7Step === 1) {
+      ['s7-a1', 's7-b1'].forEach(id => {
+        const r = document.getElementById(id);
+        r.setAttribute('fill', '#E4F2EC'); r.setAttribute('stroke', '#2F7A66'); r.setAttribute('stroke-width', '2.4');
+      });
+      outTitle.textContent = '步骤 1：事务 A 与 B 并发 SELECT count(*) = 2，各自挂上 SIReadLock';
+      outSub.textContent = '谓词锁只做读写依赖记账，绝不阻塞任何并发写入。';
+      st.textContent = '步骤 1/4：双方同时读到 2 人在班，挂上 SIReadLock';
+    } else if (s7Step === 2) {
+      const r = document.getElementById('s7-a2');
+      r.setAttribute('fill', '#F5EEDB'); r.setAttribute('stroke', '#AE8A3E'); r.setAttribute('stroke-width', '2.4');
+      outTitle.textContent = '步骤 2：事务 A 将医生 a 设为离班并先 COMMIT，写入命中 B 的 SIReadLock';
+      outSub.textContent = '冲突图记录第一条读写反依赖：B ─rw→ A（A 作为 T_out 先提交）。';
+      st.textContent = '步骤 2/4：事务 A 提交成功，形成边 B ─rw→ A';
+    } else if (s7Step === 3) {
+      const r = document.getElementById('s7-b2');
+      r.setAttribute('fill', '#F7E9DE'); r.setAttribute('stroke', '#BE653B'); r.setAttribute('stroke-width', '2.6');
+      out.setAttribute('fill', '#F7E9DE'); out.setAttribute('stroke', '#BE653B');
+      outTitle.textContent = '步骤 3：事务 B 修改医生 b 命中 A 的 SIReadLock → 构成危险结构，抛出 40001！';
+      outSub.textContent = 'A ─rw→ B 与 B ─rw→ A 闭环触发 SSI 回滚，成功保住「至少一人值班」不变量。';
+      st.textContent = '步骤 3/4：SSI 拦截事务 B，抛出 SQLSTATE 40001';
+    } else {
+      out.setAttribute('fill', '#E4F2EC'); out.setAttribute('stroke', '#2F7A66');
+      outTitle.textContent = '步骤 4：应用捕获 40001，从 BEGIN 前完整重试事务 B → 读到 count = 1，拒绝请假';
+      outSub.textContent = '切记：绝不能只重试最后一条 UPDATE，必须重跑整个事务函数！';
+      st.textContent = '步骤 4/4：应用完整重试，业务不变量守住';
+    }
+  }
+
+  document.getElementById('s7-step').addEventListener('click', () => {
+    s7Step = (s7Step + 1) % 5;
+    renderS7();
+  });
+  document.getElementById('s7-play').addEventListener('click', () => {
+    clearInterval(s7Timer);
+    s7Step = 1;
+    renderS7();
+    s7Timer = setInterval(() => {
+      if (s7Step < 4) { s7Step++; renderS7(); }
+      else { clearInterval(s7Timer); s7Timer = null; }
+    }, 1200);
+  });
+  document.getElementById('s7-reset').addEventListener('click', () => {
+    clearInterval(s7Timer); s7Timer = null;
+    s7Step = 0;
+    renderS7();
+  });
+
+  /* --- Slide 08: Commit Durability Pipeline --- */
+  let s8Mode = 'on';
+  let s8Step = 0; // 0..6
+  let s8Timer = null;
+  const s8Info = {
+    on: {
+      p3s: 'XLogFlush() 同步刷盘', p3n: '等待本地 WAL 落盘', p4s: 'TransactionIdCommitTree()', p5n: '本地模式不等待备库',
+      status: '模式：on · 本地 WAL 刷盘后返回成功',
+      title: '当前模式语义：synchronous_commit = on',
+      l1: '• 持久性保障：本地 WAL 刷盘完成后才向客户端返回成功，单机崩溃不丢已确认交易。',
+      l2: '• 一致性保障：WAL 永远先于数据页与 pg_xact，故障重启可按 WAL 重放恢复。',
+      l3: '• 延迟代价：每次写事务提交都包含一次本地 WAL 刷盘等待。'
+    },
+    off: {
+      p3s: '跳过立即刷盘（异步）', p3n: '稍后由后台刷 WAL', p4s: 'AsyncCommitTree()', p5n: '不等待同步备库',
+      status: '模式：off · 异步提交（崩溃可能丢最近已返回事务）',
+      title: '当前模式语义：synchronous_commit = off（异步提交）',
+      l1: '• 持久性边界：WAL 尚未落盘即返回成功，崩溃后可能丢失少量最近返回成功的事务。',
+      l2: '• 一致性保障：绝不破坏数据库结构，恢复状态等价于这些丢失事务干净回滚。',
+      l3: '• 适用定位：仅适合可重放、可补偿、低价值事件；严禁用于核心账务。'
+    },
+    remote_apply: {
+      p3s: 'XLogFlush() 同步刷盘', p3n: '本地 WAL 先落盘', p4s: 'TransactionIdCommitTree()', p5n: '等待备库回放可见！',
+      status: '模式：remote_apply · 等备库回放完成后返回',
+      title: '当前模式语义：synchronous_commit = remote_apply',
+      l1: '• 强同步保障：主库本地刷盘后，还必须通过 SyncRepWaitForLSN() 等备库回放生效。',
+      l2: '• 读写一致：客户端收到 COMMIT 后，立刻去同步备库读也能看到最新提交。',
+      l3: '• 延迟代价：提交延迟直接叠加网络 RTT 与备库回放耗时。'
+    }
+  };
+
+  function renderS8() {
+    const info = s8Info[s8Mode];
+    document.getElementById('s8-p3-sub').textContent = info.p3s;
+    document.getElementById('s8-p3-note').textContent = info.p3n;
+    document.getElementById('s8-p4-sub').textContent = info.p4s;
+    document.getElementById('s8-p5-note').textContent = info.p5n;
+    document.getElementById('s8-sem-title').textContent = info.title;
+    document.getElementById('s8-sem-l1').textContent = info.l1;
+    document.getElementById('s8-sem-l2').textContent = info.l2;
+    document.getElementById('s8-sem-l3').textContent = info.l3;
+
+    for (let i = 1; i <= 6; i++) {
+      const rect = document.querySelector('#s8-p' + i + ' rect');
+      if (s8Step === i) {
+        rect.setAttribute('fill', (s8Mode === 'off' && i === 3) ? '#F7E9DE' : '#E5EFF0');
+        rect.setAttribute('stroke', (s8Mode === 'off' && i === 3) ? '#BE653B' : '#245A6B');
+        rect.setAttribute('stroke-width', '2.5');
+      } else {
+        rect.setAttribute('fill', '#FFFFFF');
+        rect.setAttribute('stroke', '#D9D5CB');
+        rect.setAttribute('stroke-width', '1.2');
+      }
+    }
+    document.getElementById('s8-status').textContent = s8Step > 0
+      ? '模式：' + s8Mode + ' · 正在执行步骤 ' + s8Step + ' / 6'
+      : info.status;
+  }
+
+  document.querySelectorAll('[data-s8-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      clearInterval(s8Timer); s8Timer = null;
+      s8Mode = btn.getAttribute('data-s8-mode');
+      s8Step = 0;
+      document.querySelectorAll('[data-s8-mode]').forEach(b => b.classList.toggle('active', b === btn));
+      renderS8();
+    });
+  });
+
+  document.getElementById('s8-play').addEventListener('click', () => {
+    clearInterval(s8Timer);
+    s8Step = 1;
+    renderS8();
+    s8Timer = setInterval(() => {
+      if (s8Step < 6) { s8Step++; renderS8(); }
+      else { clearInterval(s8Timer); s8Timer = null; }
+    }, 850);
+  });
+
+  document.getElementById('s8-reset').addEventListener('click', () => {
+    clearInterval(s8Timer); s8Timer = null;
+    s8Step = 0;
+    renderS8();
+  });
+
+  /* --- Slide 10: VACUUM & OldestXmin Blockers --- */
+  const s10Map = {
+    idle: { name: 'idle in transaction', pinX: 360, view: 'pg_stat_activity (state = idle in transaction)' },
+    report: { name: '30 分钟长报表', pinX: 460, view: 'pg_stat_activity (xact_start / backend_xmin)' },
+    prepared: { name: '老 prepared transaction', pinX: 280, view: 'pg_prepared_xacts' },
+    slot: { name: '停滞逻辑复制槽', pinX: 220, view: 'pg_replication_slots (xmin / catalog_xmin)' }
+  };
+
+  function renderS10() {
+    const chks = Array.from(document.querySelectorAll('.s10-chk')).filter(c => c.checked);
+    const cleanBar = document.getElementById('s10-clean-bar');
+    const blockBar = document.getElementById('s10-block-bar');
+    const blockTxt = document.getElementById('s10-block-txt');
+    const pinLine = document.getElementById('s10-pin-line');
+    const pinTag = document.getElementById('s10-pin-tag');
+    const pinTxt = document.getElementById('s10-pin-txt');
+    const d1 = document.getElementById('s10-diag-1');
+    const d2 = document.getElementById('s10-diag-2');
+    const d3 = document.getElementById('s10-diag-3');
+    const dCmd = document.getElementById('s10-diag-cmd');
+    const st = document.getElementById('s10-status');
+
+    if (chks.length === 0) {
+      const pinX = 1280;
+      cleanBar.setAttribute('width', String(pinX - 24));
+      blockBar.setAttribute('x', String(pinX));
+      blockBar.setAttribute('width', String(1376 - pinX));
+      blockTxt.textContent = '';
+      pinLine.setAttribute('x1', String(pinX));
+      pinLine.setAttribute('x2', String(pinX));
+      pinLine.setAttribute('stroke', '#2F7A66');
+      pinTag.setAttribute('x', String(pinX - 235));
+      pinTag.setAttribute('width', '186');
+      pinTag.setAttribute('fill', '#2F7A66');
+      pinTxt.setAttribute('x', String(pinX - 221));
+      pinTxt.textContent = 'OldestXmin 顺畅推进';
+      d1.textContent = '当前无阻塞源：清理边界与最新 XID 同步推进';
+      d1.setAttribute('fill', '#2F7A66');
+      d2.textContent = '效果：旧行版本及时标记 DEAD 并被 autovacuum 回收，表与索引保持健康。';
+      d3.textContent = '冻结安全：relfrozenxid 正常前移，远离 anti-wraparound 强制清理风险。';
+      dCmd.textContent = '建议：保持常规监控 age(relfrozenxid) 与 idle_in_transaction_session_timeout';
+      st.textContent = 'OldestXmin 健康推进 · 膨胀风险：低';
+    } else {
+      let minX = 1200;
+      const names = [];
+      const views = [];
+      chks.forEach(c => {
+        const item = s10Map[c.value];
+        if (item.pinX < minX) minX = item.pinX;
+        names.push(item.name);
+        views.push(item.view);
+      });
+      cleanBar.setAttribute('width', String(minX - 24));
+      blockBar.setAttribute('x', String(minX));
+      blockBar.setAttribute('width', String(1376 - minX));
+      blockTxt.setAttribute('x', String(minX + 18));
+      blockTxt.textContent = 'HEAPTUPLE_RECENTLY_DEAD 滞留区：VACUUM 暂时不能移除！';
+      pinLine.setAttribute('x1', String(minX));
+      pinLine.setAttribute('x2', String(minX));
+      pinLine.setAttribute('stroke', '#BE653B');
+      const tagX = Math.max(24, minX - 88);
+      pinTag.setAttribute('x', String(tagX));
+      pinTag.setAttribute('fill', '#BE653B');
+      pinTxt.setAttribute('x', String(tagX + 14));
+      pinTxt.textContent = 'OldestXmin 被钉死';
+      d1.textContent = '活跃阻塞源（' + names.length + ' 项）：' + names.join('、');
+      d1.setAttribute('fill', '#BE653B');
+      d2.textContent = '后果：红线右侧所有旧版本停留在 RECENTLY_DEAD，表和索引膨胀，写入延迟上升。';
+      d3.textContent = '若长期不解除：冻结无法推进 → 触发 anti-wraparound autovacuum → 甚至拒绝分配新 XID。';
+      dCmd.textContent = '排查视图：' + views.join(' | ');
+      st.textContent = 'OldestXmin 被钉死（' + names.length + ' 项阻塞）· 膨胀风险：高';
+    }
+  }
+
+  document.querySelectorAll('.s10-chk').forEach(c => c.addEventListener('change', renderS10));
+  document.getElementById('s10-clear').addEventListener('click', () => {
+    document.querySelectorAll('.s10-chk').forEach(c => { c.checked = false; });
+    renderS10();
+  });
+
+  /* ================= 8. INIT ================= */
+  buildToc();
+  goToSlide(0, { instant: true });
+  renderS3();
+  evalSlide4();
+  renderS5(0);
+  renderS6();
+  renderS7();
+  renderS8();
+  renderS10();
+  resizeStage();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL 内核 REPACK 机制与工程实践</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-secondary: #F1EFE9;
+    --bg-mat: #E6E3DA;
+    --ink: #1B2B33;
+    --ink-secondary: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terracotta: #BE653B;
+    --terracotta-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E6F2EE;
+    --gold: #AE8A3E;
+    --gold-light: #F7F1E1;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-mat);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app-shell {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-mat);
+    overflow: hidden;
+  }
+
+  #main-area {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-mat);
+  }
+
+  #stage-scaler {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1600px;
+    height: 900px;
+    transform-origin: center center;
+    background: var(--bg-paper);
+    border: 1px solid #CFCBC0;
+    box-shadow: 0 2px 16px rgba(27, 43, 51, 0.08);
+    overflow: hidden;
+  }
+
+  /* 7-level stratigraphic hairline along top of every slide */
+  .strata-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1600px;
+    height: 5px;
+    display: flex;
+    z-index: 5;
+  }
+  .strata-bar span { flex: 1; height: 100%; }
+
+  /* Slide fixed stage */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    display: none;
+    background: var(--bg-paper);
+  }
+  .slide.active {
+    display: block;
+  }
+
+  .slide-header {
+    position: absolute;
+    top: 34px;
+    left: 64px;
+    width: 1472px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    line-height: 1.18;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.44;
+    color: var(--ink-secondary);
+    max-width: 1420px;
+  }
+
+  .slide-divider {
+    position: absolute;
+    top: 192px;
+    left: 64px;
+    width: 1472px;
+    height: 1px;
+    background: var(--stroke);
+  }
+
+  .diagram-zone {
+    position: absolute;
+    top: 208px;
+    left: 64px;
+    width: 1400px;
+    height: 430px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .diagram-toolbar {
+    height: 40px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--stroke);
+    flex-shrink: 0;
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tb-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 5px 12px;
+    background: var(--bg-paper);
+    color: var(--ink);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1.2;
+  }
+  .tb-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+  .tb-btn.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+  .tb-btn.accent {
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+  }
+  .tb-btn.accent.active, .tb-btn.accent:hover {
+    background: var(--terracotta);
+    border-color: var(--terracotta);
+    color: #F7F6F2;
+  }
+  .tb-btn.teal {
+    border-color: var(--teal);
+    color: var(--teal);
+  }
+  .tb-btn.teal.active, .tb-btn.teal:hover {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #F7F6F2;
+  }
+
+  .tb-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-secondary);
+    white-space: nowrap;
+  }
+
+  .diagram-svg-wrap {
+    flex: 1;
+    min-height: 0;
+    width: 1400px;
+    position: relative;
+  }
+
+  .diagram-svg-wrap svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .next-box {
+    position: absolute;
+    top: 660px;
+    left: 64px;
+    width: 1472px;
+    border-left: 3px solid var(--terracotta);
+    padding: 6px 0 6px 18px;
+    background: linear-gradient(90deg, rgba(247, 233, 222, 0.55) 0%, rgba(247, 246, 242, 0) 68%);
+  }
+
+  .next-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2.6px;
+    color: var(--terracotta);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.42;
+    color: var(--ink);
+  }
+
+  .slide-footer {
+    position: absolute;
+    bottom: 26px;
+    left: 64px;
+    width: 1472px;
+    height: 34px;
+    border-top: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .slide-footer .page-num {
+    color: var(--ink-secondary);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  /* Right-side In-Page Notes Pane (NOT modal) */
+  #notes-pane {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    transition: opacity 0.14s ease;
+  }
+
+  #notes-pane.open {
+    width: 440px;
+    max-width: 36vw;
+    opacity: 1;
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .notes-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .notes-tab {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 11px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-secondary);
+    color: var(--ink-secondary);
+    cursor: pointer;
+  }
+
+  .notes-tab.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .notes-close {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    padding: 4px 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-secondary);
+    cursor: pointer;
+  }
+  .notes-close:hover {
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+  }
+
+  #notes-scroll {
+    flex: 1;
+    min-width: 420px;
+    overflow-y: auto;
+    padding: 18px 20px 56px;
+    position: relative;
+  }
+
+  .note-block {
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--strata-4);
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .note-block.active {
+    border-color: var(--indigo);
+    border-left: 4px solid var(--terracotta);
+    background: #FFFFFF;
+  }
+
+  .note-block-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: var(--indigo);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .note-block.active .note-block-meta {
+    color: var(--terracotta);
+    font-weight: 700;
+  }
+
+  .note-block-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+    line-height: 1.35;
+  }
+
+  .note-block-body p {
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--ink-secondary);
+    margin-bottom: 10px;
+  }
+  .note-block-body p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* TOC Drawer (G) */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(27, 43, 51, 0.36);
+    z-index: 60;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  .toc-panel {
+    width: 980px;
+    max-width: 94%;
+    max-height: 86%;
+    background: var(--bg-paper);
+    border: 1px solid var(--indigo);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toc-head {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--stroke);
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toc-head h2 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    color: var(--ink);
+  }
+
+  .toc-grid {
+    padding: 18px 24px 24px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 14px;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 11px 14px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    cursor: pointer;
+    text-align: left;
+  }
+  .toc-item:hover {
+    border-color: var(--indigo);
+    background: var(--indigo-light);
+  }
+  .toc-item.active {
+    border-color: var(--terracotta);
+    border-left: 4px solid var(--terracotta);
+    background: var(--terracotta-light);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--indigo);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .toc-item.active .toc-num {
+    color: var(--terracotta);
+  }
+
+  .toc-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-bottom: 3px;
+  }
+
+  .toc-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    color: var(--ink);
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  /* Bottom Global HUD Bar (Always visible, including Fullscreen!) */
+  #hud-bar {
+    height: 44px;
+    flex-shrink: 0;
+    background: var(--ink);
+    color: #EBF1EE;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    border-top: 2px solid var(--indigo);
+    z-index: 50;
+    user-select: none;
+  }
+
+  .hud-left, .hud-center, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    background: transparent;
+    color: #EBF1EE;
+    border: 1px solid rgba(235, 241, 238, 0.25);
+    padding: 4px 10px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.14s, border-color 0.14s;
+  }
+  .hud-btn:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: #A4C4C6;
+  }
+  .hud-btn.active {
+    background: var(--terracotta);
+    border-color: var(--terracotta);
+    color: #FFFFFF;
+  }
+  .hud-btn.playing {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #FFFFFF;
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #FFFFFF;
+  }
+
+  .hud-progress {
+    font-variant-numeric: tabular-nums;
+    color: #CFE0DC;
+    min-width: 68px;
+    text-align: center;
+  }
+
+  .hud-autoplay-bar {
+    position: absolute;
+    bottom: 44px;
+    left: 0;
+    height: 3px;
+    width: 0;
+    background: var(--teal);
+    z-index: 55;
+    transition: width 0.2s linear;
+  }
+</style>
+</head>
+<body>
+<div id="app-shell">
+  <div id="main-area">
+    <div id="stage-viewport">
+      <div id="stage-scaler">
+        <!-- 7-strata top accent -->
+        <div class="strata-bar" aria-hidden="true">
+          <span style="background:#1E4B5A"></span>
+          <span style="background:#2E6373"></span>
+          <span style="background:#47808D"></span>
+          <span style="background:#74A5AD"></span>
+          <span style="background:#A4C4C6"></span>
+          <span style="background:#CFE0DC"></span>
+          <span style="background:#EBF1EE"></span>
+        </div>
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-index="0" data-eyebrow="DATABASE FOUNDATION · POSTGRESQL INTERNALS" data-title="PostgreSQL 内核 REPACK：从 MVCC 空间膨胀到在线表重写">
+          <div class="slide-header">
+            <div class="eyebrow">DATABASE FOUNDATION · POSTGRESQL INTERNALS</div>
+            <h1 class="slide-title">PostgreSQL 内核 REPACK：从 MVCC 空间膨胀到在线表重写</h1>
+            <p class="slide-lead">当普通 VACUUM 只能将死元组留给表内复用，数据库如何在事务运行期间安全重写物理文件并将磁盘归还操作系统？</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Background blueprint frame -->
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <!-- Left vertical depth scale -->
+                <rect x="18" y="18" width="170" height="394" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="34" y="48" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">STRATA DEPTH</text>
+                <text x="34" y="68" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">地层剖面 · 由表及里</text>
+                <line x1="34" y1="84" x2="170" y2="84" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="34" y="114" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">表层：SQL 语法入口</text>
+                <line x1="56" y1="130" x2="56" y2="338" stroke="#245A6B" stroke-width="2"/>
+                <polygon points="56,348 51,336 61,336" fill="#245A6B"/>
+                <text x="72" y="230" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">越往下越接近</text>
+                <text x="72" y="250" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">存储引擎与</text>
+                <text x="72" y="270" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">操作系统文件</text>
+                <text x="34" y="382" font-family="PingFang SC, sans-serif" font-size="12" fill="#1E4B5A" font-weight="700">底层：OS 物理回收</text>
+
+                <!-- 7 Stratigraphic Bands (Shallow -> Deep, top -> bottom) -->
+                <!-- L7: #EBF1EE -->
+                <rect x="206" y="18" width="910" height="48" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+                <text x="224" y="47" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A" font-weight="700">L1 · SQL 接口层</text>
+                <text x="396" y="47" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33">REPACK / VACUUM FULL / CLUSTER 统一解析为 RepackStmt（gram.y → utility.c）</text>
+
+                <!-- L6: #CFE0DC -->
+                <rect x="206" y="74" width="910" height="48" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1"/>
+                <text x="224" y="103" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A" font-weight="700">L2 · 锁与调度层</text>
+                <text x="396" y="103" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33">普通模式全程 AccessExclusiveLock；并发模式三段式切换（先 ShareUpdateExclusiveLock）</text>
+
+                <!-- L5: #A4C4C6 -->
+                <rect x="206" y="130" width="910" height="48" fill="#A4C4C6" stroke="#47808D" stroke-width="1"/>
+                <text x="224" y="159" font-family="SF Mono, monospace" font-size="12" fill="#1B2B33" font-weight="700">L3 · 并发补偿层</text>
+                <text x="396" y="159" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33">后台 worker + 临时 replication slot + pgrepack 插件捕获 DML 并写入 spill 文件</text>
+
+                <!-- L4: #74A5AD -->
+                <rect x="206" y="186" width="910" height="48" fill="#74A5AD" stroke="#2E6373" stroke-width="1"/>
+                <text x="224" y="215" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">L4 · 路径规划层</text>
+                <text x="396" y="215" font-family="PingFang SC, sans-serif" font-size="14" fill="#FFFFFF">USING INDEX 经 plan_cluster_use_sort() 在索引扫描与顺序扫描排序之间权衡</text>
+
+                <!-- L3: #47808D -->
+                <rect x="206" y="242" width="910" height="48" fill="#47808D" stroke="#2E6373" stroke-width="1"/>
+                <text x="224" y="271" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">L5 · MVCC 边界层</text>
+                <text x="396" y="271" font-family="PingFang SC, sans-serif" font-size="14" fill="#FFFFFF">SnapshotAny + HeapTupleSatisfiesVacuum()：丢弃 DEAD，保留 LIVE 与 RECENTLY_DEAD</text>
+
+                <!-- L2: #2E6373 -->
+                <rect x="206" y="298" width="910" height="48" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="224" y="327" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">L6 · 物理换芯层</text>
+                <text x="396" y="327" font-family="PingFang SC, sans-serif" font-size="14" fill="#FFFFFF">make_new_heap() 建临时堆 → finish_heap_swap() 交换物理身份、保留原表 OID</text>
+
+                <!-- L1: #1E4B5A -->
+                <rect x="206" y="354" width="910" height="58" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+                <text x="224" y="388" font-family="SF Mono, monospace" font-size="12" fill="#CFE0DC" font-weight="700">L7 · OS 磁盘层</text>
+                <text x="396" y="388" font-family="PingFang SC, sans-serif" font-size="14" fill="#F7F6F2">重建紧凑索引 → 删除旧物理文件 → 释放磁盘空间归还操作系统</text>
+
+                <!-- Right metadata card -->
+                <rect x="1134" y="18" width="248" height="394" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1134" y="18" width="248" height="38" fill="#245A6B"/>
+                <text x="1150" y="42" font-family="SF Mono, monospace" font-size="12" fill="#F7F6F2" font-weight="700">COURSE METADATA</text>
+
+                <text x="1150" y="84" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">课程主题</text>
+                <text x="1150" y="106" font-family="Songti SC, serif" font-size="16" fill="#1B2B33" font-weight="700">数据库筑基课 · REPACK</text>
+
+                <line x1="1150" y1="124" x2="1366" y2="124" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1150" y="148" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">作者与日期</text>
+                <text x="1150" y="170" font-family="SF Mono, monospace" font-size="13" fill="#1B2B33">digoal · 2026-06-08</text>
+
+                <line x1="1150" y1="188" x2="1366" y2="188" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="1150" y="212" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">源码依据</text>
+                <text x="1150" y="234" font-family="SF Mono, monospace" font-size="12" fill="#245A6B">postgres/postgres</text>
+                <text x="1150" y="254" font-family="SF Mono, monospace" font-size="12" fill="#46585F">repack.c / pgrepack.c</text>
+
+                <line x1="1150" y1="274" x2="1366" y2="274" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1150" y="292" width="216" height="104" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="1164" y="316" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B" font-weight="700">版本边界提示</text>
+                <text x="1164" y="338" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">本文基于开发源码内置</text>
+                <text x="1164" y="358" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">REPACK；低版本生产环境</text>
+                <text x="1164" y="378" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">须核对所在版本官方文档。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">先回到最真实的生产痛点：为什么 autovacuum 跑得很勤快，磁盘文件却纹丝不动？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">01 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 (INTERACTIVE 1) ==================== -->
+        <section class="slide" data-index="1" data-eyebrow="01 · PROBLEM MODEL" data-title="可复用不等于归还系统：MVCC 空洞与物理收缩的分界">
+          <div class="slide-header">
+            <div class="eyebrow">01 · PROBLEM MODEL</div>
+            <h1 class="slide-title">可复用不等于归还系统：MVCC 空洞与物理收缩的分界</h1>
+            <p class="slide-lead">高频 UPDATE 与 DELETE 在页面内部留下大量死元组，普通 VACUUM 原地回收供表内复用，唯有 REPACK 重写新堆才能缩小物理文件。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <button class="tb-btn active" id="s2-btn-bloat">1. 模拟膨胀</button>
+                <button class="tb-btn" id="s2-btn-vac">2. 普通 VACUUM</button>
+                <button class="tb-btn teal" id="s2-btn-repack">3. REPACK 重写</button>
+                <button class="tb-btn accent" id="s2-btn-longtx">长事务快照：关</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="tb-btn" id="s2-btn-play">自动演进</button>
+                <button class="tb-btn" id="s2-btn-reset">重置</button>
+                <span class="tb-status" id="s2-status">当前状态：膨胀态（6 个物理页）</span>
+              </div>
+            </div>
+            <div class="diagram-svg-wrap">
+              <svg id="s2-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="1400" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <!-- Legend row -->
+                <rect x="20" y="16" width="1360" height="36" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="36" y="26" width="16" height="16" fill="#245A6B"/>
+                <text x="60" y="39" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">活元组 (LIVE)</text>
+                <rect x="190" y="26" width="16" height="16" fill="#BE653B"/>
+                <text x="214" y="39" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">死元组 (DEAD)</text>
+                <rect x="348" y="26" width="16" height="16" fill="#AE8A3E"/>
+                <text x="372" y="39" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">近期死亡 (RECENTLY_DEAD，受长事务锁住)</text>
+                <rect x="688" y="26" width="16" height="16" fill="#EBF1EE" stroke="#74A5AD" stroke-dasharray="3 2"/>
+                <text x="712" y="39" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">表内可复用空洞 (不归还 OS)</text>
+                <rect x="944" y="26" width="16" height="16" fill="#E6F2EE" stroke="#2F7A66" stroke-dasharray="3 2"/>
+                <text x="968" y="39" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="600">已释放归还操作系统磁盘</text>
+
+                <!-- Dynamic pages area -->
+                <g id="s2-pages-layer"></g>
+
+                <!-- Bottom comparison summary strip -->
+                <rect x="20" y="294" width="438" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="20" y="294" width="6" height="72" fill="#BE653B"/>
+                <text x="40" y="320" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">物理文件占用 (pg_relation_size)</text>
+                <text id="s2-metric-size" x="40" y="348" font-family="SF Mono, monospace" font-size="15" fill="#BE653B" font-weight="700">6 页 (6 / 6 物理页占用 OS 磁盘)</text>
+
+                <rect x="478" y="294" width="438" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="478" y="294" width="6" height="72" fill="#245A6B"/>
+                <text x="498" y="320" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">当前阶段机制结论</text>
+                <text id="s2-metric-mech" x="498" y="348" font-family="PingFang SC, sans-serif" font-size="14" fill="#46585F">UPDATE/DELETE 留下大量死元组，扫描 I/O 放大</text>
+
+                <rect x="936" y="294" width="444" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="936" y="294" width="6" height="72" fill="#2F7A66"/>
+                <text x="956" y="320" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">适用工程定位</text>
+                <text id="s2-metric-pos" x="956" y="348" font-family="PingFang SC, sans-serif" font-size="14" fill="#2F7A66">日常靠 autovacuum 稳态复用，重度膨胀再 REPACK</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">既然必须通过重写新堆来释放物理空间，PostgreSQL 内核里的 REPACK 究竟包含哪些语法与边界？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">02 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-index="2" data-eyebrow="02 · DEFINITION & BOUNDARY" data-title="REPACK 是什么，以及它绝不是什么">
+          <div class="slide-header">
+            <div class="eyebrow">02 · DEFINITION & BOUNDARY</div>
+            <h1 class="slide-title">REPACK 是什么，以及它绝不是什么</h1>
+            <p class="slide-lead">官方文档 doc/src/sgml/ref/repack.sgml 将其定义为「rewrite a table to reclaim disk space」，并划清与日常维护的边界。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Left Panel: What it IS (Syntax + Core Forms) -->
+                <rect x="20" y="18" width="760" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="20" y="18" width="760" height="36" fill="#245A6B"/>
+                <text x="38" y="41" font-family="PingFang SC, sans-serif" font-size="14" fill="#F7F6F2" font-weight="700">它是什么：内核表重写命令与五种核心形态</text>
+
+                <!-- Syntax box -->
+                <rect x="38" y="68" width="724" height="72" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+                <text x="54" y="92" font-family="SF Mono, monospace" font-size="13" fill="#1E4B5A" font-weight="700">REPACK [ ( VERBOSE | ANALYZE | CONCURRENTLY ) ]</text>
+                <text x="54" y="114" font-family="SF Mono, monospace" font-size="13" fill="#1B2B33">       [ table_name [ ( column_name [, ...] ) ] [ USING INDEX [ index_name ] ] ];</text>
+                <text x="54" y="132" font-family="SF Mono, monospace" font-size="12" fill="#46585F">REPACK [ ( option [, ...] ) ] USING INDEX;</text>
+
+                <!-- 5 rows of definitions -->
+                <rect x="38" y="152" width="724" height="44" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="52" y="179" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">REPACK table</text>
+                <text x="272" y="179" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">按物理顺序重写表，回收死元组占用的物理文件空间</text>
+
+                <rect x="38" y="202" width="724" height="44" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="52" y="229" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">USING INDEX [idx]</text>
+                <text x="272" y="229" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">按指定索引或已配置 clustered index 重排物理行，等价于 CLUSTER</text>
+
+                <rect x="38" y="252" width="724" height="44" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="52" y="279" font-family="SF Mono, monospace" font-size="12" fill="#2F7A66" font-weight="700">REPACK (CONCURRENTLY)</text>
+                <text x="272" y="279" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">大部分阶段持较弱锁，以逻辑解码补偿并发 DML，最后短暂强锁换文件</text>
+
+                <rect x="38" y="302" width="724" height="44" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="52" y="329" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">REPACK (ANALYZE)</text>
+                <text x="272" y="329" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">重写后执行 ANALYZE；当前源码仅支持指定单张非分区表时使用</text>
+
+                <rect x="38" y="352" width="724" height="44" fill="#F7F1E1" stroke="#AE8A3E" stroke-width="1"/>
+                <text x="52" y="379" font-family="SF Mono, monospace" font-size="12" fill="#AE8A3E" font-weight="700">VACUUM FULL / CLUSTER</text>
+                <text x="272" y="379" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">前者在本地文档标为 deprecated（类无索引 REPACK），后者等价于带索引 REPACK</text>
+
+                <!-- Right Panel: What it is NOT -->
+                <rect x="802" y="18" width="578" height="394" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="802" y="18" width="578" height="36" fill="#BE653B"/>
+                <text x="820" y="41" font-family="PingFang SC, sans-serif" font-size="14" fill="#F7F6F2" font-weight="700">它绝不是什么：必须划清的五条认知红线</text>
+
+                <rect x="820" y="70" width="542" height="54" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="836" y="93" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">1. 不是普通 VACUUM 的增强版</text>
+                <text x="836" y="114" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">普通 VACUUM 原地清理死元组，REPACK 则是新建物理文件整表重写。</text>
+
+                <rect x="820" y="136" width="542" height="54" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="836" y="159" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">2. 不是「无锁收缩」</text>
+                <text x="836" y="180" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">即便 CONCURRENTLY 模式，在最终交换物理文件时仍须获取 ACCESS EXCLUSIVE 锁。</text>
+
+                <rect x="820" y="202" width="542" height="54" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="836" y="225" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">3. 不是自动防膨胀机制</text>
+                <text x="836" y="246" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">日常防线仍是合理 autovacuum、分区、批量写入与长事务治理。</text>
+
+                <rect x="820" y="268" width="542" height="54" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="836" y="291" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">4. 不是 SQL 标准语句</text>
+                <text x="836" y="312" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">文档明确指出 SQL 标准没有 REPACK，属于 PostgreSQL 特有维护能力。</text>
+
+                <rect x="820" y="334" width="542" height="62" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="836" y="357" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">5. 不是外部 pg_repack 扩展实现</text>
+                <text x="836" y="379" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">本文基于内核开发源码；低版本生产环境请按版本选择 VACUUM FULL/外部扩展。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">语法上看似并列的 REPACK、CLUSTER 与 VACUUM FULL，在 PostgreSQL 内核源码里究竟如何汇聚？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">03 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 ==================== -->
+        <section class="slide" data-index="3" data-eyebrow="03 · KERNEL ENTRYPOINT" data-title="三路语法汇聚同一引擎：从 gram.y 到 repack.c">
+          <div class="slide-header">
+            <div class="eyebrow">03 · KERNEL ENTRYPOINT</div>
+            <h1 class="slide-title">三路语法汇聚同一引擎：从 gram.y 到 repack.c</h1>
+            <p class="slide-lead">源码将表重写命令统一抽象为 RepackStmt 汇入 repack.c；而普通 VACUUM 的原地清理则始终走在独立的 lazy vacuum 路径。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                  <marker id="arr-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#2F7A66"/>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Band 1: Rewrite Engine Track -->
+                <rect x="20" y="18" width="1360" height="266" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="20" y="18" width="1360" height="32" fill="#E5EFF0"/>
+                <text x="38" y="39" font-family="PingFang SC, sans-serif" font-size="13" fill="#245A6B" font-weight="700">路径 A：表重写引擎（重建物理文件，归还 OS 空间）</text>
+
+                <!-- 3 SQL Commands -->
+                <rect x="44" y="70" width="218" height="50" fill="#245A6B"/>
+                <text x="60" y="92" font-family="SF Mono, monospace" font-size="13" fill="#FFFFFF" font-weight="700">REPACK ...</text>
+                <text x="60" y="110" font-family="SF Mono, monospace" font-size="11" fill="#CFE0DC">REPACK_COMMAND_REPACK</text>
+
+                <rect x="44" y="136" width="218" height="50" fill="#2E6373"/>
+                <text x="60" y="158" font-family="SF Mono, monospace" font-size="13" fill="#FFFFFF" font-weight="700">CLUSTER ...</text>
+                <text x="60" y="176" font-family="SF Mono, monospace" font-size="11" fill="#CFE0DC">REPACK_COMMAND_CLUSTER</text>
+
+                <rect x="44" y="202" width="218" height="56" fill="#47808D"/>
+                <text x="60" y="224" font-family="SF Mono, monospace" font-size="13" fill="#FFFFFF" font-weight="700">VACUUM FULL</text>
+                <text x="60" y="242" font-family="SF Mono, monospace" font-size="11" fill="#EBF1EE">REPACK_COMMAND_VACUUMFULL</text>
+
+                <!-- Orthogonal merge connectors -->
+                <path d="M 262 95 H 316 V 161 H 360" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+                <path d="M 262 161 H 360" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+                <path d="M 262 230 H 316 V 161" fill="none" stroke="#245A6B" stroke-width="2"/>
+
+                <!-- Parser node -->
+                <rect x="364" y="102" width="236" height="118" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="364" y="102" width="236" height="30" fill="#EBF1EE"/>
+                <text x="380" y="122" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A" font-weight="700">src/backend/parser/gram.y</text>
+                <text x="380" y="154" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">统一解析为 RepackStmt</text>
+                <text x="380" y="178" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">REPACK 置于主语法前；旧</text>
+                <text x="380" y="198" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">CLUSTER 作为兼容变体解析。</text>
+
+                <path d="M 600 161 H 654" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <!-- Utility node -->
+                <rect x="658" y="102" width="248" height="118" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="658" y="102" width="248" height="30" fill="#EBF1EE"/>
+                <text x="674" y="122" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A" font-weight="700">src/backend/tcop/utility.c</text>
+                <text x="674" y="154" font-family="SF Mono, monospace" font-size="14" fill="#1B2B33" font-weight="700">T_RepackStmt → ExecRepack()</text>
+                <text x="674" y="178" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">VACUUM FULL 经 vacuum.c</text>
+                <text x="674" y="198" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">同样直接转调 cluster_rel()。</text>
+
+                <path d="M 906 161 H 960" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+                <!-- Core repack.c node -->
+                <rect x="964" y="72" width="390" height="186" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+                <rect x="964" y="72" width="390" height="34" fill="#245A6B"/>
+                <text x="982" y="94" font-family="SF Mono, monospace" font-size="12" fill="#F7F6F2" font-weight="700">src/backend/commands/repack.c</text>
+                <text x="982" y="132" font-family="PingFang SC, sans-serif" font-size="15" fill="#FFFFFF" font-weight="700">核心重写引擎（所有重写路径汇聚点）</text>
+                <text x="982" y="160" font-family="SF Mono, monospace" font-size="12" fill="#CFE0DC">• cluster_rel()：权限、锁、对象与索引校验</text>
+                <text x="982" y="186" font-family="SF Mono, monospace" font-size="12" fill="#CFE0DC">• rebuild_relation()：创建新堆并复制元组</text>
+                <text x="982" y="212" font-family="SF Mono, monospace" font-size="12" fill="#CFE0DC">• finish_heap_swap()：交换物理文件并建索引</text>
+                <text x="982" y="238" font-family="PingFang SC, sans-serif" font-size="12" fill="#F7E9DE">DeepWiki (postgres/postgres) 交叉核对一致</text>
+
+                <!-- Band 2: Lazy Vacuum Track -->
+                <rect x="20" y="304" width="1360" height="108" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="20" y="304" width="1360" height="30" fill="#E6F2EE"/>
+                <text x="38" y="324" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">路径 B：原地清理引擎（独立路径，不经过表重写）</text>
+
+                <rect x="44" y="346" width="218" height="48" fill="#2F7A66"/>
+                <text x="60" y="375" font-family="SF Mono, monospace" font-size="13" fill="#FFFFFF" font-weight="700">普通 VACUUM / autovacuum</text>
+
+                <path d="M 262 370 H 360" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <rect x="364" y="346" width="380" height="48" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.2"/>
+                <text x="380" y="375" font-family="SF Mono, monospace" font-size="13" fill="#1B2B33">src/backend/commands/vacuum.c (lazy vacuum)</text>
+
+                <path d="M 744 370 H 814" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+                <rect x="818" y="346" width="536" height="48" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1"/>
+                <text x="836" y="375" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">原地标记页内空闲空间供表内复用，不新建物理文件，不长时间阻塞读写</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">进入 repack.c 之后，最基础的普通独占模式是如何一步步完成表重写与物理换芯的？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">04 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE 2) ==================== -->
+        <section class="slide" data-index="4" data-eyebrow="04 · EXCLUSIVE REWRITE" data-title="普通 REPACK：全程强锁的五步重写与物理换芯">
+          <div class="slide-header">
+            <div class="eyebrow">04 · EXCLUSIVE REWRITE</div>
+            <h1 class="slide-title">普通 REPACK：全程强锁的五步重写与物理换芯</h1>
+            <p class="slide-lead">RepackLockLevel(false) 直接获取 AccessExclusiveLock 消除并发干扰，通过交换物理文件身份保留原表 OID 与全部元数据依赖。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <button class="tb-btn" id="s5-prev">上一步</button>
+                <button class="tb-btn active" id="s5-next">下一步</button>
+                <button class="tb-btn teal" id="s5-play">自动演示五步</button>
+                <button class="tb-btn" id="s5-reset">重置</button>
+              </div>
+              <span class="tb-status" id="s5-status">步骤 1 / 5：ExecRepack() 与 cluster_rel() 校验并加独占锁</span>
+            </div>
+            <div class="diagram-svg-wrap">
+              <svg id="s5-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-s5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="1400" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Top Lock Band -->
+                <rect x="24" y="16" width="1352" height="38" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="42" y="40" font-family="SF Mono, monospace" font-size="13" fill="#BE653B" font-weight="700">LOCK WINDOW · AccessExclusiveLock（全程持有：阻塞其他会话读写，无并发写入干扰）</text>
+
+                <!-- 5 Steps Boxes -->
+                <g id="s5-step-1">
+                  <rect x="24" y="76" width="244" height="118" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                  <rect x="24" y="76" width="244" height="28" fill="#245A6B"/>
+                  <text x="38" y="95" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">STEP 1 · 校验与加锁</text>
+                  <text x="38" y="124" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">ExecRepack / cluster_rel</text>
+                  <text x="38" y="146" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">解析选项，检查权限、系统表、</text>
+                  <text x="38" y="166" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">临时表与索引可用性。</text>
+                </g>
+                <path d="M 268 135 H 298" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s5)"/>
+
+                <g id="s5-step-2">
+                  <rect x="301" y="76" width="244" height="118" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <rect x="301" y="76" width="244" height="28" fill="#74A5AD"/>
+                  <text x="315" y="95" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">STEP 2 · 创建临时堆</text>
+                  <text x="315" y="124" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">make_new_heap()</text>
+                  <text x="315" y="146" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">新建逻辑结构一致的</text>
+                  <text x="315" y="166" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">transient heap 物理文件。</text>
+                </g>
+                <path d="M 545 135 H 575" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s5)"/>
+
+                <g id="s5-step-3">
+                  <rect x="578" y="76" width="244" height="118" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <rect x="578" y="76" width="244" height="28" fill="#74A5AD"/>
+                  <text x="592" y="95" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">STEP 3 · 复制保留行</text>
+                  <text x="592" y="124" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">copy_table_data()</text>
+                  <text x="592" y="146" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">扫描旧表，按 MVCC 边界</text>
+                  <text x="592" y="166" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">将需保留行写入新堆。</text>
+                </g>
+                <path d="M 822 135 H 852" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s5)"/>
+
+                <g id="s5-step-4">
+                  <rect x="855" y="76" width="244" height="118" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <rect x="855" y="76" width="244" height="28" fill="#74A5AD"/>
+                  <text x="869" y="95" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">STEP 4 · 交换物理身份</text>
+                  <text x="869" y="124" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">finish_heap_swap()</text>
+                  <text x="869" y="146" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">原表 OID 保持不变，交换</text>
+                  <text x="869" y="166" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">底层物理文件与统计映射。</text>
+                </g>
+                <path d="M 1099 135 H 1129" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s5)"/>
+
+                <g id="s5-step-5">
+                  <rect x="1132" y="76" width="244" height="118" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <rect x="1132" y="76" width="244" height="28" fill="#74A5AD"/>
+                  <text x="1146" y="95" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">STEP 5 · 建索引与清理</text>
+                  <text x="1146" y="124" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">rebuild index &amp; drop</text>
+                  <text x="1146" y="146" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">在新文件上重建全部索引，</text>
+                  <text x="1146" y="166" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">删除临时表并释放旧文件。</text>
+                </g>
+
+                <!-- Bottom Data-Plane Simulation -->
+                <rect x="24" y="216" width="1352" height="150" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="42" y="242" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">PHYSICAL IDENTITY SWAP · 为什么交换物理身份而非建新表改名？</text>
+
+                <!-- Logical Table OID Box -->
+                <rect x="42" y="260" width="320" height="88" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="58" y="286" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">原表逻辑身份（OID 始终不变）</text>
+                <text x="58" y="310" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">完整保留：权限 GRANT、继承关系、</text>
+                <text x="58" y="330" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">视图/外键/外部元数据依赖。</text>
+
+                <!-- Dynamic pointer -->
+                <path id="s5-ptr-path" d="M 362 304 H 458" fill="none" stroke="#245A6B" stroke-width="2.5" marker-end="url(#arr-s5)"/>
+
+                <!-- Old Heap File -->
+                <rect id="s5-old-file" x="462" y="260" width="360" height="88" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text id="s5-old-title" x="478" y="286" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">原物理文件（膨胀态）</text>
+                <text id="s5-old-desc" x="478" y="312" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">含大量死元组与页内空洞，等待扫描复制</text>
+                <text id="s5-old-tag" x="478" y="334" font-family="SF Mono, monospace" font-size="11" fill="#89938F">STATUS: ACTIVE (LOCKED)</text>
+
+                <!-- New Transient Heap File -->
+                <rect id="s5-new-file" x="900" y="260" width="456" height="88" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1.5" stroke-dasharray="5 3"/>
+                <text id="s5-new-title" x="916" y="286" font-family="PingFang SC, sans-serif" font-size="14" fill="#89938F" font-weight="700">Transient Heap（尚未创建）</text>
+                <text id="s5-new-desc" x="916" y="312" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">将在 STEP 2 创建，并在 STEP 4 接管原表身份</text>
+                <text id="s5-new-tag" x="916" y="334" font-family="SF Mono, monospace" font-size="11" fill="#89938F">STATUS: NOT CREATED</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">在 STEP 3 的 copy_table_data() 扫描旧表时，死元组是不是全都能一刀切地直接扔掉？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">05 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 ==================== -->
+        <section class="slide" data-index="5" data-eyebrow="05 · MVCC VISIBILITY BOUNDARY" data-title="HeapTupleSatisfiesVacuum：长事务为何会吞噬收缩收益">
+          <div class="slide-header">
+            <div class="eyebrow">05 · MVCC VISIBILITY BOUNDARY</div>
+            <h1 class="slide-title">HeapTupleSatisfiesVacuum：长事务为何会吞噬收缩收益</h1>
+            <p class="slide-lead">非并发扫描使用 SnapshotAny 逐条判定元组可见性边界，只要旧事务快照仍可能需要该版本，REPACK 就必须将其原样复制到新堆。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-mvcc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Left Source -->
+                <rect x="24" y="138" width="236" height="154" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="138" width="236" height="32" fill="#245A6B"/>
+                <text x="40" y="159" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">OLD HEAP SCAN</text>
+                <text x="40" y="196" font-family="SF Mono, monospace" font-size="13" fill="#1B2B33" font-weight="700">SnapshotAny</text>
+                <text x="40" y="220" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">不只看当前查询可见行，</text>
+                <text x="40" y="240" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">而是读取旧堆全部物理</text>
+                <text x="40" y="260" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">元组交由边界函数裁决。</text>
+
+                <path d="M 260 215 H 314" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-mvcc)"/>
+
+                <!-- Center Judge -->
+                <rect x="318" y="114" width="290" height="202" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+                <rect x="318" y="114" width="290" height="32" fill="#245A6B"/>
+                <text x="334" y="135" font-family="SF Mono, monospace" font-size="11" fill="#CFE0DC" font-weight="700">heapam_handler.c</text>
+                <text x="334" y="174" font-family="SF Mono, monospace" font-size="14" fill="#FFFFFF" font-weight="700">HeapTupleSatisfiesVacuum()</text>
+                <line x1="334" y1="192" x2="592" y2="192" stroke="#47808D" stroke-width="1"/>
+                <text x="334" y="218" font-family="PingFang SC, sans-serif" font-size="13" fill="#EBF1EE">对照全局最老活跃事务边界</text>
+                <text x="334" y="240" font-family="PingFang SC, sans-serif" font-size="13" fill="#EBF1EE">（OldestXmin），逐行决定：</text>
+                <text x="334" y="268" font-family="PingFang SC, sans-serif" font-size="13" fill="#F7E9DE" font-weight="700">丢弃释放，还是复制进新堆？</text>
+                <text x="334" y="294" font-family="PingFang SC, sans-serif" font-size="12" fill="#A4C4C6">绝不破坏 MVCC 事务可见性</text>
+
+                <!-- Orthogonal branching to 4 lanes -->
+                <path d="M 608 215 H 662 V 62 H 712" fill="none" stroke="#2F7A66" stroke-width="2"/>
+                <path d="M 662 162 H 712" fill="none" stroke="#245A6B" stroke-width="2"/>
+                <path d="M 662 262 H 712" fill="none" stroke="#BE653B" stroke-width="2"/>
+                <path d="M 662 215 V 364 H 712" fill="none" stroke="#AE8A3E" stroke-width="2"/>
+
+                <!-- Lane 1: DEAD -->
+                <rect x="716" y="20" width="660" height="84" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="716" y="20" width="10" height="84" fill="#2F7A66"/>
+                <text x="742" y="48" font-family="SF Mono, monospace" font-size="14" fill="#2F7A66" font-weight="700">HEAPTUPLE_DEAD</text>
+                <rect x="1220" y="30" width="138" height="26" fill="#2F7A66"/>
+                <text x="1289" y="48" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#FFFFFF" font-weight="700">丢弃 · 回收空间</text>
+                <text x="742" y="78" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">没有任何活跃快照需要该旧版本，计入可清理元组，不写入新表。</text>
+
+                <!-- Lane 2: LIVE -->
+                <rect x="716" y="120" width="660" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="716" y="120" width="10" height="84" fill="#245A6B"/>
+                <text x="742" y="148" font-family="SF Mono, monospace" font-size="14" fill="#245A6B" font-weight="700">HEAPTUPLE_LIVE</text>
+                <rect x="1220" y="130" width="138" height="26" fill="#245A6B"/>
+                <text x="1289" y="148" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#FFFFFF" font-weight="700">必须复制到新堆</text>
+                <text x="742" y="178" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">当前有效活元组，完整写入新 heap 构成紧凑数据主体。</text>
+
+                <!-- Lane 3: RECENTLY_DEAD -->
+                <rect x="716" y="220" width="660" height="84" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="716" y="220" width="10" height="84" fill="#BE653B"/>
+                <text x="742" y="248" font-family="SF Mono, monospace" font-size="14" fill="#BE653B" font-weight="700">HEAPTUPLE_RECENTLY_DEAD</text>
+                <rect x="1220" y="230" width="138" height="26" fill="#BE653B"/>
+                <text x="1289" y="248" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#FFFFFF" font-weight="700">必须复制 · 收益打折</text>
+                <text x="742" y="278" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">虽已删除或更新，但仍可能被长事务/prepared tx 快照看见，不可丢弃！</text>
+
+                <!-- Lane 4: IN_PROGRESS -->
+                <rect x="716" y="320" width="660" height="88" fill="#F7F1E1" stroke="#AE8A3E" stroke-width="1.5"/>
+                <rect x="716" y="320" width="10" height="88" fill="#AE8A3E"/>
+                <text x="742" y="348" font-family="SF Mono, monospace" font-size="14" fill="#AE8A3E" font-weight="700">INSERT_IN_PROGRESS / DELETE_IN_PROGRESS</text>
+                <rect x="1220" y="330" width="138" height="26" fill="#AE8A3E"/>
+                <text x="1289" y="348" text-anchor="middle" font-family="PingFang SC, sans-serif" font-size="12" fill="#FFFFFF" font-weight="700">谨慎保留</text>
+                <text x="742" y="378" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">在特殊事务进行中状态下保守保留，防止未完结事务出现一致性异常。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">除了压紧空间，若还想按索引顺序重排物理行，USING INDEX 内部如何规划执行路径与资源成本？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">06 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 ==================== -->
+        <section class="slide" data-index="6" data-eyebrow="06 · ORDERING & COST" data-title="USING INDEX：双执行路径与峰值临时空间预算">
+          <div class="slide-header">
+            <div class="eyebrow">06 · ORDERING & COST</div>
+            <h1 class="slide-title">USING INDEX：双执行路径与峰值临时空间预算</h1>
+            <p class="slide-lead">USING INDEX 只是目标物理顺序，并不保证走索引扫描；生产容量评估必须按峰值资源叠加预算，而非只看表大小。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-s7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Left Panel: Planner dual path -->
+                <rect x="20" y="18" width="764" height="394" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="20" y="18" width="764" height="34" fill="#245A6B"/>
+                <text x="38" y="40" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">B-tree 索引重排的规划器双路径（plan_cluster_use_sort）</text>
+
+                <!-- Decision Box -->
+                <rect x="42" y="142" width="210" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="58" y="170" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">plan_cluster_use_sort()</text>
+                <text x="58" y="196" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">依据规划器成本参数</text>
+                <text x="58" y="216" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">与表统计信息，权衡</text>
+                <text x="58" y="236" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">随机 I/O 与排序代价。</text>
+
+                <!-- Orthogonal splits -->
+                <path d="M 252 203 H 294 V 126 H 336" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s7)"/>
+                <path d="M 294 203 V 274 H 336" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-s7)"/>
+
+                <!-- Path A: Index Scan -->
+                <rect x="340" y="72" width="420" height="108" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="340" y="72" width="420" height="28" fill="#EBF1EE"/>
+                <text x="356" y="91" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">PATH A · Index Scan 直接按索引扫旧表</text>
+                <text x="356" y="122" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">• 无需额外排序临时文件，峰值磁盘更低</text>
+                <text x="356" y="146" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• 若旧表物理相关性差，可能带来大量随机读 I/O</text>
+                <text x="356" y="168" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">适用：相关性尚可或临时盘空间受限场景</text>
+
+                <!-- Path B: Seq Scan + Sort -->
+                <rect x="340" y="200" width="420" height="122" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="340" y="200" width="420" height="28" fill="#F7E9DE"/>
+                <text x="356" y="219" font-family="SF Mono, monospace" font-size="12" fill="#BE653B" font-weight="700">PATH B · Seq Scan + Sort 顺序扫描后排序写新表</text>
+                <text x="356" y="250" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">• 顺序读旧堆 + 排序，大表场景通常执行更快</text>
+                <text x="356" y="274" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" font-weight="600">• 峰值临时空间可能接近「2× 表大小 + 全部索引」</text>
+                <text x="356" y="298" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">• 强依赖 maintenance_work_mem（过小落盘慢，过大挤内存）</text>
+
+                <!-- Bottom note on left -->
+                <rect x="42" y="340" width="718" height="54" fill="#F7F1E1" stroke="#AE8A3E" stroke-width="1"/>
+                <text x="58" y="364" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">一次性重排原则：clustering 不是永久约束，后续 INSERT/UPDATE 会逐步打乱物理顺序。</text>
+                <text x="58" y="384" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">将 fillfactor 设为小于 100 可预留页内空间帮助 HOT 更新留在同页，延缓顺序破坏但非强约束。</text>
+
+                <!-- Right Panel: Peak Resource Budget Stack -->
+                <rect x="804" y="18" width="576" height="394" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="804" y="18" width="576" height="34" fill="#1E4B5A"/>
+                <text x="822" y="40" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">峰值资源叠加预算（勿按最终省下多少空间估算）</text>
+
+                <rect x="826" y="70" width="532" height="54" fill="#1E4B5A"/>
+                <text x="844" y="94" font-family="PingFang SC, sans-serif" font-size="14" fill="#FFFFFF" font-weight="700">1. 新 Heap 副本</text>
+                <text x="844" y="114" font-family="PingFang SC, sans-serif" font-size="12" fill="#CFE0DC">旧表释放前，新旧两份物理文件同时占盘</text>
+
+                <rect x="826" y="132" width="532" height="54" fill="#2E6373"/>
+                <text x="844" y="156" font-family="PingFang SC, sans-serif" font-size="14" fill="#FFFFFF" font-weight="700">2. 全部新索引副本</text>
+                <text x="844" y="176" font-family="PingFang SC, sans-serif" font-size="12" fill="#CFE0DC">索引越多，空间叠加与重建耗时占比越高</text>
+
+                <rect x="826" y="194" width="532" height="54" fill="#47808D"/>
+                <text x="844" y="218" font-family="PingFang SC, sans-serif" font-size="14" fill="#FFFFFF" font-weight="700">3. 排序临时文件 / 并发 DML Spill 文件</text>
+                <text x="844" y="238" font-family="PingFang SC, sans-serif" font-size="12" fill="#EBF1EE">排序路径与 CONCURRENTLY 均会额外消耗临时盘</text>
+
+                <rect x="826" y="256" width="532" height="54" fill="#BE653B"/>
+                <text x="844" y="280" font-family="PingFang SC, sans-serif" font-size="14" fill="#FFFFFF" font-weight="700">4. WAL 放大、归档吞吐与 Standby 复制延迟</text>
+                <text x="844" y="300" font-family="PingFang SC, sans-serif" font-size="12" fill="#F7E9DE">permanent logged 表重写产生大量 WAL，须评估主备追赶能力</text>
+
+                <rect x="826" y="324" width="532" height="70" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1"/>
+                <text x="844" y="348" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">正确验收指标（不盲目等同于性能加速）</text>
+                <text x="844" y="370" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">对照重写前后的表/索引体积、关键 SQL 计划、I/O 延迟、</text>
+                <text x="844" y="386" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">缓存命中率、复制延迟，以及下个周期膨胀是否复发。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">普通模式虽然逻辑简单，但全程强锁无法用于线上热表——并发模式如何把长强锁拆解为三段？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">07 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 (INTERACTIVE 3) ==================== -->
+        <section class="slide" data-index="7" data-eyebrow="07 · CONCURRENT REWRITE" data-title="并发 REPACK：逻辑解码补偿与前置建索引">
+          <div class="slide-header">
+            <div class="eyebrow">07 · CONCURRENT REWRITE</div>
+            <h1 class="slide-title">并发 REPACK：逻辑解码补偿与前置建索引</h1>
+            <p class="slide-lead">本质是「快照复制 + WAL 变化补偿」：后台 worker 用 pgrepack 捕获并发 DML，且把耗时的索引构建提前到强锁窗口之前完成。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <button class="tb-btn active" id="s8-phase-1">阶段 1：快照复制 + 解码</button>
+                <button class="tb-btn" id="s8-phase-2">阶段 2：前置建索引 + 追赶</button>
+                <button class="tb-btn accent" id="s8-phase-3">阶段 3：短强锁最终换芯</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="tb-btn" id="s8-dml-toggle">并发 DML：低负载</button>
+                <button class="tb-btn teal" id="s8-play">自动演示</button>
+                <span class="tb-status" id="s8-status">阶段 1/3 · ShareUpdateExclusiveLock</span>
+              </div>
+            </div>
+            <div class="diagram-svg-wrap">
+              <svg id="s8-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-s8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                  <marker id="arr-s8-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#BE653B"/>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="1400" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Top 3-Segment Lock Bar -->
+                <rect id="s8-lock-1" x="20" y="14" width="510" height="34" fill="#2F7A66"/>
+                <text x="36" y="36" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">PHASE 1 · ShareUpdateExclusiveLock（允许普通 DML）</text>
+
+                <rect id="s8-lock-2" x="536" y="14" width="494" height="34" fill="#47808D"/>
+                <text x="552" y="36" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">PHASE 2 · 仍持弱锁（先建新索引 + 首次 catch-up）</text>
+
+                <rect id="s8-lock-3" x="1036" y="14" width="344" height="34" fill="#BE653B"/>
+                <text id="s8-lock-3-txt" x="1052" y="36" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">PHASE 3 · 短暂 AccessExclusiveLock</text>
+
+                <!-- Phase 1 Architecture Column -->
+                <g id="s8-col-1">
+                  <rect x="20" y="60" width="510" height="304" fill="#F7F6F2" stroke="#245A6B" stroke-width="2"/>
+                  <!-- Main backend -->
+                  <rect x="38" y="76" width="474" height="72" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                  <text x="54" y="100" font-family="PingFang SC, sans-serif" font-size="13" fill="#245A6B" font-weight="700">主后端：基于初始 Snapshot 复制旧表可见行 → 新 Heap</text>
+                  <text x="54" y="124" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">业务会话持续并发执行 INSERT / UPDATE / DELETE，写入 WAL</text>
+
+                  <!-- Orthogonal arrow down -->
+                  <path d="M 275 148 V 172" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s8)"/>
+
+                  <!-- Worker box -->
+                  <rect x="38" y="176" width="474" height="92" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                  <text x="54" y="200" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A" font-weight="700">repack_worker.c · Ad-hoc 逻辑解码后台 Worker</text>
+                  <text x="54" y="224" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">• 创建含当前 PID 的临时 replication slot，加载内置插件 pgrepack</text>
+                  <text x="54" y="246" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">• 过滤 WAL，仅保留目标表及 TOAST 表的 INSERT / UPDATE / DELETE</text>
+
+                  <path d="M 275 268 V 292" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-s8-o)"/>
+
+                  <!-- Spill file -->
+                  <rect x="38" y="296" width="474" height="52" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                  <text x="54" y="319" font-family="SF Mono, monospace" font-size="12" fill="#BE653B" font-weight="700">共享 Fileset · Spill 文件（暂存并发 DML 变化）</text>
+                  <text id="s8-spill-desc" x="54" y="339" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">低并发写入：spill 体积平缓，追赶压力可控</text>
+                </g>
+
+                <!-- Phase 2 Architecture Column -->
+                <g id="s8-col-2" opacity="0.55">
+                  <rect x="536" y="60" width="494" height="304" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <rect x="554" y="76" width="458" height="106" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.2"/>
+                  <text x="570" y="102" font-family="SF Mono, monospace" font-size="12" fill="#2F7A66" font-weight="700">关键细节：先在新 Heap 上创建全部新索引！</text>
+                  <text x="570" y="128" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">rebuild_relation_finish_concurrent() 不等交换后</text>
+                  <text x="570" y="150" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">才建索引，把耗时最长的建索引移到强锁之前。</text>
+                  <text x="570" y="170" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66">大幅缩短最终强锁阻塞时间</text>
+
+                  <path d="M 783 182 V 208" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s8)"/>
+
+                  <rect x="554" y="212" width="458" height="136" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.2"/>
+                  <text x="570" y="238" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">首次 apply_concurrent_changes() 追赶</text>
+                  <text x="570" y="264" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">• 读取 spill 文件，向新 Heap 重放已积累的变化</text>
+                  <text x="570" y="290" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">• UPDATE / DELETE 必须通过 identity index</text>
+                  <text x="570" y="312" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">  精准定位新 Heap 中对应行（故须有主键/索引）</text>
+                  <text id="s8-catchup-desc" x="570" y="336" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">当前追赶速度：快于新写入速率，可快速收敛</text>
+                </g>
+
+                <!-- Phase 3 Architecture Column -->
+                <g id="s8-col-3" opacity="0.55">
+                  <rect x="1036" y="60" width="344" height="304" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+                  <rect x="1054" y="76" width="308" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                  <text x="1070" y="102" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" font-weight="700">1. 获取最终强锁</text>
+                  <text x="1070" y="126" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">锁定旧表、TOAST 与全部旧索引</text>
+
+                  <path d="M 1208 150 V 172" fill="none" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-s8-o)"/>
+
+                  <rect x="1054" y="176" width="308" height="74" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.2"/>
+                  <text x="1070" y="202" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">2. 重放最后一段 WAL 变化</text>
+                  <text id="s8-final-desc" x="1070" y="226" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">等锁期间堆积少，尾差毫秒级收口</text>
+
+                  <path d="M 1208 250 V 272" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s8)"/>
+
+                  <rect x="1054" y="276" width="308" height="72" fill="#1E4B5A"/>
+                  <text x="1070" y="302" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">3. 交换 Heap 与索引物理文件</text>
+                  <text x="1070" y="326" font-family="PingFang SC, sans-serif" font-size="12" fill="#CFE0DC">删除临时对象，释放旧文件与 slot</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">既然并发模式依赖逻辑解码与行定位重放，源码中写死的六条硬性限制也就有了清晰的工程因果。</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">08 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 ==================== -->
+        <section class="slide" data-index="8" data-eyebrow="08 · CONCURRENT CONSTRAINTS" data-title="并发模式的六道硬性门槛：不是形式主义，而是重放前提">
+          <div class="slide-header">
+            <div class="eyebrow">08 · CONCURRENT CONSTRAINTS</div>
+            <h1 class="slide-title">并发模式的六道硬性门槛：不是形式主义，而是重放前提</h1>
+            <p class="slide-lead">check_concurrent_repack_requirements() 与官方文档列出的所有限制，归根结底都在防止 WAL 重放失去行定位或结构一致性。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Row 1 (3 gates) -->
+                <rect x="20" y="20" width="440" height="184" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="20" y="20" width="440" height="34" fill="#245A6B"/>
+                <text x="38" y="42" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">GATE 01 · 行定位前提（Identity Index）</text>
+                <text x="38" y="80" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">必须有非延迟主键或索引型 Replica Identity</text>
+                <text x="38" y="108" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• REPLICA IDENTITY NOTHING：WAL 缺旧行信息</text>
+                <text x="38" y="132" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• REPLICA IDENTITY FULL：源码明确尚未支持</text>
+                <text x="38" y="162" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">根因：重放 UPDATE/DELETE 须在新堆精确定位旧行。</text>
+
+                <rect x="480" y="20" width="440" height="184" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="480" y="20" width="440" height="34" fill="#245A6B"/>
+                <text x="498" y="42" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">GATE 02 · 表类型限制（Permanent Only）</text>
+                <text x="498" y="80" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">仅允许普通持久化表（Permanent Relation）</text>
+                <text x="498" y="108" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• 不支持系统目录（不走普通逻辑解码）</text>
+                <text x="498" y="132" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• 不支持单独处理 TOAST、Unlogged 与临时表</text>
+                <text x="498" y="162" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">根因：无完整 WAL 逻辑解码流即无法捕获并发变化。</text>
+
+                <rect x="940" y="20" width="440" height="184" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="940" y="20" width="440" height="34" fill="#245A6B"/>
+                <text x="958" y="42" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">GATE 03 · 分区表与事务块边界</text>
+                <text x="958" y="80" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">不可对分区父表并发，不可置于事务块内</text>
+                <text x="958" y="108" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• 分区表需改为对单个叶子分区逐个执行</text>
+                <text x="958" y="132" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• 运维脚本切忌将其随手包进 BEGIN ... COMMIT</text>
+                <text x="958" y="162" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66">对策：按叶子分区循环独立执行，降低单次窗口风险。</text>
+
+                <!-- Row 2 (3 gates) -->
+                <rect x="20" y="224" width="440" height="186" fill="#F7F6F2" stroke="#47808D" stroke-width="1.5"/>
+                <rect x="20" y="224" width="440" height="34" fill="#47808D"/>
+                <text x="38" y="246" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">GATE 04 · WAL 级别与 Slot 额度</text>
+                <text x="38" y="284" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33" font-weight="700">服务器配置须满足逻辑解码运行条件</text>
+                <text x="38" y="312" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A">• CheckSlotRequirements(true)：wal_level &gt;= replica</text>
+                <text x="38" y="336" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A">• max_repack_replication_slots 须允许新增 slot</text>
+                <text x="38" y="366" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">执行前务必 SHOW 两项参数，避免中途报错中断。</text>
+
+                <rect x="480" y="224" width="440" height="186" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="480" y="224" width="440" height="34" fill="#BE653B"/>
+                <text x="498" y="246" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">GATE 05 · 并发 DDL 冲突风险</text>
+                <text x="498" y="284" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">执行期间目标表若发生 DDL 可能导致失败</text>
+                <text x="498" y="312" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• 对象结构中途变更会破坏新旧表映射一致性</text>
+                <text x="498" y="336" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">• 窗口管理不仅看业务 DML，还要管控发布迁移</text>
+                <text x="498" y="366" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">原则：在线重写窗口内冻结目标表自动迁移与 DDL。</text>
+
+                <rect x="940" y="224" width="440" height="186" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="940" y="224" width="440" height="34" fill="#BE653B"/>
+                <text x="958" y="246" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">GATE 06 · MVCC Caveats（非 MVCC-safe）</text>
+                <text x="958" y="284" font-family="PingFang SC, sans-serif" font-size="14" fill="#BE653B" font-weight="700">并发 REPACK 不是严格 MVCC-safe</text>
+                <text x="958" y="312" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">• 若某事务在命令提交前已取得快照、但尚未</text>
+                <text x="958" y="334" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">  访问目标表，重写提交后可能看到该表为空！</text>
+                <text x="958" y="366" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">详见 mvcc.sgml，跨表强一致性长读事务须避开窗口。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">满足条件并启动命令后，DBA 如何实时看见它走到哪一步、又卡在哪一个底层瓶颈上？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">09 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 (INTERACTIVE 4) ==================== -->
+        <section class="slide" data-index="9" data-eyebrow="09 · OBSERVABILITY" data-title="pg_stat_progress_repack：透视九大阶段与卡点定位">
+          <div class="slide-header">
+            <div class="eyebrow">09 · OBSERVABILITY</div>
+            <h1 class="slide-title">pg_stat_progress_repack：透视九大阶段与卡点定位</h1>
+            <p class="slide-lead">视图通过 pg_stat_get_progress_info('REPACK') 统一呈现 REPACK、CLUSTER 与 VACUUM FULL 的实时阶段与七项计数器。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group" id="s10-phase-btns">
+                <button class="tb-btn active" data-p="0">initializing</button>
+                <button class="tb-btn" data-p="1">scanning</button>
+                <button class="tb-btn" data-p="2">sorting</button>
+                <button class="tb-btn" data-p="3">writing</button>
+                <button class="tb-btn accent" data-p="4">catch-up</button>
+                <button class="tb-btn accent" data-p="5">swapping</button>
+                <button class="tb-btn" data-p="6">rebuilding</button>
+                <button class="tb-btn teal" data-p="7">cleanup</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="tb-btn teal" id="s10-play">自动巡检</button>
+              </div>
+            </div>
+            <div class="diagram-svg-wrap">
+              <svg id="s10-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="1400" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Top Pipeline (8 visual slots covering all 9 phases: seq/index scanning grouped cleanly) -->
+                <g id="s10-pipeline"></g>
+
+                <!-- Bottom Left: 7 Counters Panel -->
+                <rect x="20" y="138" width="676" height="226" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="20" y="138" width="676" height="32" fill="#245A6B"/>
+                <text x="38" y="159" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">pg_stat_progress_repack · 核心计数器实时映射</text>
+
+                <g id="s10-counters-layer"></g>
+
+                <!-- Bottom Right: Bottleneck Diagnosis Panel -->
+                <rect x="714" y="138" width="666" height="226" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="714" y="138" width="666" height="32" fill="#BE653B"/>
+                <text x="732" y="159" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">卡点诊断面板（点击上方阶段切换定位策略）</text>
+
+                <text x="734" y="198" font-family="SF Mono, monospace" font-size="12" fill="#89938F">CURRENT PHASE</text>
+                <text id="s10-diag-phase" x="734" y="224" font-family="SF Mono, monospace" font-size="18" fill="#1B2B33" font-weight="700">initializing</text>
+
+                <line x1="734" y1="240" x2="1360" y2="240" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="734" y="266" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" font-weight="700">若在此阶段停滞，优先排查：</text>
+                <text id="s10-diag-cause" x="734" y="294" font-family="PingFang SC, sans-serif" font-size="14" fill="#1B2B33">初始化对象检查、获取初始锁（表锁或 slot 初始化等待）。</text>
+
+                <rect x="734" y="312" width="626" height="38" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+                <text id="s10-diag-sql" x="748" y="336" font-family="SF Mono, monospace" font-size="12" fill="#1E4B5A">联动排查：pg_locks（查未授予锁） / pg_stat_activity（查阻塞源）</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">看清了内部机制与监控方法后，把 REPACK 放回 PostgreSQL 完整工具箱，它与其他维护命令如何横向取舍？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">10 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-index="10" data-eyebrow="10 · COMPARATIVE MATRIX" data-title="五种空间维护机制横向对比：先分路线，再选命令">
+          <div class="slide-header">
+            <div class="eyebrow">10 · COMPARATIVE MATRIX</div>
+            <h1 class="slide-title">五种空间维护机制横向对比：先分路线，再选命令</h1>
+            <p class="slide-lead">选型的本质不是死记语法，而是区分「低成本原地复用」与「高成本重写回收」两类能力边界。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Table Header -->
+                <rect x="16" y="16" width="1368" height="42" fill="#1E4B5A"/>
+                <text x="32" y="42" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">命令 / 机制</text>
+                <text x="242" y="42" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">锁影响</text>
+                <text x="458" y="42" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">归还 OS 空间</text>
+                <text x="614" y="42" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">物理重排</text>
+                <text x="794" y="42" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">额外磁盘峰值</text>
+                <text x="1038" y="42" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">核心适用与不适用场景</text>
+
+                <!-- Row 1: 普通 VACUUM (In-place) -->
+                <rect x="16" y="64" width="1368" height="66" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="16" y="64" width="6" height="66" fill="#2F7A66"/>
+                <text x="32" y="92" font-family="SF Mono, monospace" font-size="13" fill="#2F7A66" font-weight="700">普通 VACUUM</text>
+                <text x="32" y="114" font-family="PingFang SC, sans-serif" font-size="11" fill="#2F7A66">【原地回收路线】</text>
+                <text x="242" y="92" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">可与普通读写并行</text>
+                <text x="242" y="114" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">日常稳态无阻塞</text>
+                <text x="458" y="92" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" font-weight="700">通常否</text>
+                <text x="458" y="114" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">尾部整页空例外</text>
+                <text x="614" y="102" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">否（原地清理）</text>
+                <text x="794" y="102" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="600">较低（不建新表副本）</text>
+                <text x="1038" y="92" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">适：日常维护、高频更新稳态复用</text>
+                <text x="1038" y="114" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">忌：急需立刻缩小磁盘物理文件</text>
+
+                <!-- Row 2: 普通 REPACK -->
+                <rect x="16" y="138" width="1368" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="16" y="138" width="6" height="66" fill="#245A6B"/>
+                <text x="32" y="166" font-family="SF Mono, monospace" font-size="13" fill="#245A6B" font-weight="700">普通 REPACK</text>
+                <text x="32" y="188" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">【重写回收路线】</text>
+                <text x="242" y="166" font-family="SF Mono, monospace" font-size="12" fill="#BE653B" font-weight="700">全程 ACCESS EXCLUSIVE</text>
+                <text x="242" y="188" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">阻塞读写，逻辑最简</text>
+                <text x="458" y="176" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">是（删旧文件）</text>
+                <text x="614" y="166" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">默认物理顺序</text>
+                <text x="614" y="188" font-family="SF Mono, monospace" font-size="11" fill="#245A6B">可选 USING INDEX</text>
+                <text x="794" y="166" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">至少表 + 索引副本</text>
+                <text x="794" y="188" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">排序路径峰值更高</text>
+                <text x="1038" y="166" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">适：明确维护窗口、离线表强收缩</text>
+                <text x="1038" y="188" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">忌：不能停读写的核心在线表</text>
+
+                <!-- Row 3: REPACK CONCURRENTLY -->
+                <rect x="16" y="210" width="1368" height="68" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="16" y="210" width="6" height="68" fill="#245A6B"/>
+                <text x="32" y="238" font-family="SF Mono, monospace" font-size="13" fill="#1E4B5A" font-weight="700">REPACK (CONCURRENTLY)</text>
+                <text x="32" y="260" font-family="PingFang SC, sans-serif" font-size="11" fill="#245A6B">【在线重写路线】</text>
+                <text x="242" y="238" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">大部分阶段弱锁</text>
+                <text x="242" y="260" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">最终交换阶段短暂强锁</text>
+                <text x="458" y="238" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">是</text>
+                <text x="458" y="260" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">须完成补偿与交换</text>
+                <text x="614" y="238" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">同左（支持索引）</text>
+                <text x="614" y="260" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">新写入行不保序</text>
+                <text x="794" y="238" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">表 + 索引副本</text>
+                <text x="794" y="260" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">+ 并发 DML spill 文件</text>
+                <text x="1038" y="238" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">适：热表在线收缩，满足主键与 slot</text>
+                <text x="1038" y="260" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">忌：超高 DML/DDL、无主键、分区父表</text>
+
+                <!-- Row 4: VACUUM FULL -->
+                <rect x="16" y="284" width="1368" height="62" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="16" y="284" width="6" height="62" fill="#74A5AD"/>
+                <text x="32" y="311" font-family="SF Mono, monospace" font-size="13" fill="#46585F" font-weight="700">VACUUM FULL</text>
+                <text x="32" y="331" font-family="PingFang SC, sans-serif" font-size="11" fill="#89938F">【兼容重写语法】</text>
+                <text x="242" y="320" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B">全程独占锁</text>
+                <text x="458" y="320" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">是</text>
+                <text x="614" y="320" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F">否</text>
+                <text x="794" y="320" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">新表 + 索引副本</text>
+                <text x="1038" y="320" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">适：低版本或兼容语法；忌：高并发无窗口</text>
+
+                <!-- Row 5: CLUSTER -->
+                <rect x="16" y="352" width="1368" height="62" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="16" y="352" width="6" height="62" fill="#74A5AD"/>
+                <text x="32" y="379" font-family="SF Mono, monospace" font-size="13" fill="#46585F" font-weight="700">CLUSTER</text>
+                <text x="32" y="399" font-family="PingFang SC, sans-serif" font-size="11" fill="#89938F">【等价 USING INDEX】</text>
+                <text x="242" y="388" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B">全程独占锁</text>
+                <text x="458" y="388" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">是</text>
+                <text x="614" y="388" font-family="PingFang SC, sans-serif" font-size="13" fill="#245A6B" font-weight="600">是（按索引顺序）</text>
+                <text x="794" y="388" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">新表 + 索引 + 排序文件</text>
+                <text x="1038" y="388" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">适：范围查询局部性优化；忌：仅防日常膨胀</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">明确了每种手段的定位后，动手操作前究竟需要哪四步标准 SQL 核验与伴随监控闭环？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">11 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-index="11" data-eyebrow="11 · OPERATIONAL PLAYBOOK" data-title="标准操作闭环：膨胀观测、前置核验与在线伴随监控">
+          <div class="slide-header">
+            <div class="eyebrow">11 · OPERATIONAL PLAYBOOK</div>
+            <h1 class="slide-title">标准操作闭环：膨胀观测、前置核验与在线伴随监控</h1>
+            <p class="slide-lead">最小验证模板覆盖从量化空洞、核对并发前提、执行重写到实时观测进度与复制延迟的完整运维动作。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-s12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Stage 1 -->
+                <rect x="18" y="18" width="322" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="18" y="18" width="322" height="36" fill="#245A6B"/>
+                <text x="34" y="41" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">01 · 量化膨胀与对照 VACUUM</text>
+                <text x="34" y="76" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">先证实物理体积问题，不凭感觉动手</text>
+                <rect x="32" y="92" width="294" height="194" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+                <text x="44" y="114" font-family="SF Mono, monospace" font-size="11" fill="#1E4B5A">SELECT</text>
+                <text x="44" y="132" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">  pg_size_pretty(</text>
+                <text x="44" y="150" font-family="SF Mono, monospace" font-size="11" fill="#245A6B">    pg_relation_size('t')),</text>
+                <text x="44" y="168" font-family="SF Mono, monospace" font-size="11" fill="#245A6B">    pg_total_relation_size('t');</text>
+                <text x="44" y="196" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 精确测量页内空洞</text>
+                <text x="44" y="214" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">SELECT * FROM pgstattuple('t');</text>
+                <text x="44" y="242" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 对照普通清理效果</text>
+                <text x="44" y="260" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66">VACUUM (VERBOSE, ANALYZE) t;</text>
+                <text x="34" y="314" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">预期现象：普通 VACUUM 降低死元组，</text>
+                <text x="34" y="334" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">但不保证 pg_relation_size() 显著下降。</text>
+                <text x="34" y="366" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B">同时检查 pg_stat_all_tables 统计。</text>
+
+                <path d="M 340 215 H 362" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s12)"/>
+
+                <!-- Stage 2 -->
+                <rect x="365" y="18" width="322" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="365" y="18" width="322" height="36" fill="#2E6373"/>
+                <text x="381" y="41" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">02 · 并发前置条件核验</text>
+                <text x="381" y="76" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">逐项核对持久性、主键与 WAL 参数</text>
+                <rect x="379" y="92" width="294" height="194" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+                <text x="391" y="114" font-family="SF Mono, monospace" font-size="11" fill="#1E4B5A">SELECT relpersistence, relreplident</text>
+                <text x="391" y="132" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">FROM pg_class</text>
+                <text x="391" y="150" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">WHERE oid = 't'::regclass;</text>
+                <text x="391" y="178" font-family="SF Mono, monospace" font-size="11" fill="#1E4B5A">SELECT indexrelid::regclass,</text>
+                <text x="391" y="196" font-family="SF Mono, monospace" font-size="11" fill="#245A6B">  indisprimary, indisreplident</text>
+                <text x="391" y="214" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">FROM pg_index WHERE indrelid=...;</text>
+                <text x="391" y="244" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66">SHOW wal_level;</text>
+                <text x="391" y="264" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66">SHOW max_repack_replication_slots;</text>
+                <text x="381" y="314" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">硬核对清单：relpersistence='p'、存在</text>
+                <text x="381" y="334" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">主键或索引型 identity、wal_level&gt;=replica、</text>
+                <text x="381" y="354" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">slot 额度充足，且不在事务块内。</text>
+
+                <path d="M 687 215 H 709" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s12)"/>
+
+                <!-- Stage 3 -->
+                <rect x="712" y="18" width="322" height="394" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="712" y="18" width="322" height="36" fill="#2F7A66"/>
+                <text x="728" y="41" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">03 · 按窗口执行 REPACK</text>
+                <text x="728" y="76" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">按需附加 ANALYZE 与索引排序</text>
+                <rect x="726" y="92" width="294" height="194" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1"/>
+                <text x="738" y="114" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 维护窗口普通模式</text>
+                <text x="738" y="132" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">REPACK (ANALYZE, VERBOSE) t;</text>
+                <text x="738" y="160" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 按主键或指定索引重排</text>
+                <text x="738" y="178" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">REPACK (ANALYZE, VERBOSE) t</text>
+                <text x="738" y="196" font-family="SF Mono, monospace" font-size="11" fill="#245A6B">  USING INDEX t_pkey;</text>
+                <text x="738" y="226" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 满足前提的在线并发模式</text>
+                <text x="738" y="244" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66" font-weight="700">REPACK (CONCURRENTLY,</text>
+                <text x="738" y="262" font-family="SF Mono, monospace" font-size="11" fill="#2F7A66" font-weight="700">  ANALYZE, VERBOSE) t;</text>
+                <text x="728" y="314" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">重写会改变物理相关性与页分布，</text>
+                <text x="728" y="334" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33" font-weight="700">完成后必须确保已运行 ANALYZE，</text>
+                <text x="728" y="354" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">避免规划器沿用过期统计信息。</text>
+
+                <path d="M 1034 215 H 1056" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s12)"/>
+
+                <!-- Stage 4 -->
+                <rect x="1059" y="18" width="322" height="394" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="1059" y="18" width="322" height="36" fill="#BE653B"/>
+                <text x="1075" y="41" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">04 · 另开会话伴随监控</text>
+                <text x="1075" y="76" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">盯紧进度、锁队列与主备延迟</text>
+                <rect x="1073" y="92" width="294" height="194" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="1085" y="114" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 1. 阶段与块/行进度</text>
+                <text x="1085" y="132" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">SELECT pid, command, phase,</text>
+                <text x="1085" y="150" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">  heap_blks_scanned, heap_blks_total</text>
+                <text x="1085" y="168" font-family="SF Mono, monospace" font-size="11" fill="#BE653B">FROM pg_stat_progress_repack;</text>
+                <text x="1085" y="196" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 2. 锁等待与阻塞</text>
+                <text x="1085" y="214" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">SELECT mode, granted FROM pg_locks</text>
+                <text x="1085" y="232" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">WHERE relation = 't'::regclass;</text>
+                <text x="1085" y="258" font-family="SF Mono, monospace" font-size="11" fill="#46585F">-- 3. 复制延迟</text>
+                <text x="1085" y="276" font-family="SF Mono, monospace" font-size="11" fill="#1B2B33">SELECT replay_lag FROM pg_stat_replication;</text>
+                <text x="1075" y="314" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">若 catch-up 或 swapping 停滞，</text>
+                <text x="1075" y="334" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">立即结合 pg_locks 与 WAL 速率</text>
+                <text x="1075" y="354" font-family="PingFang SC, sans-serif" font-size="12" fill="#BE653B" font-weight="700">判断是否需要中止以保护线上业务。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">会敲命令只是基础，真正拉开工程差距的是：生产环境什么时候该执行 REPACK，什么时候应当改架构？</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">12 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 (INTERACTIVE 5) ==================== -->
+        <section class="slide" data-index="12" data-eyebrow="12 · PRODUCTION DECISION" data-title="生产决策蓝图：先证伪根因，再按条件选择路径">
+          <div class="slide-header">
+            <div class="eyebrow">12 · PRODUCTION DECISION</div>
+            <h1 class="slide-title">生产决策蓝图：先证伪根因，再按条件选择路径</h1>
+            <p class="slide-lead">不要把 REPACK 当定期清洁工；执行前逐层校验膨胀影响、OS 回收需求、峰值资源与在线条件，执行后必须复盘根因。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <div class="toolbar-group">
+                <button class="tb-btn active" id="s13-c1">1. 膨胀影响成本：是</button>
+                <button class="tb-btn active" id="s13-c2">2. 须归还 OS：是</button>
+                <button class="tb-btn active" id="s13-c3">3. 磁盘/WAL 充足：是</button>
+                <button class="tb-btn active" id="s13-c4">4. 在线且满前提：是</button>
+              </div>
+              <div class="toolbar-group">
+                <button class="tb-btn" id="s13-reset">恢复默认</button>
+              </div>
+            </div>
+            <div class="diagram-svg-wrap">
+              <svg id="s13-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <marker id="arr-s13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                  </marker>
+                  <marker id="arr-s13-t" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#2F7A66"/>
+                  </marker>
+                  <marker id="arr-s13-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#BE653B"/>
+                  </marker>
+                </defs>
+                <rect x="0" y="0" width="1400" height="382" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Left 920px: Interactive Decision Flowchart -->
+                <rect x="16" y="14" width="912" height="354" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="34" y="38" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">INTERACTIVE DECISION FLOW · 切换上方四个工程条件实时推演决策结论</text>
+
+                <!-- Node Q1 -->
+                <rect id="s13-q1" x="34" y="56" width="196" height="62" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="48" y="82" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">Q1. 膨胀已证实影响</text>
+                <text x="48" y="102" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">I/O、缓存或磁盘水位？</text>
+
+                <!-- Q1 -> Q2 -->
+                <path d="M 230 87 H 266" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s13)"/>
+                <!-- Q1 -> A1 (No) -->
+                <path d="M 132 118 V 162" fill="none" stroke="#89938F" stroke-width="1.5" marker-end="url(#arr-s13)"/>
+
+                <!-- Node Q2 -->
+                <rect id="s13-q2" x="270" y="56" width="196" height="62" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="284" y="82" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">Q2. 必须将物理空间</text>
+                <text x="284" y="102" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">立即归还操作系统？</text>
+
+                <path d="M 466 87 H 502" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s13)"/>
+                <path d="M 368 118 V 162" fill="none" stroke="#89938F" stroke-width="1.5" marker-end="url(#arr-s13)"/>
+
+                <!-- Node Q3 -->
+                <rect id="s13-q3" x="506" y="56" width="196" height="62" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="520" y="82" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">Q3. 磁盘、WAL 与</text>
+                <text x="520" y="102" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">备库追赶预算充足？</text>
+
+                <path d="M 702 87 H 730" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-s13)"/>
+                <path d="M 604 118 V 162" fill="none" stroke="#89938F" stroke-width="1.5" marker-end="url(#arr-s13)"/>
+
+                <!-- Node Q4 -->
+                <rect id="s13-q4" x="734" y="56" width="178" height="62" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="748" y="82" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33" font-weight="700">Q4. 需在线且满足</text>
+                <text x="748" y="102" font-family="PingFang SC, sans-serif" font-size="12" fill="#46585F">主键/slot/非分区？</text>
+
+                <path d="M 823 118 V 162" fill="none" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-s13-t)"/>
+
+                <!-- Outcome Row -->
+                <rect id="s13-out-1" x="34" y="166" width="196" height="90" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="48" y="190" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" font-weight="700">不执行 REPACK</text>
+                <text x="48" y="212" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">先排查真正瓶颈（SQL、</text>
+                <text x="48" y="232" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">CPU、锁），勿盲目重写。</text>
+
+                <rect id="s13-out-2" x="270" y="166" width="196" height="90" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="284" y="190" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" font-weight="700">调优 autovacuum</text>
+                <text x="284" y="212" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">普通 VACUUM 原地复用</text>
+                <text x="284" y="232" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">即够用，保持稳态即可。</text>
+
+                <rect id="s13-out-3" x="506" y="166" width="196" height="90" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+                <text x="520" y="190" font-family="PingFang SC, sans-serif" font-size="13" fill="#46585F" font-weight="700">暂缓 · 先扩资源/改分区</text>
+                <text x="520" y="212" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">防磁盘写满或备库雪崩，</text>
+                <text x="520" y="232" font-family="PingFang SC, sans-serif" font-size="12" fill="#89938F">优先扩容或改时间分区。</text>
+
+                <rect id="s13-out-4" x="734" y="166" width="178" height="90" fill="#E6F2EE" stroke="#2F7A66" stroke-width="2"/>
+                <text id="s13-out-4-title" x="748" y="190" font-family="SF Mono, monospace" font-size="11.5" fill="#2F7A66" font-weight="700">REPACK (CONCURRENTLY)</text>
+                <text id="s13-out-4-l1" x="748" y="212" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">在线重写，盯紧进度、</text>
+                <text id="s13-out-4-l2" x="748" y="232" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">锁等待与复制延迟。</text>
+
+                <!-- Dynamic Verdict Banner -->
+                <rect id="s13-verdict-box" x="34" y="274" width="876" height="76" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <text id="s13-verdict-title" x="52" y="302" font-family="PingFang SC, sans-serif" font-size="15" fill="#2F7A66" font-weight="700">推荐结论：执行 REPACK (CONCURRENTLY, ANALYZE, VERBOSE)</text>
+                <text id="s13-verdict-desc" x="52" y="330" font-family="PingFang SC, sans-serif" font-size="13" fill="#1B2B33">收尾必做：确认 ANALYZE 更新统计信息，并复盘膨胀根因（分区生命周期 / 批量更新 / 长事务），防止下周期复发。</text>
+
+                <!-- Right 438px: 3 Roles Best Practices -->
+                <rect x="944" y="14" width="440" height="354" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="944" y="14" width="440" height="34" fill="#1E4B5A"/>
+                <text x="962" y="36" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">三角色协同治理最佳实践</text>
+
+                <rect x="962" y="62" width="404" height="90" fill="#FFFFFF" stroke="#245A6B" stroke-width="1"/>
+                <rect x="962" y="62" width="5" height="90" fill="#245A6B"/>
+                <text x="978" y="85" font-family="PingFang SC, sans-serif" font-size="13" fill="#245A6B" font-weight="700">数据库架构师</text>
+                <text x="978" y="108" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">• 优先用时间/列表分区 DROP 替代大表打洞</text>
+                <text x="978" y="128" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">• 高频更新表评估 fillfactor，纳入容量峰值模型</text>
+
+                <rect x="962" y="164" width="404" height="90" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1"/>
+                <rect x="962" y="164" width="5" height="90" fill="#2F7A66"/>
+                <text x="978" y="187" font-family="PingFang SC, sans-serif" font-size="13" fill="#2F7A66" font-weight="700">DBA 运维工程师</text>
+                <text x="978" y="210" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">• 先调 autovacuum，清理长事务与 prepared tx</text>
+                <text x="978" y="230" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">• 执行期看进度/锁/lag，完成后确认 ANALYZE</text>
+
+                <rect x="962" y="266" width="404" height="90" fill="#FFFFFF" stroke="#BE653B" stroke-width="1"/>
+                <rect x="962" y="266" width="5" height="90" fill="#BE653B"/>
+                <text x="978" y="289" font-family="PingFang SC, sans-serif" font-size="13" fill="#BE653B" font-weight="700">业务开发者</text>
+                <text x="978" y="312" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">• 禁止一次全表 UPDATE，按主键分批给清理留空</text>
+                <text x="978" y="332" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">• 严控长事务持有旧快照；大字段冷热拆表防 WAL 放大</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">承接 · NEXT</div>
+            <div class="next-text">最后，我们把生产落地最容易踩中的十个高频陷阱与六个第一性原理扩展问题一次收齐。</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">13 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-index="13" data-eyebrow="13 · PITFALLS & REFLECTION" data-title="十大生产避坑清单与六个第一性原理思考">
+          <div class="slide-header">
+            <div class="eyebrow">13 · PITFALLS & REFLECTION</div>
+            <h1 class="slide-title">十大生产避坑清单与六个第一性原理思考</h1>
+            <p class="slide-lead">避开认知与窗口误区，回到 MVCC、元数据依赖与分区生命周期的第一性原理理解表重写。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-svg-wrap">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="1400" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+
+                <!-- Left: 10 Pitfalls in 3 Strata -->
+                <rect x="18" y="18" width="790" height="394" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="18" y="18" width="790" height="34" fill="#BE653B"/>
+                <text x="36" y="40" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">生产十大高频避坑清单（按风险分层）</text>
+
+                <!-- Stratum 1: 认知误区 (4 items) -->
+                <rect x="34" y="64" width="758" height="114" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="48" y="86" font-family="SF Mono, monospace" font-size="12" fill="#BE653B" font-weight="700">A · 认知误区</text>
+                <text x="48" y="110" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">1. 把普通 VACUUM 未缩文件误判成失败</text>
+                <text x="418" y="110" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">3. 把 CONCURRENTLY 当成完全无锁</text>
+                <text x="48" y="136" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">7. 把 USING INDEX 当成永久物理排序</text>
+                <text x="418" y="136" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">10. 低版本生产环境照搬开发版 REPACK</text>
+                <text x="48" y="162" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">对策：分清复用与归还 OS，按生产实际版本文档选型。</text>
+
+                <!-- Stratum 2: 资源与前置 (3 items) -->
+                <rect x="34" y="188" width="758" height="104" fill="#EBF1EE" stroke="#47808D" stroke-width="1"/>
+                <text x="48" y="210" font-family="SF Mono, monospace" font-size="12" fill="#245A6B" font-weight="700">B · 资源与前置盲区</text>
+                <text x="48" y="234" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">2. 只看 pg_relation_size，漏算索引、排序与 WAL</text>
+                <text x="48" y="258" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">4. 缺少主键或 identity index 却试图跑并发模式</text>
+                <text x="48" y="280" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">5. 存在长事务或 prepared tx，导致近期死元组全被复制</text>
+
+                <!-- Stratum 3: 操作与窗口 (3 items) -->
+                <rect x="34" y="302" width="758" height="96" fill="#F7F1E1" stroke="#AE8A3E" stroke-width="1"/>
+                <text x="48" y="324" font-family="SF Mono, monospace" font-size="12" fill="#AE8A3E" font-weight="700">C · 操作与窗口失控</text>
+                <text x="48" y="348" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">6. 重写后忘记 ANALYZE，规划器沿用旧统计信息</text>
+                <text x="48" y="370" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">8. 将不支持形式包进事务块 BEGIN</text>
+                <text x="418" y="370" font-family="PingFang SC, sans-serif" font-size="12" fill="#1B2B33">9. 并发期间撞上 DDL 导致失败</text>
+
+                <!-- Right: 6 Extension Questions -->
+                <rect x="826" y="18" width="556" height="394" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="826" y="18" width="556" height="34" fill="#1E4B5A"/>
+                <text x="844" y="40" font-family="PingFang SC, sans-serif" font-size="13" fill="#FFFFFF" font-weight="700">六个第一性原理扩展思考题</text>
+
+                <text x="844" y="78" font-family="PingFang SC, sans-serif" font-size="12" fill="#1E4B5A" font-weight="700">Q1. 普通 VACUUM 为何不主动搬移页面中间的活元组？</text>
+                <text x="844" y="96" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">若原地搬移，会破坏哪些并发扫描与索引指向假设？</text>
+
+                <line x1="844" y1="108" x2="1364" y2="108" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="844" y="130" font-family="PingFang SC, sans-serif" font-size="12" fill="#1E4B5A" font-weight="700">Q2. 为何要保留原表 OID，只交换底层物理文件身份？</text>
+                <text x="844" y="148" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">若直接 CREATE TABLE AS 再改名，会丢失哪些元数据依赖？</text>
+
+                <line x1="844" y1="160" x2="1364" y2="160" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="844" y="182" font-family="PingFang SC, sans-serif" font-size="12" fill="#1E4B5A" font-weight="700">Q3. 并发 REPACK 为何用逻辑解码而非 SQL 触发器？</text>
+                <text x="844" y="200" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">两种方案在一致性、侵入性与覆盖范围上有何本质差异？</text>
+
+                <line x1="844" y1="212" x2="1364" y2="212" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="844" y="234" font-family="PingFang SC, sans-serif" font-size="12" fill="#1E4B5A" font-weight="700">Q4. 无主键但业务唯一：先建唯一索引再并发，还是普通重写？</text>
+                <text x="844" y="252" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">两种路径的停顿成本、磁盘成本与锁风险分别取决于什么？</text>
+
+                <line x1="844" y1="264" x2="1364" y2="264" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="844" y="286" font-family="PingFang SC, sans-serif" font-size="12" fill="#1E4B5A" font-weight="700">Q5. USING INDEX 之后，correlation 统计如何改变规划器估算？</text>
+                <text x="844" y="304" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">物理局部性提升怎样直接作用于范围查询（range scan）成本？</text>
+
+                <line x1="844" y1="316" x2="1364" y2="316" stroke="#D9D5CB" stroke-width="1"/>
+                <text x="844" y="338" font-family="PingFang SC, sans-serif" font-size="12" fill="#2F7A66" font-weight="700">Q6. 时间分区日志表：定期 REPACK 老分区 vs 直接 DROP 过期分区？</text>
+                <text x="844" y="356" font-family="PingFang SC, sans-serif" font-size="11" fill="#46585F">哪一种从源头消灭了表膨胀，更符合存储治理的第一性原理？</text>
+
+                <rect x="844" y="370" width="520" height="30" fill="#EBF1EE"/>
+                <text x="858" y="390" font-family="SF Mono, monospace" font-size="11" fill="#245A6B">源码深读：repack.c · repack_worker.c · pgrepack.c · heapam_handler.c</text>
+              </svg>
+            </div>
+          </div>
+          <div class="next-box">
+            <div class="next-label">完结 · SUMMARY</div>
+            <div class="next-text">课程结束 —— 按 G 打开目录回溯任意章节，按 T 浏览全文讲稿进行系统复盘。</div>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL REPACK</span>
+            <span class="page-num">14 / 14</span>
+          </div>
+        </section>
+
+      </div><!-- /#stage-scaler -->
+    </div><!-- /#stage-viewport -->
+
+    <!-- Right-side In-Page Notes Pane -->
+    <aside id="notes-pane" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div class="notes-tabs">
+          <button class="notes-tab active" id="tab-note-page">本页讲稿 N</button>
+          <button class="notes-tab" id="tab-note-all">全文讲稿 T</button>
+        </div>
+        <button class="notes-close" id="btn-notes-close" title="关闭讲稿">关闭 ×</button>
+      </div>
+      <div id="notes-scroll"></div>
+    </aside>
+  </div><!-- /#main-area -->
+
+  <!-- Auto-play progress hairline -->
+  <div class="hud-autoplay-bar" id="autoplay-bar"></div>
+
+  <!-- Global Bottom Shortcut HUD Bar (Remains visible in Fullscreen) -->
+  <footer id="hud-bar">
+    <div class="hud-left">
+      <button class="hud-btn" id="hud-prev" title="上一页">← 上页</button>
+      <span class="hud-progress" id="hud-progress">01 / 14</span>
+      <button class="hud-btn" id="hud-next" title="下一页">下页 →</button>
+    </div>
+    <div class="hud-center">
+      <button class="hud-btn" id="hud-toc"><span class="kbd">G</span> 目录</button>
+      <button class="hud-btn" id="hud-notes-page"><span class="kbd">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="hud-notes-all"><span class="kbd">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="hud-autoplay"><span class="kbd">A</span> 自动播放</button>
+      <button class="hud-btn" id="hud-fullscreen"><span class="kbd">F</span> 全屏</button>
+    </div>
+    <div class="hud-right">
+      <span style="color:#89938F">快捷键：←/→ 翻页 · Space 下一页 · Esc 关闭面板</span>
+    </div>
+  </footer>
+
+  <!-- TOC Drawer Overlay -->
+  <div id="toc-overlay" role="dialog" aria-label="演示文稿目录">
+    <div class="toc-panel">
+      <div class="toc-head">
+        <h2>目录 · PostgreSQL 内核 REPACK（共 14 页）</h2>
+        <button class="notes-close" id="btn-toc-close">关闭 Esc</button>
+      </div>
+      <div class="toc-grid" id="toc-grid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ==================== SPEAKER NOTES DATA (14 SLIDES) ==================== */
+  const SPEAKER_NOTES = [
+    {
+      num: '01',
+      title: 'PostgreSQL 内核 REPACK：从 MVCC 空间膨胀到在线表重写',
+      paragraphs: [
+        '各位好，欢迎来到数据库筑基课这一讲，主题是 PostgreSQL 内核里的 REPACK。先说清楚一个最容易产生误解的前提：我们今天讨论的不是「怎么顺手清一下垃圾」，而是一个非常硬核的存储工程问题——当普通 VACUUM 已经把死元组清掉、空间也留给表内复用了，但业务依然需要把膨胀后的物理文件真正缩小并归还给操作系统时，数据库应该怎样在事务系统持续运转的前提下，安全地重写一张表？',
+        '从这张地层剖面图可以看到，今天我们会由表及里往下挖七层：从最表层的 SQL 语法入口，穿过锁机制、后台逻辑解码补偿、排序路径规划，一直钻到最底层的 MVCC 可见性边界、物理文件换芯和操作系统磁盘回收。还要特别提醒一句：本文完全基于本地 PostgreSQL 开发源码里的内核 REPACK 命令展开，如果你的生产环境是低版本 PostgreSQL，没有内置 REPACK 语法，千万不要直接照搬 SQL，必须按所在版本的官方文档选用 VACUUM FULL、CLUSTER 或外部扩展。'
+      ]
+    },
+    {
+      num: '02',
+      title: '可复用不等于归还系统：MVCC 空洞与物理收缩的分界',
+      paragraphs: [
+        '我们先看真实生产里最让人困惑的一幕：一张订单流水表每天都在 UPDATE 状态、DELETE 过期数据，监控里 autovacuum 跑得很正常，死元组数 n_dead_tup 也确实掉下去了，可你一查 pg_relation_size()，磁盘上的物理文件纹丝不动，甚至索引也跟着膨胀，缓存命中率越来越差。',
+        '根源就在 MVCC。PostgreSQL 在执行 UPDATE 或 DELETE 时不会立刻把旧行从文件里抹掉，因为别的并发事务快照可能还看得到旧版本。普通 VACUUM 的职责是等没人需要这些旧版本时，把它们清掉并标记为「表内可复用」。但请注意，可复用绝不等于归还操作系统——除非文件尾部的整页都空了且拿到了合适的锁，否则文件中间的空洞不会自动往前挪。',
+        '大家可以点击上面的交互按钮来直观验证：先点「模拟膨胀」，再点「普通 VACUUM」，你会看到红色死元组变成了浅灰空洞，但物理页还是 6 页；接着点「REPACK 重写」，它直接新建一个紧凑的新 Heap，只把保留行写进去，再把旧文件删掉，物理占用立刻压缩归还 OS。如果此时打开「长事务快照」，你会立刻看到黄色近期死亡元组被锁住，连 REPACK 也必须把它们复制过去——这就是为什么长事务会直接打折收缩收益。'
+      ]
+    },
+    {
+      num: '03',
+      title: 'REPACK 是什么，以及它绝不是什么',
+      paragraphs: [
+        '理解了空间模型，我们再给 REPACK 做一个精确的边界定义。在源码文档 doc/src/sgml/ref/repack.sgml 里，它只有一句直白的定位：rewrite a table to reclaim disk space。围绕这个目标，它提供了五种常见形态：最基础的 REPACK table 按物理顺序重写；加上 USING INDEX 就按索引顺序重排物理行，效果等价于原来的 CLUSTER；加上 CONCURRENTLY 则进入在线并发模式；加上 ANALYZE 可以在重写后顺手更新统计信息——不过当前源码只允许对单张非分区表使用 ANALYZE 选项。同时在本地文档里，VACUUM FULL 已经被标为 deprecated。',
+        '右边这五条红线比语法更重要，我建议大家刻在脑子里：第一，它不是普通 VACUUM 的增强版，一个是原地清理，一个是新建文件整表重写；第二，它绝不是「无锁收缩」，哪怕并发模式最后交换文件时也要拿 ACCESS EXCLUSIVE 锁；第三，它不是自动防膨胀机制，日常防线永远是 autovacuum 和数据模型；第四，它不是 SQL 标准语句；第五，今天讲的是 PostgreSQL 内核源码实现，不是大家以前熟悉的外部 pg_repack 扩展。'
+      ]
+    },
+    {
+      num: '04',
+      title: '三路语法汇聚同一引擎：从 gram.y 到 repack.c',
+      paragraphs: [
+        '很多同学会疑惑：REPACK、CLUSTER、VACUUM FULL 这三个命令长得不太一样，内核里是不是写了三套完全独立的代码？我们直接翻源码求证。',
+        '在语法解析层 src/backend/parser/gram.y 里，REPACK 放在主语法前面，旧的 CLUSTER 语法作为兼容变体保留，它们最终都解析成同一个结构体 RepackStmt，只用 command 字段区分 REPACK、CLUSTER 和 VACUUMFULL。接着进入执行分发层 src/backend/tcop/utility.c，遇到 T_RepackStmt 统一调用 ExecRepack()；即便是从 vacuum.c 进来的 VACUUM FULL，源码注释也明确写着它是 REPACK 的变体，直接转调 cluster_rel()。',
+        '也就是说，三条重写路径最终全部汇聚到 src/backend/commands/repack.c 里的同一套重写引擎。而真正走在另一条平行轨道上的，是下面的绿色路径——普通 VACUUM 的 lazy vacuum，它只做原地清理，压根不碰表重写引擎。把这两条架构轨道分清，后面所有的锁和成本问题就都迎刃而解了。'
+      ]
+    },
+    {
+      num: '05',
+      title: '普通 REPACK：全程强锁的五步重写与物理换芯',
+      paragraphs: [
+        '现在我们钻进 repack.c，先看最基础的普通独占模式。源码里 RepackLockLevel(false) 直接返回 AccessExclusiveLock，从头到尾锁死整张表。代价很明显，会阻塞业务读写；但好处是逻辑极其干净，重写期间不会有任何并发修改进来捣乱。',
+        '大家可以点击「自动演示五步」跟着走一遍：第一步 ExecRepack 与 cluster_rel 做权限、系统表、临时表和索引校验；第二步 make_new_heap() 建一个结构相同的临时堆 transient heap；第三步 copy_table_data() 扫描旧表把保留行抄进新堆；第四步最精妙，finish_heap_swap() 交换新旧物理文件身份；第五步重建全部索引并删掉旧文件。',
+        '这里有一个架构师必懂的细节：为什么数据库要费劲做「物理文件身份交换」，而不是直接建一张新表、抄完数据再改名替换？源码注释给出了答案——因为交换底层物理文件可以完整保留原表的 OID。只要 OID 不变，原表上的所有权限、继承关系、视图和外部元数据依赖就全都不会丢。'
+      ]
+    },
+    {
+      num: '06',
+      title: 'HeapTupleSatisfiesVacuum：长事务为何会吞噬收缩收益',
+      paragraphs: [
+        '紧接着刚才的第三步，很多人以为 copy_table_data() 很简单：扫一遍旧表，把当前能查到的行抄过去不就行了吗？如果真这么干，MVCC 事务一致性就全崩了。',
+        '我们看 src/backend/access/heap/heapam_handler.c 的实现：非并发模式扫描旧堆用的是 SnapshotAny，也就是把所有物理行版本都捞出来，然后逐条交给 HeapTupleSatisfiesVacuum() 裁决。结果分四类：只有确定没有任何活跃快照需要的 HEAPTUPLE_DEAD 才会被真正丢弃；活元组 HEAPTUPLE_LIVE 当然必须复制；最关键的是第三类 HEAPTUPLE_RECENTLY_DEAD——它们虽然已经被业务 DELETE 或 UPDATE 掉了，但因为系统里还挂着一个老快照，可能还会读到它们，所以 REPACK 必须把这些「近期死亡」的元组原封不动地复制到新表里！',
+        '这就是实证层面解释了一个经典生产现象：为什么有时候辛辛苦苦跑完 REPACK，表体积压得并不理想？十有八九是库里挂着长事务或者遗忘的 prepared transaction，把大量本该丢弃的旧版本强行留了下来。'
+      ]
+    },
+    {
+      num: '07',
+      title: 'USING INDEX：双执行路径与峰值临时空间预算',
+      paragraphs: [
+        '如果你的诉求不只是把文件压小，还希望范围查询的物理局部性更好，就会用到 USING INDEX。这里有两个特别容易踩坑的机制真相。',
+        '第一，USING INDEX 指定的是「目标物理顺序」，不代表底层一定走索引扫描。对于 B-tree 索引，内核会调用 plan_cluster_use_sort()，根据规划器成本参数和统计信息在两条路里选：要么直接 Index Scan 扫旧表，省临时空间但可能随机 I/O 重；要么 Seq Scan 顺序扫完再 Sort 排序写新表，大表通常更快，但峰值临时空间可能逼近两倍表大小再加上全部索引。而且别忘了，clustering 是一次性操作，后续的 INSERT 和 UPDATE 会慢慢把顺序打乱，调低 fillfactor 只能延缓，不是永久约束。',
+        '第二，看右侧的资源叠加图：生产预算千万不能按「最终能省下多少空间」来算，而必须按峰值叠加来算——新旧两份 Heap、全部新索引、排序或并发 spill 临时文件、以及 permanent logged 表重写带来的巨量 WAL 归档和备库复制延迟。同时，也别把 REPACK 当成万能性能加速器，如果瓶颈在 CPU 或应用 N+1 查询，表变小并不能救命。'
+      ]
+    },
+    {
+      num: '08',
+      title: '并发 REPACK：逻辑解码补偿与前置建索引',
+      paragraphs: [
+        '既然普通模式全程独占锁会让核心热表停摆，那 REPACK (CONCURRENTLY) 是怎么做到尽量在线重写的呢？它的核心思想就八个字：快照复制，WAL 补偿。',
+        '大家可以切换上方的阶段按钮和「并发 DML」负载开关来观察三段式锁切换。第一阶段只持 ShareUpdateExclusiveLock，允许业务正常读写；后台 repack_worker.c 启动一个 ad-hoc 逻辑解码 worker，创建带当前 PID 的临时 replication slot，挂载内置插件 pgrepack，把复制期间发生在目标表和 TOAST 表上的 INSERT、UPDATE、DELETE 过滤出来写进共享 fileset 的 spill 文件。',
+        '第二阶段藏着一个极容易被忽略的精妙设计：rebuild_relation_finish_concurrent() 不会等到拿强锁之后才建索引，而是先在弱锁阶段就把新 Heap 上的全部索引建完，并做第一次 apply_concurrent_changes() 追赶，把最耗时的活全部干在强锁之前！到了第三阶段，才短暂获取旧表、TOAST 和旧索引的 AccessExclusiveLock，重放最后一点尾差 WAL，交换物理文件收工。不过如果你把上面的开关切到「高负载」，就能看到：业务写得越猛，catch-up 追赶越吃力，最后等锁期间堆积的尾差也会把短强锁拉长到业务可感知。'
+      ]
+    },
+    {
+      num: '09',
+      title: '并发模式的六道硬性门槛：不是形式主义，而是重放前提',
+      paragraphs: [
+        '看到这里，再回过头看源码 check_concurrent_repack_requirements() 里写死的那些限制，你就会发现没有一条是刻意刁难，全都是工程必然。',
+        '第一道门槛，表必须有非延迟主键或索引型 replica identity；REPLICA IDENTITY NOTHING 不行，FULL 目前源码也没实现。原因很直接：重放 UPDATE 和 DELETE 时，必须靠 identity index 在新 Heap 里精准找到对应的那一行。第二道门槛，只支持 permanent 普通表，系统目录不走普通逻辑解码，unlogged 和临时表不写完整 WAL，单独的 TOAST 也不行。第三道，分区父表不能直接并发，要对叶子分区逐个做；而且并发命令绝不能包在事务块里。',
+        '第四道，服务器必须满足 wal_level 大于等于 replica，且 max_repack_replication_slots 有余量。第五道，执行期间如果有其他会话对目标表做 DDL，结构一变重放就不可靠，并发 repack 会直接失败。第六道尤其要引起重视：官方文档在 MVCC caveats 里明确写着，REPACK (CONCURRENTLY) 不是严格 MVCC-safe——如果某个事务在重写提交前就拿了快照，但直到提交后才第一次访问这张表，它可能会看到这张表是空的！所以跨表强一致性长读任务必须避开维护窗口。'
+      ]
+    },
+    {
+      num: '10',
+      title: 'pg_stat_progress_repack：透视九大阶段与卡点定位',
+      paragraphs: [
+        '命令跑起来之后，最怕的就是黑盒等待。PostgreSQL 在 system_views.sql 里提供了 pg_stat_progress_repack 视图，底层调用 pg_stat_get_progress_info("REPACK")，不管是 REPACK、CLUSTER 还是 VACUUM FULL，全都能在一个视图里看到实时进度。',
+        '大家点击上方不同的阶段按钮，可以直观看到七个计数器的变化以及对应的卡点诊断策略。整个流程从 initializing 出发，经过 seq scanning heap 或 index scanning heap、sorting tuples、writing new heap，并发模式下会进入 catch-up，随后 swapping relation files、rebuilding index，最后 performing final cleanup。',
+        '记住四句排障口诀：卡在 scanning 看磁盘 I/O 与块扫描进度；卡在 catch-up 看业务并发 DML 是不是太猛；卡在 swapping 立刻去查 pg_locks 看谁挡住了强锁；卡在 rebuilding index 则重点核对索引数量、大小和 maintenance_work_mem。把这四个点盯住，线上执行心里就有底了。'
+      ]
+    },
+    {
+      num: '11',
+      title: '五种空间维护机制横向对比：先分路线，再选命令',
+      paragraphs: [
+        '我们现在跳出来做一次横向复盘。把普通 VACUUM、普通 REPACK、并发 REPACK、VACUUM FULL 和 CLUSTER 放在同一张矩阵里，你会发现其实根本不需要死记硬背每个命令的细节，只要先问自己一个二选一的问题：我当前走的是「原地回收路线」，还是「重写回收路线」？',
+        '绿色那一行是原地回收路线——普通 VACUUM，成本低、与读写并行、几乎不占额外磁盘，适合日常高频更新的稳态控制，但它通常不会把中间空洞还给操作系统。下面四行全都是重写回收路线：能真正缩小物理文件、顺带重建紧凑索引，但代价是成倍的磁盘峰值、WAL 写入和锁管理。在重写路线内部，有停机窗口选普通 REPACK，需要在线且满足主键与 slot 前提选 CONCURRENTLY，追求范围查询局部性则加上 USING INDEX。'
+      ]
+    },
+    {
+      num: '12',
+      title: '标准操作闭环：膨胀观测、前置核验与在线伴随监控',
+      paragraphs: [
+        '理论落地到键盘，这张图总结了从观测到收尾的四步标准操作闭环。需要客观说明，这一组 SQL 是语法层面的最小验证模板，不编造任何虚假的执行耗时数字。',
+        '第一步永远是先量化，用 pg_relation_size、pg_total_relation_size 和 pgstattuple 把堆膨胀和索引膨胀测清楚，并先拿普通 VACUUM 做一次对照。第二步如果打算走并发模式，动手前务必查 pg_class 的 relpersistence 和 relreplident，查 pg_index 的主键与 identity 索引，再 SHOW 一遍 wal_level 和 max_repack_replication_slots，确认无误且不在事务块内。',
+        '第三步再按窗口执行对应的 REPACK 命令，并记得带上 ANALYZE，或者完成后显式跑一次 ANALYZE，因为物理相关性变了，规划器需要新统计信息。第四步绝对不能省：另开一个会话，把 pg_stat_progress_repack、pg_locks 和 pg_stat_replication 的复制延迟同时挂起来盯着，一旦发现锁排队积压或备库延迟失控，可以果断止损。'
+      ]
+    },
+    {
+      num: '13',
+      title: '生产决策蓝图：先证伪根因，再按条件选择路径',
+      paragraphs: [
+        '到了生产实战，我强烈建议大家用左侧这个交互式决策树来做上线前评审。你可以试着把上面四个条件逐个切换，观察结论怎么变化。',
+        '第一关先证明「膨胀确实影响了成本」——如果慢查询其实是索引缺失或 CPU 瓶颈，根本不该跑 REPACK。第二关问「是不是必须把空间还给 OS」——如果只是怕它继续无限涨，调优 autovacuum 让表内空间进入稳态复用就够了。第三关算「磁盘、WAL 和备库追赶预算够不够」——水位都快满了还强行重写，很容易直接把磁盘打爆。第四关才根据能否停写以及是否满足主键、slot、非分区条件，在普通模式与并发模式之间落子。',
+        '右边还列出了架构师、DBA 和开发者的三角色协同清单：REPACK 永远是事后补救手段，不是定期清洁工。架构上能用时间分区 DROP 掉过期数据的，就别在大表中间天天 DELETE 打洞；开发上能分批更新的就别一次全表 UPDATE，更别留长事务拖垮全局可见性边界。'
+      ]
+    },
+    {
+      num: '14',
+      title: '十大生产避坑清单与六个第一性原理思考',
+      paragraphs: [
+        '最后一页，我们把全文最浓缩的实战经验收成两块。左边是生产十大高频避坑清单，按认知误区、资源与前置盲区、操作与窗口失控三层排开：比如别把普通 VACUUM 没缩文件当故障、别只看 heap 大小忘了索引和 WAL、别把并发模式误解成无锁、别忘跑 ANALYZE、也别在并发重写时放任自动发布跑 DDL，更别在低版本生产库里照搬开发版语法。',
+        '右边留下六个直击第一性原理的思考题供课后推演：为什么普通 VACUUM 不搬移页面中间的活元组？为什么 REPACK 宁可换物理文件也要死守原表 OID？逻辑解码和 SQL 触发器捕获变更到底差在哪？对时间分区日志表而言，定期 REPACK 老分区和直接 DROP 过期分区哪个更符合第一性原理？',
+        '如果这六个问题你都能用今天讲的源码和存储机制顺畅推演出来，PostgreSQL 的表重写与空间治理这一关，就算真正筑牢地基了。感谢收听，大家可以按 G 打开目录回看任意一页，也可以在右侧全文讲稿里直接点击任意章节跳转复盘。'
+      ]
+    }
+  ];
+
+  /* ==================== CORE SLIDE & VIEWPORT ENGINE ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentIdx = 0;
+  let notesMode = 'closed'; // 'closed' | 'page' | 'all'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+  let autoPlayProgressTimer = null;
+  const AUTO_PLAY_MS = 9000;
+
+  const stageViewport = document.getElementById('stage-viewport');
+  const stageScaler = document.getElementById('stage-scaler');
+  const notesPane = document.getElementById('notes-pane');
+  const notesScroll = document.getElementById('notes-scroll');
+  const tabNotePage = document.getElementById('tab-note-page');
+  const tabNoteAll = document.getElementById('tab-note-all');
+  const btnNotesClose = document.getElementById('btn-notes-close');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const tocGrid = document.getElementById('toc-grid');
+  const hudProgress = document.getElementById('hud-progress');
+  const hudToc = document.getElementById('hud-toc');
+  const hudNotesPage = document.getElementById('hud-notes-page');
+  const hudNotesAll = document.getElementById('hud-notes-all');
+  const hudAutoplay = document.getElementById('hud-autoplay');
+  const hudFullscreen = document.getElementById('hud-fullscreen');
+  const autoplayBar = document.getElementById('autoplay-bar');
+
+  function updateStageScale() {
+    const pad = 22;
+    const availW = Math.max(120, stageViewport.clientWidth - pad);
+    const availH = Math.max(120, stageViewport.clientHeight - pad);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageScaler.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(5)})`;
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => updateStageScale());
+    ro.observe(stageViewport);
+  }
+  window.addEventListener('resize', updateStageScale);
+  notesPane.addEventListener('transitionend', updateStageScale);
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function renderTOC() {
+    tocGrid.innerHTML = '';
+    slides.forEach((s, i) => {
+      const item = document.createElement('button');
+      item.className = 'toc-item' + (i === currentIdx ? ' active' : '');
+      item.innerHTML = `
+        <span class="toc-num">${pad2(i + 1)}</span>
+        <div>
+          <div class="toc-meta">${s.dataset.eyebrow || ''}</div>
+          <div class="toc-title">${s.dataset.title || ''}</div>
+        </div>
+      `;
+      item.addEventListener('click', () => {
+        goToSlide(i);
+        setTOC(false);
+      });
+      tocGrid.appendChild(item);
+    });
+  }
+
+  function renderNotesContent(shouldScroll) {
+    if (notesMode === 'closed') return;
+    if (notesMode === 'page') {
+      const n = SPEAKER_NOTES[currentIdx];
+      notesScroll.innerHTML = `
+        <div class="note-block active" data-slide="${currentIdx}">
+          <div class="note-block-meta"><span>SLIDE ${n.num} / ${pad2(totalSlides)}</span><span>本页讲稿</span></div>
+          <div class="note-block-title">${n.title}</div>
+          <div class="note-block-body">${n.paragraphs.map(p => `<p>${p}</p>`).join('')}</div>
+        </div>
+      `;
+      notesScroll.scrollTop = 0;
+    } else if (notesMode === 'all') {
+      if (!notesScroll.querySelector('.note-block[data-all="1"]')) {
+        notesScroll.innerHTML = SPEAKER_NOTES.map((n, i) => `
+          <div class="note-block ${i === currentIdx ? 'active' : ''}" data-all="1" data-slide="${i}">
+            <div class="note-block-meta"><span>SLIDE ${n.num} / ${pad2(totalSlides)}</span><span>${i === currentIdx ? '当前页' : '点击跳转'}</span></div>
+            <div class="note-block-title">${n.title}</div>
+            <div class="note-block-body">${n.paragraphs.map(p => `<p>${p}</p>`).join('')}</div>
+          </div>
+        `).join('');
+        notesScroll.querySelectorAll('.note-block[data-all="1"]').forEach(el => {
+          el.addEventListener('click', () => {
+            const idx = Number(el.dataset.slide);
+            goToSlide(idx);
+          });
+        });
+      } else {
+        notesScroll.querySelectorAll('.note-block[data-all="1"]').forEach(el => {
+          const idx = Number(el.dataset.slide);
+          const isCur = idx === currentIdx;
+          el.classList.toggle('active', isCur);
+          const metaRight = el.querySelector('.note-block-meta span:last-child');
+          if (metaRight) metaRight.textContent = isCur ? '当前页' : '点击跳转';
+        });
+      }
+      if (shouldScroll) {
+        const scrollToActive = (smooth) => {
+          const activeBlock = notesScroll.querySelector(`.note-block[data-slide="${currentIdx}"]`);
+          if (!activeBlock) return;
+          const containerRect = notesScroll.getBoundingClientRect();
+          const blockRect = activeBlock.getBoundingClientRect();
+          const targetTop = Math.max(0, notesScroll.scrollTop + (blockRect.top - containerRect.top) - 16);
+          notesScroll.scrollTo({ top: targetTop, behavior: smooth ? 'smooth' : 'auto' });
+        };
+        scrollToActive(false);
+        requestAnimationFrame(() => scrollToActive(true));
+      }
+    }
+  }
+
+  function setNotesMode(mode) {
+    const prevMode = notesMode;
+    notesMode = mode;
+    const isOpen = notesMode !== 'closed';
+    notesPane.classList.toggle('open', isOpen);
+    tabNotePage.classList.toggle('active', notesMode === 'page');
+    tabNoteAll.classList.toggle('active', notesMode === 'all');
+    hudNotesPage.classList.toggle('active', notesMode === 'page');
+    hudNotesAll.classList.toggle('active', notesMode === 'all');
+
+    if (prevMode !== notesMode && notesMode === 'all') {
+      notesScroll.innerHTML = ''; // force fresh full transcript build
+    }
+    if (isOpen) {
+      renderNotesContent(true);
+    }
+    // Recalculate vector scaling immediately and after transition
+    requestAnimationFrame(updateStageScale);
+    setTimeout(updateStageScale, 230);
+  }
+
+  function toggleNotesPage() {
+    setNotesMode(notesMode === 'page' ? 'closed' : 'page');
+  }
+
+  function toggleNotesAll() {
+    setNotesMode(notesMode === 'all' ? 'closed' : 'all');
+  }
+
+  function setTOC(open) {
+    tocOpen = open;
+    tocOverlay.classList.toggle('open', tocOpen);
+    hudToc.classList.toggle('active', tocOpen);
+    if (tocOpen) renderTOC();
+  }
+
+  function goToSlide(idx) {
+    const next = Math.max(0, Math.min(totalSlides - 1, idx));
+    slides[currentIdx].classList.remove('active');
+    currentIdx = next;
+    slides[currentIdx].classList.add('active');
+    hudProgress.textContent = `${pad2(currentIdx + 1)} / ${pad2(totalSlides)}`;
+    if (tocOpen) renderTOC();
+    if (notesMode !== 'closed') renderNotesContent(true);
+    if (autoPlayTimer) restartAutoPlayCycle();
+  }
+
+  function stopAutoPlay() {
+    if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
+    if (autoPlayProgressTimer) { clearInterval(autoPlayProgressTimer); autoPlayProgressTimer = null; }
+    hudAutoplay.classList.remove('playing');
+    hudAutoplay.innerHTML = '<span class="kbd">A</span> 自动播放';
+    autoplayBar.style.width = '0%';
+  }
+
+  function restartAutoPlayCycle() {
+    if (autoPlayTimer) clearInterval(autoPlayTimer);
+    if (autoPlayProgressTimer) clearInterval(autoPlayProgressTimer);
+    let elapsed = 0;
+    autoplayBar.style.width = '0%';
+    autoPlayProgressTimer = setInterval(() => {
+      elapsed += 150;
+      const pct = Math.min(100, (elapsed / AUTO_PLAY_MS) * 100);
+      autoplayBar.style.width = pct + '%';
+    }, 150);
+    autoPlayTimer = setInterval(() => {
+      if (currentIdx < totalSlides - 1) {
+        goToSlide(currentIdx + 1);
+      } else {
+        goToSlide(0);
+      }
+    }, AUTO_PLAY_MS);
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      stopAutoPlay();
+    } else {
+      hudAutoplay.classList.add('playing');
+      hudAutoplay.innerHTML = '<span class="kbd">A</span> 停止播放';
+      restartAutoPlayCycle();
+    }
+  }
+
+  function toggleFullscreen() {
+    const shell = document.getElementById('app-shell');
+    if (!document.fullscreenElement) {
+      if (shell.requestFullscreen) {
+        shell.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = !!document.fullscreenElement;
+    hudFullscreen.classList.toggle('active', isFs);
+    hudFullscreen.innerHTML = isFs ? '<span class="kbd">F</span> 退出全屏' : '<span class="kbd">F</span> 全屏';
+    setTimeout(updateStageScale, 60);
+  });
+
+  // HUD & Panel button wiring
+  document.getElementById('hud-prev').addEventListener('click', () => goToSlide(currentIdx - 1));
+  document.getElementById('hud-next').addEventListener('click', () => goToSlide(currentIdx + 1));
+  hudToc.addEventListener('click', () => setTOC(!tocOpen));
+  document.getElementById('btn-toc-close').addEventListener('click', () => setTOC(false));
+  tocOverlay.addEventListener('click', (e) => { if (e.target === tocOverlay) setTOC(false); });
+  hudNotesPage.addEventListener('click', toggleNotesPage);
+  hudNotesAll.addEventListener('click', toggleNotesAll);
+  tabNotePage.addEventListener('click', () => setNotesMode('page'));
+  tabNoteAll.addEventListener('click', () => setNotesMode('all'));
+  btnNotesClose.addEventListener('click', () => setNotesMode('closed'));
+  hudAutoplay.addEventListener('click', toggleAutoPlay);
+  hudFullscreen.addEventListener('click', toggleFullscreen);
+
+  // Global keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      e.preventDefault();
+      if (!tocOpen) goToSlide(currentIdx + 1);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      if (!tocOpen) goToSlide(currentIdx - 1);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      setTOC(!tocOpen);
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      toggleNotesPage();
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      toggleNotesAll();
+    } else if (key === 'a' || key === 'A') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) {
+        setTOC(false);
+      } else if (notesMode !== 'closed') {
+        setNotesMode('closed');
+      }
+    }
+  });
+
+  /* ==================== ANIMATION 1: SLIDE 2 MVCC SPACE MODEL ==================== */
+  const s2State = { mode: 'bloat', longTx: false, timer: null };
+  const s2PagesLayer = document.getElementById('s2-pages-layer');
+  const s2MetricSize = document.getElementById('s2-metric-size');
+  const s2MetricMech = document.getElementById('s2-metric-mech');
+  const s2MetricPos = document.getElementById('s2-metric-pos');
+  const s2Status = document.getElementById('s2-status');
+
+  // 6 pages x 6 slots = 36 slots
+  // types: 'L' live, 'D' dead, 'R' recently_dead, 'H' hole (reusable), 'F' freed OS
+  const S2_BASE_BLOAT = [
+    ['L', 'D', 'L', 'R', 'D', 'L'],
+    ['D', 'D', 'L', 'D', 'R', 'D'],
+    ['L', 'D', 'D', 'L', 'D', 'R'],
+    ['D', 'L', 'D', 'D', 'L', 'D'],
+    ['R', 'D', 'L', 'D', 'D', 'L'],
+    ['D', 'D', 'R', 'D', 'L', 'D']
+  ];
+
+  function getS2Pages() {
+    if (s2State.mode === 'bloat') {
+      return S2_BASE_BLOAT.map(p => p.map(t => (t === 'R' && !s2State.longTx) ? 'D' : t));
+    }
+    if (s2State.mode === 'vacuum') {
+      return S2_BASE_BLOAT.map(p => p.map(t => {
+        if (t === 'L') return 'L';
+        if (t === 'R' && s2State.longTx) return 'R';
+        return 'H';
+      }));
+    }
+    // repack
+    const kept = [];
+    S2_BASE_BLOAT.forEach(p => p.forEach(t => {
+      if (t === 'L') kept.push('L');
+      else if (t === 'R' && s2State.longTx) kept.push('R');
+    }));
+    const pages = [];
+    for (let pi = 0; pi < 6; pi++) {
+      const slots = [];
+      for (let si = 0; si < 6; si++) {
+        const idx = pi * 6 + si;
+        if (idx < kept.length) {
+          slots.push(kept[idx]);
+        } else if (pi < Math.ceil(kept.length / 6)) {
+          slots.push('H');
+        } else {
+          slots.push('F');
+        }
+      }
+      pages.push(slots);
+    }
+    return pages;
+  }
+
+  function renderS2() {
+    const pages = getS2Pages();
+    const colorMap = {
+      L: { fill: '#245A6B', stroke: '#1E4B5A', label: 'LIVE', txt: '#FFFFFF' },
+      D: { fill: '#BE653B', stroke: '#9B4F2B', label: 'DEAD', txt: '#FFFFFF' },
+      R: { fill: '#AE8A3E', stroke: '#8A6B2A', label: 'REC', txt: '#FFFFFF' },
+      H: { fill: '#EBF1EE', stroke: '#74A5AD', label: '空洞', txt: '#46585F' },
+      F: { fill: '#E6F2EE', stroke: '#2F7A66', label: '已释放', txt: '#2F7A66' }
+    };
+    let html = '';
+    let activePages = 0;
+    pages.forEach((slots, pi) => {
+      const isFreedPage = slots.every(s => s === 'F');
+      if (!isFreedPage) activePages++;
+      const px = 20 + pi * 230;
+      const py = 70;
+      const pFill = isFreedPage ? '#E6F2EE' : '#F7F6F2';
+      const pStroke = isFreedPage ? '#2F7A66' : '#245A6B';
+      const pDash = isFreedPage ? 'stroke-dasharray="5 3"' : '';
+      html += `<rect x="${px}" y="${py}" width="210" height="206" fill="${pFill}" stroke="${pStroke}" stroke-width="1.5" ${pDash}/>`;
+      html += `<rect x="${px}" y="${py}" width="210" height="30" fill="${isFreedPage ? '#2F7A66' : '#245A6B'}"/>`;
+      html += `<text x="${px + 12}" y="${py + 20}" font-family="SF Mono, monospace" font-size="12" fill="#FFFFFF" font-weight="700">PAGE ${pi} · ${isFreedPage ? '归还 OS' : '占盘 8KB'}</text>`;
+
+      slots.forEach((st, si) => {
+        const col = si % 2;
+        const row = Math.floor(si / 2);
+        const sx = px + 14 + col * 94;
+        const sy = py + 44 + row * 50;
+        const c = colorMap[st];
+        const dash = (st === 'H' || st === 'F') ? 'stroke-dasharray="3 2"' : '';
+        html += `<rect x="${sx}" y="${sy}" width="86" height="38" fill="${c.fill}" stroke="${c.stroke}" stroke-width="1" ${dash}/>`;
+        html += `<text x="${sx + 43}" y="${sy + 24}" text-anchor="middle" font-family="SF Mono, monospace" font-size="12" fill="${c.txt}" font-weight="700">${c.label}</text>`;
+      });
+    });
+    s2PagesLayer.innerHTML = html;
+
+    if (s2State.mode === 'bloat') {
+      s2Status.textContent = `当前状态：膨胀态（${activePages} / 6 页占盘）`;
+      s2MetricSize.textContent = '6 / 6 物理页占用 OS 磁盘（未收缩）';
+      s2MetricSize.setAttribute('fill', '#BE653B');
+      s2MetricMech.textContent = s2State.longTx
+        ? '死元组与长事务锁住的近期死亡元组混杂，扫描成本高'
+        : '高频 UPDATE/DELETE 留下大量死元组，顺序与索引扫描 I/O 放大';
+      s2MetricPos.textContent = '需先区分是要「表内复用」还是「归还 OS 空间」';
+    } else if (s2State.mode === 'vacuum') {
+      s2Status.textContent = `当前状态：普通 VACUUM 后（仍占 ${activePages} / 6 页）`;
+      s2MetricSize.textContent = '6 / 6 物理页占用 OS 磁盘（空洞留在表内）';
+      s2MetricSize.setAttribute('fill', '#AE8A3E');
+      s2MetricMech.textContent = s2State.longTx
+        ? 'DEAD 清为空洞供复用，但长事务锁住的 RECENTLY_DEAD 无法清理'
+        : '死元组已原地清为空洞供后续写入复用，但中间空洞不会前移';
+      s2MetricPos.textContent = '日常稳态维护首选，不阻塞读写，但通常不缩物理文件';
+    } else {
+      s2Status.textContent = `当前状态：REPACK 重写后（压缩至 ${activePages} / 6 页）`;
+      s2MetricSize.textContent = `${activePages} / 6 物理页占盘（释放 ${6 - activePages} 页归还 OS）`;
+      s2MetricSize.setAttribute('fill', '#2F7A66');
+      s2MetricMech.textContent = s2State.longTx
+        ? '已新建紧凑堆，但长事务锁住的 RECENTLY_DEAD 仍须复制，收益打折！'
+        : '保留行紧凑写入新 Heap，旧文件释放归还 OS，索引同步紧凑重建';
+      s2MetricPos.textContent = '一次性物理压缩，用 I/O、WAL 与锁窗口换取空间与局部性';
+    }
+
+    document.getElementById('s2-btn-bloat').classList.toggle('active', s2State.mode === 'bloat');
+    document.getElementById('s2-btn-vac').classList.toggle('active', s2State.mode === 'vacuum');
+    document.getElementById('s2-btn-repack').classList.toggle('active', s2State.mode === 'repack');
+    const lbtn = document.getElementById('s2-btn-longtx');
+    lbtn.classList.toggle('active', s2State.longTx);
+    lbtn.textContent = s2State.longTx ? '长事务快照：开（锁住 REC）' : '长事务快照：关';
+  }
+
+  function stopS2Anim() {
+    if (s2State.timer) { clearInterval(s2State.timer); s2State.timer = null; }
+  }
+  document.getElementById('s2-btn-bloat').addEventListener('click', () => { stopS2Anim(); s2State.mode = 'bloat'; renderS2(); });
+  document.getElementById('s2-btn-vac').addEventListener('click', () => { stopS2Anim(); s2State.mode = 'vacuum'; renderS2(); });
+  document.getElementById('s2-btn-repack').addEventListener('click', () => { stopS2Anim(); s2State.mode = 'repack'; renderS2(); });
+  document.getElementById('s2-btn-longtx').addEventListener('click', () => { s2State.longTx = !s2State.longTx; renderS2(); });
+  document.getElementById('s2-btn-reset').addEventListener('click', () => { stopS2Anim(); s2State.mode = 'bloat'; s2State.longTx = false; renderS2(); });
+  document.getElementById('s2-btn-play').addEventListener('click', () => {
+    stopS2Anim();
+    const seq = ['bloat', 'vacuum', 'repack'];
+    let i = 0;
+    s2State.mode = seq[0];
+    renderS2();
+    s2State.timer = setInterval(() => {
+      i++;
+      if (i >= seq.length) { stopS2Anim(); return; }
+      s2State.mode = seq[i];
+      renderS2();
+    }, 1700);
+  });
+
+  /* ==================== ANIMATION 2: SLIDE 5 EXCLUSIVE REPACK ==================== */
+  let s5Step = 1;
+  let s5Timer = null;
+  const S5_META = [
+    null,
+    {
+      status: '步骤 1 / 5：ExecRepack() 与 cluster_rel() 校验权限、索引并获取 AccessExclusiveLock',
+      ptr: 'M 362 304 H 458',
+      oldFill: '#F7E9DE', oldStroke: '#BE653B', oldTitle: '原物理文件（膨胀态）', oldDesc: '已加 AccessExclusiveLock，阻塞并发读写', oldTag: 'STATUS: ACTIVE & LOCKED',
+      newFill: '#EBF1EE', newStroke: '#A4C4C6', newDash: '5 3', newTitle: 'Transient Heap（尚未创建）', newDesc: '等待 STEP 2 调用 make_new_heap() 创建', newTag: 'STATUS: NOT CREATED'
+    },
+    {
+      status: '步骤 2 / 5：make_new_heap() 创建逻辑结构一致的 transient heap',
+      ptr: 'M 362 304 H 458',
+      oldFill: '#F7E9DE', oldStroke: '#BE653B', oldTitle: '原物理文件（膨胀态）', oldDesc: '保持只读静止状态，等待顺序或索引扫描', oldTag: 'STATUS: ACTIVE (SOURCE)',
+      newFill: '#E5EFF0', newStroke: '#245A6B', newDash: '', newTitle: 'Transient Heap（已创建空文件）', newDesc: '结构与原表一致的新物理文件，准备接收保留行', newTag: 'STATUS: READY TO WRITE'
+    },
+    {
+      status: '步骤 3 / 5：copy_table_data() 扫描旧表，过滤 DEAD 元组并写入新堆',
+      ptr: 'M 362 304 H 458',
+      oldFill: '#F7E9DE', oldStroke: '#BE653B', oldTitle: '原物理文件（正在扫描）', oldDesc: 'SnapshotAny + HeapTupleSatisfiesVacuum() 判定', oldTag: 'STATUS: SCANNING...',
+      newFill: '#E6F2EE', newStroke: '#2F7A66', newDash: '', newTitle: 'Transient Heap（写入紧凑数据）', newDesc: '仅写入 LIVE 与仍需保留行，空间高度紧凑', newTag: 'STATUS: WRITING COMPACT DATA'
+    },
+    {
+      status: '步骤 4 / 5：finish_heap_swap() 交换物理文件身份 —— 原表 OID 保持不变！',
+      ptr: 'M 362 304 H 410 V 358 H 860 V 304 H 896',
+      oldFill: '#F1EFE9', oldStroke: '#89938F', oldTitle: '旧膨胀文件（已剥离原表身份）', oldDesc: '已切换至 transient 临时身份，等待最终删除', oldTag: 'STATUS: DETACHED (OLD)',
+      newFill: '#E6F2EE', newStroke: '#2F7A66', newDash: '', newTitle: '新紧凑文件（已接管原表 OID！）', newDesc: '权限、继承关系、视图依赖全部无缝保留', newTag: 'STATUS: ACTIVE (SWAPPED!)'
+    },
+    {
+      status: '步骤 5 / 5：重建全部索引并删除旧文件，物理空间正式归还操作系统',
+      ptr: 'M 362 304 H 410 V 358 H 860 V 304 H 896',
+      oldFill: '#EBF1EE', oldStroke: '#2F7A66', oldTitle: '旧膨胀文件（已删除并释放）', oldDesc: '事务提交后物理文件删除，磁盘空间归还 OS', oldTag: 'STATUS: DROPPED & FREED',
+      newFill: '#E6F2EE', newStroke: '#2F7A66', newDash: '', newTitle: '新紧凑文件 + 全部重建索引', newDesc: '表与索引均恢复紧凑，释放强锁恢复业务读写', newTag: 'STATUS: COMPLETE'
+    }
+  ];
+
+  function renderS5() {
+    for (let i = 1; i <= 5; i++) {
+      const g = document.getElementById(`s5-step-${i}`);
+      const rects = g.querySelectorAll('rect');
+      if (i === s5Step) {
+        rects[0].setAttribute('stroke', '#BE653B');
+        rects[0].setAttribute('stroke-width', '2.5');
+        rects[1].setAttribute('fill', '#BE653B');
+      } else if (i < s5Step) {
+        rects[0].setAttribute('stroke', '#245A6B');
+        rects[0].setAttribute('stroke-width', '1.5');
+        rects[1].setAttribute('fill', '#245A6B');
+      } else {
+        rects[0].setAttribute('stroke', '#D9D5CB');
+        rects[0].setAttribute('stroke-width', '1.5');
+        rects[1].setAttribute('fill', '#74A5AD');
+      }
+    }
+    const m = S5_META[s5Step];
+    document.getElementById('s5-status').textContent = m.status;
+    document.getElementById('s5-ptr-path').setAttribute('d', m.ptr);
+    const oldF = document.getElementById('s5-old-file');
+    oldF.setAttribute('fill', m.oldFill);
+    oldF.setAttribute('stroke', m.oldStroke);
+    document.getElementById('s5-old-title').textContent = m.oldTitle;
+    document.getElementById('s5-old-desc').textContent = m.oldDesc;
+    document.getElementById('s5-old-tag').textContent = m.oldTag;
+
+    const newF = document.getElementById('s5-new-file');
+    newF.setAttribute('fill', m.newFill);
+    newF.setAttribute('stroke', m.newStroke);
+    if (m.newDash) newF.setAttribute('stroke-dasharray', m.newDash);
+    else newF.removeAttribute('stroke-dasharray');
+    document.getElementById('s5-new-title').textContent = m.newTitle;
+    document.getElementById('s5-new-title').setAttribute('fill', s5Step >= 3 ? '#2F7A66' : '#245A6B');
+    document.getElementById('s5-new-desc').textContent = m.newDesc;
+    document.getElementById('s5-new-tag').textContent = m.newTag;
+  }
+
+  function stopS5Anim() { if (s5Timer) { clearInterval(s5Timer); s5Timer = null; } }
+  document.getElementById('s5-prev').addEventListener('click', () => { stopS5Anim(); s5Step = Math.max(1, s5Step - 1); renderS5(); });
+  document.getElementById('s5-next').addEventListener('click', () => { stopS5Anim(); s5Step = Math.min(5, s5Step + 1); renderS5(); });
+  document.getElementById('s5-reset').addEventListener('click', () => { stopS5Anim(); s5Step = 1; renderS5(); });
+  document.getElementById('s5-play').addEventListener('click', () => {
+    stopS5Anim();
+    s5Step = 1;
+    renderS5();
+    s5Timer = setInterval(() => {
+      if (s5Step >= 5) { stopS5Anim(); return; }
+      s5Step++;
+      renderS5();
+    }, 1600);
+  });
+
+  /* ==================== ANIMATION 3: SLIDE 8 CONCURRENT REPACK ==================== */
+  let s8Phase = 1;
+  let s8HighDml = false;
+  let s8Timer = null;
+
+  function renderS8() {
+    [1, 2, 3].forEach(p => {
+      const col = document.getElementById(`s8-col-${p}`);
+      const btn = document.getElementById(`s8-phase-${p}`);
+      col.setAttribute('opacity', p === s8Phase ? '1' : '0.45');
+      col.querySelector('rect').setAttribute('stroke', p === s8Phase ? (p === 3 ? '#BE653B' : '#245A6B') : '#D9D5CB');
+      btn.classList.toggle('active', p === s8Phase);
+    });
+    const dmlBtn = document.getElementById('s8-dml-toggle');
+    dmlBtn.classList.toggle('accent', s8HighDml);
+    dmlBtn.classList.toggle('active', s8HighDml);
+    dmlBtn.textContent = s8HighDml ? '并发 DML：高负载（追赶吃力）' : '并发 DML：低负载';
+
+    document.getElementById('s8-spill-desc').textContent = s8HighDml
+      ? '高并发写入：spill 文件快速膨胀，临时盘与 WAL 压力陡增'
+      : '低并发写入：spill 体积平缓，追赶压力可控';
+    document.getElementById('s8-catchup-desc').textContent = s8HighDml
+      ? '高并发预警：catch-up 持续追赶，收敛耗时显著拉长！'
+      : '当前追赶速度：快于新写入速率，可快速收敛';
+    document.getElementById('s8-final-desc').textContent = s8HighDml
+      ? '警告：等锁期间堆积大量尾差，短强锁窗口可能变得可感知！'
+      : '等锁期间堆积少，尾差快速收口并完成换芯';
+
+    const labels = [
+      '',
+      '阶段 1/3 · ShareUpdateExclusiveLock（快照复制 + pgrepack 解码）',
+      '阶段 2/3 · 仍持弱锁（前置构建全部新索引 + 首次 catch-up）',
+      '阶段 3/3 · 短暂 AccessExclusiveLock（最终 WAL 补偿 + 换芯）'
+    ];
+    document.getElementById('s8-status').textContent = labels[s8Phase];
+  }
+
+  function stopS8Anim() { if (s8Timer) { clearInterval(s8Timer); s8Timer = null; } }
+  document.getElementById('s8-phase-1').addEventListener('click', () => { stopS8Anim(); s8Phase = 1; renderS8(); });
+  document.getElementById('s8-phase-2').addEventListener('click', () => { stopS8Anim(); s8Phase = 2; renderS8(); });
+  document.getElementById('s8-phase-3').addEventListener('click', () => { stopS8Anim(); s8Phase = 3; renderS8(); });
+  document.getElementById('s8-dml-toggle').addEventListener('click', () => { s8HighDml = !s8HighDml; renderS8(); });
+  document.getElementById('s8-play').addEventListener('click', () => {
+    stopS8Anim();
+    s8Phase = 1;
+    renderS8();
+    s8Timer = setInterval(() => {
+      if (s8Phase >= 3) { stopS8Anim(); return; }
+      s8Phase++;
+      renderS8();
+    }, 1800);
+  });
+
+  /* ==================== ANIMATION 4: SLIDE 10 PROGRESS VIEW ==================== */
+  let s10Phase = 0;
+  let s10Timer = null;
+  const S10_PHASES = [
+    {
+      short: 'initializing',
+      full: 'initializing',
+      counters: ['heap_blks_total: 初始化中', 'heap_blks_scanned: 0', 'heap_tuples_scanned: 0', 'heap_tuples_inserted: 0', 'heap_tuples_updated/deleted: 0', 'index_rebuild_count: 0'],
+      cause: '初始化对象检查、校验权限与索引、等待初始锁或临时 replication slot 创建。',
+      sql: '联动排查：pg_locks（查未授予锁） / pg_stat_activity（查长事务阻塞源）'
+    },
+    {
+      short: 'scanning',
+      full: 'seq scanning heap / index scanning heap',
+      counters: ['heap_blks_total: 目标总块数', 'heap_blks_scanned: 持续递增', 'heap_tuples_scanned: 持续递增', 'heap_tuples_inserted: 随过滤写入', 'heap_tuples_updated/deleted: 0', 'index_rebuild_count: 0'],
+      cause: '卡在扫描阶段时，重点排查磁盘读 I/O 吞吐、大表随机读（索引扫描）与块扫描进度。',
+      sql: '重点关注：heap_blks_scanned / heap_blks_total 增速与磁盘 I/O 等待'
+    },
+    {
+      short: 'sorting',
+      full: 'sorting tuples',
+      counters: ['heap_blks_total: 扫描完成', 'heap_blks_scanned: 已达总量', 'heap_tuples_scanned: 已达总量', 'heap_tuples_inserted: 待排序写入', 'heap_tuples_updated/deleted: 0', 'index_rebuild_count: 0'],
+      cause: 'USING INDEX 走排序路径时触发；若耗时过长，检查 maintenance_work_mem 与临时盘排序吞吐。',
+      sql: '重点关注：maintenance_work_mem 设置与 temp_bytes 落盘规模'
+    },
+    {
+      short: 'writing',
+      full: 'writing new heap',
+      counters: ['heap_blks_total: 扫描完成', 'heap_blks_scanned: 已达总量', 'heap_tuples_scanned: 已达总量', 'heap_tuples_inserted: 持续递增', 'heap_tuples_updated/deleted: 0', 'index_rebuild_count: 0'],
+      cause: '正在将排序后或过滤后的保留元组写入新堆；重点关注磁盘写带宽、WAL 生成与归档压力。',
+      sql: '联动排查：pg_stat_replication（观察 write_lag / flush_lag / replay_lag）'
+    },
+    {
+      short: 'catch-up',
+      full: 'catch-up（并发模式专有）',
+      counters: ['heap_blks_total: 基准复制完成', 'heap_blks_scanned: 基准复制完成', 'heap_tuples_scanned: 基准完成', 'heap_tuples_inserted: 重放并发 INSERT', 'heap_tuples_updated/deleted: 持续递增', 'index_rebuild_count: 新索引已前置建立'],
+      cause: '卡在 catch-up 说明业务并发 DML 过于密集，apply_concurrent_changes() 追赶 spill 文件吃力。',
+      sql: '联动排查：业务写入 TPS、spill 临时文件体积与 pg_stat_replication 延迟'
+    },
+    {
+      short: 'swapping',
+      full: 'swapping relation files',
+      counters: ['heap_blks_total: 完成', 'heap_blks_scanned: 完成', 'heap_tuples_scanned: 完成', 'heap_tuples_inserted: 尾差收口', 'heap_tuples_updated/deleted: 尾差收口', 'index_rebuild_count: 准备切主'],
+      cause: '卡在 swapping relation files 几乎必然是锁等待——正在排队获取目标表的 AccessExclusiveLock！',
+      sql: '立即排查：SELECT pid, mode, granted FROM pg_locks WHERE relation = \'t\'::regclass;'
+    },
+    {
+      short: 'rebuilding',
+      full: 'rebuilding index',
+      counters: ['heap_blks_total: 完成', 'heap_blks_scanned: 完成', 'heap_tuples_scanned: 完成', 'heap_tuples_inserted: 完成', 'heap_tuples_updated/deleted: 完成', 'index_rebuild_count: 逐个递增'],
+      cause: '卡在 rebuilding index 重点看表的索引数量、单索引体积以及 maintenance_work_mem 配置。',
+      sql: '重点关注：index_rebuild_count 变化速率与单表索引冗余清理'
+    },
+    {
+      short: 'cleanup',
+      full: 'performing final cleanup',
+      counters: ['heap_blks_total: 完成', 'heap_blks_scanned: 完成', 'heap_tuples_scanned: 完成', 'heap_tuples_inserted: 完成', 'heap_tuples_updated/deleted: 完成', 'index_rebuild_count: 全部完成'],
+      cause: '删除 transient 表、释放旧物理文件与临时 replication slot，随后可确认 ANALYZE。',
+      sql: '收尾验证：对比 pg_total_relation_size() 并确认已更新统计信息'
+    }
+  ];
+
+  function renderS10() {
+    const pipe = document.getElementById('s10-pipeline');
+    let pHtml = '';
+    S10_PHASES.forEach((ph, i) => {
+      const x = 20 + i * 172;
+      const isAct = i === s10Phase;
+      const isDone = i < s10Phase;
+      const fill = isAct ? '#BE653B' : (isDone ? '#245A6B' : '#F7F6F2');
+      const stroke = isAct ? '#BE653B' : (isDone ? '#1E4B5A' : '#A4C4C6');
+      const txtFill = (isAct || isDone) ? '#FFFFFF' : '#1B2B33';
+      pHtml += `<rect x="${x}" y="22" width="154" height="86" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
+      pHtml += `<text x="${x + 12}" y="46" font-family="SF Mono, monospace" font-size="11" fill="${isAct || isDone ? '#CFE0DC' : '#89938F'}" font-weight="700">STAGE 0${i + 1}</text>`;
+      pHtml += `<text x="${x + 12}" y="72" font-family="SF Mono, monospace" font-size="13" fill="${txtFill}" font-weight="700">${ph.short}</text>`;
+      pHtml += `<text x="${x + 12}" y="94" font-family="PingFang SC, sans-serif" font-size="11" fill="${isAct || isDone ? '#F7F6F2' : '#46585F'}">${isAct ? '当前聚焦阶段' : (isDone ? '已完成' : '待进入')}</text>`;
+      if (i < S10_PHASES.length - 1) {
+        pHtml += `<line x1="${x + 154}" y1="65" x2="${x + 172}" y2="65" stroke="#245A6B" stroke-width="2"/>`;
+      }
+    });
+    pipe.innerHTML = pHtml;
+
+    const cur = S10_PHASES[s10Phase];
+    const cLayer = document.getElementById('s10-counters-layer');
+    let cHtml = '';
+    cur.counters.forEach((line, idx) => {
+      const col = idx % 2;
+      const row = Math.floor(idx / 2);
+      const cx = 36 + col * 328;
+      const cy = 186 + row * 56;
+      const highlight = (s10Phase === 1 && idx <= 2) || (s10Phase === 3 && idx === 3) || (s10Phase === 4 && (idx === 3 || idx === 4)) || (s10Phase === 6 && idx === 5);
+      cHtml += `<rect x="${cx}" y="${cy}" width="314" height="44" fill="${highlight ? '#E5EFF0' : '#FFFFFF'}" stroke="${highlight ? '#245A6B' : '#D9D5CB'}" stroke-width="1.2"/>`;
+      cHtml += `<text x="${cx + 12}" y="${cy + 27}" font-family="SF Mono, monospace" font-size="12" fill="${highlight ? '#1E4B5A' : '#1B2B33'}" font-weight="${highlight ? '700' : '400'}">${line}</text>`;
+    });
+    cLayer.innerHTML = cHtml;
+
+    document.getElementById('s10-diag-phase').textContent = cur.full;
+    document.getElementById('s10-diag-cause').textContent = cur.cause;
+    document.getElementById('s10-diag-sql').textContent = cur.sql;
+
+    document.querySelectorAll('#s10-phase-btns button').forEach(btn => {
+      btn.classList.toggle('active', Number(btn.dataset.p) === s10Phase);
+    });
+  }
+
+  function stopS10Anim() { if (s10Timer) { clearInterval(s10Timer); s10Timer = null; } }
+  document.querySelectorAll('#s10-phase-btns button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stopS10Anim();
+      s10Phase = Number(btn.dataset.p);
+      renderS10();
+    });
+  });
+  document.getElementById('s10-play').addEventListener('click', () => {
+    stopS10Anim();
+    s10Phase = 0;
+    renderS10();
+    s10Timer = setInterval(() => {
+      if (s10Phase >= S10_PHASES.length - 1) { stopS10Anim(); return; }
+      s10Phase++;
+      renderS10();
+    }, 1400);
+  });
+
+  /* ==================== ANIMATION 5: SLIDE 13 DECISION FLOW ==================== */
+  const s13Cond = { c1: true, c2: true, c3: true, c4: true };
+
+  function renderS13() {
+    const b1 = document.getElementById('s13-c1');
+    const b2 = document.getElementById('s13-c2');
+    const b3 = document.getElementById('s13-c3');
+    const b4 = document.getElementById('s13-c4');
+    b1.textContent = `1. 膨胀影响成本：${s13Cond.c1 ? '是' : '否'}`;
+    b2.textContent = `2. 须归还 OS：${s13Cond.c2 ? '是' : '否'}`;
+    b3.textContent = `3. 磁盘/WAL 充足：${s13Cond.c3 ? '是' : '否'}`;
+    b4.textContent = `4. 在线且满前提：${s13Cond.c4 ? '是' : '否'}`;
+    b1.classList.toggle('active', s13Cond.c1);
+    b2.classList.toggle('active', s13Cond.c2);
+    b3.classList.toggle('active', s13Cond.c3);
+    b4.classList.toggle('active', s13Cond.c4);
+
+    // Reset all outcome highlights
+    [1, 2, 3, 4].forEach(i => {
+      const el = document.getElementById(`s13-out-${i}`);
+      el.setAttribute('fill', '#FFFFFF');
+      el.setAttribute('stroke', '#D9D5CB');
+      el.setAttribute('stroke-width', '1.5');
+    });
+
+    const vBox = document.getElementById('s13-verdict-box');
+    const vTitle = document.getElementById('s13-verdict-title');
+    const vDesc = document.getElementById('s13-verdict-desc');
+
+    let activeOut = 4;
+    if (!s13Cond.c1) {
+      activeOut = 1;
+      vBox.setAttribute('fill', '#F7F1E1'); vBox.setAttribute('stroke', '#AE8A3E');
+      vTitle.setAttribute('fill', '#AE8A3E');
+      vTitle.textContent = '推荐结论：不执行 REPACK —— 先证实真正的性能或容量瓶颈';
+      vDesc.textContent = '若慢查询源头是 CPU、锁等待或应用 N+1，表重写并不能改善核心延迟，切勿盲目制造 WAL 与 I/O 抖动。';
+    } else if (!s13Cond.c2) {
+      activeOut = 2;
+      vBox.setAttribute('fill', '#E5EFF0'); vBox.setAttribute('stroke', '#245A6B');
+      vTitle.setAttribute('fill', '#245A6B');
+      vTitle.textContent = '推荐结论：调优 autovacuum，使用普通 VACUUM 保持表内稳态复用';
+      vDesc.textContent = '业务只需阻止文件继续无限增长、无需立即归还 OS 磁盘时，普通 VACUUM 原地清理成本最低且不阻塞读写。';
+    } else if (!s13Cond.c3) {
+      activeOut = 3;
+      vBox.setAttribute('fill', '#F7E9DE'); vBox.setAttribute('stroke', '#BE653B');
+      vTitle.setAttribute('fill', '#BE653B');
+      vTitle.textContent = '推荐结论：暂缓 REPACK —— 先扩容磁盘/归档能力，或改造为时间分区架构';
+      vDesc.textContent = '磁盘水位逼近上限或主备链路无法承受 WAL 峰值时，强行表重写极易打满磁盘或引发备库严重延迟。';
+    } else if (!s13Cond.c4) {
+      activeOut = 4;
+      document.getElementById('s13-out-4-title').textContent = '维护窗口普通 REPACK';
+      document.getElementById('s13-out-4-l1').textContent = '全程强锁，逻辑最简，';
+      document.getElementById('s13-out-4-l2').textContent = '适合停机或低峰窗口。';
+      vBox.setAttribute('fill', '#E5EFF0'); vBox.setAttribute('stroke', '#245A6B');
+      vTitle.setAttribute('fill', '#245A6B');
+      vTitle.textContent = '推荐结论：在明确维护窗口执行普通 REPACK (ANALYZE, VERBOSE)';
+      vDesc.textContent = '无主键/无 slot 或可接受业务停写时选普通模式；执行前先清理长事务，完成后务必复盘膨胀根因。';
+    } else {
+      activeOut = 4;
+      document.getElementById('s13-out-4-title').textContent = 'REPACK (CONCURRENTLY)';
+      document.getElementById('s13-out-4-l1').textContent = '在线重写，盯紧进度、';
+      document.getElementById('s13-out-4-l2').textContent = '锁等待与复制延迟。';
+      vBox.setAttribute('fill', '#E6F2EE'); vBox.setAttribute('stroke', '#2F7A66');
+      vTitle.setAttribute('fill', '#2F7A66');
+      vTitle.textContent = '推荐结论：执行 REPACK (CONCURRENTLY, ANALYZE, VERBOSE)';
+      vDesc.textContent = '收尾必做：冻结并发 DDL、盯紧 pg_stat_progress_repack 与 replay_lag，并在完成后治理膨胀根因。';
+    }
+
+    const activeEl = document.getElementById(`s13-out-${activeOut}`);
+    activeEl.setAttribute('fill', activeOut === 3 ? '#F7E9DE' : (activeOut === 4 && s13Cond.c4 ? '#E6F2EE' : '#E5EFF0'));
+    activeEl.setAttribute('stroke', activeOut === 3 ? '#BE653B' : (activeOut === 4 && s13Cond.c4 ? '#2F7A66' : '#245A6B'));
+    activeEl.setAttribute('stroke-width', '2.5');
+  }
+
+  document.getElementById('s13-c1').addEventListener('click', () => { s13Cond.c1 = !s13Cond.c1; renderS13(); });
+  document.getElementById('s13-c2').addEventListener('click', () => { s13Cond.c2 = !s13Cond.c2; renderS13(); });
+  document.getElementById('s13-c3').addEventListener('click', () => { s13Cond.c3 = !s13Cond.c3; renderS13(); });
+  document.getElementById('s13-c4').addEventListener('click', () => { s13Cond.c4 = !s13Cond.c4; renderS13(); });
+  document.getElementById('s13-reset').addEventListener('click', () => {
+    s13Cond.c1 = s13Cond.c2 = s13Cond.c3 = s13Cond.c4 = true;
+    renderS13();
+  });
+
+  /* ==================== INIT ==================== */
+  renderS2();
+  renderS5();
+  renderS8();
+  renderS10();
+  renderS13();
+  updateStageScale();
+})();
+</script>
+</body>
+</html>

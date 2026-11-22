@@ -1,0 +1,2577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>数据库筑基课 —— PostgreSQL bgwriter 调度</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-frame: #E6E3DA;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terra: #BE653B;
+    --terra-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E4F0EC;
+    --gold: #AE8A3E;
+    --gold-light: #F5EFE0;
+
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+
+    --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'STSong', 'SimSun', Georgia, serif;
+    --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', -apple-system, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-frame);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* Root application shell */
+  #app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-frame);
+  }
+
+  /* Main workspace: left stage + optional right notes pane */
+  #workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Stage letterbox container */
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    background: var(--bg-frame);
+    transition: width 0.22s ease;
+  }
+
+  /* Fixed 1600x900 16:9 stage scaled via transform */
+  #stage-wrapper {
+    width: 1600px;
+    height: 900px;
+    flex-shrink: 0;
+    transform-origin: center center;
+    position: relative;
+    background: var(--bg-paper);
+    border: 1px solid #CCC7BC;
+    overflow: hidden;
+  }
+
+  /* Blueprint subtle grid texture on stage */
+  #stage-wrapper::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(36, 90, 107, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(36, 90, 107, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Top subtle stratigraphic accent bar */
+  .strata-ribbon {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    display: flex;
+    z-index: 2;
+  }
+  .strata-ribbon span { flex: 1; height: 100%; }
+
+  /* Individual slides */
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 46px 64px 36px 64px;
+    display: none;
+    flex-direction: column;
+    z-index: 1;
+  }
+  .slide.active {
+    display: flex;
+  }
+
+  .slide-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .slide-eyebrow .eyebrow-tag {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: var(--terra);
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.18;
+    color: var(--ink);
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.48;
+    color: var(--ink-sub);
+    max-width: 1400px;
+    margin-bottom: 16px;
+  }
+
+  .slide-divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 18px;
+    position: relative;
+  }
+  .slide-divider::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: -1px;
+    width: 96px;
+    height: 3px;
+    background: var(--indigo);
+  }
+
+  /* Diagram zone strictly 1400 x 430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    position: relative;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .diagram-zone svg {
+    display: block;
+    width: 1400px;
+    height: 430px;
+  }
+
+  .diagram-zone.has-controls svg {
+    height: 382px;
+  }
+
+  /* Dedicated non-overlapping interactive toolbar above SVG */
+  .sim-toolbar {
+    height: 48px;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+    border-bottom: 1px solid var(--stroke);
+    padding: 0 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--ink-sub);
+  }
+
+  .sim-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sim-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 13px;
+    border: 1px solid var(--indigo);
+    background: var(--bg-paper);
+    color: var(--indigo);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sim-btn:hover {
+    background: var(--indigo-light);
+  }
+  .sim-btn.primary {
+    background: var(--indigo);
+    color: #F7F6F2;
+  }
+  .sim-btn.primary:hover {
+    background: #1B4755;
+  }
+  .sim-btn.accent {
+    border-color: var(--terra);
+    color: var(--terra);
+    background: var(--terra-light);
+  }
+  .sim-btn.accent:hover {
+    background: var(--terra);
+    color: #F7F6F2;
+  }
+
+  .sim-input-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink);
+  }
+  .sim-input-label input[type="range"] {
+    width: 88px;
+    accent-color: var(--indigo);
+    cursor: pointer;
+  }
+  .sim-val {
+    display: inline-block;
+    min-width: 34px;
+    text-align: right;
+    font-weight: 700;
+    color: var(--indigo);
+  }
+  .sim-status-badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 3px 10px;
+    background: var(--indigo-light);
+    color: var(--indigo);
+    border: 1px solid #BDD1D6;
+  }
+
+  /* Bottom NEXT bridge */
+  .slide-next {
+    margin-top: 22px;
+    width: 1400px;
+    padding: 6px 0 6px 18px;
+    border-left: 3px solid var(--terra);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .slide-next-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2.2px;
+    color: var(--terra);
+    font-weight: 700;
+  }
+  .slide-next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.38;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* Stage footer */
+  .slide-footer {
+    position: absolute;
+    left: 64px;
+    right: 64px;
+    bottom: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--stroke);
+    padding-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+  .slide-footer-page {
+    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  /* Right-side in-page Speaker Notes / Full Transcript Pane */
+  #notes-pane {
+    width: 0;
+    flex-shrink: 0;
+    height: 100%;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+    user-select: text;
+  }
+  #notes-pane.open {
+    width: 440px;
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    height: 48px;
+    min-width: 440px;
+    flex-shrink: 0;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .notes-tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .notes-tab {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+  .notes-tab.active {
+    background: var(--bg-paper);
+    border-color: var(--stroke);
+    color: var(--indigo);
+  }
+  .notes-close {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 3px 8px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+  .notes-close:hover {
+    color: var(--ink);
+    border-color: var(--ink-sub);
+  }
+
+  .notes-body {
+    flex: 1;
+    min-width: 440px;
+    overflow-y: auto;
+    padding: 20px 22px 32px 22px;
+    scroll-behavior: smooth;
+  }
+
+  .note-card {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--stroke);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .note-card.active-note {
+    background: #FFFFFF;
+    border-color: #C7D4D7;
+    border-left: 4px solid var(--indigo);
+  }
+  .note-card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .note-card-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--terra);
+  }
+  .note-card-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-left: 8px;
+    flex: 1;
+  }
+  .note-card-text {
+    font-size: 14.5px;
+    line-height: 1.78;
+    color: var(--ink-sub);
+  }
+  .note-card-text p {
+    margin-bottom: 10px;
+  }
+  .note-card-text p:last-child {
+    margin-bottom: 0;
+  }
+  .note-card-text code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--indigo-light);
+    color: var(--indigo);
+    padding: 1px 4px;
+  }
+
+  /* In-page TOC Drawer (G) */
+  #toc-drawer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 360px;
+    background: var(--bg-paper);
+    border-right: 1px solid var(--stroke);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+  }
+  #toc-drawer.open {
+    transform: translateX(0);
+  }
+  .toc-header {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .toc-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 0;
+  }
+  .toc-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 18px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background 0.15s;
+  }
+  .toc-item:hover {
+    background: var(--bg-sub);
+  }
+  .toc-item.active {
+    background: var(--indigo-light);
+    border-left-color: var(--indigo);
+  }
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--terra);
+    padding-top: 2px;
+  }
+  .toc-meta {
+    flex: 1;
+    min-width: 0;
+  }
+  .toc-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  .toc-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+
+  /* Bottom HUD Shortcut Bar (Always visible, including in Fullscreen) */
+  #hud-bar {
+    height: 44px;
+    flex-shrink: 0;
+    background: #1B2B33;
+    color: #EBF1EE;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    font-size: 12.5px;
+    border-top: 1px solid #2E6373;
+    z-index: 40;
+  }
+
+  .hud-left, .hud-center, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(207, 224, 220, 0.25);
+    color: #EBF1EE;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .hud-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(207, 224, 220, 0.55);
+  }
+  .hud-btn.active {
+    background: var(--terra);
+    border-color: var(--terra);
+    color: #FFFFFF;
+  }
+  .hud-kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #CFE0DC;
+  }
+  .hud-btn.active .hud-kbd {
+    background: rgba(0, 0, 0, 0.22);
+    color: #FFFFFF;
+  }
+
+  .hud-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #CFE0DC;
+  }
+  .hud-progress-track {
+    width: 110px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.18);
+    position: relative;
+    overflow: hidden;
+  }
+  .hud-progress-fill {
+    height: 100%;
+    background: var(--terra);
+    width: 8.33%;
+    transition: width 0.2s ease;
+  }
+
+  /* SVG common typography classes */
+  .svg-title { font-family: 'PingFang SC', 'Noto Sans CJK SC', sans-serif; font-weight: 700; fill: #1B2B33; }
+  .svg-serif { font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-weight: 700; fill: #1B2B33; }
+  .svg-body { font-family: 'PingFang SC', 'Noto Sans CJK SC', sans-serif; fill: #46585F; }
+  .svg-mono { font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace; fill: #245A6B; }
+  .svg-white { font-family: 'PingFang SC', 'Noto Sans CJK SC', sans-serif; fill: #F7F6F2; }
+  .svg-white-mono { font-family: 'SF Mono', 'JetBrains Mono', monospace; fill: #EBF1EE; }
+
+  /* Subtle highlight transition for animated SVG nodes */
+  .sim-node {
+    transition: fill 0.22s ease, stroke 0.22s ease, stroke-width 0.22s ease;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <!-- In-page TOC Drawer -->
+    <aside id="toc-drawer" aria-label="目录">
+      <div class="toc-header">
+        <span>目录 · 地层索引</span>
+        <button class="notes-close" id="btn-toc-close" type="button">ESC</button>
+      </div>
+      <div class="toc-list" id="toc-list"></div>
+    </aside>
+
+    <!-- Left 16:9 Stage Viewport -->
+    <main id="stage-viewport">
+      <div id="stage-wrapper">
+        <div class="strata-ribbon">
+          <span style="background:#1E4B5A"></span>
+          <span style="background:#2E6373"></span>
+          <span style="background:#47808D"></span>
+          <span style="background:#74A5AD"></span>
+          <span style="background:#A4C4C6"></span>
+          <span style="background:#CFE0DC"></span>
+          <span style="background:#EBF1EE"></span>
+        </div>
+
+        <!-- ==================== SLIDE 1 ==================== -->
+        <section class="slide active" data-index="0" data-title="PostgreSQL bgwriter 调度机制" data-eyebrow="DATABASE FOUNDATIONS">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>DATABASE FOUNDATIONS · STORAGE &amp; I/O SCHEDULING · 2026-06-08</div>
+          <h1 class="slide-title">数据库筑基课 —— bgwriter 调度</h1>
+          <p class="slide-lead">写 I/O 起伏与业务 SQL 偶发抖动背后，写出路径并非一个进程全包；先看清七层存储地层，再回答三个核心问题。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-terra" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#BE653B"/>
+                </marker>
+                <marker id="arr-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#2F7A66"/>
+                </marker>
+                <marker id="arr-gold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#AE8A3E"/>
+                </marker>
+              </defs>
+
+              <!-- Left: 7-layer Stratigraphic Profile -->
+              <text x="36" y="34" class="svg-mono" font-size="12" letter-spacing="2">STRATIGRAPHIC WRITE PATH · 七层写出地层剖面（越深＝越底层）</text>
+
+              <!-- Layer 7 (Top - Shallowest) -->
+              <rect x="36" y="48" width="760" height="46" fill="#EBF1EE" stroke="#D9D5CB"/>
+              <text x="56" y="76" class="svg-mono" font-size="12" fill="#46585F">L7</text>
+              <text x="98" y="76" class="svg-title" font-size="15">业务 SQL 请求路径</text>
+              <text x="300" y="76" class="svg-body" font-size="13.5">读写表与索引页面；偶发延迟抖动的第一体感层</text>
+
+              <!-- Layer 6 -->
+              <rect x="36" y="98" width="760" height="46" fill="#CFE0DC" stroke="#D9D5CB"/>
+              <text x="56" y="126" class="svg-mono" font-size="12" fill="#245A6B">L6</text>
+              <text x="98" y="126" class="svg-title" font-size="15">Client Backend</text>
+              <text x="300" y="126" class="svg-body" font-size="13.5">分配 shared buffer；若撞上脏 victim 则被迫同步写出</text>
+
+              <!-- Layer 5 -->
+              <rect x="36" y="148" width="760" height="46" fill="#A4C4C6" stroke="#8EB0B3"/>
+              <text x="56" y="176" class="svg-mono" font-size="12" fill="#1B2B33">L5</text>
+              <text x="98" y="176" class="svg-title" font-size="15">Shared Buffers 共享内存</text>
+              <text x="300" y="176" class="svg-title" font-size="13.5" font-weight="400">clock-sweep 替换策略维护 clean reusable buffer 供给</text>
+
+              <!-- Layer 4 (Highlighted: bgwriter) -->
+              <rect x="36" y="198" width="760" height="50" fill="#74A5AD" stroke="#BE653B" stroke-width="2.5"/>
+              <rect x="36" y="198" width="8" height="50" fill="#BE653B"/>
+              <text x="56" y="228" class="svg-white-mono" font-size="12" font-weight="700">L4</text>
+              <text x="98" y="228" class="svg-white" font-size="16" font-weight="700">bgwriter 后台写进程（本文聚焦）</text>
+              <text x="392" y="228" class="svg-white" font-size="13.5">提前清理部分 LRU 候选脏页，平滑后台写出</text>
+
+              <!-- Layer 3 -->
+              <rect x="36" y="252" width="760" height="46" fill="#47808D" stroke="#376975"/>
+              <text x="56" y="280" class="svg-white-mono" font-size="12">L3</text>
+              <text x="98" y="280" class="svg-white" font-size="15" font-weight="700">Checkpointer &amp; WAL Writer</text>
+              <text x="330" y="280" class="svg-white" font-size="13.5">WAL 先写保障与 checkpoint 边界持久化收口</text>
+
+              <!-- Layer 2 -->
+              <rect x="36" y="302" width="760" height="46" fill="#2E6373" stroke="#224E5B"/>
+              <text x="56" y="330" class="svg-white-mono" font-size="12">L2</text>
+              <text x="98" y="330" class="svg-white" font-size="15" font-weight="700">OS Page Cache</text>
+              <text x="300" y="330" class="svg-white" font-size="13.5">文件系统页缓存，承接 write() 与 writeback hint</text>
+
+              <!-- Layer 1 (Deepest) -->
+              <rect x="36" y="352" width="760" height="46" fill="#1E4B5A" stroke="#163945"/>
+              <text x="56" y="380" class="svg-white-mono" font-size="12">L1</text>
+              <text x="98" y="380" class="svg-white" font-size="15" font-weight="700">底层存储设备</text>
+              <text x="300" y="380" class="svg-white" font-size="13.5">NVMe / 本地盘 / 网络盘；fsync() 最终落盘边界</text>
+
+              <!-- Orthogonal pointer from L4 to Right Panel -->
+              <path d="M 796 223 H 844" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+
+              <!-- Right Panel: Three Core Questions -->
+              <rect x="854" y="48" width="510" height="350" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="854" y="48" width="510" height="38" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="876" y="72" class="svg-mono" font-size="12.5" font-weight="700">调优前必须回答的三个核心问题</text>
+
+              <!-- Q1 -->
+              <rect x="876" y="106" width="466" height="78" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="876" y="106" width="4" height="78" fill="#245A6B"/>
+              <text x="896" y="132" class="svg-mono" font-size="12" font-weight="700">QUESTION 01 · 职责定位</text>
+              <text x="896" y="158" class="svg-title" font-size="16">bgwriter 到底在替谁写？</text>
+              <text x="896" y="176" class="svg-body" font-size="12.5">区分 bgwriter、client backend 与 checkpointer 的边界</text>
+
+              <!-- Q2 -->
+              <rect x="876" y="200" width="466" height="78" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="876" y="200" width="4" height="78" fill="#BE653B"/>
+              <text x="896" y="226" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">QUESTION 02 · 调度算法</text>
+              <text x="896" y="252" class="svg-title" font-size="16">它何时醒来、写多少、扫到哪里停？</text>
+              <text x="896" y="270" class="svg-body" font-size="12.5">主循环休眠、clock-sweep 输入与反馈控制截断逻辑</text>
+
+              <!-- Q3 -->
+              <rect x="876" y="294" width="466" height="78" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="876" y="294" width="4" height="78" fill="#2F7A66"/>
+              <text x="896" y="320" class="svg-mono" font-size="12" font-weight="700" fill="#2F7A66">QUESTION 03 · 排障归因</text>
+              <text x="896" y="346" class="svg-title" font-size="16">如何判断是 bgwriter 不够，还是别处瓶颈？</text>
+              <text x="896" y="364" class="svg-body" font-size="12.5">用 pg_stat_bgwriter 与 pg_stat_io 区分真实写压力</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">调参之前，先厘清第一件事：bgwriter 究竟在解决什么矛盾，又会带来什么代价？</span>
+          </div>
+          <div class="slide-footer">
+            <span>作者：digoal · 主题：存储管理 / 维护机制 / 性能诊断</span>
+            <span class="slide-footer-page">01 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 2 ==================== -->
+        <section class="slide" data-index="1" data-title="它解决什么问题：延迟与总 I/O 的交换" data-eyebrow="01 / PROBLEM STATEMENT">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>01 / PROBLEM STATEMENT · LATENCY VS TOTAL I/O</div>
+          <h1 class="slide-title">把不可预测的前台写等待，换为平滑的后台写出</h1>
+          <p class="slide-lead">backend 寻找可替换页面时若撞上脏页，被迫在 SQL 请求路径同步写出；bgwriter 提前清理可复用脏页，但代价是热页可能重复写。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Band 1: Without bgwriter (Contradiction - Terracotta) -->
+              <rect x="32" y="24" width="1336" height="122" fill="#F7E9DE" stroke="#DFC0AA"/>
+              <rect x="32" y="24" width="8" height="122" fill="#BE653B"/>
+              <text x="58" y="50" class="svg-mono" font-size="12.5" font-weight="700" fill="#BE653B">场景 A · 缺少预清理（写得太少）：用户请求路径直接承担同步写代价</text>
+
+              <rect x="58" y="66" width="210" height="62" fill="#FFFFFF" stroke="#BE653B"/>
+              <text x="74" y="92" class="svg-title" font-size="14.5">1. SQL 发生 Buffer Miss</text>
+              <text x="74" y="114" class="svg-body" font-size="12.5">需读入新页，寻找 victim</text>
+
+              <path d="M 268 97 H 316" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+
+              <rect x="324" y="66" width="240" height="62" fill="#FFFFFF" stroke="#BE653B"/>
+              <text x="340" y="92" class="svg-title" font-size="14.5" fill="#BE653B">2. 撞上脏 Victim Buffer</text>
+              <text x="340" y="114" class="svg-body" font-size="12.5">不能直接覆盖，必须先落盘</text>
+
+              <path d="M 564 97 H 612" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+
+              <rect x="620" y="66" width="290" height="62" fill="#BE653B" stroke="#9B4D29"/>
+              <text x="636" y="92" class="svg-white" font-size="14.5" font-weight="700">3. Backend 被迫同步写脏页</text>
+              <text x="636" y="114" class="svg-white" font-size="12.5">先 WAL Flush → 写旧页 → 读新页</text>
+
+              <path d="M 910 97 H 958" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+
+              <rect x="966" y="66" width="376" height="62" fill="#FFFFFF" stroke="#BE653B"/>
+              <text x="982" y="92" class="svg-title" font-size="14.5" fill="#BE653B">后果：SQL 尾延迟显著放大</text>
+              <text x="982" y="114" class="svg-body" font-size="12.5">client backend writes 偏高，前台抖动不可预测</text>
+
+              <!-- Band 2: With bgwriter (Optimal - Teal) -->
+              <rect x="32" y="162" width="1336" height="122" fill="#E4F0EC" stroke="#B6D3C9"/>
+              <rect x="32" y="162" width="8" height="122" fill="#2F7A66"/>
+              <text x="58" y="188" class="svg-mono" font-size="12.5" font-weight="700" fill="#2F7A66">场景 B · bgwriter 适度预清理：将同步写等待转移为平滑后台写出</text>
+
+              <rect x="58" y="204" width="250" height="62" fill="#245A6B" stroke="#1E4B5A"/>
+              <text x="74" y="230" class="svg-white" font-size="14.5" font-weight="700">后台：bgwriter 提前扫描</text>
+              <text x="74" y="252" class="svg-white" font-size="12.5">写出候选脏页 → 变为 clean reusable</text>
+
+              <path d="M 308 235 H 356" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <rect x="364" y="204" width="260" height="62" fill="#FFFFFF" stroke="#2F7A66"/>
+              <text x="380" y="230" class="svg-title" font-size="14.5">前台：SQL 命中 Clean Victim</text>
+              <text x="380" y="252" class="svg-body" font-size="12.5">无需等待写出，直接复用槽位</text>
+
+              <path d="M 624 235 H 672" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <rect x="680" y="204" width="270" height="62" fill="#FFFFFF" stroke="#2F7A66"/>
+              <text x="696" y="230" class="svg-title" font-size="14.5">前台：直接读入目标新页</text>
+              <text x="696" y="252" class="svg-body" font-size="12.5">用户路径避开同步写脏页开销</text>
+
+              <path d="M 950 235 H 998" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <rect x="1006" y="204" width="336" height="62" fill="#2F7A66" stroke="#235E4E"/>
+              <text x="1022" y="230" class="svg-white" font-size="14.5" font-weight="700">收益：写 I/O 平滑，延迟可控</text>
+              <text x="1022" y="252" class="svg-white" font-size="12.5">前台同步写概率明显下降</text>
+
+              <!-- Band 3: Tradeoff Spectrum (3 equal boxes) -->
+              <rect x="32" y="302" width="430" height="104" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="32" y="302" width="430" height="5" fill="#BE653B"/>
+              <text x="52" y="334" class="svg-title" font-size="15.5" fill="#BE653B">写得太少（过于保守）</text>
+              <text x="52" y="362" class="svg-body" font-size="13.5">• 用户请求频频撞上脏 victim buffer</text>
+              <text x="52" y="386" class="svg-body" font-size="13.5">• backend writes 上升，业务尾延迟恶化</text>
+
+              <rect x="485" y="302" width="430" height="104" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="485" y="302" width="430" height="5" fill="#2F7A66"/>
+              <text x="505" y="334" class="svg-title" font-size="15.5" fill="#2F7A66">写得合适（甜点区）</text>
+              <text x="505" y="362" class="svg-body" font-size="13.5">• 维持恰到好处的 clean buffer 供给</text>
+              <text x="505" y="386" class="svg-body" font-size="13.5">• 用可控后台写换取稳定的前台响应</text>
+
+              <rect x="938" y="302" width="430" height="104" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="938" y="302" width="430" height="5" fill="#AE8A3E"/>
+              <text x="958" y="334" class="svg-title" font-size="15.5" fill="#AE8A3E">写得太多（过于激进）</text>
+              <text x="958" y="362" class="svg-body" font-size="13.5">• 同一热页在单 checkpoint 周期被反复写出</text>
+              <text x="958" y="386" class="svg-body" font-size="13.5">• 总 I/O 负载增加，OS 缓存与盘队列承压</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">明确了延迟与总 I/O 的交换本质，接下来把 shared buffers 写出路径上的三方职责划清界线。</span>
+          </div>
+          <div class="slide-footer">
+            <span>核心本质：延迟（Latency）与总写 I/O（Total I/O）之间的权衡</span>
+            <span class="slide-footer-page">02 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 3 ==================== -->
+        <section class="slide" data-index="2" data-title="职责边界与核心概念：bgwriter、backend 与 checkpointer" data-eyebrow="02 / ARCHITECTURE BOUNDARY">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>02 / ARCHITECTURE BOUNDARY · ROLES &amp; PARAMETERS</div>
+          <h1 class="slide-title">bgwriter 是提前清理的清洁工，不是 checkpoint 执行者</h1>
+          <p class="slide-lead">PostgreSQL 9.2 起 bgwriter 不再处理 checkpoint；其 write() 严格遵守 WAL 先写规则，但持久化收口仍归 checkpointer。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top Shared Buffers Strata -->
+              <rect x="36" y="20" width="900" height="58" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="58" y="45" class="svg-title" font-size="15.5" fill="#245A6B">Shared Buffers（共享缓冲区：表与索引页面驻留地）</text>
+              <text x="58" y="66" class="svg-body" font-size="13">包含：已修改未落盘的 dirty buffer  |  无脏、无 pin、usage=0 的 clean reusable buffer</text>
+
+              <!-- Orthogonal branches from Shared Buffers down to 3 Roles -->
+              <path d="M 180 78 V 114" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 486 78 V 114" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+              <path d="M 792 78 V 114" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <!-- Role 1: bgwriter -->
+              <rect x="36" y="122" width="286" height="162" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="36" y="122" width="286" height="34" fill="#245A6B"/>
+              <text x="52" y="144" class="svg-white" font-size="14" font-weight="700">bgwriter（辅助进程）</text>
+              <text x="52" y="178" class="svg-body" font-size="13">• 入口：BackgroundWriterMain()</text>
+              <text x="52" y="202" class="svg-body" font-size="13">• 对象：LRU 候选可复用脏页</text>
+              <text x="52" y="226" class="svg-body" font-size="13">• 动作：XLogFlush → write()</text>
+              <text x="52" y="250" class="svg-body" font-size="13">• 边界：不推进 clock-sweep</text>
+              <text x="52" y="272" class="svg-mono" font-size="11.5" fill="#BE653B">9.2+ 不再负责 checkpoint</text>
+
+              <!-- Role 2: Client Backend -->
+              <rect x="343" y="122" width="286" height="162" fill="#FFFFFF" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="343" y="122" width="286" height="34" fill="#BE653B"/>
+              <text x="359" y="144" class="svg-white" font-size="14" font-weight="700">Client Backend（业务会话）</text>
+              <text x="359" y="178" class="svg-body" font-size="13">• 触发：buffer miss 寻 victim</text>
+              <text x="359" y="202" class="svg-body" font-size="13">• 权限：仍有权同步写脏 victim</text>
+              <text x="359" y="226" class="svg-body" font-size="13">• 动作：推进 clock-sweep 指针</text>
+              <text x="359" y="250" class="svg-body" font-size="13">• 代价：直接拖慢当前 SQL 延迟</text>
+              <text x="359" y="272" class="svg-mono" font-size="11.5" fill="#BE653B">bgwriter 旨在降低其写概率</text>
+
+              <!-- Role 3: Checkpointer -->
+              <rect x="650" y="122" width="286" height="162" fill="#FFFFFF" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="650" y="122" width="286" height="34" fill="#2F7A66"/>
+              <text x="666" y="144" class="svg-white" font-size="14" font-weight="700">Checkpointer（收口进程）</text>
+              <text x="666" y="178" class="svg-body" font-size="13">• 目标：checkpoint 边界收口</text>
+              <text x="666" y="202" class="svg-body" font-size="13">• 对象：所有需覆盖脏页（含热页）</text>
+              <text x="666" y="226" class="svg-body" font-size="13">• 动作：write() + fsync() 落盘</text>
+              <text x="666" y="250" class="svg-body" font-size="13">• 语义：推进崩溃恢复起点</text>
+              <text x="666" y="272" class="svg-mono" font-size="11.5" fill="#2F7A66">持久化语义的最终保障</text>
+
+              <!-- Arrows down to OS Page Cache & Disk -->
+              <path d="M 180 284 V 322" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 486 284 V 322" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+              <path d="M 792 284 V 322" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <!-- Bottom Strata: OS Page Cache + Storage -->
+              <rect x="36" y="330" width="593" height="76" fill="#2E6373"/>
+              <text x="56" y="358" class="svg-white" font-size="14.5" font-weight="700">OS Page Cache（write() + writeback hint）</text>
+              <text x="56" y="384" class="svg-white" font-size="12.5">写到文件系统 ≠ 持久化完成；WAL 先写确保崩溃可恢复</text>
+
+              <rect x="650" y="330" width="286" height="76" fill="#1E4B5A" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="668" y="358" class="svg-white" font-size="14.5" font-weight="700">存储落盘（fsync 收口）</text>
+              <text x="668" y="384" class="svg-white" font-size="12.5">checkpointer 完成持久化边界</text>
+
+              <!-- Right Sidebar: 4 Core GUC Parameters -->
+              <rect x="962" y="20" width="402" height="386" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="962" y="20" width="402" height="36" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="980" y="43" class="svg-mono" font-size="12.5" font-weight="700">四大核心配置参数（GUC 基线）</text>
+
+              <rect x="978" y="70" width="370" height="70" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <text x="992" y="94" class="svg-mono" font-size="13" font-weight="700">bgwriter_delay</text>
+              <text x="992" y="114" class="svg-body" font-size="12.5">两轮活动间的基础休眠时间</text>
+              <text x="992" y="132" class="svg-mono" font-size="11.5" fill="#BE653B">默认 200ms · 范围 10–10000ms</text>
+
+              <rect x="978" y="152" width="370" height="70" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <text x="992" y="176" class="svg-mono" font-size="13" font-weight="700">bgwriter_lru_maxpages</text>
+              <text x="992" y="196" class="svg-body" font-size="12.5">单轮最多写出 buffer 上限（0 则禁用）</text>
+              <text x="992" y="214" class="svg-mono" font-size="11.5" fill="#BE653B">命中上限 → maxwritten_clean++</text>
+
+              <rect x="978" y="234" width="370" height="70" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <text x="992" y="258" class="svg-mono" font-size="13" font-weight="700">bgwriter_lru_multiplier</text>
+              <text x="992" y="278" class="svg-body" font-size="12.5">对近期 buffer 需求平滑值的放大倍数</text>
+              <text x="992" y="296" class="svg-mono" font-size="11.5" fill="#245A6B">越大越激进，越小越保守</text>
+
+              <rect x="978" y="316" width="370" height="74" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <text x="992" y="340" class="svg-mono" font-size="13" font-weight="700">bgwriter_flush_after</text>
+              <text x="992" y="360" class="svg-body" font-size="12.5">累积写出达阈值后请求内核 writeback</text>
+              <text x="992" y="378" class="svg-mono" font-size="11.5" fill="#2F7A66">Linux 常见默认 512kB · 非 Linux 0</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">角色边界与四大参数已锚定，现在进入源码 bgwriter.c，看主循环如何节拍运转与休眠唤醒。</span>
+          </div>
+          <div class="slide-footer">
+            <span>源码入口：src/backend/postmaster/bgwriter.c · 历史：PG 8.0 引入，PG 9.2 拆分 checkpointer</span>
+            <span class="slide-footer-page">03 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 4 (INTERACTIVE SIM 1) ==================== -->
+        <section class="slide" data-index="3" data-title="主循环与空闲休眠唤醒（交互演示）" data-eyebrow="03 / MAIN LOOP &amp; HIBERNATION">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>03 / MAIN LOOP · BACKGROUNDWRITERMAIN() &amp; HIBERNATION</div>
+          <h1 class="slide-title">固定节拍与空闲休眠：既不空转，也不错过突增</h1>
+          <p class="slide-lead">bgwriter_delay 仅是基础节拍；连续两轮无活动且超时醒来时进入 50 倍休眠（默认约 10s），由 backend 分配时经 SetLatch() 唤醒。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="sim-toolbar">
+              <div class="sim-group">
+                <button class="sim-btn primary" id="s4-play" type="button">自动演示</button>
+                <button class="sim-btn" id="s4-step" type="button">单步推演</button>
+                <button class="sim-btn accent" id="s4-wake" type="button">模拟后端分配（SetLatch 唤醒）</button>
+                <button class="sim-btn" id="s4-reset" type="button">重置</button>
+              </div>
+              <div class="sim-group">
+                <label class="sim-input-label">
+                  <span>系统状态：</span>
+                  <select id="s4-mode" style="font-family:var(--font-sans);font-size:12.5px;padding:3px 6px;border:1px solid var(--stroke);background:#fff;color:var(--ink);">
+                    <option value="idle">空闲（进入休眠分支）</option>
+                    <option value="busy">有写入负载（常规 200ms 循环）</option>
+                  </select>
+                </label>
+                <span class="sim-status-badge" id="s4-status">当前：1. ResetLatch</span>
+              </div>
+            </div>
+            <svg viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg" id="s4-svg">
+              <!-- Top Row: Steps 1 to 4 -->
+              <rect id="s4-n1" class="sim-node" x="40" y="34" width="276" height="84" fill="#E5EFF0" stroke="#245A6B" stroke-width="2.5"/>
+              <text x="58" y="60" class="svg-mono" font-size="12" font-weight="700">STEP 01</text>
+              <text x="58" y="84" class="svg-title" font-size="15">ResetLatch(MyLatch)</text>
+              <text x="58" y="104" class="svg-body" font-size="12.5">清理旧唤醒信号，准备本轮执行</text>
+
+              <path d="M 316 76 H 362" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <rect id="s4-n2" class="sim-node" x="370" y="34" width="286" height="84" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="388" y="60" class="svg-mono" font-size="12" font-weight="700">STEP 02</text>
+              <text x="388" y="84" class="svg-title" font-size="15">ProcessMainLoopInterrupts()</text>
+              <text x="388" y="104" class="svg-body" font-size="12.5">响应 SIGHUP 重载配置、shutdown</text>
+
+              <path d="M 656 76 H 702" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <rect id="s4-n3" class="sim-node" x="710" y="34" width="290" height="84" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="728" y="60" class="svg-mono" font-size="12" font-weight="700">STEP 03 · 核心清理</text>
+              <text x="728" y="84" class="svg-title" font-size="15">BgBufferSync(&amp;wb_context)</text>
+              <text x="728" y="104" class="svg-body" font-size="12.5">按反馈模型扫描并写出候选脏页</text>
+
+              <path d="M 1000 76 H 1046" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <rect id="s4-n4" class="sim-node" x="1054" y="34" width="306" height="84" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="1072" y="60" class="svg-mono" font-size="12" font-weight="700">STEP 04–06 · 维护与上报</text>
+              <text x="1072" y="84" class="svg-title" font-size="15">pgstat 上报 + smgr + Standby</text>
+              <text x="1072" y="104" class="svg-body" font-size="12.5">上报统计、checkpoint 后清 smgr、快照</text>
+
+              <!-- Orthogonal connector from Step 4 down to Step 7 (WaitLatch) -->
+              <path d="M 1207 118 V 164" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 7: WaitLatch -->
+              <rect id="s4-n5" class="sim-node" x="1054" y="172" width="306" height="84" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="1072" y="198" class="svg-mono" font-size="12" font-weight="700">STEP 07 · 基础节拍等待</text>
+              <text x="1072" y="222" class="svg-title" font-size="15">WaitLatch(BgWriterDelay)</text>
+              <text x="1072" y="242" class="svg-body" font-size="12.5">默认等待 200ms；有活动则回 STEP 01</text>
+
+              <!-- Normal loop return line (Top-side return via middle corridor y=144) -->
+              <path id="s4-path-busy" d="M 1054 200 H 84 V 126" stroke="#2F7A66" stroke-width="1.8" stroke-dasharray="6,4" fill="none" marker-end="url(#arr-teal)"/>
+              <rect x="440" y="184" width="236" height="24" fill="#E4F0EC" stroke="#B6D3C9"/>
+              <text x="454" y="200" class="svg-mono" font-size="11.5" fill="#2F7A66">有活动：正常返回 STEP 01</text>
+
+              <!-- Hibernation Branch (Bottom Band) -->
+              <path d="M 1207 256 V 304 H 1054" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+              <text x="1220" y="286" class="svg-mono" font-size="11.5" fill="#BE653B">连续空闲+超时</text>
+
+              <rect id="s4-n6" class="sim-node" x="620" y="264" width="424" height="88" fill="#F7E9DE" stroke="#DFC0AA" stroke-width="1.5"/>
+              <text x="640" y="290" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">HIBERNATION · 空闲长休眠分支</text>
+              <text x="640" y="314" class="svg-title" font-size="15">StrategyNotifyBgWriter() + 50× 休眠</text>
+              <text x="640" y="336" class="svg-body" font-size="12.5">HIBERNATE_FACTOR = 50（默认 200ms × 50 ≈ 10s）</text>
+
+              <!-- Wakeup from Client Backend -->
+              <rect id="s4-n7" class="sim-node" x="150" y="264" width="380" height="88" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="170" y="290" class="svg-mono" font-size="12" font-weight="700" fill="#245A6B">BACKEND 主动唤醒机制</text>
+              <text x="170" y="314" class="svg-title" font-size="15">StrategyGetBuffer() → SetLatch()</text>
+              <text x="170" y="336" class="svg-body" font-size="12.5">普通 buffer 分配触发即刻唤醒；错过也会超时醒来</text>
+
+              <path id="s4-path-wake" d="M 620 308 H 538" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+              <path d="M 150 308 H 56 V 126" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">主循环把 bgwriter 准时叫醒了；进入 BgBufferSync() 后，它靠哪些输入信号决定本轮工作量？</span>
+          </div>
+          <div class="slide-footer">
+            <span>关键常量：HIBERNATE_FACTOR = 50 · 避免空闲高频 wakeup，又不失真于负载突增</span>
+            <span class="slide-footer-page">04 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 5 ==================== -->
+        <section class="slide" data-index="4" data-title="调度输入与盲区：clock-sweep 与 buffer ring" data-eyebrow="04 / SCHEDULING INPUT">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>04 / SCHEDULING INPUT · CLOCK-SWEEP &amp; BUFFER RING</div>
+          <h1 class="slide-title">紧跟 clock-sweep 却不推进指针，且不计入 buffer ring</h1>
+          <p class="slide-lead">StrategySyncStart() 读取替换指针与近期分配量；但顺序扫描、VACUUM、COPY 走的 ring buffer 不计入 numBufferAllocs。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Panel: Buffer Pool Linear/Clock-Sweep View -->
+              <rect x="32" y="22" width="840" height="384" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="32" y="22" width="840" height="36" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="52" y="45" class="svg-mono" font-size="12.5" font-weight="700">SHARED BUFFERS 扫描前沿：bgwriter 是清洁工，不是替换调度者</text>
+
+              <!-- StrategySyncStart Output Bar -->
+              <rect x="54" y="74" width="796" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="72" y="96" class="svg-mono" font-size="12" font-weight="700">StrategySyncStart() 读取三项共享状态：</text>
+              <text x="72" y="114" class="svg-mono" font-size="12" fill="#46585F">① nextVictimBuffer（下次候选位置）   ② completePasses（绕池圈数）   ③ numBufferAllocs（读取后清零）</text>
+
+              <!-- Buffer Slots Array (10 slots) -->
+              <text x="54" y="156" class="svg-body" font-size="12.5">Buffer Pool 槽位序列（环形首尾相连，向右推进）</text>
+
+              <!-- Slots -->
+              <rect x="54" y="168" width="74" height="68" fill="#EBF1EE" stroke="#A4C4C6"/>
+              <text x="72" y="196" class="svg-mono" font-size="11.5">B[i-1]</text>
+              <text x="72" y="218" class="svg-body" font-size="11.5">clean</text>
+
+              <rect x="134" y="168" width="74" height="68" fill="#E4F0EC" stroke="#2F7A66" stroke-width="2"/>
+              <text x="155" y="196" class="svg-mono" font-size="11.5" fill="#2F7A66">B[i]</text>
+              <text x="150" y="218" class="svg-body" font-size="11.5" fill="#2F7A66">已清理</text>
+
+              <rect x="214" y="168" width="74" height="68" fill="#E4F0EC" stroke="#2F7A66" stroke-width="2"/>
+              <text x="230" y="196" class="svg-mono" font-size="11.5" fill="#2F7A66">B[i+1]</text>
+              <text x="230" y="218" class="svg-body" font-size="11.5" fill="#2F7A66">已清理</text>
+
+              <rect x="294" y="168" width="74" height="68" fill="#F5EFE0" stroke="#AE8A3E"/>
+              <text x="310" y="196" class="svg-mono" font-size="11.5" fill="#AE8A3E">B[i+2]</text>
+              <text x="312" y="218" class="svg-body" font-size="11.5" fill="#AE8A3E">热页跳过</text>
+
+              <rect x="374" y="168" width="74" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+              <text x="390" y="196" class="svg-mono" font-size="11.5" fill="#BE653B">B[i+3]</text>
+              <text x="390" y="218" class="svg-body" font-size="11.5" fill="#BE653B">脏·待清</text>
+
+              <rect x="454" y="168" width="74" height="68" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="470" y="196" class="svg-mono" font-size="11.5" fill="#BE653B">B[i+4]</text>
+              <text x="470" y="218" class="svg-body" font-size="11.5" fill="#BE653B">脏·待清</text>
+
+              <rect x="534" y="168" width="74" height="68" fill="#EBF1EE" stroke="#A4C4C6"/>
+              <text x="550" y="196" class="svg-mono" font-size="11.5">B[i+5]</text>
+              <text x="552" y="218" class="svg-body" font-size="11.5">clean</text>
+
+              <rect x="614" y="168" width="74" height="68" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="630" y="196" class="svg-mono" font-size="11.5" fill="#BE653B">B[i+6]</text>
+              <text x="630" y="218" class="svg-body" font-size="11.5" fill="#BE653B">脏·待清</text>
+
+              <rect x="694" y="168" width="74" height="68" fill="#F5EFE0" stroke="#AE8A3E"/>
+              <text x="710" y="196" class="svg-mono" font-size="11.5" fill="#AE8A3E">B[i+7]</text>
+              <text x="712" y="218" class="svg-body" font-size="11.5" fill="#AE8A3E">pinned</text>
+
+              <rect x="774" y="168" width="74" height="68" fill="#EBF1EE" stroke="#A4C4C6"/>
+              <text x="790" y="196" class="svg-mono" font-size="11.5">B[i+8]</text>
+              <text x="792" y="218" class="svg-body" font-size="11.5">clean</text>
+
+              <!-- Pointer 1: nextVictimBuffer -->
+              <path d="M 171 278 V 244" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+              <rect x="54" y="282" width="246" height="46" fill="#E4F0EC" stroke="#2F7A66"/>
+              <text x="68" y="302" class="svg-mono" font-size="12" font-weight="700" fill="#2F7A66">nextVictimBuffer（clock hand）</text>
+              <text x="68" y="320" class="svg-body" font-size="11.5">由 Client Backend 推进，决定真实替换</text>
+
+              <!-- Pointer 2: next_to_clean -->
+              <path d="M 411 278 V 244" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+              <rect x="326" y="282" width="268" height="46" fill="#E5EFF0" stroke="#245A6B"/>
+              <text x="340" y="302" class="svg-mono" font-size="12" font-weight="700">next_to_clean（bgwriter 前沿）</text>
+              <text x="340" y="320" class="svg-body" font-size="11.5">在前方提前清理，绝不修改 clock hand</text>
+
+              <!-- 3 Benefits of not advancing clock hand -->
+              <rect x="54" y="342" width="796" height="48" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="72" y="371" class="svg-body" font-size="13"><tspan class="svg-title" font-size="13">不推进指针的三大好处：</tspan>① 不破坏用户真实替换顺序   ② 不搅乱全局替换状态   ③ 仅短暂读取 header，减少全局锁竞争</text>
+
+              <!-- Right Panel: Normal Path vs Buffer Ring Blind Spot -->
+              <rect x="896" y="22" width="472" height="384" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="896" y="22" width="472" height="36" fill="#F7E9DE" stroke="#DFC0AA"/>
+              <text x="916" y="45" class="svg-mono" font-size="12.5" font-weight="700" fill="#BE653B">关键盲区：buffers_alloc 不等于全部页面活动</text>
+
+              <!-- Normal Allocation Path -->
+              <rect x="918" y="78" width="428" height="118" fill="#E4F0EC" stroke="#B6D3C9"/>
+              <text x="936" y="104" class="svg-title" font-size="15" fill="#2F7A66">普通替换路径（计入 numBufferAllocs）</text>
+              <text x="936" y="130" class="svg-body" font-size="13">• 常规 OLTP 点查、索引访问、随机读写</text>
+              <text x="936" y="152" class="svg-body" font-size="13">• 走全局 clock-sweep 分配共享缓冲区</text>
+              <text x="936" y="176" class="svg-mono" font-size="12" fill="#2F7A66">→ 完整反映在 recent_alloc 与 buffers_alloc</text>
+
+              <!-- Buffer Ring Path -->
+              <rect x="918" y="216" width="428" height="168" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="936" y="242" class="svg-title" font-size="15" fill="#BE653B">Buffer Ring 路径（不计入 numBufferAllocs）</text>
+              <text x="936" y="268" class="svg-body" font-size="13">• 典型操作：大表顺序扫描、VACUUM、COPY</text>
+              <text x="936" y="290" class="svg-body" font-size="13">• 使用 strategy object 回收私有环形缓冲区</text>
+              <text x="936" y="312" class="svg-body" font-size="13">• 避免大扫描冲刷整个 shared_buffers</text>
+              <line x1="936" y1="328" x2="1328" y2="328" stroke="#DFC0AA" stroke-width="1"/>
+              <text x="936" y="350" class="svg-title" font-size="13" fill="#BE653B">排障警示：</text>
+              <text x="936" y="370" class="svg-body" font-size="12.5">不能单凭 pg_stat_bgwriter.buffers_alloc 反推全部 I/O</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">拿到 strategy_delta 与 recent_alloc 后，BgBufferSync() 如何通过反馈控制算出本轮写出目标？</span>
+          </div>
+          <div class="slide-footer">
+            <span>源码依据：src/backend/storage/buffer/freelist.c · StrategySyncStart() 注释</span>
+            <span class="slide-footer-page">05 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 6 (INTERACTIVE SIM 2) ==================== -->
+        <section class="slide" data-index="5" data-title="BgBufferSync 反馈控制模型（交互仿真）" data-eyebrow="05 / FEEDBACK CONTROL">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>05 / FEEDBACK CONTROL · BGBUFFERSYNC() ESTIMATION &amp; CUTOFF</div>
+          <h1 class="slide-title">快升慢降平滑估算，遇三类边界即刻收手</h1>
+          <p class="slide-lead">smoothed_alloc 快升慢降（smoothing_samples=16），乘以 multiplier 得目标供给，叠加 120s 全池兜底巡检并受 maxpages 硬截断。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="sim-toolbar">
+              <div class="sim-group">
+                <label class="sim-input-label">recent_alloc
+                  <input type="range" id="s6-alloc" min="0" max="120" step="5" value="40"/>
+                  <span class="sim-val" id="s6-alloc-v">40</span>
+                </label>
+                <label class="sim-input-label">multiplier
+                  <input type="range" id="s6-mult" min="1.0" max="4.0" step="0.5" value="2.0"/>
+                  <span class="sim-val" id="s6-mult-v">2.0</span>
+                </label>
+                <label class="sim-input-label">maxpages
+                  <input type="range" id="s6-maxp" min="20" max="200" step="10" value="100"/>
+                  <span class="sim-val" id="s6-maxp-v">100</span>
+                </label>
+              </div>
+              <div class="sim-group">
+                <button class="sim-btn primary" id="s6-run" type="button">执行一轮扫描</button>
+                <button class="sim-btn" id="s6-auto" type="button">连续播放</button>
+                <button class="sim-btn" id="s6-reset" type="button">重置</button>
+              </div>
+            </div>
+            <svg viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg" id="s6-svg">
+              <!-- Box 1: Input & Smoothing -->
+              <rect x="32" y="24" width="380" height="214" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="32" y="24" width="380" height="34" fill="#245A6B"/>
+              <text x="48" y="46" class="svg-white" font-size="13.5" font-weight="700">1. 平滑估算（快升慢降 · samples=16）</text>
+
+              <text x="48" y="84" class="svg-body" font-size="13">本轮输入 recent_alloc：</text>
+              <text id="s6-disp-alloc" x="388" y="84" text-anchor="end" class="svg-mono" font-size="15" font-weight="700">40</text>
+
+              <text x="48" y="114" class="svg-body" font-size="13">平滑值 smoothed_alloc：</text>
+              <text id="s6-disp-smooth" x="388" y="114" text-anchor="end" class="svg-mono" font-size="15" font-weight="700">40.0</text>
+
+              <text x="48" y="144" class="svg-body" font-size="13">预估供给 upcoming_alloc_est：</text>
+              <text id="s6-disp-est" x="388" y="144" text-anchor="end" class="svg-mono" font-size="16" font-weight="700" fill="#BE653B">80</text>
+
+              <line x1="48" y1="162" x2="394" y2="162" stroke="#D9D5CB"/>
+              <text x="48" y="186" class="svg-mono" font-size="11.5" fill="#46585F">若 recent &gt; smooth：立刻跟上</text>
+              <text x="48" y="206" class="svg-mono" font-size="11.5" fill="#46585F">若 recent &lt; smooth：按 1/16 缓降</text>
+              <text x="48" y="226" class="svg-mono" font-size="11.5" fill="#2F7A66">兜底：120s 全池最低巡检量</text>
+
+              <path d="M 412 131 H 458" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Box 2: Scanning Loop & Cutoff -->
+              <rect x="466" y="24" width="468" height="214" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="466" y="24" width="468" height="34" fill="#2E6373"/>
+              <text x="482" y="46" class="svg-white" font-size="13.5" font-weight="700">2. 扫描循环与三大停止条件（实时模拟）</text>
+
+              <!-- 3 Stop Condition Indicators -->
+              <rect id="s6-cond-catch" x="484" y="72" width="432" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="500" y="98" class="svg-body" font-size="13">条件 A · 追上 clock-sweep 指针 → 停止扫描</text>
+
+              <rect id="s6-cond-enough" x="484" y="124" width="432" height="42" fill="#E4F0EC" stroke="#2F7A66" stroke-width="2"/>
+              <text x="500" y="150" class="svg-title" font-size="13" fill="#2F7A66">条件 B · 已有足够 reusable buffer → 达标停止</text>
+
+              <rect id="s6-cond-maxp" x="484" y="176" width="432" height="42" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="500" y="202" class="svg-body" font-size="13">条件 C · 写出达 bgwriter_lru_maxpages → 截断并 maxwritten_clean++</text>
+
+              <path d="M 934 131 H 980" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Box 3: Round Output Stats -->
+              <rect x="988" y="24" width="380" height="214" fill="#FFFFFF" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="988" y="24" width="380" height="34" fill="#47808D"/>
+              <text x="1004" y="46" class="svg-white" font-size="13.5" font-weight="700">3. 累积观测指标（pg_stat_bgwriter）</text>
+
+              <text x="1008" y="88" class="svg-body" font-size="13">模拟轮次（Rounds）：</text>
+              <text id="s6-out-rounds" x="1346" y="88" text-anchor="end" class="svg-mono" font-size="15" font-weight="700">1</text>
+
+              <text x="1008" y="122" class="svg-body" font-size="13">本轮写出页数：</text>
+              <text id="s6-out-written" x="1346" y="122" text-anchor="end" class="svg-mono" font-size="15" font-weight="700" fill="#2F7A66">80</text>
+
+              <text x="1008" y="156" class="svg-body" font-size="13">累计 buffers_clean：</text>
+              <text id="s6-out-clean" x="1346" y="156" text-anchor="end" class="svg-mono" font-size="15" font-weight="700">80</text>
+
+              <text x="1008" y="190" class="svg-body" font-size="13">累计 maxwritten_clean：</text>
+              <text id="s6-out-maxw" x="1346" y="190" text-anchor="end" class="svg-mono" font-size="16" font-weight="700" fill="#BE653B">0</text>
+
+              <text id="s6-out-note" x="1008" y="222" class="svg-mono" font-size="12" fill="#2F7A66">状态：供给满足，未触发上限截断</text>
+
+              <!-- Bottom Bar: Visualized Buffer Capacity vs Demand -->
+              <rect x="32" y="256" width="1336" height="106" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <text x="52" y="282" class="svg-mono" font-size="12" font-weight="700">本轮目标供给 vs maxpages 截断标尺（拖拽上方滑块观察截断边界）</text>
+
+              <!-- Scale Track -->
+              <rect x="52" y="300" width="1296" height="24" fill="#EBF1EE" stroke="#D9D5CB"/>
+              <rect id="s6-bar-written" x="52" y="300" width="432" height="24" fill="#2F7A66"/>
+              <rect id="s6-bar-cut" x="484" y="300" width="0" height="24" fill="#BE653B" opacity="0.85"/>
+              <!-- Maxpages marker line -->
+              <line id="s6-maxp-line" x1="592" y1="292" x2="592" y2="334" stroke="#1B2B33" stroke-width="2.5"/>
+              <text id="s6-maxp-tag" x="598" y="348" class="svg-mono" font-size="11.5" font-weight="700" fill="#1B2B33">maxpages = 100</text>
+              <text x="52" y="348" class="svg-mono" font-size="11.5" fill="#46585F">0 页</text>
+              <text x="1348" y="348" text-anchor="end" class="svg-mono" font-size="11.5" fill="#46585F">240 页</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">反馈控制定出了本轮要扫多远；落到每一个具体 buffer 上，SyncOneBuffer() 如何决定写还是跳过？</span>
+          </div>
+          <div class="slide-footer">
+            <span>核心公式：upcoming_alloc_est = smoothed_alloc × bgwriter_lru_multiplier（含 120000ms 全池兜底）</span>
+            <span class="slide-footer-page">06 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 7 ==================== -->
+        <section class="slide" data-index="6" data-title="单页处理路径：SyncOneBuffer 与 Writeback Hint" data-eyebrow="06 / PAGE FLUSH PATH">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>06 / PAGE FLUSH PATH · SYNCONEBURFER() &amp; WRITEBACK HINT</div>
+          <h1 class="slide-title">极度克制的单页准入：只写无 pin、usage=0 的脏页</h1>
+          <p class="slide-lead">bgwriter 传 skip_recently_used=true 避开热页；写出前严格执行 WAL 先写，累积达 bgwriter_flush_after 后发起内核 writeback 提示。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top Pipeline: Step 1 -> 2 -> 3 -> 4 -> 5 -->
+              <!-- Step 1 -->
+              <rect x="32" y="42" width="218" height="118" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="32" y="42" width="218" height="30" fill="#245A6B"/>
+              <text x="48" y="62" class="svg-white" font-size="13" font-weight="700">1. 候选准入检查</text>
+              <text x="48" y="94" class="svg-mono" font-size="12">refcount == 0 ?</text>
+              <text x="48" y="116" class="svg-mono" font-size="12">usage_count == 0 ?</text>
+              <text x="48" y="142" class="svg-body" font-size="12">skip_recently_used=true</text>
+
+              <path d="M 250 101 H 294" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Skip branch below Step 1 -->
+              <path d="M 141 160 V 212" stroke="#AE8A3E" stroke-width="2" fill="none" marker-end="url(#arr-gold)"/>
+              <rect x="32" y="220" width="218" height="72" fill="#F5EFE0" stroke="#AE8A3E"/>
+              <text x="48" y="248" class="svg-title" font-size="13.5" fill="#AE8A3E">直接跳过（不抢热页）</text>
+              <text x="48" y="272" class="svg-body" font-size="12">正被使用或近期热门则不动</text>
+
+              <!-- Step 2 -->
+              <rect x="302" y="42" width="216" height="118" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="302" y="42" width="216" height="30" fill="#2E6373"/>
+              <text x="318" y="62" class="svg-white" font-size="13" font-weight="700">2. 有效性与脏标记</text>
+              <text x="318" y="94" class="svg-body" font-size="13">• 无效或不脏 → 直接返回</text>
+              <text x="318" y="118" class="svg-body" font-size="13">• 有效且脏 → 先 Pin</text>
+              <text x="318" y="142" class="svg-body" font-size="12.5">加 share-exclusive 内容锁</text>
+
+              <path d="M 518 101 H 562" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 3: WAL First -->
+              <rect x="570" y="42" width="246" height="118" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+              <rect x="570" y="42" width="246" height="30" fill="#BE653B"/>
+              <text x="586" y="62" class="svg-white" font-size="13" font-weight="700">3. FlushBuffer · WAL 先写</text>
+              <text x="586" y="94" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">XLogFlush(BufferGetLSN)</text>
+              <text x="586" y="118" class="svg-body" font-size="12.5">永久关系数据页写出前，</text>
+              <text x="586" y="140" class="svg-body" font-size="12.5">必须保证对应 WAL 先落盘</text>
+
+              <path d="M 816 101 H 860" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 4: smgrwrite -->
+              <rect x="868" y="42" width="218" height="118" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="868" y="42" width="218" height="30" fill="#47808D"/>
+              <text x="884" y="62" class="svg-white" font-size="13" font-weight="700">4. 写至文件系统</text>
+              <text x="884" y="94" class="svg-mono" font-size="12.5" font-weight="700">smgrwrite()</text>
+              <text x="884" y="118" class="svg-body" font-size="12.5">数据页写入 OS page cache</text>
+              <text x="884" y="142" class="svg-body" font-size="12.5">buffer 标记为 clean reusable</text>
+
+              <path d="M 1086 101 H 1130" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <!-- Step 5: Writeback -->
+              <rect x="1138" y="42" width="230" height="118" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="1138" y="42" width="230" height="30" fill="#2F7A66"/>
+              <text x="1154" y="62" class="svg-white" font-size="13" font-weight="700">5. Writeback 合并提示</text>
+              <text x="1154" y="94" class="svg-body" font-size="12.5">达 bgwriter_flush_after 时</text>
+              <text x="1154" y="116" class="svg-mono" font-size="11.5" fill="#2F7A66">IssuePendingWritebacks()</text>
+              <text x="1154" y="140" class="svg-body" font-size="12.5">合并相邻块 → smgrwriteback()</text>
+
+              <!-- Bottom Comparison Strip: bgwriter vs checkpointer calling same SyncOneBuffer -->
+              <rect x="302" y="220" width="1066" height="182" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="302" y="220" width="1066" height="34" fill="#E5EFF0" stroke="#D9D5CB"/>
+              <text x="322" y="242" class="svg-mono" font-size="12.5" font-weight="700">同一函数 SyncOneBuffer()，两个调用者的根本差异</text>
+
+              <!-- Col 1 -->
+              <rect x="324" y="270" width="490" height="114" fill="#F7F6F2" stroke="#245A6B"/>
+              <text x="342" y="296" class="svg-title" font-size="14.5" fill="#245A6B">bgwriter 调用：skip_recently_used = true</text>
+              <text x="342" y="322" class="svg-body" font-size="13">• 目标：提前准备 clean reusable buffer 供给</text>
+              <text x="342" y="344" class="svg-body" font-size="13">• 策略：只碰无 pin 且 usage_count=0 的冷候选页</text>
+              <text x="342" y="368" class="svg-mono" font-size="12" fill="#BE653B">• writeback 仅是内核提示，不等价于 checkpoint 完成</text>
+
+              <!-- Col 2 -->
+              <rect x="838" y="270" width="508" height="114" fill="#F7F6F2" stroke="#2F7A66"/>
+              <text x="856" y="296" class="svg-title" font-size="14.5" fill="#2F7A66">checkpointer 调用：skip_recently_used = false</text>
+              <text x="856" y="322" class="svg-body" font-size="13">• 目标：完成 checkpoint 边界上所有应写脏页</text>
+              <text x="856" y="344" class="svg-body" font-size="13">• 策略：不因 usage_count&gt;0 跳过，覆盖全部目标脏页</text>
+              <text x="856" y="368" class="svg-mono" font-size="12" fill="#2F7A66">• 最终以 fsync() 落盘收口，推进崩溃恢复点</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">单页处理逻辑已完全透明；现在横向拉通全部四条写出路径，建立完整的边界坐标矩阵。</span>
+          </div>
+          <div class="slide-footer">
+            <span>源码路径：src/backend/storage/buffer/bufmgr.c · SyncOneBuffer() / FlushBuffer()</span>
+            <span class="slide-footer-page">07 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 8 ==================== -->
+        <section class="slide" data-index="7" data-title="横向对比：四类写出路径的边界矩阵" data-eyebrow="07 / COMPARATIVE MATRIX">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>07 / COMPARATIVE MATRIX · FOUR WRITE PATHS</div>
+          <h1 class="slide-title">定位谁在写：bgwriter、backend、checkpointer 与 OS</h1>
+          <p class="slide-lead">四类写出路径分处不同层次，没有谁能完全替代谁；排查写抖动时，首要动作是按矩阵定位真实责任层。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Table Header -->
+              <rect x="24" y="16" width="160" height="42" fill="#1E4B5A"/>
+              <rect x="184" y="16" width="298" height="42" fill="#245A6B"/>
+              <rect x="482" y="16" width="298" height="42" fill="#BE653B"/>
+              <rect x="780" y="16" width="298" height="42" fill="#2F7A66"/>
+              <rect x="1078" y="16" width="298" height="42" fill="#47808D"/>
+
+              <text x="40" y="42" class="svg-white" font-size="13.5" font-weight="700">对比维度</text>
+              <text x="200" y="42" class="svg-white" font-size="13.5" font-weight="700">bgwriter</text>
+              <text x="498" y="42" class="svg-white" font-size="13.5" font-weight="700">Client Backend 自己写</text>
+              <text x="796" y="42" class="svg-white" font-size="13.5" font-weight="700">Checkpointer</text>
+              <text x="1094" y="42" class="svg-white" font-size="13.5" font-weight="700">OS Page Cache Writeback</text>
+
+              <!-- Row 1: 主要目标 -->
+              <rect x="24" y="58" width="1352" height="50" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="24" y="58" width="160" height="50" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="40" y="88" class="svg-title" font-size="13">主要目标</text>
+              <text x="200" y="88" class="svg-body" font-size="12.5">提前准备 clean reusable buffer</text>
+              <text x="498" y="88" class="svg-body" font-size="12.5">完成当前 SQL 的 buffer 替换</text>
+              <text x="796" y="88" class="svg-body" font-size="12.5">checkpoint 脏页写出与 fsync 收口</text>
+              <text x="1094" y="88" class="svg-body" font-size="12.5">把内核页缓存脏数据写回设备</text>
+
+              <!-- Row 2: 触发方式 -->
+              <rect x="24" y="108" width="1352" height="50" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="24" y="108" width="160" height="50" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="40" y="138" class="svg-title" font-size="13">触发方式</text>
+              <text x="200" y="138" class="svg-body" font-size="12.5">delay 周期、休眠、分配时唤醒</text>
+              <text x="498" y="138" class="svg-body" font-size="12.5">buffer miss 且 victim 为脏页</text>
+              <text x="796" y="138" class="svg-body" font-size="12.5">时间、WAL 量、手工、shutdown</text>
+              <text x="1094" y="138" class="svg-body" font-size="12.5">内核策略、内存压力、writeback/fsync</text>
+
+              <!-- Row 3: 写哪些页 -->
+              <rect x="24" y="158" width="1352" height="50" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="24" y="158" width="160" height="50" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="40" y="188" class="svg-title" font-size="13">写哪些页</text>
+              <text x="200" y="188" class="svg-body" font-size="12.5">LRU 候选、无 pin、usage=0 脏页</text>
+              <text x="498" y="188" class="svg-body" font-size="12.5">当前选中的单个 victim 脏页</text>
+              <text x="796" y="188" class="svg-body" font-size="12.5">本次 checkpoint 覆盖的全部脏页</text>
+              <text x="1094" y="188" class="svg-body" font-size="12.5">文件系统层面的 dirty page cache</text>
+
+              <!-- Row 4: 用户延迟影响 -->
+              <rect x="24" y="208" width="1352" height="50" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="24" y="208" width="160" height="50" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="40" y="238" class="svg-title" font-size="13">用户延迟影响</text>
+              <text x="200" y="238" class="svg-title" font-size="12.5" fill="#2F7A66">间接降低 backend 同步写等待</text>
+              <text x="498" y="238" class="svg-title" font-size="12.5" fill="#BE653B">直接增加当前 SQL 执行延迟</text>
+              <text x="796" y="238" class="svg-body" font-size="12.5">影响整体 I/O 与 fsync 尾延迟</text>
+              <text x="1094" y="238" class="svg-body" font-size="12.5">可能引发系统级写回队列抖动</text>
+
+              <!-- Row 5: 持久化语义 -->
+              <rect x="24" y="258" width="1352" height="50" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="24" y="258" width="160" height="50" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="40" y="288" class="svg-title" font-size="13">是否保证持久</text>
+              <text x="200" y="288" class="svg-body" font-size="12.5">不单独保证 checkpoint 完成</text>
+              <text x="498" y="288" class="svg-body" font-size="12.5">不单独保证 checkpoint 完成</text>
+              <text x="796" y="288" class="svg-title" font-size="12.5" fill="#2F7A66">是 checkpoint 持久化语义核心</text>
+              <text x="1094" y="288" class="svg-body" font-size="12.5">取决于 fsync / writeback 语义</text>
+
+              <!-- Row 6: 主要观测 -->
+              <rect x="24" y="308" width="1352" height="50" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="24" y="308" width="160" height="50" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="40" y="338" class="svg-title" font-size="13">主要观测视图</text>
+              <text x="200" y="338" class="svg-mono" font-size="11.5">pg_stat_bgwriter / pg_stat_io</text>
+              <text x="498" y="338" class="svg-mono" font-size="11.5">pg_stat_io (client backend)</text>
+              <text x="796" y="338" class="svg-mono" font-size="11.5">pg_stat_checkpointer / pg_stat_io</text>
+              <text x="1094" y="338" class="svg-mono" font-size="11.5">OS iostat / pg_stat_io.writebacks</text>
+
+              <!-- Row 7: 激进风险 -->
+              <rect x="24" y="358" width="1352" height="52" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="24" y="358" width="160" height="52" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="40" y="389" class="svg-title" font-size="13">过度激进风险</text>
+              <text x="200" y="389" class="svg-body" font-size="12.5" fill="#BE653B">重复写热页，抬升总 I/O 负载</text>
+              <text x="498" y="389" class="svg-body" font-size="12.5">不适用（属于被动承担路径）</text>
+              <text x="796" y="389" class="svg-body" font-size="12.5">checkpoint 集中写 I/O 压力大</text>
+              <text x="1094" y="389" class="svg-body" font-size="12.5">设备队列拥塞与 fsync 抖动</text>
+
+              <!-- Vertical Column Dividers -->
+              <line x1="184" y1="58" x2="184" y2="410" stroke="#D9D5CB"/>
+              <line x1="482" y1="58" x2="482" y2="410" stroke="#D9D5CB"/>
+              <line x1="780" y1="58" x2="780" y2="410" stroke="#D9D5CB"/>
+              <line x1="1078" y1="58" x2="1078" y2="410" stroke="#D9D5CB"/>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">划清了四方边界，接下来看调参时的真实博弈：bgwriter 调大或调小，三条曲线如何联动？</span>
+          </div>
+          <div class="slide-footer">
+            <span>边界原则：定位谁在写，永远优先于盲目改参数</span>
+            <span class="slide-footer-page">08 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 9 (INTERACTIVE SIM 3) ==================== -->
+        <section class="slide" data-index="8" data-title="收益与代价权衡：三条曲线与指标信号（交互演示）" data-eyebrow="08 / COST-BENEFIT TRADEOFF">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>08 / COST-BENEFIT TRADEOFF · THREE CURVES &amp; SIGNALS</div>
+          <h1 class="slide-title">没有放之四海而皆准的参数，只有负载甜点区</h1>
+          <p class="slide-lead">调参本质是在「前台写等待下降、后台重复写上升、checkpoint 尾部压力未必改善」三条定性趋势曲线间寻找平衡。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="sim-toolbar">
+              <div class="sim-group">
+                <label class="sim-input-label">bgwriter 激进程度（定性滑块）：
+                  <input type="range" id="s9-slider" min="10" max="90" step="1" value="50" style="width:180px;"/>
+                  <span class="sim-val" id="s9-val">适中</span>
+                </label>
+                <button class="sim-btn" id="s9-low" type="button">保守区</button>
+                <button class="sim-btn primary" id="s9-mid" type="button">甜点区</button>
+                <button class="sim-btn accent" id="s9-high" type="button">过度激进</button>
+              </div>
+              <div class="sim-group">
+                <span class="sim-status-badge" id="s9-badge">平衡态：前台写等待低，重复写可控</span>
+              </div>
+            </div>
+            <svg viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg" id="s9-svg">
+              <!-- Left Chart Area -->
+              <rect x="32" y="20" width="820" height="340" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <text x="54" y="46" class="svg-mono" font-size="12" font-weight="700">定性趋势曲线（非编造实测值 · 横轴：bgwriter 激进程度）</text>
+
+              <!-- Sweet spot shaded band -->
+              <rect x="360" y="62" width="180" height="248" fill="#E4F0EC" opacity="0.65"/>
+              <text x="450" y="80" text-anchor="middle" class="svg-mono" font-size="11.5" font-weight="700" fill="#2F7A66">工作负载甜点区</text>
+
+              <!-- Axes -->
+              <line x1="90" y1="310" x2="810" y2="310" stroke="#1B2B33" stroke-width="1.5"/>
+              <line x1="90" y1="62" x2="90" y2="310" stroke="#1B2B33" stroke-width="1.5"/>
+              <text x="90" y="334" class="svg-body" font-size="12">保守（少写）</text>
+              <text x="450" y="334" text-anchor="middle" class="svg-body" font-size="12">适中</text>
+              <text x="810" y="334" text-anchor="end" class="svg-body" font-size="12">激进（多写）</text>
+              <text x="52" y="186" class="svg-body" font-size="12" transform="rotate(-90 52 186)" text-anchor="middle">相对压力 / 代价</text>
+
+              <!-- Curve 1: Client Backend Forced Write Wait (Decreasing - Teal) -->
+              <path d="M 100 92 C 240 105, 360 220, 800 282" stroke="#2F7A66" stroke-width="3" fill="none"/>
+              <!-- Curve 2: Background I/O & Hot Page Rewrite Risk (Increasing - Terracotta) -->
+              <path d="M 100 284 C 360 272, 580 186, 800 88" stroke="#BE653B" stroke-width="3" fill="none"/>
+              <!-- Curve 3: Checkpoint Tail Pressure (Slightly lower then flat - Gold dashed) -->
+              <path d="M 100 176 C 320 198, 560 206, 800 208" stroke="#AE8A3E" stroke-width="2.5" stroke-dasharray="7,5" fill="none"/>
+
+              <!-- Legend inside chart top-right -->
+              <rect x="570" y="64" width="266" height="74" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <line x1="584" y1="84" x2="612" y2="84" stroke="#2F7A66" stroke-width="3"/>
+              <text x="622" y="88" class="svg-body" font-size="12">client backend 被迫写等待</text>
+              <line x1="584" y1="104" x2="612" y2="104" stroke="#BE653B" stroke-width="3"/>
+              <text x="622" y="108" class="svg-body" font-size="12">后台总 I/O 与热页重复写风险</text>
+              <line x1="584" y1="124" x2="612" y2="124" stroke="#AE8A3E" stroke-width="2.5" stroke-dasharray="6,4"/>
+              <text x="622" y="128" class="svg-body" font-size="12">checkpoint 尾部压力（不保证消除）</text>
+
+              <!-- Dynamic Operating Cursor Line -->
+              <line id="s9-cursor" x1="450" y1="62" x2="450" y2="310" stroke="#245A6B" stroke-width="2" stroke-dasharray="4,3"/>
+              <circle id="s9-dot-1" cx="450" cy="222" r="6" fill="#2F7A66" stroke="#FFFFFF" stroke-width="2"/>
+              <circle id="s9-dot-2" cx="450" cy="236" r="6" fill="#BE653B" stroke="#FFFFFF" stroke-width="2"/>
+              <circle id="s9-dot-3" cx="450" cy="202" r="6" fill="#AE8A3E" stroke="#FFFFFF" stroke-width="2"/>
+
+              <!-- Right Panel: Observable View Signals -->
+              <rect x="876" y="20" width="492" height="340" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="876" y="20" width="492" height="36" fill="#245A6B"/>
+              <text x="896" y="43" class="svg-white" font-size="13.5" font-weight="700">当前区间对应的观测视图信号</text>
+
+              <rect x="898" y="74" width="448" height="72" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="916" y="98" class="svg-mono" font-size="12" font-weight="700">pg_stat_bgwriter.buffers_clean / maxwritten_clean</text>
+              <text id="s9-sig-1" x="916" y="124" class="svg-title" font-size="13.5" fill="#2F7A66">buffers_clean 稳步增长，maxwritten_clean 偶发或平稳</text>
+
+              <rect x="898" y="160" width="448" height="72" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="916" y="184" class="svg-mono" font-size="12" font-weight="700">pg_stat_io · client backend vs background writer</text>
+              <text id="s9-sig-2" x="916" y="210" class="svg-title" font-size="13.5" fill="#245A6B">client backend writes 维持低位，后台写分布均匀</text>
+
+              <rect x="898" y="246" width="448" height="94" fill="#F7E9DE" stroke="#DFC0AA"/>
+              <text x="916" y="272" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">诊断建议与风险提示</text>
+              <text id="s9-sig-3" x="916" y="298" class="svg-body" font-size="13">当前处于延迟与总 I/O 的健康平衡区；</text>
+              <text id="s9-sig-4" x="916" y="320" class="svg-body" font-size="13">继续观察 checkpoint stats，勿盲目继续调大参数。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">看清了方向性信号，生产里具体执行哪些 SQL 来采集配置基线、角色分流与增量对比？</span>
+          </div>
+          <div class="slide-footer">
+            <span>实证原则：不同 workload 的甜点区不同，禁止照搬外部经验参数</span>
+            <span class="slide-footer-page">09 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-index="9" data-title="实操观测与增量诊断：SQL 视图联合排障" data-eyebrow="09 / OBSERVABILITY DEMO">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>09 / OBSERVABILITY DEMO · PG_STAT_BGWRITER &amp; PG_STAT_IO</div>
+          <h1 class="slide-title">跨视图采样增量：把「写得慢」拆解为可证伪的指标</h1>
+          <p class="slide-lead">只看 buffers_clean 容易误判；必须联合 pg_stat_io 按 backend_type 分流，并用前后快照增量判断截断与归因。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Step 1: Config Baseline -->
+              <rect x="28" y="24" width="308" height="176" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="28" y="24" width="308" height="34" fill="#245A6B"/>
+              <text x="44" y="46" class="svg-white" font-size="13.5" font-weight="700">STEP 1 · 核对当前配置基线</text>
+              <text x="44" y="84" class="svg-mono" font-size="12">SHOW shared_buffers;</text>
+              <text x="44" y="106" class="svg-mono" font-size="12">SHOW bgwriter_delay;</text>
+              <text x="44" y="128" class="svg-mono" font-size="12">SHOW bgwriter_lru_maxpages;</text>
+              <text x="44" y="150" class="svg-mono" font-size="12">SHOW bgwriter_lru_multiplier;</text>
+              <text x="44" y="172" class="svg-mono" font-size="12">SHOW bgwriter_flush_after;</text>
+              <text x="44" y="191" class="svg-body" font-size="11.5">同步核对 checkpoint_* 与 max_wal_size</text>
+
+              <path d="M 336 112 H 374" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 2: pg_stat_bgwriter -->
+              <rect x="382" y="24" width="318" height="176" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="382" y="24" width="318" height="34" fill="#2E6373"/>
+              <text x="398" y="46" class="svg-white" font-size="13.5" font-weight="700">STEP 2 · 采 pg_stat_bgwriter 增量</text>
+              <text x="398" y="84" class="svg-mono" font-size="12">SELECT buffers_clean,</text>
+              <text x="398" y="104" class="svg-mono" font-size="12">  maxwritten_clean, buffers_alloc</text>
+              <text x="398" y="124" class="svg-mono" font-size="12">FROM pg_stat_bgwriter;</text>
+              <line x1="398" y1="140" x2="682" y2="140" stroke="#D9D5CB"/>
+              <text x="398" y="162" class="svg-body" font-size="12.5">• 用临时表存基线，隔 30s 算 delta</text>
+              <text x="398" y="184" class="svg-body" font-size="12.5">• 生产排障窗口勿随意 reset 集群统计</text>
+
+              <path d="M 700 112 H 738" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Step 3: pg_stat_io Role Split -->
+              <rect x="746" y="24" width="626" height="176" fill="#FFFFFF" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="746" y="24" width="626" height="34" fill="#47808D"/>
+              <text x="762" y="46" class="svg-white" font-size="13.5" font-weight="700">STEP 3 · 查 pg_stat_io 按 backend_type 分流写出责任</text>
+              <text x="762" y="82" class="svg-mono" font-size="12">SELECT backend_type, object, context, writes, write_bytes, writebacks FROM pg_stat_io</text>
+              <text x="762" y="102" class="svg-mono" font-size="12">WHERE object IN ('relation', 'temp relation') ORDER BY backend_type, object, context;</text>
+
+              <rect x="762" y="118" width="186" height="68" fill="#E5EFF0" stroke="#BDD1D6"/>
+              <text x="774" y="140" class="svg-mono" font-size="11.5" font-weight="700">background writer</text>
+              <text x="774" y="160" class="svg-body" font-size="12">看实际 writes 与</text>
+              <text x="774" y="178" class="svg-body" font-size="12">writebacks 提示量</text>
+
+              <rect x="964" y="118" width="188" height="68" fill="#F7E9DE" stroke="#DFC0AA"/>
+              <text x="976" y="140" class="svg-mono" font-size="11.5" font-weight="700" fill="#BE653B">client backend</text>
+              <text x="976" y="160" class="svg-body" font-size="12">看前台被迫承担的</text>
+              <text x="976" y="178" class="svg-body" font-size="12">dirty victim 写出量</text>
+
+              <rect x="1168" y="118" width="188" height="68" fill="#E4F0EC" stroke="#B6D3C9"/>
+              <text x="1180" y="140" class="svg-mono" font-size="11.5" font-weight="700" fill="#2F7A66">checkpointer</text>
+              <text x="1180" y="160" class="svg-body" font-size="12">看 checkpoint 路径</text>
+              <text x="1180" y="178" class="svg-body" font-size="12">writes / fsyncs 压力</text>
+
+              <!-- Orthogonal connector down to Decision Branches -->
+              <path d="M 700 200 V 236" stroke="#245A6B" stroke-width="2" fill="none"/>
+              <path d="M 350 236 H 1050" stroke="#245A6B" stroke-width="2" fill="none"/>
+              <path d="M 350 236 V 262" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+              <path d="M 1050 236 V 262" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+
+              <!-- Decision Left: Tune bgwriter -->
+              <rect x="28" y="270" width="654" height="136" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="50" y="300" class="svg-title" font-size="15.5" fill="#2F7A66">分支 A · 符合调优条件：才考虑放宽 bgwriter</text>
+              <text x="50" y="328" class="svg-body" font-size="13.5">• 信号 1：delta_maxwritten_clean 短时间明显增长（频繁撞上限）</text>
+              <text x="50" y="352" class="svg-body" font-size="13.5">• 信号 2：同时 pg_stat_io 中 client backend relation writes 偏高</text>
+              <text x="50" y="380" class="svg-mono" font-size="12.5" font-weight="700" fill="#2F7A66">→ 动作：小步提高 bgwriter_lru_maxpages 或 multiplier，再复测</text>
+
+              <!-- Decision Right: Do NOT blame bgwriter -->
+              <rect x="718" y="270" width="654" height="136" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="740" y="300" class="svg-title" font-size="15.5" fill="#BE653B">分支 B · 非 bgwriter 主因：立刻转向正确排查层</text>
+              <text x="740" y="328" class="svg-body" font-size="13.5">• 信号：client backend writes 不高，但 checkpointer writes/fsyncs 抖动大</text>
+              <text x="740" y="352" class="svg-body" font-size="13.5">• 或者：调大 bgwriter 后后台 I/O 上升，前台 writes 却未下降</text>
+              <text x="740" y="380" class="svg-mono" font-size="12.5" font-weight="700" fill="#BE653B">→ 动作：转向 checkpoint 配置、max_wal_size 与存储 fsync 延迟</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">观测 SQL 与判定分支已经就位，如何把这套方法固化为架构师、DBA 与开发者的协同闭环？</span>
+          </div>
+          <div class="slide-footer">
+            <span>注：原文最小观测脚本用于建立指标映射，未在本地执行故不虚构执行输出</span>
+            <span class="slide-footer-page">10 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-index="10" data-title="角色最佳实践与观测调参闭环" data-eyebrow="10 / BEST PRACTICES">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>10 / BEST PRACTICES · TUNING LOOP &amp; ROLE PLAYBOOK</div>
+          <h1 class="slide-title">先观测再单变量小步调参，按角色各守边界</h1>
+          <p class="slide-lead">没有观测基线的调参只是移动写 I/O 位置；架构师定容量，DBA 走闭环，开发者控热点与批量写入，方能真正降延迟。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left: 4-step Closed Tuning Loop -->
+              <rect x="28" y="20" width="540" height="388" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="28" y="20" width="540" height="36" fill="#245A6B"/>
+              <text x="48" y="43" class="svg-white" font-size="13.5" font-weight="700">DBA 观测与调参四步闭环</text>
+
+              <!-- Loop Node 1 -->
+              <rect x="52" y="76" width="218" height="96" fill="#E5EFF0" stroke="#245A6B"/>
+              <text x="68" y="100" class="svg-mono" font-size="12" font-weight="700">01 · 建立基线</text>
+              <text x="68" y="124" class="svg-body" font-size="12.5">同步采 pg_stat_bgwriter、</text>
+              <text x="68" y="144" class="svg-body" font-size="12.5">pg_stat_io、checkpointer</text>
+              <text x="68" y="162" class="svg-body" font-size="12.5">与 OS I/O 指标</text>
+
+              <path d="M 270 124 H 316" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Loop Node 2 -->
+              <rect x="324" y="76" width="220" height="96" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="340" y="100" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">02 · 确认症状</text>
+              <text x="340" y="124" class="svg-body" font-size="12.5">确认 maxwritten_clean↑</text>
+              <text x="340" y="144" class="svg-body" font-size="12.5">且 client backend writes↑</text>
+              <text x="340" y="162" class="svg-body" font-size="12.5">排除 checkpoint fsync 主因</text>
+
+              <path d="M 434 172 V 222" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+
+              <!-- Loop Node 3 -->
+              <rect x="324" y="230" width="220" height="96" fill="#E4F0EC" stroke="#2F7A66"/>
+              <text x="340" y="254" class="svg-mono" font-size="12" font-weight="700" fill="#2F7A66">03 · 单变量小步调</text>
+              <text x="340" y="278" class="svg-body" font-size="12.5">每次只改一个参数；</text>
+              <text x="340" y="298" class="svg-body" font-size="12.5">flush_after 须按平台实测</text>
+              <text x="340" y="316" class="svg-body" font-size="12.5">（Linux 512kB / 非 Linux 0）</text>
+
+              <path d="M 324 278 H 278" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <!-- Loop Node 4 -->
+              <rect x="52" y="230" width="218" height="96" fill="#F5EFE0" stroke="#AE8A3E"/>
+              <text x="68" y="254" class="svg-mono" font-size="12" font-weight="700" fill="#AE8A3E">04 · 跨周期复测</text>
+              <text x="68" y="278" class="svg-body" font-size="12.5">至少跨过一个业务高峰与</text>
+              <text x="68" y="298" class="svg-body" font-size="12.5">若干 checkpoint 周期，</text>
+              <text x="68" y="316" class="svg-body" font-size="12.5">回到同一组指标验证</text>
+
+              <path d="M 161 230 V 180" stroke="#AE8A3E" stroke-width="2" fill="none" marker-end="url(#arr-gold)"/>
+
+              <!-- Bottom Note inside Loop Card -->
+              <rect x="52" y="344" width="492" height="46" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="68" y="372" class="svg-body" font-size="12.5">若后台写上升但 client backend writes 不降 → 问题不在 bgwriter，立即止损回退。</text>
+
+              <!-- Right Top: Three Roles Playbook -->
+              <rect x="592" y="20" width="780" height="218" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="592" y="20" width="780" height="36" fill="#2E6373"/>
+              <text x="612" y="43" class="svg-white" font-size="13.5" font-weight="700">三方角色协同边界</text>
+
+              <rect x="612" y="72" width="236" height="148" fill="#F7F6F2" stroke="#245A6B"/>
+              <text x="628" y="98" class="svg-title" font-size="14.5" fill="#245A6B">数据库架构师</text>
+              <text x="628" y="124" class="svg-body" font-size="12.5">• 定位为延迟治理工具，</text>
+              <text x="628" y="144" class="svg-body" font-size="12.5">  而非吞吐魔法开关</text>
+              <text x="628" y="168" class="svg-body" font-size="12.5">• 先估热集、写速率、盘带宽</text>
+              <text x="628" y="188" class="svg-body" font-size="12.5">  再定 shared_buffers</text>
+              <text x="628" y="208" class="svg-body" font-size="12.5">  与 checkpoint 框架</text>
+
+              <rect x="864" y="72" width="236" height="148" fill="#F7F6F2" stroke="#2F7A66"/>
+              <text x="880" y="98" class="svg-title" font-size="14.5" fill="#2F7A66">DBA 运维调优</text>
+              <text x="880" y="124" class="svg-body" font-size="12.5">• 严格执行左图四步闭环</text>
+              <text x="880" y="148" class="svg-body" font-size="12.5">• checkpoint 尾部抖动优先</text>
+              <text x="880" y="168" class="svg-body" font-size="12.5">  查 max_wal_size、</text>
+              <text x="880" y="188" class="svg-body" font-size="12.5">  completion_target</text>
+              <text x="880" y="208" class="svg-body" font-size="12.5">  与存储 fsync 延迟</text>
+
+              <rect x="1116" y="72" width="236" height="148" fill="#F7F6F2" stroke="#BE653B"/>
+              <text x="1132" y="98" class="svg-title" font-size="14.5" fill="#BE653B">业务开发者</text>
+              <text x="1132" y="124" class="svg-body" font-size="12.5">• 减少无谓更新与热点行</text>
+              <text x="1132" y="144" class="svg-body" font-size="12.5">  反复修改，避免写放大</text>
+              <text x="1132" y="168" class="svg-body" font-size="12.5">• 批量写入关注事务大小、</text>
+              <text x="1132" y="188" class="svg-body" font-size="12.5">  索引数、WAL 与表膨胀</text>
+              <text x="1132" y="208" class="svg-body" font-size="12.5">• 知晓 buffer ring 盲区</text>
+
+              <!-- Right Bottom: Suitable vs Unsuitable Scenarios -->
+              <rect x="592" y="254" width="380" height="154" fill="#E4F0EC" stroke="#2F7A66"/>
+              <text x="612" y="282" class="svg-title" font-size="14.5" fill="#2F7A66">适合重点关注 bgwriter 的场景</text>
+              <text x="612" y="308" class="svg-body" font-size="12.5">• OLTP 写较多，client backend writes 偏高</text>
+              <text x="612" y="330" class="svg-body" font-size="12.5">• shared_buffers 存在可提前清理的冷脏页</text>
+              <text x="612" y="352" class="svg-body" font-size="12.5">• 后台写 I/O 仍有余量，checkpoint 抖动不重</text>
+              <text x="612" y="374" class="svg-body" font-size="12.5">• 希望用平滑后台写置换前台同步写等待</text>
+
+              <rect x="992" y="254" width="380" height="154" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="1012" y="282" class="svg-title" font-size="14.5" fill="#BE653B">不适合归因于 bgwriter 的场景</text>
+              <text x="1012" y="308" class="svg-body" font-size="12.5">• 存储 fsync 延迟高 / checkpoint 收口卡顿</text>
+              <text x="1012" y="330" class="svg-body" font-size="12.5">• WAL flush 或同步复制等待为主因</text>
+              <text x="1012" y="352" class="svg-body" font-size="12.5">• 热页极高频修改 / 热集远超内存高 miss</text>
+              <text x="1012" y="374" class="svg-body" font-size="12.5">• 大量顺扫 / VACUUM / COPY 走 buffer ring</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">承接 · NEXT</span>
+            <span class="slide-next-text">实践路径已清晰；最后一页集中拆解生产中最常见的七个误区，并留下延伸思考与源码索引。</span>
+          </div>
+          <div class="slide-footer">
+            <span>协同原则：不越界调参，让容量、SQL 与后台维护各归其位</span>
+            <span class="slide-footer-page">11 / 12</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-index="11" data-title="常见七大误区与延伸思考" data-eyebrow="11 / PITFALLS &amp; EXTENSIONS">
+          <div class="slide-eyebrow"><span class="eyebrow-tag"></span>11 / PITFALLS &amp; EXTENSIONS · ANTI-PATTERNS &amp; SOURCE INDEX</div>
+          <h1 class="slide-title">避开七个高频误区，把 bgwriter 放回存储全局</h1>
+          <p class="slide-lead">禁用 bgwriter 不会消灭脏页，writeback 也不是 fsync；对照源码与真实观测增量，才是走出直觉陷阱的唯一方式。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left: 7 Pitfalls Structured List -->
+              <rect x="28" y="18" width="844" height="394" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="28" y="18" width="844" height="34" fill="#BE653B"/>
+              <text x="48" y="40" class="svg-white" font-size="13.5" font-weight="700">生产排障七大常见坑（误区 → 真实后果）</text>
+
+              <!-- 7 compact rows, height 48px each -->
+              <rect x="28" y="52" width="844" height="51" fill="#FFFFFF" stroke="#E8E4DC"/>
+              <text x="46" y="74" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">坑 01</text>
+              <text x="104" y="74" class="svg-title" font-size="13.5">设 bgwriter_lru_maxpages=0 当省 I/O 万能手段</text>
+              <text x="104" y="94" class="svg-body" font-size="12.5">不消灭脏页也不禁 checkpoint，写出压力只是转移给 client backend 或 checkpointer。</text>
+
+              <rect x="28" y="103" width="844" height="51" fill="#F7F6F2" stroke="#E8E4DC"/>
+              <text x="46" y="125" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">坑 02</text>
+              <text x="104" y="125" class="svg-title" font-size="13.5">看到 buffers_clean 很高就认为配置良好</text>
+              <text x="104" y="145" class="svg-body" font-size="12.5">写得多不等于延迟降；必须联合 client backend writes、checkpoint 与业务延迟判定。</text>
+
+              <rect x="28" y="154" width="844" height="51" fill="#FFFFFF" stroke="#E8E4DC"/>
+              <text x="46" y="176" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">坑 03</text>
+              <text x="104" y="176" class="svg-title" font-size="13.5">忽略持续增长的 maxwritten_clean</text>
+              <text x="104" y="196" class="svg-body" font-size="12.5">说明扫描经常撞上 maxpages 被迫截断，此时即便 buffers_clean 不低也可能供给不足。</text>
+
+              <rect x="28" y="205" width="844" height="51" fill="#F7F6F2" stroke="#E8E4DC"/>
+              <text x="46" y="227" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">坑 04</text>
+              <text x="104" y="227" class="svg-title" font-size="13.5">把 checkpoint 抖动甩锅给 bgwriter</text>
+              <text x="104" y="247" class="svg-body" font-size="12.5">PostgreSQL 9.2 起 bgwriter 已不管 checkpoint，收口节流与 fsync 抖动主看 checkpointer。</text>
+
+              <rect x="28" y="256" width="844" height="51" fill="#FFFFFF" stroke="#E8E4DC"/>
+              <text x="46" y="278" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">坑 05</text>
+              <text x="104" y="278" class="svg-title" font-size="13.5">把 bgwriter_flush_after 的 writeback 当成 fsync</text>
+              <text x="104" y="298" class="svg-body" font-size="12.5">writeback 仅是内核提前落盘提示，不构成 checkpoint 完成或事务提交持久化语义。</text>
+
+              <rect x="28" y="307" width="844" height="51" fill="#F7F6F2" stroke="#E8E4DC"/>
+              <text x="46" y="329" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">坑 06</text>
+              <text x="104" y="329" class="svg-title" font-size="13.5">只查 pg_stat_bgwriter，不结合 pg_stat_io</text>
+              <text x="104" y="349" class="svg-body" font-size="12.5">新版必须看 pg_stat_io 按 backend_type 验证 client backend writes 是否真实下降。</text>
+
+              <rect x="28" y="358" width="844" height="54" fill="#FFFFFF" stroke="#E8E4DC"/>
+              <text x="46" y="380" class="svg-mono" font-size="12" font-weight="700" fill="#BE653B">坑 07</text>
+              <text x="104" y="380" class="svg-title" font-size="13.5">照搬他人的 multiplier 或 maxpages 参数</text>
+              <text x="104" y="400" class="svg-body" font-size="12.5">不同写模型与盘介质（NVMe/本地/网络盘）表现迥异，参数必须围绕本机负载复测。</text>
+
+              <!-- Right Top: Extension Questions -->
+              <rect x="896" y="18" width="476" height="222" fill="#FFFFFF" stroke="#D9D5CB"/>
+              <rect x="896" y="18" width="476" height="34" fill="#245A6B"/>
+              <text x="916" y="40" class="svg-white" font-size="13.5" font-weight="700">延伸思考（深化架构理解）</text>
+
+              <text x="916" y="78" class="svg-body" font-size="13">1. 为何沿 clock-sweep 提前扫，而非随机扫脏页？</text>
+              <text x="916" y="106" class="svg-body" font-size="13">2. 热页单周期改 100 次，激进 bgwriter 带来何写放大？</text>
+              <text x="916" y="134" class="svg-body" font-size="13">3. client writes 高但 maxwritten_clean 低，先查什么？</text>
+              <text x="916" y="162" class="svg-body" font-size="13">4. DuckDB、LSM 与云原生存储如何权衡后台写与延迟？</text>
+              <line x1="916" y1="182" x2="1352" y2="182" stroke="#D9D5CB"/>
+              <text x="916" y="206" class="svg-mono" font-size="12" fill="#2F7A66">底层共性：前台延迟隔离 vs 后台写放大治理</text>
+              <text x="916" y="226" class="svg-mono" font-size="11.5" fill="#46585F">结合 WAL 先写规则与崩溃恢复边界统一思考</text>
+
+              <!-- Right Bottom: Source Code Index -->
+              <rect x="896" y="256" width="476" height="156" fill="#E5EFF0" stroke="#245A6B"/>
+              <text x="916" y="284" class="svg-mono" font-size="12.5" font-weight="700">核心源码与官方文档索引</text>
+              <text x="916" y="310" class="svg-mono" font-size="12">• postmaster/bgwriter.c — BackgroundWriterMain()</text>
+              <text x="916" y="332" class="svg-mono" font-size="12">• storage/buffer/bufmgr.c — BgBufferSync / FlushBuffer</text>
+              <text x="916" y="354" class="svg-mono" font-size="12">• storage/buffer/freelist.c — clock-sweep / Notify</text>
+              <text x="916" y="376" class="svg-mono" font-size="12">• postmaster/checkpointer.c — CheckpointWriteDelay</text>
+              <text x="916" y="398" class="svg-mono" font-size="12">• 文档：config.sgml · monitoring.sgml</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="slide-next-label">收口 · SUMMARY</span>
+            <span class="slide-next-text">回到生产现场：用 pg_stat_bgwriter 与 pg_stat_io 的真实增量，替代对后台写的直觉猜测。</span>
+          </div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL bgwriter 调度 · 完</span>
+            <span class="slide-footer-page">12 / 12</span>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Right-side In-page Speaker Notes / Full Transcript Pane -->
+    <aside id="notes-pane" aria-label="讲稿面板">
+      <div class="notes-header">
+        <div class="notes-tabs">
+          <button class="notes-tab active" id="tab-page-note" type="button">本页讲稿 (N)</button>
+          <button class="notes-tab" id="tab-full-note" type="button">全文讲稿 (T)</button>
+        </div>
+        <button class="notes-close" id="btn-notes-close" type="button">关闭</button>
+      </div>
+      <div class="notes-body" id="notes-body"></div>
+    </aside>
+  </div>
+
+  <!-- Persistent Bottom Shortcut HUD Bar (Visible in Fullscreen too) -->
+  <footer id="hud-bar">
+    <div class="hud-left">
+      <button class="hud-btn" id="hud-prev" type="button" title="上一页 (←)"><span class="hud-kbd">←</span>上一页</button>
+      <button class="hud-btn" id="hud-next" type="button" title="下一页 (→)"><span class="hud-kbd">→</span>下一页</button>
+      <div class="hud-progress-wrap">
+        <div class="hud-progress-track"><div class="hud-progress-fill" id="hud-progress-fill"></div></div>
+        <span id="hud-page-label">01 / 12</span>
+      </div>
+    </div>
+    <div class="hud-center">
+      <button class="hud-btn" id="hud-toc" type="button" title="目录 (G)"><span class="hud-kbd">G</span>目录</button>
+      <button class="hud-btn" id="hud-note" type="button" title="本页讲稿 (N)"><span class="hud-kbd">N</span>本页讲稿</button>
+      <button class="hud-btn" id="hud-transcript" type="button" title="全文讲稿 (T)"><span class="hud-kbd">T</span>全文讲稿</button>
+      <button class="hud-btn" id="hud-autoplay" type="button" title="自动播放 (A)"><span class="hud-kbd">A</span>自动播放</button>
+      <button class="hud-btn" id="hud-fullscreen" type="button" title="全屏 (F)"><span class="hud-kbd">F</span>全屏</button>
+    </div>
+    <div class="hud-right">
+      <span style="font-family:var(--font-mono);font-size:11.5px;color:#A4C4C6;">bgwriter 调度 · 16:9</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ==================== SPEAKER NOTES DATA (逻辑推演 + 实证 + 口语化) ====================
+  const NOTES = [
+    {
+      title: "背景与七层写出地层",
+      paragraphs: [
+        "大家在生产环境里大概率都遇到过这样一幕：业务 SQL 平时跑得很稳，突然间毛刺抖动一下；打开 iostat 一看，磁盘写 I/O 起起伏伏。这时候很多同学的第一反应就是——「是不是后台写太慢了？」或者「是不是 checkpoint 太猛了？」",
+        "但先别急着改参数。大家看左边的七层地层剖面图，PostgreSQL 的数据写出路径根本不是一个进程包圆的。从最上层的业务 SQL、Client Backend，到 Shared Buffers，再到今天的主角 <code>bgwriter</code>、底层的 <code>checkpointer</code> 与 WAL writer，一直沉到 OS page cache 和存储设备，每一层都有自己的边界。",
+        "所以调 <code>bgwriter</code> 之前，我们必须按逻辑顺序把三个问题彻底钉死：第一，它到底在替谁写？第二，它什么时候醒来、写多少、扫到哪里停？第三，出了写抖动，怎么实证判断是它不够，还是别处出了问题？我们顺着第一个问题往下推。"
+      ]
+    },
+    {
+      title: "它解决什么问题：延迟与总 I/O 的交换",
+      paragraphs: [
+        "先回答第一个问题：<code>bgwriter</code> 到底替谁干活？大家想象一下，一个普通业务连接（Client Backend）执行 SQL，要读一个不在 <code>shared_buffers</code> 里的数据页，就得在内存池里找一个可以替换的 victim buffer。",
+        "如果这个 victim 是干净的，直接覆盖读新页，皆大欢喜；可万一它是个脏页呢？那不好意思，为了不丢数据，这个业务进程就得自己停下来，先把旧脏页同步写出去，再读新页。这一下就把磁盘写的延迟，直接塞进了用户的 SQL 响应时间里，尾延迟瞬间拉高。",
+        "<code>bgwriter</code> 干的事，就是提前把一部分「将来可能被替换」的脏页写到文件系统，让它们提前变成 clean reusable buffer。但天下没有免费的午餐——如果一个热页在一个 checkpoint 周期内被修改了一百次，原本可能只需写一次；<code>bgwriter</code> 太勤快，就会反复把它提前写出，放大总 I/O。PostgreSQL 官方文档也明确提醒了这一点。所以它绝不是越快越好，而是在「前台尾延迟」和「后台总 I/O」之间做交易。"
+      ]
+    },
+    {
+      title: "职责边界与四大核心参数",
+      paragraphs: [
+        "明白了它的价值和代价，我们立刻把三方边界画清楚，这是最容易混淆的地方。大家看图里从 Shared Buffers 分出的三条竖线：左边 <code>bgwriter</code> 只负责提前清理一部分 LRU 候选脏页；中间 Client Backend 在替换路径上依然有权同步写脏页；右边 <code>checkpointer</code> 才负责 checkpoint 边界上的脏页写出和最终 <code>fsync()</code> 收口。",
+        "特别提醒一个历史分水岭：PostgreSQL 8.0 引入了 <code>bgwriter</code>，但从 PostgreSQL 9.2 开始，<code>bgwriter</code> 就不再处理 checkpoint 了，那是独立进程 <code>checkpointer</code> 的活。而且，<code>bgwriter</code> 调用 <code>write()</code> 写到文件系统，绝不等价于持久化完成——虽然它会严格遵守 WAL 先写规则，但崩溃恢复的持久化边界依然归 <code>checkpointer</code>。",
+        "右侧列出了四个核心 GUC 参数：基础节拍 <code>bgwriter_delay</code>（默认 200ms，范围 10 到 10000ms）、单轮上限 <code>bgwriter_lru_maxpages</code>、需求放大倍数 <code>bgwriter_lru_multiplier</code>，以及平台相关的 <code>bgwriter_flush_after</code>（Linux 常见默认 512kB，非 Linux 默认 0）。带着这四个抓手，我们钻进源码主循环。"
+      ]
+    },
+    {
+      title: "主循环与空闲休眠唤醒",
+      paragraphs: [
+        "源码入口在 <code>src/backend/postmaster/bgwriter.c</code> 的 <code>BackgroundWriterMain()</code>，结构非常干净。大家可以点一下上方的「自动演示」或「单步推演」跟着走一遍：先 <code>ResetLatch</code> 清旧信号，再处理中断，然后调用核心函数 <code>BgBufferSync()</code> 清理一轮，接着上报 <code>pgstat</code> 统计、在 checkpoint 后清理 smgr、必要时记录 standby snapshot，最后 <code>WaitLatch</code> 睡一个 <code>BgWriterDelay</code>。",
+        "那问题来了：如果系统半夜根本没人用，难道 <code>bgwriter</code> 也要每 200 毫秒醒来空转一次吗？当然不会。源码设计了休眠机制（Hibernation）：如果连续两轮都没有 buffer 分配活动，且上次是超时醒来的，它就会先调用 <code>StrategyNotifyBgWriter()</code> 留个话——「下次有分配记得叫我」——然后睡一个 <code>BgWriterDelay × HIBERNATE_FACTOR</code>。源码里这个因子是 50，所以默认 200ms 乘以 50，最长睡大约 10 秒。",
+        "大家现在可以点一下橙色的「模拟后端分配」按钮：一旦前台业务突然来了，普通 backend 在 <code>StrategyGetBuffer()</code> 里看到这个通知请求，就会立刻 <code>SetLatch()</code> 把它叫醒。这样既省了空闲唤醒，又不会在负载突增时反应迟钝。"
+      ]
+    },
+    {
+      title: "调度输入与 buffer ring 盲区",
+      paragraphs: [
+        "好，<code>bgwriter</code> 醒来进入 <code>BgBufferSync()</code>，它凭什么决定这一轮要准备多少干净页面？第一步是调用 <code>StrategySyncStart()</code>，从 buffer replacement 策略里读取三个共享状态：clock-sweep 下一次要看的 <code>nextVictimBuffer</code>、绕过缓冲池的圈数 <code>completePasses</code>，以及距离上次读取后发生的分配次数 <code>numBufferAllocs</code>（读完顺手清零）。",
+        "这里有两个工程细节非常精妙。第一，大家看左图，<code>bgwriter</code> 只是从当前指针往前看，清理 <code>next_to_clean</code> 前沿的脏页，它绝不推进 <code>nextVictimBuffer</code>。为什么？因为它是清洁工，不是调度者——不改指针就不破坏业务真实的替换顺序，还能把全局锁竞争降到最低。",
+        "第二，看右边的橙色警示区，这是很多 DBA 排障时踩过的盲区：<code>freelist.c</code> 里写得很清楚，顺序扫描、VACUUM、COPY 这些操作使用的是私有 buffer ring，它们的分配不计入 <code>numBufferAllocs</code>。换句话说，<code>pg_stat_bgwriter.buffers_alloc</code> 反映不了全库所有的页面压力，诊断大批量扫描或 VACUUM 引发的 I/O 时，千万别被这一个数字骗了。"
+      ]
+    },
+    {
+      title: "BgBufferSync 反馈控制模型",
+      paragraphs: [
+        "拿到输入后，<code>BgBufferSync()</code> 并不是机械地「每轮固定写 N 页」，而是跑了一套经典的反馈控制。它维护一个跨轮平滑变量 <code>smoothed_alloc</code>，采用「快升慢降」策略：如果本轮分配突然飙高，平滑值立刻跟上；如果分配回落，则按 <code>smoothing_samples = 16</code> 慢慢往下退。再乘以 <code>bgwriter_lru_multiplier</code>，就得到了下一轮预估需要准备的 clean buffer 数量。",
+        "哪怕系统几乎没分配，源码还留了一道 <code>scan_whole_pool_milliseconds = 120000.0</code> 的兜底，也就是按大约 120 秒扫完整个缓冲池的最低节奏慢慢清理，防止空闲后池子里攒一堆脏候选页。",
+        "大家可以动手拖一下上面的滑块，比如把 <code>recent_alloc</code> 拉高到 80，再点「执行一轮扫描」。当预估需求超过 <code>bgwriter_lru_maxpages</code> 时，你会看到底部标尺出现橙色截断区，条件 C 亮起，<code>maxwritten_clean</code> 加 1。这就是为什么生产里一旦看到 <code>maxwritten_clean</code> 持续猛涨，往往不是需求满足了，而是每轮都被上限硬生生掐断了。"
+      ]
+    },
+    {
+      title: "SyncOneBuffer 单页处理与 Writeback",
+      paragraphs: [
+        "反馈控制决定了「扫多远」，接下来落到每一个具体页面，<code>BgBufferSync()</code> 调用 <code>SyncOneBuffer(next_to_clean, true, wb_context)</code>。注意第二个参数 <code>skip_recently_used = true</code>，它划出了 <code>bgwriter</code> 极度克制的准入红线：只有 <code>refcount == 0</code> 且 <code>usage_count == 0</code> 的页面它才碰；只要正被 pin 着或者最近用过，直接绕开，绝不和业务抢热页。",
+        "确认有效且为脏页后，才加锁进入 <code>FlushBuffer()</code>。对于永久表，第一步必须是 <code>XLogFlush(BufferGetLSN(buf))</code>——先把对应的 WAL 刷盘，再 <code>smgrwrite()</code> 把数据页写进 OS page cache。这就是 WAL 先写规则在后台写路径上的硬性落地。",
+        "写完之后还不算完，它会把页放进 writeback 队列；一旦攒够 <code>bgwriter_flush_after</code>，就调用 <code>IssuePendingWritebacks()</code> 合并相邻块，通过 <code>smgrwriteback()</code> 提醒操作系统尽早往磁盘推，减轻 checkpoint 末尾 fsync 卡顿。顺带对比下方：<code>checkpointer</code> 调的是同一个函数，但传的是 <code>false</code>，因为它必须覆盖所有应写脏页并用 <code>fsync()</code> 完成持久化收口。"
+      ]
+    },
+    {
+      title: "四类写出路径的边界矩阵",
+      paragraphs: [
+        "走到这里，整个 PostgreSQL 写出链路的全貌就拼齐了。我们把 <code>bgwriter</code>、Client Backend 自己写、<code>checkpointer</code> 和 OS Page Cache Writeback 放到一张矩阵里横向对比。",
+        "这张表不是用来背诵的，而是排障时的坐标纸。大家重点盯住「用户延迟影响」和「持久化语义」这两行：<code>bgwriter</code> 是间接帮前台降写等待，不保证 checkpoint 完成；Client Backend 自己写是被动兜底，直接拖慢当前 SQL；<code>checkpointer</code> 承担崩溃恢复的持久化边界，压力集中体现在 checkpoint 期间和末尾 fsync；而 OS writeback 是内核层面的脏页刷回。",
+        "所以，下次再遇到磁盘写尖刺，先别把锅扣给某一个进程，对照第六行的观测视图，把四条路径各自的写量拆出来看。"
+      ]
+    },
+    {
+      title: "收益与代价权衡：三条趋势曲线",
+      paragraphs: [
+        "那么，如果确认需要调整 <code>bgwriter</code>，是不是把参数调得越大越好？大家可以把上面滑块从「保守区」一路拖到「过度激进」，观察左边三条定性曲线的联动。",
+        "在保守区，<code>bgwriter</code> 写得少，后台 I/O 看着很安静，但青绿色的前台被迫写等待高高挂起，业务时不时卡顿；当我们往右调到甜点区，前台写等待明显掉下来，后台总 I/O 还在可控范围；可一旦继续往右冲进过度激进区，前台写等待已经降不动了，陶橙色的后台总 I/O 和热页重复写风险却陡然抬头，反过来把存储队列打满。",
+        "同时注意那条金色虚线：checkpoint 尾部压力可能会改善一点，但完全不保证消除。不同业务的读写比、热集大小和盘性能千差万别，所以根本不存在一套「放之四海而皆准的黄金参数」，只能靠实证指标去逼近本机的甜点区。"
+      ]
+    },
+    {
+      title: "实操观测与增量诊断",
+      paragraphs: [
+        "怎么用实证而不是拍脑袋来定位甜点区？我们看这套最小观测流水线。第一步，用 <code>SHOW</code> 核对当前 <code>shared_buffers</code>、四个 <code>bgwriter_*</code> 参数以及 checkpoint 参数，先知道基线在哪。",
+        "第二步，查 <code>pg_stat_bgwriter</code>，重点不是看开机以来的累计总数，而是像图里说的，建个临时表记下快照，等 30 秒业务跑完再相减算增量（delta）。生产排障窗口尽量别手快执行 <code>pg_stat_reset_shared('bgwriter')</code>，那会抹掉整个集群的统计基线。",
+        "第三步也是最关键的一步：在新版 PostgreSQL 里一定联合查询 <code>pg_stat_io</code>，按 <code>backend_type</code> 把 <code>background writer</code>、<code>client backend</code> 和 <code>checkpointer</code> 的 relation writes 拆开看。只有当你同时看到 <code>delta_maxwritten_clean</code> 明显增长，且 <code>client backend</code> 写出偏高，才进入左边的分支 A 考虑小步放宽；如果前台写并不高，抖动全在 <code>checkpointer</code>，那就立刻走右边分支 B，转向 checkpoint 和存储延迟排查。"
+      ]
+    },
+    {
+      title: "角色最佳实践与观测调参闭环",
+      paragraphs: [
+        "把这套观测方法落地到团队协作，就是左边的四步闭环和右边的三方边界。对 DBA 来说，核心纪律是「单变量、小步调、跨周期复测」：每次只改一个参数，至少跨过一个业务高峰和几个 checkpoint 周期再回看同一组指标。特别是 <code>bgwriter_flush_after</code>，它强依赖操作系统和存储的 writeback 能力，必须实测。如果改完发现后台 I/O 上去了，但前台 <code>client backend writes</code> 纹丝不动，那就果断回退。",
+        "对架构师来说，要始终把 <code>bgwriter</code> 定位成「延迟平滑工具」，而不是「吞吐魔法开关」。热集远超内存、盘带宽打满，靠调 bgwriter 是救不回来的。",
+        "对业务开发者来说，别把 SQL 慢统统推给后台写。减少热点行无谓反复更新，控制批量事务大小和冗余索引，并且清楚大表顺扫、VACUUM、COPY 走的 buffer ring 不会完整出现在 <code>buffers_alloc</code> 里，这才是治本之道。右下方也帮大家划清了适合与不适合调优的场景边界。"
+      ]
+    },
+    {
+      title: "常见七大误区与延伸思考",
+      paragraphs: [
+        "最后一页，我们把生产里最容易踩的七个坑集中扫一遍。比如坑 1，有人觉得把 <code>bgwriter_lru_maxpages</code> 设为 0 就能省 I/O，其实脏页一页也没少，只是全甩给了业务进程和 checkpointer；坑 2 和坑 3 是一体两面，只看 <code>buffers_clean</code> 高却忽略 <code>maxwritten_clean</code> 狂涨，会误以为供给充足；坑 4 和坑 5 则是概念混淆——9.2 以后 bgwriter 不管 checkpoint，<code>writeback</code> 也不是 <code>fsync</code>；坑 6 和坑 7 提醒我们一定要结合 <code>pg_stat_io</code>，绝不照搬别人博客里的参数。",
+        "右侧留了四个延伸思考题和核心源码索引。大家课后可以顺着 <code>bgwriter.c</code>、<code>bufmgr.c</code> 和 <code>freelist.c</code> 核对一下细节，甚至横向对比一下 DuckDB、LSM 存储引擎和云原生存储是怎么处理「前台延迟隔离」与「后台写放大」这对永恒矛盾的。",
+        "回到生产现场，记住一句话就够了：用 <code>pg_stat_bgwriter</code> 和 <code>pg_stat_io</code> 的真实增量说话，替代对后台写的直觉猜测。谢谢大家！"
+      ]
+    }
+  ];
+
+  // ==================== CORE DECK STATE ====================
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const totalSlides = slides.length;
+  let currentIndex = 0;
+  let notesMode = "closed"; // 'closed' | 'page' | 'full'
+  let tocOpen = false;
+  let autoplayTimer = null;
+
+  const appEl = document.getElementById("app");
+  const viewportEl = document.getElementById("stage-viewport");
+  const stageWrapperEl = document.getElementById("stage-wrapper");
+  const notesPaneEl = document.getElementById("notes-pane");
+  const notesBodyEl = document.getElementById("notes-body");
+  const tocDrawerEl = document.getElementById("toc-drawer");
+  const tocListEl = document.getElementById("toc-list");
+
+  const hudPageLabel = document.getElementById("hud-page-label");
+  const hudProgressFill = document.getElementById("hud-progress-fill");
+  const hudTocBtn = document.getElementById("hud-toc");
+  const hudNoteBtn = document.getElementById("hud-note");
+  const hudTranscriptBtn = document.getElementById("hud-transcript");
+  const hudAutoplayBtn = document.getElementById("hud-autoplay");
+  const hudFullscreenBtn = document.getElementById("hud-fullscreen");
+  const tabPageNote = document.getElementById("tab-page-note");
+  const tabFullNote = document.getElementById("tab-full-note");
+
+  // ==================== STAGE VECTOR SCALING ====================
+  function resizeStage() {
+    const rect = viewportEl.getBoundingClientRect();
+    const padX = 24;
+    const padY = 20;
+    const availW = Math.max(100, rect.width - padX);
+    const availH = Math.max(100, rect.height - padY);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageWrapperEl.style.transform = "scale(" + scale.toFixed(5) + ")";
+  }
+
+  window.addEventListener("resize", resizeStage);
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => resizeStage());
+    ro.observe(viewportEl);
+  }
+
+  // ==================== TOC RENDERING ====================
+  function buildTOC() {
+    tocListEl.innerHTML = "";
+    slides.forEach((s, idx) => {
+      const item = document.createElement("div");
+      item.className = "toc-item" + (idx === currentIndex ? " active" : "");
+      item.dataset.index = idx;
+      const numStr = String(idx + 1).padStart(2, "0");
+      item.innerHTML =
+        '<div class="toc-num">' + numStr + "</div>" +
+        '<div class="toc-meta">' +
+          '<div class="toc-title">' + s.dataset.title + "</div>" +
+          '<div class="toc-sub">' + s.dataset.eyebrow + "</div>" +
+        "</div>";
+      item.addEventListener("click", () => {
+        goToSlide(idx);
+        setTocOpen(false);
+      });
+      tocListEl.appendChild(item);
+    });
+  }
+
+  function updateTOCHighlight() {
+    Array.from(tocListEl.children).forEach((el, idx) => {
+      el.classList.toggle("active", idx === currentIndex);
+    });
+  }
+
+  function setTocOpen(open) {
+    tocOpen = open;
+    tocDrawerEl.classList.toggle("open", tocOpen);
+    hudTocBtn.classList.toggle("active", tocOpen);
+  }
+
+  // ==================== NOTES / FULL TRANSCRIPT PANE ====================
+  function renderNotes() {
+    if (notesMode === "closed") {
+      notesPaneEl.classList.remove("open");
+      hudNoteBtn.classList.remove("active");
+      hudTranscriptBtn.classList.remove("active");
+      setTimeout(resizeStage, 230);
+      return;
+    }
+
+    notesPaneEl.classList.add("open");
+    hudNoteBtn.classList.toggle("active", notesMode === "page");
+    hudTranscriptBtn.classList.toggle("active", notesMode === "full");
+    tabPageNote.classList.toggle("active", notesMode === "page");
+    tabFullNote.classList.toggle("active", notesMode === "full");
+
+    if (notesMode === "page") {
+      const n = NOTES[currentIndex];
+      const numStr = String(currentIndex + 1).padStart(2, "0");
+      notesBodyEl.innerHTML =
+        '<div class="note-card active-note">' +
+          '<div class="note-card-header">' +
+            '<span class="note-card-num">P.' + numStr + "</span>" +
+            '<span class="note-card-title">' + n.title + "</span>" +
+          "</div>" +
+          '<div class="note-card-text">' +
+            n.paragraphs.map((p) => "<p>" + p + "</p>").join("") +
+          "</div>" +
+        "</div>";
+      notesBodyEl.scrollTop = 0;
+    } else if (notesMode === "full") {
+      // Build full transcript once or refresh highlights
+      if (notesBodyEl.dataset.renderedMode !== "full") {
+        notesBodyEl.innerHTML = NOTES.map((n, idx) => {
+          const numStr = String(idx + 1).padStart(2, "0");
+          return (
+            '<div class="note-card' + (idx === currentIndex ? " active-note" : "") + '" id="transcript-item-' + idx + '" data-idx="' + idx + '">' +
+              '<div class="note-card-header">' +
+                '<span class="note-card-num">P.' + numStr + "</span>" +
+                '<span class="note-card-title">' + n.title + "</span>" +
+              "</div>" +
+              '<div class="note-card-text">' +
+                n.paragraphs.map((p) => "<p>" + p + "</p>").join("") +
+              "</div>" +
+            "</div>"
+          );
+        }).join("");
+        notesBodyEl.dataset.renderedMode = "full";
+        Array.from(notesBodyEl.querySelectorAll(".note-card-header")).forEach((hdr) => {
+          hdr.addEventListener("click", () => {
+            const idx = parseInt(hdr.parentElement.dataset.idx, 10);
+            if (!isNaN(idx)) goToSlide(idx);
+          });
+        });
+      } else {
+        Array.from(notesBodyEl.querySelectorAll(".note-card")).forEach((card, idx) => {
+          card.classList.toggle("active-note", idx === currentIndex);
+        });
+      }
+      scrollTranscriptToCurrent();
+    }
+
+    if (notesMode !== "full") {
+      notesBodyEl.dataset.renderedMode = notesMode;
+    }
+
+    // Recalculate stage scaling immediately and after transition
+    resizeStage();
+    setTimeout(() => {
+      resizeStage();
+      if (notesMode === "full") scrollTranscriptToCurrent();
+    }, 240);
+  }
+
+  function scrollTranscriptToCurrent() {
+    const target = document.getElementById("transcript-item-" + currentIndex);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function toggleNotesMode(targetMode) {
+    if (notesMode === targetMode) {
+      notesMode = "closed";
+    } else {
+      notesMode = targetMode;
+    }
+    renderNotes();
+  }
+
+  // ==================== SLIDE NAVIGATION ====================
+  function goToSlide(index) {
+    if (index < 0) index = 0;
+    if (index >= totalSlides) index = totalSlides - 1;
+    slides[currentIndex].classList.remove("active");
+    currentIndex = index;
+    slides[currentIndex].classList.add("active");
+
+    const numStr = String(currentIndex + 1).padStart(2, "0");
+    hudPageLabel.textContent = numStr + " / " + String(totalSlides).padStart(2, "0");
+    hudProgressFill.style.width = (((currentIndex + 1) / totalSlides) * 100).toFixed(2) + "%";
+
+    updateTOCHighlight();
+    if (notesMode !== "closed") {
+      renderNotes();
+    }
+  }
+
+  function nextSlide() {
+    if (currentIndex < totalSlides - 1) {
+      goToSlide(currentIndex + 1);
+    } else if (autoplayTimer) {
+      goToSlide(0);
+    }
+  }
+
+  function prevSlide() {
+    if (currentIndex > 0) {
+      goToSlide(currentIndex - 1);
+    }
+  }
+
+  // ==================== AUTOPLAY ====================
+  function toggleAutoplay() {
+    if (autoplayTimer) {
+      clearInterval(autoplayTimer);
+      autoplayTimer = null;
+      hudAutoplayBtn.classList.remove("active");
+    } else {
+      hudAutoplayBtn.classList.add("active");
+      autoplayTimer = setInterval(() => {
+        nextSlide();
+      }, 6000);
+    }
+  }
+
+  // ==================== FULLSCREEN ====================
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      const req = appEl.requestFullscreen || appEl.webkitRequestFullscreen;
+      if (req) {
+        try { req.call(appEl); } catch (e) {}
+      }
+    } else {
+      const ex = document.exitFullscreen || document.webkitExitFullscreen;
+      if (ex) {
+        try { ex.call(document); } catch (e) {}
+      }
+    }
+  }
+
+  document.addEventListener("fullscreenchange", () => {
+    hudFullscreenBtn.classList.toggle("active", Boolean(document.fullscreenElement));
+    resizeStage();
+  });
+
+  // ==================== HUD & BUTTON WIRING ====================
+  document.getElementById("hud-prev").addEventListener("click", prevSlide);
+  document.getElementById("hud-next").addEventListener("click", nextSlide);
+  hudTocBtn.addEventListener("click", () => setTocOpen(!tocOpen));
+  document.getElementById("btn-toc-close").addEventListener("click", () => setTocOpen(false));
+  hudNoteBtn.addEventListener("click", () => toggleNotesMode("page"));
+  hudTranscriptBtn.addEventListener("click", () => toggleNotesMode("full"));
+  tabPageNote.addEventListener("click", () => { notesMode = "page"; renderNotes(); });
+  tabFullNote.addEventListener("click", () => { notesMode = "full"; renderNotes(); });
+  document.getElementById("btn-notes-close").addEventListener("click", () => { notesMode = "closed"; renderNotes(); });
+  hudAutoplayBtn.addEventListener("click", toggleAutoplay);
+  hudFullscreenBtn.addEventListener("click", toggleFullscreen);
+
+  // ==================== KEYBOARD SHORTCUTS ====================
+  document.addEventListener("keydown", (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toUpperCase() : "";
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+
+    const key = e.key.toLowerCase();
+    if (key === "arrowright" || key === "pagedown" || key === " ") {
+      e.preventDefault();
+      nextSlide();
+    } else if (key === "arrowleft" || key === "pageup") {
+      e.preventDefault();
+      prevSlide();
+    } else if (key === "home") {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === "end") {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === "g") {
+      e.preventDefault();
+      setTocOpen(!tocOpen);
+    } else if (key === "n") {
+      e.preventDefault();
+      toggleNotesMode("page");
+    } else if (key === "t") {
+      e.preventDefault();
+      toggleNotesMode("full");
+    } else if (key === "a") {
+      e.preventDefault();
+      toggleAutoplay();
+    } else if (key === "f") {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === "escape") {
+      if (tocOpen) setTocOpen(false);
+    }
+  });
+
+  // ==================== INTERACTIVE SIM 1: SLIDE 4 MAIN LOOP ====================
+  (function initSim4() {
+    const nodes = [
+      { id: "s4-n1", label: "当前：1. ResetLatch 清理旧唤醒信号" },
+      { id: "s4-n2", label: "当前：2. ProcessMainLoopInterrupts 处理中断" },
+      { id: "s4-n3", label: "当前：3. BgBufferSync 执行一轮脏页清理" },
+      { id: "s4-n4", label: "当前：4–6. pgstat 上报、smgr 清理与 Standby 快照" },
+      { id: "s4-n5", label: "当前：7. WaitLatch 等待 BgWriterDelay (200ms)" },
+      { id: "s4-n6", label: "当前：进入 Hibernation 长休眠（50× ≈ 10s）" },
+      { id: "s4-n7", label: "当前：Backend 分配触发 SetLatch() 唤醒 bgwriter" }
+    ];
+    let step = 0;
+    let timer = null;
+
+    const statusEl = document.getElementById("s4-status");
+    const modeEl = document.getElementById("s4-mode");
+    const playBtn = document.getElementById("s4-play");
+
+    function renderS4() {
+      nodes.forEach((n, idx) => {
+        const el = document.getElementById(n.id);
+        if (!el) return;
+        const active = idx === step;
+        if (idx === 5) {
+          el.setAttribute("fill", active ? "#BE653B" : "#F7E9DE");
+          el.setAttribute("stroke", active ? "#8F411E" : "#DFC0AA");
+          el.setAttribute("stroke-width", active ? "3" : "1.5");
+        } else if (idx === 6) {
+          el.setAttribute("fill", active ? "#E4F0EC" : "#FFFFFF");
+          el.setAttribute("stroke", active ? "#2F7A66" : "#245A6B");
+          el.setAttribute("stroke-width", active ? "3" : "1.5");
+        } else {
+          el.setAttribute("fill", active ? "#E5EFF0" : "#FFFFFF");
+          el.setAttribute("stroke", active ? "#245A6B" : "#D9D5CB");
+          el.setAttribute("stroke-width", active ? "3" : "1.5");
+        }
+      });
+      statusEl.textContent = nodes[step].label;
+    }
+
+    function advanceS4() {
+      const isIdle = modeEl.value === "idle";
+      if (step < 4) {
+        step += 1;
+      } else if (step === 4) {
+        step = isIdle ? 5 : 0;
+      } else if (step === 5) {
+        step = 6;
+      } else {
+        step = 0;
+      }
+      renderS4();
+    }
+
+    document.getElementById("s4-step").addEventListener("click", advanceS4);
+    document.getElementById("s4-wake").addEventListener("click", () => {
+      step = 6;
+      renderS4();
+    });
+    document.getElementById("s4-reset").addEventListener("click", () => {
+      if (timer) { clearInterval(timer); timer = null; playBtn.textContent = "自动演示"; }
+      step = 0;
+      renderS4();
+    });
+    playBtn.addEventListener("click", () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        playBtn.textContent = "自动演示";
+      } else {
+        playBtn.textContent = "暂停演示";
+        timer = setInterval(advanceS4, 1100);
+      }
+    });
+
+    renderS4();
+  })();
+
+  // ==================== INTERACTIVE SIM 2: SLIDE 6 FEEDBACK CONTROL ====================
+  (function initSim6() {
+    const allocInput = document.getElementById("s6-alloc");
+    const multInput = document.getElementById("s6-mult");
+    const maxpInput = document.getElementById("s6-maxp");
+
+    const allocV = document.getElementById("s6-alloc-v");
+    const multV = document.getElementById("s6-mult-v");
+    const maxpV = document.getElementById("s6-maxp-v");
+
+    const dispAlloc = document.getElementById("s6-disp-alloc");
+    const dispSmooth = document.getElementById("s6-disp-smooth");
+    const dispEst = document.getElementById("s6-disp-est");
+    const outRounds = document.getElementById("s6-out-rounds");
+    const outWritten = document.getElementById("s6-out-written");
+    const outClean = document.getElementById("s6-out-clean");
+    const outMaxw = document.getElementById("s6-out-maxw");
+    const outNote = document.getElementById("s6-out-note");
+
+    const condCatch = document.getElementById("s6-cond-catch");
+    const condEnough = document.getElementById("s6-cond-enough");
+    const condMaxp = document.getElementById("s6-cond-maxp");
+
+    const barWritten = document.getElementById("s6-bar-written");
+    const barCut = document.getElementById("s6-bar-cut");
+    const maxpLine = document.getElementById("s6-maxp-line");
+    const maxpTag = document.getElementById("s6-maxp-tag");
+
+    const autoBtn = document.getElementById("s6-auto");
+
+    let smoothedAlloc = 40.0;
+    let rounds = 1;
+    let totalClean = 80;
+    let totalMaxw = 0;
+    let timer = null;
+
+    function updateLabelsOnly() {
+      allocV.textContent = allocInput.value;
+      multV.textContent = Number(multInput.value).toFixed(1);
+      maxpV.textContent = maxpInput.value;
+    }
+
+    function runOneRound(resetFirst) {
+      const recent = Number(allocInput.value);
+      const mult = Number(multInput.value);
+      const maxp = Number(maxpInput.value);
+
+      if (resetFirst) {
+        smoothedAlloc = recent;
+        rounds = 1;
+        totalClean = 0;
+        totalMaxw = 0;
+      } else {
+        // Fast rise, slow decay (smoothing_samples = 16)
+        if (recent > smoothedAlloc) {
+          smoothedAlloc = recent;
+        } else {
+          smoothedAlloc = smoothedAlloc + (recent - smoothedAlloc) / 16.0;
+        }
+        rounds += 1;
+      }
+
+      const rawEst = Math.round(smoothedAlloc * mult);
+      const minSweep = 4; // represents 120s whole-pool minimal scan floor
+      const target = Math.max(rawEst, minSweep);
+
+      let written = target;
+      let stopReason = "enough";
+      if (recent === 0 && rawEst < minSweep) {
+        written = minSweep;
+        stopReason = "catch";
+      } else if (target > maxp) {
+        written = maxp;
+        stopReason = "maxp";
+        totalMaxw += 1;
+      }
+
+      totalClean += written;
+
+      // Update text readouts
+      dispAlloc.textContent = String(recent);
+      dispSmooth.textContent = smoothedAlloc.toFixed(1);
+      dispEst.textContent = String(target);
+      outRounds.textContent = String(rounds);
+      outWritten.textContent = String(written);
+      outClean.textContent = String(totalClean);
+      outMaxw.textContent = String(totalMaxw);
+
+      // Highlight stop condition
+      const setBox = (el, active, bg, stroke) => {
+        el.setAttribute("fill", active ? bg : "#F7F6F2");
+        el.setAttribute("stroke", active ? stroke : "#D9D5CB");
+        el.setAttribute("stroke-width", active ? "2" : "1");
+      };
+      setBox(condCatch, stopReason === "catch", "#E5EFF0", "#245A6B");
+      setBox(condEnough, stopReason === "enough", "#E4F0EC", "#2F7A66");
+      setBox(condMaxp, stopReason === "maxp", "#F7E9DE", "#BE653B");
+
+      if (stopReason === "maxp") {
+        outNote.textContent = "状态：撞上 maxpages 截断，maxwritten_clean 增长！";
+        outNote.setAttribute("fill", "#BE653B");
+      } else if (stopReason === "catch") {
+        outNote.textContent = "状态：低负载兜底巡检，追上 clock-sweep 后停止";
+        outNote.setAttribute("fill", "#245A6B");
+      } else {
+        outNote.textContent = "状态：供给满足，未触发上限截断";
+        outNote.setAttribute("fill", "#2F7A66");
+      }
+
+      // Update capacity scale bar (0..240 mapped to 1296px)
+      const maxScale = 240;
+      const trackW = 1296;
+      const wWritten = Math.min(written / maxScale, 1) * trackW;
+      const wTarget = Math.min(target / maxScale, 1) * trackW;
+      const xMaxp = 52 + Math.min(maxp / maxScale, 1) * trackW;
+
+      barWritten.setAttribute("width", wWritten.toFixed(1));
+      if (target > maxp) {
+        barCut.setAttribute("x", (52 + wWritten).toFixed(1));
+        barCut.setAttribute("width", Math.max(0, wTarget - wWritten).toFixed(1));
+      } else {
+        barCut.setAttribute("width", "0");
+      }
+      maxpLine.setAttribute("x1", xMaxp.toFixed(1));
+      maxpLine.setAttribute("x2", xMaxp.toFixed(1));
+      const tagX = Math.min(xMaxp + 6, 1220);
+      maxpTag.setAttribute("x", tagX.toFixed(1));
+      maxpTag.textContent = "maxpages = " + maxp;
+    }
+
+    [allocInput, multInput, maxpInput].forEach((inp) => {
+      inp.addEventListener("input", () => {
+        updateLabelsOnly();
+        runOneRound(false);
+      });
+    });
+
+    document.getElementById("s6-run").addEventListener("click", () => runOneRound(false));
+    document.getElementById("s6-reset").addEventListener("click", () => {
+      if (timer) { clearInterval(timer); timer = null; autoBtn.textContent = "连续播放"; }
+      allocInput.value = "40";
+      multInput.value = "2.0";
+      maxpInput.value = "100";
+      updateLabelsOnly();
+      runOneRound(true);
+    });
+    autoBtn.addEventListener("click", () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        autoBtn.textContent = "连续播放";
+      } else {
+        autoBtn.textContent = "暂停";
+        timer = setInterval(() => runOneRound(false), 950);
+      }
+    });
+
+    updateLabelsOnly();
+    runOneRound(true);
+  })();
+
+  // ==================== INTERACTIVE SIM 3: SLIDE 9 TRADEOFF ====================
+  (function initSim9() {
+    const slider = document.getElementById("s9-slider");
+    const valEl = document.getElementById("s9-val");
+    const badgeEl = document.getElementById("s9-badge");
+    const cursor = document.getElementById("s9-cursor");
+    const dot1 = document.getElementById("s9-dot-1");
+    const dot2 = document.getElementById("s9-dot-2");
+    const dot3 = document.getElementById("s9-dot-3");
+    const sig1 = document.getElementById("s9-sig-1");
+    const sig2 = document.getElementById("s9-sig-2");
+    const sig3 = document.getElementById("s9-sig-3");
+    const sig4 = document.getElementById("s9-sig-4");
+
+    function updateS9(v) {
+      slider.value = String(v);
+      const t = (v - 10) / 80; // 0..1
+      const x = 100 + t * 700;
+
+      // Approximate Y positions along the three qualitative curves
+      const y1 = 92 + 190 * Math.pow(t, 0.72); // decreasing pressure => higher Y
+      const y2 = 284 - 196 * Math.pow(t, 1.55); // increasing pressure => lower Y
+      const y3 = 176 + 32 * Math.pow(t, 0.65);
+
+      cursor.setAttribute("x1", x.toFixed(1));
+      cursor.setAttribute("x2", x.toFixed(1));
+      dot1.setAttribute("cx", x.toFixed(1));
+      dot1.setAttribute("cy", y1.toFixed(1));
+      dot2.setAttribute("cx", x.toFixed(1));
+      dot2.setAttribute("cy", y2.toFixed(1));
+      dot3.setAttribute("cx", x.toFixed(1));
+      dot3.setAttribute("cy", y3.toFixed(1));
+
+      if (v < 36) {
+        valEl.textContent = "保守";
+        badgeEl.textContent = "写得太少：前台撞脏页风险上升";
+        sig1.textContent = "buffers_clean 偏低，maxwritten_clean 可能持续增长";
+        sig1.setAttribute("fill", "#BE653B");
+        sig2.textContent = "client backend relation writes 长期偏高，尾延迟放大";
+        sig2.setAttribute("fill", "#BE653B");
+        sig3.textContent = "前台频繁承担同步写脏页代价；若后台 I/O 有余量，";
+        sig4.textContent = "可考虑单变量小步调高 maxpages 或 multiplier。";
+      } else if (v <= 64) {
+        valEl.textContent = "适中";
+        badgeEl.textContent = "平衡态：前台写等待低，重复写可控";
+        sig1.textContent = "buffers_clean 稳步增长，maxwritten_clean 偶发或平稳";
+        sig1.setAttribute("fill", "#2F7A66");
+        sig2.textContent = "client backend writes 维持低位，后台写分布均匀";
+        sig2.setAttribute("fill", "#245A6B");
+        sig3.textContent = "当前处于延迟与总 I/O 的健康平衡区；";
+        sig4.textContent = "继续观察 checkpoint stats，勿盲目继续调大参数。";
+      } else {
+        valEl.textContent = "激进";
+        badgeEl.textContent = "写得太多：热页重复写放大总 I/O";
+        sig1.textContent = "buffers_clean 极高，但继续增大已难换取更低延迟";
+        sig1.setAttribute("fill", "#AE8A3E");
+        sig2.textContent = "background writer writes/writebacks 飙升，挤压盘队列";
+        sig2.setAttribute("fill", "#BE653B");
+        sig3.textContent = "同一热页在单 checkpoint 周期内被反复提前写出，";
+        sig4.textContent = "增加总体 I/O 负载，且无法根治 checkpoint fsync 抖动。";
+      }
+    }
+
+    slider.addEventListener("input", () => updateS9(Number(slider.value)));
+    document.getElementById("s9-low").addEventListener("click", () => updateS9(20));
+    document.getElementById("s9-mid").addEventListener("click", () => updateS9(50));
+    document.getElementById("s9-high").addEventListener("click", () => updateS9(82));
+    updateS9(50);
+  })();
+
+  // ==================== INITIALIZE ====================
+  buildTOC();
+  goToSlide(0);
+  resizeStage();
+})();
+</script>
+</body>
+</html>

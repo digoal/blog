@@ -1,0 +1,2881 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL Hook 机制与工程边界</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-outer: #E8E5DC;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terracotta: #BE653B;
+    --terracotta-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E4F2EC;
+    --gold: #AE8A3E;
+    --gold-light: #F6EFE0;
+    --s1: #1E4B5A;
+    --s2: #2E6373;
+    --s3: #47808D;
+    --s4: #74A5AD;
+    --s5: #A4C4C6;
+    --s6: #CFE0DC;
+    --s7: #EBF1EE;
+    --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'STSong', 'SimSun', Georgia, serif;
+    --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-outer);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg-outer);
+  }
+
+  #workspace {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* 左侧固定舞台视口：等比缩放 + letterbox */
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-outer);
+    padding: 12px;
+  }
+
+  #stage-shell {
+    position: relative;
+    width: 1600px;
+    height: 900px;
+    flex-shrink: 0;
+    transform-origin: center center;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    overflow: hidden;
+  }
+
+  /* 1600x900 固定舞台内每页结构 */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    padding: 40px 64px 28px 64px;
+    display: none;
+    flex-direction: column;
+    background: var(--bg-paper);
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* 地层微标尺装饰线（极简工程蓝图感，非装饰性杂物） */
+  .slide::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background: linear-gradient(
+      to bottom,
+      var(--s7) 0% 14%,
+      var(--s6) 14% 28%,
+      var(--s5) 28% 42%,
+      var(--s4) 42% 57%,
+      var(--s3) 57% 71%,
+      var(--s2) 71% 85%,
+      var(--s1) 85% 100%
+    );
+  }
+
+  .slide-header {
+    width: 1400px;
+    flex-shrink: 0;
+  }
+
+  .eyebrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .slide-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    color: var(--ink-muted);
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    line-height: 1.22;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .slide-lead {
+    font-size: 19px;
+    line-height: 1.48;
+    color: var(--ink-sub);
+    margin-bottom: 14px;
+    font-weight: 400;
+  }
+
+  .slide-divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 14px;
+    flex-shrink: 0;
+  }
+
+  /* 交互控制栏：独立位于图区上方，绝不遮挡 SVG */
+  .anim-toolbar {
+    width: 1400px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    padding: 0 14px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+  }
+
+  .anim-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .anim-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+    margin-right: 4px;
+  }
+
+  .btn-ctrl {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1;
+    padding: 6px 12px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .btn-ctrl:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+  }
+
+  .btn-ctrl.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .btn-ctrl.warn.active {
+    background: var(--terracotta);
+    border-color: var(--terracotta);
+    color: #F7F6F2;
+  }
+
+  .btn-ctrl.action {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #F7F6F2;
+  }
+
+  .btn-ctrl.action:hover {
+    background: #246352;
+    border-color: #246352;
+    color: #F7F6F2;
+  }
+
+  .anim-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--indigo);
+    max-width: 660px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 图区严格 1400x430（交互页内嵌 1400x430 或略紧凑 1400x404，SVG 保持等比不裁切） */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    flex-shrink: 0;
+    position: relative;
+    background: var(--bg-paper);
+  }
+
+  .slide.has-toolbar .diagram-zone {
+    height: 400px;
+  }
+
+  .diagram-zone svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 底部承接与页脚 */
+  .slide-bottom {
+    margin-top: auto;
+    width: 1400px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .next-bridge {
+    border-left: 3px solid var(--terracotta);
+    background: var(--bg-sub);
+    padding: 10px 18px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+
+  .next-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--terracotta);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.35;
+    color: var(--ink);
+  }
+
+  .slide-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--stroke);
+    padding-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .footer-page {
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  /* 右侧页内开窗讲稿区 */
+  #notes-pane {
+    width: 0;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+    user-select: text;
+  }
+
+  #notes-pane.open {
+    width: min(450px, 34vw);
+    border-left-width: 1px;
+  }
+
+  .notes-header {
+    padding: 14px 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .notes-mode-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1.6px;
+    padding: 3px 8px;
+    background: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .notes-heading {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .notes-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .notes-tab-btn {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 4px 9px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-tab-btn.active {
+    background: var(--indigo-light);
+    border-color: var(--indigo);
+    color: var(--indigo);
+    font-weight: 600;
+  }
+
+  .notes-close-btn {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 3px 8px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+
+  .notes-close-btn:hover {
+    border-color: var(--terracotta);
+    color: var(--terracotta);
+  }
+
+  #notes-body {
+    flex: 1;
+    position: relative;
+    overflow-y: auto;
+    padding: 18px 20px 36px 20px;
+    line-height: 1.78;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .note-block.transcript-item {
+    cursor: pointer;
+  }
+
+  .note-block.transcript-item:hover {
+    border-color: var(--indigo);
+  }
+
+  .note-block.current {
+    border-left: 4px solid var(--terracotta);
+    border-color: var(--terracotta);
+    background: #FDFBF7;
+  }
+
+  .note-block-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--stroke);
+  }
+
+  .note-slide-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+    letter-spacing: 1px;
+  }
+
+  .note-slide-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .note-p {
+    margin-bottom: 10px;
+    color: var(--ink-sub);
+    text-align: left;
+  }
+
+  .note-p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-p strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .note-cue {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--terracotta-light);
+    border-left: 3px solid var(--terracotta);
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  /* 底部控制栏（全屏后始终显示） */
+  #hud-bar {
+    height: 46px;
+    flex-shrink: 0;
+    background: #1B2B33;
+    color: #EBF1EE;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-top: 1px solid #2E6373;
+    font-size: 13px;
+    z-index: 40;
+  }
+
+  .hud-left, .hud-center, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(207, 224, 220, 0.25);
+    color: #EBF1EE;
+    padding: 5px 10px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .hud-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: #A4C4C6;
+  }
+
+  .hud-btn.active {
+    background: var(--terracotta);
+    border-color: var(--terracotta);
+    color: #F7F6F2;
+  }
+
+  .hud-btn.autoplay-on {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #F7F6F2;
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #F7F6F2;
+  }
+
+  .hud-progress {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #CFE0DC;
+    min-width: 72px;
+    text-align: center;
+  }
+
+  .progress-track {
+    width: 140px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--terracotta);
+    width: 8.33%;
+    transition: width 0.2s ease;
+  }
+
+  /* 目录层 (G 键) */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(27, 43, 51, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 28px;
+  }
+
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  .toc-panel {
+    width: min(1040px, 94vw);
+    max-height: 82vh;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toc-header {
+    padding: 16px 24px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toc-title {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .toc-grid {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    overflow-y: auto;
+  }
+
+  .toc-card {
+    border: 1px solid var(--stroke);
+    background: var(--bg-paper);
+    padding: 12px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .toc-card:hover {
+    border-color: var(--indigo);
+    background: var(--indigo-light);
+  }
+
+  .toc-card.current {
+    border-left: 4px solid var(--terracotta);
+    border-color: var(--terracotta);
+    background: var(--terracotta-light);
+  }
+
+  .toc-card-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--indigo);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .toc-card-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+
+  .toc-card-sub {
+    font-size: 12px;
+    color: var(--ink-sub);
+    line-height: 1.35;
+  }
+
+  /* SVG 通用排版类 */
+  svg text {
+    font-family: 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
+  }
+  svg .t-serif {
+    font-family: 'Songti SC', 'Noto Serif CJK SC', 'STSong', Georgia, serif;
+  }
+  svg .t-mono {
+    font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  }
+
+  /* 动画高亮状态 */
+  .svg-node { transition: opacity 0.25s, filter 0.25s; }
+  .svg-dim { opacity: 0.28; }
+  .svg-hl rect.box-bg { stroke: #BE653B !important; stroke-width: 2.6 !important; }
+  .svg-hl-teal rect.box-bg { stroke: #2F7A66 !important; stroke-width: 2.6 !important; }
+  .svg-line-active { stroke: #BE653B !important; stroke-width: 3 !important; }
+  .svg-line-teal { stroke: #2F7A66 !important; stroke-width: 3 !important; }
+  .svg-line-cut { stroke: #BE653B !important; stroke-dasharray: 6 4 !important; stroke-width: 2.5 !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <div id="stage-viewport">
+      <div id="stage-shell">
+
+        <!-- ==================== SLIDE 1: 封面 · 地层剖面总览 ==================== -->
+        <section class="slide active" data-slide="1" data-title="PostgreSQL Hook：不改内核主干的扩展插槽" data-sub="课程导入与内核地层总览">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">DATABASE FOUNDATION COURSE · POSTGRESQL INTERNALS</span>
+              <span class="slide-tag">作者 digoal · 2026-06-08 · 源码依据 postgres/postgres</span>
+            </div>
+            <h1 class="slide-title">数据库筑基课 —— PostgreSQL Hook</h1>
+            <p class="slide-lead">不改动核心流程大结构，在认证、解析、规划、执行、DDL 与配置七大内核地层暴露函数指针插槽，让扩展安全介入生命周期。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-terra" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#BE653B"/>
+                </marker>
+                <marker id="arr-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#2F7A66"/>
+                </marker>
+                <marker id="arr-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#89938F"/>
+                </marker>
+              </defs>
+
+              <!-- 背景框 -->
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- 左侧工程标尺 -->
+              <line x1="76" y1="24" x2="76" y2="406" stroke="#89938F" stroke-width="1"/>
+              <text x="38" y="34" text-anchor="middle" font-size="11" fill="#89938F" class="t-mono">DEPTH</text>
+              <text x="38" y="64" text-anchor="middle" font-size="12" fill="#46585F" class="t-mono">L1</text>
+              <text x="38" y="118" text-anchor="middle" font-size="12" fill="#46585F" class="t-mono">L2</text>
+              <text x="38" y="172" text-anchor="middle" font-size="12" fill="#46585F" class="t-mono">L3</text>
+              <text x="38" y="226" text-anchor="middle" font-size="12" fill="#46585F" class="t-mono">L4</text>
+              <text x="38" y="280" text-anchor="middle" font-size="12" fill="#46585F" class="t-mono">L5</text>
+              <text x="38" y="334" text-anchor="middle" font-size="12" fill="#46585F" class="t-mono">L6</text>
+              <text x="38" y="388" text-anchor="middle" font-size="12" fill="#1E4B5A" font-weight="700" class="t-mono">L7</text>
+
+              <!-- 地层七阶横带 (浅 -> 深) -->
+              <!-- L1 -->
+              <rect x="92" y="36" width="840" height="48" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="112" y="65" font-size="16" font-weight="700" fill="#1B2B33">L1 · 连接认证与日志出口</text>
+              <text x="392" y="65" font-size="13" fill="#46585F" class="t-mono">ClientAuthentication_hook · emit_log_hook</text>
+
+              <!-- L2 -->
+              <rect x="92" y="90" width="840" height="48" fill="#CFE0DC" stroke="#B8CEC9" stroke-width="1"/>
+              <text x="112" y="119" font-size="16" font-weight="700" fill="#1B2B33">L2 · 解析分析与语义树</text>
+              <text x="392" y="119" font-size="13" fill="#1B2B33" class="t-mono">post_parse_analyze_hook (Query / queryId)</text>
+
+              <!-- L3 -->
+              <rect x="92" y="144" width="840" height="48" fill="#A4C4C6" stroke="#8EB0B3" stroke-width="1"/>
+              <text x="112" y="173" font-size="16" font-weight="700" fill="#1B2B33">L3 · 优化器与候选路径生成</text>
+              <text x="392" y="173" font-size="13" fill="#1B2B33" class="t-mono">planner_hook · set_rel/join_pathlist_hook</text>
+
+              <!-- L4 -->
+              <rect x="92" y="198" width="840" height="48" fill="#74A5AD" stroke="#609098" stroke-width="1"/>
+              <text x="112" y="227" font-size="16" font-weight="700" fill="#F7F6F2">L4 · 执行器四阶段生命周期</text>
+              <text x="392" y="227" font-size="13" fill="#F7F6F2" class="t-mono">ExecutorStart / Run / Finish / End_hook</text>
+
+              <!-- L5 -->
+              <rect x="92" y="252" width="840" height="48" fill="#47808D" stroke="#396E7B" stroke-width="1"/>
+              <text x="112" y="281" font-size="16" font-weight="700" fill="#F7F6F2">L5 · Utility 命令与 DDL 管控</text>
+              <text x="392" y="281" font-size="13" fill="#EBF1EE" class="t-mono">ProcessUtility_hook (CREATE / ALTER / DROP)</text>
+
+              <!-- L6 -->
+              <rect x="92" y="306" width="840" height="48" fill="#2E6373" stroke="#23505E" stroke-width="1"/>
+              <text x="112" y="335" font-size="16" font-weight="700" fill="#F7F6F2">L6 · 目录对象生命周期事件</text>
+              <text x="392" y="335" font-size="13" fill="#EBF1EE" class="t-mono">object_access_hook · object_access_hook_str</text>
+
+              <!-- L7 -->
+              <rect x="92" y="360" width="840" height="48" fill="#1E4B5A" stroke="#163945" stroke-width="1"/>
+              <text x="112" y="389" font-size="16" font-weight="700" fill="#F7F6F2">L7 · 启动期共享内存与配置协议</text>
+              <text x="392" y="389" font-size="13" fill="#CFE0DC" class="t-mono">shmem_request/startup_hook · GUC check/assign</text>
+
+              <!-- 右侧工程蓝图图例与核心命题框 -->
+              <line x1="932" y1="60" x2="972" y2="60" stroke="#245A6B" stroke-width="1.5"/>
+              <line x1="932" y1="168" x2="972" y2="168" stroke="#245A6B" stroke-width="1.5"/>
+              <line x1="932" y1="222" x2="972" y2="222" stroke="#245A6B" stroke-width="1.5"/>
+              <line x1="932" y1="384" x2="972" y2="384" stroke="#BE653B" stroke-width="1.5"/>
+              <line x1="972" y1="60" x2="972" y2="384" stroke="#245A6B" stroke-width="1.5"/>
+
+              <rect x="996" y="36" width="380" height="176" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="996" y="36" width="380" height="34" fill="#245A6B"/>
+              <text x="1014" y="58" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">CORE PROPOSITION · 核心命题</text>
+              <text x="1014" y="96" font-size="16" font-weight="700" fill="#1B2B33">Hook 不是独立 SQL 功能</text>
+              <text x="1014" y="122" font-size="14" fill="#46585F">它是内核在关键地层留出的 C 函数指针插槽：</text>
+              <text x="1014" y="148" font-size="14" fill="#245A6B">1. 越底层，可见内部结构越深</text>
+              <text x="1014" y="172" font-size="14" fill="#BE653B">2. 越底层，崩溃与 ABI 升级代价越大</text>
+              <text x="1014" y="196" font-size="14" fill="#2F7A66">3. 越能用窄机制解决，越不用全局 Hook</text>
+
+              <rect x="996" y="232" width="380" height="176" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="996" y="232" width="380" height="34" fill="#BE653B"/>
+              <text x="1014" y="254" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">SOURCE ANCHORS · 本课源码坐标</text>
+              <text x="1014" y="290" font-size="13" fill="#1B2B33" class="t-mono">parser/analyze.c · optimizer/planner.c</text>
+              <text x="1014" y="314" font-size="13" fill="#1B2B33" class="t-mono">executor/execMain.c · tcop/utility.c</text>
+              <text x="1014" y="338" font-size="13" fill="#1B2B33" class="t-mono">catalog/objectaccess.c · misc/guc.c</text>
+              <text x="1014" y="364" font-size="13" fill="#46585F">实证扩展：pg_stat_statements / auto_explain</text>
+              <text x="1014" y="388" font-size="13" fill="#46585F">passwordcheck / auth_delay / Custom Scan</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">现实工程里，究竟是哪些棘手痛点逼着我们必须走进内核生命周期？</span>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 · 扩展机制与场景实践</span>
+              <span class="footer-page">01 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 2: 工程痛点与五大场景 ==================== -->
+        <section class="slide" data-slide="2" data-title="不 Fork 内核，却要进入内核生命周期" data-sub="工程痛点、五大场景与代价">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">01 · PROBLEM &amp; VALUE</span>
+              <span class="slide-tag">为什么需要 Hook</span>
+            </div>
+            <h1 class="slide-title">不 Fork 内核，却要进入内核生命周期</h1>
+            <p class="slide-lead">直接修改 PostgreSQL 主干会让升级、回归与合并冲突彻底失控；Hook 用「固定插槽」承接五大类内核扩展需求。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 左区：反面路线 Fork 内核 -->
+              <rect x="24" y="24" width="380" height="382" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="24" y="24" width="380" height="38" fill="#BE653B"/>
+              <text x="42" y="48" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">ANTI-PATTERN · 直接改主干代码</text>
+
+              <rect x="44" y="80" width="340" height="62" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="60" y="106" font-size="15" font-weight="700" fill="#1B2B33">痛点 A · 偶发慢 SQL 缺现场</text>
+              <text x="60" y="128" font-size="13" fill="#46585F">常规日志只有文本，拿不到计划与 buffer/WAL</text>
+
+              <rect x="44" y="154" width="340" height="62" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="60" y="180" font-size="15" font-weight="700" fill="#1B2B33">痛点 B · 高危 DDL 统一审计</text>
+              <text x="60" y="202" font-size="13" fill="#46585F">需拦截 CREATE ROLE / ALTER SYSTEM / DROP</text>
+
+              <rect x="44" y="228" width="340" height="62" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="60" y="254" font-size="15" font-weight="700" fill="#1B2B33">痛点 C · 接入新扫描路径</text>
+              <text x="60" y="276" font-size="13" fill="#46585F">希望让优化器把自定义扫描纳入成本比较</text>
+
+              <rect x="44" y="308" width="340" height="80" fill="#BE653B"/>
+              <text x="60" y="336" font-size="15" font-weight="700" fill="#F7F6F2">直接改主干的后果：</text>
+              <text x="60" y="360" font-size="13" fill="#F7E9DE">大版本升级冲突 · 回归成本指数上升 · 多团队踩踏</text>
+              <text x="60" y="378" font-size="13" fill="#F7E9DE">每个需求都维护一套私有内核分支，工程失控</text>
+
+              <!-- 中间正交连接线 -->
+              <line x1="404" y1="215" x2="462" y2="215" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <rect x="412" y="176" width="44" height="24" fill="#F7F6F2"/>
+              <text x="434" y="193" text-anchor="middle" font-size="12" font-weight="700" fill="#245A6B" class="t-mono">HOOK</text>
+
+              <!-- 右区：Hook 承接五大场景 -->
+              <rect x="468" y="24" width="600" height="382" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="468" y="24" width="600" height="38" fill="#245A6B"/>
+              <text x="486" y="48" font-size="14" font-weight="700" fill="#F7F6F2" class="t-mono">FIVE SCENARIOS · Hook 承接的五大典型场景</text>
+
+              <!-- 5 条水平层带 -->
+              <rect x="486" y="76" width="564" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="486" y="76" width="8" height="54" fill="#245A6B"/>
+              <text x="508" y="99" font-size="15" font-weight="700" fill="#1B2B33">1. 可观测性</text>
+              <text x="636" y="99" font-size="13" fill="#245A6B" class="t-mono">pg_stat_statements · auto_explain</text>
+              <text x="508" y="120" font-size="13" fill="#46585F">解析/规划/执行/Utility 统计 SQL 画像，慢查询结束自动输出计划</text>
+
+              <rect x="486" y="140" width="564" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="486" y="140" width="8" height="54" fill="#2E6373"/>
+              <text x="508" y="163" font-size="15" font-weight="700" fill="#1B2B33">2. 安全与审计</text>
+              <text x="636" y="163" font-size="13" fill="#245A6B" class="t-mono">passwordcheck · auth_delay · sepgsql</text>
+              <text x="508" y="184" font-size="13" fill="#46585F">口令规则校验、认证失败延迟防暴力破解、对象级强制访问控制</text>
+
+              <rect x="486" y="204" width="564" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="486" y="204" width="8" height="54" fill="#47808D"/>
+              <text x="508" y="227" font-size="15" font-weight="700" fill="#1B2B33">3. 优化器扩展</text>
+              <text x="636" y="227" font-size="13" fill="#245A6B" class="t-mono">set_rel_pathlist_hook · CustomPath</text>
+              <text x="508" y="248" font-size="13" fill="#46585F">向 base/join relation 注入自定义扫描路径，参与原生代价比较</text>
+
+              <rect x="486" y="268" width="564" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="486" y="268" width="8" height="54" fill="#2F7A66"/>
+              <text x="508" y="291" font-size="15" font-weight="700" fill="#1B2B33">4. 资源初始化</text>
+              <text x="636" y="291" font-size="13" fill="#2F7A66" class="t-mono">shmem_request_hook · LWLock</text>
+              <text x="508" y="312" font-size="13" fill="#46585F">在 postmaster 启动期申请共享内存区域与 LWLock tranche</text>
+
+              <rect x="486" y="332" width="564" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="486" y="332" width="8" height="54" fill="#AE8A3E"/>
+              <text x="508" y="355" font-size="15" font-weight="700" fill="#1B2B33">5. 配置协议</text>
+              <text x="636" y="355" font-size="13" fill="#AE8A3E" class="t-mono">GUC check / assign / show_hook</text>
+              <text x="508" y="376" font-size="13" fill="#46585F">控制自定义参数的合法性校验、确认赋值副作用与轻量展示</text>
+
+              <!-- 最右列：硬代价提醒 -->
+              <rect x="1088" y="24" width="288" height="382" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="1088" y="24" width="288" height="38" fill="#1E4B5A"/>
+              <text x="1106" y="48" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">COSTS · 必须直面的代价</text>
+
+              <text x="1106" y="92" font-size="14" font-weight="700" fill="#BE653B">01 · C 级崩溃半径</text>
+              <text x="1106" y="114" font-size="13" fill="#46585F">错误会直接击穿后端甚至实例</text>
+
+              <line x1="1106" y1="132" x2="1358" y2="132" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1106" y="158" font-size="14" font-weight="700" fill="#BE653B">02 · 单指针链式协作</text>
+              <text x="1106" y="180" font-size="13" fill="#46585F">受加载顺序影响，不能假定首位</text>
+
+              <line x1="1106" y1="198" x2="1358" y2="198" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1106" y="224" font-size="14" font-weight="700" fill="#BE653B">03 · 版本 ABI 漂移</text>
+              <text x="1106" y="246" font-size="13" fill="#46585F">如 PG 19 release notes 中</text>
+              <text x="1106" y="266" font-size="12" fill="#1B2B33" class="t-mono">get_relation_info_hook</text>
+              <text x="1106" y="286" font-size="12" fill="#46585F">已被 build_simple_rel_hook 替换</text>
+
+              <line x1="1106" y1="306" x2="1358" y2="306" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1106" y="332" font-size="14" font-weight="700" fill="#2F7A66">04 · 强工具非默认工具</text>
+              <text x="1106" y="354" font-size="13" fill="#46585F">能用 SQL/触发器/事件触发器/</text>
+              <text x="1106" y="374" font-size="13" fill="#46585F">FDW 解决，就不要先上 Hook</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">这个既强大又危险的「内核插槽」，在 PostgreSQL 的 C 源码里究竟长什么样？</span>
+            </div>
+            <div class="slide-footer">
+              <span>依据：doc/src/sgml/release-19.sgml · contrib 实证扩展</span>
+              <span class="footer-page">02 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 3: Hook 的三要素与源码标本 ==================== -->
+        <section class="slide" data-slide="3" data-title="三个组件构成整个 Hook 机制" data-sub="planner_hook 源码标本拆解">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">02 · ANATOMY OF A HOOK</span>
+              <span class="slide-tag">它是什么 · 源码标本</span>
+            </div>
+            <h1 class="slide-title">三个组件构成整个 Hook 机制</h1>
+            <p class="slide-lead">去掉神秘感：Hook 只是「函数指针类型 + 全局变量 + 核心分支」三件套，由内核留槽、由扩展在 _PG_init() 接管与转发。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 列 1: 头文件声明 -->
+              <rect x="24" y="28" width="416" height="296" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="28" width="416" height="38" fill="#1E4B5A"/>
+              <text x="42" y="52" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">01 · HEADER (include/optimizer/planner.h)</text>
+
+              <text x="42" y="92" font-size="15" font-weight="700" fill="#1B2B33">要素一：函数指针类型 + 全局变量</text>
+              <rect x="42" y="108" width="380" height="196" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="56" y="136" font-size="13" fill="#245A6B" class="t-mono">typedef PlannedStmt *(*planner_hook_type)(</text>
+              <text x="72" y="160" font-size="13" fill="#1B2B33" class="t-mono">Query *parse,</text>
+              <text x="72" y="182" font-size="13" fill="#1B2B33" class="t-mono">const char *query_string,</text>
+              <text x="72" y="204" font-size="13" fill="#1B2B33" class="t-mono">int cursorOptions,</text>
+              <text x="72" y="226" font-size="13" fill="#1B2B33" class="t-mono">ParamListInfo boundParams,</text>
+              <text x="72" y="248" font-size="13" fill="#1B2B33" class="t-mono">ExplainState *es);</text>
+              <text x="56" y="282" font-size="13" font-weight="700" fill="#BE653B" class="t-mono">extern PGDLLIMPORT planner_hook_type</text>
+              <text x="72" y="300" font-size="13" font-weight="700" fill="#BE653B" class="t-mono">planner_hook;</text>
+
+              <!-- 正交连接 1->2 -->
+              <line x1="440" y1="176" x2="486" y2="176" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- 列 2: 核心入口分支 -->
+              <rect x="492" y="28" width="416" height="296" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="492" y="28" width="416" height="38" fill="#2E6373"/>
+              <text x="510" y="52" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">02 · CORE ENTRY (plan/planner.c)</text>
+
+              <text x="510" y="92" font-size="15" font-weight="700" fill="#1B2B33">要素二：核心流程中的非空分支</text>
+              <rect x="510" y="108" width="380" height="196" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="524" y="138" font-size="13" fill="#245A6B" class="t-mono">PlannedStmt *planner(...) {</text>
+              <text x="540" y="166" font-size="13" font-weight="700" fill="#BE653B" class="t-mono">if (planner_hook)</text>
+              <text x="556" y="190" font-size="13" fill="#1B2B33" class="t-mono">result = (*planner_hook)(</text>
+              <text x="572" y="212" font-size="13" fill="#46585F" class="t-mono">parse, query_string, ...);</text>
+              <text x="540" y="242" font-size="13" font-weight="700" fill="#2F7A66" class="t-mono">else</text>
+              <text x="556" y="266" font-size="13" fill="#1B2B33" class="t-mono">result = standard_planner(</text>
+              <text x="572" y="288" font-size="13" fill="#46585F" class="t-mono">parse, query_string, ...);</text>
+
+              <!-- 正交连接 2->3 -->
+              <line x1="908" y1="176" x2="954" y2="176" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+
+              <!-- 列 3: 扩展安装与转发 -->
+              <rect x="960" y="28" width="416" height="296" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="960" y="28" width="416" height="38" fill="#2F7A66"/>
+              <text x="978" y="52" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">03 · EXTENSION (_PG_init &amp; Callback)</text>
+
+              <text x="978" y="92" font-size="15" font-weight="700" fill="#1B2B33">要素三：保存旧指针、安装、转发</text>
+              <rect x="978" y="108" width="380" height="196" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="992" y="134" font-size="13" fill="#2F7A66" class="t-mono">void _PG_init(void) {</text>
+              <text x="1008" y="156" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">prev_planner_hook = planner_hook;</text>
+              <text x="1008" y="178" font-size="13" font-weight="700" fill="#BE653B" class="t-mono">planner_hook = my_planner;</text>
+              <text x="992" y="200" font-size="13" fill="#2F7A66" class="t-mono">}</text>
+              <line x1="992" y1="214" x2="1342" y2="214" stroke="#D9D5CB" stroke-width="1" stroke-dasharray="4 3"/>
+              <text x="992" y="236" font-size="13" fill="#245A6B" class="t-mono">if (prev_planner_hook)</text>
+              <text x="1008" y="258" font-size="13" fill="#1B2B33" class="t-mono">return prev_planner_hook(...);</text>
+              <text x="992" y="280" font-size="13" fill="#245A6B" class="t-mono">return standard_planner(...);</text>
+
+              <!-- 底部职责分工横带 -->
+              <rect x="24" y="346" width="1352" height="60" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="44" y="381" font-size="15" font-weight="700" fill="#1E4B5A">内核与扩展的契约边界：</text>
+              <text x="234" y="381" font-size="15" fill="#1B2B33">内核只负责提供「函数指针插槽」与「standard_* 标准实现」；扩展负责「保存旧指针」「安装新指针」「决定何时转发」。</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">把这一个插槽放大到整条 SQL 请求，PostgreSQL 内核到底在哪些关键节点埋了钩子？</span>
+            </div>
+            <div class="slide-footer">
+              <span>源码依据：src/include/optimizer/planner.h · src/backend/optimizer/plan/planner.c</span>
+              <span class="footer-page">03 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 4: 请求处理管线中的 11 类 Hook (交互动画 1) ==================== -->
+        <section class="slide has-toolbar" data-slide="4" data-title="调用位置决定了 Hook 的能力边界" data-sub="请求处理管线中的 11 类 Hook 坐标">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">03 · REQUEST PIPELINE</span>
+              <span class="slide-tag">核心原理 · 交互追踪</span>
+            </div>
+            <h1 class="slide-title">调用位置决定了 Hook 的能力边界</h1>
+            <p class="slide-lead">不同阶段暴露给 Hook 的内核数据结构截然不同——选择请求类型，观察它穿过哪些地层与插槽。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="anim-toolbar">
+            <div class="anim-group">
+              <span class="anim-label">请求场景</span>
+              <button class="btn-ctrl active" data-pipe-mode="select">SELECT 查询</button>
+              <button class="btn-ctrl" data-pipe-mode="ddl">DDL 管控</button>
+              <button class="btn-ctrl" data-pipe-mode="auth">客户端认证</button>
+            </div>
+            <div class="anim-group">
+              <button class="btn-ctrl action" id="btn-pipe-play">播放追踪</button>
+              <button class="btn-ctrl" id="btn-pipe-step">单步</button>
+              <button class="btn-ctrl" id="btn-pipe-reset">重置</button>
+            </div>
+            <div class="anim-status" id="pipe-status">就绪：点击「播放追踪」或「单步」查看请求穿过路径</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 400" width="1400" height="400" xmlns="http://www.w3.org/2000/svg" id="svg-pipeline">
+              <rect x="0" y="0" width="1400" height="400" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 主请求管线横轴节点 (y=36..170) -->
+              <!-- Node 1: Auth -->
+              <g class="svg-node" id="p-auth">
+                <rect class="box-bg" x="24" y="34" width="196" height="126" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="24" y="34" width="196" height="28" fill="#245A6B"/>
+                <text x="122" y="53" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">01 · 认证层</text>
+                <text x="122" y="84" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">ClientAuth_hook</text>
+                <text x="122" y="108" text-anchor="middle" font-size="12" fill="#46585F">登录审计 / 失败延迟</text>
+                <text x="122" y="128" text-anchor="middle" font-size="11" fill="#89938F" class="t-mono">可见：Port / 状态码</text>
+                <text x="122" y="148" text-anchor="middle" font-size="11" fill="#245A6B" class="t-mono">auth_delay.c</text>
+              </g>
+
+              <line id="pl-1-2" x1="220" y1="97" x2="254" y2="97" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- Node 2: Parse Analyze -->
+              <g class="svg-node" id="p-parse">
+                <rect class="box-bg" x="260" y="34" width="210" height="126" fill="#CFE0DC" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="260" y="34" width="210" height="28" fill="#2E6373"/>
+                <text x="365" y="53" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">02 · 解析分析层</text>
+                <text x="365" y="84" text-anchor="middle" font-size="12" font-weight="700" fill="#1B2B33" class="t-mono">post_parse_analyze</text>
+                <text x="365" y="108" text-anchor="middle" font-size="12" fill="#1B2B33">queryId / 规范化 SQL</text>
+                <text x="365" y="128" text-anchor="middle" font-size="11" fill="#46585F" class="t-mono">可见：Query / ParseState</text>
+                <text x="365" y="148" text-anchor="middle" font-size="11" fill="#1E4B5A" class="t-mono">parser/analyze.c</text>
+              </g>
+
+              <!-- 分叉线：SELECT -> Planner (上) / DDL -> Utility (下) -->
+              <line id="pl-2-3" x1="470" y1="97" x2="512" y2="97" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <path id="pl-2-util" d="M 470 132 L 492 132 L 492 252 L 512 252" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- Node 3: Planner -->
+              <g class="svg-node" id="p-plan">
+                <rect class="box-bg" x="518" y="24" width="270" height="146" fill="#A4C4C6" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="518" y="24" width="270" height="28" fill="#47808D"/>
+                <text x="653" y="43" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">03 · 优化器与路径层</text>
+                <text x="653" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#1B2B33" class="t-mono">planner_hook</text>
+                <text x="653" y="96" text-anchor="middle" font-size="12" fill="#1B2B33" class="t-mono">set_rel / join_pathlist_hook</text>
+                <text x="653" y="118" text-anchor="middle" font-size="12" fill="#1B2B33" class="t-mono">join_search · create_upper_paths</text>
+                <text x="653" y="140" text-anchor="middle" font-size="11" fill="#1E4B5A" class="t-mono">可见：PlannerInfo / RelOptInfo</text>
+                <text x="653" y="159" text-anchor="middle" font-size="11" fill="#1E4B5A" class="t-mono">planner.c · allpaths.c · joinpath.c</text>
+              </g>
+
+              <line id="pl-3-4" x1="788" y1="97" x2="830" y2="97" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- Node 4: Executor -->
+              <g class="svg-node" id="p-exec">
+                <rect class="box-bg" x="836" y="24" width="286" height="146" fill="#74A5AD" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="836" y="24" width="286" height="28" fill="#1E4B5A"/>
+                <text x="979" y="43" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">04 · 执行器四阶段层</text>
+                <text x="979" y="76" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">ExecutorStart / Run_hook</text>
+                <text x="979" y="98" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">ExecutorFinish / End_hook</text>
+                <text x="979" y="122" text-anchor="middle" font-size="12" fill="#EBF1EE">统计耗时 / 行数 / buffer / WAL</text>
+                <text x="979" y="142" text-anchor="middle" font-size="11" fill="#CFE0DC" class="t-mono">可见：QueryDesc / EState / Instr</text>
+                <text x="979" y="160" text-anchor="middle" font-size="11" fill="#CFE0DC" class="t-mono">executor/execMain.c</text>
+              </g>
+
+              <!-- Node 5: ProcessUtility (下支路) -->
+              <g class="svg-node" id="p-util">
+                <rect class="box-bg" x="518" y="196" width="270" height="106" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="518" y="196" width="270" height="26" fill="#BE653B"/>
+                <text x="653" y="214" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">05 · UTILITY / DDL 路径</text>
+                <text x="653" y="242" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">ProcessUtility_hook</text>
+                <text x="653" y="264" text-anchor="middle" font-size="12" fill="#46585F">CREATE / ALTER / DROP / VACUUM</text>
+                <text x="653" y="286" text-anchor="middle" font-size="11" fill="#89938F" class="t-mono">可见：PlannedStmt / stmt_location</text>
+              </g>
+
+              <line id="pl-util-oa" x1="788" y1="249" x2="830" y2="249" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+
+              <!-- Node 6: ObjectAccess -->
+              <g class="svg-node" id="p-oa">
+                <rect class="box-bg" x="836" y="196" width="286" height="106" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="836" y="196" width="286" height="26" fill="#2E6373"/>
+                <text x="979" y="214" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">06 · 目录对象事件层</text>
+                <text x="979" y="242" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">object_access_hook</text>
+                <text x="979" y="264" text-anchor="middle" font-size="12" fill="#46585F">POST_CREATE / DROP / ALTER / EXEC</text>
+                <text x="979" y="286" text-anchor="middle" font-size="11" fill="#89938F" class="t-mono">可见：ObjectAccessType / is_internal</text>
+              </g>
+
+              <!-- 汇入日志层 -->
+              <path id="pl-4-log" d="M 1122 97 L 1146 97 L 1146 164 L 1168 164" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <path id="pl-oa-log" d="M 1122 249 L 1146 249 L 1146 164 L 1168 164" fill="none" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+
+              <!-- Node 7: Log -->
+              <g class="svg-node" id="p-log">
+                <rect class="box-bg" x="1174" y="96" width="202" height="136" fill="#F1EFE9" stroke="#AE8A3E" stroke-width="1.5"/>
+                <rect x="1174" y="96" width="202" height="28" fill="#AE8A3E"/>
+                <text x="1275" y="115" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">07 · 日志输出层</text>
+                <text x="1275" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">emit_log_hook</text>
+                <text x="1275" y="172" text-anchor="middle" font-size="12" fill="#46585F">日志转发 / 审计采集</text>
+                <text x="1275" y="194" text-anchor="middle" font-size="11" fill="#89938F" class="t-mono">可见：ErrorData</text>
+                <text x="1275" y="216" text-anchor="middle" font-size="11" fill="#89938F" class="t-mono">utils/error/elog.c</text>
+              </g>
+
+              <!-- 底层支撑地层：Shmem & GUC -->
+              <rect x="24" y="324" width="664" height="58" fill="#1E4B5A" stroke="#163945" stroke-width="1"/>
+              <text x="44" y="350" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">底座 A · 共享内存初始化：shmem_request_hook · shmem_startup_hook</text>
+              <text x="44" y="370" font-size="12" fill="#CFE0DC">postmaster 启动期申请共享内存与 LWLock tranche（storage/ipc/ipci.c）</text>
+
+              <rect x="708" y="324" width="668" height="58" fill="#2E6373" stroke="#23505E" stroke-width="1"/>
+              <text x="728" y="350" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">底座 B · GUC 配置协议：check_hook · assign_hook · show_hook</text>
+              <text x="728" y="370" font-size="12" fill="#EBF1EE">贯穿全程的配置参数校验、确认赋值副作用与展示控制（utils/misc/guc.c）</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">11 类插槽各司其职，但如果两个扩展同时盯上同一个全局指针，它们怎么和平共处？</span>
+            </div>
+            <div class="slide-footer">
+              <span>提示：点击上方「SELECT 查询 / DDL 管控 / 客户端认证」切换并单步追踪</span>
+              <span class="footer-page">04 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 5: 链式转发与截断故障 (交互动画 2) ==================== -->
+        <section class="slide has-toolbar" data-slide="5" data-title="后加载在链头，不转发即截断" data-sub="Hook 链式注册、转发模型与工程纪律">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">04 · CHAINING &amp; DISCIPLINE</span>
+              <span class="slide-tag">核心原理 · 链式模拟</span>
+            </div>
+            <h1 class="slide-title">后加载在链头，不转发即截断</h1>
+            <p class="slide-lead">全局 Hook 不是内建链表——多个扩展共存全靠自觉保存前值并转发；一旦中间节点漏转发，先加载的扩展会被静默「吃掉」。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="anim-toolbar">
+            <div class="anim-group">
+              <span class="anim-label">转发模式</span>
+              <button class="btn-ctrl active" id="btn-chain-ok">正常链式转发</button>
+              <button class="btn-ctrl warn" id="btn-chain-cut">模拟故障：扩展 B 忘记转发</button>
+            </div>
+            <div class="anim-group">
+              <button class="btn-ctrl action" id="btn-chain-run">触发一次调用</button>
+              <button class="btn-ctrl" id="btn-chain-reset">重置</button>
+            </div>
+            <div class="anim-status" id="chain-status">加载顺序：shared_preload_libraries = 'pg_stat_statements, auto_explain'</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 400" width="1400" height="400" xmlns="http://www.w3.org/2000/svg" id="svg-chain">
+              <rect x="0" y="0" width="1400" height="400" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 上半区：调用链图示 -->
+              <text x="32" y="34" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">RUNTIME CALL CHAIN · 运行时调用链（后加载位于链头）</text>
+
+              <!-- Core -->
+              <g class="svg-node" id="c-core">
+                <rect class="box-bg" x="32" y="54" width="230" height="156" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="32" y="54" width="230" height="30" fill="#1E4B5A"/>
+                <text x="147" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">PostgreSQL Core</text>
+                <text x="147" y="112" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">ExecutorStart()</text>
+                <text x="147" y="138" text-anchor="middle" font-size="12" fill="#46585F">检查全局函数指针：</text>
+                <text x="147" y="160" text-anchor="middle" font-size="12" fill="#BE653B" class="t-mono">ExecutorStart_hook</text>
+                <text x="147" y="190" text-anchor="middle" font-size="12" fill="#245A6B">当前指向 → 扩展 B</text>
+              </g>
+
+              <line id="cl-1" x1="262" y1="132" x2="334" y2="132" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <text x="298" y="122" text-anchor="middle" font-size="11" fill="#46585F" class="t-mono">STEP 1</text>
+
+              <!-- Ext B (后加载 / 链头) -->
+              <g class="svg-node" id="c-extb">
+                <rect class="box-bg" x="340" y="54" width="290" height="156" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="340" y="54" width="290" height="30" fill="#2E6373"/>
+                <text x="485" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">扩展 B · auto_explain (后加载=链头)</text>
+                <text x="485" y="108" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">explain_ExecutorStart()</text>
+                <text x="485" y="132" text-anchor="middle" font-size="12" fill="#46585F">1. 决定是否采样并开启 instr</text>
+                <text x="485" y="156" text-anchor="middle" font-size="12" id="c-extb-fwd" fill="#2F7A66" font-weight="700">2. 调用 prev_ExecutorStart()</text>
+                <text x="485" y="186" text-anchor="middle" font-size="11" fill="#89938F" class="t-mono">prev 保存了 扩展 A 的入口</text>
+              </g>
+
+              <line id="cl-2" x1="630" y1="132" x2="702" y2="132" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <text id="cl-2-lbl" x="666" y="122" text-anchor="middle" font-size="11" fill="#46585F" class="t-mono">STEP 2</text>
+
+              <!-- 截断跳过线（默认隐藏，故障模式显示） -->
+              <path id="cl-bypass" d="M 485 210 L 485 244 L 1222 244 L 1222 214" fill="none" stroke="#BE653B" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#arr-terra)" opacity="0"/>
+              <text id="cl-bypass-lbl" x="854" y="236" text-anchor="middle" font-size="12" font-weight="700" fill="#BE653B" opacity="0">截断故障：直接调 standard_ExecutorStart()，跳过扩展 A！</text>
+
+              <!-- Ext A (先加载) -->
+              <g class="svg-node" id="c-exta">
+                <rect class="box-bg" x="708" y="54" width="290" height="156" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="708" y="54" width="290" height="30" fill="#47808D"/>
+                <text x="853" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">扩展 A · pg_stat_statements (先加载)</text>
+                <text x="853" y="108" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">pgss_ExecutorStart()</text>
+                <text x="853" y="132" text-anchor="middle" font-size="12" fill="#46585F">1. 打开 INSTRUMENT_ALL 统计</text>
+                <text x="853" y="156" text-anchor="middle" font-size="12" fill="#2F7A66" font-weight="700">2. 调用 standard_ExecutorStart()</text>
+                <text x="853" y="186" text-anchor="middle" font-size="11" id="c-exta-note" fill="#89938F" class="t-mono">prev == NULL（链尾）</text>
+              </g>
+
+              <line id="cl-3" x1="998" y1="132" x2="1070" y2="132" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <text id="cl-3-lbl" x="1034" y="122" text-anchor="middle" font-size="11" fill="#46585F" class="t-mono">STEP 3</text>
+
+              <!-- Standard -->
+              <g class="svg-node" id="c-std">
+                <rect class="box-bg" x="1076" y="54" width="292" height="156" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="1076" y="54" width="292" height="30" fill="#2F7A66"/>
+                <text x="1222" y="74" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">KERNEL STANDARD · 标准实现</text>
+                <text x="1222" y="112" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">standard_ExecutorStart()</text>
+                <text x="1222" y="140" text-anchor="middle" font-size="12" fill="#46585F">初始化 EState 与计划树节点</text>
+                <text x="1222" y="164" text-anchor="middle" font-size="12" fill="#2F7A66">所有前置 Hook 观测均已生效</text>
+                <text x="1222" y="190" text-anchor="middle" font-size="11" fill="#46585F" class="t-mono">src/backend/executor/execMain.c</text>
+              </g>
+
+              <!-- 下半区：四条工程纪律 -->
+              <rect x="32" y="268" width="1336" height="112" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="50" y="294" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">ENGINEERING DISCIPLINES · 链式协作四条硬纪律（contrib 源码实证）</text>
+
+              <rect x="50" y="308" width="310" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="64" y="330" font-size="13" font-weight="700" fill="#1B2B33">1. 不假设自己是唯一扩展</text>
+              <text x="64" y="352" font-size="12" fill="#46585F">必须保存 prev_* 并按约定转发</text>
+
+              <rect x="378" y="308" width="310" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="392" y="330" font-size="13" font-weight="700" fill="#1B2B33">2. 异常路径必须恢复状态</text>
+              <text x="392" y="352" font-size="12" fill="#46585F">用 PG_TRY/PG_FINALLY 守护 nesting_level</text>
+
+              <rect x="706" y="308" width="310" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="720" y="330" font-size="13" font-weight="700" fill="#1B2B33">3. 禁止热路径阻塞 I/O</text>
+              <text x="720" y="352" font-size="12" fill="#46585F">执行器/认证/日志路径严禁长阻塞</text>
+
+              <rect x="1034" y="308" width="316" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1048" y="330" font-size="13" font-weight="700" fill="#1B2B33">4. 先调旧 Hook 还是后调？</text>
+              <text x="1048" y="352" font-size="12" fill="#46585F">passwordcheck/auth_delay 均先转发旧链</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">理清了多扩展如何链式协作，我们再切入最容易被误用的两层——优化器与执行器。</span>
+            </div>
+            <div class="slide-footer">
+              <span>源码实证：pg_stat_statements.c · auto_explain.c · passwordcheck.c · auth_delay.c</span>
+              <span class="footer-page">05 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 6: 优化器与执行器 Hook 职责边界 (交互动画 3) ==================== -->
+        <section class="slide has-toolbar" data-slide="6" data-title="优化器竞选路径，执行器只做观测" data-sub="Planner Path 注入与 Executor 四阶段观测">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">05 · PLANNER &amp; EXECUTOR</span>
+              <span class="slide-tag">核心原理 · 路径竞选演示</span>
+            </div>
+            <h1 class="slide-title">优化器竞选路径，执行器只做观测</h1>
+            <p class="slide-lead">优化器 Hook 把 CustomPath 送进原生代价模型公平竞选；执行器四阶段读取 QueryDesc 做统计与输出，绝不篡改查询语义。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="anim-toolbar">
+            <div class="anim-group">
+              <span class="anim-label">代价场景</span>
+              <button class="btn-ctrl active" id="btn-plan-std">常规索引路径代价更低</button>
+              <button class="btn-ctrl" id="btn-plan-custom">CustomPath 硬件加速代价更低</button>
+            </div>
+            <div class="anim-group">
+              <button class="btn-ctrl action" id="btn-plan-run">演示路径竞选与执行</button>
+            </div>
+            <div class="anim-status" id="plan-status">原则（custom-scan.sgml）：可改「怎么扫」，严禁改「返回什么」</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 400" width="1400" height="400" xmlns="http://www.w3.org/2000/svg" id="svg-planexec">
+              <rect x="0" y="0" width="1400" height="400" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 上层带：优化器阶段 -->
+              <rect x="20" y="18" width="1360" height="196" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="18" width="1360" height="28" fill="#245A6B"/>
+              <text x="36" y="37" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">PLANNER PHASE · 规划阶段：注入候选路径并由优化器按成本选择（planner.c / allpaths.c / joinpath.c）</text>
+
+              <!-- Query -> planner_hook -->
+              <g class="svg-node" id="pe-entry">
+                <rect class="box-bg" x="38" y="64" width="210" height="130" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="143" y="90" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="t-mono">planner_hook</text>
+                <text x="143" y="114" text-anchor="middle" font-size="12" fill="#46585F">包住整个规划入口</text>
+                <text x="143" y="138" text-anchor="middle" font-size="11" fill="#245A6B" class="t-mono">planner_setup_hook</text>
+                <text x="143" y="158" text-anchor="middle" font-size="11" fill="#245A6B" class="t-mono">planner_shutdown_hook</text>
+                <text x="143" y="180" text-anchor="middle" font-size="11" fill="#89938F">输入：Query 树</text>
+              </g>
+
+              <line x1="248" y1="129" x2="288" y2="129" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <!-- 路径生成池 -->
+              <g class="svg-node" id="pe-paths">
+                <rect class="box-bg" x="294" y="56" width="446" height="146" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="312" y="78" font-size="12" font-weight="700" fill="#1E4B5A" class="t-mono">候选路径池 (RelOptInfo · add_path)</text>
+
+                <!-- 原生路径 -->
+                <rect id="pe-box-std" x="312" y="90" width="194" height="44" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="409" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33">SeqScan / IndexScan</text>
+                <text x="409" y="127" text-anchor="middle" font-size="11" fill="#46585F" class="t-mono" id="pe-cost-std">原生路径 · 状态：候选</text>
+
+                <!-- CustomPath -->
+                <rect id="pe-box-custom" x="526" y="90" width="196" height="44" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="624" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33">CustomPath (扩展注入)</text>
+                <text x="624" y="127" text-anchor="middle" font-size="11" fill="#BE653B" class="t-mono" id="pe-cost-custom">set_rel_pathlist_hook</text>
+
+                <!-- 下方三类路径钩子标注 -->
+                <text x="312" y="160" font-size="11" fill="#46585F" class="t-mono">Base: set_rel_pathlist_hook</text>
+                <text x="526" y="160" font-size="11" fill="#46585F" class="t-mono">Join: set_join_pathlist / join_search</text>
+                <text x="312" y="182" font-size="11" fill="#46585F" class="t-mono">Upper: create_upper_paths_hook (GROUP / WINDOW / DISTINCT / FINAL)</text>
+              </g>
+
+              <line x1="740" y1="129" x2="782" y2="129" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <!-- 成本比较器 -->
+              <g class="svg-node" id="pe-winner">
+                <rect class="box-bg" x="788" y="64" width="268" height="130" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="922" y="90" text-anchor="middle" font-size="13" font-weight="700" fill="#2F7A66" class="t-mono">cheapest_total_path</text>
+                <text x="922" y="118" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2B33" id="pe-win-title">优胜路径：IndexScan</text>
+                <text x="922" y="144" text-anchor="middle" font-size="12" fill="#46585F" id="pe-win-desc">优化器比较代价后生成 Plan</text>
+                <text x="922" y="174" text-anchor="middle" font-size="11" fill="#2F7A66" class="t-mono">结果集必须与标准路径严格一致</text>
+              </g>
+
+              <line x1="1056" y1="129" x2="1098" y2="129" stroke="#2F7A66" stroke-width="1.8" marker-end="url(#arr-teal)"/>
+
+              <!-- 输出 Plan -->
+              <g class="svg-node" id="pe-plan">
+                <rect class="box-bg" x="1104" y="64" width="256" height="130" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+                <text x="1232" y="92" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">PlannedStmt</text>
+                <text x="1232" y="120" text-anchor="middle" font-size="12" fill="#46585F">进入执行器的只读蓝图</text>
+                <rect x="1126" y="138" width="212" height="40" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <text x="1232" y="156" text-anchor="middle" font-size="12" font-weight="700" fill="#BE653B">红线边界</text>
+                <text x="1232" y="172" text-anchor="middle" font-size="11" fill="#1B2B33">成本估错会选坏计划，语义绝不可改</text>
+              </g>
+
+              <!-- 向下直角连线：Plan -> ExecutorStart -->
+              <path d="M 1232 194 L 1232 224 L 180 224 L 180 242" fill="none" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <!-- 下层带：执行器四阶段 -->
+              <rect x="20" y="246" width="1360" height="136" fill="#EBF1EE" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="20" y="246" width="1360" height="26" fill="#1E4B5A"/>
+              <text x="36" y="264" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">EXECUTOR PHASE · 执行器四阶段：面向可观测性的 Instrumentation 采集（execMain.c）</text>
+
+              <g class="svg-node" id="ex-1">
+                <rect class="box-bg" x="38" y="284" width="302" height="84" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="54" y="308" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">1. ExecutorStart_hook</text>
+                <text x="54" y="330" font-size="12" fill="#1B2B33">计划初始化前后，开启采样与</text>
+                <text x="54" y="350" font-size="12" fill="#46585F" class="t-mono">INSTRUMENT_ALL / instrument_options</text>
+              </g>
+              <line x1="340" y1="326" x2="372" y2="326" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <g class="svg-node" id="ex-2">
+                <rect class="box-bg" x="378" y="284" width="302" height="84" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="394" y="308" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">2. ExecutorRun_hook</text>
+                <text x="394" y="330" font-size="12" fill="#1B2B33">实际执行计划树（可能被多次调用）</text>
+                <text x="394" y="350" font-size="12" fill="#46585F">维护 nesting_level 与累计总耗时</text>
+              </g>
+              <line x1="680" y1="326" x2="712" y2="326" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <g class="svg-node" id="ex-3">
+                <rect class="box-bg" x="718" y="284" width="302" height="84" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="734" y="308" font-size="13" font-weight="700" fill="#245A6B" class="t-mono">3. ExecutorFinish_hook</text>
+                <text x="734" y="330" font-size="12" fill="#1B2B33">执行完成后的收尾阶段</text>
+                <text x="734" y="350" font-size="12" fill="#46585F">覆盖 AFTER triggers 等后续触发动作</text>
+              </g>
+              <line x1="1020" y1="326" x2="1052" y2="326" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <g class="svg-node" id="ex-4">
+                <rect class="box-bg" x="1058" y="284" width="302" height="84" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="1074" y="308" font-size="13" font-weight="700" fill="#2F7A66" class="t-mono">4. ExecutorEnd_hook</text>
+                <text x="1074" y="330" font-size="12" fill="#1B2B33">释放资源前读出完整执行指标</text>
+                <text x="1074" y="350" font-size="12" fill="#46585F">pgss 写共享统计 / auto_explain 印计划</text>
+              </g>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">SELECT 和 DML 走优化器与执行器，那 CREATE、ALTER、DROP 这类 DDL 命令去哪了？</span>
+            </div>
+            <div class="slide-footer">
+              <span>源码依据：doc/src/sgml/custom-scan.sgml · contrib/auto_explain/auto_explain.c</span>
+              <span class="footer-page">06 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 7: ProcessUtility 与 ObjectAccess 双层管控 ==================== -->
+        <section class="slide" data-slide="7" data-title="DDL 管控看 Utility，安全审计挂对象事件" data-sub="ProcessUtility_hook 与 object_access_hook">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">06 · DDL &amp; OBJECT LIFECYCLE</span>
+              <span class="slide-tag">核心原理 · 双层管控</span>
+            </div>
+            <h1 class="slide-title">DDL 管控看 Utility，安全审计挂对象事件</h1>
+            <p class="slide-lead">Utility 命令不走普通执行器；对象访问 Hook 则直接锚定目录对象生命周期，绕开 SQL 语法花样，但必须警惕递归与内部事件。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 上半层：ProcessUtility_hook -->
+              <rect x="24" y="22" width="1352" height="184" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="24" y="22" width="1352" height="32" fill="#BE653B"/>
+              <text x="42" y="43" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">LAYER A · ProcessUtility_hook（src/backend/tcop/utility.c）—— 命令级入口</text>
+
+              <rect x="44" y="70" width="350" height="118" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="60" y="96" font-size="15" font-weight="700" fill="#1B2B33">覆盖范围：非常规执行路径语句</text>
+              <text x="60" y="122" font-size="13" fill="#245A6B" class="t-mono">CREATE TABLE / ROLE · ALTER SYSTEM</text>
+              <text x="60" y="144" font-size="13" fill="#245A6B" class="t-mono">DROP INDEX · VACUUM · EXPLAIN</text>
+              <text x="60" y="170" font-size="13" fill="#46585F">适合：DDL 审计、Utility 计时、高危命令拦截</text>
+
+              <line x1="394" y1="129" x2="436" y2="129" stroke="#BE653B" stroke-width="1.8" marker-end="url(#arr-terra)"/>
+
+              <!-- 细节 1 -->
+              <rect x="442" y="70" width="440" height="118" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="460" y="96" font-size="14" font-weight="700" fill="#BE653B">源码警示 1 · 多语句切分</text>
+              <text x="460" y="122" font-size="13" fill="#1B2B33">同一个 queryString 可能含多条分号分隔语句</text>
+              <text x="460" y="146" font-size="13" fill="#1B2B33">必须使用 <tspan class="t-mono" font-weight="700">pstmt-&gt;stmt_location</tspan> 与 <tspan class="t-mono" font-weight="700">stmt_len</tspan></text>
+              <text x="460" y="170" font-size="13" fill="#46585F">精准截取当前正在执行的子语句片段</text>
+
+              <!-- 细节 2 -->
+              <rect x="904" y="70" width="452" height="118" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="922" y="96" font-size="14" font-weight="700" fill="#BE653B">源码警示 2 · 递归调用子命令</text>
+              <text x="922" y="122" font-size="13" fill="#1B2B33">部分 Utility 会再次递归进入 ProcessUtility()</text>
+              <text x="922" y="146" font-size="13" fill="#1B2B33">典型例子：<tspan class="t-mono" font-weight="700">CREATE SCHEMA</tspan>、<tspan class="t-mono" font-weight="700">ALTER TABLE</tspan> 子句</text>
+              <text x="922" y="170" font-size="13" fill="#46585F">审计与计数必须感知递归层级，避免重复记录</text>
+
+              <!-- 向下关联线 -->
+              <line x1="700" y1="206" x2="700" y2="226" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <!-- 下半层：object_access_hook -->
+              <rect x="24" y="232" width="1352" height="176" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="232" width="1352" height="32" fill="#1E4B5A"/>
+              <text x="42" y="253" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">LAYER B · object_access_hook（src/include/catalog/objectaccess.h）—— 目录对象生命周期事件</text>
+
+              <!-- 6 个事件格 (3x2) -->
+              <rect x="44" y="278" width="276" height="50" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="182" y="308" text-anchor="middle" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">OAT_POST_CREATE</text>
+
+              <rect x="336" y="278" width="276" height="50" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="474" y="308" text-anchor="middle" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">OAT_DROP</text>
+
+              <rect x="628" y="278" width="276" height="50" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="766" y="308" text-anchor="middle" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">OAT_POST_ALTER</text>
+
+              <rect x="44" y="340" width="276" height="50" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="182" y="370" text-anchor="middle" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">OAT_NAMESPACE_SEARCH</text>
+
+              <rect x="336" y="340" width="276" height="50" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="474" y="370" text-anchor="middle" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">OAT_FUNCTION_EXECUTE</text>
+
+              <rect x="628" y="340" width="276" height="50" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="766" y="370" text-anchor="middle" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">OAT_TRUNCATE</text>
+
+              <!-- 右侧 is_internal 边界提示 -->
+              <rect x="926" y="278" width="430" height="112" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="944" y="304" font-size="14" font-weight="700" fill="#2F7A66">核心优势与 is_internal 边界</text>
+              <text x="944" y="328" font-size="13" fill="#1B2B33">优势：绕开 SQL 文本写法差异，直挂内核对象事件</text>
+              <text x="944" y="352" font-size="13" fill="#BE653B">边界：TOAST/内部索引/约束会带 is_internal 标志</text>
+              <text x="944" y="374" font-size="13" fill="#46585F">若不过滤，可能误阻断 PostgreSQL 自身维护动作</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">行为路径都看清了，那扩展的配置开关（GUC）和加载时机（LOAD vs Preload）又有哪些硬规则？</span>
+            </div>
+            <div class="slide-footer">
+              <span>源码依据：src/backend/tcop/utility.c · src/backend/catalog/objectaccess.c</span>
+              <span class="footer-page">07 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 8: GUC 协议与三类加载时机边界 ==================== -->
+        <section class="slide" data-slide="8" data-title="GUC 分离校验与副作用，加载时机定生死" data-sub="GUC 三类 Hook 与 Preload 地层边界">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">07 · GUC &amp; PRELOAD BOUNDARY</span>
+              <span class="slide-tag">配置协议与加载时机</span>
+            </div>
+            <h1 class="slide-title">GUC 分离校验与副作用，加载时机定生死</h1>
+            <p class="slide-lead">自定义配置项绝非裸变量赋值；而需要共享内存与 LWLock 的扩展，必须进入 postmaster 启动期预加载。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 左半区：GUC 三阶段协议 -->
+              <rect x="24" y="24" width="644" height="382" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="24" width="644" height="34" fill="#245A6B"/>
+              <text x="42" y="46" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">GUC HOOK PROTOCOL（utils/guc.h · misc/guc.c）</text>
+
+              <!-- Stage 1 -->
+              <rect x="44" y="76" width="604" height="80" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="44" y="76" width="12" height="80" fill="#245A6B"/>
+              <text x="72" y="102" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">1. check_hook (GucBool / Int / StringCheckHook)</text>
+              <text x="72" y="124" font-size="13" fill="#46585F">只验证「能不能设」；返回 false 按协议报错，用 PG_TRY/PG_CATCH 防泄漏</text>
+              <text x="72" y="144" font-size="12" fill="#BE653B">严禁在 check 阶段偷偷做不可回滚副作用（测试 SET 也可能触发）</text>
+
+              <line x1="346" y1="156" x2="346" y2="176" stroke="#245A6B" stroke-width="1.8" marker-end="url(#arr-indigo)"/>
+
+              <!-- Stage 2 -->
+              <rect x="44" y="182" width="604" height="72" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.2"/>
+              <rect x="44" y="182" width="12" height="72" fill="#2F7A66"/>
+              <text x="72" y="208" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">2. assign_hook (Guc*AssignHook)</text>
+              <text x="72" y="234" font-size="13" fill="#46585F">确认赋值后才执行副作用，把生效配置安全传播到运行状态</text>
+
+              <line x1="346" y1="254" x2="346" y2="274" stroke="#2F7A66" stroke-width="1.8" marker-end="url(#arr-teal)"/>
+
+              <!-- Stage 3 -->
+              <rect x="44" y="280" width="604" height="54" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1.2"/>
+              <rect x="44" y="280" width="12" height="54" fill="#AE8A3E"/>
+              <text x="72" y="304" font-size="14" font-weight="700" fill="#1B2B33" class="t-mono">3. show_hook (GucShowHook)</text>
+              <text x="72" y="324" font-size="13" fill="#46585F">控制 SHOW 展示格式，必须轻量，禁止昂贵计算</text>
+
+              <!-- Prefix Reserved -->
+              <rect x="44" y="346" width="604" height="44" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="62" y="373" font-size="13" font-weight="700" fill="#1E4B5A">规范：必须调用 <tspan class="t-mono">MarkGUCPrefixReserved()</tspan> 防止前缀被误占</text>
+
+              <!-- 右半区：加载时机三层地层 -->
+              <rect x="692" y="24" width="684" height="382" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="692" y="24" width="684" height="34" fill="#1E4B5A"/>
+              <text x="710" y="46" font-size="13" font-weight="700" fill="#F7F6F2" class="t-mono">PRELOAD STRATA · 三类加载时机与能力边界（xfunc.sgml / load.sgml）</text>
+
+              <!-- Tier 1: LOAD -->
+              <rect x="712" y="76" width="644" height="84" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1.2"/>
+              <text x="732" y="102" font-size="15" font-weight="700" fill="#1B2B33">浅层 · LOAD 'lib'</text>
+              <text x="952" y="102" font-size="12" fill="#46585F" class="t-mono">作用域：仅当前会话</text>
+              <text x="732" y="126" font-size="13" fill="#46585F">适合：单会话调试、局部启用 Hook 改变当前连接行为</text>
+              <text x="732" y="148" font-size="12" fill="#BE653B">限制：无法影响其他会话，更不能申请启动期共享内存</text>
+
+              <!-- Tier 2: session / local preload -->
+              <rect x="712" y="174" width="644" height="84" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1.2"/>
+              <text x="732" y="200" font-size="15" font-weight="700" fill="#1B2B33">中层 · session / local_preload_libraries</text>
+              <text x="1090" y="200" font-size="12" fill="#1E4B5A" class="t-mono">作用域：每个新会话启动时</text>
+              <text x="732" y="224" font-size="13" fill="#1B2B33">适合：按库/角色/会话自动挂载轻量 Hook（无需重启实例）</text>
+              <text x="732" y="246" font-size="12" fill="#46585F">限制：仍晚于 postmaster 共享内存初始化窗口</text>
+
+              <!-- Tier 3: shared_preload_libraries -->
+              <rect x="712" y="272" width="644" height="118" fill="#1E4B5A" stroke="#163945" stroke-width="1.5"/>
+              <text x="732" y="300" font-size="15" font-weight="700" fill="#F7F6F2">深层 · shared_preload_libraries（需重启实例）</text>
+              <text x="1152" y="300" font-size="12" fill="#CFE0DC" class="t-mono">作用域：全局实例</text>
+              <text x="732" y="326" font-size="13" fill="#EBF1EE">唯一允许在 _PG_init() 注册 shmem_request_hook 的加载窗口：</text>
+              <text x="732" y="350" font-size="12" fill="#F7E9DE" class="t-mono">RequestAddinShmemSpace() · RequestNamedLWLockTranche()</text>
+              <text x="732" y="374" font-size="12" fill="#CFE0DC">实证：pgss 检查 process_shared_preload_libraries_in_progress，非预加载则拒绝安装</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">看完了内核全部机理，回到架构选型现场：Hook 和触发器、事件触发器、FDW、Custom Scan 该怎么横向对比？</span>
+            </div>
+            <div class="slide-footer">
+              <span>源码依据：src/backend/storage/ipc/ipci.c · doc/src/sgml/config.sgml</span>
+              <span class="footer-page">08 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 9: 六大扩展机制横向对比 ==================== -->
+        <section class="slide" data-slide="9" data-title="越靠近内核能力越强，代价也同阶上升" data-sub="PostgreSQL 六大扩展机制能力与风险矩阵">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">08 · MECHANISM COMPARISON</span>
+              <span class="slide-tag">横向对比 · 选型坐标系</span>
+            </div>
+            <h1 class="slide-title">越靠近内核能力越强，代价也同阶上升</h1>
+            <p class="slide-lead">从表层 SQL 函数到底层内核 Hook，按地层深度排开六大扩展机制：先问「能否用更窄的机制完成」。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 表头 -->
+              <rect x="16" y="16" width="1368" height="38" fill="#1E4B5A"/>
+              <text x="34" y="40" font-size="13" font-weight="700" fill="#F7F6F2">扩展机制 (浅→深)</text>
+              <text x="218" y="40" font-size="13" font-weight="700" fill="#F7F6F2">主要目标与语言</text>
+              <text x="454" y="40" font-size="13" font-weight="700" fill="#F7F6F2">影响范围与加载</text>
+              <text x="698" y="40" font-size="13" font-weight="700" fill="#F7F6F2">典型风险</text>
+              <text x="954" y="40" font-size="13" font-weight="700" fill="#F7F6F2">适合场景</text>
+              <text x="1178" y="40" font-size="13" font-weight="700" fill="#F7F6F2">不适合场景</text>
+
+              <!-- Row 1: SQL 函数 -->
+              <rect x="16" y="54" width="1368" height="58" fill="#EBF1EE" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="16" y="54" width="8" height="58" fill="#CFE0DC"/>
+              <text x="34" y="88" font-size="14" font-weight="700" fill="#1B2B33">SQL 函数 / 过程</text>
+              <text x="218" y="79" font-size="13" fill="#1B2B33">提供计算或操作接口</text>
+              <text x="218" y="99" font-size="12" fill="#46585F" class="t-mono">SQL / PL / C</text>
+              <text x="454" y="79" font-size="13" fill="#1B2B33">调用点局部</text>
+              <text x="454" y="99" font-size="12" fill="#46585F">安装扩展即可</text>
+              <text x="698" y="88" font-size="13" fill="#46585F">权限控制与执行成本</text>
+              <text x="954" y="88" font-size="13" fill="#2F7A66">业务函数、工具函数</text>
+              <text x="1178" y="88" font-size="13" fill="#BE653B">全局内核观测</text>
+
+              <!-- Row 2: 普通触发器 -->
+              <rect x="16" y="112" width="1368" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="16" y="112" width="8" height="58" fill="#A4C4C6"/>
+              <text x="34" y="146" font-size="14" font-weight="700" fill="#1B2B33">普通触发器</text>
+              <text x="218" y="137" font-size="13" fill="#1B2B33">响应表级 DML</text>
+              <text x="218" y="157" font-size="12" fill="#46585F" class="t-mono">SQL / PL / C</text>
+              <text x="454" y="137" font-size="13" fill="#1B2B33">目标表局部</text>
+              <text x="454" y="157" font-size="12" fill="#46585F">绑定到具体表</text>
+              <text x="698" y="146" font-size="13" fill="#46585F">写放大、递归触发</text>
+              <text x="954" y="146" font-size="13" fill="#2F7A66">行级/语句级数据约束</text>
+              <text x="1178" y="146" font-size="13" fill="#BE653B">跨数据库全局策略</text>
+
+              <!-- Row 3: 事件触发器 -->
+              <rect x="16" y="170" width="1368" height="58" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="16" y="170" width="8" height="58" fill="#74A5AD"/>
+              <text x="34" y="204" font-size="14" font-weight="700" fill="#1B2B33">事件触发器</text>
+              <text x="218" y="195" font-size="13" fill="#1B2B33">响应 DDL 事件</text>
+              <text x="218" y="215" font-size="12" fill="#46585F" class="t-mono">SQL / PL / C</text>
+              <text x="454" y="195" font-size="13" fill="#1B2B33">数据库级 DDL 事件</text>
+              <text x="454" y="215" font-size="12" fill="#46585F">无需 preload</text>
+              <text x="698" y="204" font-size="13" fill="#46585F">DDL 递归、覆盖不足</text>
+              <text x="954" y="204" font-size="13" fill="#2F7A66">常规 DDL 审计</text>
+              <text x="1178" y="204" font-size="13" fill="#BE653B">DML 执行观测</text>
+
+              <!-- Row 4: FDW -->
+              <rect x="16" y="228" width="1368" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="16" y="228" width="8" height="58" fill="#47808D"/>
+              <text x="34" y="262" font-size="14" font-weight="700" fill="#1B2B33">FDW 外部表</text>
+              <text x="218" y="253" font-size="13" fill="#1B2B33">访问外部数据源</text>
+              <text x="218" y="273" font-size="12" fill="#46585F" class="t-mono">C 为主</text>
+              <text x="454" y="253" font-size="13" fill="#1B2B33">外表访问路径</text>
+              <text x="454" y="273" font-size="12" fill="#46585F">server / user mapping</text>
+              <text x="698" y="262" font-size="13" fill="#46585F">远端一致性、下推边界</text>
+              <text x="954" y="262" font-size="13" fill="#2F7A66">外部系统读写集成</text>
+              <text x="1178" y="262" font-size="13" fill="#BE653B">改造本地表执行计划</text>
+
+              <!-- Row 5: Custom Scan -->
+              <rect x="16" y="286" width="1368" height="58" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="16" y="286" width="8" height="58" fill="#2E6373"/>
+              <text x="34" y="320" font-size="14" font-weight="700" fill="#1B2B33">Custom Scan</text>
+              <text x="218" y="311" font-size="13" fill="#1B2B33">添加新扫描/执行路径</text>
+              <text x="218" y="331" font-size="12" fill="#46585F" class="t-mono">C 语言</text>
+              <text x="454" y="311" font-size="13" fill="#1B2B33">优化器选中路径</text>
+              <text x="454" y="331" font-size="12" fill="#46585F">通常配合 path Hook</text>
+              <text x="698" y="320" font-size="13" fill="#46585F">成本估错、语义须一致</text>
+              <text x="954" y="320" font-size="13" fill="#2F7A66">硬件加速、缓存扫描</text>
+              <text x="1178" y="320" font-size="13" fill="#BE653B">只想拦截 SQL 文本</text>
+
+              <!-- Row 6: Hook (最深层高亮) -->
+              <rect x="16" y="344" width="1368" height="68" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="16" y="344" width="8" height="68" fill="#1E4B5A"/>
+              <text x="34" y="383" font-size="15" font-weight="700" fill="#1E4B5A">内核 Hook</text>
+              <text x="218" y="372" font-size="13" font-weight="700" fill="#1B2B33">进入内核生命周期</text>
+              <text x="218" y="394" font-size="12" fill="#46585F" class="t-mono">C 为主</text>
+              <text x="454" y="372" font-size="13" font-weight="700" fill="#1B2B33">全局或会话级</text>
+              <text x="454" y="394" font-size="12" fill="#BE653B">常需 preload / 重启</text>
+              <text x="698" y="372" font-size="13" font-weight="700" fill="#BE653B">截断链条、崩溃</text>
+              <text x="698" y="394" font-size="12" fill="#BE653B">版本 ABI 签名变化</text>
+              <text x="954" y="372" font-size="13" font-weight="700" fill="#2F7A66">观测、审计、优化器</text>
+              <text x="954" y="394" font-size="12" fill="#2F7A66">接入与共享状态</text>
+              <text x="1178" y="372" font-size="13" font-weight="700" fill="#BE653B">普通业务逻辑</text>
+              <text x="1178" y="394" font-size="12" fill="#BE653B">与局部数据校验</text>
+
+              <!-- 竖向分隔线 -->
+              <line x1="204" y1="16" x2="204" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="440" y1="16" x2="440" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="684" y1="16" x2="684" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="940" y1="16" x2="940" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="1164" y1="16" x2="1164" y2="412" stroke="#D9D5CB" stroke-width="1"/>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">确定必须用 Hook 之后，一个最小可执行模板长什么样？热路径上又要付出哪些真实代价？</span>
+            </div>
+            <div class="slide-footer">
+              <span>设计准绳：优势是靠近内核，劣势也是靠近内核</span>
+              <span class="footer-page">09 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10: 实操 DEMO 与热路径收益代价 ==================== -->
+        <section class="slide" data-slide="10" data-title="最小模板二十行，考验在热路径成本" data-sub="最小执行器 Hook 结构与五大 contrib 权衡">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">09 · DEMO &amp; TRADE-OFFS</span>
+              <span class="slide-tag">实操结构与效果权衡</span>
+            </div>
+            <h1 class="slide-title">最小模板二十行，考验在热路径成本</h1>
+            <p class="slide-lead">Hook 的收益是可插拔地拓展能力边界，而非「免费观测」——越热的路径，每次内存分配、加锁与日志都在被放大。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 左侧：最小执行器 Hook 模板 + 验证清单 -->
+              <rect x="20" y="20" width="610" height="390" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="20" width="610" height="32" fill="#1E4B5A"/>
+              <text x="38" y="41" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">MINIMAL TEMPLATE · 最小执行器 Hook 结构示例</text>
+
+              <rect x="36" y="66" width="578" height="220" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="50" y="90" font-size="12" fill="#245A6B" class="t-mono">PG_MODULE_MAGIC;</text>
+              <text x="50" y="110" font-size="12" fill="#1B2B33" class="t-mono">static ExecutorStart_hook_type prev_ExecutorStart = NULL;</text>
+              <text x="50" y="134" font-size="12" fill="#245A6B" class="t-mono">static void demo_ExecutorStart(QueryDesc *qd, int eflags) {</text>
+              <text x="66" y="154" font-size="12" fill="#89938F" class="t-mono">/* 仅做极轻量观测或设置 instr，严禁阻塞与长锁 */</text>
+              <text x="66" y="176" font-size="12" font-weight="700" fill="#2F7A66" class="t-mono">if (prev_ExecutorStart) prev_ExecutorStart(qd, eflags);</text>
+              <text x="66" y="196" font-size="12" font-weight="700" fill="#2F7A66" class="t-mono">else standard_ExecutorStart(qd, eflags);</text>
+              <text x="50" y="216" font-size="12" fill="#245A6B" class="t-mono">}</text>
+              <text x="50" y="240" font-size="12" fill="#BE653B" class="t-mono">void _PG_init(void) {</text>
+              <text x="66" y="260" font-size="12" fill="#1B2B33" class="t-mono">prev_ExecutorStart = ExecutorStart_hook;</text>
+              <text x="66" y="278" font-size="12" fill="#BE653B" class="t-mono">ExecutorStart_hook = demo_ExecutorStart; }</text>
+
+              <!-- 最小验证三步 -->
+              <rect x="36" y="298" width="578" height="98" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="52" y="320" font-size="13" font-weight="700" fill="#1E4B5A">测试实例最小验证三步（生产前必测崩溃恢复与并发）：</text>
+              <text x="52" y="344" font-size="12" fill="#1B2B33" class="t-mono">1. SELECT name, setting FROM pg_settings WHERE name LIKE '%preload%';</text>
+              <text x="52" y="364" font-size="12" fill="#1B2B33" class="t-mono">2. SELECT name, context, setting FROM pg_settings WHERE name LIKE 'demo.%';</text>
+              <text x="52" y="384" font-size="12" fill="#1B2B33" class="t-mono">3. EXPLAIN (ANALYZE, BUFFERS) SELECT count(*) FROM pg_class;</text>
+
+              <!-- 右侧：五类真实扩展 收益 vs 代价 -->
+              <rect x="650" y="20" width="730" height="390" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="650" y="20" width="730" height="32" fill="#BE653B"/>
+              <text x="668" y="41" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">REAL-WORLD TRADE-OFFS · 五大 contrib 扩展的收益与代价</text>
+
+              <!-- 表头小条 -->
+              <text x="670" y="74" font-size="12" font-weight="700" fill="#89938F" class="t-mono">扩展 / 机制</text>
+              <text x="854" y="74" font-size="12" font-weight="700" fill="#2F7A66" class="t-mono">核心收益</text>
+              <text x="1098" y="74" font-size="12" font-weight="700" fill="#BE653B" class="t-mono">真实代价</text>
+              <line x1="668" y1="82" x2="1364" y2="82" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 1 -->
+              <rect x="668" y="90" width="696" height="50" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="682" y="120" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">pg_stat_statements</text>
+              <text x="854" y="120" font-size="13" fill="#2F7A66">全局 SQL 统计画像</text>
+              <text x="1098" y="114" font-size="12" fill="#46585F">共享内存、锁竞争、规范化</text>
+              <text x="1098" y="132" font-size="12" fill="#46585F">存储与执行路径统计开销</text>
+
+              <!-- 2 -->
+              <rect x="668" y="146" width="696" height="50" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="682" y="176" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">auto_explain</text>
+              <text x="854" y="176" font-size="13" fill="#2F7A66">慢查询事故现场留计划</text>
+              <text x="1098" y="170" font-size="12" fill="#46585F">log_analyze / timing / buffer</text>
+              <text x="1098" y="188" font-size="12" fill="#46585F">/ I/O / WAL 采集带来开销</text>
+
+              <!-- 3 -->
+              <rect x="668" y="202" width="696" height="50" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="682" y="232" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">passwordcheck</text>
+              <text x="854" y="232" font-size="13" fill="#2F7A66">统一角色口令安全策略</text>
+              <text x="1098" y="226" font-size="12" fill="#46585F">仅能检查明文或可推断密码，</text>
+              <text x="1098" y="244" font-size="12" fill="#46585F">预加密口令检查能力有限</text>
+
+              <!-- 4 -->
+              <rect x="668" y="258" width="696" height="50" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="682" y="288" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">auth_delay</text>
+              <text x="854" y="288" font-size="13" fill="#2F7A66">拖慢暴力破解尝试速度</text>
+              <text x="1098" y="282" font-size="12" fill="#46585F">失败连接 sleep 持续占用后端</text>
+              <text x="1098" y="300" font-size="12" fill="#46585F">槽位，参数需谨慎配置</text>
+
+              <!-- 5 -->
+              <rect x="668" y="314" width="696" height="50" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="682" y="344" font-size="13" font-weight="700" fill="#1E4B5A" class="t-mono">Custom Scan</text>
+              <text x="854" y="344" font-size="13" fill="#2F7A66">免改核试验硬件加速</text>
+              <text x="1098" y="338" font-size="12" fill="#46585F">成本估错选坏计划，执行语义</text>
+              <text x="1098" y="356" font-size="12" fill="#46585F">必须与替代路径完全一致</text>
+
+              <!-- 底部热路径五问 -->
+              <text x="670" y="394" font-size="12" font-weight="700" fill="#BE653B">热路径五问：每次调用是否分配内存？是否加锁？是否写日志？SPI/并行是否重复计数？异常是否恢复？</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">落地到团队协作中，架构师、DBA 和业务开发者各自该守住什么底线，又该如何避开十大高频坑？</span>
+            </div>
+            <div class="slide-footer">
+              <span>注：示例为结构演示，生产扩展需配 .control / Makefile 或 Meson 并在测试实例完整验证</span>
+              <span class="footer-page">10 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11: 三角色最佳实践与十大常见坑 ==================== -->
+        <section class="slide" data-slide="11" data-title="三方各守边界，避开十类高频生产事故" data-sub="面向架构师、DBA、开发者的最佳实践与十大坑">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">10 · BEST PRACTICES &amp; PITFALLS</span>
+              <span class="slide-tag">最佳实践与避坑清单</span>
+            </div>
+            <h1 class="slide-title">三方各守边界，避开十类高频生产事故</h1>
+            <p class="slide-lead">Hook 的工程成败不只在写代码那一刻，而在架构归类、运维分级开关与排障纪律的长期协同。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" width="1400" height="430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- 上半区：三角色最佳实践 -->
+              <rect x="20" y="18" width="440" height="176" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="18" width="440" height="30" fill="#1E4B5A"/>
+              <text x="36" y="38" font-size="13" font-weight="700" fill="#F7F6F2">数据库架构师 · 定边界与升级审计</text>
+              <text x="36" y="72" font-size="13" fill="#1B2B33">1. 按需求归类：观测/DDL/对象/路径各走正门</text>
+              <text x="36" y="100" font-size="13" fill="#1B2B33">2. 架构文档写明 preload、重启窗口与共享内存容量</text>
+              <text x="36" y="128" font-size="13" fill="#1B2B33">3. 业务规则用约束/RLS/触发器，不深埋全局 Hook</text>
+              <text x="36" y="156" font-size="13" fill="#245A6B">4. 升级前审计 src/include/* Hook 签名与 release notes</text>
+
+              <rect x="480" y="18" width="440" height="176" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="480" y="18" width="440" height="30" fill="#2F7A66"/>
+              <text x="496" y="38" font-size="13" font-weight="700" fill="#F7F6F2">DBA · 控 Preload 与分级采样</text>
+              <text x="496" y="72" font-size="13" fill="#1B2B33">1. 严格审查 shared_preload_libraries 变更台账</text>
+              <text x="496" y="100" font-size="13" fill="#1B2B33">2. 观测类分级开启：常态控采样，事故期再开全维</text>
+              <text x="496" y="128" font-size="13" fill="#1B2B33">3. 关注多扩展加载顺序引发的重复计数或统计缺失</text>
+              <text x="496" y="156" font-size="13" fill="#2F7A66">4. 疑难排障先在测试环境二分 preload 列表定位</text>
+
+              <rect x="940" y="18" width="440" height="176" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="940" y="18" width="440" height="30" fill="#AE8A3E"/>
+              <text x="956" y="38" font-size="13" font-weight="700" fill="#F7F6F2">业务开发者 · 认清边界与观测盲区</text>
+              <text x="956" y="72" font-size="13" fill="#1B2B33">1. 不把 Hook 当作数据库里的应用中间件</text>
+              <text x="956" y="100" font-size="13" fill="#1B2B33">2. 理解 pgss/auto_explain 的采样、规范化与嵌套边界</text>
+              <text x="956" y="128" font-size="13" fill="#1B2B33">3. 不假设观测或审计 Hook 扩展永远在线</text>
+              <text x="956" y="156" font-size="13" fill="#896926">4. 应用自身保留超时、重试与基础诊断日志</text>
+
+              <!-- 下半区：十大常见坑 (2x5 规整蓝图网格) -->
+              <rect x="20" y="210" width="1360" height="202" fill="#F1EFE9" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="20" y="210" width="1360" height="28" fill="#BE653B"/>
+              <text x="36" y="229" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">TEN COMMON PITFALLS · 十大高频工程坑（按发生频率与破坏面归类）</text>
+
+              <!-- Row 1 (5 boxes) -->
+              <rect x="36" y="252" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="50" y="276" font-size="13" font-weight="700" fill="#BE653B">01 · 不转发前值</text>
+              <text x="50" y="300" font-size="12" fill="#46585F">后加载把先加载「吃掉」</text>
+
+              <rect x="304" y="252" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="318" y="276" font-size="13" font-weight="700" fill="#BE653B">02 · 漏 nesting_level</text>
+              <text x="318" y="300" font-size="12" fill="#46585F">递归 SQL 顶层与嵌套混淆</text>
+
+              <rect x="572" y="252" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="586" y="276" font-size="13" font-weight="700" fill="#BE653B">03 · 异常未恢复状态</text>
+              <text x="586" y="300" font-size="12" fill="#46585F">ereport(ERROR) 跳转漏还原</text>
+
+              <rect x="840" y="252" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="854" y="276" font-size="13" font-weight="700" fill="#BE653B">04 · 热路径做重活</text>
+              <text x="854" y="300" font-size="12" fill="#46585F">执行/认证/日志风暴被放大</text>
+
+              <rect x="1108" y="252" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1122" y="276" font-size="13" font-weight="700" fill="#BE653B">05 · LOAD 当全局用</text>
+              <text x="1122" y="300" font-size="12" fill="#46585F">仅当前会话有效，无共享内存</text>
+
+              <!-- Row 2 (5 boxes) -->
+              <rect x="36" y="330" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="50" y="354" font-size="13" font-weight="700" fill="#BE653B">06 · 忽略并行 worker</text>
+              <text x="50" y="378" font-size="12" fill="#46585F">auto_explain 在 worker 避采样</text>
+
+              <rect x="304" y="330" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="318" y="354" font-size="13" font-weight="700" fill="#BE653B">07 · 忽略 Utility 递归</text>
+              <text x="318" y="378" font-size="12" fill="#46585F">CREATE SCHEMA 等触发子调用</text>
+
+              <rect x="572" y="330" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="586" y="354" font-size="13" font-weight="700" fill="#BE653B">08 · check 做副作用</text>
+              <text x="586" y="378" font-size="12" fill="#46585F">校验失败无法回滚，应放 assign</text>
+
+              <rect x="840" y="330" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="854" y="354" font-size="13" font-weight="700" fill="#BE653B">09 · 漏判 is_internal</text>
+              <text x="854" y="378" font-size="12" fill="#46585F">TOAST/内部约束误报或误拦截</text>
+
+              <rect x="1108" y="330" width="256" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1122" y="354" font-size="13" font-weight="700" fill="#BE653B">10 · 忽视版本 ABI</text>
+              <text x="1122" y="378" font-size="12" fill="#46585F">优化器 Hook 演进快须写适配测试</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">承接 · NEXT</span>
+              <span class="next-text">最后，把整节课浓缩成一张可交互的「是否使用 Hook」工程决策树，现场演练四个真实场景。</span>
+            </div>
+            <div class="slide-footer">
+              <span>工程底线：把加载时机、链式转发、错误恢复与版本回归测试一并纳入设计</span>
+              <span class="footer-page">11 / 12</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12: 是否使用 Hook 决策树 (交互动画 4) ==================== -->
+        <section class="slide has-toolbar" data-slide="12" data-title="能用窄机制解决，绝不上全局 Hook" data-sub="Hook 选型决策流程与课后思考题">
+          <div class="slide-header">
+            <div class="eyebrow-row">
+              <span class="eyebrow">11 · DECISION FLOW &amp; SUMMARY</span>
+              <span class="slide-tag">总结 · 交互决策演练</span>
+            </div>
+            <h1 class="slide-title">能用窄机制解决，绝不上全局 Hook</h1>
+            <p class="slide-lead">Hook 是最后一公里扩展手段——点击下方四个真实需求，沿工程决策树验证最优落地方案。</p>
+          </div>
+          <div class="slide-divider"></div>
+          <div class="anim-toolbar">
+            <div class="anim-group">
+              <span class="anim-label">场景演练</span>
+              <button class="btn-ctrl active" data-dec-case="biz">表级业务校验</button>
+              <button class="btn-ctrl" data-dec-case="ddl">拦截 ALTER SYSTEM</button>
+              <button class="btn-ctrl" data-dec-case="gpu">向量 / GPU 自定义扫描</button>
+              <button class="btn-ctrl" data-dec-case="stat">全局慢 SQL 指标采集</button>
+            </div>
+            <div class="anim-status" id="dec-status">结论：优先使用约束 / 触发器 / RLS，无需进入内核 Hook</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 400" width="1400" height="400" xmlns="http://www.w3.org/2000/svg" id="svg-decision">
+              <rect x="0" y="0" width="1400" height="400" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Gate 1 -->
+              <g class="svg-node" id="d-g1">
+                <rect class="box-bg" x="28" y="42" width="276" height="106" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="28" y="42" width="276" height="26" fill="#245A6B"/>
+                <text x="166" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">GATE 1 · 窄机制优先</text>
+                <text x="166" y="92" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">能否用约束 / 函数 / 触发器 /</text>
+                <text x="166" y="114" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">RLS / 事件触发器解决？</text>
+                <text x="166" y="136" text-anchor="middle" font-size="11" fill="#46585F">风险最低、无 ABI 升级耦合</text>
+              </g>
+
+              <!-- Gate 1 YES -> Outcome 1 -->
+              <line id="dl-g1-yes" x1="166" y1="148" x2="166" y2="246" stroke="#2F7A66" stroke-width="2" marker-end="url(#arr-teal)"/>
+              <rect x="174" y="182" width="38" height="22" fill="#F7F6F2"/>
+              <text x="193" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="#2F7A66">YES</text>
+
+              <g class="svg-node" id="d-o1">
+                <rect class="box-bg" x="28" y="252" width="276" height="118" fill="#E4F2EC" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="28" y="252" width="276" height="26" fill="#2F7A66"/>
+                <text x="166" y="270" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">方案 A · 不使用 Hook</text>
+                <text x="166" y="302" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">采用 SQL 原生机制</text>
+                <text x="166" y="326" text-anchor="middle" font-size="12" fill="#46585F">约束 / 触发器 / RLS / 事件触发器</text>
+                <text x="166" y="348" text-anchor="middle" font-size="11" fill="#2F7A66">零内核崩溃风险，升级最稳</text>
+              </g>
+
+              <!-- Gate 1 NO -> Gate 2 -->
+              <line id="dl-g1-no" x1="304" y1="95" x2="376" y2="95" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <text x="340" y="85" text-anchor="middle" font-size="12" font-weight="700" fill="#BE653B">NO</text>
+
+              <!-- Gate 2 -->
+              <g class="svg-node" id="d-g2">
+                <rect class="box-bg" x="382" y="42" width="290" height="106" fill="#CFE0DC" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="382" y="42" width="290" height="26" fill="#2E6373"/>
+                <text x="527" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">GATE 2 · 场景归类</text>
+                <text x="527" y="92" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">目标是否属于优化器</text>
+                <text x="527" y="114" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">新增扫描 / Join 路径？</text>
+                <text x="527" y="136" text-anchor="middle" font-size="11" fill="#1E4B5A">不得篡改结果语义</text>
+              </g>
+
+              <!-- Gate 2 YES -> Outcome 2 -->
+              <line id="dl-g2-yes" x1="527" y1="148" x2="527" y2="246" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <rect x="535" y="182" width="38" height="22" fill="#F7F6F2"/>
+              <text x="554" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="#245A6B">YES</text>
+
+              <g class="svg-node" id="d-o2">
+                <rect class="box-bg" x="382" y="252" width="290" height="118" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="382" y="252" width="290" height="26" fill="#245A6B"/>
+                <text x="527" y="270" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">方案 B · Custom Scan</text>
+                <text x="527" y="300" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">set_rel / join_pathlist_hook</text>
+                <text x="527" y="324" text-anchor="middle" font-size="12" fill="#46585F">生成 CustomPath 纳入成本模型</text>
+                <text x="527" y="348" text-anchor="middle" font-size="11" fill="#BE653B">必做版本 ABI 审计与等价结果测试</text>
+              </g>
+
+              <!-- Gate 2 NO -> Gate 3 -->
+              <line id="dl-g2-no" x1="672" y1="95" x2="744" y2="95" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <text x="708" y="85" text-anchor="middle" font-size="12" font-weight="700" fill="#BE653B">NO</text>
+
+              <!-- Gate 3 -->
+              <g class="svg-node" id="d-g3">
+                <rect class="box-bg" x="750" y="42" width="280" height="106" fill="#A4C4C6" stroke="#1E4B5A" stroke-width="1.5"/>
+                <rect x="750" y="42" width="280" height="26" fill="#47808D"/>
+                <text x="890" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">GATE 3 · 共享状态与覆盖面</text>
+                <text x="890" y="92" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">是否需要启动期共享内存、</text>
+                <text x="890" y="114" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">LWLock 或全局强制拦截？</text>
+                <text x="890" y="136" text-anchor="middle" font-size="11" fill="#1E4B5A">决定 LOAD vs shared_preload</text>
+              </g>
+
+              <!-- Gate 3 NO -> Outcome 3 -->
+              <line id="dl-g3-no" x1="890" y1="148" x2="890" y2="246" stroke="#AE8A3E" stroke-width="2" marker-end="url(#arr-indigo)"/>
+              <rect x="898" y="182" width="38" height="22" fill="#F7F6F2"/>
+              <text x="917" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="#AE8A3E">NO</text>
+
+              <g class="svg-node" id="d-o3">
+                <rect class="box-bg" x="750" y="252" width="280" height="118" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.5"/>
+                <rect x="750" y="252" width="280" height="26" fill="#AE8A3E"/>
+                <text x="890" y="270" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">方案 C · 会话级 Hook</text>
+                <text x="890" y="300" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33">session_preload / LOAD</text>
+                <text x="890" y="324" text-anchor="middle" font-size="12" fill="#46585F">免重启实例，按会话或角色加载</text>
+                <text x="890" y="348" text-anchor="middle" font-size="11" fill="#46585F">仍须遵守链式转发与异常恢复</text>
+              </g>
+
+              <!-- Gate 3 YES -> Outcome 4 -->
+              <line id="dl-g3-yes" x1="1030" y1="95" x2="1084" y2="95" stroke="#BE653B" stroke-width="2" marker-end="url(#arr-terra)"/>
+              <text x="1057" y="85" text-anchor="middle" font-size="12" font-weight="700" fill="#BE653B">YES</text>
+
+              <g class="svg-node" id="d-o4">
+                <rect class="box-bg" x="1090" y="42" width="282" height="328" fill="#1E4B5A" stroke="#163945" stroke-width="1.5"/>
+                <rect x="1090" y="42" width="282" height="28" fill="#BE653B"/>
+                <text x="1231" y="61" text-anchor="middle" font-size="12" font-weight="700" fill="#F7F6F2" class="t-mono">方案 D · 全局内核 Hook</text>
+                <text x="1110" y="100" font-size="15" font-weight="700" fill="#F7F6F2">shared_preload_libraries</text>
+                <text x="1110" y="126" font-size="12" fill="#CFE0DC">适配：全局观测 / 高危 DDL 管控</text>
+                <text x="1110" y="148" font-size="12" fill="#CFE0DC">/ 对象级安全审计 / 共享内存统计</text>
+                <line x1="1110" y1="168" x2="1352" y2="168" stroke="#47808D" stroke-width="1"/>
+                <text x="1110" y="196" font-size="13" font-weight="700" fill="#F7E9DE">上线前六项硬核查清单：</text>
+                <text x="1110" y="222" font-size="12" fill="#EBF1EE">1. 规划好重启窗口与内存上限</text>
+                <text x="1110" y="246" font-size="12" fill="#EBF1EE">2. 确认 prev_* 链式转发无截断</text>
+                <text x="1110" y="270" font-size="12" fill="#EBF1EE">3. PG_TRY/PG_FINALLY 护状态</text>
+                <text x="1110" y="294" font-size="12" fill="#EBF1EE">4. 过滤 is_internal / 并行 worker</text>
+                <text x="1110" y="318" font-size="12" fill="#EBF1EE">5. MarkGUCPrefixReserved()</text>
+                <text x="1110" y="342" font-size="12" fill="#EBF1EE">6. 跨大版本 ABI 回归测试</text>
+              </g>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="next-bridge">
+              <span class="next-tag">课程完结 · REVIEW</span>
+              <span class="next-text">按 G 打开全局目录复盘，或按 T 浏览全文连绵讲稿与五道课后延伸思考题。</span>
+            </div>
+            <div class="slide-footer">
+              <span>数据库筑基课 - Hook · 感谢聆听</span>
+              <span class="footer-page">12 / 12</span>
+            </div>
+          </div>
+        </section>
+
+      </div><!-- /#stage-shell -->
+    </div><!-- /#stage-viewport -->
+
+    <!-- 右侧页内开窗讲稿区（按 N 本页 / 按 T 全文联动） -->
+    <aside id="notes-pane" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div class="notes-title-group">
+          <span class="notes-mode-badge" id="notes-badge">本页讲稿</span>
+          <span class="notes-heading" id="notes-heading">讲稿与推演</span>
+        </div>
+        <div class="notes-header-actions">
+          <button class="notes-tab-btn active" id="tab-note-page">本页 N</button>
+          <button class="notes-tab-btn" id="tab-note-all">全文 T</button>
+          <button class="notes-close-btn" id="btn-notes-close" title="关闭讲稿">✕</button>
+        </div>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+
+    <!-- 目录层 (G 键) -->
+    <div id="toc-overlay" role="dialog" aria-label="演说目录">
+      <div class="toc-panel">
+        <div class="toc-header">
+          <span class="toc-title">演说目录 —— 数据库筑基课 · PostgreSQL Hook</span>
+          <button class="notes-close-btn" id="btn-toc-close">关闭 G / Esc</button>
+        </div>
+        <div class="toc-grid" id="toc-grid"></div>
+      </div>
+    </div>
+  </div><!-- /#workspace -->
+
+  <!-- 底部快捷键控制栏（全屏后常驻可见） -->
+  <footer id="hud-bar">
+    <div class="hud-left">
+      <button class="hud-btn" id="btn-prev" title="上一页">← 上一页</button>
+      <span class="hud-progress" id="hud-page">01 / 12</span>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <button class="hud-btn" id="btn-next" title="下一页">下一页 →</button>
+    </div>
+    <div class="hud-center">
+      <button class="hud-btn" id="btn-toc"><span class="kbd">G</span> 目录</button>
+      <button class="hud-btn" id="btn-notes"><span class="kbd">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="btn-transcript"><span class="kbd">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="btn-autoplay"><span class="kbd">P</span> <span id="autoplay-label">自动播放</span></button>
+      <button class="hud-btn" id="btn-fullscreen"><span class="kbd">F</span> <span id="fs-label">全屏</span></button>
+    </div>
+    <div class="hud-right">
+      <span style="color:#A4C4C6;font-size:12px;">空格：播放动画/下一页</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ==================== 1. 全文连绵口语讲稿数据 ==================== */
+  const SPEAKER_NOTES = [
+    {
+      slide: 1,
+      title: '数据库筑基课 —— PostgreSQL Hook',
+      paragraphs: [
+        '各位同学大家好，欢迎回到数据库筑基课。今天我们要聊一个在 PostgreSQL 生态里极其关键、但平时写业务 SQL 几乎看不见的概念——Hook。',
+        '很多工程师第一次听见 Hook，会误以为它是某个独立的 SQL 功能，或者某个插件模块。其实都不是。如果你把 PostgreSQL 内核想象成一套七层地层剖面——从最表层的客户端认证、解析分析，往下走到优化器、执行器、Utility 命令、目录对象事件，一直到最底层的共享内存与 GUC 配置——Hook 就是 PostgreSQL 提前在每一层固定位置留好的「函数指针插槽」。',
+        '这节课所有结论都直接锚定 PostgreSQL 源码和 contrib 里的经典扩展，比如 pg_stat_statements、auto_explain、passwordcheck 和 auth_delay。我们的目标很明确：不只看懂它怎么写，更要建立清晰的工程边界——知道什么时候该用它，以及什么时候千万别碰它。'
+      ],
+      cue: '那我们先从真实生产现场出发：到底是什么样的工程痛点，逼着我们不得不走进内核生命周期？'
+    },
+    {
+      slide: 2,
+      title: '不 Fork 内核，却要进入内核生命周期',
+      paragraphs: [
+        '先看三个在真实业务里反复出现的痛点。第一，线上偶发慢 SQL，但常规日志只能吐出语句文本和耗时，根本拿不到当时的执行计划，也不知道它到底读了多少 buffer、写了多少 WAL；第二，安全团队要做统一审计，要求拦截 CREATE ROLE、ALTER SYSTEM、DROP TABLE；第三，优化器团队想给特定查询挂上一条自定义扫描路径，让优化器参与成本比较。',
+        '你会发现，这三个需求有个共同点：普通 SQL 手段够不着内核内部状态。可如果每个需求都去改 PostgreSQL 主干代码、拉一个私有分支出来，后果就是大版本升级全线冲突，回归测试失控。Hook 解决的正是「既要进入内核生命周期，又不应该 fork 内核」这个核心矛盾。',
+        '所以它天然承接了五大类场景：可观测性、安全与审计、优化器扩展、启动期资源初始化，以及 GUC 配置协议。但我们必须把丑话说在前头——它的代价同样直接：第一，它是 C 级能力，写崩了直接带走后端甚至整个实例；第二，多数 Hook 只有一个全局指针，多扩展必须靠链式转发；第三，它的 ABI 会随版本演进，比如在 PG 19 的 release notes 里，get_relation_info_hook 就被 build_simple_rel_hook 替换了。所以记住一句话：Hook 是强工具，绝不是默认工具。'
+      ],
+      cue: '既然我们明确了它的价值和代价，接下来立刻掀开引擎盖：这个「内核插槽」在 C 源码里究竟长什么样？'
+    },
+    {
+      slide: 3,
+      title: '三个组件构成整个 Hook 机制',
+      paragraphs: [
+        '其实把源码摊开，Hook 一点也不神秘，核心就是三件东西。我们直接拿优化器入口 planner_hook 做标本。',
+        '第一件，头文件里的声明。在 src/include/optimizer/planner.h 里，先用 typedef 定义一个函数指针类型 planner_hook_type，再声明一个全局导出的变量 extern PGDLLIMPORT planner_hook_type planner_hook。默认它是 NULL。',
+        '第二件，核心流程里的一小段 if-else 分支。在 src/backend/optimizer/plan/planner.c 的 planner() 函数里，内核只做一件事：如果 planner_hook 非空，就调 (*planner_hook)(...)；否则老老实实走 standard_planner(...)。',
+        '第三件，扩展侧的接管与转发。扩展在动态库加载时的 _PG_init() 里，先把当前全局的 planner_hook 存到自己的静态变量 prev_planner_hook 里，再把全局指针改成自己的 my_planner。等运行时回调进来，干完自己的活，如果 prev_planner_hook 非空就转发给前人，否则调用 standard_planner。内核给槽和标准实现，扩展管保存、安装和转发——这就是全部基本模型。'
+      ],
+      cue: '一个插槽的原理清楚了。现在把镜头拉远：一条完整请求穿过 PostgreSQL 内核时，到底埋了哪些位置的插槽？'
+    },
+    {
+      slide: 4,
+      title: '调用位置决定了 Hook 的能力边界',
+      paragraphs: [
+        '请看这张管线图，这里你可以直接点上方的「SELECT 查询」「DDL 管控」或者「客户端认证」，然后点「播放追踪」来跟着请求走一遍。',
+        '为什么要特意做这个追踪？因为 Hook 的能力边界，完全是由它的调用位置决定的。比如你在认证层挂 ClientAuthentication_hook，你能看到连接状态、能像 auth_delay 那样在失败时 sleep，但你根本看不到 SQL；到了解析分析层的 post_parse_analyze_hook，你能拿到 Query 树和 queryId，但优化器还没开始生成路径。',
+        '再往后就分叉了：普通查询进入优化器层，通过 planner_hook、set_rel_pathlist_hook、set_join_pathlist_hook、create_upper_paths_hook 影响路径，再进入执行器四阶段，拿到 QueryDesc 和 EState 采集真实耗时、行数、buffer 和 WAL；而 CREATE、ALTER、DROP、VACUUM 这类 Utility 命令不走常规执行器，它们走下方的 ProcessUtility_hook，并在修改系统目录时触发 object_access_hook。',
+        '除此之外，最底层还有两块底座：负责启动期共享内存的 shmem_request_hook / shmem_startup_hook，以及贯穿全程的配置协议 GUC Hook。选错位置，就算代码写得再漂亮，也拿不到你要的数据结构。'
+      ],
+      cue: '现在问题来了：这么多扩展都在同一个管线上工作，如果 auto_explain 和 pg_stat_statements 同时挂在 ExecutorStart_hook 上，它们怎么不打架？'
+    },
+    {
+      slide: 5,
+      title: '后加载在链头，不转发即截断',
+      paragraphs: [
+        '这一页我们专门看链式转发，这是生产环境里最容易踩坑的地方。因为大多数 Hook 只是单个全局函数指针，PostgreSQL 并没有帮你维护一个内建链表。',
+        '假设你的配置是 shared_preload_libraries = \'pg_stat_statements, auto_explain\'。pg_stat_statements 先加载，它把 prev 记为 NULL，把全局指针指向自己；紧接着 auto_explain 后加载，它把 prev 记为 pg_stat_statements 的入口，再把全局指针指向自己。结果就是——后加载的扩展站在链头。',
+        '大家可以点一下上方的「触发一次调用」：正常模式下，Core 先调 auto_explain，它设完采样再转发给 pg_stat_statements，最后落到 standard_ExecutorStart，整条链完整闭合。现在切换成「模拟故障：扩展 B 忘记转发」再点一次——你看，一旦链头的扩展直接调了 standard_ExecutorStart 而忘了调 prev，扩展 A 就被彻底跳过、静默吃掉了，线上表现就是监控指标莫名其妙清零。',
+        '所以源码里的成熟扩展都严守四条纪律：永远假设还有别的扩展；用 PG_TRY / PG_FINALLY 保护 nesting_level 等状态，防止 ereport(ERROR) 跳转后状态泄漏；热路径严禁阻塞 I/O；以及像 passwordcheck、auth_delay 那样明确先转发旧 Hook 再执行自身逻辑。'
+      ],
+      cue: '协作纪律讲透了，接下来我们把放大镜对准整个管线里最容易被误用的两层——优化器和执行器。'
+    },
+    {
+      slide: 6,
+      title: '优化器竞选路径，执行器只做观测',
+      paragraphs: [
+        '很多团队拿到优化器 Hook 的第一反应是：我能不能在这里把慢 SQL 强行改写掉？或者在执行器里偷偷改一下返回结果？千万别这么干。',
+        '看上半区的优化器阶段。planner_hook 包住整个规划入口，而真正给扩展发挥空间的是路径生成钩子：base relation 阶段用 set_rel_pathlist_hook，join 阶段用 set_join_pathlist_hook 和 join_path_setup_hook，上层聚合排序用 create_upper_paths_hook。扩展做的事是用 add_path() 把自己的 CustomPath 放进 RelOptInfo 的候选池里。你可以点上方切换「常规索引路径代价更低」和「CustomPath 硬件加速代价更低」来演示——最终谁胜出，由优化器的代价模型决定。官方 custom-scan.sgml 划了一条死红线：Custom Scan 可以改变「怎么扫」，但执行结果必须和被替代路径严格一致。',
+        '再看下半区的执行器四阶段：ExecutorStart 适合打开 INSTRUMENT_ALL；ExecutorRun 负责实际跑计划树、维护嵌套层级；ExecutorFinish 兜住 AFTER triggers 等收尾；ExecutorEnd 在释放资源前把耗时、行数、buffer、WAL 写进共享统计或像 auto_explain 那样打印计划。这就解释了为什么慢 SQL 观测必须用执行器 Hook 而不是日志 Hook——日志只有文本，只有执行器才能拿到 QueryDesc 和完整的 instrumentation。'
+      ],
+      cue: '刚才我们说过，SELECT 和 DML 走规划器和执行器，但企业最头疼的往往是高危 DDL——CREATE、ALTER、DROP 到底该怎么管？'
+    },
+    {
+      slide: 7,
+      title: 'DDL 管控看 Utility，安全审计挂对象事件',
+      paragraphs: [
+        'DDL、VACUUM、EXPLAIN 这类命令在 PostgreSQL 里统称 Utility 命令，它们绕过常规执行器，统一走 src/backend/tcop/utility.c 里的 ProcessUtility()。',
+        '如果你打算用 ProcessUtility_hook 做审计或拦截，源码注释里有两个细节你必须刻在脑子里。第一，客户端一次发过来的 queryString 可能用分号拼了多条语句，你不能直接拿整段字符串去匹配，必须结合 pstmt->stmt_location 和 stmt_len 切出当前这一条；第二，很多 Utility 命令内部会递归调 ProcessUtility()，比如 CREATE SCHEMA 里面夹带建表、或者 ALTER TABLE 的子命令，不处理递归就会重复计数甚至误拦截。',
+        '那如果我想做更彻底的安全审计，不想跟各种 SQL 语法变体捉迷藏呢？那就往下看一层：object_access_hook。它不看 SQL 文本怎么写，而是直接挂在系统目录对象生命周期的六个事件上——创建后、删除、修改后、命名空间搜索、函数执行和 TRUNCATE，像 sepgsql 就是典型代表。',
+        '但对象层也有一个隐蔽边界：PostgreSQL 自己建 TOAST 表、内部索引或约束时也会触发事件，并带上 is_internal 标志。扩展必须明确判断要不要跳过内部事件，否则很容易把数据库自己的正常维护动作给拦死。'
+      ],
+      cue: '所有执行路径都梳理完了。接下来是落地扩展时最容易栽跟头的两个底层机制：配置项 GUC 怎么写，以及动态库什么时候加载？'
+    },
+    {
+      slide: 8,
+      title: 'GUC 分离校验与副作用，加载时机定生死',
+      paragraphs: [
+        '先看左边的 GUC 协议。在 PostgreSQL 里，扩展自定义配置项不是直接改一个 C 全局变量，而是拆成三个 Hook：check_hook、assign_hook 和 show_hook。',
+        '为什么要把 check 和 assign 拆开？因为 check_hook 在真正提交生效之前调用，甚至可能只是测试一下能不能设、或者中途失败回滚。所以 check_hook 只负责验证合法性，绝不能偷偷干不可回滚的副作用；字符串类型在 guc.c 里还专门用 PG_TRY / PG_CATCH 防内存泄漏。真正要把新配置传播到运行状态，必须放到 assign_hook 里。另外别忘了调 MarkGUCPrefixReserved()，把你扩展的配置前缀占住，这是所有官方 contrib 扩展的标配习惯。',
+        '再看右边的加载时机三层地层。很多新手会问：我直接执行 LOAD 不就行了吗，为什么 pg_stat_statements 非要改 shared_preload_libraries 还逼我重启实例？原因在 src/backend/storage/ipc/ipci.c 里写得很死：RequestAddinShmemSpace() 和 RequestNamedLWLockTranche() 只能在 postmaster 启动期的 shmem_request_hook 窗口内调用，晚一步就会直接 FATAL。LOAD 只管当前会话，session_preload_libraries 只管会话启动，只有 shared_preload_libraries 才能拿到启动期共享内存和全局视角。'
+      ],
+      cue: '到这里，Hook 的全套核心原理已经闭合。现在我们跳出代码，站在架构师的高度做一次横向对比：面对具体需求，到底该选哪把锤子？'
+    },
+    {
+      slide: 9,
+      title: '越靠近内核能力越强，代价也同阶上升',
+      paragraphs: [
+        '这张矩阵把 PostgreSQL 常见的六大扩展机制，按照离内核的远近从浅到深排成了一张地层表：最浅的是 SQL 函数和普通触发器，往下是事件触发器、FDW、Custom Scan，最深一层才是内核 Hook。',
+        '大家可以横向扫一遍「影响范围」和「典型风险」这两列。SQL 函数和普通触发器局限在调用点或单张表，哪怕写错了影响也局部可控；事件触发器能覆盖数据库级 DDL 审计，而且完全不需要 preload 或重启；FDW 专攻外部数据源集成；Custom Scan 专注把新扫描路径送进优化器。',
+        '而最底层的 Hook，优势是靠近内核，劣势恰恰也是靠近内核。它能拿到上面所有机制都拿不到的内部结构，但同时要你扛下全局崩溃半径、链条截断和跨大版本 ABI 变化的全部成本。所以每次架构评审，第一句话永远应该问：这个问题能不能用更窄的机制解决？只有答案是否定的时候，才轮到 Hook 出场。'
+      ],
+      cue: '假设经过评审，我们确实必须写一个 Hook 扩展。那一个最小可用模板怎么写？上线后热路径上又会遇到哪些真实的收益与代价权衡？'
+    },
+    {
+      slide: 10,
+      title: '最小模板二十行，考验在热路径成本',
+      paragraphs: [
+        '左边是一个不到二十行的最小执行器 Hook 结构模板。PG_MODULE_MAGIC 声明魔数，_PG_init() 保存 prev_ExecutorStart 并安装 demo_ExecutorStart，回调里做完极轻量操作后严格转发。配合下方三步 SQL：先查 pg_settings 确认 preload，再查自定义 GUC 前缀，最后用 EXPLAIN (ANALYZE, BUFFERS) 触发目标路径，这就是最标准的测试实例验证闭环。',
+        '但写出来只是起点，真正决定生产生死的在右边这张「收益与代价」对照表。我们拿五个真实 contrib 扩展做实证：pg_stat_statements 换来了全局 SQL 画像，代价是共享内存、锁和统计路径开销；auto_explain 换来了事故现场的执行计划，代价是开启 log_analyze、timing、buffer 和 WAL 后的 instrumentation 采集成本；passwordcheck 受限于能否拿到明文；auth_delay 拖慢了暴力破解，但失败连接 sleep 会持续占住后端连接槽位；Custom Scan 免改核试验加速，但成本模型一旦估错就会让优化器选出灾难计划。',
+        '记住底部这五个热路径灵魂拷问：每次调用有没有分配内存？有没有抢锁？有没有写日志？SPI、触发器和并行 worker 里会不会重复计数？出错跳转时状态能不能恢复？把这五问过一遍，你的 Hook 才算真正过关。'
+      ],
+      cue: '技术细节到位了，落到组织协同上，架构师、DBA 和业务开发三个角色各自该守住什么防线？有哪些反复出现的生产坑？'
+    },
+    {
+      slide: 11,
+      title: '三方各守边界，避开十类高频生产事故',
+      paragraphs: [
+        '我们把工程实践拆给三个角色来看。对数据库架构师：第一要把需求精准归类，不要把业务规则深埋在全局 Hook 里；第二要把 preload、重启窗口和共享内存容量写进架构设计；第三，每次数据库大版本升级前，必须把 src/include/* 的 Hook 签名和 release notes 过一遍 ABI 审计。',
+        '对 DBA：shared_preload_libraries 里的每一个库都直接进入内核主干生命周期，必须有台账；观测类扩展要学会分级开关，常态控制采样率，事故期再开全维度；一旦怀疑线上异常跟扩展链冲突有关，最快的排障手段是在测试环境二分 preload 列表。',
+        '对业务开发者：千万别把 Hook 当作数据库里的应用中间件；看 pg_stat_statements 和 auto_explain 的数据时要理解它们的采样和嵌套边界；应用侧自己的超时、重试和日志一个都不能省。',
+        '下半区汇总了生产里最常见的十个坑：从 01 不转发吃链、02 漏 nesting_level、03 异常未恢复、04 热路径阻塞、05 误把 LOAD 当全局，到 06 忽略并行 worker、07 忽略 Utility 递归、08 check_hook 做副作用、09 漏判 is_internal，以及 10 忽视版本 ABI 演进。这十条可以直接当作你团队的 Code Review 检查表。'
+      ],
+      cue: '最后，我们把整节课的所有判断收敛到一张可现场演练的决策图里，帮你形成肌肉记忆。'
+    },
+    {
+      slide: 12,
+      title: '能用窄机制解决，绝不上全局 Hook',
+      paragraphs: [
+        '这一页是整节课的总收束。你可以点击上方四个典型场景按钮，跟着高亮路径走一遍决策树：',
+        '第一，表级业务校验——在第一道门「能否用原生窄机制解决」就直接答 YES，走约束、触发器或 RLS，彻底远离内核风险。第二，禁止非白名单执行 ALTER SYSTEM——如果权限体系和事件触发器覆盖不到，跳过第二道门，在第三道门确认需要全局强制拦截，落到 shared_preload + ProcessUtility_hook。第三，向量或 GPU 自定义扫描——在第二道门直接走 Custom Scan + set_rel_pathlist_hook，把新路径送进原生代价模型。第四，全局慢 SQL 指标采集——需要跨会话共享内存统计，在第三道门落到方案 D，同时把右侧的六项上线核查清单逐一打勾。',
+        '最后留给大家五道课后思考题，方便进一步咀嚼：一、禁止非白名单执行 ALTER SYSTEM，ProcessUtility_hook、事件触发器和权限体系各自拿得到什么上下文？二、统计 SQL 耗时、行数、buffer 和 WAL，为什么 ExecutorEnd_hook 比日志 Hook 更合适？三、向量索引或 GPU 扫描该改 planner_hook 还是用 set_rel_pathlist_hook 加 CustomPath？四、两个扩展同挂 ExecutorStart_hook，怎么设计测试验证链条没被截断？五、共享内存 Hash 表为什么要求 shared_preload_libraries，能否用 DSM 降低重启依赖？',
+        '今天的数据库筑基课 —— PostgreSQL Hook 就讲到这里，谢谢大家！'
+      ],
+      cue: '复盘建议：按 G 键可随时跳回任意章节图示，按 F 键可全屏沉浸浏览。'
+    }
+  ];
+
+  /* ==================== 2. 幻灯片状态与核心导航 ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentSlide = 1;
+  let notesMode = 'closed'; // 'closed' | 'page' | 'all'
+  let tocOpen = false;
+  let autoplayTimer = null;
+  const AUTOPLAY_INTERVAL_MS = 10000;
+
+  const stageViewport = document.getElementById('stage-viewport');
+  const stageShell = document.getElementById('stage-shell');
+  const notesPane = document.getElementById('notes-pane');
+  const notesBody = document.getElementById('notes-body');
+  const notesBadge = document.getElementById('notes-badge');
+  const notesHeading = document.getElementById('notes-heading');
+  const tabNotePage = document.getElementById('tab-note-page');
+  const tabNoteAll = document.getElementById('tab-note-all');
+  const hudPage = document.getElementById('hud-page');
+  const progressFill = document.getElementById('progress-fill');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const tocGrid = document.getElementById('toc-grid');
+
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNotes = document.getElementById('btn-notes');
+  const btnTranscript = document.getElementById('btn-transcript');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const autoplayLabel = document.getElementById('autoplay-label');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const fsLabel = document.getElementById('fs-label');
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  /* 固定 1600x900 舞台等比矢量缩放 */
+  function rescaleStage() {
+    const rect = stageViewport.getBoundingClientRect();
+    const availW = Math.max(200, rect.width - 24);
+    const availH = Math.max(120, rect.height - 24);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageShell.style.transform = 'scale(' + scale.toFixed(5) + ')';
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(rescaleStage).observe(stageViewport);
+  }
+  window.addEventListener('resize', rescaleStage);
+
+  /* 构建目录网格 */
+  function buildTOC() {
+    tocGrid.innerHTML = '';
+    slides.forEach(function(s, idx) {
+      const n = idx + 1;
+      const card = document.createElement('button');
+      card.className = 'toc-card' + (n === currentSlide ? ' current' : '');
+      card.setAttribute('data-target-slide', String(n));
+      card.innerHTML =
+        '<div class="toc-card-num">SLIDE ' + pad2(n) + '</div>' +
+        '<div class="toc-card-title">' + s.dataset.title + '</div>' +
+        '<div class="toc-card-sub">' + s.dataset.sub + '</div>';
+      card.addEventListener('click', function() {
+        goToSlide(n);
+        setTOC(false);
+      });
+      tocGrid.appendChild(card);
+    });
+  }
+
+  function updateTOCHighlight() {
+    const cards = tocGrid.querySelectorAll('.toc-card');
+    cards.forEach(function(c) {
+      const target = Number(c.getAttribute('data-target-slide'));
+      c.classList.toggle('current', target === currentSlide);
+    });
+  }
+
+  function setTOC(open) {
+    tocOpen = open;
+    tocOverlay.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+    if (tocOpen) updateTOCHighlight();
+  }
+
+  /* 讲稿渲染与联动滚动 */
+  function renderNotes() {
+    if (notesMode === 'closed') {
+      notesPane.classList.remove('open');
+      btnNotes.classList.remove('active');
+      btnTranscript.classList.remove('active');
+      setTimeout(rescaleStage, 240);
+      rescaleStage();
+      return;
+    }
+
+    notesPane.classList.add('open');
+    btnNotes.classList.toggle('active', notesMode === 'page');
+    btnTranscript.classList.toggle('active', notesMode === 'all');
+    tabNotePage.classList.toggle('active', notesMode === 'page');
+    tabNoteAll.classList.toggle('active', notesMode === 'all');
+
+    if (notesMode === 'page') {
+      const item = SPEAKER_NOTES[currentSlide - 1];
+      notesBadge.textContent = '本页讲稿';
+      notesHeading.textContent = '第 ' + pad2(currentSlide) + ' / ' + pad2(totalSlides) + ' 页';
+      notesBody.innerHTML = buildNoteBlockHTML(item, false);
+      notesBody.scrollTop = 0;
+    } else {
+      notesBadge.textContent = '全文讲稿';
+      notesHeading.textContent = '全 12 页连绵演说词';
+      if (!notesBody.querySelector('.transcript-item')) {
+        notesBody.innerHTML = SPEAKER_NOTES.map(function(item) {
+          return buildNoteBlockHTML(item, true);
+        }).join('');
+        notesBody.querySelectorAll('.transcript-item').forEach(function(el) {
+          el.addEventListener('click', function() {
+            const target = Number(el.getAttribute('data-note-slide'));
+            if (target && target !== currentSlide) goToSlide(target);
+          });
+        });
+      }
+      syncTranscriptScroll(true);
+      setTimeout(function() { syncTranscriptScroll(true); }, 250);
+    }
+    rescaleStage();
+    setTimeout(rescaleStage, 240);
+  }
+
+  function buildNoteBlockHTML(item, isAll) {
+    const isCur = item.slide === currentSlide;
+    const cls = 'note-block' + (isAll ? ' transcript-item' : '') + (isCur ? ' current' : '');
+    const ps = item.paragraphs.map(function(p) {
+      return '<p class="note-p">' + p + '</p>';
+    }).join('');
+    return (
+      '<div class="' + cls + '" data-note-slide="' + item.slide + '" id="note-slide-' + item.slide + '">' +
+        '<div class="note-block-meta">' +
+          '<span class="note-slide-num">SLIDE ' + pad2(item.slide) + '</span>' +
+          '<span class="note-slide-title">' + item.title + '</span>' +
+        '</div>' +
+        ps +
+        '<div class="note-cue"><strong>承接过渡：</strong>' + item.cue + '</div>' +
+      '</div>'
+    );
+  }
+
+  function syncTranscriptScroll(instant) {
+    if (notesMode !== 'all') return;
+    const blocks = notesBody.querySelectorAll('.transcript-item');
+    let activeEl = null;
+    blocks.forEach(function(el) {
+      const n = Number(el.getAttribute('data-note-slide'));
+      const match = (n === currentSlide);
+      el.classList.toggle('current', match);
+      if (match) activeEl = el;
+    });
+    if (activeEl) {
+      const targetTop = Math.max(0, activeEl.offsetTop - 14);
+      notesBody.scrollTo({ top: targetTop, behavior: instant ? 'auto' : 'smooth' });
+    }
+  }
+
+  function toggleNotesMode(targetMode) {
+    if (notesMode === targetMode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = targetMode;
+    }
+    renderNotes();
+  }
+
+  /* 翻页核心函数 */
+  function goToSlide(n) {
+    const clamped = Math.max(1, Math.min(totalSlides, n));
+    currentSlide = clamped;
+    slides.forEach(function(s, idx) {
+      s.classList.toggle('active', idx + 1 === currentSlide);
+    });
+    hudPage.textContent = pad2(currentSlide) + ' / ' + pad2(totalSlides);
+    progressFill.style.width = ((currentSlide / totalSlides) * 100).toFixed(2) + '%';
+    updateTOCHighlight();
+
+    if (notesMode === 'page') {
+      renderNotes();
+    } else if (notesMode === 'all') {
+      syncTranscriptScroll();
+    }
+  }
+
+  /* 自动播放 */
+  function setAutoplay(enable) {
+    if (autoplayTimer) {
+      clearInterval(autoplayTimer);
+      autoplayTimer = null;
+    }
+    if (enable) {
+      btnAutoplay.classList.add('autoplay-on');
+      autoplayLabel.textContent = '停止自动播放';
+      autoplayTimer = setInterval(function() {
+        if (currentSlide < totalSlides) {
+          goToSlide(currentSlide + 1);
+        } else {
+          goToSlide(1);
+        }
+      }, AUTOPLAY_INTERVAL_MS);
+    } else {
+      btnAutoplay.classList.remove('autoplay-on');
+      autoplayLabel.textContent = '自动播放';
+    }
+  }
+
+  /* 全屏（全屏后底部控制栏在 #app 内常驻可见） */
+  function toggleFullscreen() {
+    const doc = document;
+    const el = document.documentElement;
+    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+      if (el.requestFullscreen) el.requestFullscreen().catch(function() {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } else {
+      if (doc.exitFullscreen) doc.exitFullscreen().catch(function() {});
+      else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+    }
+  }
+
+  function updateFSLabel() {
+    const isFS = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+    fsLabel.textContent = isFS ? '退出全屏' : '全屏';
+    btnFullscreen.classList.toggle('active', isFS);
+    setTimeout(rescaleStage, 80);
+  }
+  document.addEventListener('fullscreenchange', updateFSLabel);
+  document.addEventListener('webkitfullscreenchange', updateFSLabel);
+
+  /* 按钮事件绑定 */
+  btnPrev.addEventListener('click', function() { goToSlide(currentSlide - 1); });
+  btnNext.addEventListener('click', function() { goToSlide(currentSlide + 1); });
+  btnToc.addEventListener('click', function() { setTOC(!tocOpen); });
+  document.getElementById('btn-toc-close').addEventListener('click', function() { setTOC(false); });
+  tocOverlay.addEventListener('click', function(e) { if (e.target === tocOverlay) setTOC(false); });
+
+  btnNotes.addEventListener('click', function() { toggleNotesMode('page'); });
+  btnTranscript.addEventListener('click', function() { toggleNotesMode('all'); });
+  tabNotePage.addEventListener('click', function() { notesMode = 'page'; renderNotes(); });
+  tabNoteAll.addEventListener('click', function() { notesMode = 'all'; renderNotes(); });
+  document.getElementById('btn-notes-close').addEventListener('click', function() {
+    notesMode = 'closed';
+    renderNotes();
+  });
+
+  btnAutoplay.addEventListener('click', function() { setAutoplay(!autoplayTimer); });
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  /* ==================== 3. 交互动画一：Slide 4 请求处理管线追踪 ==================== */
+  const PIPE_SCENARIOS = {
+    select: {
+      steps: [
+        { nodes: ['p-auth'], lines: [], msg: '1/5 认证层：连接已通过 ClientAuthentication_hook 校验' },
+        { nodes: ['p-parse'], lines: ['pl-1-2'], msg: '2/5 解析分析层：post_parse_analyze_hook 获取 Query 与 queryId' },
+        { nodes: ['p-plan'], lines: ['pl-2-3'], msg: '3/5 优化器层：planner_hook 与 pathlist_hook 参与候选路径生成' },
+        { nodes: ['p-exec'], lines: ['pl-3-4'], msg: '4/5 执行器层：ExecutorStart→End 采集耗时、行数、buffer 与 WAL' },
+        { nodes: ['p-log'], lines: ['pl-4-log'], msg: '5/5 日志层：如慢查询超阈值，emit_log_hook 捕获输出日志' }
+      ]
+    },
+    ddl: {
+      steps: [
+        { nodes: ['p-parse'], lines: [], msg: '1/4 解析层：CREATE ROLE / ALTER SYSTEM 生成 Utility PlannedStmt' },
+        { nodes: ['p-util'], lines: ['pl-2-util'], msg: '2/4 Utility 层：绕过常规执行器，进入 ProcessUtility_hook 审计拦截' },
+        { nodes: ['p-oa'], lines: ['pl-util-oa'], msg: '3/4 对象事件层：修改系统目录时触发 object_access_hook (POST_CREATE/ALTER)' },
+        { nodes: ['p-log'], lines: ['pl-oa-log'], msg: '4/4 日志层：emit_log_hook 汇总审计日志输出' }
+      ]
+    },
+    auth: {
+      steps: [
+        { nodes: ['p-auth'], lines: [], msg: '1/2 认证层：ClientAuthentication_hook 检查认证结果，失败则由 auth_delay 延迟' },
+        { nodes: ['p-log'], lines: [], msg: '2/2 日志层：认证失败记录经由 emit_log_hook 进入安全审计流' }
+      ]
+    }
+  };
+  let pipeMode = 'select';
+  let pipeStepIdx = -1;
+  let pipeTimer = null;
+  const pipeAllNodes = ['p-auth', 'p-parse', 'p-plan', 'p-exec', 'p-util', 'p-oa', 'p-log'];
+  const pipeAllLines = ['pl-1-2', 'pl-2-3', 'pl-2-util', 'pl-3-4', 'pl-util-oa', 'pl-4-log', 'pl-oa-log'];
+  const pipeStatusEl = document.getElementById('pipe-status');
+
+  function resetPipelineVisual() {
+    if (pipeTimer) { clearInterval(pipeTimer); pipeTimer = null; }
+    pipeStepIdx = -1;
+    pipeAllNodes.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('svg-dim', 'svg-hl');
+    });
+    pipeAllLines.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('svg-line-active');
+    });
+    pipeStatusEl.textContent = '已就绪（' + pipeMode.toUpperCase() + '）：点击「播放追踪」或「单步」观察路径';
+  }
+
+  function applyPipelineStep(idx) {
+    const steps = PIPE_SCENARIOS[pipeMode].steps;
+    if (idx < 0 || idx >= steps.length) return;
+    const visitedNodes = new Set();
+    const visitedLines = new Set();
+    for (let i = 0; i <= idx; i++) {
+      steps[i].nodes.forEach(function(n) { visitedNodes.add(n); });
+      steps[i].lines.forEach(function(l) { visitedLines.add(l); });
+    }
+    const curNodes = new Set(steps[idx].nodes);
+    pipeAllNodes.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('svg-dim', !visitedNodes.has(id));
+      el.classList.toggle('svg-hl', curNodes.has(id));
+    });
+    pipeAllLines.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('svg-line-active', visitedLines.has(id));
+    });
+    pipeStatusEl.textContent = steps[idx].msg;
+  }
+
+  function stepPipeline() {
+    const steps = PIPE_SCENARIOS[pipeMode].steps;
+    pipeStepIdx = (pipeStepIdx + 1) % steps.length;
+    applyPipelineStep(pipeStepIdx);
+  }
+
+  function playPipeline() {
+    resetPipelineVisual();
+    const steps = PIPE_SCENARIOS[pipeMode].steps;
+    pipeStepIdx = 0;
+    applyPipelineStep(0);
+    pipeTimer = setInterval(function() {
+      pipeStepIdx++;
+      if (pipeStepIdx >= steps.length) {
+        clearInterval(pipeTimer);
+        pipeTimer = null;
+        return;
+      }
+      applyPipelineStep(pipeStepIdx);
+    }, 1050);
+  }
+
+  document.querySelectorAll('[data-pipe-mode]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      pipeMode = btn.getAttribute('data-pipe-mode');
+      document.querySelectorAll('[data-pipe-mode]').forEach(function(b) {
+        b.classList.toggle('active', b === btn);
+      });
+      resetPipelineVisual();
+    });
+  });
+  document.getElementById('btn-pipe-play').addEventListener('click', playPipeline);
+  document.getElementById('btn-pipe-step').addEventListener('click', function() {
+    if (pipeTimer) { clearInterval(pipeTimer); pipeTimer = null; }
+    stepPipeline();
+  });
+  document.getElementById('btn-pipe-reset').addEventListener('click', resetPipelineVisual);
+
+  /* ==================== 4. 交互动画二：Slide 5 链式转发与截断模拟 ==================== */
+  let chainBroken = false;
+  let chainTimer = null;
+  const chainStatusEl = document.getElementById('chain-status');
+  const btnChainOk = document.getElementById('btn-chain-ok');
+  const btnChainCut = document.getElementById('btn-chain-cut');
+
+  function resetChainVisual() {
+    if (chainTimer) { clearInterval(chainTimer); chainTimer = null; }
+    ['c-core', 'c-extb', 'c-exta', 'c-std'].forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('svg-dim', 'svg-hl', 'svg-hl-teal');
+    });
+    ['cl-1', 'cl-2', 'cl-3'].forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('svg-line-active', 'svg-line-teal');
+    });
+    document.getElementById('cl-bypass').setAttribute('opacity', chainBroken ? '1' : '0');
+    document.getElementById('cl-bypass-lbl').setAttribute('opacity', chainBroken ? '1' : '0');
+    document.getElementById('c-extb-fwd').textContent = chainBroken
+      ? '2. 错误：直接调 standard_ExecutorStart()'
+      : '2. 调用 prev_ExecutorStart()';
+    document.getElementById('c-extb-fwd').setAttribute('fill', chainBroken ? '#BE653B' : '#2F7A66');
+    document.getElementById('c-exta-note').textContent = chainBroken
+      ? '警告：被跳过！统计彻底失效'
+      : 'prev == NULL（链尾）';
+    document.getElementById('c-exta-note').setAttribute('fill', chainBroken ? '#BE653B' : '#89938F');
+    document.getElementById('cl-2').setAttribute('opacity', chainBroken ? '0.2' : '1');
+    document.getElementById('cl-2-lbl').setAttribute('opacity', chainBroken ? '0.2' : '1');
+    chainStatusEl.textContent = chainBroken
+      ? '故障模式：点击「触发一次调用」观察扩展 A 如何被静默截断'
+      : '正常模式：shared_preload_libraries = \'pg_stat_statements, auto_explain\'';
+  }
+
+  function runChainSimulation() {
+    resetChainVisual();
+    const seq = chainBroken
+      ? [
+          { node: 'c-core', line: null, msg: '1/3 Core 发现 ExecutorStart_hook 非空，进入链头扩展 B' },
+          { node: 'c-extb', line: 'cl-1', msg: '2/3 扩展 B 忘记调 prev，直接绕过扩展 A 调标准实现！' },
+          { node: 'c-std', line: null, dimA: true, msg: '3/3 进入 standard_ExecutorStart —— 扩展 A (pgss) 从未被调用！' }
+        ]
+      : [
+          { node: 'c-core', line: null, msg: '1/4 Core 检查全局指针，先进入后加载的扩展 B (auto_explain)' },
+          { node: 'c-extb', line: 'cl-1', msg: '2/4 扩展 B 设置采样，并按约定转发给 prev_ExecutorStart()' },
+          { node: 'c-exta', line: 'cl-2', msg: '3/4 扩展 A (pg_stat_statements) 打开 INSTRUMENT_ALL 并转发' },
+          { node: 'c-std', line: 'cl-3', ok: true, msg: '4/4 到达 standard_ExecutorStart() —— 整条 Hook 链完整闭合！' }
+        ];
+    let i = 0;
+    function tick() {
+      if (i >= seq.length) {
+        clearInterval(chainTimer);
+        chainTimer = null;
+        return;
+      }
+      const s = seq[i];
+      ['c-core', 'c-extb', 'c-exta', 'c-std'].forEach(function(id) {
+        document.getElementById(id).classList.remove('svg-hl', 'svg-hl-teal');
+      });
+      document.getElementById(s.node).classList.add(s.ok ? 'svg-hl-teal' : 'svg-hl');
+      if (s.line) document.getElementById(s.line).classList.add(chainBroken ? 'svg-line-active' : 'svg-line-teal');
+      if (s.dimA) document.getElementById('c-exta').classList.add('svg-dim');
+      chainStatusEl.textContent = s.msg;
+      i++;
+    }
+    tick();
+    chainTimer = setInterval(tick, 950);
+  }
+
+  btnChainOk.addEventListener('click', function() {
+    chainBroken = false;
+    btnChainOk.classList.add('active');
+    btnChainCut.classList.remove('active');
+    resetChainVisual();
+  });
+  btnChainCut.addEventListener('click', function() {
+    chainBroken = true;
+    btnChainCut.classList.add('active');
+    btnChainOk.classList.remove('active');
+    resetChainVisual();
+  });
+  document.getElementById('btn-chain-run').addEventListener('click', runChainSimulation);
+  document.getElementById('btn-chain-reset').addEventListener('click', resetChainVisual);
+
+  /* ==================== 5. 交互动画三：Slide 6 优化器路径竞选 ==================== */
+  let planCustomWins = false;
+  let planTimer = null;
+  const btnPlanStd = document.getElementById('btn-plan-std');
+  const btnPlanCustom = document.getElementById('btn-plan-custom');
+  const planStatusEl = document.getElementById('plan-status');
+
+  function updatePlanModeUI() {
+    if (planTimer) { clearInterval(planTimer); planTimer = null; }
+    ['pe-entry', 'pe-paths', 'pe-winner', 'pe-plan', 'ex-1', 'ex-2', 'ex-3', 'ex-4'].forEach(function(id) {
+      document.getElementById(id).classList.remove('svg-hl', 'svg-hl-teal');
+    });
+    const boxStd = document.getElementById('pe-box-std');
+    const boxCus = document.getElementById('pe-box-custom');
+    if (planCustomWins) {
+      boxStd.setAttribute('stroke-width', '1.2');
+      boxCus.setAttribute('stroke-width', '2.8');
+      document.getElementById('pe-cost-std').textContent = '原生路径 · 代价较高';
+      document.getElementById('pe-cost-custom').textContent = 'CustomPath · 代价更优';
+      document.getElementById('pe-win-title').textContent = '优胜路径：CustomPath';
+      document.getElementById('pe-win-desc').textContent = '转换为 CustomScan Plan 节点';
+      planStatusEl.textContent = '当前场景：CustomPath 成本更低，优化器自动选中自定义扫描路径';
+    } else {
+      boxStd.setAttribute('stroke-width', '2.8');
+      boxCus.setAttribute('stroke-width', '1.2');
+      document.getElementById('pe-cost-std').textContent = '原生路径 · 代价更优';
+      document.getElementById('pe-cost-custom').textContent = 'CustomPath · 代价较高';
+      document.getElementById('pe-win-title').textContent = '优胜路径：IndexScan';
+      document.getElementById('pe-win-desc').textContent = '优化器保留原生最优计划';
+      planStatusEl.textContent = '当前场景：常规索引路径代价更低，CustomPath 落选且不干扰计划';
+    }
+  }
+
+  function runPlanAnimation() {
+    updatePlanModeUI();
+    const steps = [
+      { id: 'pe-entry', msg: '1/6 进入 planner_hook / standard_planner()，准备规划 Query 树' },
+      { id: 'pe-paths', msg: '2/6 set_rel_pathlist_hook 通过 add_path() 将 CustomPath 注入候选池' },
+      { id: 'pe-winner', teal: true, msg: planCustomWins ? '3/6 代价模型选中 CustomPath 作为 cheapest_total_path' : '3/6 代价模型选中 IndexScan，CustomPath 落选' },
+      { id: 'pe-plan', msg: '4/6 生成 PlannedStmt——无论选谁，语义结果必须完全一致' },
+      { id: 'ex-1', msg: '5/6 ExecutorStart_hook 开启 INSTRUMENT_ALL，ExecutorRun 追踪执行' },
+      { id: 'ex-4', teal: true, msg: '6/6 ExecutorEnd_hook 落盘共享统计或输出慢查询执行计划' }
+    ];
+    let i = 0;
+    function tick() {
+      if (i >= steps.length) {
+        clearInterval(planTimer);
+        planTimer = null;
+        return;
+      }
+      ['pe-entry', 'pe-paths', 'pe-winner', 'pe-plan', 'ex-1', 'ex-2', 'ex-3', 'ex-4'].forEach(function(id) {
+        document.getElementById(id).classList.remove('svg-hl', 'svg-hl-teal');
+      });
+      const st = steps[i];
+      document.getElementById(st.id).classList.add(st.teal ? 'svg-hl-teal' : 'svg-hl');
+      planStatusEl.textContent = st.msg;
+      i++;
+    }
+    tick();
+    planTimer = setInterval(tick, 900);
+  }
+
+  btnPlanStd.addEventListener('click', function() {
+    planCustomWins = false;
+    btnPlanStd.classList.add('active');
+    btnPlanCustom.classList.remove('active');
+    updatePlanModeUI();
+  });
+  btnPlanCustom.addEventListener('click', function() {
+    planCustomWins = true;
+    btnPlanCustom.classList.add('active');
+    btnPlanStd.classList.remove('active');
+    updatePlanModeUI();
+  });
+  document.getElementById('btn-plan-run').addEventListener('click', runPlanAnimation);
+
+  /* ==================== 6. 交互动画四：Slide 12 决策树演练 ==================== */
+  const DECISION_CASES = {
+    biz: {
+      nodes: ['d-g1', 'd-o1'],
+      lines: ['dl-g1-yes'],
+      win: 'd-o1',
+      msg: '表级业务校验 → Gate 1 选 YES → 直接用约束 / 触发器 / RLS，无需 Hook'
+    },
+    ddl: {
+      nodes: ['d-g1', 'd-g2', 'd-g3', 'd-o4'],
+      lines: ['dl-g1-no', 'dl-g2-no', 'dl-g3-yes'],
+      win: 'd-o4',
+      msg: '全局拦截 ALTER SYSTEM → 若事件触发器/权限不足 → shared_preload + ProcessUtility_hook'
+    },
+    gpu: {
+      nodes: ['d-g1', 'd-g2', 'd-o2'],
+      lines: ['dl-g1-no', 'dl-g2-yes'],
+      win: 'd-o2',
+      msg: '向量 / GPU 自定义扫描 → Gate 2 选 YES → Custom Scan + set_rel_pathlist_hook'
+    },
+    stat: {
+      nodes: ['d-g1', 'd-g2', 'd-g3', 'd-o4'],
+      lines: ['dl-g1-no', 'dl-g2-no', 'dl-g3-yes'],
+      win: 'd-o4',
+      msg: '全局慢 SQL 指标采集 → 需共享内存与全局覆盖 → shared_preload + ExecutorStart/End_hook'
+    }
+  };
+  const allDecNodes = ['d-g1', 'd-g2', 'd-g3', 'd-o1', 'd-o2', 'd-o3', 'd-o4'];
+  const allDecLines = ['dl-g1-yes', 'dl-g1-no', 'dl-g2-yes', 'dl-g2-no', 'dl-g3-no', 'dl-g3-yes'];
+  const decStatusEl = document.getElementById('dec-status');
+
+  function applyDecisionCase(caseKey) {
+    const cfg = DECISION_CASES[caseKey];
+    if (!cfg) return;
+    const activeNodes = new Set(cfg.nodes);
+    const activeLines = new Set(cfg.lines);
+    allDecNodes.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('svg-dim', !activeNodes.has(id));
+      el.classList.toggle('svg-hl', id === cfg.win && cfg.win === 'd-o4');
+      el.classList.toggle('svg-hl-teal', id === cfg.win && cfg.win !== 'd-o4');
+    });
+    allDecLines.forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('svg-line-active', activeLines.has(id));
+    });
+    decStatusEl.textContent = cfg.msg;
+  }
+
+  document.querySelectorAll('[data-dec-case]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const key = btn.getAttribute('data-dec-case');
+      document.querySelectorAll('[data-dec-case]').forEach(function(b) {
+        b.classList.toggle('active', b === btn);
+      });
+      applyDecisionCase(key);
+    });
+  });
+
+  /* ==================== 7. 全局快捷键 ==================== */
+  document.addEventListener('keydown', function(e) {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      setTOC(!tocOpen);
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      if (tocOpen) setTOC(false);
+      toggleNotesMode('page');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      if (tocOpen) setTOC(false);
+      toggleNotesMode('all');
+    } else if (key === 'p' || key === 'P') {
+      e.preventDefault();
+      setAutoplay(!autoplayTimer);
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) {
+        e.preventDefault();
+        setTOC(false);
+      }
+    } else if (key === 'ArrowRight' || key === 'PageDown') {
+      e.preventDefault();
+      if (tocOpen) setTOC(false);
+      goToSlide(currentSlide + 1);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      if (tocOpen) setTOC(false);
+      goToSlide(currentSlide - 1);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(1);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides);
+    } else if (key === ' ') {
+      e.preventDefault();
+      if (tocOpen) { setTOC(false); return; }
+      if (currentSlide === 4) { stepPipeline(); }
+      else if (currentSlide === 5) { runChainSimulation(); }
+      else if (currentSlide === 6) { runPlanAnimation(); }
+      else { goToSlide(currentSlide + 1); }
+    }
+  });
+
+  /* ==================== 8. 初始化 ==================== */
+  buildTOC();
+  goToSlide(1);
+  updatePlanModeUI();
+  applyDecisionCase('biz');
+  rescaleStage();
+})();
+</script>
+</body>
+</html>

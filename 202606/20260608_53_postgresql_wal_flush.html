@@ -1,0 +1,2951 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL WAL Flush 行为</title>
+<style>
+  :root {
+    --bg-paper: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --bg-letterbox: #E6E3DA;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-light: #E5EFF0;
+    --terra: #BE653B;
+    --terra-light: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-light: #E4F0EC;
+    --gold: #AE8A3E;
+    --gold-light: #F6EFE0;
+    --s1: #1E4B5A;
+    --s2: #2E6373;
+    --s3: #47808D;
+    --s4: #74A5AD;
+    --s5: #A4C4C6;
+    --s6: #CFE0DC;
+    --s7: #EBF1EE;
+    --font-serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", -apple-system, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-letterbox);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-letterbox);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Main split area: Stage on left, Notes drawer on right */
+  #workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-letterbox);
+    position: relative;
+    overflow: hidden;
+    padding: 12px;
+  }
+
+  #stage-frame {
+    width: 1600px;
+    height: 900px;
+    flex-shrink: 0;
+    background: var(--bg-paper);
+    position: relative;
+    overflow: hidden;
+    transform-origin: center center;
+    border: 1px solid var(--stroke);
+  }
+
+  /* Slide structure: fixed 1600x900 blueprint grid */
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    padding: 40px 64px 28px 64px;
+    display: none;
+    flex-direction: column;
+    background: var(--bg-paper);
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Subtle blueprint top strata bar */
+  .strata-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    display: flex;
+  }
+  .strata-bar span { flex: 1; height: 100%; }
+
+  .slide-eyebrow {
+    font-family: var(--font-mono), var(--font-sans);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    font-weight: 600;
+    text-transform: uppercase;
+    height: 20px;
+    line-height: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1.18;
+    color: var(--ink);
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.42;
+    color: var(--ink-sub);
+    margin-top: 8px;
+    max-width: 1440px;
+  }
+
+  .slide-divider {
+    width: 1472px;
+    height: 1px;
+    background: var(--stroke);
+    margin-top: 14px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+
+  /* Dedicated interactive control bar ABOVE SVG (zero overlap) */
+  .ctrl-bar {
+    width: 1400px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 0 12px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    flex-shrink: 0;
+  }
+
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ctrl-label {
+    font-size: 13px;
+    color: var(--ink-muted);
+    font-family: var(--font-mono), var(--font-sans);
+    letter-spacing: 1px;
+    margin-right: 4px;
+  }
+
+  .ctrl-btn {
+    height: 26px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    color: var(--ink);
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 24px;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--indigo);
+    color: var(--indigo);
+    background: var(--indigo-light);
+  }
+
+  .ctrl-btn.active {
+    background: var(--indigo);
+    color: #F7F6F2;
+    border-color: var(--indigo);
+  }
+
+  .ctrl-btn.accent {
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+
+  .ctrl-btn.accent:hover, .ctrl-btn.accent.active {
+    background: var(--terra);
+    color: #F7F6F2;
+    border-color: var(--terra);
+  }
+
+  .ctrl-btn.teal {
+    border-color: var(--teal);
+    color: var(--teal);
+  }
+
+  .ctrl-btn.teal:hover, .ctrl-btn.teal.active {
+    background: var(--teal);
+    color: #F7F6F2;
+    border-color: var(--teal);
+  }
+
+  .ctrl-status {
+    font-family: var(--font-mono), var(--font-sans);
+    font-size: 13px;
+    color: var(--indigo);
+    white-space: nowrap;
+  }
+
+  /* Static proposition strip for non-interactive slides to maintain uniform rhythm */
+  .prop-strip {
+    width: 1400px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 0 14px;
+    background: var(--bg-sub);
+    border-left: 3px solid var(--indigo);
+    border-top: 1px solid var(--stroke);
+    border-right: 1px solid var(--stroke);
+    border-bottom: 1px solid var(--stroke);
+    flex-shrink: 0;
+  }
+
+  .prop-strip-text {
+    font-size: 14px;
+    color: var(--ink-sub);
+  }
+
+  .prop-strip-tag {
+    font-family: var(--font-mono), var(--font-sans);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+  }
+
+  /* Diagram zone: strictly 1400 x 430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .diagram-zone svg {
+    width: 1400px;
+    height: 430px;
+    display: block;
+  }
+
+  /* Bottom NEXT bridge */
+  .slide-next {
+    margin-top: 18px;
+    width: 1400px;
+    padding: 12px 18px;
+    background: var(--bg-sub);
+    border-left: 3px solid var(--terra);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .next-tag {
+    font-family: var(--font-mono), var(--font-sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--terra);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.4;
+    color: var(--ink);
+  }
+
+  /* Slide footer */
+  .slide-footer {
+    margin-top: auto;
+    width: 1472px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--stroke);
+    padding-top: 8px;
+    font-size: 12px;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    letter-spacing: 1px;
+  }
+
+  .footer-page {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-sub);
+    letter-spacing: 1.5px;
+  }
+
+  /* Right-side in-page Notes / Transcript Pane */
+  #notes-pane {
+    width: 0;
+    height: 100%;
+    background: var(--bg-paper);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: width 0.2s ease;
+  }
+
+  #notes-pane.open {
+    width: 440px;
+    border-left-width: 1px;
+  }
+
+  #notes-header {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  #notes-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .notes-mode-tabs {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .notes-tab {
+    font-size: 12px;
+    padding: 4px 10px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+    cursor: pointer;
+    font-family: var(--font-sans);
+  }
+
+  .notes-tab.active {
+    background: var(--indigo);
+    color: #F7F6F2;
+    border-color: var(--indigo);
+  }
+
+  .notes-close {
+    font-size: 14px;
+    padding: 3px 9px;
+    background: transparent;
+    border: 1px solid var(--stroke);
+    color: var(--ink-sub);
+    cursor: pointer;
+    margin-left: 4px;
+  }
+
+  .notes-close:hover {
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+
+  #notes-body {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px 28px 20px;
+    scroll-behavior: smooth;
+  }
+
+  .note-block {
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--stroke);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .note-block.active-note {
+    background: var(--bg-sub);
+    border-color: var(--stroke);
+    border-left: 3px solid var(--terra);
+  }
+
+  .note-block-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .note-page-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--indigo);
+    flex-shrink: 0;
+  }
+
+  .note-block.active-note .note-page-num {
+    color: var(--terra);
+  }
+
+  .note-slide-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    flex: 1;
+  }
+
+  .note-text {
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--ink-sub);
+  }
+
+  .note-text p {
+    margin-bottom: 10px;
+  }
+
+  .note-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-text code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--indigo-light);
+    color: var(--indigo);
+    padding: 1px 4px;
+  }
+
+  /* Bottom shortcut HUD bar (always visible, including fullscreen) */
+  #hud-bar {
+    height: 44px;
+    flex-shrink: 0;
+    background: #1B2B33;
+    color: #EBF1EE;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-top: 2px solid var(--indigo);
+    z-index: 40;
+    user-select: none;
+  }
+
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-btn {
+    height: 28px;
+    padding: 0 10px;
+    background: #243842;
+    color: #EBF1EE;
+    border: 1px solid #3A5563;
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .hud-btn:hover {
+    background: var(--indigo);
+    border-color: #74A5AD;
+  }
+
+  .hud-btn.active {
+    background: var(--terra);
+    border-color: #E28E66;
+    color: #FFFFFF;
+  }
+
+  .hud-kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #CFE0DC;
+  }
+
+  .hud-progress {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #CFE0DC;
+    min-width: 68px;
+    text-align: center;
+  }
+
+  /* In-page TOC panel (G) */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(27, 43, 51, 0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    padding: 28px;
+  }
+
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  #toc-panel {
+    width: 960px;
+    max-width: 94%;
+    max-height: 86%;
+    background: var(--bg-paper);
+    border: 1px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #toc-header {
+    padding: 14px 22px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  #toc-header h2 {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink);
+  }
+
+  #toc-grid {
+    padding: 18px 22px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .toc-item {
+    padding: 12px 14px;
+    background: var(--bg-paper);
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--indigo);
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .toc-item:hover {
+    background: var(--indigo-light);
+    border-color: var(--indigo);
+  }
+
+  .toc-item.current {
+    background: var(--terra-light);
+    border-color: var(--terra);
+    border-left-color: var(--terra);
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--indigo);
+    min-width: 26px;
+  }
+
+  .toc-item.current .toc-num {
+    color: var(--terra);
+  }
+
+  .toc-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .toc-item-sub {
+    font-size: 12px;
+    color: var(--ink-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* SVG global typography rules */
+  svg text {
+    font-family: var(--font-sans);
+    user-select: none;
+  }
+  svg .svg-serif {
+    font-family: var(--font-serif);
+  }
+  svg .svg-mono {
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <div id="stage-viewport">
+      <div id="stage-frame">
+
+        <!-- ==================== SLIDE 01: COVER ==================== -->
+        <section class="slide active" data-index="0">
+          <div class="strata-bar">
+            <span style="background:#1E4B5A"></span>
+            <span style="background:#2E6373"></span>
+            <span style="background:#47808D"></span>
+            <span style="background:#74A5AD"></span>
+            <span style="background:#A4C4C6"></span>
+            <span style="background:#CFE0DC"></span>
+            <span style="background:#EBF1EE"></span>
+          </div>
+          <div class="slide-eyebrow">POSTGRESQL INTERNALS · 数据库筑基课 · 维护机制 + 写入路径 + 可靠性边界</div>
+          <h1 class="slide-title">WAL Flush 行为：水位、路径与持久性边界</h1>
+          <p class="slide-lead">作者 digoal · 2026-06-08 · 基于 PostgreSQL 源码与官方文档，剖析 WAL 字节何时落盘、谁在等它、谁又不等它。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">七阶地层总览：从应用提交到稳定存储与远端副本，越深越接近不可妥协的持久性底线</span>
+            <span class="prop-strip-tag">STRATA OVERVIEW · 7 LAYERS</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Left stratigraphic scale -->
+              <rect x="20" y="20" width="160" height="390" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="100" y="48" text-anchor="middle" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">DEPTH SCALE</text>
+              <line x1="36" y1="60" x2="164" y2="60" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="100" y="88" text-anchor="middle" font-size="13" fill="#46585F">浅层 · 应用语义</text>
+              <line x1="100" y1="104" x2="100" y2="356" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="100,366 94,354 106,354" fill="#245A6B"/>
+              <text x="100" y="392" text-anchor="middle" font-size="13" font-weight="700" fill="#1E4B5A">深层 · 稳定存储</text>
+
+              <!-- 7 Horizontal Strata Bands (y: 20 to 410, each height 52, gap 4 -> 7*52 + 6*4 = 388) -->
+              <!-- Layer 7 (shallowest) -->
+              <rect x="200" y="20" width="880" height="50" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="220" y="50" font-size="15" font-weight="700" fill="#1B2B33">L1 · 事务提交决策层</text>
+              <text x="488" y="50" font-size="14" fill="#46585F">RecordTransactionCommit() · 决定同步等待或异步登记</text>
+              <text x="1060" y="50" text-anchor="end" font-size="13" fill="#245A6B" class="svg-mono">xact.c</text>
+
+              <!-- Layer 6 -->
+              <rect x="200" y="76" width="880" height="50" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1"/>
+              <text x="220" y="106" font-size="15" font-weight="700" fill="#1B2B33">L2 · 共享内存 WAL Buffer</text>
+              <text x="488" y="106" font-size="14" fill="#1B2B33">XLogInsertRecord() 写入记录 · 推进 insert LSN</text>
+              <text x="1060" y="106" text-anchor="end" font-size="13" fill="#245A6B" class="svg-mono">insert LSN</text>
+
+              <!-- Layer 5 -->
+              <rect x="200" y="132" width="880" height="50" fill="#A4C4C6" stroke="#47808D" stroke-width="1"/>
+              <text x="220" y="162" font-size="15" font-weight="700" fill="#1B2B33">L3 · 写锁争用与 Group Commit</text>
+              <text x="488" y="162" font-size="14" fill="#1B2B33">WALWriteLock + commit_delay · 一次刷盘服务一批并发提交</text>
+              <text x="1060" y="162" text-anchor="end" font-size="13" fill="#1B2B33" class="svg-mono">xlog.c</text>
+
+              <!-- Layer 4 -->
+              <rect x="200" y="188" width="880" height="50" fill="#74A5AD" stroke="#2E6373" stroke-width="1"/>
+              <text x="220" y="218" font-size="15" font-weight="700" fill="#FFFFFF">L4 · 内核页缓存与文件写出</text>
+              <text x="488" y="218" font-size="14" fill="#F7F6F2">XLogWrite() 合并连续页写入 Segment · 推进 write LSN</text>
+              <text x="1060" y="218" text-anchor="end" font-size="13" fill="#F7F6F2" class="svg-mono">write LSN</text>
+
+              <!-- Layer 3 -->
+              <rect x="200" y="244" width="880" height="50" fill="#47808D" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="220" y="274" font-size="15" font-weight="700" fill="#FFFFFF">L5 · 后台兜底 WAL Writer</text>
+              <text x="488" y="274" font-size="14" fill="#EBF1EE">XLogBackgroundFlush() · 周期刷完整页与异步提交收敛</text>
+              <text x="1060" y="274" text-anchor="end" font-size="13" fill="#EBF1EE" class="svg-mono">walwriter.c</text>
+
+              <!-- Layer 2 -->
+              <rect x="200" y="300" width="880" height="50" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="220" y="330" font-size="15" font-weight="700" fill="#FFFFFF">L6 · WAL-Before-Data 护栏</text>
+              <text x="488" y="330" font-size="14" fill="#EBF1EE">FlushBuffer() / SLRU 写脏页前必先 XLogFlush(Page LSN)</text>
+              <text x="1060" y="330" text-anchor="end" font-size="13" fill="#CFE0DC" class="svg-mono">bufmgr / slru</text>
+
+              <!-- Layer 1 (deepest) -->
+              <rect x="200" y="356" width="880" height="54" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="220" y="388" font-size="15" font-weight="700" fill="#FFFFFF">L7 · 稳定存储与同步复制边界</text>
+              <text x="488" y="388" font-size="14" fill="#CFE0DC">issue_xlog_fsync() 推进 flush LSN · SyncRepWaitForLSN() 等备库</text>
+              <text x="1060" y="388" text-anchor="end" font-size="13" fill="#F7E9DE" class="svg-mono">flush LSN</text>
+
+              <!-- Right Callout Card: Course Grounding -->
+              <rect x="1104" y="20" width="276" height="390" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="1104" y="20" width="276" height="4" fill="#BE653B"/>
+              <text x="1124" y="56" font-size="16" font-weight="700" fill="#1B2B33" class="svg-serif">核心事实依据</text>
+              <line x1="1124" y1="70" x2="1360" y2="70" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1124" y="98" font-size="13" font-weight="700" fill="#245A6B">官方 SGML 文档</text>
+              <text x="1124" y="120" font-size="12.5" fill="#46585F" class="svg-mono">wal.sgml / config.sgml</text>
+              <text x="1124" y="140" font-size="12.5" fill="#46585F" class="svg-mono">monitoring.sgml</text>
+              <text x="1124" y="160" font-size="12.5" fill="#46585F" class="svg-mono">high-availability.sgml</text>
+              <text x="1124" y="196" font-size="13" font-weight="700" fill="#245A6B">核心后端源码</text>
+              <text x="1124" y="218" font-size="12.5" fill="#46585F" class="svg-mono">xlog.c / xact.c / README</text>
+              <text x="1124" y="238" font-size="12.5" fill="#46585F" class="svg-mono">walwriter.c / bufmgr.c</text>
+              <text x="1124" y="258" font-size="12.5" fill="#46585F" class="svg-mono">slru.c / syncrep.c</text>
+              <text x="1124" y="278" font-size="12.5" fill="#46585F" class="svg-mono">walsender.c</text>
+              <line x1="1124" y1="302" x2="1360" y2="302" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1124" y="330" font-size="13" font-weight="700" fill="#BE653B">交互说明</text>
+              <text x="1124" y="354" font-size="13" fill="#46585F">含 4 组机制交互推演</text>
+              <text x="1124" y="376" font-size="13" fill="#46585F">按 N / T 展开右侧讲稿</text>
+              <text x="1124" y="398" font-size="13" fill="#46585F">按 G 打开全局目录跳转</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">在拆解源码之前，先看生产环境中最常让人困惑的五个真实场景——它们全部指向同一个核心问题。</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>地层剖面 / 工程蓝图</span></div>
+            <div class="footer-page">01 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02: 5 SCENARIOS ==================== -->
+        <section class="slide" data-index="1">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">01 · PROBLEM STATEMENT · 生产现场</div>
+          <h1 class="slide-title">五个真实踩坑场景，都指向同一个本质问题</h1>
+          <p class="slide-lead">WAL 插入共享内存不等于持久化；真正决定性能与安全的，是「哪些字节必须在何时到达稳定存储」。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">现象归因图：把五类看似孤立的线上异常，收敛到 WAL Flush 的水位与等待边界</span>
+            <span class="prop-strip-tag">ROOT CAUSE CONVERGENCE</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- 5 Scenario Boxes on Left (x: 24..620, height 66, gap 12) -->
+              <!-- S1 -->
+              <rect x="24" y="24" width="596" height="66" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="24" width="6" height="66" fill="#BE653B"/>
+              <text x="44" y="50" font-size="15" font-weight="700" fill="#1B2B33">场景 1 · 小事务很多，CPU 不满但 TPS 上不去</text>
+              <text x="44" y="74" font-size="13.5" fill="#46585F">wait_event 出现 WALSync、WALWrite 或 LWLock:WALWrite</text>
+              <!-- S2 -->
+              <rect x="24" y="102" width="596" height="66" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="102" width="6" height="66" fill="#BE653B"/>
+              <text x="44" y="128" font-size="15" font-weight="700" fill="#1B2B33">场景 2 · 改 synchronous_commit=off 后延迟降了</text>
+              <text x="44" y="152" font-size="13.5" fill="#46585F">业务提心吊胆：万一断电崩溃，「数据库会不会损坏」？</text>
+              <!-- S3 -->
+              <rect x="24" y="180" width="596" height="66" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="180" width="6" height="66" fill="#BE653B"/>
+              <text x="44" y="206" font-size="15" font-weight="700" fill="#1B2B33">场景 3 · 开启同步复制后，主库本地盘很快却提交变慢</text>
+              <text x="44" y="230" font-size="13.5" fill="#46585F">提交延迟突然被网络 RTT 与 Standby 磁盘/回放能力拖住</text>
+              <!-- S4 -->
+              <rect x="24" y="258" width="596" height="66" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="258" width="6" height="66" fill="#BE653B"/>
+              <text x="44" y="284" font-size="15" font-weight="700" fill="#1B2B33">场景 4 · 后台写脏页或 Checkpoint 时也会触发 XLogFlush</text>
+              <text x="44" y="308" font-size="13.5" fill="#46585F">明明不是事务提交，为什么后台进程也在等 WAL 落盘？</text>
+              <!-- S5 -->
+              <rect x="24" y="336" width="596" height="66" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="336" width="6" height="66" fill="#BE653B"/>
+              <text x="44" y="362" font-size="15" font-weight="700" fill="#1B2B33">场景 5 · 三个 WAL LSN 监控函数返回值各不相同</text>
+              <text x="44" y="386" font-size="13.5" fill="#46585F">insert_lsn / wal_lsn / flush_lsn 到底哪个才代表「安全」？</text>
+
+              <!-- Orthogonal bus lines converging at x=668 -->
+              <path d="M 620 57 L 668 57 M 620 135 L 668 135 M 620 213 L 668 213 M 620 291 L 668 291 M 620 369 L 668 369" stroke="#245A6B" stroke-width="1.8" fill="none"/>
+              <line x1="668" y1="57" x2="668" y2="369" stroke="#245A6B" stroke-width="1.8"/>
+              <line x1="668" y1="213" x2="722" y2="213" stroke="#245A6B" stroke-width="2.2"/>
+              <polygon points="732,213 720,207 720,219" fill="#245A6B"/>
+
+              <!-- Center Core Proposition Box (x: 732..1038) -->
+              <rect x="732" y="114" width="306" height="198" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+              <text x="885" y="152" text-anchor="middle" font-size="13" letter-spacing="2" fill="#A4C4C6" class="svg-mono">CORE QUESTION</text>
+              <line x1="762" y1="168" x2="1008" y2="168" stroke="#47808D" stroke-width="1"/>
+              <text x="885" y="204" text-anchor="middle" font-size="21" font-weight="700" fill="#FFFFFF" class="svg-serif">哪些 WAL 字节</text>
+              <text x="885" y="238" text-anchor="middle" font-size="21" font-weight="700" fill="#FFFFFF" class="svg-serif">必须在什么时候</text>
+              <text x="885" y="272" text-anchor="middle" font-size="21" font-weight="700" fill="#F7E9DE" class="svg-serif">到达稳定存储？</text>
+
+              <!-- Orthogonal arrow from Core to Right Trade-off Boxes -->
+              <path d="M 1038 164 L 1076 164 L 1076 108 L 1104 108" stroke="#2F7A66" stroke-width="1.8" fill="none"/>
+              <polygon points="1114,108 1102,102 1102,114" fill="#2F7A66"/>
+              <path d="M 1038 262 L 1076 262 L 1076 318 L 1104 318" stroke="#BE653B" stroke-width="1.8" fill="none"/>
+              <polygon points="1114,318 1102,312 1102,324" fill="#BE653B"/>
+
+              <!-- Right Top: Design Strategy -->
+              <rect x="1114" y="34" width="262" height="156" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="1134" y="64" font-size="15" font-weight="700" fill="#2F7A66">PostgreSQL 的解法</text>
+              <text x="1134" y="92" font-size="13.5" fill="#1B2B33">· 将进度拆为三个 LSN 水位</text>
+              <text x="1134" y="118" font-size="13.5" fill="#1B2B33">· 不同角色等待不同水位</text>
+              <text x="1134" y="144" font-size="13.5" fill="#1B2B33">· Group Commit 摊薄 fsync</text>
+              <text x="1134" y="170" font-size="13.5" fill="#1B2B33">· WAL Writer 后台周期兜底</text>
+
+              <!-- Right Bottom: Inherent Cost -->
+              <rect x="1114" y="236" width="262" height="156" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="1134" y="266" font-size="15" font-weight="700" fill="#BE653B">无法回避的代价</text>
+              <text x="1134" y="294" font-size="13.5" fill="#1B2B33">· fsync 延迟直接进入提交尾延迟</text>
+              <text x="1134" y="320" font-size="13.5" fill="#1B2B33">· 同步复制叠加网络与备库 I/O</text>
+              <text x="1134" y="346" font-size="13.5" fill="#1B2B33">· 异步提交引入最近事务丢失窗</text>
+              <text x="1134" y="372" font-size="13.5" fill="#1B2B33">· 调参需在延迟与吞吐间权衡</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">既然 PostgreSQL 把进度拆成了三道水位，下一步就通过交互剖面看清 insert、write、flush 三者如何联动。</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>背景与核心命题</span></div>
+            <div class="footer-page">02 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03: 3 WATERMARKS (INTERACTIVE #1) ==================== -->
+        <section class="slide" data-index="2">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">02 · THREE WATERMARKS · 核心模型与交互推演</div>
+          <h1 class="slide-title">三道 LSN 水位：`insert`、`write` 与 `flush` 不是一回事</h1>
+          <p class="slide-lead">WAL flush 指把 WAL 字节推进到稳定存储，而非刷数据页；同步提交认准的是第三个水位 `flush LSN`。</p>
+          <div class="slide-divider"></div>
+          <div class="ctrl-bar" id="s3-ctrl">
+            <div class="ctrl-group">
+              <span class="ctrl-label">水位模拟</span>
+              <button class="ctrl-btn" id="s3-insert-btn">+ 插入 WAL Record</button>
+              <button class="ctrl-btn" id="s3-write-btn">执行 XLogWrite()</button>
+              <button class="ctrl-btn teal" id="s3-flush-btn">执行 issue_xlog_fsync()</button>
+              <button class="ctrl-btn accent" id="s3-method-btn">同步方式：fdatasync</button>
+              <button class="ctrl-btn" id="s3-auto-btn">自动演示</button>
+              <button class="ctrl-btn" id="s3-reset-btn">重置</button>
+            </div>
+            <div class="ctrl-status" id="s3-status">insert: 0/1000 | write: 0/1000 | flush: 0/1000</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" id="s3-svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Left Column: Shared Structs (x: 24..310) -->
+              <rect x="24" y="22" width="286" height="178" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="22" width="286" height="30" fill="#245A6B"/>
+              <text x="38" y="42" font-size="13" font-weight="700" fill="#FFFFFF" class="svg-mono">xlog.c · 共享进度结构</text>
+              <text x="38" y="74" font-size="13" font-weight="700" fill="#1B2B33" class="svg-mono">XLogwrtRqst (目标请求)</text>
+              <text x="38" y="96" font-size="12.5" fill="#46585F" class="svg-mono">  Write: last byte + 1</text>
+              <text x="38" y="116" font-size="12.5" fill="#46585F" class="svg-mono">  Flush: last byte + 1</text>
+              <line x1="38" y1="130" x2="294" y2="130" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="38" y="152" font-size="13" font-weight="700" fill="#2F7A66" class="svg-mono">XLogwrtResult (实际已达)</text>
+              <text x="38" y="174" font-size="12.5" fill="#46585F" class="svg-mono">  Write / Flush 已完成位置</text>
+
+              <!-- Method Explanation Box -->
+              <rect x="24" y="216" width="286" height="192" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="38" y="246" font-size="14" font-weight="700" fill="#1E4B5A">wal_sync_method 语义</text>
+              <line x1="38" y1="258" x2="294" y2="258" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="38" y="284" font-size="13" font-weight="700" fill="#245A6B" id="s3-method-title">当前：fdatasync（两步分离）</text>
+              <text x="38" y="310" font-size="13" fill="#1B2B33" id="s3-method-l1">· XLogWrite() 仅写入内核页缓存</text>
+              <text x="38" y="336" font-size="13" fill="#1B2B33" id="s3-method-l2">· issue_xlog_fsync() 才同步落盘</text>
+              <text x="38" y="362" font-size="13" fill="#46585F" id="s3-method-l3">· write LSN 领先 flush LSN 属常态</text>
+              <text x="38" y="390" font-size="12.5" fill="#BE653B">提示：点击上方切换 open_datasync</text>
+
+              <!-- Right Area: 3 Stratigraphic Storage Layers (x: 340..1376) -->
+              <!-- Layer 1: Shared WAL Buffer -->
+              <rect x="340" y="22" width="1036" height="114" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1.2"/>
+              <text x="358" y="48" font-size="15" font-weight="700" fill="#1B2B33">1. 共享内存 WAL Buffer</text>
+              <text x="630" y="48" font-size="13" fill="#46585F" class="svg-mono">pg_current_wal_insert_lsn()</text>
+              <text x="1358" y="48" text-anchor="end" font-size="13" fill="#BE653B">崩溃丢失 · 不代表持久化</text>
+              <!-- Track 1 -->
+              <rect x="358" y="68" width="998" height="44" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect id="s3-bar-insert" x="358" y="68" width="120" height="44" fill="#A4C4C6"/>
+              <text id="s3-lbl-insert" x="488" y="95" font-size="13" font-weight="700" fill="#1B2B33" class="svg-mono">insert LSN = 0/1000</text>
+
+              <!-- Layer 2: OS Page Cache / WAL Segment File -->
+              <rect x="340" y="156" width="1036" height="114" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1.2"/>
+              <text x="358" y="182" font-size="15" font-weight="700" fill="#1B2B33">2. WAL 文件 / 内核页缓存</text>
+              <text x="630" y="182" font-size="13" fill="#1B2B33" class="svg-mono">pg_current_wal_lsn()</text>
+              <text x="1358" y="182" text-anchor="end" font-size="13" fill="#AE8A3E">已写出到文件 · OS 崩溃仍可能丢</text>
+              <!-- Track 2 -->
+              <rect x="358" y="202" width="998" height="44" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect id="s3-bar-write" x="358" y="202" width="120" height="44" fill="#47808D"/>
+              <text id="s3-lbl-write" x="488" y="229" font-size="13" font-weight="700" fill="#1B2B33" class="svg-mono">write LSN = 0/1000</text>
+
+              <!-- Layer 3: Durable Storage -->
+              <rect x="340" y="290" width="1036" height="118" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.5"/>
+              <text x="358" y="316" font-size="15" font-weight="700" fill="#FFFFFF">3. 稳定存储 Durable Storage</text>
+              <text x="630" y="316" font-size="13" fill="#CFE0DC" class="svg-mono">pg_current_wal_flush_lsn()</text>
+              <text x="1358" y="316" text-anchor="end" font-size="13" fill="#E4F0EC">同步提交本地安全边界</text>
+              <!-- Track 3 -->
+              <rect x="358" y="336" width="998" height="44" fill="#2B5B6B" stroke="#47808D" stroke-width="1"/>
+              <rect id="s3-bar-flush" x="358" y="336" width="120" height="44" fill="#2F7A66"/>
+              <text id="s3-lbl-flush" x="488" y="363" font-size="13" font-weight="700" fill="#FFFFFF" class="svg-mono">flush LSN = 0/1000</text>
+
+              <!-- Vertical connectors between layers -->
+              <line x1="857" y1="136" x2="857" y2="152" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="857,156 852,148 862,148" fill="#245A6B"/>
+              <line x1="857" y1="270" x2="857" y2="286" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="857,290 852,282 862,282" fill="#2F7A66"/>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">弄清了三道水位，下一个直击本质的问题是：事务提交时为什么只等 WAL flush，而不用等数据页刷盘？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>三道 LSN 水位</span></div>
+            <div class="footer-page">03 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04: COMMIT PATH ==================== -->
+        <section class="slide" data-index="3">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">03 · TRANSACTION COMMIT · 核心原理 3.1</div>
+          <h1 class="slide-title">事务提交：为什么只等 WAL，不等数据页？</h1>
+          <p class="slide-lead">只要 commit WAL record 到达稳定存储，崩溃后就能按顺序 REDO；Heap/Index 脏页可以留给后台从容写出。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">xact.c · RecordTransactionCommit() 执行顺序：先持久化 commit record，再更新提交状态，最后返回客户端</span>
+            <span class="prop-strip-tag">COMMIT DURABILITY ORDER</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Top Main Path Band -->
+              <rect x="24" y="24" width="1352" height="218" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="42" y="52" font-size="14" font-weight="700" fill="#245A6B">同步提交主路径（前台必须等待）</text>
+
+              <!-- Step 1 -->
+              <rect x="42" y="74" width="218" height="114" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.2"/>
+              <text x="58" y="102" font-size="12" font-weight="700" fill="#245A6B" class="svg-mono">STEP 01</text>
+              <text x="58" y="128" font-size="15" font-weight="700" fill="#1B2B33">构造并插入 WAL</text>
+              <text x="58" y="152" font-size="13" fill="#46585F">XLogInsertRecord()</text>
+              <text x="58" y="172" font-size="12.5" fill="#46585F">写入 Commit Record</text>
+
+              <line x1="260" y1="131" x2="298" y2="131" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="306,131 296,125 296,137" fill="#245A6B"/>
+
+              <!-- Step 2 -->
+              <rect x="306" y="74" width="240" height="114" fill="#CFE0DC" stroke="#47808D" stroke-width="1.2"/>
+              <text x="322" y="102" font-size="12" font-weight="700" fill="#1E4B5A" class="svg-mono">STEP 02</text>
+              <text x="322" y="128" font-size="15" font-weight="700" fill="#1B2B33">锁定结束水位</text>
+              <text x="322" y="152" font-size="13" fill="#1B2B33" class="svg-mono">XactLastRecEnd</text>
+              <text x="322" y="172" font-size="12.5" fill="#46585F">已写 WAL 且已分配 XID</text>
+
+              <line x1="546" y1="131" x2="584" y2="131" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="592,131 582,125 582,137" fill="#245A6B"/>
+
+              <!-- Step 3 (Critical Barrier) -->
+              <rect x="592" y="64" width="276" height="134" fill="#1E4B5A" stroke="#BE653B" stroke-width="2"/>
+              <text x="610" y="92" font-size="12" font-weight="700" fill="#F7E9DE" class="svg-mono">STEP 03 · 持久性屏障</text>
+              <text x="610" y="120" font-size="16" font-weight="700" fill="#FFFFFF" class="svg-mono">XLogFlush(XactLastRecEnd)</text>
+              <text x="610" y="148" font-size="13" fill="#CFE0DC">确保 Commit Record 到达</text>
+              <text x="610" y="170" font-size="13" fill="#CFE0DC">稳定存储后才放行下一步</text>
+
+              <line x1="868" y1="131" x2="906" y2="131" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="914,131 904,125 904,137" fill="#2F7A66"/>
+
+              <!-- Step 4 -->
+              <rect x="914" y="74" width="232" height="114" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.2"/>
+              <text x="930" y="102" font-size="12" font-weight="700" fill="#2F7A66" class="svg-mono">STEP 04</text>
+              <text x="930" y="128" font-size="15" font-weight="700" fill="#1B2B33">更新事务提交状态</text>
+              <text x="930" y="152" font-size="13" fill="#1B2B33" class="svg-mono">TransactionIdCommitTree()</text>
+              <text x="930" y="172" font-size="12.5" fill="#46585F">提交状态对其他会话可见</text>
+
+              <line x1="1146" y1="131" x2="1184" y2="131" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="1192,131 1182,125 1182,137" fill="#2F7A66"/>
+
+              <!-- Step 5 -->
+              <rect x="1192" y="74" width="164" height="114" fill="#2F7A66" stroke="#1E4B5A" stroke-width="1.2"/>
+              <text x="1208" y="102" font-size="12" font-weight="700" fill="#E4F0EC" class="svg-mono">STEP 05</text>
+              <text x="1208" y="130" font-size="16" font-weight="700" fill="#FFFFFF">返回客户端</text>
+              <text x="1208" y="156" font-size="13" fill="#E4F0EC">COMMIT 成功</text>
+
+              <!-- Recovery invariant note -->
+              <text x="42" y="224" font-size="13.5" fill="#46585F">崩溃恢复判定：见到持久化 Commit Record → 事务已提交（REDO 重放）；未见到 → 等价于未提交（自动回滚）。</text>
+
+              <!-- Bottom Deferred Path Band -->
+              <rect x="24" y="264" width="1352" height="142" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="42" y="294" font-size="14" font-weight="700" fill="#1E4B5A">异步解耦路径（提交时不需要等待）</text>
+
+              <rect x="42" y="312" width="380" height="74" fill="#F7F6F2" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="58" y="340" font-size="14.5" font-weight="700" fill="#1B2B33">Shared Buffers 中的 Heap / Index 脏页</text>
+              <text x="58" y="366" font-size="13" fill="#46585F">所有修改已由 WAL Record 描述，保留在内存继续复用</text>
+
+              <line x1="422" y1="349" x2="486" y2="349" stroke="#47808D" stroke-width="1.8" stroke-dasharray="6,4"/>
+              <polygon points="494,349 484,343 484,355" fill="#47808D"/>
+
+              <rect x="494" y="312" width="420" height="74" fill="#F7F6F2" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="510" y="340" font-size="14.5" font-weight="700" fill="#1B2B33">延迟写出触发者：Checkpoint / BGWriter / 淘汰</text>
+              <text x="510" y="366" font-size="13" fill="#46585F">把随机数据页写盘从高频提交路径中彻底剥离</text>
+
+              <line x1="914" y1="349" x2="978" y2="349" stroke="#BE653B" stroke-width="1.8"/>
+              <polygon points="986,349 976,343 976,355" fill="#BE653B"/>
+
+              <rect x="986" y="312" width="370" height="74" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="1002" y="340" font-size="14.5" font-weight="700" fill="#BE653B">常见误区纠正</text>
+              <text x="1002" y="366" font-size="13" fill="#1B2B33">「COMMIT 返回」= Commit WAL 落盘，≠ 数据页已落盘</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">单事务提交只等一条顺序日志的 fsync；可当并发事务同时涌入 XLogFlush()，PostgreSQL 怎么防止把磁盘刷爆？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>事务提交与持久性顺序</span></div>
+            <div class="footer-page">04 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05: XLOGFLUSH & GROUP COMMIT (INTERACTIVE #2) ==================== -->
+        <section class="slide" data-index="4">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">04 · GROUP COMMIT · 核心原理 3.2 与并发推演</div>
+          <h1 class="slide-title">XLogFlush 内部：写锁争用如何自然演化为 Group Commit</h1>
+          <p class="slide-lead">等 `WALWriteLock` 并非全是坏事——Leader 一次刷盘会顺带推进后续已插入的 WAL，Follower 醒来直接快速返回。</p>
+          <div class="slide-divider"></div>
+          <div class="ctrl-bar" id="s5-ctrl">
+            <div class="ctrl-group">
+              <span class="ctrl-label">Group Commit 推演</span>
+              <button class="ctrl-btn" id="s5-step-btn">单步推进</button>
+              <button class="ctrl-btn teal" id="s5-auto-btn">自动播放</button>
+              <button class="ctrl-btn accent" id="s5-delay-btn">commit_delay：关闭 (0)</button>
+              <button class="ctrl-btn" id="s5-reset-btn">重置</button>
+            </div>
+            <div class="ctrl-status" id="s5-status">阶段 0 / 5：4 个并发事务准备提交</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" id="s5-svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Top Pipeline Header: 5 Phases -->
+              <rect x="24" y="20" width="256" height="42" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1" id="s5-ph1"/>
+              <text x="152" y="46" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1B2B33">1. 检查本地 Flush 水位</text>
+
+              <rect x="296" y="20" width="256" height="42" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1" id="s5-ph2"/>
+              <text x="424" y="46" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1B2B33">2. 合并请求 &amp; 争抢写锁</text>
+
+              <rect x="568" y="20" width="256" height="42" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1" id="s5-ph3"/>
+              <text x="696" y="46" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1B2B33">3. 可选 commit_delay 蓄水</text>
+
+              <rect x="840" y="20" width="256" height="42" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1" id="s5-ph4"/>
+              <text x="968" y="46" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1B2B33">4. Leader 一次 XLogWrite+fsync</text>
+
+              <rect x="1112" y="20" width="264" height="42" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1" id="s5-ph5"/>
+              <text x="1244" y="46" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1B2B33">5. 二次检查 · 快速返回</text>
+
+              <!-- 4 Transaction Swimlanes (y: 80, 152, 224, 296, height 58 each) -->
+              <!-- Lane T1 -->
+              <rect x="24" y="80" width="1352" height="58" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="80" width="144" height="58" fill="#245A6B"/>
+              <text x="96" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Tx 1 (Leader)</text>
+              <text x="96" y="126" text-anchor="middle" font-size="12" fill="#CFE0DC" class="svg-mono">LSN 0/2100</text>
+              <rect id="s5-t1-box" x="184" y="90" width="220" height="38" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+              <text id="s5-t1-txt" x="294" y="114" text-anchor="middle" font-size="13" fill="#1B2B33">调用 XLogFlush(0/2100)</text>
+
+              <!-- Lane T2 -->
+              <rect x="24" y="150" width="1352" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="150" width="144" height="58" fill="#47808D"/>
+              <text x="96" y="176" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Tx 2 (Follower)</text>
+              <text x="96" y="196" text-anchor="middle" font-size="12" fill="#EBF1EE" class="svg-mono">LSN 0/2200</text>
+              <rect id="s5-t2-box" x="184" y="160" width="220" height="38" fill="#E5EFF0" stroke="#47808D" stroke-width="1.2"/>
+              <text id="s5-t2-txt" x="294" y="184" text-anchor="middle" font-size="13" fill="#1B2B33">调用 XLogFlush(0/2200)</text>
+
+              <!-- Lane T3 -->
+              <rect x="24" y="220" width="1352" height="58" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="220" width="144" height="58" fill="#47808D"/>
+              <text x="96" y="246" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Tx 3 (Follower)</text>
+              <text x="96" y="266" text-anchor="middle" font-size="12" fill="#EBF1EE" class="svg-mono">LSN 0/2300</text>
+              <rect id="s5-t3-box" x="184" y="230" width="220" height="38" fill="#E5EFF0" stroke="#47808D" stroke-width="1.2"/>
+              <text id="s5-t3-txt" x="294" y="254" text-anchor="middle" font-size="13" fill="#1B2B33">调用 XLogFlush(0/2300)</text>
+
+              <!-- Lane T4 -->
+              <rect x="24" y="290" width="1352" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="290" width="144" height="58" fill="#74A5AD"/>
+              <text x="96" y="316" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">Tx 4 (稍晚到达)</text>
+              <text x="96" y="336" text-anchor="middle" font-size="12" fill="#1B2B33" class="svg-mono">LSN 0/2400</text>
+              <rect id="s5-t4-box" x="184" y="300" width="220" height="38" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.2"/>
+              <text id="s5-t4-txt" x="294" y="324" text-anchor="middle" font-size="13" fill="#1B2B33">稍后插入 WAL Buffer</text>
+
+              <!-- Bottom Shared Watermark Telemetry Bar -->
+              <rect x="24" y="364" width="1352" height="48" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text id="s5-shared-txt" x="44" y="393" font-size="14" fill="#FFFFFF">共享状态：LogwrtResult.Flush = 0/2000 | WALWriteLock = 空闲 | 累计 fsync = 0 次</text>
+              <text id="s5-note-txt" x="1356" y="393" text-anchor="end" font-size="13.5" fill="#F7E9DE">提示：点击「单步推进」观察 1 次 fsync 如何服务多事务</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">Leader 拿到 WALWriteLock 后调用的 XLogWrite()，内部又为什么要把 write 与 fsync 分开看待？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>XLogFlush 与组提交</span></div>
+            <div class="footer-page">05 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06: XLOGWRITE & WAL_SYNC_METHOD ==================== -->
+        <section class="slide" data-index="5">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">05 · XLOGWRITE &amp; SYNC METHOD · 核心原理 3.3</div>
+          <h1 class="slide-title">XLogWrite 拆解：为什么 write 与 fsync 必须分开看？</h1>
+          <p class="slide-lead">在 `WALWriteLock` 保护下，XLogWrite 合并连续页并切换 Segment，但「写进文件」是否落盘由 `wal_sync_method` 决定。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">左侧：XLogWrite() 内部执行流（xlog.c） | 右侧：wal_sync_method 与 fsync 参数行为对照（wal.sgml）</span>
+            <span class="prop-strip-tag">WRITE VS FSYNC BOUNDARY</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Left Flow Column (x: 24..600) -->
+              <rect x="24" y="20" width="576" height="390" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="20" width="576" height="34" fill="#245A6B"/>
+              <text x="42" y="42" font-size="14" font-weight="700" fill="#FFFFFF">XLogWrite() 执行流程（必须持有 WALWriteLock）</text>
+
+              <!-- Box 1 -->
+              <rect x="46" y="70" width="532" height="54" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1.2"/>
+              <text x="64" y="93" font-size="14" font-weight="700" fill="#1B2B33">1. 合并连续 WAL Buffer 页</text>
+              <text x="64" y="114" font-size="13" fill="#46585F">从当前未写出页开始，尽量合并成较少的 write() 系统调用</text>
+              <line x1="312" y1="124" x2="312" y2="140" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="312,144 307,136 317,136" fill="#245A6B"/>
+
+              <!-- Box 2 -->
+              <rect x="46" y="144" width="532" height="58" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1.2"/>
+              <text x="64" y="167" font-size="14" font-weight="700" fill="#1B2B33">2. 打开或切换 WAL Segment 文件</text>
+              <text x="64" y="189" font-size="13" fill="#46585F">若写到 Segment 末尾：立即 fsync，并通知归档、walsender、checkpoint</text>
+              <line x1="312" y1="202" x2="312" y2="218" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="312,222 307,214 317,214" fill="#245A6B"/>
+
+              <!-- Box 3 -->
+              <rect x="46" y="222" width="532" height="62" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="64" y="246" font-size="14" font-weight="700" fill="#1E4B5A">3. 若请求包含 Flush 目标 → 按 wal_sync_method 处理</text>
+              <text x="64" y="270" font-size="13" fill="#1B2B33">fdatasync/fsync 类：调用 issue_xlog_fsync()；open_sync 类：write 已同步</text>
+              <line x1="312" y1="284" x2="312" y2="300" stroke="#2F7A66" stroke-width="1.8"/>
+              <polygon points="312,304 307,296 317,296" fill="#2F7A66"/>
+
+              <!-- Box 4 -->
+              <rect x="46" y="304" width="532" height="86" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.2"/>
+              <text x="64" y="330" font-size="14" font-weight="700" fill="#2F7A66">4. 推进共享水位并唤醒等待者</text>
+              <text x="64" y="354" font-size="13" fill="#1B2B33">更新 LogwrtResult.Write 与 LogwrtResult.Flush</text>
+              <text x="64" y="376" font-size="13" fill="#46585F">唤醒 walsender 以及等待 Primary flush LSN 的进程</text>
+
+              <!-- Right Table Column (x: 624..1376) -->
+              <rect x="624" y="20" width="752" height="270" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Table Header -->
+              <rect x="624" y="20" width="752" height="38" fill="#1E4B5A"/>
+              <text x="642" y="44" font-size="13.5" font-weight="700" fill="#FFFFFF">wal_sync_method 类型</text>
+              <text x="870" y="44" font-size="13.5" font-weight="700" fill="#FFFFFF">XLogWrite() 行为</text>
+              <text x="1136" y="44" font-size="13.5" font-weight="700" fill="#FFFFFF">issue_xlog_fsync() 行为</text>
+
+              <!-- Row 1 -->
+              <rect x="624" y="58" width="752" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="642" y="88" font-size="13.5" font-weight="700" fill="#245A6B" class="svg-mono">open_datasync</text>
+              <text x="642" y="110" font-size="13.5" font-weight="700" fill="#245A6B" class="svg-mono">open_sync</text>
+              <text x="870" y="88" font-size="13" fill="#1B2B33">WAL 文件以同步写方式打开</text>
+              <text x="870" y="110" font-size="13" fill="#46585F">write 本身即带有同步语义</text>
+              <text x="1136" y="98" font-size="13" fill="#2F7A66" font-weight="700">通常不再额外做事</text>
+
+              <!-- Row 2 -->
+              <rect x="624" y="134" width="752" height="80" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="642" y="160" font-size="13.5" font-weight="700" fill="#245A6B" class="svg-mono">fdatasync / fsync</text>
+              <text x="642" y="184" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">fsync_writethrough</text>
+              <text x="870" y="164" font-size="13" fill="#1B2B33">将 WAL Buffer 写入文件</text>
+              <text x="870" y="188" font-size="13" fill="#46585F">通常仅进入操作系统内核缓存</text>
+              <text x="1136" y="164" font-size="13" fill="#1B2B33" font-weight="700">调用对应同步系统调用</text>
+              <text x="1136" y="188" font-size="13" fill="#46585F">真正推进到稳定存储</text>
+
+              <!-- Row 3 -->
+              <rect x="624" y="214" width="752" height="76" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="642" y="256" font-size="14" font-weight="700" fill="#BE653B" class="svg-mono">fsync = off</text>
+              <text x="870" y="256" font-size="13" fill="#1B2B33">不强制 WAL 到达稳定存储</text>
+              <text x="1136" y="256" font-size="13" font-weight="700" fill="#BE653B">wal_sync_method 失去可靠性意义</text>
+
+              <!-- Vertical column dividers -->
+              <line x1="852" y1="20" x2="852" y2="290" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="1118" y1="20" x2="1118" y2="290" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Bottom Callout on Right -->
+              <rect x="624" y="310" width="752" height="100" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.2"/>
+              <rect x="624" y="310" width="6" height="100" fill="#AE8A3E"/>
+              <text x="646" y="340" font-size="15" font-weight="700" fill="#1B2B33">监控排障关键区分（避免误判）</text>
+              <text x="646" y="368" font-size="13.5" fill="#46585F">· write LSN 往前推进 ≠ 同步提交已满足；只有 flush LSN 推进才代表 durable 边界前移。</text>
+              <text x="646" y="392" font-size="13.5" fill="#46585F">· 不同存储平台下各方法代价差异大，应结合 pg_test_fsync 与代表性 workload 实测。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">如果业务愿意容忍极短时间内的提交丢失、换取更低延迟，异步提交与 WAL Writer 又是怎样配合的？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>XLogWrite 与同步方式</span></div>
+            <div class="footer-page">06 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07: ASYNC COMMIT & WAL WRITER (INTERACTIVE #3) ==================== -->
+        <section class="slide" data-index="6">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">06 · ASYNC COMMIT &amp; WAL WRITER · 核心原理 3.4 &amp; 3.6</div>
+          <h1 class="slide-title">异步提交与 WAL Writer：跳过等待，如何守住一致底线？</h1>
+          <p class="slide-lead">前台用 `XLogSetAsyncXactLSN()` 登记后立刻返回，后台 WAL Writer 按周期与阈值分层刷盘，将丢失窗口收敛在可控范围。</p>
+          <div class="slide-divider"></div>
+          <div class="ctrl-bar" id="s7-ctrl">
+            <div class="ctrl-group">
+              <span class="ctrl-label">异步提交与崩溃窗口推演</span>
+              <button class="ctrl-btn" id="s7-commit-btn">+ 发起异步 COMMIT</button>
+              <button class="ctrl-btn teal" id="s7-tick-btn">推进 WAL Writer (+200ms)</button>
+              <button class="ctrl-btn accent" id="s7-crash-btn">模拟系统崩溃 (Crash)</button>
+              <button class="ctrl-btn" id="s7-auto-btn">自动演示</button>
+              <button class="ctrl-btn" id="s7-reset-btn">重置</button>
+            </div>
+            <div class="ctrl-status" id="s7-status">已返回客户端: 0 | 已落盘持久: 0 | 风险窗口内: 0</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" id="s7-svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Top Band: Foreground Async Commit -->
+              <rect x="24" y="20" width="1352" height="122" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="42" y="46" font-size="14" font-weight="700" fill="#245A6B">前台后端（synchronous_commit = off）</text>
+              <rect x="42" y="62" width="230" height="62" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1"/>
+              <text x="157" y="88" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1B2B33">写 Commit Record</text>
+              <text x="157" y="109" text-anchor="middle" font-size="12.5" fill="#46585F">进入 WAL Buffer</text>
+              <line x1="272" y1="93" x2="320" y2="93" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="328,93 318,87 318,99" fill="#245A6B"/>
+
+              <rect x="328" y="62" width="290" height="62" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.2"/>
+              <text x="473" y="88" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1B2B33" class="svg-mono">XLogSetAsyncXactLSN()</text>
+              <text x="473" y="109" text-anchor="middle" font-size="12.5" fill="#46585F">登记最近异步 LSN 并唤醒 WAL Writer</text>
+              <line x1="618" y1="93" x2="666" y2="93" stroke="#2F7A66" stroke-width="1.8"/>
+              <polygon points="674,93 664,87 664,99" fill="#2F7A66"/>
+
+              <rect x="674" y="62" width="218" height="62" fill="#2F7A66"/>
+              <text x="783" y="88" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">立即返回客户端</text>
+              <text x="783" y="109" text-anchor="middle" font-size="12.5" fill="#E4F0EC">不等本地 fsync</text>
+
+              <!-- Right side Tx Queue Display -->
+              <rect x="920" y="34" width="436" height="94" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="938" y="56" font-size="12.5" font-weight="700" fill="#46585F">最近已返回客户端的异步事务队列（每格 1 批事务）</text>
+              <g id="s7-tx-slots">
+                <rect x="938" y="68" width="52" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="998" y="68" width="52" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1058" y="68" width="52" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1118" y="68" width="52" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1178" y="68" width="52" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1238" y="68" width="52" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="1298" y="68" width="46" height="44" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              </g>
+
+              <!-- Vertical wakeup arrow from XLogSetAsyncXactLSN to WAL Writer -->
+              <line x1="473" y1="124" x2="473" y2="162" stroke="#AE8A3E" stroke-width="2" stroke-dasharray="5,3"/>
+              <polygon points="473,170 467,160 479,160" fill="#AE8A3E"/>
+
+              <!-- Middle Band: WAL Writer Background Flush -->
+              <rect x="24" y="170" width="1352" height="148" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="42" y="196" font-size="14" font-weight="700" fill="#1E4B5A">后台 WAL Writer · XLogBackgroundFlush() 分层策略（walwriter.c）</text>
+
+              <rect x="42" y="212" width="296" height="86" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1"/>
+              <text x="58" y="238" font-size="13.5" font-weight="700" fill="#245A6B">1. 优先退至完整 WAL 页边界</text>
+              <text x="58" y="262" font-size="12.5" fill="#46585F">通常只写完整页，避免频繁零碎 I/O</text>
+              <text x="58" y="284" font-size="12.5" fill="#46585F">写完后机会性初始化后续 WAL 页</text>
+
+              <line x1="338" y1="255" x2="374" y2="255" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="382,255 372,249 372,261" fill="#245A6B"/>
+
+              <rect x="382" y="212" width="310" height="86" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1"/>
+              <text x="398" y="238" font-size="13.5" font-weight="700" fill="#245A6B">2. 兜底不完整页的异步提交</text>
+              <text x="398" y="262" font-size="12.5" fill="#46585F">完整页已刷后，再推进最新异步 LSN</text>
+              <text x="398" y="284" font-size="12.5" fill="#46585F">最坏收敛窗口约 3 × wal_writer_delay</text>
+
+              <line x1="692" y1="255" x2="728" y2="255" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="736,255 726,249 726,261" fill="#245A6B"/>
+
+              <rect x="736" y="212" width="300" height="86" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="752" y="238" font-size="13.5" font-weight="700" fill="#1E4B5A">3. 关键参数控制节奏</text>
+              <text x="752" y="262" font-size="12.5" fill="#1B2B33" class="svg-mono">wal_writer_delay = 200ms</text>
+              <text x="752" y="284" font-size="12.5" fill="#1B2B33" class="svg-mono">wal_writer_flush_after = 1MB</text>
+
+              <rect x="1056" y="212" width="300" height="86" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="1072" y="238" font-size="13.5" font-weight="700" fill="#BE653B">注意：不是唯一写出者</text>
+              <text x="1072" y="262" font-size="12.5" fill="#1B2B33">同步提交、WAL Buffer 满、Segment</text>
+              <text x="1072" y="284" font-size="12.5" fill="#1B2B33">切换、Checkpoint 仍会触发写出</text>
+
+              <!-- Bottom Status / Crash Feedback Banner -->
+              <rect id="s7-banner" x="24" y="336" width="1352" height="74" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text id="s7-banner-title" x="44" y="366" font-size="15" font-weight="700" fill="#FFFFFF">风险边界说明：异步提交的风险是「最近已返回事务可能丢失」，而非「数据库任意损坏」</text>
+              <text id="s7-banner-sub" x="44" y="392" font-size="13.5" fill="#CFE0DC">崩溃或 immediate shutdown 后，未落盘的异步事务等价于干净 abort，数据库状态仍保持一致（transam/README）。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">既然异步提交依然守住了数据库一致性，那它和经常被误用的 fsync=off 之间，究竟隔着怎样的生死红线？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>异步提交与 WAL Writer</span></div>
+            <div class="footer-page">07 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08: ASYNC VS FSYNC=OFF ==================== -->
+        <section class="slide" data-index="7">
+          <div class="strata-bar"><span style="background:#BE653B"></span></div>
+          <div class="slide-eyebrow">07 · SAFETY BOUNDARY · 横向对比 4.3</div>
+          <h1 class="slide-title">红线对比：`synchronous_commit=off` 与 `fsync=off`</h1>
+          <p class="slide-lead">把 `fsync=off` 当性能优化手段是生产大忌——前者可按事务精准降级，后者直接摧毁整库崩溃恢复前提。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">五维工程对照：明确区分「事务级持久性降级」与「系统级崩溃安全失效」</span>
+            <span class="prop-strip-tag">CONSISTENCY REDLINE</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Comparison Table (x: 24..1376, y: 20..312) -->
+              <rect x="24" y="20" width="1352" height="44" fill="#1E4B5A"/>
+              <text x="46" y="47" font-size="14" font-weight="700" fill="#FFFFFF">对比维度</text>
+              <text x="274" y="47" font-size="14" font-weight="700" fill="#E4F0EC">synchronous_commit = off（可控权衡）</text>
+              <text x="836" y="47" font-size="14" font-weight="700" fill="#F7E9DE">fsync = off（生产禁区）</text>
+
+              <!-- Row 1 -->
+              <rect x="24" y="64" width="1352" height="48" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="46" y="93" font-size="14" font-weight="700" fill="#245A6B">作用范围</text>
+              <text x="274" y="93" font-size="14" fill="#1B2B33">精细可控：可按事务 (SET LOCAL)、会话、用户、库设置</text>
+              <text x="836" y="93" font-size="14" fill="#1B2B33">全局影响：服务器级可靠性开关，波及全部数据库与文件</text>
+
+              <!-- Row 2 -->
+              <rect x="24" y="112" width="1352" height="48" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="46" y="141" font-size="14" font-weight="700" fill="#245A6B">放弃了什么</text>
+              <text x="274" y="141" font-size="14" fill="#1B2B33">提交返回客户端前，不等 commit WAL 本地 flush 完成</text>
+              <text x="836" y="141" font-size="14" fill="#1B2B33">PostgreSQL 不再强制关键文件同步，顺序写入保障失效</text>
+
+              <!-- Row 3 -->
+              <rect x="24" y="160" width="1352" height="48" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="46" y="189" font-size="14" font-weight="700" fill="#245A6B">崩溃后风险</text>
+              <text x="274" y="189" font-size="14" fill="#1B2B33">最近已返回成功的少量事务可能丢失（最坏约 3×delay）</text>
+              <text x="836" y="189" font-size="14" font-weight="700" fill="#BE653B">OS 崩溃或断电可能造成任意严重的不可逆数据损坏</text>
+
+              <!-- Row 4 -->
+              <rect x="24" y="208" width="1352" height="48" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="46" y="237" font-size="14" font-weight="700" fill="#245A6B">数据库一致性</text>
+              <text x="274" y="237" font-size="14" font-weight="700" fill="#2F7A66">官方文档确认保持一致，丢失事务等价于干净 abort</text>
+              <text x="836" y="237" font-size="14" font-weight="700" fill="#BE653B">无法保证一致性，甚至可能无法启动恢复</text>
+
+              <!-- Row 5 -->
+              <rect x="24" y="256" width="1352" height="52" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="46" y="287" font-size="14" font-weight="700" fill="#245A6B">适合场景</text>
+              <text x="274" y="287" font-size="14" fill="#1B2B33">可重放事件、低价值日志、幂等队列消费结果</text>
+              <text x="836" y="287" font-size="14" fill="#46585F">仅限随时可重建的临时测试环境或一次性离线导入</text>
+
+              <!-- Vertical Dividers -->
+              <line x1="252" y1="20" x2="252" y2="308" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="814" y1="20" x2="814" y2="308" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Bottom Action Guidance Band -->
+              <rect x="24" y="330" width="664" height="80" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.2"/>
+              <rect x="24" y="330" width="6" height="80" fill="#2F7A66"/>
+              <text x="46" y="360" font-size="15" font-weight="700" fill="#2F7A66">推荐工程做法</text>
+              <text x="46" y="388" font-size="13.5" fill="#1B2B33">保持全局 fsync=on；仅对可重放低价值事务使用 SET LOCAL synchronous_commit TO off。</text>
+
+              <rect x="712" y="330" width="664" height="80" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <rect x="712" y="330" width="6" height="80" fill="#BE653B"/>
+              <text x="734" y="360" font-size="15" font-weight="700" fill="#BE653B">特别警示：Immediate Shutdown</text>
+              <text x="734" y="388" font-size="13.5" fill="#1B2B33">immediate shutdown 等价于崩溃，同样会丢失尚未 flush 的异步提交事务。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">前面都在讲事务提交触发 flush；接下来揭开第四个生产困惑——为什么写脏页和 SLRU 也会强制调用 XLogFlush()？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>异步提交与 fsync=off 边界</span></div>
+            <div class="footer-page">08 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09: WRITE-AHEAD RULE (FLUSHBUFFER & SLRU) ==================== -->
+        <section class="slide" data-index="8">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">08 · WAL-BEFORE-DATA INVARIANT · 核心原理 3.5</div>
+          <h1 class="slide-title">数据页与 SLRU 写出前：WAL Flush 死守日志先行铁律</h1>
+          <p class="slide-lead">提交 flush 保护的是「返回时的持久性」，页写前 flush 保护的是「WAL 必须先于数据页与状态页落盘」的恢复不变量。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">双支路保护机制：bufmgr.c (FlushBuffer) 与 slru.c 在写盘前强制按页内 LSN 推进 WAL Flush</span>
+            <span class="prop-strip-tag">WRITE-AHEAD RULE GUARD</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Branch A: Buffer Manager (Top Half) -->
+              <rect x="24" y="20" width="1352" height="200" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="42" y="48" font-size="14.5" font-weight="700" fill="#245A6B">支路 A · 共享缓冲区脏页写出（src/backend/storage/buffer/bufmgr.c · FlushBuffer）</text>
+
+              <!-- A1 -->
+              <rect x="42" y="68" width="240" height="86" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1.2"/>
+              <text x="58" y="96" font-size="14" font-weight="700" fill="#1B2B33">触发脏页写出</text>
+              <text x="58" y="118" font-size="12.5" fill="#46585F">Checkpoint / BGWriter / 淘汰</text>
+              <text x="58" y="138" font-size="12.5" fill="#245A6B" class="svg-mono">recptr = BufferGetLSN(buf)</text>
+
+              <line x1="282" y1="111" x2="320" y2="111" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="328,111 318,105 318,117" fill="#245A6B"/>
+
+              <!-- A2 Decision -->
+              <rect x="328" y="68" width="232" height="86" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="444" y="96" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1E4B5A">检查页面持久属性</text>
+              <text x="444" y="120" text-anchor="middle" font-size="12.5" fill="#1B2B33" class="svg-mono">buf-&gt;state &amp; BM_PERMANENT</text>
+              <text x="444" y="142" text-anchor="middle" font-size="12.5" fill="#46585F">区分永久表与 Unlogged 表</text>
+
+              <!-- Orthogonal branch: Yes (top) & No (bottom) -->
+              <path d="M 560 94 L 620 94" stroke="#2F7A66" stroke-width="2" fill="none"/>
+              <polygon points="628,94 618,88 618,100" fill="#2F7A66"/>
+              <text x="590" y="86" text-anchor="middle" font-size="12" font-weight="700" fill="#2F7A66">永久</text>
+
+              <path d="M 560 132 L 592 132 L 592 182 L 620 182" stroke="#AE8A3E" stroke-width="1.8" fill="none"/>
+              <polygon points="628,182 618,176 618,188" fill="#AE8A3E"/>
+              <text x="580" y="172" text-anchor="middle" font-size="12" font-weight="700" fill="#AE8A3E">非持久</text>
+
+              <!-- A3 Permanent -->
+              <rect x="628" y="60" width="320" height="74" fill="#1E4B5A" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="644" y="86" font-size="14" font-weight="700" fill="#FFFFFF" class="svg-mono">XLogFlush(recptr)</text>
+              <text x="644" y="110" font-size="12.5" fill="#CFE0DC">例：Page LSN = 0/7001200 → WAL 必先落盘</text>
+
+              <line x1="948" y1="97" x2="992" y2="97" stroke="#2F7A66" stroke-width="2"/>
+              <polygon points="1000,97 990,91 990,103" fill="#2F7A66"/>
+
+              <rect x="1000" y="60" width="356" height="74" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.2"/>
+              <text x="1016" y="86" font-size="14" font-weight="700" fill="#2F7A66">安全写出数据页到磁盘</text>
+              <text x="1016" y="110" font-size="12.5" fill="#1B2B33">杜绝「数据页已落盘却找不到对应 WAL」</text>
+
+              <!-- A4 Unlogged -->
+              <rect x="628" y="152" width="728" height="54" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1"/>
+              <text x="644" y="176" font-size="13.5" font-weight="700" fill="#1B2B33">Unlogged Relation 跳过 XLogFlush()</text>
+              <text x="644" y="196" font-size="12.5" fill="#46585F">崩溃后本就会重置；且部分 Unlogged Index 使用 fake LSN 做并发检测，误刷反而出错</text>
+
+              <!-- Branch B: SLRU (Bottom Half) -->
+              <rect x="24" y="240" width="1352" height="170" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="42" y="268" font-size="14.5" font-weight="700" fill="#1E4B5A">支路 B · SLRU 状态页写出保护（src/backend/access/transam/slru.c）</text>
+
+              <rect x="42" y="288" width="320" height="96" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1.2"/>
+              <text x="58" y="316" font-size="14" font-weight="700" fill="#1B2B33">事务状态页（如 CLOG）写出</text>
+              <text x="58" y="340" font-size="12.5" fill="#46585F">页内记录了异步提交等事务的状态位</text>
+              <text x="58" y="362" font-size="12.5" fill="#46585F">同时跟踪该页关联的最大 WAL LSN</text>
+
+              <line x1="362" y1="336" x2="412" y2="336" stroke="#245A6B" stroke-width="1.8"/>
+              <polygon points="420,336 410,330 410,342" fill="#245A6B"/>
+
+              <rect x="420" y="288" width="340" height="96" fill="#1E4B5A"/>
+              <text x="438" y="316" font-size="14" font-weight="700" fill="#FFFFFF">写出前按页内最大 LSN 刷 WAL</text>
+              <text x="438" y="340" font-size="13" fill="#CFE0DC" class="svg-mono">XLogFlush(max_lsn_on_page)</text>
+              <text x="438" y="364" font-size="12.5" fill="#EBF1EE">确保 Commit WAL 先于状态页到达稳定存储</text>
+
+              <line x1="760" y1="336" x2="810" y2="336" stroke="#BE653B" stroke-width="1.8"/>
+              <polygon points="818,336 808,330 808,342" fill="#BE653B"/>
+
+              <rect x="818" y="288" width="538" height="96" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="836" y="316" font-size="14" font-weight="700" fill="#BE653B">为什么这一步对异步提交至关重要？</text>
+              <text x="836" y="340" font-size="13" fill="#1B2B33">防止出现「CLOG 状态页已落盘标为 committed，但对应的</text>
+              <text x="836" y="364" font-size="13" fill="#1B2B33">commit WAL 尚未持久化」的顺序错误，从而守住一致性。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">单机本地的持久性与恢复不变量全部闭环；一旦配置了同步复制，提交等待又会如何跨越网络延伸到 Standby？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>数据页与 SLRU 写前保护</span></div>
+            <div class="footer-page">09 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10: SYNC REPLICATION (INTERACTIVE #4) ==================== -->
+        <section class="slide" data-index="9">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">09 · SYNCHRONOUS REPLICATION · 核心原理 3.7 与交互切换</div>
+          <h1 class="slide-title">同步复制：本地 Flush 之后，逐级叠加远端等待层次</h1>
+          <p class="slide-lead">同步复制不替代本地 flush，而是在 Primary durable 后调用 `SyncRepWaitForLSN()`，把延迟扩展为「本地 + 网络 + 备库」。</p>
+          <div class="slide-divider"></div>
+          <div class="ctrl-bar" id="s10-ctrl">
+            <div class="ctrl-group">
+              <span class="ctrl-label">切换 synchronous_commit</span>
+              <button class="ctrl-btn" data-mode="off">off</button>
+              <button class="ctrl-btn" data-mode="local">local</button>
+              <button class="ctrl-btn" data-mode="remote_write">remote_write</button>
+              <button class="ctrl-btn active" data-mode="on">on (默认)</button>
+              <button class="ctrl-btn" data-mode="remote_apply">remote_apply</button>
+              <button class="ctrl-btn teal" id="s10-auto-btn">轮播对比</button>
+            </div>
+            <div class="ctrl-status" id="s10-status">当前模式：on · 等主库 Flush + 备库 Flush</div>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" id="s10-svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Primary Container (x: 24..630) -->
+              <rect x="24" y="20" width="606" height="270" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="24" y="20" width="606" height="34" fill="#245A6B"/>
+              <text x="42" y="42" font-size="14" font-weight="700" fill="#FFFFFF">PRIMARY 主库（先完成本地持久化）</text>
+
+              <!-- P1: WAL Buffer -->
+              <rect id="s10-n1" x="44" y="76" width="166" height="106" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+              <text x="127" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">1. WAL Buffer</text>
+              <text x="127" y="130" text-anchor="middle" font-size="12.5" fill="#46585F">写入 Commit</text>
+              <text x="127" y="152" text-anchor="middle" font-size="12" fill="#245A6B" class="svg-mono">insert LSN</text>
+
+              <line x1="210" y1="129" x2="246" y2="129" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="254,129 244,123 244,135" fill="#245A6B"/>
+
+              <!-- P2: Local Flush -->
+              <rect id="s10-n2" x="254" y="76" width="176" height="106" fill="#1E4B5A" stroke="#2F7A66" stroke-width="2"/>
+              <text x="342" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">2. 本地 Flush</text>
+              <text x="342" y="130" text-anchor="middle" font-size="12.5" fill="#CFE0DC">XLogFlush()</text>
+              <text x="342" y="152" text-anchor="middle" font-size="12" fill="#E4F0EC" class="svg-mono">Primary Durable</text>
+
+              <line x1="430" y1="129" x2="466" y2="129" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="474,129 464,123 464,135" fill="#245A6B"/>
+
+              <!-- P3: walsender -->
+              <rect id="s10-n3" x="474" y="76" width="136" height="106" fill="#CFE0DC" stroke="#47808D" stroke-width="1.5"/>
+              <text x="542" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">walsender</text>
+              <text x="542" y="130" text-anchor="middle" font-size="12" fill="#46585F">WalSndWaitForWal</text>
+              <text x="542" y="152" text-anchor="middle" font-size="12" fill="#245A6B">等主库 Flush 后发</text>
+
+              <text x="44" y="218" font-size="13" fill="#46585F">· 主库在本地 flush 后调用 SyncRepWaitForLSN(XactLastRecEnd, true)</text>
+              <text x="44" y="242" font-size="13" fill="#46585F">· shutdown 时 walsender 会主动 XLogFlush(InsertEnd) 避免死等</text>
+              <text x="44" y="266" font-size="12.5" fill="#245A6B" class="svg-mono">syncrep.c / walsender.c</text>
+
+              <!-- Network Bridge -->
+              <line x1="630" y1="129" x2="722" y2="129" stroke="#BE653B" stroke-width="2.2" stroke-dasharray="6,4"/>
+              <polygon points="732,129 720,123 720,135" fill="#BE653B"/>
+              <text x="681" y="112" text-anchor="middle" font-size="12.5" font-weight="700" fill="#BE653B">网络 RTT</text>
+              <text x="681" y="152" text-anchor="middle" font-size="11.5" fill="#46585F">WAL 流 + ACK</text>
+
+              <!-- Standby Container (x: 732..1376) -->
+              <rect x="732" y="20" width="644" height="270" fill="#F1EFE9" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="732" y="20" width="644" height="34" fill="#47808D"/>
+              <text x="750" y="42" font-size="14" font-weight="700" fill="#FFFFFF">STANDBY 备库（三层远端反馈水位）</text>
+
+              <!-- S1: remote_write -->
+              <rect id="s10-n4" x="752" y="76" width="180" height="106" fill="#CFE0DC" stroke="#47808D" stroke-width="1.5"/>
+              <text x="842" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">3. 备库 Write</text>
+              <text x="842" y="130" text-anchor="middle" font-size="12.5" fill="#46585F">写到备库文件系统</text>
+              <text x="842" y="152" text-anchor="middle" font-size="12" fill="#245A6B" class="svg-mono">remote_write</text>
+
+              <line x1="932" y1="129" x2="966" y2="129" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="974,129 964,123 964,135" fill="#245A6B"/>
+
+              <!-- S2: on (remote flush) -->
+              <rect id="s10-n5" x="974" y="76" width="180" height="106" fill="#1E4B5A" stroke="#2F7A66" stroke-width="2"/>
+              <text x="1064" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF">4. 备库 Flush</text>
+              <text x="1064" y="130" text-anchor="middle" font-size="12.5" fill="#CFE0DC">备库 WAL 落盘</text>
+              <text x="1064" y="152" text-anchor="middle" font-size="12" fill="#E4F0EC" class="svg-mono">on (默认同步)</text>
+
+              <line x1="1154" y1="129" x2="1188" y2="129" stroke="#245A6B" stroke-width="2"/>
+              <polygon points="1196,129 1186,123 1186,135" fill="#245A6B"/>
+
+              <!-- S3: remote_apply -->
+              <rect id="s10-n6" x="1196" y="76" width="160" height="106" fill="#EBF1EE" stroke="#74A5AD" stroke-width="1.5"/>
+              <text x="1276" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">5. 备库 Replay</text>
+              <text x="1276" y="130" text-anchor="middle" font-size="12.5" fill="#46585F">重放对查询可见</text>
+              <text x="1276" y="152" text-anchor="middle" font-size="12" fill="#245A6B" class="svg-mono">remote_apply</text>
+
+              <!-- Return Marker Arrow -->
+              <rect id="s10-marker-box" x="990" y="206" width="148" height="32" fill="#BE653B"/>
+              <text id="s10-marker-txt" x="1064" y="227" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">▲ COMMIT 返回点</text>
+
+              <text x="752" y="266" font-size="13" fill="#46585F">提示：未配置 synchronous_standby_names 时，非 off 模式仅体现为本地 WAL flush。</text>
+
+              <!-- Bottom Dynamic Explanation Box -->
+              <rect x="24" y="308" width="1352" height="102" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text id="s10-desc-title" x="46" y="340" font-size="16" font-weight="700" fill="#FFFFFF">模式 on：等主库本地 Flush + 等备库 Flush 到稳定存储</text>
+              <text id="s10-desc-l1" x="46" y="368" font-size="13.5" fill="#CFE0DC">工程含义：默认同步复制语义，主备均落盘后才返回；提交延迟直接受主库盘、网络 RTT 与备库 fsync 共同影响。</text>
+              <text id="s10-desc-l2" x="46" y="394" font-size="13.5" fill="#F7E9DE">容灾边界：主库彻底损毁且备库 OS 崩溃时，已返回提交依然安全；但不保证备库立刻读到最新数据。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">看完了所有路径，现在把前台提交、后台 WAL Writer、脏页写出三类触发者放到同一张表里做全局对照。</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>同步复制等待层次</span></div>
+            <div class="footer-page">10 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11: 3 TRIGGERS MATRIX ==================== -->
+        <section class="slide" data-index="10">
+          <div class="strata-bar"><span style="background:#245A6B"></span></div>
+          <div class="slide-eyebrow">10 · GLOBAL COMPARISON · 横向对比 4.1 &amp; 4.2</div>
+          <h1 class="slide-title">三类 WAL Flush 触发者横向解剖</h1>
+          <p class="slide-lead">它们最终都会碰触 `XLogFlush()` 或 `XLogWrite()`，但目标水位、风险画像和调优手柄完全不同，排障必须先分清路径。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">全局对照矩阵：同步提交 vs WAL Writer vs 数据页写前 FlushBuffer</span>
+            <span class="prop-strip-tag">THREE FLUSH TRIGGERS</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Header -->
+              <rect x="24" y="20" width="1352" height="44" fill="#1E4B5A"/>
+              <text x="44" y="47" font-size="14" font-weight="700" fill="#FFFFFF">维度</text>
+              <text x="206" y="47" font-size="14" font-weight="700" fill="#FFFFFF">同步提交 · XLogFlush</text>
+              <text x="606" y="47" font-size="14" font-weight="700" fill="#FFFFFF">WAL Writer · XLogBackgroundFlush</text>
+              <text x="1006" y="47" font-size="14" font-weight="700" fill="#FFFFFF">数据页写前 · FlushBuffer</text>
+
+              <!-- Row 1: Trigger -->
+              <rect x="24" y="64" width="1352" height="62" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="44" y="100" font-size="14" font-weight="700" fill="#245A6B">触发者</text>
+              <text x="206" y="90" font-size="13.5" fill="#1B2B33">前台事务提交、两阶段提交</text>
+              <text x="206" y="112" font-size="13" fill="#46585F">以及部分强制同步操作</text>
+              <text x="606" y="90" font-size="13.5" fill="#1B2B33">后台 WAL Writer 进程</text>
+              <text x="606" y="112" font-size="13" fill="#46585F">周期超时或被异步提交 Latch 唤醒</text>
+              <text x="1006" y="90" font-size="13.5" fill="#1B2B33">Checkpoint、BGWriter</text>
+              <text x="1006" y="112" font-size="13" fill="#46585F">共享缓冲区淘汰、手工 flush</text>
+
+              <!-- Row 2: Target LSN -->
+              <rect x="24" y="126" width="1352" height="58" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="44" y="160" font-size="14" font-weight="700" fill="#245A6B">目标 LSN</text>
+              <text x="206" y="160" font-size="13.5" fill="#1B2B33">Commit Record 结束 LSN 或特定记录</text>
+              <text x="606" y="160" font-size="13.5" fill="#1B2B33">完整 WAL 页边界或最新异步 LSN</text>
+              <text x="1006" y="160" font-size="13.5" fill="#1B2B33">数据页头部记录的 Page LSN</text>
+
+              <!-- Row 3: Client Latency -->
+              <rect x="24" y="184" width="1352" height="54" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="44" y="216" font-size="14" font-weight="700" fill="#245A6B">客户端返回</text>
+              <text x="206" y="216" font-size="13.5" font-weight="700" fill="#BE653B">直接阻塞客户端 COMMIT 返回</text>
+              <text x="606" y="216" font-size="13.5" fill="#1B2B33">不阻塞，但决定异步提交丢失窗口</text>
+              <text x="1006" y="216" font-size="13.5" fill="#2F7A66">不关切返回，只守恢复顺序</text>
+
+              <!-- Row 4: Main Risk -->
+              <rect x="24" y="238" width="1352" height="66" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="44" y="276" font-size="14" font-weight="700" fill="#245A6B">主要风险</text>
+              <text x="206" y="266" font-size="13.5" fill="#1B2B33">提交尾延迟升高、WALWriteLock 争用</text>
+              <text x="206" y="288" font-size="13" fill="#BE653B">底层 fsync 慢或同步复制拖慢</text>
+              <text x="606" y="266" font-size="13.5" fill="#1B2B33">刷太慢导致异步丢失窗口变长</text>
+              <text x="606" y="288" font-size="13" fill="#46585F">或前台后端被迫自己写 WAL 增多</text>
+              <text x="1006" y="266" font-size="13.5" fill="#1B2B33">若跳过会破坏 WAL-before-data</text>
+              <text x="1006" y="288" font-size="13" fill="#46585F">Checkpoint 高峰放大写盘压力</text>
+
+              <!-- Row 5: Tuning Knobs -->
+              <rect x="24" y="304" width="1352" height="66" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <text x="44" y="342" font-size="14" font-weight="700" fill="#1E4B5A">典型调参</text>
+              <text x="206" y="332" font-size="13" fill="#1B2B33" class="svg-mono">synchronous_commit / commit_delay</text>
+              <text x="206" y="354" font-size="13" fill="#46585F">底层存储性能、同步复制拓扑</text>
+              <text x="606" y="332" font-size="13" fill="#1B2B33" class="svg-mono">wal_writer_delay / flush_after</text>
+              <text x="606" y="354" font-size="13" fill="#46585F">wal_buffers 容量评估</text>
+              <text x="1006" y="332" font-size="13" fill="#1B2B33" class="svg-mono">checkpoint_* / shared_buffers</text>
+              <text x="1006" y="354" font-size="13" fill="#46585F">存储写回策略与 full_page_writes</text>
+
+              <!-- Column lines -->
+              <line x1="186" y1="20" x2="186" y2="370" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="586" y1="20" x2="586" y2="370" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="986" y1="20" x2="986" y2="370" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Bottom rule -->
+              <text x="24" y="406" font-size="13.5" fill="#46585F">工程铁律：只调大 wal_buffers 不能解决 fsync 慢或同步复制慢；调优前必须先通过观测手段锁定慢在哪一条路径。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">既然「先定位再调参」是铁律，下一页给出可直接落地的四套诊断 SQL 与基准验证方法。</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>三类触发者全局对照</span></div>
+            <div class="footer-page">11 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12: OBSERVABILITY & SQL TOOLKIT ==================== -->
+        <section class="slide" data-index="11">
+          <div class="strata-bar"><span style="background:#2F7A66"></span></div>
+          <div class="slide-eyebrow">11 · OBSERVABILITY &amp; DEMO · 实操验证</div>
+          <h1 class="slide-title">可观测性工具箱：用四组查询拆开「写慢」与「刷慢」</h1>
+          <p class="slide-lead">把 LSN 水位、WAL 统计、I/O 耗时、等待事件与 `pg_test_fsync` 组合起来，让每一次调参都有实证依据。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">测试库实操 SQL 蓝图（基于 monitoring.sgml 与 func-admin.sgml，不虚构任何压测数字）</span>
+            <span class="prop-strip-tag">DIAGNOSTIC SQL QUADRANT</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Q1: Top-Left (x: 24..688, y: 20..204) -->
+              <rect x="24" y="20" width="664" height="184" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="20" width="664" height="32" fill="#245A6B"/>
+              <text x="40" y="41" font-size="13.5" font-weight="700" fill="#FFFFFF">1. 观测三道 LSN 水位 &amp; 对照同步/异步提交</text>
+              <text x="40" y="74" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT pg_current_wal_insert_lsn() AS insert_lsn,</text>
+              <text x="40" y="94" font-size="12.5" fill="#1B2B33" class="svg-mono">       pg_current_wal_lsn()        AS write_lsn,</text>
+              <text x="40" y="114" font-size="12.5" fill="#1B2B33" class="svg-mono">       pg_current_wal_flush_lsn()  AS flush_lsn;</text>
+              <line x1="40" y1="130" x2="670" y2="130" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="40" y="152" font-size="12.5" fill="#2F7A66" class="svg-mono">BEGIN; SET LOCAL synchronous_commit TO off; INSERT ...; COMMIT;</text>
+              <text x="40" y="176" font-size="12.5" fill="#46585F">验证点：同步提交后 flush_lsn 必覆盖 commit；异步提交后 flush_lsn 可短暂落后。</text>
+
+              <!-- Q2: Top-Right (x: 712..1376, y: 20..204) -->
+              <rect x="712" y="20" width="664" height="184" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="712" y="20" width="664" height="32" fill="#245A6B"/>
+              <text x="728" y="41" font-size="13.5" font-weight="700" fill="#FFFFFF">2. 观测 WAL 统计与 I/O 耗时（拆分 write 与 fsync）</text>
+              <text x="728" y="74" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT wal_records, wal_fpi, wal_bytes, wal_buffers_full</text>
+              <text x="728" y="94" font-size="12.5" fill="#1B2B33" class="svg-mono">FROM pg_stat_wal;</text>
+              <line x1="728" y1="108" x2="1358" y2="108" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="728" y="130" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT backend_type, writes, write_time, fsyncs, fsync_time</text>
+              <text x="728" y="150" font-size="12.5" fill="#1B2B33" class="svg-mono">FROM pg_stat_io WHERE object = 'wal';</text>
+              <text x="728" y="176" font-size="12.5" fill="#46585F">验证点：开启 track_wal_io_timing 后可区分写文件慢还是 fsync 慢。</text>
+
+              <!-- Q3: Bottom-Left (x: 24..688, y: 222..410) -->
+              <rect x="24" y="222" width="664" height="188" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="222" width="664" height="32" fill="#47808D"/>
+              <text x="40" y="243" font-size="13.5" font-weight="700" fill="#FFFFFF">3. 捕捉活跃会话等待事件（pg_stat_activity）</text>
+              <text x="40" y="276" font-size="12.5" fill="#1B2B33" class="svg-mono">SELECT pid, backend_type, wait_event_type, wait_event, state</text>
+              <text x="40" y="296" font-size="12.5" fill="#1B2B33" class="svg-mono">FROM pg_stat_activity</text>
+              <text x="40" y="316" font-size="12.5" fill="#1B2B33" class="svg-mono">WHERE wait_event IN ('WALWrite','WALSync','CommitDelay')</text>
+              <text x="40" y="336" font-size="12.5" fill="#1B2B33" class="svg-mono">   OR wait_event_type = 'LWLock';</text>
+              <text x="40" y="366" font-size="12.5" fill="#46585F">· WALWrite / WALSync：文件写与同步等待 · LWLock:WALWrite：争抢写出锁</text>
+              <text x="40" y="388" font-size="12.5" fill="#46585F">· CommitDelay：Group Commit Leader 正在主动等待更多事务汇入</text>
+
+              <!-- Q4: Bottom-Right (x: 712..1376, y: 222..410) -->
+              <rect x="712" y="222" width="664" height="188" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.2"/>
+              <rect x="712" y="222" width="664" height="32" fill="#2F7A66"/>
+              <text x="728" y="243" font-size="13.5" font-weight="700" fill="#FFFFFF">4. 粗测单次 Flush 成本（pg_test_fsync）</text>
+              <rect x="728" y="270" width="200" height="36" fill="#1E4B5A"/>
+              <text x="828" y="293" text-anchor="middle" font-size="14" font-weight="700" fill="#FFFFFF" class="svg-mono">$ pg_test_fsync</text>
+              <text x="728" y="330" font-size="13" fill="#1B2B33">· 比较当前存储上不同 wal_sync_method（fdatasync、open_datasync 等）相对成本</text>
+              <text x="728" y="356" font-size="13" fill="#1B2B33">· 辅助判断 commit_delay 是否具备测试价值</text>
+              <text x="728" y="384" font-size="13" font-weight="700" fill="#BE653B">边界：结果不等同业务 TPS，任何调参必须用代表性 workload 实测验证。</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">有了观测抓手，架构师、DBA 和业务开发者在实际工作中应该各自守住哪些动作规范？</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>可观测性与诊断 SQL</span></div>
+            <div class="footer-page">12 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13: BEST PRACTICES BY ROLE ==================== -->
+        <section class="slide" data-index="12">
+          <div class="strata-bar"><span style="background:#2F7A66"></span></div>
+          <div class="slide-eyebrow">12 · BEST PRACTICES · 最佳实践与适用边界</div>
+          <h1 class="slide-title">分角色工程落地：架构师、DBA 与业务开发者</h1>
+          <p class="slide-lead">把 RPO/RTO 翻译成参数边界，先看等待再调优，用业务分级与批量提交解决根因。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">上方：三角色正确动作清单 | 下方：适合与不适合从 WAL Flush 入手的场景边界</span>
+            <span class="prop-strip-tag">ROLE-BASED PLAYBOOK</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Column 1: Architect (x: 24..456) -->
+              <rect x="24" y="20" width="432" height="266" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="20" width="432" height="36" fill="#1E4B5A"/>
+              <text x="42" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">数据库架构师</text>
+              <text x="42" y="82" font-size="13.5" font-weight="700" fill="#245A6B">1. 按事务价值分级持久性</text>
+              <text x="42" y="104" font-size="12.5" fill="#46585F">账务/库存/订单保 on；可重放日志评估 off</text>
+              <text x="42" y="136" font-size="13.5" font-weight="700" fill="#245A6B">2. 明确同步复制等待语义</text>
+              <text x="42" y="158" font-size="12.5" fill="#46585F">防单点选 on；强因果读备库才选 remote_apply</text>
+              <text x="42" y="190" font-size="13.5" font-weight="700" fill="#245A6B">3. 将 RPO/RTO 映射为参数边界</text>
+              <text x="42" y="212" font-size="12.5" fill="#46585F">提交窗口、Checkpoint 重放窗、复制槽保留窗</text>
+              <text x="42" y="244" font-size="13.5" font-weight="700" fill="#BE653B">4. 严禁生产用 fsync=off 换性能</text>
+              <text x="42" y="266" font-size="12.5" fill="#46585F">它改变的是整库一致性底线，非事务策略</text>
+
+              <!-- Column 2: DBA (x: 484..916) -->
+              <rect x="484" y="20" width="432" height="266" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="484" y="20" width="432" height="36" fill="#245A6B"/>
+              <text x="502" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">DBA 运维与调优</text>
+              <text x="502" y="82" font-size="13.5" font-weight="700" fill="#245A6B">1. 先定位等待类型，再动参数</text>
+              <text x="502" y="104" font-size="12.5" fill="#46585F">查 WALSync / WALWrite / 锁 / 同步复制</text>
+              <text x="502" y="136" font-size="13.5" font-weight="700" fill="#245A6B">2. 紧盯 wal_buffers_full 与 pg_stat_io</text>
+              <text x="502" y="158" font-size="12.5" fill="#46585F">开启 track_wal_io_timing 区分写慢与刷慢</text>
+              <text x="502" y="190" font-size="13.5" font-weight="700" fill="#245A6B">3. 谨慎实测 commit_delay</text>
+              <text x="502" y="212" font-size="12.5" fill="#46585F">仅高并发受 flush 限制时有效，过大反增延迟</text>
+              <text x="502" y="244" font-size="13.5" font-weight="700" fill="#245A6B">4. 同步复制双端同看 + 联合看 FPI</text>
+              <text x="502" y="266" font-size="12.5" fill="#46585F">备库回放/网络与 Checkpoint FPI 峰值并查</text>
+
+              <!-- Column 3: Developer (x: 944..1376) -->
+              <rect x="944" y="20" width="432" height="266" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="944" y="20" width="432" height="36" fill="#2F7A66"/>
+              <text x="962" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">业务应用开发者</text>
+              <text x="962" y="82" font-size="13.5" font-weight="700" fill="#2F7A66">1. 批量提交减少总 flush 次数</text>
+              <text x="962" y="104" font-size="12.5" fill="#46585F">避免每行一提交，自然放大 Group Commit 收益</text>
+              <text x="962" y="136" font-size="13.5" font-weight="700" fill="#2F7A66">2. 低价值写入用事务级异步</text>
+              <text x="962" y="158" font-size="12.5" fill="#46585F">SET LOCAL synchronous_commit TO off</text>
+              <text x="962" y="190" font-size="13.5" font-weight="700" fill="#2F7A66">3. 异步提交必须配合幂等与重放</text>
+              <text x="962" y="212" font-size="12.5" fill="#46585F">严禁用于资金扣减或不可回滚外部调用</text>
+              <text x="962" y="244" font-size="13.5" font-weight="700" fill="#2F7A66">4. 正确理解 COMMIT 返回语义</text>
+              <text x="962" y="266" font-size="12.5" fill="#46585F">它代表 Commit WAL 落盘，不代表脏页落盘</text>
+
+              <!-- Bottom Scope Strip: Suitable vs Unsuitable -->
+              <rect x="24" y="304" width="664" height="106" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.2"/>
+              <text x="42" y="330" font-size="14" font-weight="700" fill="#2F7A66">适合重点优化 WAL Flush 的场景</text>
+              <text x="42" y="356" font-size="12.5" fill="#1B2B33">· 高并发小事务受 fsync / WALWriteLock 瓶颈限制；高 WAL 速率导致 wal_buffers_full 增长</text>
+              <text x="42" y="378" font-size="12.5" fill="#1B2B33">· 同步复制延迟需在主库/网络/备库间拆解；有可重放低价值事务可用异步提交换延迟</text>
+              <text x="42" y="400" font-size="12.5" fill="#1B2B33">· 存储平台差异显著，需评估 wal_sync_method 与缓存策略</text>
+
+              <rect x="712" y="304" width="664" height="106" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="730" y="330" font-size="14" font-weight="700" fill="#BE653B">不适合只从 WAL Flush 入手的场景</text>
+              <text x="730" y="356" font-size="12.5" fill="#1B2B33">· 慢查询源自执行计划、行锁冲突、CPU 或缓存未命中；WAL 暴涨源自索引过多/大 UPDATE</text>
+              <text x="730" y="378" font-size="12.5" fill="#1B2B33">· 磁盘爆满源自归档失败、复制槽不推进或备库长期落后</text>
+              <text x="730" y="400" font-size="12.5" fill="#1B2B33">· 业务零容忍已返回事务丢失却想关同步提交，或企图在生产关闭 fsync</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">最后一页，用十条高频生产避坑清单与进阶思考题，把整套 WAL Flush 知识体系彻底收口。</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>分角色最佳实践</span></div>
+            <div class="footer-page">13 / 14</div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14: 10 PITFALLS & QUESTIONS ==================== -->
+        <section class="slide" data-index="13">
+          <div class="strata-bar"><span style="background:#BE653B"></span></div>
+          <div class="slide-eyebrow">13 · PITFALLS &amp; TAKEAWAYS · 避坑清单与进阶延伸</div>
+          <h1 class="slide-title">生产十坑速查与进阶思考</h1>
+          <p class="slide-lead">把概念边界刻进日常排障肌肉记忆，再顺着源码入口继续向深水区验证。</p>
+          <div class="slide-divider"></div>
+          <div class="prop-strip">
+            <span class="prop-strip-text">左侧：十条高频误区速查 | 右侧：核心思考题与 PostgreSQL 源码阅读入口</span>
+            <span class="prop-strip-tag">CHECKLIST &amp; REFERENCES</span>
+          </div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="0" width="1400" height="430" fill="#F7F6F2"/>
+              <!-- Left Panel: 10 Pitfalls in 2x5 grid (x: 24..892) -->
+              <rect x="24" y="20" width="868" height="390" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="24" y="20" width="868" height="34" fill="#BE653B"/>
+              <text x="42" y="42" font-size="14" font-weight="700" fill="#FFFFFF">常见十坑（生产排障对照清单）</text>
+
+              <!-- Col 1 (1..5) -->
+              <rect x="38" y="68" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="92" font-size="13.5" font-weight="700" fill="#BE653B">01 · 把 write LSN 当 durable LSN</text>
+              <text x="52" y="114" font-size="12.5" fill="#46585F">pg_current_wal_lsn() 只是写出位置，非 flush 位置</text>
+
+              <rect x="38" y="136" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="160" font-size="13.5" font-weight="700" fill="#BE653B">02 · 以为 COMMIT 返回等于脏页落盘</text>
+              <text x="52" y="182" font-size="12.5" fill="#46585F">同步提交只保证 Commit WAL 落盘，脏页稍后写</text>
+
+              <rect x="38" y="204" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="228" font-size="13.5" font-weight="700" fill="#BE653B">03 · 混淆 synchronous_commit=off 与 fsync=off</text>
+              <text x="52" y="250" font-size="12.5" fill="#46585F">前者丢最近事务仍一致，后者可导致整库损坏</text>
+
+              <rect x="38" y="272" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="296" font-size="13.5" font-weight="700" fill="#BE653B">04 · 同步复制只看主库，不看备库</text>
+              <text x="52" y="318" font-size="12.5" fill="#46585F">remote_write / on / remote_apply 等待层次迥异</text>
+
+              <rect x="38" y="340" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="52" y="364" font-size="13.5" font-weight="700" fill="#BE653B">05 · 盲目调大 wal_buffers</text>
+              <text x="52" y="386" font-size="12.5" fill="#46585F">仅缓解 buffer 满触发写，消不掉 commit fsync</text>
+
+              <!-- Col 2 (6..10) -->
+              <rect x="464" y="68" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="478" y="92" font-size="13.5" font-weight="700" fill="#BE653B">06 · 错误使用 commit_delay</text>
+              <text x="478" y="114" font-size="12.5" fill="#46585F">无并发提交或非 flush 瓶颈时，只会白增延迟</text>
+
+              <rect x="464" y="136" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="478" y="160" font-size="13.5" font-weight="700" fill="#BE653B">07 · 忽略数据页写前 WAL Flush</text>
+              <text x="478" y="182" font-size="12.5" fill="#46585F">Checkpoint 与缓冲淘汰同样触发 XLogFlush(Page LSN)</text>
+
+              <rect x="464" y="204" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="478" y="228" font-size="13.5" font-weight="700" fill="#BE653B">08 · 不可重放交易开启异步提交</text>
+              <text x="478" y="250" font-size="12.5" fill="#46585F">崩溃窗口内已返回事务可能消失，业务必须能承受</text>
+
+              <rect x="464" y="272" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="478" y="296" font-size="13.5" font-weight="700" fill="#BE653B">09 · 忽略 immediate shutdown 风险</text>
+              <text x="478" y="318" font-size="12.5" fill="#46585F">它等价于崩溃，会丢失尚未 flush 的异步提交</text>
+
+              <rect x="464" y="340" width="414" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="478" y="364" font-size="13.5" font-weight="700" fill="#BE653B">10 · 用无代表性的压测调参</text>
+              <text x="478" y="386" font-size="12.5" fill="#46585F">效果强依赖事务大小、并发、存储与复制拓扑</text>
+
+              <!-- Right Panel: Questions & Source Index (x: 912..1376) -->
+              <rect x="912" y="20" width="464" height="224" fill="#E5EFF0" stroke="#74A5AD" stroke-width="1"/>
+              <rect x="912" y="20" width="464" height="34" fill="#1E4B5A"/>
+              <text x="930" y="42" font-size="14" font-weight="700" fill="#FFFFFF">课后进阶思考（精选 4 题）</text>
+              <text x="930" y="78" font-size="13" fill="#1B2B33">Q1 · 为何 commit_delay 在拿到 WALWriteLock 之后睡，</text>
+              <text x="930" y="98" font-size="13" fill="#46585F">     而不是在写 commit record 之前睡？</text>
+              <text x="930" y="126" font-size="13" fill="#1B2B33">Q2 · remote_write 为何能抗备库 PG 崩溃，却扛不住 OS 崩溃？</text>
+              <text x="930" y="156" font-size="13" fill="#1B2B33">Q3 · Page LSN 与 Commit LSN 各自守护什么不变量？</text>
+              <text x="930" y="186" font-size="13" fill="#1B2B33">Q4 · wal_buffers_full 涨但 fsync_time 很低，下一步查什么？</text>
+              <text x="930" y="220" font-size="12" fill="#245A6B">完整 8 题见右侧讲稿与原文《数据库筑基课 - wal flush 行为》</text>
+
+              <rect x="912" y="260" width="464" height="150" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="930" y="288" font-size="14" font-weight="700" fill="#245A6B">推荐源码与文档精读路径</text>
+              <line x1="930" y1="298" x2="1358" y2="298" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="930" y="322" font-size="12.5" fill="#1B2B33" class="svg-mono">xlog.c      → XLogFlush / XLogWrite / BackgroundFlush</text>
+              <text x="930" y="344" font-size="12.5" fill="#1B2B33" class="svg-mono">xact.c      → RecordTransactionCommit()</text>
+              <text x="930" y="366" font-size="12.5" fill="#1B2B33" class="svg-mono">walwriter.c → 周期刷盘与异步提交收敛</text>
+              <text x="930" y="388" font-size="12.5" fill="#1B2B33" class="svg-mono">bufmgr/slru → FlushBuffer() &amp; SLRU 页写前护栏</text>
+            </svg>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">闭环 · END</span>
+            <span class="next-text">本课完结——建议在测试库用 pg_stat_io、pg_stat_activity 与 pg_test_fsync 亲手复现一次三道水位的推进。</span>
+          </div>
+          <div class="slide-footer">
+            <div class="footer-left"><span>数据库筑基课 · POSTGRESQL WAL FLUSH 行为</span><span>完结 · 感谢聆听</span></div>
+            <div class="footer-page">14 / 14</div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- In-page TOC Overlay (G) -->
+      <div id="toc-overlay" role="dialog" aria-label="课程目录">
+        <div id="toc-panel">
+          <div id="toc-header">
+            <h2>目录 · 数据库筑基课 —— WAL Flush 行为（共 14 页）</h2>
+            <button class="notes-close" id="toc-close-btn">关闭 [G / Esc]</button>
+          </div>
+          <div id="toc-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right-side In-page Speaker Notes / Full Transcript Pane -->
+    <aside id="notes-pane" aria-label="讲稿面板">
+      <div id="notes-header">
+        <span id="notes-title">本页讲稿</span>
+        <div class="notes-mode-tabs">
+          <button class="notes-tab active" id="tab-page-note">本页 [N]</button>
+          <button class="notes-tab" id="tab-full-note">全文 [T]</button>
+          <button class="notes-close" id="notes-close-btn">✕</button>
+        </div>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+  </div>
+
+  <!-- Always-visible Bottom Shortcut HUD Bar (also visible in fullscreen) -->
+  <footer id="hud-bar">
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-prev" title="上一页">← 上一页</button>
+      <span class="hud-progress" id="hud-page">01 / 14</span>
+      <button class="hud-btn" id="btn-next" title="下一页">下一页 →</button>
+    </div>
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-toc"><span class="hud-kbd">G</span>目录</button>
+      <button class="hud-btn" id="btn-note"><span class="hud-kbd">N</span>本页讲稿</button>
+      <button class="hud-btn" id="btn-transcript"><span class="hud-kbd">T</span>全文讲稿</button>
+      <button class="hud-btn" id="btn-autoplay"><span class="hud-kbd">P</span>自动播放</button>
+      <button class="hud-btn" id="btn-fullscreen"><span class="hud-kbd">F</span>全屏</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== SLIDE METADATA & SPOKEN NOTES ==================== */
+  const SLIDES_DATA = [
+    {
+      title: 'WAL Flush 行为：水位、路径与持久性边界',
+      sub: '七阶地层总览与课程源码依据',
+      notes: [
+        '各位好，欢迎来到数据库筑基课。前面两篇我们已经把 WAL 的整体作用和共享内存里的 wal buffer 管理讲清楚了：WAL 把随机数据修改转成可恢复的顺序日志，wal buffer 在内存里承接并发写入。今天这一讲，我们继续往下钻一个在生产环境里最容易踩坑、也最容易被误解的底层机制——WAL flush 行为。',
+        '大家看屏幕上的七阶地层剖面：从最浅层的应用 COMMIT 决策，经过共享内存 WAL Buffer、WALWriteLock 组提交、操作系统内核页缓存、后台 WAL Writer、数据页写出前的日志先行护栏，一直沉到最底层的稳定存储与同步复制边界。',
+        '今天所有的结论都不是拍脑袋总结，而是严格对照 PostgreSQL 官方 SGML 文档和后端核心源码——包括 xlog.c、xact.c、walwriter.c、bufmgr.c、slru.c、syncrep.c 和 walsender.c——逐层推演出来的。下面我们直接从线上最真实的五个困惑切入。'
+      ]
+    },
+    {
+      title: '五个真实踩坑场景，都指向同一个本质问题',
+      sub: '生产异常现象与核心命题收敛',
+      notes: [
+        '为什么一定要专门花一节课讲 WAL flush？因为线上有五个高频问题，几乎每个用 PostgreSQL 的团队都会撞上：第一，小事务特别多，CPU 根本没打满，TPS 却死活上不去，查 pg_stat_activity 满屏都是 WALSync、WALWrite 或者 LWLock:WALWrite；第二，应用把 synchronous_commit 改成 off，延迟确实降了，但研发心里发毛，总担心断电会不会把库搞坏。',
+        '第三，上了同步复制之后，主库本地是高速 NVMe，结果提交延迟突然抖动，被网络和备库 I/O 拖住了；第四，明明没有事务提交，只是 Checkpoint 或者后台刷脏页，居然也在触发 XLogFlush()；第五，监控里查 pg_current_wal_insert_lsn()、pg_current_wal_lsn() 和 pg_current_wal_flush_lsn() 三个函数，返回值居然不一样，到底哪个才算安全？',
+        '把这五个现象往里收一收，它们问的其实是同一个问题：哪些 WAL 字节，必须在什么时候，到达稳定存储？PostgreSQL 给出的解法非常克制——把 WAL 进度拆成三道水位，让不同角色按风险各取所需。我们下一页直接动手推演这三道水位。'
+      ]
+    },
+    {
+      title: '三道 LSN 水位：insert、write 与 flush 不是一回事',
+      sub: '共享进度结构与 wal_sync_method 交互推演',
+      notes: [
+        '先纠正一个最常见的概念混淆：在 PostgreSQL 语境里，WAL flush 指的是把 WAL 字节推进到稳定存储，不是把表和索引的数据页刷盘。',
+        '看右边这三层地层：最上面是共享内存 WAL Buffer，对应 pg_current_wal_insert_lsn()，这只是逻辑上插进内存了，一断电全没；中间是写入 WAL 文件进入内核页缓存，对应 pg_current_wal_lsn()，也就是 write LSN；最底层才是真正落盘的稳定存储，对应 pg_current_wal_flush_lsn()，也就是 flush LSN。源码 xlog.c 里用 XLogwrtRqst 表示目标请求，用 XLogwrtResult 记录已经写到和刷到哪里。',
+        '大家可以点一下上方工具栏的按钮试一试：在默认的 fdatasync 模式下，插入 WAL Record 只推高 insert LSN；执行 XLogWrite() 只推高 write LSN；只有执行 issue_xlog_fsync()，flush LSN 才会跟上。如果你点一下切换成 open_datasync，就会发现 XLogWrite() 一步同时推进 write 和 flush，因为文件本身就是同步打开的。看清三道水位后，我们来看事务提交到底在等哪一道。'
+      ]
+    },
+    {
+      title: '事务提交：为什么只等 WAL，不等数据页？',
+      sub: 'RecordTransactionCommit() 与持久性顺序',
+      notes: [
+        '很多应用开发者直觉上觉得，我发了一个 COMMIT，数据库返回成功，那我改的数据页肯定已经写到磁盘了。其实恰恰相反。',
+        '我们看 xact.c 里的 RecordTransactionCommit()：事务先构造并插入 Commit WAL Record，拿到它的结束位置 XactLastRecEnd。对于已经写过 WAL、分配了 XID、且 synchronous_commit 不是 off 的事务，在返回客户端之前，必须先执行 XLogFlush(XactLastRecEnd)，确保这条 Commit Record 到达稳定存储；然后才调用 TransactionIdCommitTree() 更新事务提交状态，最后向客户端返回成功。',
+        '为什么要严守这个顺序？因为崩溃恢复时，PostgreSQL 只要在持久化 WAL 里看到了 Commit Record，就能把前面的修改全量 REDO 回来；如果没看到，就等价于这个事务没提交。至于堆表和索引的脏页，它们都在 Shared Buffers 里，完全可以留给 Checkpoint、BGWriter 慢慢刷盘，把随机 I/O 从高频提交路径里彻底摘出去。那问题来了：并发事务一起撞向 XLogFlush() 时，岂不是每次提交都要刷一次盘？'
+      ]
+    },
+    {
+      title: 'XLogFlush 内部：写锁争用如何自然演化为 Group Commit',
+      sub: 'WALWriteLock、commit_delay 与并发组提交推演',
+      notes: [
+        '这一页是理解高并发小事务吞吐的关键。看 xlog.c 里的 XLogFlush()：它并不是傻傻地让每个后端排队各刷各的盘。',
+        '点一下上方的「单步推进」或者「自动播放」来观察四个并发事务：Tx 1、Tx 2、Tx 3 几乎同时到达，先检查本地 LogwrtResult.Flush，发现还没覆盖自己的 LSN，于是去争抢 WALWriteLock。Tx 1 抢到了锁成为 Leader，Tx 2 和 Tx 3 乖乖等锁。这时候如果开启了 commit_delay，Leader 会短暂蓄水，让稍晚到达的 Tx 4 也把记录插进 WAL Buffer。',
+        '关键的一步来了：Leader 调用 XLogWrite() 刷盘时，不会只刷到自己的 0/2100，而是把此刻已经插进 WAL Buffer 的所有连续记录一并写出并 fsync，直接把共享的 LogwrtResult.Flush 推到 0/2300 甚至 0/2400！等 Leader 释放锁，Follower 醒来重新检查共享水位，惊喜地发现自己的 LSN 已经被顺手刷完了，直接快速返回！这就是为什么即使 commit_delay 设为 0，高并发下也会自然形成 Group Commit，用 1 次 fsync 服务一批事务。'
+      ]
+    },
+    {
+      title: 'XLogWrite 拆解：为什么 write 与 fsync 必须分开看？',
+      sub: 'Segment 切换、刷盘触发与 wal_sync_method 对照',
+      notes: [
+        '刚刚我们看到 Leader 持有 WALWriteLock 后调用了 XLogWrite()。这个函数干四件核心事情：第一，把连续未写出的 WAL Buffer 页合并成更少的 write() 调用；第二，必要时打开或切换 WAL Segment，而且一旦写到 Segment 末尾，会立刻 fsync 并通知归档、walsender 和 checkpoint；第三，如果请求包含 Flush 目标，就根据 wal_sync_method 决定要不要再调 issue_xlog_fsync()；第四，更新共享的 Write 和 Flush 水位并唤醒等待进程。',
+        '看右边这张对照表，这是官方文档 wal.sgml 强调的重点：如果用 open_datasync 或 open_sync，write 本身就带同步语义，issue_xlog_fsync() 通常不再额外做事；但如果是 Linux 上最常见的 fdatasync、fsync 或 fsync_writethrough，XLogWrite() 只是把字节交给内核页缓存，真正的落盘代价全在 issue_xlog_fsync() 里。',
+        '至于 fsync=off，那根本不是同步方式，而是放弃了强制落盘。所以监控里千万记住：write LSN 往前走不代表安全，flush LSN 往前走才代表 durable 边界推进。接下来我们看另一种主动不等 flush 的机制——异步提交。'
+      ]
+    },
+    {
+      title: '异步提交与 WAL Writer：跳过等待，如何守住一致底线？',
+      sub: 'XLogSetAsyncXactLSN() 与后台兜底崩溃推演',
+      notes: [
+        '当业务把 synchronous_commit 设成 off，RecordTransactionCommit() 就不再调用 XLogFlush()，而是改调 XLogSetAsyncXactLSN(XactLastRecEnd)，把最新异步提交的 LSN 记到共享内存里，顺便唤醒后台的 WAL Writer，然后前台直接给客户端返回成功。',
+        '那么谁来帮这些异步提交兜底落盘？就是 walwriter.c 里的 XLogBackgroundFlush()。它非常讲究策略：首先尽量退到最后一个完整 WAL 页边界，避免零碎小 I/O；如果完整页已经刷完，再照顾当前不完整页里最新的异步提交 LSN；具体只 write 还是 write 加 flush，由 wal_writer_delay（默认 200ms）和 wal_writer_flush_after（默认 1MB）共同控制。源码注释明确说明，最坏情况下大约在三倍 wal_writer_delay 周期内，异步提交就会到达磁盘。',
+        '大家可以点击上面的「发起异步 COMMIT」，再点「模拟系统崩溃」：绿色已经落盘的事务毫发无损，橙色还在风险窗口里的事务会丢失，等价于干净的 abort，但整个数据库依然保持一致。注意，WAL Writer 也不是唯一写出者，WAL Buffer 满或者同步提交一样会推动写出。'
+      ]
+    },
+    {
+      title: '红线对比：synchronous_commit=off 与 fsync=off',
+      sub: '可控持久性降级与系统级崩溃安全失效',
+      notes: [
+        '这一页请大家务必刻在脑子里，因为线上太多悲剧源于把这两个参数混为一谈。',
+        '先看作用范围：synchronous_commit=off 可以精细到单条事务，用 SET LOCAL synchronous_commit TO off，只对这一笔可重放的日志或点击流生效；而 fsync=off 是服务器级开关，一关就是全库裸奔。',
+        '再看崩溃后果：synchronous_commit=off 放弃的只是「客户端刚收到成功回复的那几百毫秒事务的持久性」，PostgreSQL 依然严格遵守 WAL-before-data 顺序，崩溃重启后丢掉的事务就像没发生过一样，数据库结构完全一致；而 fsync=off 直接破坏了操作系统写入顺序保障，一旦宿主机断电或内核崩溃，可能出现无法修复的数据损坏甚至数据库起不来。',
+        '另外提醒一个隐蔽的坑：immediate shutdown 在语义上等价于服务器崩溃，同样会丢失尚未 flush 的异步提交。说完提交路径，我们来看第四个生产困惑——为什么写脏页也会触发 WAL flush？'
+      ]
+    },
+    {
+      title: '数据页与 SLRU 写出前：WAL Flush 死守日志先行铁律',
+      sub: 'FlushBuffer() 与 SLRU 的 WAL-before-data 护栏',
+      notes: [
+        '很多人以为只有事务 COMMIT 才会调 XLogFlush()，结果排查 Checkpoint 抖动时发现后台也在等 WALSync，觉得很奇怪。其实这就是 WAL 名字本身——Write-Ahead Logging 的硬约束。',
+        '看上方支路 A，源码 bufmgr.c 里的 FlushBuffer() 在把共享缓冲区里的脏页写到磁盘前，会先读出这个页面头部的 Page LSN，比如 0/7001200。只要这个缓冲区带有 BM_PERMANENT 标记、属于永久表，就必须先调用 XLogFlush(recptr)，保证描述这页修改的所有 WAL 都已经落盘，然后才允许写数据页。反过来，如果是 Unlogged 表，源码明确跳过，因为崩溃后它本来就要重置，而且部分 Unlogged 索引会借用 fake LSN 做并发检测，拿假 LSN 去刷 WAL 反而会出错。',
+        '再看下方支路 B，slru.c 在写出 CLOG 这类事务状态页之前，同样会根据页内记录的最大 LSN 调用 XLogFlush()。正是这道护栏，确保了异步提交时绝不会出现「CLOG 已经落盘说事务提交了，但 Commit WAL 还没落盘」的顺序错乱。本地机制全部闭环，下面我们把视野拉到主备同步复制。'
+      ]
+    },
+    {
+      title: '同步复制：本地 Flush 之后，逐级叠加远端等待层次',
+      sub: 'synchronous_commit 五种模式交互对比',
+      notes: [
+        '配置了 synchronous_standby_names 之后，很多人误以为同步复制是拿备库替代主库刷盘。其实不是——主库依然必须先完成本地 XLogFlush()，然后才调用 syncrep.c 里的 SyncRepWaitForLSN() 去等备库反馈。',
+        '大家点击上方工具栏里的五个模式按钮，就能直观看到 COMMIT 返回点是怎么一步步往右移的：off 不等主库也不等备库；local 只等主库本地 flush，不等同步复制；remote_write 等备库收到并写到文件系统缓存，能扛住备库 PostgreSQL 进程崩溃，但扛不住备库操作系统崩溃；默认的 on 要等备库也 flush 到稳定存储，这时提交延迟就变成了主库盘 + 网络 RTT + 备库 fsync；最高的 remote_apply 还要等备库把 WAL 回放完、对只读查询可见后才返回，因果读最强，但延迟也最高。',
+        '另外看 walsender.c：WAL sender 发送日志前也要等主库把对应 WAL flush 出来，在 shutdown 时还会主动刷到最新插入尾部，避免死等。到此为止，全部核心原理都已拆透，我们做一次全局横向收拢。'
+      ]
+    },
+    {
+      title: '三类 WAL Flush 触发者横向解剖',
+      sub: '同步提交、WAL Writer 与 FlushBuffer 全局对比',
+      notes: [
+        '把前面讲的散点收成一张作战图：PostgreSQL 里主要有三类角色在推动 WAL flush——前台同步提交、后台 WAL Writer、以及数据页写出前的 FlushBuffer。',
+        '虽然它们最终都走 XLogFlush() 或 XLogWrite()，但诉求完全不同：同步提交瞄准的是 Commit Record 结束 LSN，直接卡着客户端响应，瓶颈往往在 fsync、WALWriteLock 或同步复制；WAL Writer 瞄准的是完整页和最新异步 LSN，不阻塞前台，但如果太慢会拉长异步丢失窗口，或者逼着前台自己写 WAL；FlushBuffer 瞄准的是 Page LSN，守护的是恢复顺序。',
+        '所以调优最忌讳「一慢就调大 wal_buffers」。wal_buffers 只能缓解高 WAL 速率下缓冲区满导致的前台写出，对底层的 fsync 慢或同步复制慢无能为力。怎么判断到底慢在哪一条？下一页我们直接上实操诊断 SQL。'
+      ]
+    },
+    {
+      title: '可观测性工具箱：用四组查询拆开「写慢」与「刷慢」',
+      sub: 'LSN 函数、pg_stat_wal、pg_stat_io、等待事件与 pg_test_fsync',
+      notes: [
+        '工程排障讲究眼见为实。这里整理了四组可以直接在测试库或监控体系里落地的观测手段。',
+        '第一组，查三个 LSN 函数，配合事务级 SET LOCAL synchronous_commit TO off 做对照实验，你能亲眼看到同步提交后 flush_lsn 立刻覆盖 commit，而异步提交后 flush_lsn 会短暂落后，等 WAL Writer 醒来才追上。',
+        '第二组，联合看 pg_stat_wal 和 pg_stat_io。pg_stat_wal 重点盯 wal_buffers_full 和 wal_fpi；pg_stat_io 里筛选 object = wal，只要开启了 track_wal_io_timing，就能把 write_time 和 fsync_time 彻底拆开，一眼看穿究竟是写文件慢还是刷盘慢。',
+        '第三组，查 pg_stat_activity，区分 WALWrite、WALSync、CommitDelay 和 LWLock:WALWrite。第四组，用官方自带的 pg_test_fsync 粗测当前存储上各种 wal_sync_method 的相对成本，判断 commit_delay 值不值得测。记住，我们不编造任何虚构性能数字，一切以代表性 workload 实测为准。'
+      ]
+    },
+    {
+      title: '分角色工程落地：架构师、DBA 与业务开发者',
+      sub: '正确动作清单与适用/不适用场景边界',
+      notes: [
+        '把原理和观测转化成团队里的日常规范，三个角色各有侧重。',
+        '对架构师来说，核心是「分层」：不要所有业务一刀切用同一种持久性，账务、库存、订单守住 synchronous_commit=on，可重放的日志流、点击流才去评估 off；同步复制想清楚是防单点还是强读一致；把 RPO/RTO 明确映射成参数边界，同时把 fsync=off 设为不可逾越的生产红线。',
+        '对 DBA 来说，核心是「先查后调」：先通过等待事件和 pg_stat_io 锁定瓶颈，再动 wal_buffers 或 commit_delay；同步复制排障必须主备双端一起看；Checkpoint 后出现 WAL 尖峰，要把 wal_fpi 和 full_page_writes 结合起来看。',
+        '对业务开发者来说，收益最大的一招往往不是调数据库参数，而是「合理批量提交」，把每行一提交合并成批次，自然放大 Group Commit；如果用事务级异步提交，必须配套幂等重试，绝不用于不可回滚的外部副作用。底部也标明了适用边界——如果是执行计划、行锁或者复制槽堆积引发的问题，别指望调 WAL flush 能救场。'
+      ]
+    },
+    {
+      title: '生产十坑速查与进阶思考',
+      sub: '高频误区清单、思考题与源码入口',
+      notes: [
+        '最后一页，我们用十条生产避坑清单把今天的内容打牢：第一，别把 write LSN 当 durable LSN；第二，别以为 COMMIT 返回等于脏页落盘；第三，绝不混淆 synchronous_commit=off 和 fsync=off；第四，同步复制必须主备同看；第五，别盲目调大 wal_buffers。',
+        '第六，没有并发提交别乱开 commit_delay；第七，别忘了 Checkpoint 写脏页也会触发 XLogFlush(Page LSN)；第八，不可重放交易不能开异步提交；第九，别忽略 immediate shutdown 会丢未刷盘异步事务；第十，绝不用没有代表性的压测去拍定 WAL 参数。',
+        '右侧留了四道很有意思的进阶思考题，比如为什么 commit_delay 要在拿到 WALWriteLock 之后再睡，而不是写 commit record 之前睡？以及如果 wal_buffers_full 在涨但 fsync_time 很低，下一步该怀疑什么？建议大家带着问题，顺着右下角的源码入口去读一读 xlog.c 和 walwriter.c，再在测试库跑一遍诊断 SQL。今天的课程就到这里，感谢聆听！'
+      ]
+    }
+  ];
+
+  /* ==================== CORE PRESENTATION STATE ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentIndex = 0;
+  let notesMode = 'closed'; // 'closed' | 'page' | 'full'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+
+  const stageViewport = document.getElementById('stage-viewport');
+  const stageFrame = document.getElementById('stage-frame');
+  const notesPane = document.getElementById('notes-pane');
+  const notesTitle = document.getElementById('notes-title');
+  const notesBody = document.getElementById('notes-body');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const tocGrid = document.getElementById('toc-grid');
+  const hudPage = document.getElementById('hud-page');
+
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNote = document.getElementById('btn-note');
+  const btnTranscript = document.getElementById('btn-transcript');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const tabPageNote = document.getElementById('tab-page-note');
+  const tabFullNote = document.getElementById('tab-full-note');
+  const notesCloseBtn = document.getElementById('notes-close-btn');
+  const tocCloseBtn = document.getElementById('toc-close-btn');
+
+  /* ==================== VECTOR SCALING (16:9 LETTERBOX) ==================== */
+  function fitStage() {
+    const rect = stageViewport.getBoundingClientRect();
+    const pad = 20;
+    const availW = Math.max(200, rect.width - pad);
+    const availH = Math.max(120, rect.height - pad);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageFrame.style.transform = 'scale(' + scale.toFixed(5) + ')';
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(fitStage);
+    ro.observe(stageViewport);
+  }
+  window.addEventListener('resize', fitStage);
+  document.addEventListener('fullscreenchange', function () {
+    btnFullscreen.classList.toggle('active', !!document.fullscreenElement);
+    setTimeout(fitStage, 60);
+  });
+
+  /* ==================== TOC RENDERING ==================== */
+  function buildTOC() {
+    tocGrid.innerHTML = '';
+    SLIDES_DATA.forEach(function (item, idx) {
+      const btn = document.createElement('button');
+      btn.className = 'toc-item' + (idx === currentIndex ? ' current' : '');
+      btn.setAttribute('data-toc-idx', String(idx));
+      btn.innerHTML =
+        '<span class="toc-num">' + String(idx + 1).padStart(2, '0') + '</span>' +
+        '<span class="toc-meta">' +
+          '<span class="toc-item-title">' + item.title + '</span>' +
+          '<span class="toc-item-sub">' + item.sub + '</span>' +
+        '</span>';
+      btn.addEventListener('click', function () {
+        goToSlide(idx);
+        setTOC(false);
+      });
+      tocGrid.appendChild(btn);
+    });
+  }
+
+  function updateTOCHighlight() {
+    const items = tocGrid.querySelectorAll('.toc-item');
+    items.forEach(function (el, idx) {
+      el.classList.toggle('current', idx === currentIndex);
+    });
+  }
+
+  function setTOC(open) {
+    tocOpen = open;
+    tocOverlay.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+    if (tocOpen) updateTOCHighlight();
+  }
+
+  /* ==================== NOTES / TRANSCRIPT PANE ==================== */
+  function renderNotesContent() {
+    if (notesMode === 'closed') return;
+
+    if (notesMode === 'page') {
+      notesTitle.textContent = '本页讲稿 · ' + String(currentIndex + 1).padStart(2, '0') + ' / ' + totalSlides;
+      tabPageNote.classList.add('active');
+      tabFullNote.classList.remove('active');
+      const d = SLIDES_DATA[currentIndex];
+      notesBody.innerHTML =
+        '<div class="note-block active-note" data-note-idx="' + currentIndex + '">' +
+          '<div class="note-block-head">' +
+            '<span class="note-page-num">P' + String(currentIndex + 1).padStart(2, '0') + '</span>' +
+            '<span class="note-slide-title">' + d.title + '</span>' +
+          '</div>' +
+          '<div class="note-text">' + d.notes.map(function (p) { return '<p>' + p + '</p>'; }).join('') + '</div>' +
+        '</div>';
+      notesBody.scrollTop = 0;
+    } else if (notesMode === 'full') {
+      notesTitle.textContent = '全文讲稿 · 共 ' + totalSlides + ' 页';
+      tabPageNote.classList.remove('active');
+      tabFullNote.classList.add('active');
+
+      // Render all blocks once if not already rendered in full mode
+      const existing = notesBody.querySelectorAll('.note-block');
+      if (existing.length !== totalSlides) {
+        notesBody.innerHTML = SLIDES_DATA.map(function (d, idx) {
+          return (
+            '<div class="note-block' + (idx === currentIndex ? ' active-note' : '') + '" data-note-idx="' + idx + '">' +
+              '<div class="note-block-head">' +
+                '<span class="note-page-num">P' + String(idx + 1).padStart(2, '0') + '</span>' +
+                '<span class="note-slide-title">' + d.title + '</span>' +
+              '</div>' +
+              '<div class="note-text">' + d.notes.map(function (p) { return '<p>' + p + '</p>'; }).join('') + '</div>' +
+            '</div>'
+          );
+        }).join('');
+        notesBody.querySelectorAll('.note-block').forEach(function (blk) {
+          blk.addEventListener('click', function () {
+            const idx = parseInt(blk.getAttribute('data-note-idx'), 10);
+            if (!isNaN(idx)) goToSlide(idx);
+          });
+        });
+      } else {
+        existing.forEach(function (blk, idx) {
+          blk.classList.toggle('active-note', idx === currentIndex);
+        });
+      }
+      scrollTranscriptToCurrent();
+    }
+  }
+
+  function scrollTranscriptToCurrent() {
+    if (notesMode !== 'full') return;
+    const activeBlock = notesBody.querySelector('.note-block[data-note-idx="' + currentIndex + '"]');
+    if (activeBlock) {
+      const top = activeBlock.offsetTop - 14;
+      notesBody.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+  }
+
+  function setNotesMode(targetMode) {
+    // Toggle off if pressing same mode again
+    if (notesMode === targetMode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = targetMode;
+    }
+    const isOpen = notesMode !== 'closed';
+    notesPane.classList.toggle('open', isOpen);
+    btnNote.classList.toggle('active', notesMode === 'page');
+    btnTranscript.classList.toggle('active', notesMode === 'full');
+    if (isOpen) {
+      renderNotesContent();
+    }
+    // Re-fit stage during & after width transition
+    fitStage();
+    setTimeout(fitStage, 120);
+    setTimeout(fitStage, 240);
+  }
+
+  /* ==================== NAVIGATION & AUTOPLAY ==================== */
+  function goToSlide(index) {
+    const clamped = Math.max(0, Math.min(totalSlides - 1, index));
+    slides[currentIndex].classList.remove('active');
+    currentIndex = clamped;
+    slides[currentIndex].classList.add('active');
+    hudPage.textContent = String(currentIndex + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+    updateTOCHighlight();
+    if (notesMode !== 'closed') {
+      renderNotesContent();
+    }
+  }
+
+  function nextSlide() {
+    if (currentIndex < totalSlides - 1) {
+      goToSlide(currentIndex + 1);
+    } else if (autoPlayTimer) {
+      stopAutoPlay();
+    }
+  }
+
+  function prevSlide() {
+    if (currentIndex > 0) goToSlide(currentIndex - 1);
+  }
+
+  function stopAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    btnAutoplay.classList.remove('active');
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlayTimer) {
+      stopAutoPlay();
+    } else {
+      btnAutoplay.classList.add('active');
+      autoPlayTimer = setInterval(function () {
+        if (currentIndex < totalSlides - 1) {
+          goToSlide(currentIndex + 1);
+        } else {
+          goToSlide(0);
+        }
+      }, 6000);
+    }
+  }
+
+  function toggleFullscreen() {
+    const el = document.getElementById('app');
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(function () {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(function () {});
+      }
+    }
+  }
+
+  /* ==================== HUD & KEYBOARD BINDINGS ==================== */
+  btnPrev.addEventListener('click', prevSlide);
+  btnNext.addEventListener('click', nextSlide);
+  btnToc.addEventListener('click', function () { setTOC(!tocOpen); });
+  tocCloseBtn.addEventListener('click', function () { setTOC(false); });
+  tocOverlay.addEventListener('click', function (e) {
+    if (e.target === tocOverlay) setTOC(false);
+  });
+  btnNote.addEventListener('click', function () { setNotesMode('page'); });
+  btnTranscript.addEventListener('click', function () { setNotesMode('full'); });
+  tabPageNote.addEventListener('click', function () {
+    if (notesMode !== 'page') setNotesMode('page');
+  });
+  tabFullNote.addEventListener('click', function () {
+    if (notesMode !== 'full') setNotesMode('full');
+  });
+  notesCloseBtn.addEventListener('click', function () { setNotesMode(notesMode); });
+  btnAutoplay.addEventListener('click', toggleAutoPlay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    const key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      e.preventDefault();
+      nextSlide();
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      prevSlide();
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      setTOC(!tocOpen);
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      setNotesMode('page');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      setNotesMode('full');
+    } else if (key === 'p' || key === 'P') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) setTOC(false);
+    }
+  });
+
+  /* ==================== ANIMATION #1: SLIDE 03 WATERMARKS ==================== */
+  (function initSlide3() {
+    let insertStep = 1; // 1..8
+    let writeStep = 1;
+    let flushStep = 1;
+    let syncMethod = 'fdatasync'; // 'fdatasync' | 'open_datasync'
+    let demoTimer = null;
+
+    const barInsert = document.getElementById('s3-bar-insert');
+    const barWrite = document.getElementById('s3-bar-write');
+    const barFlush = document.getElementById('s3-bar-flush');
+    const lblInsert = document.getElementById('s3-lbl-insert');
+    const lblWrite = document.getElementById('s3-lbl-write');
+    const lblFlush = document.getElementById('s3-lbl-flush');
+    const statusEl = document.getElementById('s3-status');
+    const methodBtn = document.getElementById('s3-method-btn');
+    const mTitle = document.getElementById('s3-method-title');
+    const mL1 = document.getElementById('s3-method-l1');
+    const mL2 = document.getElementById('s3-method-l2');
+    const mL3 = document.getElementById('s3-method-l3');
+    const autoBtn = document.getElementById('s3-auto-btn');
+
+    function lsnText(step) {
+      return '0/' + (step * 1000);
+    }
+
+    function render() {
+      const maxW = 760;
+      const wI = Math.round((insertStep / 8) * maxW);
+      const wW = Math.round((writeStep / 8) * maxW);
+      const wF = Math.round((flushStep / 8) * maxW);
+
+      barInsert.setAttribute('width', String(wI));
+      barWrite.setAttribute('width', String(wW));
+      barFlush.setAttribute('width', String(wF));
+
+      lblInsert.setAttribute('x', String(358 + wI + 14));
+      lblWrite.setAttribute('x', String(358 + wW + 14));
+      lblFlush.setAttribute('x', String(358 + wF + 14));
+
+      lblInsert.textContent = 'insert LSN = ' + lsnText(insertStep);
+      lblWrite.textContent = 'write LSN = ' + lsnText(writeStep);
+      lblFlush.textContent = 'flush LSN = ' + lsnText(flushStep);
+
+      statusEl.textContent =
+        'insert: ' + lsnText(insertStep) +
+        ' | write: ' + lsnText(writeStep) +
+        ' | flush: ' + lsnText(flushStep);
+
+      if (syncMethod === 'fdatasync') {
+        methodBtn.textContent = '同步方式：fdatasync';
+        methodBtn.classList.remove('active');
+        mTitle.textContent = '当前：fdatasync（两步分离）';
+        mL1.textContent = '· XLogWrite() 仅写入内核页缓存';
+        mL2.textContent = '· issue_xlog_fsync() 才同步落盘';
+        mL3.textContent = '· write LSN 领先 flush LSN 属常态';
+      } else {
+        methodBtn.textContent = '同步方式：open_datasync';
+        methodBtn.classList.add('active');
+        mTitle.textContent = '当前：open_datasync（写即同步）';
+        mL1.textContent = '· 文件以同步写打开，write 即落盘';
+        mL2.textContent = '· issue_xlog_fsync() 通常不再额外做事';
+        mL3.textContent = '· 执行 XLogWrite() 同时推进 write 与 flush';
+      }
+    }
+
+    function doInsert() {
+      if (insertStep < 8) insertStep++;
+      render();
+    }
+    function doWrite() {
+      writeStep = insertStep;
+      if (syncMethod === 'open_datasync') {
+        flushStep = writeStep;
+      }
+      render();
+    }
+    function doFlush() {
+      flushStep = writeStep;
+      render();
+    }
+    function stopDemo() {
+      if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+      autoBtn.classList.remove('active');
+      autoBtn.textContent = '自动演示';
+    }
+    function reset() {
+      stopDemo();
+      insertStep = 1; writeStep = 1; flushStep = 1;
+      render();
+    }
+
+    document.getElementById('s3-insert-btn').addEventListener('click', doInsert);
+    document.getElementById('s3-write-btn').addEventListener('click', doWrite);
+    document.getElementById('s3-flush-btn').addEventListener('click', doFlush);
+    methodBtn.addEventListener('click', function () {
+      syncMethod = syncMethod === 'fdatasync' ? 'open_datasync' : 'fdatasync';
+      if (syncMethod === 'open_datasync' && flushStep < writeStep) flushStep = writeStep;
+      render();
+    });
+    document.getElementById('s3-reset-btn').addEventListener('click', reset);
+    autoBtn.addEventListener('click', function () {
+      if (demoTimer) { stopDemo(); return; }
+      reset();
+      autoBtn.classList.add('active');
+      autoBtn.textContent = '停止演示';
+      let tick = 0;
+      const seq = [doInsert, doInsert, doInsert, doWrite, doInsert, doFlush, doWrite, doFlush];
+      demoTimer = setInterval(function () {
+        if (tick < seq.length) {
+          seq[tick]();
+          tick++;
+        } else {
+          stopDemo();
+        }
+      }, 900);
+    });
+
+    render();
+  })();
+
+  /* ==================== ANIMATION #2: SLIDE 05 GROUP COMMIT ==================== */
+  (function initSlide5() {
+    let phase = 0; // 0..5
+    let useDelay = false;
+    let timer = null;
+
+    const phEls = [1, 2, 3, 4, 5].map(function (n) { return document.getElementById('s5-ph' + n); });
+    const tBoxes = [1, 2, 3, 4].map(function (n) { return document.getElementById('s5-t' + n + '-box'); });
+    const tTxts = [1, 2, 3, 4].map(function (n) { return document.getElementById('s5-t' + n + '-txt'); });
+    const statusEl = document.getElementById('s5-status');
+    const sharedTxt = document.getElementById('s5-shared-txt');
+    const noteTxt = document.getElementById('s5-note-txt');
+    const delayBtn = document.getElementById('s5-delay-btn');
+    const autoBtn = document.getElementById('s5-auto-btn');
+
+    function setTx(idx, x, w, fill, stroke, txt, txtFill) {
+      tBoxes[idx].setAttribute('x', String(x));
+      tBoxes[idx].setAttribute('width', String(w));
+      tBoxes[idx].setAttribute('fill', fill);
+      tBoxes[idx].setAttribute('stroke', stroke);
+      tTxts[idx].setAttribute('x', String(x + w / 2));
+      tTxts[idx].textContent = txt;
+      tTxts[idx].setAttribute('fill', txtFill || '#1B2B33');
+    }
+
+    function render() {
+      phEls.forEach(function (el, i) {
+        const active = (i + 1) === phase;
+        el.setAttribute('fill', active ? '#245A6B' : (i + 1 < phase ? '#CFE0DC' : '#EBF1EE'));
+        const txt = el.nextElementSibling;
+        if (txt) txt.setAttribute('fill', active ? '#FFFFFF' : '#1B2B33');
+      });
+
+      if (phase === 0) {
+        setTx(0, 184, 220, '#E5EFF0', '#245A6B', '调用 XLogFlush(0/2100)');
+        setTx(1, 184, 220, '#E5EFF0', '#47808D', '调用 XLogFlush(0/2200)');
+        setTx(2, 184, 220, '#E5EFF0', '#47808D', '调用 XLogFlush(0/2300)');
+        setTx(3, 184, 220, '#F6EFE0', '#AE8A3E', '稍后插入 WAL Buffer');
+        statusEl.textContent = '阶段 0 / 5：4 个并发事务准备提交';
+        sharedTxt.textContent = '共享状态：LogwrtResult.Flush = 0/2000 | WALWriteLock = 空闲 | 累计 fsync = 0 次';
+        noteTxt.textContent = '提示：点击「单步推进」观察 1 次 fsync 如何服务多事务';
+      } else if (phase === 1) {
+        setTx(0, 184, 240, '#E5EFF0', '#245A6B', '本地 Flush=0/2000 < 0/2100');
+        setTx(1, 184, 240, '#E5EFF0', '#47808D', '本地 Flush=0/2000 < 0/2200');
+        setTx(2, 184, 240, '#E5EFF0', '#47808D', '本地 Flush=0/2000 < 0/2300');
+        setTx(3, 184, 240, '#F6EFE0', '#AE8A3E', '正在构造 Commit Record...');
+        statusEl.textContent = '阶段 1 / 5：快速检查未命中，进入临界区';
+        sharedTxt.textContent = '共享状态：LogwrtResult.Flush = 0/2000 | WALWriteLock = 空闲 | 累计 fsync = 0 次';
+        noteTxt.textContent = 'Tx1/Tx2/Tx3 本地检查未满足，准备合并写请求并争抢写锁';
+      } else if (phase === 2) {
+        setTx(0, 320, 260, '#245A6B', '#1E4B5A', '抢到 WALWriteLock (Leader)', '#FFFFFF');
+        setTx(1, 320, 260, '#F7E9DE', '#BE653B', '等待 WALWriteLock (LWLock)');
+        setTx(2, 320, 260, '#F7E9DE', '#BE653B', '等待 WALWriteLock (LWLock)');
+        setTx(3, 240, 240, '#F6EFE0', '#AE8A3E', '即将插入 0/2400 到 Buffer');
+        statusEl.textContent = '阶段 2 / 5：Tx 1 成为 Leader，Tx 2/3 等待写锁';
+        sharedTxt.textContent = '共享状态：LogwrtResult.Flush = 0/2000 | WALWriteLock = Tx 1 持有 | 累计 fsync = 0 次';
+        noteTxt.textContent = '等待写锁的 Follower 不会白等——Leader 会把它们的 WAL 一并带走';
+      } else if (phase === 3) {
+        if (useDelay) {
+          setTx(0, 568, 256, '#AE8A3E', '#8C6D2B', 'Leader 执行 commit_delay 蓄水', '#FFFFFF');
+          setTx(1, 360, 200, '#F7E9DE', '#BE653B', '继续等待锁释放');
+          setTx(2, 360, 200, '#F7E9DE', '#BE653B', '继续等待锁释放');
+          setTx(3, 568, 256, '#E4F0EC', '#2F7A66', '趁蓄水完成 0/2400 插入并入队');
+          statusEl.textContent = '阶段 3 / 5：commit_delay 开启，成功汇入 Tx 4';
+          sharedTxt.textContent = '共享状态：WAL Buffer 已插入至 0/2400 | WaitEvent = CommitDelay | 累计 fsync = 0 次';
+          noteTxt.textContent = '代价：Tx 1 延迟略增；收益：Tx 4 也搭上了同一班 fsync 顺风车';
+        } else {
+          setTx(0, 568, 256, '#245A6B', '#1E4B5A', 'commit_delay=0 直接准备刷盘', '#FFFFFF');
+          setTx(1, 360, 200, '#F7E9DE', '#BE653B', '等待锁释放');
+          setTx(2, 360, 200, '#F7E9DE', '#BE653B', '等待锁释放');
+          setTx(3, 280, 220, '#F6EFE0', '#AE8A3E', '尚未插入完成，错过本批');
+          statusEl.textContent = '阶段 3 / 5：commit_delay=0，立即进入刷盘';
+          sharedTxt.textContent = '共享状态：WAL Buffer 已插入至 0/2300 | WALWriteLock = Tx 1 | 累计 fsync = 0 次';
+          noteTxt.textContent = '即使 commit_delay=0，已到达的 Tx 1/2/3 仍自然形成 Group Commit';
+        }
+      } else if (phase === 4) {
+        const endLsn = useDelay ? '0/2400' : '0/2300';
+        setTx(0, 840, 256, '#1E4B5A', '#2F7A66', '一次 XLogWrite + fsync 至 ' + endLsn, '#FFFFFF');
+        setTx(1, 568, 240, '#F7E9DE', '#BE653B', '等待 Leader 完成 fsync');
+        setTx(2, 568, 240, '#F7E9DE', '#BE653B', '等待 Leader 完成 fsync');
+        if (useDelay) {
+          setTx(3, 568, 240, '#F7E9DE', '#BE653B', '等待 Leader 完成 fsync');
+        } else {
+          setTx(3, 568, 240, '#F6EFE0', '#AE8A3E', '插入 0/2400，等下一轮刷盘');
+        }
+        statusEl.textContent = '阶段 4 / 5：Leader 一次性刷盘推进至 ' + endLsn;
+        sharedTxt.textContent = '共享状态：LogwrtResult.Flush 推进至 ' + endLsn + ' | 累计 fsync = 1 次';
+        noteTxt.textContent = '关键：XLogFlush 不只刷自己，而是连带把已插入的后续 WAL 一同刷盘';
+      } else if (phase === 5) {
+        const endLsn = useDelay ? '0/2400' : '0/2300';
+        setTx(0, 1112, 248, '#2F7A66', '#1E4B5A', '释放锁 · COMMIT 返回 ✓', '#FFFFFF');
+        setTx(1, 1112, 248, '#2F7A66', '#1E4B5A', '二次检查已覆盖 · 快速返回 ✓', '#FFFFFF');
+        setTx(2, 1112, 248, '#2F7A66', '#1E4B5A', '二次检查已覆盖 · 快速返回 ✓', '#FFFFFF');
+        if (useDelay) {
+          setTx(3, 1112, 248, '#2F7A66', '#1E4B5A', '二次检查已覆盖 · 快速返回 ✓', '#FFFFFF');
+          statusEl.textContent = '阶段 5 / 5：完成！仅 1 次 fsync 服务全部 4 个事务';
+        } else {
+          setTx(3, 840, 256, '#BE653B', '#8E4321', '成为下批 Leader，需第 2 次 fsync', '#FFFFFF');
+          statusEl.textContent = '阶段 5 / 5：1 次 fsync 服务 Tx 1/2/3；Tx 4 进入下一批';
+        }
+        sharedTxt.textContent = '共享状态：LogwrtResult.Flush = ' + endLsn + ' | 本批 fsync = 1 次 | 唤醒 walsender';
+        noteTxt.textContent = '验证了 Group Commit 的本质：共享刷盘成果，显著摊薄同步 I/O 成本';
+      }
+    }
+
+    function stopAuto() {
+      if (timer) { clearInterval(timer); timer = null; }
+      autoBtn.classList.remove('active');
+      autoBtn.textContent = '自动播放';
+    }
+
+    document.getElementById('s5-step-btn').addEventListener('click', function () {
+      phase = phase < 5 ? phase + 1 : 0;
+      render();
+    });
+    delayBtn.addEventListener('click', function () {
+      useDelay = !useDelay;
+      delayBtn.textContent = useDelay ? 'commit_delay：开启 (蓄水)' : 'commit_delay：关闭 (0)';
+      delayBtn.classList.toggle('active', useDelay);
+      render();
+    });
+    document.getElementById('s5-reset-btn').addEventListener('click', function () {
+      stopAuto();
+      phase = 0;
+      render();
+    });
+    autoBtn.addEventListener('click', function () {
+      if (timer) { stopAuto(); return; }
+      phase = 0;
+      render();
+      autoBtn.classList.add('active');
+      autoBtn.textContent = '停止播放';
+      timer = setInterval(function () {
+        if (phase < 5) {
+          phase++;
+          render();
+        } else {
+          stopAuto();
+        }
+      }, 1200);
+    });
+
+    render();
+  })();
+
+  /* ==================== ANIMATION #3: SLIDE 07 ASYNC & WAL WRITER ==================== */
+  (function initSlide7() {
+    // Each slot: 'empty' | 'window' (returned to client, not flushed) | 'flushed' | 'lost'
+    let slots = ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'];
+    let crashed = false;
+    let timer = null;
+
+    const slotsGroup = document.getElementById('s7-tx-slots');
+    const statusEl = document.getElementById('s7-status');
+    const banner = document.getElementById('s7-banner');
+    const bannerTitle = document.getElementById('s7-banner-title');
+    const bannerSub = document.getElementById('s7-banner-sub');
+    const autoBtn = document.getElementById('s7-auto-btn');
+
+    function render() {
+      const xs = [938, 998, 1058, 1118, 1178, 1238, 1298];
+      const ws = [52, 52, 52, 52, 52, 52, 46];
+      let html = '';
+      let returnedCount = 0;
+      let flushedCount = 0;
+      let windowCount = 0;
+      let lostCount = 0;
+
+      slots.forEach(function (st, i) {
+        let fill = '#F1EFE9', stroke = '#D9D5CB', txt = '—', txtColor = '#89938F';
+        if (st === 'window') {
+          fill = '#F7E9DE'; stroke = '#BE653B'; txt = 'T' + (i + 1); txtColor = '#BE653B';
+          returnedCount++; windowCount++;
+        } else if (st === 'flushed') {
+          fill = '#2F7A66'; stroke = '#1E4B5A'; txt = 'T' + (i + 1) + '✓'; txtColor = '#FFFFFF';
+          returnedCount++; flushedCount++;
+        } else if (st === 'lost') {
+          fill = '#BE653B'; stroke = '#7A3516'; txt = '丢'; txtColor = '#FFFFFF';
+          lostCount++;
+        }
+        html +=
+          '<rect x="' + xs[i] + '" y="68" width="' + ws[i] + '" height="44" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.2"/>' +
+          '<text x="' + (xs[i] + ws[i] / 2) + '" y="95" text-anchor="middle" font-size="13" font-weight="700" fill="' + txtColor + '">' + txt + '</text>';
+      });
+      slotsGroup.innerHTML = html;
+
+      if (!crashed) {
+        statusEl.textContent = '已返回客户端: ' + returnedCount + ' | 已落盘持久: ' + flushedCount + ' | 风险窗口内: ' + windowCount;
+        banner.setAttribute('fill', '#1E4B5A');
+        bannerTitle.textContent = '风险边界说明：异步提交的风险是「最近已返回事务可能丢失」，而非「数据库任意损坏」';
+        bannerSub.textContent = '绿色 = 已由 WAL Writer 刷盘持久；橙色 = 已返回客户端但尚在内存风险窗口内（最坏约 3 × wal_writer_delay 收敛）。';
+      } else {
+        statusEl.textContent = '崩溃恢复完成：保留 ' + flushedCount + ' 批 | 丢失 ' + lostCount + ' 批 | 数据库一致 ✓';
+        banner.setAttribute('fill', '#BE653B');
+        bannerTitle.textContent = '崩溃发生！已落盘的 ' + flushedCount + ' 批事务完整保留；风险窗口内的 ' + lostCount + ' 批事务丢失（等价干净 abort）';
+        bannerSub.textContent = '恢复后数据库结构与状态完全一致，绝不会出现 fsync=off 导致的任意数据损坏。点击「重置」可继续推演。';
+      }
+    }
+
+    function addCommit() {
+      if (crashed) return;
+      const idx = slots.indexOf('empty');
+      if (idx !== -1) slots[idx] = 'window';
+      render();
+    }
+
+    function tickWriter() {
+      if (crashed) return;
+      // Flush up to 2 oldest 'window' items (simulating page boundary + async LSN flush)
+      let flushed = 0;
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i] === 'window' && flushed < 2) {
+          slots[i] = 'flushed';
+          flushed++;
+        }
+      }
+      render();
+    }
+
+    function triggerCrash() {
+      if (crashed) return;
+      crashed = true;
+      slots = slots.map(function (st) { return st === 'window' ? 'lost' : st; });
+      render();
+    }
+
+    function stopAuto() {
+      if (timer) { clearInterval(timer); timer = null; }
+      autoBtn.classList.remove('active');
+      autoBtn.textContent = '自动演示';
+    }
+
+    function reset() {
+      stopAuto();
+      crashed = false;
+      slots = ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'];
+      render();
+    }
+
+    document.getElementById('s7-commit-btn').addEventListener('click', addCommit);
+    document.getElementById('s7-tick-btn').addEventListener('click', tickWriter);
+    document.getElementById('s7-crash-btn').addEventListener('click', triggerCrash);
+    document.getElementById('s7-reset-btn').addEventListener('click', reset);
+    autoBtn.addEventListener('click', function () {
+      if (timer) { stopAuto(); return; }
+      reset();
+      autoBtn.classList.add('active');
+      autoBtn.textContent = '停止演示';
+      let step = 0;
+      const seq = [addCommit, addCommit, addCommit, tickWriter, addCommit, addCommit, triggerCrash];
+      timer = setInterval(function () {
+        if (step < seq.length) {
+          seq[step]();
+          step++;
+        } else {
+          stopAuto();
+        }
+      }, 900);
+    });
+
+    render();
+  })();
+
+  /* ==================== ANIMATION #4: SLIDE 10 SYNC REPLICATION ==================== */
+  (function initSlide10() {
+    const MODES = {
+      off: {
+        status: '当前模式：off · 不等主库 Flush，也不等备库',
+        activeNodes: [1],
+        markerX: 53,
+        title: '模式 off：不等本地 Flush，也不等同步复制',
+        l1: '工程含义：提交写进主库 WAL Buffer 并登记异步 LSN 后即刻返回，延迟最低。',
+        l2: '容灾边界：牺牲最近已返回事务的持久性；主库崩溃或 immediate shutdown 可能丢失最近窗口内提交。'
+      },
+      local: {
+        status: '当前模式：local · 仅等主库本地 Flush，不等同步复制',
+        activeNodes: [1, 2],
+        markerX: 268,
+        title: '模式 local：只等 Primary 本地 Flush，不等 Standby 反馈',
+        l1: '工程含义：即使配置了 synchronous_standby_names，本事务也只追求主库本地持久。',
+        l2: '容灾边界：主库本地重启不丢数据；但若主库整机不可恢复，未传到备库的提交可能丢失。'
+      },
+      remote_write: {
+        status: '当前模式：remote_write · 等主库 Flush + 备库写入文件系统',
+        activeNodes: [1, 2, 3, 4],
+        markerX: 768,
+        title: '模式 remote_write：等 Primary 本地 Flush + Standby 接收并写到 OS 文件系统',
+        l1: '工程含义：备库无需执行 fsync 即返回 ACK，比 on 少了备库刷盘延迟。',
+        l2: '容灾边界：可抗备库 PostgreSQL 进程崩溃，但若备库操作系统崩溃或断电，仍可能丢失。'
+      },
+      on: {
+        status: '当前模式：on · 等主库 Flush + 备库 Flush 到稳定存储',
+        activeNodes: [1, 2, 3, 4, 5],
+        markerX: 990,
+        title: '模式 on：等 Primary 本地 Flush + 等 Standby Flush 到稳定存储（默认同步复制）',
+        l1: '工程含义：主备双方均完成持久化落盘后返回；提交延迟受主库盘 + 网络 RTT + 备库 fsync 共同影响。',
+        l2: '容灾边界：主备单点崩溃均不丢已返回提交；但不保证备库只读查询立刻看到新数据。'
+      },
+      remote_apply: {
+        status: '当前模式：remote_apply · 等主库 Flush + 备库 Replay 对查询可见',
+        activeNodes: [1, 2, 3, 4, 5, 6],
+        markerX: 1202,
+        title: '模式 remote_apply：等 Primary 本地 Flush + 等 Standby 回放完成并对查询可见',
+        l1: '工程含义：因果读语义最强——主库 COMMIT 返回后，立刻查备库即可读到本次写入；提交延迟最高。',
+        l2: '容灾边界：同时受网络、备库落盘与备库回放速度（含备库长查询冲突）影响。'
+      }
+    };
+
+    const modeKeys = ['off', 'local', 'remote_write', 'on', 'remote_apply'];
+    const btns = Array.from(document.querySelectorAll('#s10-ctrl [data-mode]'));
+    const statusEl = document.getElementById('s10-status');
+    const markerBox = document.getElementById('s10-marker-box');
+    const markerTxt = document.getElementById('s10-marker-txt');
+    const descTitle = document.getElementById('s10-desc-title');
+    const descL1 = document.getElementById('s10-desc-l1');
+    const descL2 = document.getElementById('s10-desc-l2');
+    const autoBtn = document.getElementById('s10-auto-btn');
+    let timer = null;
+    let curIdx = 3; // 'on'
+
+    function applyMode(key) {
+      const cfg = MODES[key];
+      if (!cfg) return;
+      curIdx = modeKeys.indexOf(key);
+      btns.forEach(function (b) {
+        b.classList.toggle('active', b.getAttribute('data-mode') === key);
+      });
+      statusEl.textContent = cfg.status;
+      descTitle.textContent = cfg.title;
+      descL1.textContent = cfg.l1;
+      descL2.textContent = cfg.l2;
+
+      markerBox.setAttribute('x', String(cfg.markerX));
+      markerTxt.setAttribute('x', String(cfg.markerX + 74));
+
+      for (let i = 1; i <= 6; i++) {
+        const rect = document.getElementById('s10-n' + i);
+        const isLast = i === cfg.activeNodes[cfg.activeNodes.length - 1];
+        const isOn = cfg.activeNodes.indexOf(i) !== -1;
+        if (isLast) {
+          rect.setAttribute('fill', '#1E4B5A');
+          rect.setAttribute('stroke', '#BE653B');
+          rect.setAttribute('stroke-width', '2.5');
+        } else if (isOn) {
+          rect.setAttribute('fill', '#245A6B');
+          rect.setAttribute('stroke', '#1E4B5A');
+          rect.setAttribute('stroke-width', '1.5');
+        } else {
+          rect.setAttribute('fill', '#EBF1EE');
+          rect.setAttribute('stroke', '#A4C4C6');
+          rect.setAttribute('stroke-width', '1');
+        }
+        // Update 3 sibling text nodes color for high contrast
+        let el = rect.nextElementSibling;
+        let tCount = 0;
+        while (el && el.tagName.toLowerCase() === 'text' && tCount < 3) {
+          if (isOn) {
+            el.setAttribute('fill', tCount === 0 ? '#FFFFFF' : '#CFE0DC');
+          } else {
+            el.setAttribute('fill', tCount === 0 ? '#1B2B33' : '#46585F');
+          }
+          el = el.nextElementSibling;
+          tCount++;
+        }
+      }
+    }
+
+    function stopAuto() {
+      if (timer) { clearInterval(timer); timer = null; }
+      autoBtn.classList.remove('active');
+      autoBtn.textContent = '轮播对比';
+    }
+
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        stopAuto();
+        applyMode(b.getAttribute('data-mode'));
+      });
+    });
+
+    autoBtn.addEventListener('click', function () {
+      if (timer) { stopAuto(); return; }
+      autoBtn.classList.add('active');
+      autoBtn.textContent = '停止轮播';
+      timer = setInterval(function () {
+        curIdx = (curIdx + 1) % modeKeys.length;
+        applyMode(modeKeys[curIdx]);
+      }, 1800);
+    });
+
+    applyMode('on');
+  })();
+
+  /* ==================== INIT ==================== */
+  buildTOC();
+  goToSlide(0);
+  fitStage();
+})();
+</script>
+</body>
+</html>

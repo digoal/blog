@@ -1,0 +1,2897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 — PostgreSQL 增量备份和增量还原</title>
+<style>
+  :root {
+    --bg-base: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --primary: #245A6B;
+    --primary-light: #E5EFF0;
+    --accent: #BE653B;
+    --accent-light: #F7E9DE;
+    --good: #2F7A66;
+    --good-light: #E6F2EE;
+    --gold: #AE8A3E;
+    --gold-light: #F5EFE0;
+    --strata-1: #1E4B5A;
+    --strata-2: #2E6373;
+    --strata-3: #47808D;
+    --strata-4: #74A5AD;
+    --strata-5: #A4C4C6;
+    --strata-6: #CFE0DC;
+    --strata-7: #EBF1EE;
+    --font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", Georgia, serif;
+    --font-sans: "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", -apple-system, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+    --hud-h: 46px;
+    --notes-w: 440px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #1C262B;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* Main App Shell: Top Workspace + Bottom Fixed HUD (Always visible in fullscreen) */
+  #app-shell {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: #1C262B;
+  }
+
+  #workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Left Stage Viewport (letterboxed container for fixed 1600x900 stage) */
+  #stage-viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    background: #222E34;
+    transition: width 0.22s ease;
+  }
+
+  #stage-scale-box {
+    width: 1600px;
+    height: 900px;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform-origin: center center;
+    transform: translate(-50%, -50%) scale(1);
+    background: var(--bg-base);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+  }
+
+  /* Subtle blueprint grid lines on stage background */
+  #stage-scale-box::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(217, 213, 203, 0.22) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(217, 213, 203, 0.22) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Top strata thin bar */
+  .strata-top-rule {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    display: flex;
+    z-index: 5;
+  }
+  .strata-top-rule span { flex: 1; height: 100%; }
+
+  /* Slides */
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 46px 64px 36px 64px;
+    display: none;
+    flex-direction: column;
+    z-index: 2;
+  }
+  .slide.active {
+    display: flex;
+  }
+
+  .slide-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--primary);
+    text-transform: uppercase;
+    font-weight: 600;
+    line-height: 18px;
+    margin-bottom: 10px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.22;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+
+  .slide-lead {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    color: var(--ink-sub);
+    line-height: 1.48;
+    margin-bottom: 16px;
+    max-width: 1400px;
+  }
+
+  .slide-divider {
+    width: 1400px;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 20px;
+    flex-shrink: 0;
+  }
+
+  /* Diagram Zone: Fixed 1400x430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    background: var(--bg-base);
+  }
+
+  /* Dedicated non-overlapping toolbar above SVG when slide has interactive controls */
+  .diagram-toolbar {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    border-bottom: none;
+    flex-shrink: 0;
+  }
+
+  .tb-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    color: var(--ink-muted);
+    margin-right: 4px;
+  }
+
+  .tb-btn {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    background: var(--bg-base);
+    border: 1px solid var(--stroke);
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1.3;
+  }
+  .tb-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-light);
+  }
+  .tb-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #FFFFFF;
+  }
+  .tb-btn.accent.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #FFFFFF;
+  }
+  .tb-btn.good.active {
+    background: var(--good);
+    border-color: var(--good);
+    color: #FFFFFF;
+  }
+
+  .tb-status {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .tb-range-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-sub);
+    margin-left: 8px;
+  }
+  .tb-range-wrap input[type="range"] {
+    width: 120px;
+    accent-color: var(--primary);
+    cursor: pointer;
+  }
+
+  .svg-frame {
+    width: 1400px;
+    flex: 1;
+    min-height: 0;
+    border: 1px solid var(--stroke);
+    background: #FAF9F6;
+    overflow: hidden;
+  }
+  .svg-frame svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Bottom NEXT Callout */
+  .slide-next {
+    margin-top: 24px;
+    width: 1400px;
+    border-left: 3px solid var(--accent);
+    background: var(--bg-sub);
+    padding: 12px 20px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .next-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .next-text {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* Stage Footer */
+  .slide-footer {
+    position: absolute;
+    left: 64px;
+    right: 96px;
+    bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--stroke);
+    padding-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+  .footer-page {
+    color: var(--ink);
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  /* Right-side In-Page Notes / Transcript Pane (Non-modal, vectors-scales stage left) */
+  #notes-pane {
+    width: 0;
+    height: 100%;
+    background: var(--bg-base);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+    flex-shrink: 0;
+    user-select: text;
+  }
+  #notes-pane.open {
+    width: var(--notes-w);
+    border-left-width: 2px;
+  }
+
+  .notes-header {
+    padding: 14px 20px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .notes-tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .notes-tab {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-base);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+  .notes-tab.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #FFFFFF;
+  }
+  .notes-close {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg-base);
+    color: var(--ink-sub);
+    cursor: pointer;
+  }
+  .notes-close:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  #notes-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px 48px 22px;
+    scroll-behavior: smooth;
+  }
+
+  .note-block {
+    padding: 16px 16px 18px 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--stroke);
+    background: #FAF9F6;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .note-block.clickable {
+    cursor: pointer;
+  }
+  .note-block.clickable:hover {
+    border-color: var(--primary);
+  }
+  .note-block.current {
+    border-color: var(--primary);
+    border-left: 4px solid var(--accent);
+    background: #FFFFFF;
+  }
+  .note-meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .note-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+  .note-text {
+    font-size: 14.5px;
+    line-height: 1.78;
+    color: var(--ink-sub);
+  }
+  .note-text p {
+    margin-bottom: 10px;
+  }
+  .note-text p:last-child {
+    margin-bottom: 0;
+  }
+  .note-cue {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: var(--accent-light);
+    border-left: 3px solid var(--accent);
+    font-size: 13px;
+    color: var(--ink);
+    line-height: 1.5;
+  }
+
+  /* TOC Overlay (G) */
+  #toc-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(27, 43, 51, 0.86);
+    z-index: 40;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+  }
+  #toc-overlay.open {
+    display: flex;
+  }
+  .toc-panel {
+    width: min(1160px, 94vw);
+    max-height: 82vh;
+    background: var(--bg-base);
+    border: 2px solid var(--primary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .toc-head {
+    padding: 16px 24px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .toc-head h2 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .toc-grid {
+    padding: 20px 24px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .toc-item {
+    padding: 12px 16px;
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--primary);
+    background: #FAF9F6;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .toc-item:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+  }
+  .toc-item.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    border-left-width: 4px;
+  }
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .toc-item.active .toc-num { color: var(--accent); }
+  .toc-item-title {
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+
+  /* Bottom Persistent HUD Bar (Visible in normal AND fullscreen mode) */
+  #bottom-hud {
+    height: var(--hud-h);
+    background: #1B2B33;
+    border-top: 1px solid #2E4550;
+    color: #E5EFF0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    flex-shrink: 0;
+    z-index: 50;
+    font-family: var(--font-sans);
+    font-size: 13px;
+  }
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hud-btn {
+    background: #243842;
+    color: #EBF1EE;
+    border: 1px solid #3B5563;
+    padding: 5px 11px;
+    font-size: 12.5px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .hud-btn:hover {
+    background: #2E6373;
+    border-color: #74A5AD;
+  }
+  .hud-btn.active {
+    background: var(--accent);
+    border-color: #D9855E;
+    color: #FFFFFF;
+  }
+  .hud-btn kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: rgba(0,0,0,0.28);
+    padding: 1px 5px;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #CFE0DC;
+  }
+  .hud-btn.active kbd {
+    color: #FFFFFF;
+    border-color: rgba(255,255,255,0.45);
+  }
+  .hud-counter {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #A4C4C6;
+    min-width: 68px;
+    text-align: center;
+  }
+  .hud-progress-track {
+    width: 140px;
+    height: 4px;
+    background: #2C3F48;
+    position: relative;
+    overflow: hidden;
+  }
+  .hud-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s ease;
+  }
+  .autoplay-badge {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: #F5EFE0;
+    background: #AE8A3E;
+    padding: 2px 7px;
+    display: none;
+  }
+  .autoplay-badge.show {
+    display: inline-block;
+  }
+
+  /* SVG typography helper classes */
+  svg text {
+    font-family: var(--font-sans);
+  }
+  svg .svg-serif {
+    font-family: var(--font-serif);
+  }
+  svg .svg-mono {
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+<div id="app-shell">
+  <div id="workspace">
+    <!-- Left Vector-Scaled 16:9 Stage -->
+    <div id="stage-viewport">
+      <div id="stage-scale-box">
+        <!-- 7-level strata top accent strip -->
+        <div class="strata-top-rule" aria-hidden="true">
+          <span style="background:#1E4B5A"></span>
+          <span style="background:#2E6373"></span>
+          <span style="background:#47808D"></span>
+          <span style="background:#74A5AD"></span>
+          <span style="background:#A4C4C6"></span>
+          <span style="background:#CFE0DC"></span>
+          <span style="background:#EBF1EE"></span>
+        </div>
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-slide="0" data-title="增量备份和增量还原：不是省盘开关，而是一组恢复链协议">
+          <div class="slide-eyebrow">DATABASE FOUNDATION COURSE · POSTGRESQL 17+ · 维护机制 + 场景实践</div>
+          <h1 class="slide-title">增量备份和增量还原：不是省盘开关，而是一组恢复链协议</h1>
+          <p class="slide-lead">作者 digoal · 2026-06-08 · 基于 PostgreSQL 源码、官方文档与 DeepWiki 脉络，拆解物理块级增量备份与合成恢复全链路。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 7-level Stratigraphic Profile -->
+                <text x="28" y="34" font-size="14" font-weight="700" fill="#245A6B" class="svg-mono">STRATIGRAPHIC ARCHITECTURE · 增量备份七层协议剖面（上层运维 → 底层存储）</text>
+
+                <!-- Layer 7 (Top): Business Verification & PITR -->
+                <rect x="28" y="48" width="840" height="46" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+                <text x="48" y="76" font-size="15" font-weight="700" fill="#1B2B33">L7 · 恢复验收与 PITR</text>
+                <text x="328" y="76" font-size="13.5" fill="#46585F">restore_command + recovery.signal + 归档 WAL 重放至目标点，验收后放行</text>
+
+                <!-- Layer 6: pg_combinebackup -->
+                <rect x="28" y="100" width="840" height="46" fill="#CFE0DC" stroke="#245A6B" stroke-width="1"/>
+                <text x="48" y="128" font-size="15" font-weight="700" fill="#1B2B33">L6 · 链合成 pg_combinebackup</text>
+                <text x="328" y="128" font-size="13.5" fill="#1B2B33">按从旧到新输入 B0 → B1 → B2，块级回溯拼装 Synthetic Full Backup</text>
+
+                <!-- Layer 5: pg_basebackup --incremental -->
+                <rect x="28" y="152" width="840" height="46" fill="#A4C4C6" stroke="#245A6B" stroke-width="1"/>
+                <text x="48" y="180" font-size="15" font-weight="700" fill="#1B2B33">L5 · 增量采集 pg_basebackup</text>
+                <text x="328" y="180" font-size="13.5" fill="#1B2B33">上传旧 manifest → 仅传变化块写为 INCREMENTAL.*，非关系文件全量保留</text>
+
+                <!-- Layer 4: Backup Manifest v2 -->
+                <rect x="28" y="204" width="840" height="46" fill="#74A5AD" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="48" y="232" font-size="15" font-weight="700" fill="#FFFFFF">L4 · 元数据契约 Manifest v2</text>
+                <text x="328" y="232" font-size="13.5" fill="#FFFFFF">System-Identifier 验同源 · WAL-Ranges 定区间 · 清单做 sanity check</text>
+
+                <!-- Layer 3: WAL Summary -->
+                <rect x="28" y="256" width="840" height="46" fill="#47808D" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="48" y="284" font-size="15" font-weight="700" fill="#FFFFFF">L3 · 变化块索引 WAL Summary</text>
+                <text x="328" y="284" font-size="13.5" fill="#FFFFFF">walsummarizer 后台扫描 WAL → pg_wal/summaries 记 (ts, rel, fork, blk)</text>
+
+                <!-- Layer 2: WAL Stream -->
+                <rect x="28" y="308" width="840" height="46" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+                <text x="48" y="336" font-size="14.5" font-weight="700" fill="#FFFFFF">L2 · 连续日志流 WAL &amp; Archive</text>
+                <text x="328" y="336" font-size="13.5" fill="#EBF1EE">wal_level &gt;= replica · archive_mode=on · 支撑一致性与任意时间点重放</text>
+
+                <!-- Layer 1 (Bottom): Physical 8kB Blocks -->
+                <rect x="28" y="360" width="840" height="48" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+                <text x="48" y="389" font-size="14.5" font-weight="700" fill="#FFFFFF">L1 · 底层物理块 8kB Blocks</text>
+                <text x="328" y="389" font-size="13.5" fill="#CFE0DC">Heap / Index 分块存储 · 物理增量最小追踪粒度（非表、非行、非事务）</text>
+
+                <!-- Right Panel: 5 Core Questions of the Protocol -->
+                <rect x="900" y="48" width="472" height="360" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+                <rect x="900" y="48" width="472" height="40" fill="#245A6B"/>
+                <text x="920" y="73" font-size="15" font-weight="700" fill="#FFFFFF" class="svg-serif">恢复链协议必须回答的五个问题</text>
+
+                <rect x="920" y="106" width="432" height="46" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="920" y="106" width="4" height="46" fill="#245A6B"/>
+                <text x="938" y="126" font-size="14" font-weight="700" fill="#1B2B33">01 · 哪些块变了？</text>
+                <text x="938" y="144" font-size="13" fill="#46585F">由 WAL Summary 精确索引，而非扫描磁盘或比对文件哈希</text>
+
+                <rect x="920" y="162" width="432" height="46" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="920" y="162" width="4" height="46" fill="#2E6373"/>
+                <text x="938" y="182" font-size="14" font-weight="700" fill="#1B2B33">02 · 哪些块没变、旧块在哪里？</text>
+                <text x="938" y="200" font-size="13" fill="#46585F">沿 B2 → B1 → B0 备份链向前溯源，最新增量优先覆盖</text>
+
+                <rect x="920" y="218" width="432" height="46" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="920" y="218" width="4" height="46" fill="#47808D"/>
+                <text x="938" y="238" font-size="14" font-weight="700" fill="#1B2B33">03 · 合成之后 WAL 从哪开始重放？</text>
+                <text x="938" y="256" font-size="13" fill="#46585F">依赖新 backup_label 与归档 WAL，完成第二段常规物理恢复</text>
+
+                <rect x="920" y="274" width="432" height="46" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="920" y="274" width="4" height="46" fill="#BE653B"/>
+                <text x="938" y="294" font-size="14" font-weight="700" fill="#BE653B">04 · 备份链是否还能拼起来？</text>
+                <text x="938" y="312" font-size="13" fill="#46585F">缺任意父备份或 summary 窗口断裂，整条链都会失效</text>
+
+                <rect x="920" y="330" width="432" height="60" fill="#E6F2EE" stroke="#2F7A66"/>
+                <text x="938" y="354" font-size="14" font-weight="700" fill="#2F7A66">核心视角：把增量备份当「备份链产品」治理</text>
+                <text x="938" y="376" font-size="11.5" fill="#1B2B33">源码：basebackup_incremental.c · walsummarizer.c · reconstruct.c</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">从真实 30TB 集群的 4 小时备份窗口困境出发，看为什么文件级校验救不了物理增量。</span>
+          </div>
+          <div class="slide-footer">
+            <span>POSTGRESQL 增量备份与增量还原 · 架构全景</span>
+            <span class="footer-page">01 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-slide="1" data-title="痛点与破题：为什么 30TB 集群不能靠文件级校验做增量？">
+          <div class="slide-eyebrow">01 · 问题定义与设计目标</div>
+          <h1 class="slide-title">1TB 关系文件只改几十个 8kB 块，文件级增量立刻失效</h1>
+          <p class="slide-lead">真实痛点：30TB 集群全量备份逼近 4 小时低峰窗口、对象存储账单攀升，但文件 checksum 粒度太粗。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left Box: File-level Checksum Failure -->
+                <rect x="28" y="24" width="640" height="236" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <rect x="28" y="24" width="640" height="36" fill="#BE653B"/>
+                <text x="48" y="47" font-size="15" font-weight="700" fill="#FFFFFF">困局：如果只按「文件是否修改 / Checksum」判断增量</text>
+
+                <text x="48" y="84" font-size="14" font-weight="700" fill="#1B2B33">例：30TB 集群中某 1TB 关系文件（按 8kB Block 切分）</text>
+                <!-- Grid of blocks representing 1TB relation file with only a few dirty blocks -->
+                <g transform="translate(48, 98)">
+                  <rect x="0" y="0" width="600" height="68" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <!-- 20x2 grid of small blocks -->
+                  <rect x="12" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="40" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="68" y="10" width="24" height="20" fill="#BE653B" stroke="#8C4220"/>
+                  <rect x="96" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="124" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="152" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="180" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="208" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="236" y="10" width="24" height="20" fill="#BE653B" stroke="#8C4220"/>
+                  <rect x="264" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="292" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="320" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="348" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="376" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="404" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="432" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="460" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="488" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="516" y="10" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="544" y="10" width="44" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <text x="566" y="24" text-anchor="middle" font-size="11" fill="#46585F" class="svg-mono">...</text>
+
+                  <rect x="12" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="40" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="68" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="96" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="124" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="152" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="180" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="208" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="236" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="264" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="292" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="320" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="348" y="36" width="24" height="20" fill="#BE653B" stroke="#8C4220"/>
+                  <rect x="376" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="404" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="432" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="460" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="488" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="516" y="36" width="24" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <rect x="544" y="36" width="44" height="20" fill="#EBF1EE" stroke="#A4C4C6"/>
+                  <text x="566" y="50" text-anchor="middle" font-size="11" fill="#46585F" class="svg-mono">...</text>
+                </g>
+                <text x="48" y="190" font-size="14" fill="#BE653B" font-weight="700">结果：只要改了几个 8kB 块，文件 Checksum 就全变 → 被迫重传整个文件</text>
+                <text x="48" y="216" font-size="13.5" fill="#46585F">• 业务低峰仅 4 小时，全量备份窗口日趋逼近红线</text>
+                <text x="48" y="238" font-size="13.5" fill="#46585F">• 对象存储账单持续膨胀，演练时还需重放海量 WAL</text>
+
+                <!-- Arrow from Left to Right -->
+                <path d="M 668 142 L 732 142" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="732,142 722,136 722,148" fill="#245A6B"/>
+
+                <!-- Right Box: PG17 Block-level Answer -->
+                <rect x="732" y="24" width="640" height="236" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="732" y="24" width="640" height="36" fill="#2F7A66"/>
+                <text x="752" y="47" font-size="15" font-weight="700" fill="#FFFFFF">破题：PostgreSQL 17 块级增量备份（保留物理恢复能力）</text>
+
+                <text x="752" y="84" font-size="14" font-weight="700" fill="#1B2B33">只带走被 WAL 记录修改过的 8kB Block，未修改块延后向旧备份借用</text>
+
+                <rect x="752" y="98" width="286" height="68" fill="#FAF9F6" stroke="#2F7A66"/>
+                <text x="768" y="122" font-size="13.5" font-weight="700" fill="#2F7A66">INCREMENTAL.&lt;rel&gt; 只存变化块</text>
+                <rect x="768" y="132" width="38" height="22" fill="#BE653B"/>
+                <text x="787" y="147" text-anchor="middle" font-size="11" fill="#FFFFFF" class="svg-mono">B#2</text>
+                <rect x="814" y="132" width="38" height="22" fill="#BE653B"/>
+                <text x="833" y="147" text-anchor="middle" font-size="11" fill="#FFFFFF" class="svg-mono">B#8</text>
+                <rect x="860" y="132" width="44" height="22" fill="#BE653B"/>
+                <text x="882" y="147" text-anchor="middle" font-size="11" fill="#FFFFFF" class="svg-mono">B#32</text>
+                <text x="916" y="147" font-size="12" fill="#46585F">+ 头部索引</text>
+
+                <rect x="1054" y="98" width="298" height="68" fill="#FAF9F6" stroke="#245A6B"/>
+                <text x="1070" y="122" font-size="13.5" font-weight="700" fill="#245A6B">非关系文件仍完整保存</text>
+                <text x="1070" y="146" font-size="12.5" fill="#46585F">配置 / pg_control / 状态 / manifest</text>
+
+                <text x="752" y="192" font-size="13.5" font-weight="700" fill="#1B2B33">代价也同样直接（工程权衡）：</text>
+                <text x="752" y="216" font-size="13.5" fill="#46585F">• 必须开启并保留 WAL summary，且严禁随意删旧全量/旧增量</text>
+                <text x="752" y="238" font-size="13.5" fill="#46585F">• 增量不能直接启动（须先合成）；若大部分块都变了则收益极小</text>
+
+                <!-- Bottom Row: 3 Decomposed Sub-problems -->
+                <rect x="28" y="284" width="434" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <text x="48" y="312" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">SUB-PROBLEM 01</text>
+                <text x="48" y="338" font-size="16" font-weight="700" fill="#1B2B33" class="svg-serif">哪些关系块发生过 WAL 修改？</text>
+                <text x="48" y="366" font-size="13.5" fill="#46585F">解法：WAL summarizer 扫描 WAL，输出</text>
+                <text x="48" y="388" font-size="13.5" fill="#46585F">pg_wal/summaries 变化块索引文件。</text>
+
+                <rect x="482" y="284" width="434" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <text x="502" y="312" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">SUB-PROBLEM 02</text>
+                <text x="502" y="338" font-size="16" font-weight="700" fill="#1B2B33" class="svg-serif">未保存的旧块从哪个备份取？</text>
+                <text x="502" y="366" font-size="13.5" fill="#46585F">解法：pg_combinebackup 按旧→新链条</text>
+                <text x="502" y="388" font-size="13.5" fill="#46585F">合成 synthetic full backup。</text>
+
+                <rect x="936" y="284" width="436" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <text x="956" y="312" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">SUB-PROBLEM 03</text>
+                <text x="956" y="338" font-size="16" font-weight="700" fill="#1B2B33" class="svg-serif">合成后还需哪些 WAL 到一致态？</text>
+                <text x="956" y="366" font-size="13.5" fill="#46585F">解法：按常规 PITR 配置 restore_command</text>
+                <text x="956" y="388" font-size="13.5" fill="#46585F">与 recovery.signal 重放归档 WAL。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">把「物理级、块级、备份链式」的边界钉死，先分清它是什么、不是什么。</span>
+          </div>
+          <div class="slide-footer">
+            <span>01 · 问题定义与设计目标</span>
+            <span class="footer-page">02 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-slide="2" data-title="概念全景：物理增量备份链的四件套与五条边界">
+          <div class="slide-eyebrow">02 · 架构总览与核心术语</div>
+          <h1 class="slide-title">增量备份不是孤立文件，而是 B0 → B1 → B2 的有序依赖链</h1>
+          <p class="slide-lead">PostgreSQL 增量备份是「物理级、块级、备份链式」能力，必须经 pg_combinebackup 合成后才能进入常规恢复。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top Zone: Backup Chain Overview (Fig 1 from article) -->
+                <text x="28" y="32" font-size="13.5" font-weight="700" fill="#245A6B" class="svg-mono">FIG 1 · 全量备份、增量备份与合成全量备份链路</text>
+
+                <!-- B0 -->
+                <rect x="28" y="48" width="186" height="122" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1.2"/>
+                <text x="44" y="74" font-size="16" font-weight="700" fill="#FFFFFF" class="svg-mono">B0 · FULL</text>
+                <text x="44" y="98" font-size="13" fill="#EBF1EE">完整物理基础备份</text>
+                <text x="44" y="120" font-size="12.5" fill="#CFE0DC">完整数据文件</text>
+                <rect x="44" y="132" width="154" height="26" fill="#2E6373" stroke="#74A5AD"/>
+                <text x="121" y="150" text-anchor="middle" font-size="12" fill="#FFFFFF" class="svg-mono">backup_manifest</text>
+
+                <!-- Arrow B0 -> B1 -->
+                <path d="M 214 109 L 274 109" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="274,109 264,103 264,115" fill="#245A6B"/>
+                <text x="244" y="96" text-anchor="middle" font-size="11" fill="#46585F" class="svg-mono">manifest</text>
+                <text x="244" y="128" text-anchor="middle" font-size="11" fill="#46585F" class="svg-mono">+ summary</text>
+
+                <!-- B1 -->
+                <rect x="274" y="48" width="186" height="122" fill="#47808D" stroke="#1E4B5A" stroke-width="1.2"/>
+                <text x="290" y="74" font-size="16" font-weight="700" fill="#FFFFFF" class="svg-mono">B1 · INC #1</text>
+                <text x="290" y="98" font-size="13" fill="#FFFFFF">--incremental=B0</text>
+                <text x="290" y="120" font-size="12.5" fill="#EBF1EE">含 INCREMENTAL.*</text>
+                <rect x="290" y="132" width="154" height="26" fill="#2E6373" stroke="#A4C4C6"/>
+                <text x="367" y="150" text-anchor="middle" font-size="12" fill="#FFFFFF" class="svg-mono">backup_manifest</text>
+
+                <!-- Arrow B1 -> B2 -->
+                <path d="M 460 109 L 520 109" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="520,109 510,103 510,115" fill="#245A6B"/>
+                <text x="490" y="96" text-anchor="middle" font-size="11" fill="#46585F" class="svg-mono">manifest</text>
+                <text x="490" y="128" text-anchor="middle" font-size="11" fill="#46585F" class="svg-mono">+ summary</text>
+
+                <!-- B2 -->
+                <rect x="520" y="48" width="186" height="122" fill="#74A5AD" stroke="#1E4B5A" stroke-width="1.2"/>
+                <text x="536" y="74" font-size="16" font-weight="700" fill="#1B2B33" class="svg-mono">B2 · INC #2</text>
+                <text x="536" y="98" font-size="13" fill="#1B2B33">--incremental=B1</text>
+                <text x="536" y="120" font-size="12.5" fill="#1B2B33">含 INCREMENTAL.*</text>
+                <rect x="536" y="132" width="154" height="26" fill="#2E6373" stroke="#1E4B5A"/>
+                <text x="613" y="150" text-anchor="middle" font-size="12" fill="#FFFFFF" class="svg-mono">backup_manifest</text>
+
+                <!-- Orthogonal collector from B0, B1, B2 into pg_combinebackup -->
+                <path d="M 121 170 L 121 196 L 838 196 L 838 170" stroke="#BE653B" stroke-width="2" fill="none"/>
+                <path d="M 367 170 L 367 196" stroke="#BE653B" stroke-width="2" fill="none"/>
+                <path d="M 613 170 L 613 196" stroke="#BE653B" stroke-width="2" fill="none"/>
+                <polygon points="838,170 832,180 844,180" fill="#BE653B"/>
+                <text x="480" y="216" text-anchor="middle" font-size="12.5" font-weight="700" fill="#BE653B">按从旧到新顺序（B0 B1 B2）一并输入，缺一不可</text>
+
+                <!-- pg_combinebackup box -->
+                <rect x="748" y="48" width="180" height="122" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="838" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#BE653B" class="svg-mono">pg_combinebackup</text>
+                <text x="838" y="106" text-anchor="middle" font-size="13" fill="#1B2B33">校验链条 LSN/TLI</text>
+                <text x="838" y="128" text-anchor="middle" font-size="13" fill="#1B2B33">块级回溯重建</text>
+                <text x="838" y="150" text-anchor="middle" font-size="13" fill="#1B2B33">重写 label/manifest</text>
+
+                <!-- Arrow combine -> Synthetic Full -->
+                <path d="M 928 109 L 972 109" stroke="#2F7A66" stroke-width="2" fill="none"/>
+                <polygon points="972,109 962,103 962,115" fill="#2F7A66"/>
+
+                <!-- Synthetic Full -->
+                <rect x="972" y="48" width="184" height="122" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="1064" y="76" text-anchor="middle" font-size="14.5" font-weight="700" fill="#2F7A66" class="svg-mono">SYNTHETIC FULL</text>
+                <text x="1064" y="102" text-anchor="middle" font-size="13" fill="#1B2B33">合成全量备份目录</text>
+                <text x="1064" y="124" text-anchor="middle" font-size="12.5" fill="#46585F">可继续做常规恢复</text>
+                <text x="1064" y="146" text-anchor="middle" font-size="12.5" fill="#46585F">亦可作新基线输入</text>
+
+                <!-- Arrow Synthetic Full -> PG Recovery -->
+                <path d="M 1156 109 L 1196 109" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="1196,109 1186,103 1186,115" fill="#245A6B"/>
+
+                <!-- PG Recovery -->
+                <rect x="1196" y="48" width="176" height="122" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <text x="1284" y="76" text-anchor="middle" font-size="14.5" font-weight="700" fill="#245A6B">PG 常规物理恢复</text>
+                <text x="1284" y="102" text-anchor="middle" font-size="12.5" fill="#1B2B33">归档 WAL + history</text>
+                <text x="1284" y="124" text-anchor="middle" font-size="12.5" fill="#1B2B33">recovery.signal</text>
+                <text x="1284" y="146" text-anchor="middle" font-size="12.5" fill="#1B2B33">PITR 重放与验收</text>
+
+                <!-- Bottom Zone: What it IS vs What it IS NOT -->
+                <rect x="28" y="240" width="656" height="168" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+                <rect x="28" y="240" width="656" height="32" fill="#245A6B"/>
+                <text x="46" y="261" font-size="14" font-weight="700" fill="#FFFFFF">核心四件套（它是什么：物理级 · 块级 · 备份链式）</text>
+                <text x="46" y="294" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#245A6B">1. backup_manifest：</tspan>UTF-8 JSON（v2），记系统标识、文件清单、WAL ranges 与 SHA-256</text>
+                <text x="46" y="322" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#245A6B">2. WAL summary：</tspan>pg_wal/summaries 二进制索引，按 (tablespace, rel, fork) 记修改块</text>
+                <text x="46" y="350" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#245A6B">3. INCREMENTAL.*：</tspan>替代部分关系文件，含 magic、变化块数、截断长度与块数据</text>
+                <text x="46" y="378" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#245A6B">4. Synthetic Full：</tspan>pg_combinebackup 合成产物，满足常规物理备份的全部恢复条件</text>
+
+                <rect x="708" y="240" width="664" height="168" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+                <rect x="708" y="240" width="664" height="32" fill="#BE653B"/>
+                <text x="726" y="261" font-size="14" font-weight="700" fill="#FFFFFF">五条硬边界（它不是什么——避免概念混淆）</text>
+                <text x="726" y="294" font-size="13.5" fill="#1B2B33">× 不是 pg_dump 的逻辑增量，不能跨大版本或单表导出</text>
+                <text x="726" y="320" font-size="13.5" fill="#1B2B33">× 不是按表、按行、按事务保存变化（只认物理 8kB block）</text>
+                <text x="726" y="346" font-size="13.5" fill="#1B2B33">× 不是把 WAL 当备份本体（恢复时依然需要完整归档 WAL）</text>
+                <text x="726" y="372" font-size="13.5" fill="#1B2B33">× 不是直接拿最新增量目录启动，也不是自动管理保留策略的备份系统</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">增量备份的第一步并不是扫描磁盘，而是客户端先把旧 manifest 传给服务端。</span>
+          </div>
+          <div class="slide-footer">
+            <span>02 · 架构总览与核心术语</span>
+            <span class="footer-page">03 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 (INTERACTIVE ANIMATION) ==================== -->
+        <section class="slide" data-slide="3" data-title="协议握手：增量备份从 UPLOAD_MANIFEST 开始，而非扫描文件">
+          <div class="slide-eyebrow">03 · 核心原理 · 复制协议握手</div>
+          <h1 class="slide-title">先验同源与 WAL 区间，再由 WAL Summary 裁决变化块</h1>
+          <p class="slide-lead">manifest 文件列表只做 sanity check（防止同名重建误判），真正决定哪些块变化的是 WAL summary。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <span class="tb-label">协议动画</span>
+              <button class="tb-btn" id="s4-play">▶ 播放握手流程</button>
+              <button class="tb-btn" id="s4-step">⏭ 单步演进</button>
+              <button class="tb-btn" id="s4-reset">↺ 重置</button>
+              <span class="tb-status" id="s4-status">当前：完整协议总览（点击播放或单步查看源码流转）</span>
+            </div>
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 390" xmlns="http://www.w3.org/2000/svg" id="s4-svg">
+                <!-- Column Headers -->
+                <rect x="36" y="18" width="290" height="46" fill="#245A6B"/>
+                <text x="181" y="39" text-anchor="middle" font-size="15" font-weight="700" fill="#FFFFFF">客户端 pg_basebackup</text>
+                <text x="181" y="56" text-anchor="middle" font-size="11.5" fill="#CFE0DC" class="svg-mono">src/bin/pg_basebackup/pg_basebackup.c</text>
+
+                <rect x="468" y="18" width="330" height="46" fill="#2E6373"/>
+                <text x="633" y="39" text-anchor="middle" font-size="15" font-weight="700" fill="#FFFFFF">服务端 BaseBackup 入口</text>
+                <text x="633" y="56" text-anchor="middle" font-size="11.5" fill="#CFE0DC" class="svg-mono">src/backend/backup/basebackup.c</text>
+
+                <rect x="936" y="18" width="428" height="46" fill="#1E4B5A"/>
+                <text x="1150" y="39" text-anchor="middle" font-size="15" font-weight="700" fill="#FFFFFF">增量解析与校验引擎</text>
+                <text x="1150" y="56" text-anchor="middle" font-size="11.5" fill="#CFE0DC" class="svg-mono">src/backend/backup/basebackup_incremental.c</text>
+
+                <!-- Lifelines -->
+                <line x1="181" y1="64" x2="181" y2="372" stroke="#D9D5CB" stroke-width="2" stroke-dasharray="5,5"/>
+                <line x1="633" y1="64" x2="633" y2="372" stroke="#D9D5CB" stroke-width="2" stroke-dasharray="5,5"/>
+                <line x1="1150" y1="64" x2="1150" y2="372" stroke="#D9D5CB" stroke-width="2" stroke-dasharray="5,5"/>
+
+                <!-- Step 1 -->
+                <g class="s4-step-group" data-step="1">
+                  <rect x="48" y="82" width="266" height="46" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                  <text x="62" y="102" font-size="13.5" font-weight="700" fill="#1B2B33">① 解析 --incremental=OLDMANIFEST</text>
+                  <text x="62" y="120" font-size="12" fill="#46585F">检查服务端版本是否支持增量备份（PG17+）</text>
+                </g>
+
+                <!-- Step 2 -->
+                <g class="s4-step-group" data-step="2">
+                  <path d="M 314 156 L 468 156" stroke="#245A6B" stroke-width="2" fill="none"/>
+                  <polygon points="468,156 458,150 458,162" fill="#245A6B"/>
+                  <text x="391" y="148" text-anchor="middle" font-size="12" font-weight="700" fill="#245A6B" class="svg-mono">UPLOAD_MANIFEST</text>
+                  <rect x="48" y="138" width="266" height="36" fill="#FAF9F6" stroke="#245A6B"/>
+                  <text x="62" y="161" font-size="13" fill="#1B2B33">② 通过复制协议分块上传旧 manifest</text>
+                  <rect x="468" y="138" width="330" height="36" fill="#E5EFF0" stroke="#245A6B"/>
+                  <text x="482" y="161" font-size="13" fill="#1B2B33">接收 manifest 缓冲区并移交增量解析器</text>
+                </g>
+
+                <!-- Step 3 -->
+                <g class="s4-step-group" data-step="3">
+                  <path d="M 798 156 L 936 156" stroke="#245A6B" stroke-width="2" fill="none"/>
+                  <polygon points="936,156 926,150 926,162" fill="#245A6B"/>
+                  <rect x="936" y="92" width="428" height="128" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.2"/>
+                  <text x="954" y="116" font-size="13.5" font-weight="700" fill="#245A6B">③ 解析 Manifest v2 的三大职责：</text>
+                  <text x="954" y="142" font-size="13" fill="#1B2B33">• <tspan font-weight="700">System-Identifier：</tspan>必须与当前集群一致（防串库）</text>
+                  <text x="954" y="168" font-size="13" fill="#1B2B33">• <tspan font-weight="700">WAL-Ranges：</tspan>推导前序到当前所需 summary 区间</text>
+                  <text x="954" y="194" font-size="13" fill="#BE653B">• <tspan font-weight="700">Files 清单：</tspan>仅作 sanity check，不作变化检测依据</text>
+                </g>
+
+                <!-- Step 4 -->
+                <g class="s4-step-group" data-step="4">
+                  <path d="M 314 252 L 468 252" stroke="#BE653B" stroke-width="2" fill="none"/>
+                  <polygon points="468,252 458,246 458,258" fill="#BE653B"/>
+                  <text x="391" y="244" text-anchor="middle" font-size="11.5" font-weight="700" fill="#BE653B" class="svg-mono">BASE_BACKUP (INC)</text>
+                  <rect x="48" y="232" width="266" height="40" fill="#F7E9DE" stroke="#BE653B"/>
+                  <text x="62" y="257" font-size="13" font-weight="700" fill="#1B2B33">④ 发送带 INCREMENTAL 的备份指令</text>
+
+                  <rect x="468" y="226" width="330" height="54" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                  <text x="482" y="248" font-size="13" font-weight="700" fill="#BE653B">硬前提门禁检查（任一不满足即报错）：</text>
+                  <text x="482" y="268" font-size="12.5" fill="#1B2B33">1) 必须已上传 manifest  2) summarize_wal=on</text>
+                </g>
+
+                <!-- Step 5 -->
+                <g class="s4-step-group" data-step="5">
+                  <path d="M 798 252 L 936 252" stroke="#2F7A66" stroke-width="2" fill="none"/>
+                  <polygon points="936,252 926,246 926,258" fill="#2F7A66"/>
+                  <rect x="936" y="234" width="428" height="60" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.2"/>
+                  <text x="954" y="258" font-size="13.5" font-weight="700" fill="#2F7A66">⑤ PrepareForIncrementalBackup()</text>
+                  <text x="954" y="280" font-size="12.5" fill="#1B2B33">等待 summarizer 追齐 → 校验 summary 无缺口 → 产出块位图</text>
+
+                  <path d="M 936 332 L 181 332" stroke="#2F7A66" stroke-width="2" fill="none"/>
+                  <polygon points="181,332 191,326 191,338" fill="#2F7A66"/>
+                  <rect x="358" y="314" width="440" height="36" fill="#E6F2EE" stroke="#2F7A66"/>
+                  <text x="578" y="337" text-anchor="middle" font-size="13" font-weight="700" fill="#2F7A66">流式回传：非关系文件全量 + 关系文件按需发 INCREMENTAL.*</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">服务端拿到 WAL-Ranges 之后，如何确认变化块索引没有缺口？关键在 WAL summary 窗口。</span>
+          </div>
+          <div class="slide-footer">
+            <span>03 · 核心原理 · 复制协议握手</span>
+            <span class="footer-page">04 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE SCENARIO) ==================== -->
+        <section class="slide" data-slide="4" data-title="变化块索引：WAL Summary 覆盖窗口为什么从前序 Start LSN 算起？">
+          <div class="slide-eyebrow">03 · 核心原理 · WAL SUMMARY 覆盖窗口</div>
+          <h1 class="slide-title">必须无缺口覆盖「前序 Start LSN → 当前 Start LSN」</h1>
+          <p class="slide-lead">前序备份本身持续一段时间，备份期间产生的 WAL 同样影响旧块能否复用，因此不能从 End LSN 起算。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <span class="tb-label">窗口推演</span>
+              <button class="tb-btn good active" data-s5="ok">正常无缺口覆盖</button>
+              <button class="tb-btn accent" data-s5="gap">模拟 keep_time 过短缺口</button>
+              <button class="tb-btn accent" data-s5="minimal">模拟 wal_level=minimal 冲突</button>
+              <span class="tb-status" id="s5-status">状态：WalSummariesAreComplete() = TRUE，允许执行增量备份</span>
+            </div>
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 390" xmlns="http://www.w3.org/2000/svg">
+                <!-- Timeline axis -->
+                <text x="36" y="32" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">FIG 2 · WAL LSN 时间轴与 pg_wal/summaries 覆盖校验</text>
+
+                <!-- Main LSN Axis -->
+                <line x1="60" y1="118" x2="1340" y2="118" stroke="#1B2B33" stroke-width="2.5"/>
+                <polygon points="1340,118 1328,112 1328,124" fill="#1B2B33"/>
+                <text x="1346" y="122" font-size="12" font-weight="700" fill="#1B2B33" class="svg-mono">LSN</text>
+
+                <!-- B0 duration band -->
+                <rect x="180" y="58" width="230" height="44" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+                <text x="295" y="78" text-anchor="middle" font-size="13.5" font-weight="700" fill="#245A6B">前序备份 B0 执行期</text>
+                <text x="295" y="95" text-anchor="middle" font-size="11.5" fill="#46585F">期间仍有并发写入与 WAL 产生</text>
+
+                <!-- Markers on axis -->
+                <line x1="180" y1="102" x2="180" y2="236" stroke="#245A6B" stroke-width="2" stroke-dasharray="4,4"/>
+                <circle cx="180" cy="118" r="5" fill="#245A6B"/>
+                <text x="180" y="142" text-anchor="middle" font-size="12.5" font-weight="700" fill="#245A6B" class="svg-mono">B0 Start LSN</text>
+
+                <line x1="410" y1="102" x2="410" y2="152" stroke="#89938F" stroke-width="1.5" stroke-dasharray="3,3"/>
+                <circle cx="410" cy="118" r="4" fill="#89938F"/>
+                <text x="410" y="142" text-anchor="middle" font-size="12" fill="#89938F" class="svg-mono">B0 End LSN (非起点)</text>
+
+                <!-- B1 Start -->
+                <rect x="1080" y="58" width="220" height="44" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+                <text x="1190" y="78" text-anchor="middle" font-size="13.5" font-weight="700" fill="#BE653B">当前增量备份 B1 启动</text>
+                <text x="1190" y="95" text-anchor="middle" font-size="11.5" fill="#46585F">WaitForWalSummarization() 追齐</text>
+
+                <line x1="1080" y1="102" x2="1080" y2="236" stroke="#BE653B" stroke-width="2" stroke-dasharray="4,4"/>
+                <circle cx="1080" cy="118" r="5" fill="#BE653B"/>
+                <text x="1080" y="142" text-anchor="middle" font-size="12.5" font-weight="700" fill="#BE653B" class="svg-mono">B1 Start LSN</text>
+
+                <!-- Required Window Bracket -->
+                <rect x="180" y="162" width="900" height="28" fill="#F5EFE0" stroke="#AE8A3E"/>
+                <text x="630" y="181" text-anchor="middle" font-size="13" font-weight="700" fill="#856522">必需覆盖窗口：[ B0 Start LSN  →  B1 Start LSN ]（含 B0 备份期间 WAL）</text>
+
+                <!-- Summary Segments -->
+                <g id="s5-seg-1">
+                  <rect x="180" y="202" width="224" height="42" fill="#2F7A66" stroke="#1E4B5A"/>
+                  <text x="292" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF" class="svg-mono">summary_01</text>
+                  <text x="292" y="237" text-anchor="middle" font-size="11" fill="#E6F2EE">(ts, rel, fork, blocks, limit)</text>
+                </g>
+                <g id="s5-seg-2">
+                  <rect x="406" y="202" width="224" height="42" fill="#2F7A66" stroke="#1E4B5A"/>
+                  <text x="518" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF" class="svg-mono">summary_02</text>
+                  <text x="518" y="237" text-anchor="middle" font-size="11" fill="#E6F2EE">连续无缺口</text>
+                </g>
+                <g id="s5-seg-3">
+                  <rect x="632" y="202" width="224" height="42" fill="#2F7A66" stroke="#1E4B5A"/>
+                  <text x="744" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF" class="svg-mono">summary_03</text>
+                  <text x="744" y="237" text-anchor="middle" font-size="11" fill="#E6F2EE">连续无缺口</text>
+                </g>
+                <g id="s5-seg-4">
+                  <rect x="858" y="202" width="222" height="42" fill="#2F7A66" stroke="#1E4B5A"/>
+                  <text x="969" y="220" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF" class="svg-mono">summary_04</text>
+                  <text x="969" y="237" text-anchor="middle" font-size="11" fill="#E6F2EE">追齐至 B1 Start</text>
+                </g>
+
+                <!-- Dynamic alert banner inside SVG -->
+                <rect x="60" y="262" width="1280" height="110" fill="#F1EFE9" stroke="#D9D5CB" id="s5-info-box"/>
+                <text x="84" y="290" font-size="15" font-weight="700" fill="#2F7A66" id="s5-info-title">✓ 硬前提满足：summarize_wal = on，wal_level = replica/logical，wal_summary_keep_time 覆盖完整备份间隔</text>
+                <text x="84" y="318" font-size="13.5" fill="#1B2B33" id="s5-info-l1">• 索引结构（pg_walsummary）：维度为 tablespace OID + relation OID + relation fork，保存修改块列表及创建/截断时的 limit block。</text>
+                <text x="84" y="344" font-size="13.5" fill="#46585F" id="s5-info-l2">• 参数默认值：summarize_wal = off（必须显式开启）；wal_summary_keep_time = 10d（设为 0 表示不自动清理，由运维自管）。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">有了完整的 summary 索引，服务端对每个文件究竟按全量发还是按增量发？</span>
+          </div>
+          <div class="slide-footer">
+            <span>03 · 核心原理 · WAL Summary 覆盖窗口</span>
+            <span class="footer-page">05 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 ==================== -->
+        <section class="slide" data-slide="5" data-title="决策与格式：GetFileBackupMethod() 与 INCREMENTAL.* 文件结构">
+          <div class="slide-eyebrow">03 · 核心原理 · 文件选型与增量格式</div>
+          <h1 class="slide-title">不是所有文件都走增量：7 类退回全量规则与 INCREMENTAL.* 剖面</h1>
+          <p class="slide-lead">非关系文件与 FSM fork 始终全量保存；变化块超 ~90% 阈值也退回全量，避免得不偿失。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left half: GetFileBackupMethod() 7 Fallback Rules -->
+                <rect x="28" y="22" width="664" height="386" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="28" y="22" width="664" height="38" fill="#245A6B"/>
+                <text x="48" y="46" font-size="14.5" font-weight="700" fill="#FFFFFF" class="svg-mono">GetFileBackupMethod() · 直接退回全量的 7 类条件</text>
+
+                <rect x="46" y="74" width="628" height="38" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="62" y="98" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">01 非块对齐 / 超段约束：</tspan>文件大小不是 BLCKSZ 整数倍，或超 relation segment 限制</text>
+
+                <rect x="46" y="118" width="628" height="38" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="62" y="142" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">02 FSM Fork：</tspan>Free-Space Map 没有完整 WAL 记录，无法安全按块增量</text>
+
+                <rect x="46" y="162" width="628" height="38" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="62" y="186" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">03 旧 Manifest 无记录：</tspan>前序备份中不存在该文件或其对应增量文件</text>
+
+                <rect x="46" y="206" width="628" height="38" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="62" y="230" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">04 新建库 / 表空间：</tspan>summary 标记该 (DB OID, Tablespace OID) 为新建</text>
+
+                <rect x="46" y="250" width="628" height="38" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="62" y="274" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">05 Limit Block 截断：</tspan>说明该 segment 之前的旧块已不可安全复用</text>
+
+                <rect x="46" y="294" width="628" height="38" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="62" y="318" font-size="13.5" fill="#1B2B33"><tspan font-weight="700" fill="#BE653B">06 变化块超 ~90% 阈值：</tspan>变化字节数接近整个文件大小，直接发全量更划算</text>
+
+                <rect x="46" y="340" width="628" height="52" fill="#E5EFF0" stroke="#245A6B"/>
+                <text x="62" y="362" font-size="13.5" font-weight="700" fill="#245A6B">07 非关系文件始终完整保存（非偷懒，而是语义边界）</text>
+                <text x="62" y="382" font-size="12.5" fill="#46585F">配置文件、pg_control、状态文件、manifest 不属 relation fork block 模型，全量最安全</text>
+
+                <!-- Arrow between left & right -->
+                <path d="M 692 215 L 732 215" stroke="#2F7A66" stroke-width="2" fill="none"/>
+                <polygon points="732,215 722,209 722,221" fill="#2F7A6B"/>
+
+                <!-- Right half: INCREMENTAL.* File Format (Fig 3) -->
+                <rect x="732" y="22" width="640" height="386" fill="#FAF9F6" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="732" y="22" width="640" height="38" fill="#2F7A66"/>
+                <text x="752" y="46" font-size="14.5" font-weight="700" fill="#FFFFFF" class="svg-mono">FIG 3 · INCREMENTAL.&lt;原文件名&gt; 二进制地层结构</text>
+
+                <!-- Header Section -->
+                <text x="752" y="84" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">HEADER · 增量文件头部</text>
+                <rect x="752" y="94" width="142" height="62" fill="#1E4B5A" stroke="#1B2B33"/>
+                <text x="823" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF" class="svg-mono">Magic</text>
+                <text x="823" y="140" text-anchor="middle" font-size="11.5" fill="#CFE0DC">增量文件标识</text>
+
+                <rect x="894" y="94" width="146" height="62" fill="#2E6373" stroke="#1B2B33"/>
+                <text x="967" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF" class="svg-mono">Num Blocks</text>
+                <text x="967" y="140" text-anchor="middle" font-size="11.5" fill="#CFE0DC">变化块数量 N</text>
+
+                <rect x="1040" y="94" width="160" height="62" fill="#47808D" stroke="#1B2B33"/>
+                <text x="1120" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#FFFFFF" class="svg-mono">Trunc Length</text>
+                <text x="1120" y="140" text-anchor="middle" font-size="11.5" fill="#EBF1EE">截断块长度</text>
+
+                <rect x="1200" y="94" width="152" height="62" fill="#74A5AD" stroke="#1B2B33"/>
+                <text x="1276" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#1B2B33" class="svg-mono">Rel Block Nos</text>
+                <text x="1276" y="140" text-anchor="middle" font-size="11.5" fill="#1B2B33">[b1, b2, ..., bN]</text>
+
+                <!-- Data Section -->
+                <text x="752" y="186" font-size="13" font-weight="700" fill="#2F7A66" class="svg-mono">PAYLOAD · 仅打包被 WAL Summary 标记的变化块（每个 8kB）</text>
+                <rect x="752" y="196" width="140" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="822" y="226" text-anchor="middle" font-size="14" font-weight="700" fill="#BE653B" class="svg-mono">Block #b1</text>
+                <text x="822" y="248" text-anchor="middle" font-size="12" fill="#46585F">8kB 物理页数据</text>
+
+                <rect x="904" y="196" width="140" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="974" y="226" text-anchor="middle" font-size="14" font-weight="700" fill="#BE653B" class="svg-mono">Block #b2</text>
+                <text x="974" y="248" text-anchor="middle" font-size="12" fill="#46585F">8kB 物理页数据</text>
+
+                <rect x="1056" y="196" width="140" height="72" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="1126" y="226" text-anchor="middle" font-size="14" font-weight="700" fill="#BE653B" class="svg-mono">Block #b3</text>
+                <text x="1126" y="248" text-anchor="middle" font-size="12" fill="#46585F">8kB 物理页数据</text>
+
+                <rect x="1208" y="196" width="144" height="72" fill="#F1EFE9" stroke="#D9D5CB" stroke-dasharray="4,4"/>
+                <text x="1280" y="228" text-anchor="middle" font-size="13" font-weight="700" fill="#89938F" class="svg-mono">... Block #bN</text>
+                <text x="1280" y="248" text-anchor="middle" font-size="11.5" fill="#89938F">未变块不写入</text>
+
+                <!-- Zero-change edge case note -->
+                <rect x="752" y="292" width="600" height="98" fill="#E6F2EE" stroke="#2F7A66"/>
+                <text x="772" y="318" font-size="14" font-weight="700" fill="#2F7A66">精妙边界：当某关系文件「零块变化」但文件仍然存在时？</text>
+                <text x="772" y="344" font-size="13.5" fill="#1B2B33">sendFile() 依然会生成一个极小的 INCREMENTAL.*（仅头部，Num Blocks = 0），</text>
+                <text x="772" y="368" font-size="13.5" fill="#1B2B33">用来明确声明「该文件在当前时刻依然存在，但没有需要保存的新块」。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">增量文件只是半成品，还原时 pg_combinebackup 怎样从链条里把完整文件拼出来？</span>
+          </div>
+          <div class="slide-footer">
+            <span>03 · 核心原理 · 文件选型与增量格式</span>
+            <span class="footer-page">06 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 (INTERACTIVE ANIMATION) ==================== -->
+        <section class="slide" data-slide="6" data-title="块级重建算法：pg_combinebackup 如何从最新增量向前溯源？">
+          <div class="slide-eyebrow">03 · 核心原理 · 块级重建算法</div>
+          <h1 class="slide-title">最新增量优先级最高，缺失块沿 B2 → B1 → B0 逐级回溯</h1>
+          <p class="slide-lead">reconstruct_from_incremental_file() 为输出文件建立 sourcemap / offsetmap，无源扩展块填零输出。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <span class="tb-label">重建动画</span>
+              <button class="tb-btn" id="s7-play">▶ 自动重建</button>
+              <button class="tb-btn" id="s7-step">⏭ 逐块步进</button>
+              <button class="tb-btn" id="s7-reset">↺ 重置</button>
+              <button class="tb-btn accent" id="s7-break">模拟丢失 B1 断链</button>
+              <span class="tb-status" id="s7-status">就绪：点击「自动重建」观察 8 个 Block 的回溯定源过程</span>
+            </div>
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 390" xmlns="http://www.w3.org/2000/svg" id="s7-svg">
+                <!-- Legend -->
+                <text x="32" y="28" font-size="12.5" font-weight="700" fill="#245A6B" class="svg-mono">FIG 4 · reconstruct.c 块级回溯矩阵（Trunc Length = 8 Blocks，优先取最新）</text>
+
+                <!-- Row Labels -->
+                <rect x="32" y="44" width="210" height="54" fill="#74A5AD" stroke="#1E4B5A"/>
+                <text x="48" y="68" font-size="14" font-weight="700" fill="#1B2B33" class="svg-mono">B2 (最新 INC)</text>
+                <text x="48" y="87" font-size="12" fill="#1B2B33">优先度 #1 · 含 Blk 1, 5</text>
+
+                <rect x="32" y="114" width="210" height="54" fill="#47808D" stroke="#1E4B5A" id="s7-b1-label"/>
+                <text x="48" y="138" font-size="14" font-weight="700" fill="#FFFFFF" class="svg-mono">B1 (前序 INC)</text>
+                <text x="48" y="157" font-size="12" fill="#EBF1EE" id="s7-b1-sub">优先度 #2 · 含 Blk 2, 5, 6</text>
+
+                <rect x="32" y="184" width="210" height="54" fill="#1E4B5A" stroke="#1B2B33"/>
+                <text x="48" y="208" font-size="14" font-weight="700" fill="#FFFFFF" class="svg-mono">B0 (基础 FULL)</text>
+                <text x="48" y="227" font-size="12" fill="#CFE0DC">兜底基线 · 含 Blk 0..6</text>
+
+                <rect x="32" y="274" width="210" height="72" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <text x="48" y="302" font-size="14.5" font-weight="700" fill="#2F7A66" class="svg-mono">SYNTHETIC OUTPUT</text>
+                <text x="48" y="324" font-size="12" fill="#1B2B33">合成后的完整关系文件</text>
+                <text x="48" y="340" font-size="11.5" fill="#46585F">sourcemap + offsetmap</text>
+
+                <!-- 8 Columns for Block 0..7 (x starts at 270, col width 128, gap 10) -->
+                <g id="s7-grid"></g>
+
+                <!-- Bottom rule explanation -->
+                <rect x="270" y="356" width="1096" height="24" fill="#F1EFE9"/>
+                <text x="284" y="372" font-size="12" fill="#46585F" id="s7-caption">说明：Blk 5 在 B1 与 B2 均存在，但最新增量 B2 胜出；Blk 7 在链中无来源，按源码注释作为「扩展未写 WAL 的初始化块」填零输出。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">合成出 synthetic full backup 并不等于数据库已恢复，后面还有关键的第二段。</span>
+          </div>
+          <div class="slide-footer">
+            <span>03 · 核心原理 · 块级重建算法</span>
+            <span class="footer-page">07 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-slide="7" data-title="恢复两段论：合成全量只是起点，WAL 重放才是恢复终点">
+          <div class="slide-eyebrow">03 · 核心原理 · 两段式生产恢复</div>
+          <h1 class="slide-title">把「链合成」与「WAL 恢复」混为一谈，是演练失败的头号原因</h1>
+          <p class="slide-lead">pg_combinebackup 产出的只是未启动的一致性基线；必须继续配置 restore_command 与 recovery.signal 完成重放。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <text x="28" y="32" font-size="13.5" font-weight="700" fill="#245A6B" class="svg-mono">FIG 5 · 生产恢复与校验两段式流水线</text>
+
+                <!-- Stage 1 Container -->
+                <rect x="28" y="48" width="656" height="258" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+                <rect x="28" y="48" width="656" height="38" fill="#245A6B"/>
+                <text x="48" y="72" font-size="15" font-weight="700" fill="#FFFFFF">第一段：备份链离线合成（pg_combinebackup 主导）</text>
+
+                <rect x="48" y="102" width="186" height="90" fill="#FAF9F6" stroke="#245A6B"/>
+                <text x="62" y="126" font-size="13.5" font-weight="700" fill="#245A6B">1. 链路合法性校验</text>
+                <text x="62" y="148" font-size="12" fill="#46585F">• 查 PG_VERSION</text>
+                <text x="62" y="166" font-size="12" fill="#46585F">• 查 pg_control 同源</text>
+                <text x="62" y="184" font-size="12" fill="#46585F">• 查 backup_label 接续</text>
+
+                <path d="M 234 147 L 262 147" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="262,147 252,141 252,153" fill="#245A6B"/>
+
+                <rect x="262" y="102" width="186" height="90" fill="#FAF9F6" stroke="#245A6B"/>
+                <text x="276" y="126" font-size="13.5" font-weight="700" fill="#245A6B">2. 重建数据与元数据</text>
+                <text x="276" y="148" font-size="12" fill="#46585F">• 普通文件直接复制</text>
+                <text x="276" y="166" font-size="12" fill="#46585F">• INCREMENTAL.* 块重建</text>
+                <text x="276" y="184" font-size="12" fill="#46585F">• 生成新 backup_manifest</text>
+
+                <path d="M 448 147 L 476 147" stroke="#245A6B" stroke-width="2" fill="none"/>
+                <polygon points="476,147 466,141 466,153" fill="#245A6B"/>
+
+                <rect x="476" y="102" width="188" height="90" fill="#FAF9F6" stroke="#245A6B"/>
+                <text x="490" y="126" font-size="13.5" font-weight="700" fill="#245A6B">3. 去增量标签与验签</text>
+                <text x="490" y="148" font-size="12" fill="#46585F">• 移除 INCREMENTAL FROM</text>
+                <text x="490" y="166" font-size="12" fill="#46585F">• 输出 Synthetic Full</text>
+                <text x="490" y="184" font-size="12" fill="#2F7A66" font-weight="700">• pg_verifybackup 校验</text>
+
+                <rect x="48" y="212" width="616" height="76" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="66" y="238" font-size="13.5" font-weight="700" fill="#BE653B">本阶段完成 ≠ 数据库可对外服务！</text>
+                <text x="66" y="262" font-size="13" fill="#1B2B33">pg_verifybackup 只验证目录文件、checksum 与所需 WAL 可解析性，无法替代真实 WAL 启动恢复。</text>
+
+                <!-- Transition Arrow -->
+                <path d="M 684 177 L 716 177" stroke="#BE653B" stroke-width="2.5" fill="none"/>
+                <polygon points="716,177 704,170 704,184" fill="#BE653B"/>
+
+                <!-- Stage 2 Container -->
+                <rect x="716" y="48" width="656" height="258" fill="#E6F2EE" stroke="#2F7A66" stroke-width="1.5"/>
+                <rect x="716" y="48" width="656" height="38" fill="#2F7A66"/>
+                <text x="736" y="72" font-size="15" font-weight="700" fill="#FFFFFF">第二段：PostgreSQL 常规物理恢复与 PITR（Startup 进程主导）</text>
+
+                <rect x="736" y="102" width="186" height="90" fill="#FAF9F6" stroke="#2F7A66"/>
+                <text x="750" y="126" font-size="13.5" font-weight="700" fill="#2F7A66">4. 部署与环境准备</text>
+                <text x="750" y="148" font-size="12" fill="#46585F">• 放入目标 PGDATA</text>
+                <text x="750" y="166" font-size="12" fill="#46585F">• 映射表空间 -T</text>
+                <text x="750" y="184" font-size="12" fill="#46585F">• 清理旧 pg_wal 内容</text>
+
+                <path d="M 922 147 L 950 147" stroke="#2F7A66" stroke-width="2" fill="none"/>
+                <polygon points="950,147 940,141 940,153" fill="#2F7A66"/>
+
+                <rect x="950" y="102" width="186" height="90" fill="#FAF9F6" stroke="#2F7A66"/>
+                <text x="964" y="126" font-size="13.5" font-weight="700" fill="#2F7A66">5. 配置归档与信号</text>
+                <text x="964" y="148" font-size="12" fill="#46585F">• 设置 restore_command</text>
+                <text x="964" y="166" font-size="12" fill="#46585F">• recovery_target_time</text>
+                <text x="964" y="184" font-size="12" fill="#46585F">• 创建 recovery.signal</text>
+
+                <path d="M 1136 147 L 1164 147" stroke="#2F7A66" stroke-width="2" fill="none"/>
+                <polygon points="1164,147 1154,141 1154,153" fill="#2F7A66"/>
+
+                <rect x="1164" y="102" width="188" height="90" fill="#FAF9F6" stroke="#2F7A66"/>
+                <text x="1178" y="126" font-size="13.5" font-weight="700" fill="#2F7A66">6. 重放 WAL 与验收</text>
+                <text x="1178" y="148" font-size="12" fill="#46585F">• 从 WAL range 起点重放</text>
+                <text x="1178" y="166" font-size="12" fill="#46585F">• 到达目标点/最新 WAL</text>
+                <text x="1178" y="184" font-size="12" fill="#2F7A66" font-weight="700">• 核验业务数据再开放</text>
+
+                <rect x="736" y="212" width="616" height="76" fill="#FAF9F6" stroke="#2F7A66"/>
+                <text x="754" y="238" font-size="13.5" font-weight="700" fill="#2F7A66">源码级保障：src/bin/pg_combinebackup/backup_label.c</text>
+                <text x="754" y="262" font-size="12.2" fill="#1B2B33">合成时校验 INCREMENTAL FROM LSN/TLI 与前序 start LSN/TLI 接续，随后剥离增量头。</text>
+
+                <!-- Bottom Summary Bar -->
+                <rect x="28" y="328" width="1344" height="78" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="48" y="356" font-size="14" font-weight="700" fill="#1B2B33">铁律提醒：输入备份目录（B0 / B1 / B2）应只读挂载，永远不要在输入备份目录上启动 PostgreSQL</text>
+                <text x="48" y="384" font-size="13.5" fill="#46585F">所有恢复必须写向全新输出目录；一旦写脏输入目录，整条备份链及后续校验全部作废。</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">跳出单点机制，横向对比四种备份路线，厘清增量备份、WAL 归档与 summary 的分工。</span>
+          </div>
+          <div class="slide-footer">
+            <span>03 · 核心原理 · 两段式生产恢复</span>
+            <span class="footer-page">08 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 ==================== -->
+        <section class="slide" data-slide="8" data-title="横向对比：四大备份路线与三套 WAL 机制的职责边界">
+          <div class="slide-eyebrow">04 · 横向对比与机制分工</div>
+          <h1 class="slide-title">增量备份不替代 WAL 归档，小库全量往往更简单可靠</h1>
+          <p class="slide-lead">增量备份的价值来自「变化块比例低 + 链路管理能力强」，而非在所有规模下无脑替代全量。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top: 4 Backup Approaches Comparison Matrix -->
+                <text x="28" y="28" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">MATRIX 01 · 四种主流备份方式核心维度对比</text>
+
+                <!-- Table Header -->
+                <rect x="28" y="38" width="1344" height="32" fill="#1E4B5A"/>
+                <text x="44" y="59" font-size="13" font-weight="700" fill="#FFFFFF">维度</text>
+                <text x="190" y="59" font-size="13" font-weight="700" fill="#FFFFFF">PG 增量物理备份</text>
+                <text x="500" y="59" font-size="13" font-weight="700" fill="#FFFFFF">PG 全量物理备份</text>
+                <text x="790" y="59" font-size="13" font-weight="700" fill="#FFFFFF">SQL Dump (pg_dump)</text>
+                <text x="1080" y="59" font-size="13" font-weight="700" fill="#FFFFFF">存储快照</text>
+
+                <!-- Row 1: Granularity -->
+                <rect x="28" y="70" width="1344" height="34" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="44" y="92" font-size="13" font-weight="700" fill="#245A6B">粒度与恢复前置</text>
+                <text x="190" y="92" font-size="12.5" fill="#1B2B33">relation fork block；须先合成链</text>
+                <text x="500" y="92" font-size="12.5" fill="#1B2B33">文件/目录；直接还原做 WAL 恢复</text>
+                <text x="790" y="92" font-size="12.5" fill="#1B2B33">SQL 对象/数据；建库后 pg_restore</text>
+                <text x="1080" y="92" font-size="12.5" fill="#1B2B33">卷/存储块；快照后处理一致性 WAL</text>
+
+                <!-- Row 2: Major Version & WAL -->
+                <rect x="28" y="104" width="1344" height="34" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="44" y="126" font-size="13" font-weight="700" fill="#245A6B">跨大版本 / WAL</text>
+                <text x="190" y="126" font-size="12.5" fill="#BE653B">不支持跨版本；需 summary + WAL</text>
+                <text x="500" y="126" font-size="12.5" fill="#1B2B33">不支持跨版本；仍需归档 WAL</text>
+                <text x="790" y="126" font-size="12.5" fill="#2F7A66" font-weight="700">适合跨大版本；不依赖物理 WAL</text>
+                <text x="1080" y="126" font-size="12.5" fill="#1B2B33">不支持跨版本；通常仍需冻结/WAL</text>
+
+                <!-- Row 3: Best Fit -->
+                <rect x="28" y="138" width="1344" height="34" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="44" y="160" font-size="13" font-weight="700" fill="#2F7A66">适合场景</text>
+                <text x="190" y="160" font-size="12.5" fill="#1B2B33">大库、冷数据多、变化块比例低</text>
+                <text x="500" y="160" font-size="12.5" fill="#1B2B33">小库，或简单可靠优先团队</text>
+                <text x="790" y="160" font-size="12.5" fill="#1B2B33">跨版本迁移、单表恢复、审计导出</text>
+                <text x="1080" y="160" font-size="12.5" fill="#1B2B33">存储平台强、需快速克隆副本</text>
+
+                <!-- Row 4: Anti-pattern -->
+                <rect x="28" y="172" width="1344" height="34" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="44" y="194" font-size="13" font-weight="700" fill="#BE653B">不适合场景</text>
+                <text x="190" y="194" font-size="12.5" fill="#46585F">高频全库重写、链路管理薄弱</text>
+                <text x="500" y="194" font-size="12.5" fill="#46585F">备份窗口或存储账单不可接受</text>
+                <text x="790" y="194" font-size="12.5" fill="#46585F">超大库频繁全量逻辑导出</text>
+                <text x="1080" y="194" font-size="12.5" fill="#46585F">缺数据库一致性控制或跨平台迁移</text>
+
+                <!-- Bottom: 4 Mechanisms Separation of Concerns -->
+                <text x="28" y="236" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">MATRIX 02 · 别把四套机制混为一谈（各自保存什么 / 不能替代什么）</text>
+
+                <rect x="28" y="248" width="322" height="160" fill="#E5EFF0" stroke="#245A6B"/>
+                <rect x="28" y="248" width="322" height="32" fill="#245A6B"/>
+                <text x="44" y="269" font-size="14" font-weight="700" fill="#FFFFFF">增量备份</text>
+                <text x="44" y="302" font-size="13" fill="#1B2B33"><tspan font-weight="700">保存：</tspan>变化关系块 + 完整非关系文件</text>
+                <text x="44" y="330" font-size="13" fill="#2F7A66"><tspan font-weight="700">解决：</tspan>减少传输流量与对象存储占用</text>
+                <text x="44" y="366" font-size="13" fill="#BE653B"><tspan font-weight="700">不能替代：</tspan>WAL 归档与 WAL 恢复</text>
+
+                <rect x="368" y="248" width="322" height="160" fill="#E5EFF0" stroke="#2E6373"/>
+                <rect x="368" y="248" width="322" height="32" fill="#2E6373"/>
+                <text x="384" y="269" font-size="14" font-weight="700" fill="#FFFFFF">WAL 归档</text>
+                <text x="384" y="302" font-size="13" fill="#1B2B33"><tspan font-weight="700">保存：</tspan>连续 WAL segment 与 history</text>
+                <text x="384" y="330" font-size="13" fill="#2F7A66"><tspan font-weight="700">解决：</tspan>PITR、备份一致性推进、补档</text>
+                <text x="384" y="366" font-size="13" fill="#BE653B"><tspan font-weight="700">不能替代：</tspan>物理基础备份本体</text>
+
+                <rect x="708" y="248" width="322" height="160" fill="#E5EFF0" stroke="#47808D"/>
+                <rect x="708" y="248" width="322" height="32" fill="#47808D"/>
+                <text x="724" y="269" font-size="14" font-weight="700" fill="#FFFFFF">WAL Summary</text>
+                <text x="724" y="302" font-size="13" fill="#1B2B33"><tspan font-weight="700">保存：</tspan>某段 WAL 修改过的块索引</text>
+                <text x="724" y="330" font-size="13" fill="#2F7A66"><tspan font-weight="700">解决：</tspan>告知增量备份「要带走哪些块」</text>
+                <text x="724" y="366" font-size="13" fill="#BE653B"><tspan font-weight="700">不能替代：</tspan>不能用于直接恢复数据</text>
+
+                <rect x="1048" y="248" width="324" height="160" fill="#F7E9DE" stroke="#BE653B"/>
+                <rect x="1048" y="248" width="324" height="32" fill="#BE653B"/>
+                <text x="1064" y="269" font-size="14" font-weight="700" fill="#FFFFFF">pg_combinebackup</text>
+                <text x="1064" y="302" font-size="13" fill="#1B2B33"><tspan font-weight="700">产出：</tspan>合成全量备份目录</text>
+                <text x="1064" y="330" font-size="13" fill="#2F7A66"><tspan font-weight="700">解决：</tspan>把增量链还原为普通物理备份</text>
+                <text x="1064" y="366" font-size="13" fill="#BE653B"><tspan font-weight="700">不能替代：</tspan>不负责重放归档 WAL</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">真实生产收益到底怎么评估？别靠拍脑袋，用可观测视图同时量备份端与恢复端。</span>
+          </div>
+          <div class="slide-footer">
+            <span>04 · 横向对比与机制分工</span>
+            <span class="footer-page">09 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 (INTERACTIVE SIMULATOR) ==================== -->
+        <section class="slide" data-slide="9" data-title="效果评估与可观测性：备份变小了，但 RTO 达标吗？">
+          <div class="slide-eyebrow">05 · 效果评估与可观测入口</div>
+          <h1 class="slide-title">收益取决于变化块比例，验收必须双指标：备份端 + 恢复端</h1>
+          <p class="slide-lead">备份不是目标，按 RTO 恢复才是目标；热点重写、REINDEX、VACUUM FULL 与长链都会抵消收益。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <span class="tb-label">机制推演（概念模型）</span>
+              <div class="tb-range-wrap">
+                <span>块变化比例：</span>
+                <input type="range" id="s10-ratio" min="2" max="96" value="2">
+                <strong id="s10-ratio-val" class="svg-mono">2%</strong>
+              </div>
+              <div class="tb-range-wrap">
+                <span>备份链长度：</span>
+                <input type="range" id="s10-chain" min="1" max="14" value="3">
+                <strong id="s10-chain-val" class="svg-mono">3 节点</strong>
+              </div>
+              <button class="tb-btn" id="s10-preset-cold">冷数据 (2%)</button>
+              <button class="tb-btn" id="s10-preset-reindex">REINDEX 后 (92%)</button>
+              <span class="tb-status" id="s10-status">增量生效（远低于 ~90% 退回阈值）</span>
+            </div>
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 390" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 4 Observability SQL Probes -->
+                <text x="28" y="30" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">OBSERVABILITY · 四大内置观测视图与函数（语法模板）</text>
+
+                <rect x="28" y="44" width="620" height="72" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="28" y="44" width="5" height="72" fill="#1E4B5A"/>
+                <text x="48" y="68" font-size="13.5" font-weight="700" fill="#1E4B5A" class="svg-mono">SELECT * FROM pg_available_wal_summaries() ORDER BY tli, start_lsn;</text>
+                <text x="48" y="96" font-size="13" fill="#46585F">用途：查看现有 WAL summary 文件覆盖的 timeline 与 LSN 区间，排查窗口缺口。</text>
+
+                <rect x="28" y="128" width="620" height="72" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="28" y="128" width="5" height="72" fill="#2E6373"/>
+                <text x="48" y="152" font-size="13.5" font-weight="700" fill="#2E6373" class="svg-mono">SELECT * FROM pg_get_wal_summarizer_state();</text>
+                <text x="48" y="180" font-size="13" fill="#46585F">用途：确认 summarizer 后台进程已写盘位置与内存处理进度，判断是否卡顿。</text>
+
+                <rect x="28" y="212" width="620" height="72" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="28" y="212" width="5" height="72" fill="#47808D"/>
+                <text x="48" y="236" font-size="13.5" font-weight="700" fill="#47808D" class="svg-mono">SELECT * FROM pg_wal_summary_contents(tli, start_lsn, end_lsn) LIMIT 20;</text>
+                <text x="48" y="264" font-size="13" fill="#46585F">用途：透视指定 summary 内标记了哪些表的哪些变化块，定位增量暴涨元凶。</text>
+
+                <rect x="28" y="296" width="620" height="72" fill="#FAF9F6" stroke="#245A6B"/>
+                <rect x="28" y="296" width="5" height="72" fill="#2F7A66"/>
+                <text x="48" y="320" font-size="13.5" font-weight="700" fill="#2F7A66" class="svg-mono">SELECT pid, phase, backup_type, backup_total, backup_streamed</text>
+                <text x="48" y="348" font-size="13" fill="#46585F">FROM pg_stat_progress_basebackup;  — 实时确认本次备份类型与流式传输进度。</text>
+
+                <!-- Right: Dual-Metric Interactive Model -->
+                <rect x="676" y="44" width="696" height="324" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="676" y="44" width="696" height="36" fill="#245A6B"/>
+                <text x="696" y="67" font-size="14" font-weight="700" fill="#FFFFFF">双指标权衡示意（100 万块关系段概念模型，非生产实测）</text>
+
+                <!-- Metric 1: Backup-side ratio bar -->
+                <text x="700" y="110" font-size="14" font-weight="700" fill="#1B2B33">① 备份端：关系段变化块占比 vs ~90% 全量退回红线</text>
+                <rect x="700" y="124" width="644" height="36" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <rect x="700" y="124" width="13" height="36" fill="#2F7A66" id="s10-bar-fill"/>
+                <!-- 90% threshold line -->
+                <line x1="1280" y1="116" x2="1280" y2="168" stroke="#BE653B" stroke-width="2" stroke-dasharray="4,3"/>
+                <text x="1280" y="182" text-anchor="middle" font-size="11.5" font-weight="700" fill="#BE653B" class="svg-mono">~90% 退回全量阈值</text>
+                <text x="700" y="182" font-size="12.5" fill="#46585F" id="s10-bar-desc">约 2 万 / 100 万块变化 → 仅传变化块 + 增量头 + 完整非关系文件</text>
+
+                <!-- Metric 2: Restore-side chain length -->
+                <text x="700" y="222" font-size="14" font-weight="700" fill="#1B2B33">② 恢复端：pg_combinebackup 需回溯的备份目录数与链管理压力</text>
+                <g id="s10-chain-nodes"></g>
+                <text x="700" y="294" font-size="12.5" fill="#46585F" id="s10-chain-desc">当前链长 3（1 全量 + 2 增量）：合成扫描目录较少，建议配合 --dry-run --debug 与演练实测 RTO。</text>
+
+                <!-- Factors footer -->
+                <rect x="700" y="310" width="644" height="44" fill="#FAF9F6" stroke="#D9D5CB"/>
+                <text x="716" y="337" font-size="11.8" fill="#46585F">放大变化块操作：热点 UPDATE · 索引维护 · VACUUM FULL · CLUSTER · REINDEX · 批量装载</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">看懂原理和指标后，直接走一遍从开启 summary 到 PITR 验收的最小实操链路。</span>
+          </div>
+          <div class="slide-footer">
+            <span>05 · 效果评估与可观测入口</span>
+            <span class="footer-page">10 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 (INTERACTIVE 6-STEP RUNBOOK) ==================== -->
+        <section class="slide" data-slide="10" data-title="实操演练：6 步走通增量备份、链合成与 PITR 验收">
+          <div class="slide-eyebrow">06 · 实操 DEMO · 最小可复现闭环</div>
+          <h1 class="slide-title">从 summarize_wal=on 到 recovery.signal 的标准命令链路</h1>
+          <p class="slide-lead">以下为可执行模板（生产前需替换连接串、目录、归档路径与目标时间），每一步均对应前置核验。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="diagram-toolbar">
+              <span class="tb-label">实操步骤</span>
+              <button class="tb-btn active" data-s11="0">① 开启 Summary</button>
+              <button class="tb-btn" data-s11="1">② 全量 B0</button>
+              <button class="tb-btn" data-s11="2">③ 增量 B1</button>
+              <button class="tb-btn" data-s11="3">④ 增量 B2</button>
+              <button class="tb-btn" data-s11="4">⑤ 合成全量</button>
+              <button class="tb-btn" data-s11="5">⑥ 校验与 PITR</button>
+              <span class="tb-status" id="s11-status">步骤 1 / 6：配置参数并确认 summarizer 进程运行</span>
+            </div>
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 390" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left vertical stepper strata -->
+                <g id="s11-stepper">
+                  <rect x="28" y="20" width="320" height="50" fill="#245A6B" stroke="#1E4B5A" data-step-box="0"/>
+                  <text x="48" y="50" font-size="14" font-weight="700" fill="#FFFFFF" data-step-txt="0">01 · 开启 WAL Summary 与归档</text>
+
+                  <rect x="28" y="80" width="320" height="50" fill="#EBF1EE" stroke="#D9D5CB" data-step-box="1"/>
+                  <text x="48" y="110" font-size="14" font-weight="700" fill="#1B2B33" data-step-txt="1">02 · 制作基线全量备份 B0</text>
+
+                  <rect x="28" y="140" width="320" height="50" fill="#EBF1EE" stroke="#D9D5CB" data-step-box="2"/>
+                  <text x="48" y="170" font-size="14" font-weight="700" fill="#1B2B33" data-step-txt="2">03 · 第一次增量备份 B1</text>
+
+                  <rect x="28" y="200" width="320" height="50" fill="#EBF1EE" stroke="#D9D5CB" data-step-box="3"/>
+                  <text x="48" y="230" font-size="14" font-weight="700" fill="#1B2B33" data-step-txt="3">04 · 第二次增量备份 B2</text>
+
+                  <rect x="28" y="260" width="320" height="50" fill="#EBF1EE" stroke="#D9D5CB" data-step-box="4"/>
+                  <text x="48" y="290" font-size="14" font-weight="700" fill="#1B2B33" data-step-txt="4">05 · pg_combinebackup 合成</text>
+
+                  <rect x="28" y="320" width="320" height="50" fill="#EBF1EE" stroke="#D9D5CB" data-step-box="5"/>
+                  <text x="48" y="350" font-size="14" font-weight="700" fill="#1B2B33" data-step-txt="5">06 · 校验并启动 PITR 恢复</text>
+                </g>
+
+                <!-- Connector line -->
+                <path d="M 348 45 L 386 45" stroke="#245A6B" stroke-width="2" id="s11-arrow"/>
+
+                <!-- Right Detail Code + Checklist Panel -->
+                <rect x="386" y="20" width="986" height="350" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="386" y="20" width="986" height="38" fill="#1E4B5A"/>
+                <text x="408" y="44" font-size="15" font-weight="700" fill="#FFFFFF" id="s11-detail-title">步骤 01 · 在 postgresql.conf 开启 WAL Summary 与归档</text>
+
+                <!-- Code Block Box -->
+                <rect x="408" y="74" width="942" height="176" fill="#1B2B33"/>
+                <g id="s11-code-lines" class="svg-mono" font-size="13.5" fill="#EBF1EE"></g>
+
+                <!-- Verification / Gotcha Box -->
+                <rect x="408" y="264" width="942" height="90" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <rect x="408" y="264" width="4" height="90" fill="#BE653B"/>
+                <text x="426" y="290" font-size="14" font-weight="700" fill="#BE653B" id="s11-note-head">关键核验与排障要点</text>
+                <text x="426" y="316" font-size="13.5" fill="#1B2B33" id="s11-note-l1"></text>
+                <text x="426" y="340" font-size="13.5" fill="#46585F" id="s11-note-l2"></text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">命令跑通只是起步，生产落地需要架构师、DBA、业务开发三方协同。</span>
+          </div>
+          <div class="slide-footer">
+            <span>06 · 实操 DEMO · 最小可复现闭环</span>
+            <span class="footer-page">11 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-slide="11" data-title="最佳实践与场景矩阵：三类角色的分工与适用边界">
+          <div class="slide-eyebrow">07 &amp; 08 · 最佳实践与适用场景</div>
+          <h1 class="slide-title">把增量备份做成「备份链产品」，而非一条定时脚本</h1>
+          <p class="slide-lead">架构师管链条与基线策略，DBA 守住 summary 与 --link 红线，业务方提前报备重写任务。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Top: 3 Roles -->
+                <rect x="28" y="20" width="434" height="214" fill="#FAF9F6" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="28" y="20" width="434" height="36" fill="#2F7A66"/>
+                <text x="46" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">面向数据库架构师 · 链路与目标治理</text>
+                <text x="46" y="82" font-size="13.5" font-weight="700" fill="#1B2B33">1. 备份链元数据产品化</text>
+                <text x="46" y="102" font-size="12.5" fill="#46585F">记录全量/增量 ID、父 ID、manifest、LSN、校验态</text>
+                <text x="46" y="132" font-size="13.5" font-weight="700" fill="#1B2B33">2. RPO 与 RTO 双约束设计</text>
+                <text x="46" y="152" font-size="12.5" fill="#46585F">采用「周期性全量 + 多次增量 + 定期合成新基线」</text>
+                <text x="46" y="182" font-size="13.5" font-weight="700" fill="#1B2B33">3. 不当跨大版本迁移工具</text>
+                <text x="46" y="202" font-size="12.5" fill="#46585F">物理格式强绑定主版本，升级走逻辑复制或原生升级</text>
+
+                <rect x="482" y="20" width="434" height="214" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="482" y="20" width="434" height="36" fill="#245A6B"/>
+                <text x="500" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">面向 DBA · 窗口、清单与硬链接红线</text>
+                <text x="500" y="82" font-size="13.5" font-weight="700" fill="#1B2B33">1. 联合管理 summarize_wal 与 keep_time</text>
+                <text x="500" y="102" font-size="12.5" fill="#46585F">保留期必须大于最长增量间隔并留足调度延迟冗余</text>
+                <text x="500" y="132" font-size="13.5" font-weight="700" fill="#1B2B33">2. 严禁 --no-manifest；演练必含合成</text>
+                <text x="500" y="152" font-size="12.5" fill="#46585F">每份保留 manifest，演练测 --dry-run、表空间与验签</text>
+                <text x="500" y="182" font-size="13.5" font-weight="700" fill="#BE653B">3. 极其谨慎使用 pg_combinebackup --link</text>
+                <text x="500" y="202" font-size="12.5" fill="#46585F">硬链接共享底层文件，仅限用完即删的临时副本</text>
+
+                <rect x="936" y="20" width="436" height="214" fill="#FAF9F6" stroke="#47808D" stroke-width="1.2"/>
+                <rect x="936" y="20" width="436" height="36" fill="#47808D"/>
+                <text x="954" y="43" font-size="14.5" font-weight="700" fill="#FFFFFF">面向业务开发者 · 预期管理与变更协同</text>
+                <text x="954" y="82" font-size="13.5" font-weight="700" fill="#1B2B33">1. 增量备份 ≠ 误删秒回</text>
+                <text x="954" y="102" font-size="12.5" fill="#46585F">细粒度找回单表/几行需配合逻辑备份、延迟库或审计</text>
+                <text x="954" y="132" font-size="13.5" font-weight="700" fill="#1B2B33">2. 批量重写前主动通知 DBA</text>
+                <text x="954" y="152" font-size="12.5" fill="#46585F">VACUUM FULL / CLUSTER / REINDEX / 全表更新会放大增量</text>
+                <text x="954" y="182" font-size="13.5" font-weight="700" fill="#1B2B33">3. 业务 RTO 用演练数据确认</text>
+                <text x="954" y="202" font-size="12.5" fill="#46585F">演练报告应拆分：合成耗时 + WAL 重放耗时 + 校验耗时</text>
+
+                <!-- Bottom: Fit vs Not Fit -->
+                <rect x="28" y="252" width="656" height="156" fill="#E6F2EE" stroke="#2F7A66"/>
+                <text x="48" y="278" font-size="14.5" font-weight="700" fill="#2F7A66">✓ 适合采用增量备份的场景</text>
+                <text x="48" y="304" font-size="13" fill="#1B2B33">• 大型集群，历史数据冷或变化块比例低；全量窗口/带宽/账单已成瓶颈</text>
+                <text x="48" y="330" font-size="13" fill="#1B2B33">• 已有可靠 WAL 归档体系，且团队具备维护备份链元数据与演练能力</text>
+                <text x="48" y="356" font-size="13" fill="#1B2B33">• 业务 RTO 可接受「恢复前先执行合成全量」的两段流程</text>
+                <text x="48" y="384" font-size="12.5" fill="#2F7A66" font-weight="700">核心前提：变化率低 + 归档稳 + 链路管得住</text>
+
+                <rect x="708" y="252" width="664" height="156" fill="#F7E9DE" stroke="#BE653B"/>
+                <text x="728" y="278" font-size="14.5" font-weight="700" fill="#BE653B">× 不适合采用增量备份的场景</text>
+                <text x="728" y="304" font-size="13" fill="#1B2B33">• 小库（全量更简单便宜）；或大量表每天全量重写（变化块逼近 100%）</text>
+                <text x="728" y="330" font-size="13" fill="#1B2B33">• 链路管理薄弱常手工删旧备份；或连基础 WAL 归档与 PITR 都未演练通过</text>
+                <text x="728" y="356" font-size="13" fill="#1B2B33">• 期望跨大版本迁移、对象级恢复，或运行在 wal_level=minimal 的临时库</text>
+                <text x="728" y="384" font-size="12.5" fill="#BE653B" font-weight="700">反模式警示：管不住链条时，增量反而放大故障面</text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">生产事故往往不是不会敲命令，而是踩进链路管理的隐蔽陷阱——来看 8 大常见坑。</span>
+          </div>
+          <div class="slide-footer">
+            <span>07 &amp; 08 · 最佳实践与适用场景</span>
+            <span class="footer-page">12 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-slide="12" data-title="生产避坑图谱：8 个最易导致能备份不能恢复的致命误区">
+          <div class="slide-eyebrow">09 · 常见坑与硬规避动作</div>
+          <h1 class="slide-title">备份成功不等于可恢复：拆解 8 条高危故障链</h1>
+          <p class="slide-lead">每条坑都对应一条明确的工程规避动作——把事故拦截在备份治理制度里，而不是恢复夜里。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- 4x2 Grid of 8 Pitfalls (each card 326x184, gap 14) -->
+                <!-- Row 1 -->
+                <g transform="translate(28, 22)">
+                  <rect width="326" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#BE653B"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#BE653B" class="svg-mono">PITFALL 01 · 链路断裂</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">只留最新增量，误删旧全量</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：缺失旧 block 来源，无法合成</text>
+                  <line x1="18" y1="100" x2="308" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">维护父子依赖表，确认所有子链</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">均退役后才允许回收父备份。</text>
+                </g>
+
+                <g transform="translate(368, 22)">
+                  <rect width="326" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#BE653B"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#BE653B" class="svg-mono">PITFALL 02 · 窗口缺口</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">keep_time 小于备份间隔</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：旧 summary 被清，增量失败</text>
+                  <line x1="18" y1="100" x2="308" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">wal_summary_keep_time 必须大于</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">最大间隔 + 调度延迟，核心库留冗余。</text>
+                </g>
+
+                <g transform="translate(708, 22)">
+                  <rect width="326" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#BE653B"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#BE653B" class="svg-mono">PITFALL 03 · 误判终点</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">以为 combine 完成即恢复完成</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：未重放 WAL 到一致点被误用</text>
+                  <line x1="18" y1="100" x2="308" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">合成后必须接续 restore_command、</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">recovery.signal 并启动完成重放。</text>
+                </g>
+
+                <g transform="translate(1048, 22)">
+                  <rect width="324" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#BE653B"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#BE653B" class="svg-mono">PITFALL 04 · 污染基线</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">在输入备份目录上启动 PG</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：写脏基线，后续链与校验作废</text>
+                  <line x1="18" y1="100" x2="306" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">输入备份目录只读挂载，所有合成</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">与恢复一律输出到独立新目录。</text>
+                </g>
+
+                <!-- Row 2 -->
+                <g transform="translate(28, 222)">
+                  <rect width="326" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#AE8A3E"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#AE8A3E" class="svg-mono">PITFALL 05 · 硬链接风险</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">使用 --link 后修改输出目录</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：硬链接穿透修改输入备份文件</text>
+                  <line x1="18" y1="100" x2="308" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">生产优先普通 copy 或 reflink/clone；</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">--link 仅用于用完即删的临时副本。</text>
+                </g>
+
+                <g transform="translate(368, 222)">
+                  <rect width="326" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#AE8A3E"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#AE8A3E" class="svg-mono">PITFALL 06 · 备库边界</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">Standby 活动少导致增量失败</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：无新 restartpoint，起点不满足</text>
+                  <line x1="18" y1="100" x2="308" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">理解 standby restartpoint 边界；</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">必要时在 primary 执行或调策略。</text>
+                </g>
+
+                <g transform="translate(708, 222)">
+                  <rect width="326" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#245A6B"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#245A6B" class="svg-mono">PITFALL 07 · 排障误判</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">把 manifest 当变化检测依据</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：误判机制，排查方向跑偏</text>
+                  <line x1="18" y1="100" x2="308" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">变化块源自 WAL summary；manifest</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">管同源校验、WAL range 与 sanity。</text>
+                </g>
+
+                <g transform="translate(1048, 222)">
+                  <rect width="324" height="184" fill="#FAF9F6" stroke="#D9D5CB"/>
+                  <rect width="4" height="184" fill="#245A6B"/>
+                  <text x="18" y="28" font-size="12" font-weight="700" fill="#245A6B" class="svg-mono">PITFALL 08 · 归档盲区</text>
+                  <text x="18" y="54" font-size="14.5" font-weight="700" fill="#1B2B33">只验备份链，不校验 WAL 归档</text>
+                  <text x="18" y="84" font-size="12.5" fill="#BE653B">后果：链能合成，启动恢复时缺 WAL</text>
+                  <line x1="18" y1="100" x2="306" y2="100" stroke="#D9D5CB"/>
+                  <text x="18" y="124" font-size="12.5" font-weight="700" fill="#2F7A66">规避动作：</text>
+                  <text x="18" y="146" font-size="12.5" fill="#46585F">pg_verifybackup + 归档完整性巡检</text>
+                  <text x="18" y="166" font-size="12.5" fill="#46585F">+ 真实恢复演练三者联动。</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">承接 · NEXT</span>
+            <span class="next-text">最后留出 5 道架构思辨题与源码/文档索引，把这套恢复链协议真正内化为工程直觉。</span>
+          </div>
+          <div class="slide-footer">
+            <span>09 · 常见坑与硬规避动作</span>
+            <span class="footer-page">13 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-slide="13" data-title="延伸思考与源码索引：5 道架构考题与官方溯源坐标">
+          <div class="slide-eyebrow">10 &amp; 11 · 扩展问题与扩展阅读</div>
+          <h1 class="slide-title">从机制走向设计：带回团队的 5 个问题与源码地图</h1>
+          <p class="slide-lead">所有核心机制均绑定 PostgreSQL 官方文档与源码路径，无虚构压测数据，可直接对照深入研读。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <div class="svg-frame">
+              <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+                <!-- Left: 5 Extension Questions -->
+                <rect x="28" y="20" width="690" height="390" fill="#FAF9F6" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="28" y="20" width="690" height="38" fill="#245A6B"/>
+                <text x="48" y="44" font-size="14.5" font-weight="700" fill="#FFFFFF">五道架构思辨题（检验是否真正掌握恢复链协议）</text>
+
+                <rect x="46" y="72" width="654" height="58" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="62" y="96" font-size="13.5" font-weight="700" fill="#245A6B">Q1 · 30 天「每周全量 + 每天增量」策略下，删除第 1 天全量前如何证明安全？</text>
+                <text x="62" y="118" font-size="12.5" fill="#46585F">提示：校验所有以第 1 天全量为根节点的子增量均已过保留期或已完成新基线合成。</text>
+
+                <rect x="46" y="138" width="654" height="58" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="62" y="162" font-size="13.5" font-weight="700" fill="#245A6B">Q2 · 为什么用 WAL summary 记块变化，而不是直接比对两个 manifest 文件 checksum？</text>
+                <text x="62" y="184" font-size="12.5" fill="#46585F">提示：文件级 checksum 粒度太粗（改一块传整文件），且同名重建存在一致性隐患。</text>
+
+                <rect x="46" y="204" width="654" height="58" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="62" y="228" font-size="13.5" font-weight="700" fill="#245A6B">Q3 · 一次 REINDEX DATABASE 后增量体积暴涨，是备份异常还是合理结果？</text>
+                <text x="62" y="250" font-size="12.5" fill="#46585F">提示：合理结果——索引重写产生大量新块并触发 WAL 记录，甚至突破 ~90% 退回全量。</text>
+
+                <rect x="46" y="270" width="654" height="58" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="62" y="294" font-size="13.5" font-weight="700" fill="#245A6B">Q4 · 为什么 pg_combinebackup 输出 synthetic full，仍需归档 WAL 才能 PITR？</text>
+                <text x="62" y="316" font-size="12.5" fill="#46585F">提示：合成只把增量链变回在线热备基线，仍需重放备份期及之后的 WAL 才能达到一致点。</text>
+
+                <rect x="46" y="336" width="654" height="58" fill="#F1EFE9" stroke="#D9D5CB"/>
+                <text x="62" y="360" font-size="13.5" font-weight="700" fill="#245A6B">Q5 · 短 RTO 核心库：保留长增量链，还是周期性合成为新基线？代价何在？</text>
+                <text x="62" y="382" font-size="12.5" fill="#46585F">提示：长链省备份算力但拉长恢复合成 IO；周期合成增加日常计算/存储开销但压缩恢复 RTO。</text>
+
+                <!-- Right: Source Code & Docs Map -->
+                <rect x="742" y="20" width="630" height="390" fill="#FAF9F6" stroke="#1E4B5A" stroke-width="1.2"/>
+                <rect x="742" y="20" width="630" height="38" fill="#1E4B5A"/>
+                <text x="762" y="44" font-size="14.5" font-weight="700" fill="#FFFFFF">PostgreSQL 源码与官方文档溯源坐标（postgres/postgres）</text>
+
+                <text x="762" y="82" font-size="13" font-weight="700" fill="#245A6B" class="svg-mono">DOCS · 官方 SGML 文档</text>
+                <rect x="762" y="92" width="590" height="114" fill="#E5EFF0" stroke="#74A5AD"/>
+                <text x="778" y="114" font-size="12.5" fill="#1B2B33" class="svg-mono">• doc/src/sgml/backup.sgml             <tspan fill="#46585F">增量备份与 PITR 总纲</tspan></text>
+                <text x="778" y="135" font-size="12.5" fill="#1B2B33" class="svg-mono">• doc/src/sgml/ref/pg_basebackup.sgml  <tspan fill="#46585F">--incremental / manifest</tspan></text>
+                <text x="778" y="156" font-size="12.5" fill="#1B2B33" class="svg-mono">• doc/src/sgml/ref/pg_combinebackup.sgml <tspan fill="#46585F">合成用法、--link/--dry-run</tspan></text>
+                <text x="778" y="177" font-size="12.5" fill="#1B2B33" class="svg-mono">• doc/src/sgml/backup-manifest.sgml    <tspan fill="#46585F">Manifest v2 JSON 协议</tspan></text>
+                <text x="778" y="198" font-size="12.5" fill="#1B2B33" class="svg-mono">• doc/src/sgml/config.sgml &amp; func-info <tspan fill="#46585F">summarize_wal 与观测函数</tspan></text>
+
+                <text x="762" y="232" font-size="13" font-weight="700" fill="#2F7A66" class="svg-mono">SOURCE · 核心 C 源码路径</text>
+                <rect x="762" y="242" width="590" height="152" fill="#E6F2EE" stroke="#2F7A66"/>
+                <text x="778" y="264" font-size="12.5" fill="#1B2B33" class="svg-mono">• src/bin/pg_basebackup/pg_basebackup.c      <tspan fill="#46585F">客户端上传与指令</tspan></text>
+                <text x="778" y="286" font-size="12.5" fill="#1B2B33" class="svg-mono">• src/backend/backup/basebackup.c            <tspan fill="#46585F">服务端增量写出</tspan></text>
+                <text x="778" y="308" font-size="12.5" fill="#1B2B33" class="svg-mono">• src/backend/backup/basebackup_incremental.c<tspan fill="#46585F">选型与窗口校验</tspan></text>
+                <text x="778" y="330" font-size="12.5" fill="#1B2B33" class="svg-mono">• src/backend/postmaster/walsummarizer.c     <tspan fill="#46585F">后台 WAL 汇总进程</tspan></text>
+                <text x="778" y="352" font-size="12.5" fill="#1B2B33" class="svg-mono">• src/bin/pg_combinebackup/reconstruct.c     <tspan fill="#46585F">块级 sourcemap 重建</tspan></text>
+                <text x="778" y="374" font-size="12.5" fill="#1B2B33" class="svg-mono">• src/bin/pg_combinebackup/backup_label.c    <tspan fill="#46585F">链 LSN/TLI 接续校验</tspan></text>
+              </svg>
+            </div>
+          </div>
+          <div class="slide-next">
+            <span class="next-tag">结语 · END</span>
+            <span class="next-text">增量备份的本质是恢复链治理——祝你的每一次恢复演练都胸有成竹。</span>
+          </div>
+          <div class="slide-footer">
+            <span>10 &amp; 11 · 扩展问题与源码索引 · 数据库筑基课</span>
+            <span class="footer-page">14 / 14</span>
+          </div>
+        </section>
+
+      </div><!-- /stage-scale-box -->
+    </div><!-- /stage-viewport -->
+
+    <!-- Right-side In-Page Notes / Full Transcript Pane (Non-modal) -->
+    <aside id="notes-pane" aria-label="演讲稿面板">
+      <div class="notes-header">
+        <div class="notes-tabs">
+          <button class="notes-tab active" id="tab-note-page" data-mode="page">本页讲稿 (N)</button>
+          <button class="notes-tab" id="tab-note-all" data-mode="all">全文讲稿 (T)</button>
+        </div>
+        <button class="notes-close" id="btn-close-notes">关闭 ✕</button>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+
+    <!-- In-Page TOC Overlay (G) -->
+    <div id="toc-overlay" role="dialog" aria-label="演示目录">
+      <div class="toc-panel">
+        <div class="toc-head">
+          <h2>演示目录 · PostgreSQL 增量备份和增量还原（14 页）</h2>
+          <button class="notes-close" id="btn-close-toc">关闭 (G / Esc)</button>
+        </div>
+        <div class="toc-grid" id="toc-grid"></div>
+      </div>
+    </div>
+  </div><!-- /workspace -->
+
+  <!-- Bottom Persistent Shortcut HUD (Visible in normal AND fullscreen) -->
+  <footer id="bottom-hud">
+    <div class="hud-group">
+      <button class="hud-btn" id="hud-prev" title="上一页">← 上一页</button>
+      <span class="hud-counter" id="hud-counter">01 / 14</span>
+      <button class="hud-btn" id="hud-next" title="下一页">下一页 →</button>
+      <div class="hud-progress-track" aria-hidden="true">
+        <div class="hud-progress-fill" id="hud-progress-fill"></div>
+      </div>
+    </div>
+    <div class="hud-group">
+      <button class="hud-btn" id="hud-toc" title="目录 (G)">目录 <kbd>G</kbd></button>
+      <button class="hud-btn" id="hud-note" title="本页讲稿 (N)">本页讲稿 <kbd>N</kbd></button>
+      <button class="hud-btn" id="hud-transcript" title="全文讲稿 (T)">全文讲稿 <kbd>T</kbd></button>
+      <button class="hud-btn" id="hud-autoplay" title="自动播放 (A)">自动播放 <kbd>A</kbd></button>
+      <span class="autoplay-badge" id="autoplay-badge">AUTO 8s</span>
+      <button class="hud-btn" id="hud-fullscreen" title="全屏 (F)">全屏 <kbd>F</kbd></button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ==================== 1. SPOKEN LECTURE NOTES (逻辑推演 + 实证 + 口语化) ====================
+  const NOTES = [
+    {
+      page: 1,
+      eyebrow: "封面 · 协议视角",
+      title: "增量备份和增量还原：不是省盘开关，而是一组恢复链协议",
+      paragraphs: [
+        "大家好，今天我们讲数据库筑基课里非常贴近生产的一节——PostgreSQL 的物理增量备份和增量还原。先抛一个反直觉的结论：千万别把增量备份当成一个「勾上就能省 80% 硬盘」的开关。在工程上，它本质上是一组极其严谨的「恢复链协议」。",
+        "你看右边这张七层地层剖面图，最底层是 8kB 的物理块，往上是 WAL 日志流、WAL Summary 变化块索引、Manifest v2 元数据契约，再往上是 pg_basebackup 采集、pg_combinebackup 链合成，最顶层才是 PITR 归档重放与业务验收。整套机制必须回答五个硬问题：哪些块变了、哪些块没变、旧块在链条的哪一层、合成后 WAL 从哪开始重放、以及这条链到底还能不能拼起来。",
+        "我们今天所有拆解都直接锚定 PostgreSQL 17+ 的官方 SGML 文档和核心 C 源码，不讲空话，也不编造任何压测数字。"
+      ],
+      cue: "承接下一张：先把视角拉回真实生产现场——一个 30TB 的集群，为什么逼着我们必须做块级增量？"
+    },
+    {
+      page: 2,
+      eyebrow: "01 · 问题定义",
+      title: "1TB 关系文件只改几十个 8kB 块，文件级增量立刻失效",
+      paragraphs: [
+        "先看真实痛点。假设你管着一个 30TB 的 PostgreSQL 集群，每天跑一次全量物理备份。业务低峰期只有 4 个小时，结果全量备份越跑越慢，眼看就要撞穿 4 小时窗口；对象存储账单也在蹭蹭涨；更难受的是做恢复演练时，每次都得从全量基线往后重放海量 WAL。",
+        "这时候很自然会想到「只备份今天变化的数据」。但数据库有个很棘手的特点：一个 1TB 的关系文件里，今天可能只改了几十个 8kB 的 block。如果你只靠文件修改时间或者文件级 checksum 来判断变化，那只要改了一个块，整个文件的 checksum 就全变了，结果还是得把整个文件重传一遍，增量彻底失去意义。",
+        "所以 PostgreSQL 17 把问题切碎成三个可落地的子问题：第一，用 WAL summarizer 把变化识别下沉到 relation fork block 粒度；第二，用 pg_combinebackup 按链条找回没保存的旧块；第三，合成之后交回标准 PITR 重放归档 WAL。当然天下没有免费的午餐，省下的带宽和存储，是用「维护 WAL summary、管好备份链、先合成再启动」这三笔管理成本换来的。"
+      ],
+      cue: "承接下一张：先把整条备份链长什么样画出来，同时钉死它是什么、不是什么。"
+    },
+    {
+      page: 3,
+      eyebrow: "02 · 概念全景",
+      title: "增量备份不是孤立文件，而是 B0 → B1 → B2 的有序依赖链",
+      paragraphs: [
+        "这张图对应原文图 1，是整节课最核心的全局心智模型。最左边 B0 是一份完整的全量备份，里面既有完整数据文件，也有一份 backup_manifest。第二天我们做增量 B1，把 B0 的 manifest 喂给 pg_basebackup --incremental，服务端结合 WAL summary，只把变化块打包成 INCREMENTAL.* 文件；第三天做 B2，再基于 B1 的 manifest 往前走。",
+        "重点看下面那条陶橙色的回流箭头：当你要恢复到 B2 时刻的状态，绝对不能直接拿 B2 目录去启动 PostgreSQL！官方文档 pg_basebackup.sgml 写得清清楚楚，你必须把 B0、B1、B2 按「从旧到新」的顺序一并交给 pg_combinebackup，合成出一个 Synthetic Full Backup（合成全量备份），然后再走常规物理恢复。",
+        "为了防止后续排障走偏，右下角五条红线务必记牢：它不是 pg_dump 逻辑增量，不按表、行或事务记录；它不是拿 WAL 当备份本体；它不能直接启动；它更不会自动帮你管备份保留策略。"
+      ],
+      cue: "承接下一张：具体敲下 pg_basebackup --incremental 后，客户端和服务端第一毫秒到底干了什么？"
+    },
+    {
+      page: 4,
+      eyebrow: "03 · 协议握手",
+      title: "先验同源与 WAL 区间，再由 WAL Summary 裁决变化块",
+      paragraphs: [
+        "很多人直觉以为增量备份是客户端或者服务端去扫描磁盘对比文件，其实完全不是。我们点一下「播放握手流程」看源码里的真实步骤：在 src/bin/pg_basebackup/pg_basebackup.c 里，客户端先解析 --incremental=OLDMANIFEST，确认服务端版本支持增量，然后通过复制协议发出 UPLOAD_MANIFEST，把旧的 backup_manifest 分块传给服务端。",
+        "服务端收到后，交给 basebackup_incremental.c 解析，做三件事：第一，比对 System-Identifier，防止你张冠李戴拿别的集群 manifest 来做参考；第二，读取 WAL-Ranges，算出需要哪些 WAL summary；第三，保留文件列表——但源码注释明确提醒，文件列表只做 sanity check，绝不是变化检测依据！因为同名文件可能被删掉重建，靠文件名判断极不安全。",
+        "接着客户端发出带 INCREMENTAL 选项的 BASE_BACKUP 指令，basebackup.c 立刻检查两道门禁：没传 manifest 报错，summarize_wal 没开也报错。都通过后，进入 PrepareForIncrementalBackup()，去查 WAL summary。"
+      ],
+      cue: "承接下一张：PrepareForIncrementalBackup() 到底怎么校验 WAL summary 窗口？为什么起点不是前序的 End LSN？"
+    },
+    {
+      page: 5,
+      eyebrow: "03 · Summary 窗口",
+      title: "必须无缺口覆盖「前序 Start LSN → 当前 Start LSN」",
+      paragraphs: [
+        "这里藏着一个非常容易搞反的细节。看图里的 LSN 时间轴：增量备份要求 pg_wal/summaries 里的 summary 文件，必须无缺口覆盖「前序备份 B0 的 Start LSN 到当前备份 B1 的 Start LSN」。注意，起点是 B0 的 Start LSN，而不是 B0 的 End LSN！",
+        "逻辑很简单：B0 备份本身不是瞬时完成的，可能跑了一两个小时。在这期间数据库还在持续写入，产生的 WAL 同样会修改块，直接影响「B0 里抓下来的那些块，后面能不能安全复用」。所以必须从 B0 Start LSN 算起，并且调用 WaitForWalSummarization() 等后台 summarizer 追到 B1 Start LSN，再用 WalSummariesAreComplete() 验证严丝合缝。",
+        "大家可以点一下工具栏上的两个异常场景：如果 wal_summary_keep_time（默认 10 天）设得比两次备份间隔还短，旧 summary 被自动清理出现缺口，增量立刻失败；如果 wal_level=minimal，和 summarize_wal=on 根本不兼容，summarizer 会拒绝为 minimal 级别的 WAL 生成 summary。"
+      ],
+      cue: "承接下一张：窗口验证无缺口后，服务端开始逐个文件遍历，怎么决定哪些文件发全量、哪些发增量？"
+    },
+    {
+      page: 6,
+      eyebrow: "03 · 文件选型与格式",
+      title: "不是所有文件都走增量：7 类退回全量规则与 INCREMENTAL.* 剖面",
+      paragraphs: [
+        "真正做决定的函数叫 GetFileBackupMethod()。它不是无脑把所有文件都转成增量，遇到左侧这七类情况，会果断退回全量发送：文件大小不是 BLCKSZ 整数倍、超 segment 约束、FSM（free-space map，因为没有完整 WAL 记录）、旧 manifest 里没有它、新建的库或表空间、summary 里的 limit block 表明旧段截断不能复用，以及变化块字节数超过文件大小约 90% 时——改得都快全变了，发全量反而更干脆。",
+        "此外，配置文件、pg_control、状态文件、manifest 这些非关系文件永远完整保存。这不是偷懒，而是因为 WAL summary 只描述 relation fork block，非关系文件不适用块引用模型。",
+        "通过筛选的关系文件，文件名会变成 INCREMENTAL.<原文件名>。看右侧剖面：头部写 Magic、变化块数 N、截断长度、相对块号数组，后面紧跟这 N 个 8kB 变化块。哪怕某个非空关系文件一块都没变，sendFile() 也会写一个极小的只有头部的 INCREMENTAL.*，专门用来告诉未来的合成器：「这个文件此刻还活着，只是没新块。」"
+      ],
+      cue: "承接下一张：增量备份做好了，真到恢复那天，pg_combinebackup 怎么把这些碎片重新拼回完整文件？"
+    },
+    {
+      page: 7,
+      eyebrow: "03 · 块级重建",
+      title: "最新增量优先级最高，缺失块沿 B2 → B1 → B0 逐级回溯",
+      paragraphs: [
+        "我们来看 reconstruct.c 里最精彩的块级重建算法，可以点「自动重建」或者「逐块步进」跟着走一遍。pg_combinebackup 拿到最新备份 B2 的 INCREMENTAL.* 头部后，先知道最终文件有 8 个块（截断长度 = 8），于是建好 sourcemap 和 offsetmap。",
+        "规则非常清晰：最新增量 B2 优先级最高。所以 Blk 1 和 Blk 5 直接从 B2 拿——注意 Blk 5 虽然在 B1 里也有，但 B2 更新，所以 B2 胜出。剩下的空槽位，往旧备份回溯：去 B1 找到 Blk 2 和 Blk 6；还缺的 Blk 0、3、4，继续回溯到全量基线 B0 补齐。",
+        "那最右边的 Blk 7 呢？B2、B1、B0 里全都没有，但它又在截断长度之内。源码注释解释得很清楚：这是扩展出来但还没被 WAL 修改过的初始化块，直接填零输出！现在点一下工具栏的「模拟丢失 B1 断链」——你看，一旦中间的 B1 丢了，Blk 2 和 Blk 6 立刻失去正确来源，整条恢复链直接报废。这就是为什么绝不能随手删中间增量。"
+      ],
+      cue: "承接下一张：文件都拼完整了，是不是直接 pg_ctl start 就能连业务？千万别急，这只是上半场。"
+    },
+    {
+      page: 8,
+      eyebrow: "03 · 两段式恢复",
+      title: "把「链合成」与「WAL 恢复」混为一谈，是演练失败的头号原因",
+      paragraphs: [
+        "这张图对应原文图 5，我想用一句话帮大家焊死在脑子里：pg_combinebackup 输出的 Synthetic Full Backup，不是已经可用的数据库，而是一份「尚未做完一致性恢复的离线物理基线」。",
+        "整个恢复严格分两段。第一段是离线合成：pg_combinebackup 检查所有输入目录的 PG_VERSION、pg_control 同源性以及 backup_label.c 里的 INCREMENTAL FROM LSN/TLI 链条接续，重建数据文件后，剥离 INCREMENTAL FROM 行，生成新的 backup_label 和 backup_manifest。此时跑 pg_verifybackup 只能说明文件没缺、checksum 对得上，不代表数据已经一致。",
+        "第二段必须交还给 PostgreSQL 常规物理恢复：把合成目录放到目标 PGDATA，用 -T 映射好表空间，清理旧 pg_wal，配置 restore_command 和 recovery_target_time，创建 recovery.signal，启动数据库让它从归档 WAL 重放到目标点，最后人工或脚本核验业务数据，确认无误再放开连接。顺便强调一条铁律：输入目录只读挂载，永远别在输入备份目录上启动数据库。"
+      ],
+      cue: "承接下一张：机制全通了，我们跳出来做横向对比，看看增量备份在整个备份版图里的真实位置。"
+    },
+    {
+      page: 9,
+      eyebrow: "04 · 横向对比",
+      title: "增量备份不替代 WAL 归档，小库全量往往更简单可靠",
+      paragraphs: [
+        "技术选型最忌讳「拿着锤子看什么都像钉子」。上面这张矩阵把物理增量、物理全量、SQL Dump 和存储快照摆在一起比。如果你的库很小，全量备份十几分钟就能跑完、存储也不贵，那直接全量最省心，没必要引入备份链管理复杂度。物理增量真正的甜点区，是「大库、冷数据多、变化块比例低、而且团队管得住链条」的场景；至于跨大版本升级或单表细粒度恢复，还是老老实实找 pg_dump 或逻辑复制。",
+        "下半部分请大家特别留意四套机制的分工：增量备份管的是「哪些物理块的新版本要带走」，省的是传输和存储；WAL 归档管的是「怎么把旧状态连续推进到目标时刻」，撑的是 PITR；WAL Summary 只是「给增量备份指路的变化块索引」，它本身完全不能用来恢复数据；pg_combinebackup 只管拼文件，不重放 WAL。四者各司其职，谁也替代不了谁。"
+      ],
+      cue: "承接下一张：落地之前怎么判断增量到底值不值？我们看效果评估和内置观测视图。"
+    },
+    {
+      page: 10,
+      eyebrow: "05 · 效果与观测",
+      title: "收益取决于变化块比例，验收必须双指标：备份端 + 恢复端",
+      paragraphs: [
+        "假设一个关系段有 100 万个 8kB 块，一个备份周期里只有 2 万块被修改，也就是 2% 的变化率，增量备份确实能省下巨额传输和存储。但千万别拿这个理想模型去估算所有业务！右边这个概念推演器大家可以拖动滑块感受一下：如果业务有大量热点表 UPDATE、或者跑了 VACUUM FULL、CLUSTER、REINDEX，变化比例一旦冲过 ~90% 的源码阈值，点一下「REINDEX 后 (92%)」，直接就退回全量了。",
+        "更关键的是第二个滑块——备份链长度。链越长，日常备份虽然轻，但恢复时 pg_combinebackup 要扫的旧目录就越多，管理复杂度和合成 IO 都在涨。所以评估一定要看双指标：备份端看目录大小、传输时间和 pg_stat_progress_basebackup.backup_type；恢复端看 pg_combinebackup --dry-run --debug 和真实演练耗时。",
+        "左侧四个内置 SQL 视图就是你的听诊器：pg_available_wal_summaries() 看窗口覆盖，pg_get_wal_summarizer_state() 看后台进程进度，pg_wal_summary_contents() 直接定位是谁改爆了块。"
+      ],
+      cue: "承接下一张：下面我们把整条最小实操链路拆成 6 步，逐条看命令和常见报错。"
+    },
+    {
+      page: 11,
+      eyebrow: "06 · 实操 DEMO",
+      title: "从 summarize_wal=on 到 recovery.signal 的标准命令链路",
+      paragraphs: [
+        "这一页是可以随手查阅的 6 步实操手册，点击工具栏上的 ① 到 ⑥ 可以切换每一步的命令模板和排障要点。第一步先在 postgresql.conf 配好 wal_level = replica、summarize_wal = on、wal_summary_keep_time = '14d' 以及归档命令，重载或重启后用 pg_get_wal_summarizer_state() 确认进程在干活。",
+        "第二步跑全量 B0，保留 /backup/pg/b0/backup_manifest，并用 pg_verifybackup 验一次。第三步跑第一次增量 B1，关键参数是 --incremental=/backup/pg/b0/backup_manifest。如果这步报 summary 不完整，按五条线索排查：summarize_wal 没开、summarizer 没追上、keep_time 太短被清了、manifest 串库了，或者在 standby 上因为没产生新 restartpoint 导致起始条件不满足。",
+        "第四步基于 B1 的 manifest 跑 B2。第五步先用 pg_combinebackup --dry-run --debug 预演链路，再正式按 B0 B1 B2 顺序合成到独立输出目录，有表空间记得加 -T 映射。第六步对合成目录跑 pg_verifybackup，再配 restore_command、recovery_target_time 和 recovery.signal，启动实例重放归档 WAL 并验收业务数据。"
+      ],
+      cue: "承接下一张：命令跑通只是单机演示，放到团队生产里，三个角色该怎么配合？"
+    },
+    {
+      page: 12,
+      eyebrow: "07 & 08 · 最佳实践",
+      title: "把增量备份做成「备份链产品」，而非一条定时脚本",
+      paragraphs: [
+        "增量备份在生产环境出事，十有八九不是 PostgreSQL 的 bug，而是组织协作脱节。我们把最佳实践按三个角色拆开：对架构师来说，增量备份必须产品化，要建元数据表管住全量 ID、增量 ID、父子关系、manifest 路径、LSN 和归档范围；在 RPO 与 RTO 之间做平衡，常见成熟策略是「周期性全量 + 多次增量 + 定期合成新基线」，并且绝不拿它当跨大版本迁移工具。",
+        "对 DBA 来说，核心守住三条红线：wal_summary_keep_time 必须比最长备份间隔留足调度延迟冗余；绝不使用 --no-manifest；极度谨慎使用 pg_combinebackup --link，因为硬链接让输出目录和输入备份共享底层文件，一旦在输出目录启动实例，直接把输入备份写脏，官方文档只建议用于用完即删的临时副本。",
+        "对业务开发来说，要建立两个共识：有增量备份不等于误删能秒回，细粒度找回还要靠逻辑备份或延迟库；跑 VACUUM FULL、CLUSTER、REINDEX 这类重操作前一定提前打招呼，否则半夜增量暴涨把盘打满。"
+      ],
+      cue: "承接下一张：最后把生产里最容易踩的 8 个致命坑集中拉出来，逐个击破。"
+    },
+    {
+      page: 13,
+      eyebrow: "09 · 常见坑",
+      title: "备份成功不等于可恢复：拆解 8 条高危故障链",
+      paragraphs: [
+        "这 8 张卡片就是无数次恢复演练踩出来的血泪清单。第一坑，只留最新增量删了旧全量，直接断链；规避方法是靠父子依赖表做引用计数，子链全退役才删父备份。第二坑，wal_summary_keep_time 小于备份间隔，窗口一断下次增量必挂。第三坑，以为 pg_combinebackup 跑完就能直接对外服务，忘了第二段 WAL 重放。第四坑，直接在输入备份目录上启动 PostgreSQL，把基线写脏。",
+        "下面一排同样致命：第五坑，图快加了 --link 又去改输出目录，硬链接穿透污染输入备份，生产优先普通 copy 或 reflink/clone。第六坑，在几乎没写入的 standby 上做增量，没有新 restartpoint 导致失败。第七坑，排障时误把 manifest 当变化检测表，其实该去查 WAL summary。第八坑，只验了备份链，没巡检 WAL 归档，真到恢复那天合成很顺利，一启动发现缺归档 WAL，前功尽弃。"
+      ],
+      cue: "承接下一张：收尾留 5 道架构思辨题和完整的源码坐标，方便大家课后复盘。"
+    },
+    {
+      page: 14,
+      eyebrow: "10 & 11 · 思辨与溯源",
+      title: "从机制走向设计：带回团队的 5 个问题与源码地图",
+      paragraphs: [
+        "最后这一页，左边是留给大家带回团队讨论的 5 道架构考题：比如 30 天「每周全量 + 每天增量」里，删第 1 天全量前怎么证明没有子链依赖？为什么不用 manifest checksum 而用 WAL summary？REINDEX 后增量暴涨是不是异常？为什么 synthetic full 仍需归档 WAL？以及短 RTO 核心库在「长链」和「周期合成新基线」之间怎么权衡代价？如果这五个问题你都能一口气讲透，说明这套恢复链协议你已经真正掌握了。",
+        "右边是完整的 PostgreSQL 官方文档与 C 源码坐标，从 backup.sgml、pg_combinebackup.sgml 到 basebackup_incremental.c、walsummarizer.c、reconstruct.c 和 backup_label.c，全部一一对应。感谢大家的聆听，祝你们的每一次备份都能经得起真实恢复演练的检验！"
+      ],
+      cue: "演讲结束：按 G 可随时跳转任意章节复盘，按 T 可浏览完整讲稿。"
+    }
+  ];
+
+  // ==================== 2. CORE SLIDE ENGINE & VECTOR SCALING ====================
+  const slides = Array.from(document.querySelectorAll(".slide"));
+  const totalSlides = slides.length;
+  let currentSlide = 0;
+
+  const stageViewport = document.getElementById("stage-viewport");
+  const stageScaleBox = document.getElementById("stage-scale-box");
+  const notesPane = document.getElementById("notes-pane");
+  const notesBody = document.getElementById("notes-body");
+  const tocOverlay = document.getElementById("toc-overlay");
+  const tocGrid = document.getElementById("toc-grid");
+
+  const hudCounter = document.getElementById("hud-counter");
+  const hudProgress = document.getElementById("hud-progress-fill");
+  const hudNoteBtn = document.getElementById("hud-note");
+  const hudTransBtn = document.getElementById("hud-transcript");
+  const hudTocBtn = document.getElementById("hud-toc");
+  const hudAutoBtn = document.getElementById("hud-autoplay");
+  const hudFsBtn = document.getElementById("hud-fullscreen");
+  const autoplayBadge = document.getElementById("autoplay-badge");
+
+  // Notes state: null | 'page' | 'all'
+  let notesMode = null;
+  let tocOpen = false;
+  let autoPlayTimer = null;
+  const AUTO_MS = 8000;
+
+  function pad2(n) { return n < 10 ? "0" + n : String(n); }
+
+  // Proportional vector scaling into left stage-viewport with letterboxing
+  function updateStageScale() {
+    const vw = stageViewport.clientWidth;
+    const vh = stageViewport.clientHeight;
+    if (!vw || !vh) return;
+    const pad = 16;
+    const availW = Math.max(100, vw - pad * 2);
+    const availH = Math.max(100, vh - pad * 2);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageScaleBox.style.transform = "translate(-50%, -50%) scale(" + scale.toFixed(5) + ")";
+  }
+
+  window.addEventListener("resize", updateStageScale);
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(updateStageScale).observe(stageViewport);
+  }
+
+  function goToSlide(idx) {
+    const next = Math.max(0, Math.min(totalSlides - 1, idx));
+    currentSlide = next;
+    slides.forEach((s, i) => s.classList.toggle("active", i === currentSlide));
+    hudCounter.textContent = pad2(currentSlide + 1) + " / " + pad2(totalSlides);
+    hudProgress.style.width = (((currentSlide + 1) / totalSlides) * 100).toFixed(2) + "%";
+    updateTocActive();
+    syncNotesOnSlideChange();
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides - 1) {
+      goToSlide(currentSlide + 1);
+    } else if (autoPlayTimer) {
+      stopAutoPlay();
+    }
+  }
+  function prevSlide() {
+    if (currentSlide > 0) goToSlide(currentSlide - 1);
+  }
+
+  // ==================== 3. RIGHT-SIDE NOTES / FULL TRANSCRIPT SYNC ====================
+  function renderNoteBlockHTML(item, isAllMode) {
+    const isCurr = (item.page - 1) === currentSlide;
+    const cls = "note-block" + (isAllMode ? " clickable" : "") + (isCurr ? " current" : "");
+    const pHtml = item.paragraphs.map(p => "<p>" + p + "</p>").join("");
+    return (
+      '<div class="' + cls + '" data-note-idx="' + (item.page - 1) + '">' +
+        '<div class="note-meta"><span>PAGE ' + pad2(item.page) + " / " + pad2(totalSlides) + "</span><span>" + item.eyebrow + "</span></div>" +
+        '<div class="note-title">' + item.title + "</div>" +
+        '<div class="note-text">' + pHtml + "</div>" +
+        '<div class="note-cue">' + item.cue + "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderNotesPane() {
+    if (!notesMode) return;
+    document.getElementById("tab-note-page").classList.toggle("active", notesMode === "page");
+    document.getElementById("tab-note-all").classList.toggle("active", notesMode === "all");
+
+    if (notesMode === "page") {
+      notesBody.innerHTML = renderNoteBlockHTML(NOTES[currentSlide], false);
+      notesBody.scrollTop = 0;
+    } else {
+      notesBody.innerHTML = NOTES.map(n => renderNoteBlockHTML(n, true)).join("");
+      scrollTranscriptToCurrent(false);
+    }
+  }
+
+  function scrollTranscriptToCurrent(smooth) {
+    if (notesMode !== "all") return;
+    const blocks = notesBody.querySelectorAll(".note-block");
+    blocks.forEach(b => {
+      const i = parseInt(b.getAttribute("data-note-idx"), 10);
+      b.classList.toggle("current", i === currentSlide);
+    });
+    const target = notesBody.querySelector('.note-block[data-note-idx="' + currentSlide + '"]');
+    if (target) {
+      const top = target.offsetTop - notesBody.offsetTop - 16;
+      notesBody.scrollTo({ top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
+    }
+  }
+
+  function syncNotesOnSlideChange() {
+    if (notesMode === "page") {
+      renderNotesPane();
+    } else if (notesMode === "all") {
+      scrollTranscriptToCurrent(true);
+    }
+  }
+
+  function setNotesMode(mode) {
+    // Toggle off if pressing the same mode key again
+    if (notesMode === mode) {
+      notesMode = null;
+      notesPane.classList.remove("open");
+    } else {
+      notesMode = mode;
+      notesPane.classList.add("open");
+      renderNotesPane();
+    }
+    hudNoteBtn.classList.toggle("active", notesMode === "page");
+    hudTransBtn.classList.toggle("active", notesMode === "all");
+    // Re-scale stage smoothly during & after width transition
+    requestAnimationFrame(updateStageScale);
+    setTimeout(updateStageScale, 240);
+  }
+
+  // Click on any block in full transcript jumps to that slide
+  notesBody.addEventListener("click", function (e) {
+    if (notesMode !== "all") return;
+    const block = e.target.closest(".note-block[data-note-idx]");
+    if (!block) return;
+    const idx = parseInt(block.getAttribute("data-note-idx"), 10);
+    if (!isNaN(idx)) goToSlide(idx);
+  });
+
+  document.getElementById("tab-note-page").addEventListener("click", () => {
+    if (notesMode !== "page") setNotesMode("page");
+  });
+  document.getElementById("tab-note-all").addEventListener("click", () => {
+    if (notesMode !== "all") setNotesMode("all");
+  });
+  document.getElementById("btn-close-notes").addEventListener("click", () => {
+    if (notesMode) setNotesMode(notesMode);
+  });
+
+  // ==================== 4. TOC OVERLAY (G) ====================
+  function buildToc() {
+    tocGrid.innerHTML = slides.map((s, i) => {
+      const title = s.getAttribute("data-title") || ("Slide " + (i + 1));
+      const eyebrow = (s.querySelector(".slide-eyebrow") || {}).textContent || "";
+      return (
+        '<button class="toc-item" data-toc-idx="' + i + '">' +
+          '<div class="toc-num">' + pad2(i + 1) + " · " + eyebrow + "</div>" +
+          '<div class="toc-item-title">' + title + "</div>" +
+        "</button>"
+      );
+    }).join("");
+  }
+  function updateTocActive() {
+    tocGrid.querySelectorAll(".toc-item").forEach(el => {
+      el.classList.toggle("active", parseInt(el.getAttribute("data-toc-idx"), 10) === currentSlide);
+    });
+  }
+  function toggleToc(force) {
+    tocOpen = typeof force === "boolean" ? force : !tocOpen;
+    tocOverlay.classList.toggle("open", tocOpen);
+    hudTocBtn.classList.toggle("active", tocOpen);
+    if (tocOpen) updateTocActive();
+  }
+  tocGrid.addEventListener("click", function (e) {
+    const item = e.target.closest(".toc-item[data-toc-idx]");
+    if (!item) return;
+    goToSlide(parseInt(item.getAttribute("data-toc-idx"), 10));
+    toggleToc(false);
+  });
+  tocOverlay.addEventListener("click", function (e) {
+    if (e.target === tocOverlay) toggleToc(false);
+  });
+  document.getElementById("btn-close-toc").addEventListener("click", () => toggleToc(false));
+
+  // ==================== 5. AUTO-PLAY & FULLSCREEN ====================
+  function startAutoPlay() {
+    stopAutoPlay();
+    autoPlayTimer = setInterval(() => {
+      if (currentSlide < totalSlides - 1) {
+        goToSlide(currentSlide + 1);
+      } else {
+        stopAutoPlay();
+      }
+    }, AUTO_MS);
+    hudAutoBtn.classList.add("active");
+    autoplayBadge.classList.add("show");
+  }
+  function stopAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    hudAutoBtn.classList.remove("active");
+    autoplayBadge.classList.remove("show");
+  }
+  function toggleAutoPlay() {
+    if (autoPlayTimer) stopAutoPlay(); else startAutoPlay();
+  }
+
+  function toggleFullscreen() {
+    const el = document.getElementById("app-shell");
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+  document.addEventListener("fullscreenchange", () => {
+    hudFsBtn.classList.toggle("active", !!document.fullscreenElement);
+    setTimeout(updateStageScale, 80);
+  });
+
+  // HUD button bindings
+  document.getElementById("hud-prev").addEventListener("click", prevSlide);
+  document.getElementById("hud-next").addEventListener("click", nextSlide);
+  hudTocBtn.addEventListener("click", () => toggleToc());
+  hudNoteBtn.addEventListener("click", () => setNotesMode("page"));
+  hudTransBtn.addEventListener("click", () => setNotesMode("all"));
+  hudAutoBtn.addEventListener("click", toggleAutoPlay);
+  hudFsBtn.addEventListener("click", toggleFullscreen);
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", function (e) {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+    if (tag === "input" || tag === "textarea") return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === "ArrowRight" || key === "PageDown" || key === " ") {
+      e.preventDefault();
+      nextSlide();
+    } else if (key === "ArrowLeft" || key === "PageUp") {
+      e.preventDefault();
+      prevSlide();
+    } else if (key === "Home") {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === "End") {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === "g" || key === "G") {
+      e.preventDefault();
+      toggleToc();
+    } else if (key === "n" || key === "N") {
+      e.preventDefault();
+      setNotesMode("page");
+    } else if (key === "t" || key === "T") {
+      e.preventDefault();
+      setNotesMode("all");
+    } else if (key === "a" || key === "A") {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === "f" || key === "F") {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === "Escape") {
+      if (tocOpen) toggleToc(false);
+      else if (notesMode) setNotesMode(notesMode);
+    }
+  });
+
+  // ==================== 6. SLIDE 04 INTERACTIVE PROTOCOL ANIMATION ====================
+  (function initSlide4() {
+    const groups = Array.from(document.querySelectorAll(".s4-step-group"));
+    const statusEl = document.getElementById("s4-status");
+    const playBtn = document.getElementById("s4-play");
+    const stepBtn = document.getElementById("s4-step");
+    const resetBtn = document.getElementById("s4-reset");
+
+    const STEP_TEXTS = [
+      "当前：完整协议总览（点击播放或单步查看源码流转）",
+      "步骤 1/5：客户端解析 --incremental 并确认 PG17+ 版本支持",
+      "步骤 2/5：客户端经复制协议 UPLOAD_MANIFEST 分块上传旧 manifest",
+      "步骤 3/5：basebackup_incremental.c 验同源、取 WAL-Ranges、保留清单作 sanity check",
+      "步骤 4/5：客户端发 BASE_BACKUP (INCREMENTAL)，服务端校验门禁（manifest + summarize_wal=on）",
+      "步骤 5/5：PrepareForIncrementalBackup() 校验 summary 无缺口并流式回传增量数据"
+    ];
+    let step = 0;
+    let timer = null;
+
+    function renderS4() {
+      groups.forEach(g => {
+        const s = parseInt(g.getAttribute("data-step"), 10);
+        if (step === 0) {
+          g.style.opacity = "1";
+        } else {
+          g.style.opacity = s <= step ? "1" : "0.18";
+        }
+      });
+      statusEl.textContent = STEP_TEXTS[step];
+    }
+    function stopS4() {
+      if (timer) { clearInterval(timer); timer = null; }
+      playBtn.classList.remove("active");
+      playBtn.textContent = "▶ 播放握手流程";
+    }
+    playBtn.addEventListener("click", () => {
+      if (timer) { stopS4(); return; }
+      if (step >= 5 || step === 0) step = 1;
+      renderS4();
+      playBtn.classList.add("active");
+      playBtn.textContent = "❚❚ 暂停";
+      timer = setInterval(() => {
+        if (step < 5) { step++; renderS4(); }
+        else { stopS4(); }
+      }, 1300);
+    });
+    stepBtn.addEventListener("click", () => {
+      stopS4();
+      step = step >= 5 ? 1 : step + 1;
+      renderS4();
+    });
+    resetBtn.addEventListener("click", () => {
+      stopS4();
+      step = 0;
+      renderS4();
+    });
+    renderS4();
+  })();
+
+  // ==================== 7. SLIDE 05 INTERACTIVE WAL SUMMARY WINDOW ====================
+  (function initSlide5() {
+    const btns = Array.from(document.querySelectorAll("[data-s5]"));
+    const statusEl = document.getElementById("s5-status");
+    const seg2 = document.getElementById("s5-seg-2");
+    const segs = [1, 2, 3, 4].map(i => document.getElementById("s5-seg-" + i));
+    const titleEl = document.getElementById("s5-info-title");
+    const l1El = document.getElementById("s5-info-l1");
+    const l2El = document.getElementById("s5-info-l2");
+
+    function applyS5(mode) {
+      btns.forEach(b => b.classList.toggle("active", b.getAttribute("data-s5") === mode));
+      segs.forEach(g => {
+        const rect = g.querySelector("rect");
+        rect.setAttribute("fill", "#2F7A66");
+        rect.setAttribute("stroke", "#1E4B5A");
+        rect.removeAttribute("stroke-dasharray");
+        g.style.opacity = "1";
+      });
+      seg2.querySelectorAll("text")[0].textContent = "summary_02";
+      seg2.querySelectorAll("text")[1].textContent = "连续无缺口";
+
+      if (mode === "ok") {
+        statusEl.textContent = "状态：WalSummariesAreComplete() = TRUE，允许执行增量备份";
+        titleEl.setAttribute("fill", "#2F7A66");
+        titleEl.textContent = "✓ 硬前提满足：summarize_wal = on，wal_level = replica/logical，wal_summary_keep_time 覆盖完整备份间隔";
+        l1El.textContent = "• 索引结构（pg_walsummary）：维度为 tablespace OID + relation OID + relation fork，保存修改块列表及创建/截断时的 limit block。";
+        l2El.textContent = "• 参数默认值：summarize_wal = off（必须显式开启）；wal_summary_keep_time = 10d（设为 0 表示不自动清理，由运维自管）。";
+      } else if (mode === "gap") {
+        const r2 = seg2.querySelector("rect");
+        r2.setAttribute("fill", "#F7E9DE");
+        r2.setAttribute("stroke", "#BE653B");
+        r2.setAttribute("stroke-dasharray", "6,4");
+        seg2.querySelectorAll("text")[0].textContent = "MISSING GAP";
+        seg2.querySelectorAll("text")[0].setAttribute("fill", "#BE653B");
+        seg2.querySelectorAll("text")[1].textContent = "已被过早清理";
+        seg2.querySelectorAll("text")[1].setAttribute("fill", "#BE653B");
+        statusEl.textContent = "状态：WalSummariesAreComplete() = FALSE — 增量备份报错中止";
+        titleEl.setAttribute("fill", "#BE653B");
+        titleEl.textContent = "× 窗口断裂：wal_summary_keep_time 小于备份间隔，summary_02 已被自动删除";
+        l1El.textContent = "• 故障现象：服务端无法确认缺口区间内哪些块被修改过，拒绝生成可能损坏恢复链的增量备份。";
+        l2El.textContent = "• 生产规避：保留时间必须大于「最长增量间隔 + 调度延迟冗余」，并用 pg_available_wal_summaries() 持续巡检。";
+      } else if (mode === "minimal") {
+        segs.forEach(g => {
+          const r = g.querySelector("rect");
+          r.setAttribute("fill", "#F7E9DE");
+          r.setAttribute("stroke", "#BE653B");
+          g.querySelectorAll("text")[0].setAttribute("fill", "#BE653B");
+          g.querySelectorAll("text")[1].setAttribute("fill", "#BE653B");
+        });
+        seg2.querySelectorAll("text")[0].textContent = "NO SUMMARY";
+        seg2.querySelectorAll("text")[1].textContent = "拒绝为 minimal 汇总";
+        statusEl.textContent = "状态：配置冲突 — wal_level=minimal 与 summarize_wal=on 不兼容";
+        titleEl.setAttribute("fill", "#BE653B");
+        titleEl.textContent = "× 硬边界冲突：服务器无法以 summarize_wal=on 且 wal_level=minimal 启动";
+        l1El.textContent = "• 官方文档说明：即便启动后调成此组合，summarizer 也会拒绝为 wal_level=minimal 生成的 WAL 生成 summary。";
+        l2El.textContent = "• 正确配置：生产增量备份集群必须保持 wal_level = replica 或 logical。";
+      }
+      if (mode === "ok") {
+        segs.forEach(g => {
+          g.querySelectorAll("text")[0].setAttribute("fill", "#FFFFFF");
+          g.querySelectorAll("text")[1].setAttribute("fill", "#E6F2EE");
+        });
+      }
+    }
+    btns.forEach(b => b.addEventListener("click", () => applyS5(b.getAttribute("data-s5"))));
+  })();
+
+  // ==================== 8. SLIDE 07 INTERACTIVE BLOCK RECONSTRUCTION ====================
+  (function initSlide7() {
+    const grid = document.getElementById("s7-grid");
+    const statusEl = document.getElementById("s7-status");
+    const captionEl = document.getElementById("s7-caption");
+    const playBtn = document.getElementById("s7-play");
+    const stepBtn = document.getElementById("s7-step");
+    const resetBtn = document.getElementById("s7-reset");
+    const breakBtn = document.getElementById("s7-break");
+    const b1Label = document.getElementById("s7-b1-label");
+    const b1Sub = document.getElementById("s7-b1-sub");
+
+    // 8 blocks model: source in B2, B1, B0
+    const BLOCKS = [
+      { id: 0, b2: false, b1: false, b0: true,  src: "B0", note: "回溯至 B0 全量" },
+      { id: 1, b2: true,  b1: false, b0: true,  src: "B2", note: "取最新增量 B2" },
+      { id: 2, b2: false, b1: true,  b0: true,  src: "B1", note: "回溯至 B1 增量" },
+      { id: 3, b2: false, b1: false, b0: true,  src: "B0", note: "回溯至 B0 全量" },
+      { id: 4, b2: false, b1: false, b0: true,  src: "B0", note: "回溯至 B0 全量" },
+      { id: 5, b2: true,  b1: true,  b0: true,  src: "B2", note: "B2 覆盖 B1 旧版" },
+      { id: 6, b2: false, b1: true,  b0: true,  src: "B1", note: "回溯至 B1 增量" },
+      { id: 7, b2: false, b1: false, b0: false, src: "ZERO", note: "无源扩展块填零" }
+    ];
+
+    let revealed = 8; // Start fully shown so slide is immediately readable
+    let b1Missing = false;
+    let timer = null;
+
+    function drawS7() {
+      let html = "";
+      b1Label.setAttribute("fill", b1Missing ? "#F7E9DE" : "#47808D");
+      b1Label.setAttribute("stroke", b1Missing ? "#BE653B" : "#1E4B5A");
+      b1Sub.textContent = b1Missing ? "已丢失！中间增量断链" : "优先度 #2 · 含 Blk 2, 5, 6";
+      b1Sub.setAttribute("fill", b1Missing ? "#BE653B" : "#EBF1EE");
+
+      BLOCKS.forEach((b, idx) => {
+        const x = 270 + idx * 138;
+        const w = 126;
+        const isDone = idx < revealed;
+        const isCurrent = idx === revealed - 1 && revealed > 0 && revealed < 8;
+
+        // Column header
+        html += '<text x="' + (x + w / 2) + '" y="40" text-anchor="middle" font-size="12" font-weight="700" fill="#46585F" class="svg-mono">Blk ' + b.id + "</text>";
+
+        // B2 cell (y=44)
+        const b2Fill = b.b2 ? "#BE653B" : "#F1EFE9";
+        const b2Txt = b.b2 ? "#FFFFFF" : "#89938F";
+        html += '<rect x="' + x + '" y="44" width="' + w + '" height="54" fill="' + b2Fill + '" stroke="#D9D5CB"/>';
+        html += '<text x="' + (x + w / 2) + '" y="76" text-anchor="middle" font-size="12.5" font-weight="700" fill="' + b2Txt + '" class="svg-mono">' + (b.b2 ? "v2 (NEW)" : "—") + "</text>";
+
+        // B1 cell (y=114)
+        let b1Fill = b.b1 ? "#47808D" : "#F1EFE9";
+        let b1Txt = b.b1 ? "#FFFFFF" : "#89938F";
+        let b1Str = b.b1 ? "v1 (INC)" : "—";
+        if (b1Missing) {
+          b1Fill = "#F7E9DE";
+          b1Txt = "#BE653B";
+          b1Str = "MISSING";
+        }
+        html += '<rect x="' + x + '" y="114" width="' + w + '" height="54" fill="' + b1Fill + '" stroke="' + (b1Missing ? "#BE653B" : "#D9D5CB") + '"' + (b1Missing ? ' stroke-dasharray="4,3"' : "") + "/>";
+        html += '<text x="' + (x + w / 2) + '" y="146" text-anchor="middle" font-size="12.5" font-weight="700" fill="' + b1Txt + '" class="svg-mono">' + b1Str + "</text>";
+
+        // B0 cell (y=184)
+        const b0Fill = b.b0 ? "#1E4B5A" : "#F1EFE9";
+        const b0Txt = b.b0 ? "#FFFFFF" : "#89938F";
+        html += '<rect x="' + x + '" y="184" width="' + w + '" height="54" fill="' + b0Fill + '" stroke="#D9D5CB"/>';
+        html += '<text x="' + (x + w / 2) + '" y="216" text-anchor="middle" font-size="12.5" font-weight="700" fill="' + b0Txt + '" class="svg-mono">' + (b.b0 ? "v0 (FULL)" : "—") + "</text>";
+
+        // Orthogonal vertical connector to output (y=274)
+        if (isDone) {
+          let broken = b1Missing && b.src === "B1";
+          let startY = b.src === "B2" ? 98 : (b.src === "B1" ? 168 : (b.src === "B0" ? 238 : 254));
+          let lineCol = broken ? "#BE653B" : (b.src === "ZERO" ? "#AE8A3E" : "#2F7A66");
+          html += '<line x1="' + (x + w / 2) + '" y1="' + startY + '" x2="' + (x + w / 2) + '" y2="274" stroke="' + lineCol + '" stroke-width="' + (isCurrent ? "3" : "2") + '"' + (broken ? ' stroke-dasharray="4,3"' : "") + "/>";
+          html += '<polygon points="' + (x + w / 2) + ',274 ' + (x + w / 2 - 5) + ',264 ' + (x + w / 2 + 5) + ',264" fill="' + lineCol + '"/>';
+
+          // Output cell
+          let outFill = broken ? "#F7E9DE" : (b.src === "ZERO" ? "#F5EFE0" : "#E6F2EE");
+          let outStroke = broken ? "#BE653B" : (b.src === "ZERO" ? "#AE8A3E" : "#2F7A66");
+          let outHead = broken ? "ERR: 缺源!" : (b.src === "ZERO" ? "ZERO BLOCK" : ("来自 " + b.src));
+          let outSub = broken ? "链断裂失败" : b.note;
+          html += '<rect x="' + x + '" y="274" width="' + w + '" height="72" fill="' + outFill + '" stroke="' + outStroke + '" stroke-width="' + (isCurrent ? "2.5" : "1.4") + '"/>';
+          html += '<text x="' + (x + w / 2) + '" y="302" text-anchor="middle" font-size="13" font-weight="700" fill="' + outStroke + '" class="svg-mono">' + outHead + "</text>";
+          html += '<text x="' + (x + w / 2) + '" y="326" text-anchor="middle" font-size="11.5" fill="#1B2B33">' + outSub + "</text>";
+        } else {
+          html += '<rect x="' + x + '" y="274" width="' + w + '" height="72" fill="#FAF9F6" stroke="#D9D5CB" stroke-dasharray="4,4"/>';
+          html += '<text x="' + (x + w / 2) + '" y="314" text-anchor="middle" font-size="12" fill="#89938F" class="svg-mono">待重建...</text>';
+        }
+      });
+
+      grid.innerHTML = html;
+
+      if (b1Missing) {
+        statusEl.textContent = "警报：B1 丢失导致 Blk 2 / Blk 6 缺失来源，pg_combinebackup 拒绝合成！";
+        captionEl.textContent = "断链实证：缺少中间增量 B1 时，backup_label 链校验与块重建均会失败，最新增量 B2 彻底无法恢复。";
+      } else if (revealed === 0) {
+        statusEl.textContent = "已重置：点击「自动重建」或「逐块步进」观察回溯算法";
+        captionEl.textContent = "提示：pg_combinebackup 优先使用最新增量 B2，缺失块逐级回溯至 B1、B0，无源扩展块补零。";
+      } else if (revealed < 8) {
+        const cur = BLOCKS[revealed - 1];
+        statusEl.textContent = "重建进度 " + revealed + "/8：Blk " + cur.id + " → " + cur.note;
+      } else {
+        statusEl.textContent = "合成完成（8/8 块已定源）：准备写出完整文件与新 backup_manifest";
+        captionEl.textContent = "说明：Blk 5 在 B1 与 B2 均存在，但最新增量 B2 胜出；Blk 7 在链中无来源，按源码注释作为「扩展未写 WAL 的初始化块」填零输出。";
+      }
+    }
+
+    function stopS7() {
+      if (timer) { clearInterval(timer); timer = null; }
+      playBtn.classList.remove("active");
+      playBtn.textContent = "▶ 自动重建";
+    }
+
+    playBtn.addEventListener("click", () => {
+      if (timer) { stopS7(); return; }
+      if (revealed >= 8) revealed = 0;
+      playBtn.classList.add("active");
+      playBtn.textContent = "❚❚ 暂停";
+      revealed++;
+      drawS7();
+      timer = setInterval(() => {
+        if (revealed < 8) { revealed++; drawS7(); }
+        else { stopS7(); }
+      }, 850);
+    });
+    stepBtn.addEventListener("click", () => {
+      stopS7();
+      revealed = revealed >= 8 ? 1 : revealed + 1;
+      drawS7();
+    });
+    resetBtn.addEventListener("click", () => {
+      stopS7();
+      b1Missing = false;
+      breakBtn.classList.remove("active");
+      revealed = 0;
+      drawS7();
+    });
+    breakBtn.addEventListener("click", () => {
+      stopS7();
+      b1Missing = !b1Missing;
+      breakBtn.classList.toggle("active", b1Missing);
+      revealed = 8;
+      drawS7();
+    });
+
+    drawS7();
+  })();
+
+  // ==================== 9. SLIDE 10 INTERACTIVE RATIO / CHAIN SIMULATOR ====================
+  (function initSlide10() {
+    const ratioInput = document.getElementById("s10-ratio");
+    const chainInput = document.getElementById("s10-chain");
+    const ratioVal = document.getElementById("s10-ratio-val");
+    const chainVal = document.getElementById("s10-chain-val");
+    const statusEl = document.getElementById("s10-status");
+    const barFill = document.getElementById("s10-bar-fill");
+    const barDesc = document.getElementById("s10-bar-desc");
+    const chainNodes = document.getElementById("s10-chain-nodes");
+    const chainDesc = document.getElementById("s10-chain-desc");
+
+    function updateS10() {
+      const r = parseInt(ratioInput.value, 10);
+      const c = parseInt(chainInput.value, 10);
+      ratioVal.textContent = r + "%";
+      chainVal.textContent = c + " 节点";
+
+      const maxW = 644;
+      const fillW = Math.max(10, Math.round((r / 100) * maxW));
+      barFill.setAttribute("width", String(fillW));
+
+      const fallback = r >= 90;
+      barFill.setAttribute("fill", fallback ? "#BE653B" : (r >= 50 ? "#AE8A3E" : "#2F7A66"));
+
+      const blocksWan = r; // out of 100万 blocks -> r 万 blocks
+      if (fallback) {
+        statusEl.textContent = "触及 ~90% 源码阈值 → 该文件直接退回全量发送！";
+        barDesc.textContent = "约 " + blocksWan + " 万 / 100 万块变化（≥90%）→ GetFileBackupMethod() 退回全量备份，无增量收益";
+      } else if (r >= 50) {
+        statusEl.textContent = "变化块偏高（" + r + "%）：收益明显收窄，需权衡链管理成本";
+        barDesc.textContent = "约 " + blocksWan + " 万 / 100 万块变化 → 仍发 INCREMENTAL.*，但传输压缩空间有限";
+      } else {
+        statusEl.textContent = "增量生效（" + r + "% 变化块，远低于 ~90% 退回阈值）";
+        barDesc.textContent = "约 " + blocksWan + " 万 / 100 万块变化 → 仅传变化块 + 增量头 + 完整非关系文件";
+      }
+
+      // Draw chain nodes inside x=700..1344, y=236..270
+      const gap = 6;
+      const nodeW = Math.min(72, Math.floor((644 - gap * (c - 1)) / c));
+      let html = "";
+      for (let i = 0; i < c; i++) {
+        const x = 700 + i * (nodeW + gap);
+        const isFull = i === 0;
+        const fill = isFull ? "#1E4B5A" : (c >= 10 ? "#BE653B" : "#47808D");
+        html += '<rect x="' + x + '" y="236" width="' + nodeW + '" height="34" fill="' + fill + '" stroke="#1B2B33"/>';
+        html += '<text x="' + (x + nodeW / 2) + '" y="258" text-anchor="middle" font-size="' + (nodeW < 42 ? "10" : "12") + '" font-weight="700" fill="#FFFFFF" class="svg-mono">' + (isFull ? "B0" : ("B" + i)) + "</text>";
+      }
+      chainNodes.innerHTML = html;
+
+      if (c >= 10) {
+        chainDesc.textContent = "当前链长 " + c + "（1 全量 + " + (c - 1) + " 增量）：链条偏长，合成需回溯多目录，建议周期性合成为新基线控制 RTO。";
+      } else {
+        chainDesc.textContent = "当前链长 " + c + "（1 全量 + " + (c - 1) + " 增量）：合成扫描目录可控，建议配合 --dry-run --debug 与演练实测 RTO。";
+      }
+    }
+
+    ratioInput.addEventListener("input", updateS10);
+    chainInput.addEventListener("input", updateS10);
+    document.getElementById("s10-preset-cold").addEventListener("click", () => {
+      ratioInput.value = 2; chainInput.value = 3; updateS10();
+    });
+    document.getElementById("s10-preset-reindex").addEventListener("click", () => {
+      ratioInput.value = 92; chainInput.value = 7; updateS10();
+    });
+    updateS10();
+  })();
+
+  // ==================== 10. SLIDE 11 INTERACTIVE 6-STEP RUNBOOK ====================
+  (function initSlide11() {
+    const btns = Array.from(document.querySelectorAll("[data-s11]"));
+    const statusEl = document.getElementById("s11-status");
+    const detailTitle = document.getElementById("s11-detail-title");
+    const codeLines = document.getElementById("s11-code-lines");
+    const noteHead = document.getElementById("s11-note-head");
+    const noteL1 = document.getElementById("s11-note-l1");
+    const noteL2 = document.getElementById("s11-note-l2");
+    const arrow = document.getElementById("s11-arrow");
+    const stepBoxes = Array.from(document.querySelectorAll("[data-step-box]"));
+    const stepTxts = Array.from(document.querySelectorAll("[data-step-txt]"));
+
+    const STEPS = [
+      {
+        status: "步骤 1 / 6：配置参数并确认 summarizer 进程运行",
+        title: "步骤 01 · 在 postgresql.conf 开启 WAL Summary 与归档",
+        code: [
+          "# postgresql.conf",
+          "wal_level = replica",
+          "summarize_wal = on",
+          "wal_summary_keep_time = '14d'",
+          "archive_mode = on",
+          "archive_command = 'test ! -f /archive/%f && cp %p /archive/%f'",
+          "-- 重载或按需重启后确认：SELECT * FROM pg_get_wal_summarizer_state();"
+        ],
+        head: "关键核验与硬约束",
+        l1: "• summarize_wal 只能在 postgresql.conf 或命令行设置；wal_level=minimal 下无法有效生成 summary。",
+        l2: "• wal_summary_keep_time 应大于最长增量间隔并留出调度延迟冗余。"
+      },
+      {
+        status: "步骤 2 / 6：生成全量基线 B0 并保留 backup_manifest",
+        title: "步骤 02 · 制作第一个全量备份 B0 并校验",
+        code: [
+          "pg_basebackup \\",
+          "  -h primary.example.com -U repl \\",
+          "  -D /backup/pg/b0 -Fp -X stream \\",
+          "  --checkpoint=fast --manifest-checksums=CRC32C --progress",
+          "",
+          "# 校验基线完整性（务必保留 /backup/pg/b0/backup_manifest）",
+          "pg_verifybackup /backup/pg/b0"
+        ],
+        head: "基线保留要点",
+        l1: "• 严禁使用 --no-manifest 做增量链基线；后续第一次增量 B1 必须上传 b0/backup_manifest。",
+        l2: "• B0 目录建议只读保护，后续所有子增量退役前均不得删除 B0。"
+      },
+      {
+        status: "步骤 3 / 6：基于 B0 manifest 执行第一次增量备份 B1",
+        title: "步骤 03 · 制作第一次增量备份 B1（--incremental=B0）",
+        code: [
+          "pg_basebackup \\",
+          "  -h primary.example.com -U repl \\",
+          "  -D /backup/pg/b1 -Fp -X stream \\",
+          "  --incremental=/backup/pg/b0/backup_manifest \\",
+          "  --manifest-checksums=CRC32C --progress"
+        ],
+        head: "若报 WAL Summary 不完整，按 5 条线索排查",
+        l1: "• 1) summarize_wal 未开启；2) summarizer 未追上；3) wal_summary_keep_time 太短被清理；",
+        l2: "• 4) 参考 manifest 非同一集群（System-Identifier 不符）；5) Standby 上无新 restartpoint。"
+      },
+      {
+        status: "步骤 4 / 6：基于 B1 manifest 串联第二次增量备份 B2",
+        title: "步骤 04 · 制作第二次增量备份 B2（--incremental=B1）",
+        code: [
+          "pg_basebackup \\",
+          "  -h primary.example.com -U repl \\",
+          "  -D /backup/pg/b2 -Fp -X stream \\",
+          "  --incremental=/backup/pg/b1/backup_manifest \\",
+          "  --manifest-checksums=CRC32C --progress"
+        ],
+        head: "备份链元数据治理",
+        l1: "• B2 的父节点是 B1，根节点是 B0；备份系统应登记 (B2 -> B1 -> B0) 父子关系与 start LSN。",
+        l2: "• 备份期间可查 pg_stat_progress_basebackup 核实 backup_type 与传输进度。"
+      },
+      {
+        status: "步骤 5 / 6：先 dry-run 预演，再按旧→新顺序合成全量",
+        title: "步骤 05 · 使用 pg_combinebackup 合成 Synthetic Full Backup",
+        code: [
+          "# 1) 先预演链路与输出规划",
+          "pg_combinebackup --dry-run --debug -o /restore/pgdata.synthetic \\",
+          "  /backup/pg/b0 /backup/pg/b1 /backup/pg/b2",
+          "",
+          "# 2) 确认无误后正式合成（若有表空间加 -T OLDDIR=NEWDIR）",
+          "pg_combinebackup -o /restore/pgdata.synthetic \\",
+          "  /backup/pg/b0 /backup/pg/b1 /backup/pg/b2"
+        ],
+        head: "合成阶段红线",
+        l1: "• 输入顺序必须严格从旧到新（B0 B1 B2），第一个须为全量，最后一个为目标增量。",
+        l2: "• 切勿在输入目录上启动数据库；生产慎用 --link，优先普通 copy 或 reflink/clone。"
+      },
+      {
+        status: "步骤 6 / 6：验签 + 配置归档重放 + 验收业务数据",
+        title: "步骤 06 · 校验合成目录并进入 PostgreSQL 常规 PITR 恢复",
+        code: [
+          "# 1) 校验合成目录",
+          "pg_verifybackup /restore/pgdata.synthetic",
+          "",
+          "# 2) 配置归档恢复参数并创建 recovery.signal",
+          "# postgresql.auto.conf:",
+          "#   restore_command = 'cp /archive/%f %p'",
+          "#   recovery_target_time = '2026-06-07 10:30:00+08'",
+          "touch /restore/pgdata.synthetic/recovery.signal"
+        ],
+        head: "第二段恢复验收",
+        l1: "• pg_verifybackup 仅校验文件/checksum，不能替代真实启动恢复；须启动 PG 读取归档 WAL。",
+        l2: "• 恢复推进至目标时间点后，务必核验业务数据一致性再对外开放连接。"
+      }
+    ];
+
+    function renderS11(idx) {
+      const s = STEPS[idx];
+      btns.forEach(b => b.classList.toggle("active", parseInt(b.getAttribute("data-s11"), 10) === idx));
+      stepBoxes.forEach((box, i) => {
+        box.setAttribute("fill", i === idx ? "#245A6B" : (i < idx ? "#CFE0DC" : "#EBF1EE"));
+        box.setAttribute("stroke", i === idx ? "#1E4B5A" : "#D9D5CB");
+      });
+      stepTxts.forEach((t, i) => {
+        t.setAttribute("fill", i === idx ? "#FFFFFF" : "#1B2B33");
+      });
+      const cy = 45 + idx * 60;
+      arrow.setAttribute("d", "M 348 " + cy + " L 386 " + cy);
+
+      statusEl.textContent = s.status;
+      detailTitle.textContent = s.title;
+      noteHead.textContent = s.head;
+      noteL1.textContent = s.l1;
+      noteL2.textContent = s.l2;
+
+      codeLines.innerHTML = s.code.map((line, i) => {
+        const safe = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const isComment = line.trim().startsWith("#") || line.trim().startsWith("--");
+        const fill = isComment ? "#A4C4C6" : "#F7F6F2";
+        return '<text x="426" y="' + (100 + i * 21) + '" fill="' + fill + '">' + safe + "</text>";
+      }).join("");
+    }
+
+    btns.forEach(b => b.addEventListener("click", () => renderS11(parseInt(b.getAttribute("data-s11"), 10))));
+    stepBoxes.forEach(box => {
+      box.style.cursor = "pointer";
+      box.addEventListener("click", () => renderS11(parseInt(box.getAttribute("data-step-box"), 10)));
+    });
+    renderS11(0);
+  })();
+
+  // ==================== 11. BOOTSTRAP ====================
+  buildToc();
+  goToSlide(0);
+  updateStageScale();
+  requestAnimationFrame(updateStageScale);
+  window.addEventListener("load", updateStageScale);
+})();
+</script>
+</body>
+</html>

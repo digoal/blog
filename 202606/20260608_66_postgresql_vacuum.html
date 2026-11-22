@@ -1,0 +1,3022 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 —— PostgreSQL 垃圾回收</title>
+<style>
+:root {
+  --bg-paper: #F7F6F2;
+  --bg-sec: #F1EFE9;
+  --bg-letterbox: #E7E4DC;
+  --ink: #1B2B33;
+  --ink-sec: #46585F;
+  --ink-muted: #89938F;
+  --stroke: #D9D5CB;
+  --indigo: #245A6B;
+  --indigo-light: #E5EFF0;
+  --terra: #BE653B;
+  --terra-light: #F7E9DE;
+  --teal: #2F7A66;
+  --teal-light: #E4F0EC;
+  --gold: #AE8A3E;
+  --gold-light: #F6F0E1;
+  --s1: #1E4B5A;
+  --s2: #2E6373;
+  --s3: #47808D;
+  --s4: #74A5AD;
+  --s5: #A4C4C6;
+  --s6: #CFE0DC;
+  --s7: #EBF1EE;
+  --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'STSong', Georgia, serif;
+  --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-letterbox);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* App Shell — Fullscreen Target so HUD stays visible in Fullscreen */
+#app-shell {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-letterbox);
+  position: relative;
+  overflow: hidden;
+}
+
+#workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Left Stage Viewport (Proportional 16:9 Letterbox) */
+#stage-viewport {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-letterbox);
+}
+
+#stage-frame {
+  width: 1600px;
+  height: 900px;
+  position: relative;
+  flex-shrink: 0;
+  background: var(--bg-paper);
+  border: 1px solid var(--stroke);
+  transform-origin: center center;
+  overflow: hidden;
+}
+
+/* Slides inside fixed 1600x900 stage */
+.slide {
+  position: absolute;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+  padding: 44px 64px 36px 64px;
+  display: none;
+  flex-direction: column;
+  background: var(--bg-paper);
+}
+.slide.active {
+  display: flex;
+}
+
+/* Architectural strata left-edge hairline accent */
+.slide::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(to bottom,
+    var(--s7) 0%, var(--s7) 14%,
+    var(--s6) 14%, var(--s6) 28%,
+    var(--s5) 28%, var(--s5) 42%,
+    var(--s4) 42%, var(--s4) 56%,
+    var(--s3) 56%, var(--s3) 70%,
+    var(--s2) 70%, var(--s2) 85%,
+    var(--s1) 85%, var(--s1) 100%);
+}
+
+.slide-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 3.4px;
+  color: var(--indigo);
+  text-transform: uppercase;
+  line-height: 18px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.slide-title {
+  font-family: var(--font-serif);
+  font-size: 44px;
+  line-height: 54px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slide-lead {
+  font-family: var(--font-sans);
+  font-size: 19px;
+  line-height: 28px;
+  color: var(--ink-sec);
+  max-width: 1400px;
+  min-height: 56px;
+  margin-bottom: 14px;
+}
+
+.slide-divider {
+  width: 1400px;
+  height: 1px;
+  background: var(--stroke);
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+/* Diagram Zone: fixed 1400 x 430 */
+.diagram-zone {
+  width: 1400px;
+  height: 430px;
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-paper);
+}
+
+.diagram-zone svg.diagram-svg {
+  width: 1400px;
+  height: 430px;
+  display: block;
+}
+
+.diagram-zone.has-controls svg.diagram-svg {
+  width: 1400px;
+  height: 382px;
+}
+
+/* Dedicated Non-Overlapping Interactive Control Bar */
+.sim-bar {
+  width: 1400px;
+  height: 40px;
+  margin-bottom: 8px;
+  padding: 0 14px;
+  background: var(--bg-sec);
+  border: 1px solid var(--stroke);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.sim-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sim-btn {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+  height: 28px;
+  border: 1px solid var(--indigo);
+  background: var(--bg-paper);
+  color: var(--indigo);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sim-btn:hover {
+  background: var(--indigo-light);
+}
+.sim-btn.primary {
+  background: var(--indigo);
+  color: #FFFFFF;
+}
+.sim-btn.primary:hover {
+  background: var(--s1);
+}
+.sim-btn.active-warn, .sim-btn.active-warn:hover {
+  background: var(--terra);
+  border-color: var(--terra);
+  color: #FFFFFF;
+}
+.sim-btn.active-ok {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #FFFFFF;
+}
+
+.sim-status {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-sec);
+  white-space: nowrap;
+}
+
+.sim-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-sec);
+}
+.sim-input-group select,
+.sim-input-group input[type="range"] {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  accent-color: var(--indigo);
+}
+.sim-input-group select {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--stroke);
+  background: var(--bg-paper);
+  color: var(--ink);
+}
+
+/* Bottom NEXT Callout */
+.slide-next {
+  margin-top: 24px;
+  width: 1400px;
+  padding: 10px 18px;
+  border-left: 3px solid var(--terra);
+  background: var(--bg-sec);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 30px;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.slide-next .next-tag {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--terra);
+  font-weight: 700;
+  margin-right: 12px;
+}
+
+/* Slide Footer */
+.slide-footer {
+  margin-top: auto;
+  width: 1400px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stroke);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.slide-footer .page-num {
+  color: var(--ink-sec);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Right In-Page Notes Split Pane (NOT a modal) */
+#notes-pane {
+  width: 0;
+  flex-shrink: 0;
+  height: 100%;
+  background: var(--bg-sec);
+  border-left: 0 solid var(--stroke);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#notes-pane.open {
+  width: clamp(340px, 31vw, 460px);
+  border-left-width: 1px;
+}
+
+.notes-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--stroke);
+  background: var(--bg-paper);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.notes-header-title {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.notes-header-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  padding: 2px 8px;
+  background: var(--indigo-light);
+  color: var(--indigo);
+  border: 1px solid var(--s5);
+}
+.notes-close-btn {
+  background: none;
+  border: 1px solid var(--stroke);
+  color: var(--ink-sec);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.notes-close-btn:hover {
+  background: var(--bg-sec);
+  color: var(--ink);
+}
+
+#notes-body {
+  flex: 1;
+  position: relative;
+  overflow-y: auto;
+  padding: 16px 18px 40px 18px;
+}
+
+.note-card {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--bg-paper);
+  border: 1px solid var(--stroke);
+  border-left: 3px solid var(--s4);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.note-card.current {
+  border-color: var(--indigo);
+  border-left: 4px solid var(--terra);
+  background: #FFFFFF;
+}
+.note-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.note-card-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--indigo);
+}
+.note-card.current .note-card-num {
+  color: var(--terra);
+}
+.note-card-title {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  flex: 1;
+}
+.note-card-text {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--ink-sec);
+}
+.note-card-text p {
+  margin-bottom: 10px;
+}
+.note-card-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* TOC Drawer (G shortcut) */
+#toc-drawer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 390px;
+  max-width: 85vw;
+  background: var(--bg-paper);
+  border-right: 1px solid var(--stroke);
+  transform: translateX(-100%);
+  transition: transform 0.18s ease;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+#toc-drawer.open {
+  transform: translateX(0);
+}
+.toc-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--stroke);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-sec);
+}
+.toc-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.toc-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+.toc-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 12px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--ink-sec);
+}
+.toc-item:hover {
+  background: var(--bg-sec);
+  border-color: var(--stroke);
+  color: var(--ink);
+}
+.toc-item.active {
+  background: var(--indigo-light);
+  border-color: var(--s4);
+  border-left: 3px solid var(--indigo);
+  color: var(--ink);
+  font-weight: 600;
+}
+.toc-item-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--indigo);
+  flex-shrink: 0;
+}
+
+/* Bottom Persistent Shortcut HUD Bar (Visible in Normal & Fullscreen) */
+#hud-bar {
+  height: 44px;
+  flex-shrink: 0;
+  background: var(--ink);
+  color: #EBF1EE;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  font-size: 12.5px;
+  border-top: 1px solid #2E424B;
+  z-index: 50;
+  user-select: none;
+}
+
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #EBF1EE;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.hud-btn:hover {
+  background: rgba(255,255,255,0.14);
+}
+.hud-btn.active {
+  background: var(--terra);
+  border-color: var(--terra);
+  color: #FFFFFF;
+}
+.hud-btn.active-indigo {
+  background: var(--indigo);
+  border-color: var(--s4);
+  color: #FFFFFF;
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #FFFFFF;
+}
+
+.hud-counter {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #CFE0DC;
+  min-width: 68px;
+  text-align: center;
+}
+
+.autoplay-progress {
+  width: 64px;
+  height: 4px;
+  background: rgba(255,255,255,0.18);
+  overflow: hidden;
+  display: none;
+}
+.autoplay-progress.visible {
+  display: block;
+}
+.autoplay-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--terra);
+  transition: width 0.2s linear;
+}
+
+/* SVG common typography classes */
+.svg-title { font-family: var(--font-serif); font-weight: 700; fill: #1B2B33; }
+.svg-head { font-family: var(--font-sans); font-weight: 700; fill: #1B2B33; }
+.svg-head-inv { font-family: var(--font-sans); font-weight: 700; fill: #F7F6F2; }
+.svg-body { font-family: var(--font-sans); font-weight: 400; fill: #46585F; }
+.svg-body-inv { font-family: var(--font-sans); font-weight: 400; fill: #EBF1EE; }
+.svg-mono { font-family: var(--font-mono); font-weight: 600; fill: #245A6B; }
+.svg-mono-inv { font-family: var(--font-mono); font-weight: 600; fill: #EBF1EE; }
+.svg-muted { font-family: var(--font-sans); font-weight: 400; fill: #89938F; }
+.svg-terra { font-family: var(--font-sans); font-weight: 700; fill: #BE653B; }
+.svg-teal { font-family: var(--font-sans); font-weight: 700; fill: #2F7A66; }
+.svg-gold { font-family: var(--font-sans); font-weight: 700; fill: #AE8A3E; }
+</style>
+</head>
+<body>
+<div id="app-shell">
+  <div id="workspace">
+    <!-- TOC Drawer -->
+    <aside id="toc-drawer" aria-label="课件目录">
+      <div class="toc-header">
+        <span class="toc-title">地层目录 · 14 页导航</span>
+        <button class="notes-close-btn" id="toc-close-btn" title="关闭目录 (G / Esc)">ESC</button>
+      </div>
+      <div class="toc-list" id="toc-list"></div>
+    </aside>
+
+    <!-- Left 16:9 Fixed Stage Viewport -->
+    <main id="stage-viewport">
+      <div id="stage-frame">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-index="0" data-title="封面：PostgreSQL 垃圾回收地层总览">
+          <div class="slide-eyebrow">DATABASE FOUNDATION · 01 / 14 · POSTGRESQL 垃圾回收</div>
+          <h1 class="slide-title">PostgreSQL 垃圾回收：从 MVCC 代价到生产排障闭环</h1>
+          <p class="slide-lead">应用开发者常把 DELETE 当「删数据」、把 UPDATE 当「原地改」。沿着表存储与源码地层逐层下探，拆解磁盘不降、索引膨胀与长事务拖垮写入的底层机理。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Left Stratigraphic Profile (7 Strata) -->
+              <rect x="0" y="0" width="930" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="20" y="28" class="svg-mono" font-size="13">STRATIGRAPHIC MAP · 七阶技术地层剖面（表层 SQL → 底层存储与调度）</text>
+
+              <!-- Layer 7 (Top / Lightest) -->
+              <rect x="20" y="42" width="890" height="46" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="38" y="70" class="svg-mono" font-size="13">L7</text>
+              <text x="82" y="70" class="svg-head" font-size="16">应用写入层</text>
+              <text x="256" y="70" class="svg-body" font-size="14">UPDATE 写新行版本 / DELETE 标删除事务信息 —— 并发读写不阻塞的代价起点</text>
+
+              <!-- Layer 6 -->
+              <rect x="20" y="94" width="890" height="46" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1"/>
+              <text x="38" y="122" class="svg-mono" font-size="13">L6</text>
+              <text x="82" y="122" class="svg-head" font-size="16">可见性边界层</text>
+              <text x="256" y="122" class="svg-body" font-size="14">GlobalVisState / HeapTupleSatisfiesVacuum() —— 决定旧版本何时从 recently dead 变为可回收</text>
+
+              <!-- Layer 5 -->
+              <rect x="20" y="146" width="890" height="46" fill="#A4C4C6" stroke="#47808D" stroke-width="1"/>
+              <text x="38" y="174" class="svg-mono" font-size="13">L5</text>
+              <text x="82" y="174" class="svg-head" font-size="16">页内剪枝与 HOT</text>
+              <text x="256" y="174" class="svg-body" font-size="14">pruneheap.c / README.HOT —— 非索引列同页更新免增索引项，页内剪短 HOT 链</text>
+
+              <!-- Layer 4 -->
+              <rect x="20" y="198" width="890" height="46" fill="#74A5AD" stroke="#2E6373" stroke-width="1"/>
+              <text x="38" y="226" class="svg-mono-inv" font-size="13">L4</text>
+              <text x="82" y="226" class="svg-head-inv" font-size="16">标准 VACUUM 状态机</text>
+              <text x="256" y="226" class="svg-body-inv" font-size="14">vacuumlazy.c —— Phase I 扫 Heap → Phase II 清索引 → Phase III 回收 LP_UNUSED</text>
+
+              <!-- Layer 3 -->
+              <rect x="20" y="250" width="890" height="46" fill="#47808D" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="38" y="278" class="svg-mono-inv" font-size="13">L3</text>
+              <text x="82" y="278" class="svg-head-inv" font-size="16">物理地图协同层</text>
+              <text x="256" y="278" class="svg-body-inv" font-size="14">VM (all-visible / all-frozen 保守跳页) + FSM (1/256 页粒度近似寻址复用)</text>
+
+              <!-- Layer 2 -->
+              <rect x="20" y="302" width="890" height="46" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+              <text x="38" y="330" class="svg-mono-inv" font-size="13">L2</text>
+              <text x="82" y="330" class="svg-head-inv" font-size="16">XID 冻结保命层</text>
+              <text x="256" y="330" class="svg-body-inv" font-size="14">32 位循环事务空间防 wraparound —— normal / aggressive / failsafe 三档兜底</text>
+
+              <!-- Layer 1 (Deepest) -->
+              <rect x="20" y="354" width="890" height="56" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="38" y="387" class="svg-mono-inv" font-size="13">L1</text>
+              <text x="82" y="387" class="svg-head-inv" font-size="16">调度与排障闭环</text>
+              <text x="256" y="387" class="svg-body-inv" font-size="14">autovacuum.c launcher/worker 调度、五步观测视图、三角色防线与六步排障闭环</text>
+
+              <!-- Right Metadata & Grounding Panel -->
+              <rect x="954" y="0" width="446" height="205" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="954" y="0" width="446" height="34" fill="#245A6B"/>
+              <text x="972" y="22" class="svg-mono-inv" font-size="13">VERIFICATION BASELINE · 实证核验基线</text>
+              <text x="972" y="64" class="svg-head" font-size="15">课程主题：数据库筑基课 —— 垃圾回收</text>
+              <text x="972" y="92" class="svg-body" font-size="14">作者：digoal · 日期：2026-06-08</text>
+              <text x="972" y="122" class="svg-body" font-size="13.5">• PostgreSQL 源码：vacuum.c / vacuumlazy.c /</text>
+              <text x="984" y="144" class="svg-body" font-size="13.5">pruneheap.c / visibilitymap.c / autovacuum.c</text>
+              <text x="972" y="172" class="svg-body" font-size="13.5">• 官方 SGML 文档：mvcc / maintenance / storage</text>
+              <text x="972" y="194" class="svg-muted" font-size="12.5">• 架构索引：DeepWiki postgres/postgres</text>
+
+              <rect x="954" y="225" width="446" height="205" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="972" y="255" class="svg-terra" font-size="15">生产五大高频困惑（本课逐一解答）</text>
+              <line x1="972" y1="268" x2="1380" y2="268" stroke="#BE653B" stroke-width="1" opacity="0.4"/>
+              <text x="972" y="294" class="svg-body" font-size="14">01. 删了大量数据，磁盘空间为什么不降？</text>
+              <text x="972" y="322" class="svg-body" font-size="14">02. 为什么索引往往比表更先发生严重膨胀？</text>
+              <text x="972" y="350" class="svg-body" font-size="14">03. 一个不写数据的长事务为何拖垮全表清理？</text>
+              <text x="972" y="378" class="svg-body" font-size="14">04. autovacuum 明明开着，表为何依然膨胀？</text>
+              <text x="972" y="406" class="svg-body" font-size="14">05. 为什么 VACUUM FULL 会锁住线上业务？</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>先从最根本的工程矛盾切入：为什么一次普通的 UPDATE 与 DELETE 会在 PostgreSQL 里制造「垃圾」？</div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · 表存储 + MVCC + 维护机制</span>
+            <span class="page-num">01 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-index="1" data-title="它解决什么问题：MVCC 的四类工程代价">
+          <div class="slide-eyebrow">STRATUM 01 · 02 / 14 · 它解决什么问题</div>
+          <h1 class="slide-title">MVCC 用「版本成本」换取读写不阻塞，却衍生四类工程问题</h1>
+          <p class="slide-lead">官方文档 mvcc.sgml 说明：每个 SQL 看到某时间点快照，读写互不阻塞；但 UPDATE 写新版本、DELETE 只记删除事务，必须靠垃圾回收把旧版本安全变回可复用空间。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-ter-2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#BE653B"/>
+                </marker>
+              </defs>
+
+              <!-- Col 1: MVCC Write Mechanism -->
+              <rect x="0" y="10" width="350" height="410" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="0" y="10" width="350" height="38" fill="#245A6B"/>
+              <text x="18" y="34" class="svg-head-inv" font-size="15">1. MVCC 写入本质（非原地覆盖）</text>
+
+              <rect x="18" y="66" width="314" height="106" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1"/>
+              <text x="34" y="92" class="svg-mono" font-size="14">UPDATE table SET ...</text>
+              <text x="34" y="118" class="svg-body" font-size="14">写入全新行版本，旧版本留在原页</text>
+              <text x="34" y="142" class="svg-body" font-size="14">供仍在运行的旧快照继续读取。</text>
+
+              <rect x="18" y="188" width="314" height="106" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1"/>
+              <text x="34" y="214" class="svg-mono" font-size="14">DELETE FROM table ...</text>
+              <text x="34" y="240" class="svg-body" font-size="14">仅给旧版本打上删除事务信息，</text>
+              <text x="34" y="264" class="svg-body" font-size="14">不会立刻从 8KB 数据页里擦除。</text>
+
+              <rect x="18" y="310" width="314" height="92" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="34" y="336" class="svg-head" font-size="14">设计置换：锁等待 → 版本维护</text>
+              <text x="34" y="362" class="svg-body" font-size="13.5">普通读不阻塞写、写不阻塞读，</text>
+              <text x="34" y="384" class="svg-body" font-size="13.5">但残留版本必须有后台回收闭环。</text>
+
+              <!-- Orthogonal Connector Col 1 -> Col 2 -->
+              <path d="M350,215 H400" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-ter-2)"/>
+
+              <!-- Col 2: Four Engineering Problems -->
+              <rect x="404" y="10" width="540" height="410" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="404" y="10" width="540" height="38" fill="#BE653B"/>
+              <text x="422" y="34" class="svg-head-inv" font-size="15">2. 不回收引发的四类工程问题</text>
+
+              <!-- Problem 1 -->
+              <rect x="422" y="64" width="504" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="422" y="64" width="6" height="76" fill="#BE653B"/>
+              <text x="442" y="90" class="svg-terra" font-size="15">01 空间问题</text>
+              <text x="442" y="118" class="svg-body" font-size="14">旧行版本、dead line pointer、dead index tuple 堆积 → 表膨胀与索引膨胀</text>
+
+              <!-- Problem 2 -->
+              <rect x="422" y="152" width="504" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="422" y="152" width="6" height="76" fill="#BE653B"/>
+              <text x="442" y="178" class="svg-terra" font-size="15">02 性能问题</text>
+              <text x="442" y="206" class="svg-body" font-size="14">扫描需跳过不可见版本，索引遇到多物理版本，缓冲池与磁盘 IO 被垃圾占满</text>
+
+              <!-- Problem 3 -->
+              <rect x="422" y="240" width="504" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="422" y="240" width="6" height="76" fill="#BE653B"/>
+              <text x="442" y="266" class="svg-terra" font-size="15">03 正确性问题</text>
+              <text x="442" y="294" class="svg-body" font-size="14">事务 ID 为 32 位循环空间，旧 xmin 长期不冻结将触发 XID wraparound 灾难</text>
+
+              <!-- Problem 4 -->
+              <rect x="422" y="328" width="504" height="76" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="422" y="328" width="6" height="76" fill="#BE653B"/>
+              <text x="442" y="354" class="svg-terra" font-size="15">04 运维问题</text>
+              <text x="442" y="382" class="svg-body" font-size="14">长事务、prepared xact、逻辑复制槽、锁冲突与错误参数导致回收持续滞后</text>
+
+              <!-- Orthogonal Connector Col 2 -> Col 3 -->
+              <path d="M944,120 H994" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-2)"/>
+              <path d="M944,315 H994" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-ter-2)"/>
+
+              <!-- Col 3 Top: Core Goal -->
+              <rect x="998" y="10" width="402" height="200" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="998" y="10" width="402" height="36" fill="#2F7A66"/>
+              <text x="1016" y="33" class="svg-head-inv" font-size="15">3. 垃圾回收的真正目标</text>
+              <text x="1016" y="74" class="svg-head" font-size="15">不是「把表缩到最小」，而是：</text>
+              <text x="1016" y="104" class="svg-body" font-size="14">• 不破坏快照一致性的前提下回收旧版本</text>
+              <text x="1016" y="132" class="svg-body" font-size="14">• 让空间在「同一张表内」变为可复用</text>
+              <text x="1016" y="160" class="svg-body" font-size="14">• 推进 VM、FSM、冻结边界与统计信息</text>
+              <text x="1016" y="190" class="svg-teal" font-size="13.5">维持长期稳态空间与 XID 安全</text>
+
+              <!-- Col 3 Bottom: Explicit Costs -->
+              <rect x="998" y="226" width="402" height="194" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="998" y="226" width="402" height="36" fill="#BE653B"/>
+              <text x="1016" y="249" class="svg-head-inv" font-size="15">4. 必须正视的明确代价</text>
+              <text x="1016" y="290" class="svg-body" font-size="14">• 消耗磁盘 IO、CPU、WAL 与维护内存</text>
+              <text x="1016" y="318" class="svg-body" font-size="14">• 标准 VACUUM 通常不把空间还给 OS</text>
+              <text x="1016" y="346" class="svg-body" font-size="14">• VACUUM FULL 能缩文件，但需重写表</text>
+              <text x="1016" y="374" class="svg-body" font-size="14">  并持有强锁（ACCESS EXCLUSIVE）</text>
+              <text x="1016" y="404" class="svg-terra" font-size="13.5">运维核心：在收益与开销之间找平衡</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>面对空间、性能、XID 正确性与运维四重挑战，PostgreSQL 把垃圾回收拆成了哪三层机制与三个物理文件？</div>
+          <div class="slide-footer">
+            <span>依据：doc/src/sgml/mvcc.sgml · maintenance.sgml</span>
+            <span class="page-num">02 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-index="2" data-title="它是什么：三层机制与三个物理 Fork">
+          <div class="slide-eyebrow">STRATUM 02 · 03 / 14 · 垃圾回收体系全貌</div>
+          <h1 class="slide-title">三层回收机制协同三个物理 Fork，构成 Heap 存储维护骨架</h1>
+          <p class="slide-lead">针对内置 heap table access method，PostgreSQL 用「页内剪枝 → 标准 VACUUM → autovacuum」三层协作，维护 main fork、VM 与 FSM 三个物理文件。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+              </defs>
+
+              <!-- Left: 3-Layer Mechanism Stack -->
+              <rect x="0" y="0" width="700" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="20" y="30" class="svg-mono" font-size="13">MECHANISM LAYERS · 垃圾回收三层架构</text>
+
+              <!-- Layer 3: Autovacuum -->
+              <rect x="20" y="48" width="660" height="98" fill="#EBF1EE" stroke="#47808D" stroke-width="1.5"/>
+              <rect x="20" y="48" width="136" height="98" fill="#47808D"/>
+              <text x="40" y="92" class="svg-head-inv" font-size="16">第 3 层</text>
+              <text x="40" y="116" class="svg-mono-inv" font-size="13">自动调度</text>
+              <text x="174" y="78" class="svg-head" font-size="16">autovacuum（launcher + worker）</text>
+              <text x="174" y="104" class="svg-body" font-size="14">launcher 周期性唤醒 worker，依据表级统计、insert / update / delete</text>
+              <text x="174" y="128" class="svg-body" font-size="14">阈值、ANALYZE 阈值与 wraparound 风险自动挑选目标表。</text>
+
+              <!-- Down arrow -->
+              <path d="M350,146 V168" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-3)"/>
+
+              <!-- Layer 2: Lazy VACUUM -->
+              <rect x="20" y="172" width="660" height="106" fill="#E5EFF0" stroke="#2E6373" stroke-width="1.5"/>
+              <rect x="20" y="172" width="136" height="106" fill="#2E6373"/>
+              <text x="40" y="218" class="svg-head-inv" font-size="16">第 2 层</text>
+              <text x="40" y="242" class="svg-mono-inv" font-size="13">标准回收</text>
+              <text x="174" y="202" class="svg-head" font-size="16">lazy VACUUM（全表三阶段状态机）</text>
+              <text x="174" y="228" class="svg-body" font-size="14">扫描 heap 记录 dead TID → 清理索引中的 dead index entry → 回到 heap</text>
+              <text x="174" y="252" class="svg-body" font-size="14">将 LP_DEAD 转为 LP_UNUSED，同步更新 VM、FSM、冻结与统计信息。</text>
+
+              <!-- Down arrow -->
+              <path d="M350,278 V300" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-3)"/>
+
+              <!-- Layer 1: Heap Pruning -->
+              <rect x="20" y="304" width="660" height="106" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="20" y="304" width="136" height="106" fill="#1E4B5A"/>
+              <text x="40" y="350" class="svg-head-inv" font-size="16">第 1 层</text>
+              <text x="40" y="374" class="svg-mono-inv" font-size="13">页内剪枝</text>
+              <text x="174" y="334" class="svg-head" font-size="16">heap pruning（访问页或 VACUUM 时触发）</text>
+              <text x="174" y="360" class="svg-body" font-size="14">判断页内旧版本是否已无人可见，剪短 HOT 链、整理页内碎片，</text>
+              <text x="174" y="384" class="svg-body" font-size="14">必要时将 line pointer 标为 LP_DEAD 或直接释放为 LP_UNUSED。</text>
+
+              <!-- Orthogonal Bridge Left -> Right -->
+              <path d="M700,225 H752" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-3)"/>
+
+              <!-- Right: 3 Physical Forks -->
+              <rect x="756" y="0" width="644" height="430" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="776" y="30" class="svg-mono" font-size="13">PHYSICAL OBJECTS · 三个协同物理文件（Heap AM）</text>
+
+              <!-- Fork 1: Main -->
+              <rect x="776" y="48" width="604" height="96" fill="#F1EFE9" stroke="#245A6B" stroke-width="1"/>
+              <text x="794" y="76" class="svg-head" font-size="16">1. heap main fork</text>
+              <text x="980" y="76" class="svg-mono" font-size="13">relfilenode / relfilenode.1 ...</text>
+              <line x1="794" y1="88" x2="1362" y2="88" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="794" y="114" class="svg-body" font-size="14">存储行版本本体、page header、line pointer 数组、tuple header 与数据。</text>
+              <text x="794" y="135" class="svg-muted" font-size="12.5">垃圾产生与空间复用的主战场</text>
+
+              <!-- Fork 2: VM -->
+              <rect x="776" y="158" width="604" height="96" fill="#E5EFF0" stroke="#245A6B" stroke-width="1"/>
+              <text x="794" y="186" class="svg-head" font-size="16">2. visibility map (VM)</text>
+              <text x="1020" y="186" class="svg-mono" font-size="13">relfilenode_vm</text>
+              <line x1="794" y1="198" x2="1362" y2="198" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="794" y="224" class="svg-body" font-size="14">每个 heap 页占两位：all-visible 与 all-frozen。</text>
+              <text x="794" y="245" class="svg-teal" font-size="13">作用：支撑 VACUUM 跳页扫描 &amp; Index-Only Scan 跳过回表</text>
+
+              <!-- Fork 3: FSM -->
+              <rect x="776" y="268" width="604" height="96" fill="#F6F0E1" stroke="#AE8A3E" stroke-width="1"/>
+              <text x="794" y="296" class="svg-head" font-size="16">3. free space map (FSM)</text>
+              <text x="1030" y="296" class="svg-mono" font-size="13">relfilenode_fsm</text>
+              <line x1="794" y1="308" x2="1362" y2="308" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="794" y="334" class="svg-body" font-size="14">近似记录每个页面可用空间（树结构快速搜索）。</text>
+              <text x="794" y="355" class="svg-gold" font-size="13">作用：帮助 INSERT / UPDATE 快速找到可复用页面，减少文件扩展</text>
+
+              <!-- Extensible AM Note -->
+              <rect x="776" y="378" width="604" height="34" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="794" y="400" class="svg-muted" font-size="13">注：以上为内置 heap table AM 行为；PG 支持可扩展 table AM，其他引擎策略可不同。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>三层骨架已经立住——现在钻进最关键的第一道闸门：旧版本究竟何时才算真正「可回收的垃圾」？</div>
+          <div class="slide-footer">
+            <span>依据：doc/src/sgml/storage.sgml · src/backend/access/heap/</span>
+            <span class="page-num">03 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 (INTERACTIVE 1) ==================== -->
+        <section class="slide" data-index="3" data-title="核心原理 I：MVCC 可见性边界与长事务阻塞">
+          <div class="slide-eyebrow">STRATUM 03 · 04 / 14 · 核心原理 I · 可见性边界</div>
+          <h1 class="slide-title">提交不等于可回收：GlobalVisState 划定垃圾清除红线</h1>
+          <p class="slide-lead">HeapTupleSatisfiesVacuum() 与 pruneheap.c 坚持正确性优先：只要活跃快照、prepared xact 或复制槽仍可能读取旧版本，它就只能停在 recently dead。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="sim-bar">
+              <div class="sim-controls">
+                <button class="sim-btn primary" id="s4-play">播放演进</button>
+                <button class="sim-btn" id="s4-step">单步推进</button>
+                <button class="sim-btn" id="s4-block">模拟长事务阻塞：关</button>
+                <button class="sim-btn" id="s4-reset">重置</button>
+              </div>
+              <div class="sim-status" id="s4-status">阶段 1/4：版本 v1 (xmin=100) 正常存活 · 当前 XID=101</div>
+            </div>
+            <svg class="diagram-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-ter-4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#BE653B"/>
+                </marker>
+              </defs>
+
+              <!-- Top Band: 4 Lifecycle States -->
+              <rect id="s4-st1" x="0" y="8" width="295" height="122" fill="#E4F0EC" stroke="#2F7A66" stroke-width="2.5"/>
+              <text x="18" y="34" class="svg-mono" font-size="12">STATE 01 · LIVE</text>
+              <text x="18" y="60" class="svg-head" font-size="16">存活版本 (v1)</text>
+              <text x="18" y="86" class="svg-body" font-size="13.5">xmin=100 已提交，xmax=无效</text>
+              <text x="18" y="110" class="svg-teal" font-size="13">对当前所有新快照均可见</text>
+
+              <path d="M295,69 H355" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-4)"/>
+
+              <rect id="s4-st2" x="360" y="8" width="295" height="122" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="378" y="34" class="svg-mono" font-size="12">STATE 02 · DELETE/UPDATE</text>
+              <text x="378" y="60" class="svg-head" font-size="16">修改进行中 / 刚提交</text>
+              <text x="378" y="86" class="svg-body" font-size="13.5">事务 XID=105 写入 xmax=105</text>
+              <text x="378" y="110" class="svg-body" font-size="13">提交后旧快照仍可看到 v1</text>
+
+              <path d="M655,69 H715" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-4)"/>
+
+              <rect id="s4-st3" x="720" y="8" width="315" height="122" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="738" y="34" class="svg-terra" font-size="12">STATE 03 · RECENTLY DEAD</text>
+              <text x="738" y="60" class="svg-head" font-size="16">近期死亡（受红线保护）</text>
+              <text x="738" y="86" class="svg-body" font-size="13.5">xmax=105 &gt;= GlobalVisHorizon</text>
+              <text x="738" y="110" class="svg-terra" font-size="13">VACUUM 跑过也绝对不能清理！</text>
+
+              <path d="M1035,69 H1095" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-4)"/>
+
+              <rect id="s4-st4" x="1100" y="8" width="300" height="122" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="1118" y="34" class="svg-mono" font-size="12">STATE 04 · DEAD / REMOVABLE</text>
+              <text x="1118" y="60" class="svg-head" font-size="16">可安全回收垃圾</text>
+              <text x="1118" y="86" class="svg-body" font-size="13.5">xmax=105 &lt; GlobalVisHorizon</text>
+              <text x="1118" y="110" class="svg-teal" font-size="13">无人可见，允许剪枝与 VACUUM</text>
+
+              <!-- Middle Band: XID Timeline & Horizon Line -->
+              <rect x="0" y="150" width="1400" height="114" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="20" y="176" class="svg-mono" font-size="13">GLOBAL VISIBILITY HORIZON · XID 时间轴与可见性红线（heapam_visibility.c）</text>
+
+              <!-- Axis line -->
+              <line x1="60" y1="224" x2="1340" y2="224" stroke="#46585F" stroke-width="2"/>
+              <!-- Ticks -->
+              <line x1="140" y1="216" x2="140" y2="232" stroke="#46585F" stroke-width="2"/>
+              <text x="114" y="250" class="svg-mono" font-size="12">XID 100</text>
+              <line x1="420" y1="216" x2="420" y2="232" stroke="#46585F" stroke-width="2"/>
+              <text x="394" y="250" class="svg-mono" font-size="12">XID 102</text>
+              <line x1="700" y1="216" x2="700" y2="232" stroke="#46585F" stroke-width="2"/>
+              <text x="652" y="250" class="svg-terra" font-size="12">v1.xmax = 105</text>
+              <line x1="980" y1="216" x2="980" y2="232" stroke="#46585F" stroke-width="2"/>
+              <text x="954" y="250" class="svg-mono" font-size="12">XID 108</text>
+              <line x1="1240" y1="216" x2="1240" y2="232" stroke="#46585F" stroke-width="2"/>
+              <text x="1214" y="250" class="svg-mono" font-size="12">XID 112</text>
+
+              <!-- Marker for v1 xmax=105 -->
+              <rect x="692" y="216" width="16" height="16" fill="#BE653B"/>
+
+              <!-- Movable Horizon Indicator -->
+              <g id="s4-horizon" transform="translate(0, 0)">
+                <line x1="360" y1="184" x2="360" y2="256" stroke="#245A6B" stroke-width="3" stroke-dasharray="5,3"/>
+                <rect x="272" y="184" width="176" height="24" fill="#245A6B"/>
+                <text id="s4-horizon-lbl" x="282" y="200" class="svg-mono-inv" font-size="11.5">Horizon = XID 101</text>
+              </g>
+
+              <!-- Blocker Pin (hidden unless block mode on) -->
+              <g id="s4-pin" style="display:none;">
+                <rect x="522" y="184" width="174" height="24" fill="#BE653B"/>
+                <text x="532" y="200" class="svg-head-inv" font-size="12">长事务钉死 xmin=102！</text>
+              </g>
+
+              <!-- Bottom Band: 4 Real-World Blockers -->
+              <rect x="0" y="280" width="338" height="100" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="16" y="306" class="svg-terra" font-size="14">阻塞源 1：idle in transaction</text>
+              <text x="16" y="330" class="svg-body" font-size="13">连接开启事务后挂起，哪怕不写数据，</text>
+              <text x="16" y="352" class="svg-body" font-size="13">也会钉住 backend_xmin 拖垮全表清理。</text>
+
+              <rect x="354" y="280" width="338" height="100" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="370" y="306" class="svg-terra" font-size="14">阻塞源 2：长查询快照</text>
+              <text x="370" y="330" class="svg-body" font-size="13">超长报表本身未必持重锁，但它的快照</text>
+              <text x="370" y="352" class="svg-body" font-size="13">会迫使新产生的大量垃圾长时间保留。</text>
+
+              <rect x="708" y="280" width="338" height="100" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="724" y="306" class="svg-terra" font-size="14">阻塞源 3：prepared transaction</text>
+              <text x="724" y="330" class="svg-body" font-size="13">两阶段提交残留未决事务，持续占用</text>
+              <text x="724" y="352" class="svg-body" font-size="13">旧事务边界，阻碍可见性红线前进。</text>
+
+              <rect x="1062" y="280" width="338" height="100" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="1078" y="306" class="svg-terra" font-size="14">阻塞源 4：逻辑复制槽</text>
+              <text x="1078" y="330" class="svg-body" font-size="13">下游断连后槽仍保留 catalog_xmin，</text>
+              <text x="1078" y="352" class="svg-body" font-size="13">拖住系统 catalog 表垃圾无法清理。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>当旧版本终于跨过可见性红线变为 removable，标准 VACUUM 又是怎样用三阶段状态机完成清理的？</div>
+          <div class="slide-footer">
+            <span>依据：src/backend/access/heap/heapam_visibility.c · pruneheap.c</span>
+            <span class="page-num">04 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE 2) ==================== -->
+        <section class="slide" data-index="4" data-title="核心原理 II：Lazy VACUUM 三阶段状态机">
+          <div class="slide-eyebrow">STRATUM 04 · 05 / 14 · 核心原理 II · 标准 VACUUM 状态机</div>
+          <h1 class="slide-title">Lazy VACUUM 受内存约束循环执行，绝非一次从头删到尾</h1>
+          <p class="slide-lead">vacuumlazy.c 拆为三阶段：扫 Heap 存 dead TID → 清理全部索引 → 回收 Heap 页；一旦 TidStore 触及 maintenance_work_mem 上限即暂停扫描、多轮清理。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="sim-bar">
+              <div class="sim-controls">
+                <button class="sim-btn primary" id="s5-play">播放三阶段</button>
+                <button class="sim-btn" id="s5-step">单步执行</button>
+                <button class="sim-btn" id="s5-loop">模拟 TidStore 满载多轮循环：关</button>
+                <button class="sim-btn" id="s5-reset">重置</button>
+              </div>
+              <div class="sim-status" id="s5-status">就绪 · 入口：vacuum.c → heap_vacuum_rel()</div>
+            </div>
+            <svg class="diagram-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-ter-5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#BE653B"/>
+                </marker>
+              </defs>
+
+              <!-- Phase I -->
+              <rect id="s5-p1" x="0" y="12" width="380" height="196" fill="#E5EFF0" stroke="#245A6B" stroke-width="2"/>
+              <rect x="0" y="12" width="380" height="36" fill="#245A6B"/>
+              <text x="16" y="35" class="svg-head-inv" font-size="15">Phase I：扫描 Heap（lazy_scan_heap）</text>
+              <text x="18" y="72" class="svg-body" font-size="14">• 跳过 VM 标记已干净的页</text>
+              <text x="18" y="98" class="svg-body" font-size="14">• 页内执行 pruning 与 freezing</text>
+              <text x="18" y="124" class="svg-body" font-size="14">• 将 dead tuple 的 TID 存入 TidStore</text>
+              <!-- TidStore Memory Gauge inside Phase I -->
+              <rect x="18" y="144" width="344" height="48" fill="#F7F6F2" stroke="#74A5AD" stroke-width="1"/>
+              <text x="28" y="164" class="svg-mono" font-size="12">TidStore (maintenance_work_mem)</text>
+              <rect x="28" y="172" width="324" height="12" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <rect id="s5-membar" x="28" y="172" width="0" height="12" fill="#245A6B"/>
+
+              <!-- Connector P1 -> P2 -->
+              <path d="M380,110 H456" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-5)"/>
+              <text x="388" y="98" class="svg-mono" font-size="11.5">扫完/满载</text>
+
+              <!-- Phase II -->
+              <rect id="s5-p2" x="460" y="12" width="410" height="196" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="460" y="12" width="410" height="36" fill="#2E6373"/>
+              <text x="476" y="35" class="svg-head-inv" font-size="15">Phase II：清理索引（lazy_vacuum_all_indexes）</text>
+              <text x="478" y="72" class="svg-body" font-size="14">• 调用索引 AM 接口（支持 vacuumparallel.c 并行）</text>
+              <text x="478" y="98" class="svg-body" font-size="14">• 删除指向 TidStore 中 dead TID 的所有索引项</text>
+              <text x="478" y="128" class="svg-head" font-size="14">三大可跳过条件（避免无效开销）：</text>
+              <text x="478" y="154" class="svg-body" font-size="13.5">1. 表无索引或指定跳过  2. dead item 极少</text>
+              <text x="478" y="178" class="svg-terra" font-size="13.5">3. 触发 wraparound failsafe（保命优先）</text>
+
+              <!-- Connector P2 -> P3 -->
+              <path d="M870,110 H946" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-5)"/>
+              <text x="878" y="98" class="svg-mono" font-size="11.5">索引已清</text>
+
+              <!-- Phase III -->
+              <rect id="s5-p3" x="950" y="12" width="450" height="196" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <rect x="950" y="12" width="450" height="36" fill="#2F7A66"/>
+              <text x="966" y="35" class="svg-head-inv" font-size="15">Phase III：回收 Heap（lazy_vacuum_heap_rel）</text>
+              <text x="968" y="72" class="svg-body" font-size="14">• 再次访问记录过 dead TID 的相关 heap 页面</text>
+              <text x="968" y="98" class="svg-body" font-size="14">• 将已清索引的 LP_DEAD 转为可复用 LP_UNUSED</text>
+              <text x="968" y="124" class="svg-body" font-size="14">• 清空 TidStore、更新页面 FSM 与 VM 状态</text>
+              <rect x="968" y="144" width="414" height="48" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="982" y="164" class="svg-teal" font-size="13.5">安全原因：必须先删索引项再复用 LP_UNUSED，</text>
+              <text x="982" y="184" class="svg-body" font-size="13">否则旧索引会指向后来写入的新行（数据错乱）！</text>
+
+              <!-- Orthogonal Loop-back Arrow (TidStore Full -> Reset & Return to Phase I) -->
+              <path id="s5-loop-path" d="M1175,208 V254 H190 V212" stroke="#BE653B" stroke-width="2" stroke-dasharray="6,4" fill="none" marker-end="url(#arr-ter-5)"/>
+              <rect x="490" y="238" width="420" height="30" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="506" y="258" class="svg-terra" font-size="13.5">若 TidStore 满载：清空后返回 Phase I 继续扫描（多轮索引清理）</text>
+
+              <!-- Bottom End Band: Truncation & Final Cleanup -->
+              <rect id="s5-end" x="0" y="286" width="1400" height="90" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="0" y="286" width="220" height="90" fill="#1E4B5A"/>
+              <text x="20" y="324" class="svg-head-inv" font-size="15">扫尾阶段</text>
+              <text x="20" y="348" class="svg-mono-inv" font-size="12.5">Truncate &amp; Stats</text>
+              <text x="242" y="318" class="svg-head" font-size="15">尾部截断与统计更新（标准 VACUUM 不承诺把中间空洞还给操作系统）</text>
+              <text x="242" y="346" class="svg-body" font-size="14">仅当 relation 尾部存在连续全空页面且能拿到合适锁时，才尝试截断归还 OS；随后更新 relfrozenxid 与表统计。</text>
+              <text x="242" y="368" class="svg-muted" font-size="12.5">注意：VACUUM FULL 不走此状态机，而是走整表重写路径（持 ACCESS EXCLUSIVE 锁）。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>多索引表的 Phase II 代价最高——有没有办法把部分垃圾在 8KB 页内就地消化，根本不制造索引垃圾？</div>
+          <div class="slide-footer">
+            <span>依据：src/backend/commands/vacuum.c · vacuumlazy.c · vacuumparallel.c</span>
+            <span class="page-num">05 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 (INTERACTIVE 3) ==================== -->
+        <section class="slide" data-index="5" data-title="核心原理 III：HOT 更新与页内剪枝">
+          <div class="slide-eyebrow">STRATUM 05 · 06 / 14 · 核心原理 III · HOT 与页内剪枝</div>
+          <h1 class="slide-title">HOT 让非索引列更新留在同页，把索引垃圾消灭在萌芽期</h1>
+          <p class="slide-lead">README.HOT 解释：若更新未改二级索引列且同页有空闲空间，新版本成为 Heap-Only Tuple，索引仍指 root；页内 pruning 直接剪短 HOT 链。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="sim-bar">
+              <div class="sim-controls">
+                <button class="sim-btn primary" id="s6-play">播放 HOT 剪枝</button>
+                <button class="sim-btn" id="s6-step">单步演进</button>
+                <button class="sim-btn" id="s6-nonhot">对比：修改了索引列（非 HOT）</button>
+                <button class="sim-btn" id="s6-reset">重置</button>
+              </div>
+              <div class="sim-status" id="s6-status">初始态：索引仅 1 条指针指向 LP[1] → v1(live)</div>
+            </div>
+            <svg class="diagram-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-teal-6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#2F7A66"/>
+                </marker>
+                <marker id="arr-ter-6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#BE653B"/>
+                </marker>
+              </defs>
+
+              <!-- Left: Secondary Index -->
+              <rect x="0" y="10" width="290" height="362" fill="#F1EFE9" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="0" y="10" width="290" height="36" fill="#245A6B"/>
+              <text x="16" y="33" class="svg-head-inv" font-size="15">普通二级索引（B-Tree）</text>
+
+              <rect x="18" y="68" width="254" height="58" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="32" y="92" class="svg-mono" font-size="13">Index Entry #1</text>
+              <text x="32" y="114" class="svg-body" font-size="13">key=42 → TID(Page 7, LP[1])</text>
+
+              <!-- Extra Index Entries for Non-HOT comparison -->
+              <g id="s6-nonhot-idx" style="display:none;">
+                <rect x="18" y="142" width="254" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="32" y="166" class="svg-terra" font-size="13">新增 Index Entry #2 (非 HOT)</text>
+                <text x="32" y="188" class="svg-body" font-size="13">key=43 → TID(Page 7, LP[2])</text>
+
+                <rect x="18" y="216" width="254" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+                <text x="32" y="240" class="svg-terra" font-size="13">新增 Index Entry #3 (非 HOT)</text>
+                <text x="32" y="262" class="svg-body" font-size="13">key=44 → TID(Page 8, LP[1])</text>
+
+                <text x="18" y="306" class="svg-terra" font-size="13.5">代价：每个普通索引都新增条目</text>
+                <text x="18" y="328" class="svg-body" font-size="13">必须等全表 VACUUM Phase II 清理</text>
+              </g>
+
+              <g id="s6-hot-idx-note">
+                <rect x="18" y="154" width="254" height="196" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+                <text x="32" y="182" class="svg-teal" font-size="14">HOT 两大前提条件</text>
+                <text x="32" y="210" class="svg-body" font-size="13.5">1. 未修改任何普通索引列</text>
+                <text x="32" y="236" class="svg-body" font-size="13.5">2. 同一个 Heap 页有空位</text>
+                <line x1="32" y1="254" x2="256" y2="254" stroke="#2F7A66" stroke-width="1" opacity="0.35"/>
+                <text x="32" y="280" class="svg-head" font-size="13.5">结果：索引项 0 新增！</text>
+                <text x="32" y="304" class="svg-body" font-size="13">扫描仍经 LP[1] 沿 t_ctid</text>
+                <text x="32" y="326" class="svg-body" font-size="13">在同页内找到最新可见版本。</text>
+              </g>
+
+              <!-- Orthogonal arrow Index -> LP[1] -->
+              <path d="M272,97 H368" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-6)"/>
+
+              <!-- Center: 8KB Heap Page -->
+              <rect x="372" y="10" width="600" height="362" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="372" y="10" width="600" height="36" fill="#1E4B5A"/>
+              <text x="390" y="33" class="svg-head-inv" font-size="15">Heap Page 7（8KB 页内 Line Pointer 与 HOT 链）</text>
+
+              <!-- Line Pointer Array Band -->
+              <text x="390" y="68" class="svg-mono" font-size="12">LINE POINTER ARRAY（页首指针数组）</text>
+              <rect id="s6-lp1" x="390" y="78" width="176" height="54" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <text x="404" y="100" class="svg-mono" font-size="12.5">LP[1] (root)</text>
+              <text id="s6-lp1-st" x="404" y="120" class="svg-head" font-size="13">LP_NORMAL → v1</text>
+
+              <rect id="s6-lp2" x="584" y="78" width="176" height="54" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="598" y="100" class="svg-mono" font-size="12.5">LP[2]</text>
+              <text id="s6-lp2-st" x="598" y="120" class="svg-muted" font-size="13">LP_UNUSED</text>
+
+              <rect id="s6-lp3" x="778" y="78" width="176" height="54" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="792" y="100" class="svg-mono" font-size="12.5">LP[3]</text>
+              <text id="s6-lp3-st" x="792" y="120" class="svg-muted" font-size="13">LP_UNUSED</text>
+
+              <!-- Connectors LP -> Tuples -->
+              <path id="s6-c1" d="M478,132 V186" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-6)"/>
+              <path id="s6-c2" d="M672,132 V186" stroke="#D9D5CB" stroke-width="1.5" fill="none"/>
+              <path id="s6-c3" d="M866,132 V186" stroke="#D9D5CB" stroke-width="1.5" fill="none"/>
+              <!-- Redirect path (LP[1] -> LP[3] after pruning) -->
+              <path id="s6-redir" d="M478,132 V158 H866 V186" stroke="#2F7A66" stroke-width="2.5" fill="none" style="display:none;" marker-end="url(#arr-teal-6)"/>
+
+              <!-- Tuple Slots -->
+              <text x="390" y="180" class="svg-mono" font-size="12">TUPLE DATA AREA（页底行版本区，沿 t_ctid 链接）</text>
+
+              <rect id="s6-t1" x="390" y="190" width="176" height="92" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="404" y="216" class="svg-head" font-size="14">v1 (root)</text>
+              <text id="s6-t1-st" x="404" y="240" class="svg-teal" font-size="13">LIVE · 原始版本</text>
+              <text id="s6-t1-ctid" x="404" y="264" class="svg-mono" font-size="12">t_ctid = (7,1)</text>
+
+              <path id="s6-ct12" d="M566,236 H580" stroke="#D9D5CB" stroke-width="2" fill="none"/>
+
+              <rect id="s6-t2" x="584" y="190" width="176" height="92" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="598" y="216" class="svg-muted" font-size="14">v2 (HOT)</text>
+              <text id="s6-t2-st" x="598" y="240" class="svg-muted" font-size="13">空闲槽位</text>
+              <text id="s6-t2-ctid" x="598" y="264" class="svg-muted" font-size="12">—</text>
+
+              <path id="s6-ct23" d="M760,236 H774" stroke="#D9D5CB" stroke-width="2" fill="none"/>
+
+              <rect id="s6-t3" x="778" y="190" width="176" height="92" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="792" y="216" class="svg-muted" font-size="14">v3 (HOT)</text>
+              <text id="s6-t3-st" x="792" y="240" class="svg-muted" font-size="13">空闲槽位</text>
+              <text id="s6-t3-ctid" x="792" y="264" class="svg-muted" font-size="12">—</text>
+
+              <!-- Free space bar at bottom of page -->
+              <rect x="390" y="304" width="564" height="50" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text id="s6-page-note" x="406" y="334" class="svg-body" font-size="13.5">页内空闲区充足（调低 fillfactor 可为高频 HOT 更新预留空间）。</text>
+
+              <!-- Right: Engineering Takeaways -->
+              <rect x="996" y="10" width="404" height="362" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="996" y="10" width="404" height="36" fill="#2F7A66"/>
+              <text x="1014" y="33" class="svg-head-inv" font-size="15">页内剪枝边界与工程启发</text>
+
+              <rect x="1014" y="64" width="368" height="114" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="1030" y="90" class="svg-head" font-size="14.5">1. 中间死版本就地释放</text>
+              <text x="1030" y="116" class="svg-body" font-size="13.5">v2 无任何索引直接指向，页内 pruning</text>
+              <text x="1030" y="138" class="svg-body" font-size="13.5">可直接回收其空间并把 LP[1] 重定向</text>
+              <text x="1030" y="160" class="svg-body" font-size="13.5">（LP_REDIRECT）到存活的 v3。</text>
+
+              <rect x="1014" y="192" width="368" height="82" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="1030" y="218" class="svg-terra" font-size="14">2. Root 指针不可随意复用</text>
+              <text x="1030" y="244" class="svg-body" font-size="13.5">LP[1] 仍被索引指向，只能等标准 VACUUM</text>
+              <text x="1030" y="264" class="svg-body" font-size="13.5">删完索引项后才能变为 LP_UNUSED。</text>
+
+              <rect x="1014" y="288" width="368" height="70" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="1030" y="314" class="svg-teal" font-size="14">3. 建模铁律：少建冗余索引</text>
+              <text x="1030" y="340" class="svg-body" font-size="13.5">高频更新字段应与索引列分离，抑制写放大。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>页内剪枝与 VACUUM 清出空间后，系统靠哪两张地图实现「下次跳过干净页」与「新写入精准寻址」？</div>
+          <div class="slide-footer">
+            <span>依据：src/backend/access/heap/README.HOT · pruneheap.c</span>
+            <span class="page-num">06 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 ==================== -->
+        <section class="slide" data-index="6" data-title="核心原理 IV：VM 保守跳页与 FSM 近似寻址">
+          <div class="slide-eyebrow">STRATUM 06 · 07 / 14 · 核心原理 IV · VM 与 FSM 地图</div>
+          <h1 class="slide-title">VM 管「保守跳页」，FSM 管「近似寻址」：二者语义截然不同</h1>
+          <p class="slide-lead">storage.sgml 与 visibilitymap.c 指出：VM 两位 bit 必须严格保守，否则引发查询错乱；FSM 以约 1/256 页粒度做树形近似导航，不可作精确审计账本。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-gold-7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#AE8A3E"/>
+                </marker>
+              </defs>
+
+              <!-- Top Band: Visibility Map (VM) -->
+              <rect x="0" y="0" width="930" height="132" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="0" y="0" width="180" height="132" fill="#245A6B"/>
+              <text x="18" y="48" class="svg-head-inv" font-size="16">Visibility Map</text>
+              <text x="18" y="72" class="svg-mono-inv" font-size="12.5">relfilenode_vm</text>
+              <text x="18" y="102" class="svg-body-inv" font-size="12.5">每页 2 bit · 严格保守</text>
+
+              <!-- VM cells aligned with 5 Heap Pages -->
+              <rect x="200" y="18" width="132" height="96" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="216" y="42" class="svg-mono" font-size="12">Page 0</text>
+              <text x="216" y="68" class="svg-teal" font-size="12.5">all-visible = 1</text>
+              <text x="216" y="92" class="svg-teal" font-size="12.5">all-frozen  = 1</text>
+
+              <rect x="344" y="18" width="132" height="96" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="360" y="42" class="svg-mono" font-size="12">Page 1</text>
+              <text x="360" y="68" class="svg-teal" font-size="12.5">all-visible = 1</text>
+              <text x="360" y="92" class="svg-muted" font-size="12.5">all-frozen  = 0</text>
+
+              <rect x="488" y="18" width="132" height="96" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="504" y="42" class="svg-mono" font-size="12">Page 2</text>
+              <text x="504" y="68" class="svg-terra" font-size="12.5">all-visible = 0</text>
+              <text x="504" y="92" class="svg-terra" font-size="12.5">all-frozen  = 0</text>
+
+              <rect x="632" y="18" width="132" height="96" fill="#F7F6F2" stroke="#245A6B" stroke-width="1"/>
+              <text x="648" y="42" class="svg-mono" font-size="12">Page 3</text>
+              <text x="648" y="68" class="svg-teal" font-size="12.5">all-visible = 1</text>
+              <text x="648" y="92" class="svg-muted" font-size="12.5">all-frozen  = 0</text>
+
+              <rect x="776" y="18" width="132" height="96" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="792" y="42" class="svg-mono" font-size="12">Page 4</text>
+              <text x="792" y="68" class="svg-teal" font-size="12.5">all-visible = 1</text>
+              <text x="792" y="92" class="svg-teal" font-size="12.5">all-frozen  = 1</text>
+
+              <!-- Vertical Connectors VM <-> Heap -->
+              <path d="M266,132 V166" stroke="#245A6B" stroke-width="1.5"/>
+              <path d="M410,132 V166" stroke="#245A6B" stroke-width="1.5"/>
+              <path d="M554,132 V166" stroke="#BE653B" stroke-width="1.5"/>
+              <path d="M698,132 V166" stroke="#245A6B" stroke-width="1.5"/>
+              <path d="M842,132 V166" stroke="#245A6B" stroke-width="1.5"/>
+
+              <!-- Middle Band: Heap Main Fork -->
+              <rect x="0" y="166" width="930" height="96" fill="#F1EFE9" stroke="#1E4B5A" stroke-width="1.5"/>
+              <rect x="0" y="166" width="180" height="96" fill="#1E4B5A"/>
+              <text x="18" y="208" class="svg-head-inv" font-size="16">Heap Main Fork</text>
+              <text x="18" y="232" class="svg-mono-inv" font-size="12.5">8KB 数据页序列</text>
+
+              <rect x="200" y="182" width="132" height="64" fill="#CFE0DC" stroke="#245A6B" stroke-width="1"/>
+              <text x="216" y="208" class="svg-head" font-size="13.5">Page 0 (满)</text>
+              <text x="216" y="232" class="svg-body" font-size="12.5">全冻结 · 跳扫</text>
+
+              <rect x="344" y="182" width="132" height="64" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+              <text x="360" y="208" class="svg-head" font-size="13.5">Page 1 (空 3KB)</text>
+              <text x="360" y="232" class="svg-body" font-size="12.5">全可见 · 可复用</text>
+
+              <rect x="488" y="182" width="132" height="64" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="504" y="208" class="svg-terra" font-size="13.5">Page 2 (含死行)</text>
+              <text x="504" y="232" class="svg-body" font-size="12.5">写清 VM · 待清</text>
+
+              <rect x="632" y="182" width="132" height="64" fill="#EBF1EE" stroke="#245A6B" stroke-width="1"/>
+              <text x="648" y="208" class="svg-head" font-size="13.5">Page 3 (空 5KB)</text>
+              <text x="648" y="232" class="svg-body" font-size="12.5">高空闲 · 优选</text>
+
+              <rect x="776" y="182" width="132" height="64" fill="#CFE0DC" stroke="#245A6B" stroke-width="1"/>
+              <text x="792" y="208" class="svg-head" font-size="13.5">Page 4 (满)</text>
+              <text x="792" y="232" class="svg-body" font-size="12.5">全冻结 · 跳扫</text>
+
+              <!-- Vertical Connectors Heap <-> FSM -->
+              <path d="M266,262 V296" stroke="#AE8A3E" stroke-width="1.5"/>
+              <path d="M410,262 V296" stroke="#AE8A3E" stroke-width="1.5"/>
+              <path d="M554,262 V296" stroke="#AE8A3E" stroke-width="1.5"/>
+              <path d="M698,262 V296" stroke="#AE8A3E" stroke-width="1.5"/>
+              <path d="M842,262 V296" stroke="#AE8A3E" stroke-width="1.5"/>
+
+              <!-- Bottom Band: Free Space Map (FSM) -->
+              <rect x="0" y="296" width="930" height="134" fill="#F6F0E1" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="0" y="296" width="180" height="134" fill="#AE8A3E"/>
+              <text x="18" y="344" class="svg-head-inv" font-size="16">Free Space Map</text>
+              <text x="18" y="368" class="svg-mono-inv" font-size="12.5">relfilenode_fsm</text>
+              <text x="18" y="396" class="svg-body-inv" font-size="12.5">树形索引 · 近似导航</text>
+
+              <rect x="200" y="314" width="132" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="216" y="338" class="svg-mono" font-size="12">avail ≈ 0 B</text>
+              <text x="216" y="360" class="svg-muted" font-size="12">跳过分配</text>
+
+              <rect x="344" y="314" width="132" height="58" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1"/>
+              <text x="360" y="338" class="svg-gold" font-size="12.5">avail ≈ 3072 B</text>
+              <text x="360" y="360" class="svg-body" font-size="12">可承接新行</text>
+
+              <rect x="488" y="314" width="132" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="504" y="338" class="svg-mono" font-size="12">avail ≈ 256 B</text>
+              <text x="504" y="360" class="svg-muted" font-size="12">待回收释放</text>
+
+              <rect x="632" y="314" width="132" height="58" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="648" y="338" class="svg-teal" font-size="12.5">avail ≈ 5120 B</text>
+              <text x="648" y="360" class="svg-teal" font-size="12">INSERT 优先命中</text>
+
+              <rect x="776" y="314" width="132" height="58" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="792" y="338" class="svg-mono" font-size="12">avail ≈ 0 B</text>
+              <text x="792" y="360" class="svg-muted" font-size="12">跳过分配</text>
+
+              <text x="200" y="406" class="svg-body" font-size="13.5">freespace/README：以约 1/256 页（32 字节）粒度取整记录，靠自修复树结构快速检索，减少文件扩展。</text>
+
+              <!-- Right Side Comparison Panel -->
+              <rect x="954" y="0" width="446" height="205" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="954" y="0" width="446" height="36" fill="#245A6B"/>
+              <text x="972" y="23" class="svg-head-inv" font-size="15">VM 为什么必须「严格保守」？</text>
+              <text x="972" y="66" class="svg-body" font-size="14">• 设 1 时必须为真；为 0 只表示「未知」</text>
+              <text x="972" y="94" class="svg-body" font-size="14">• 若误设为 1：VACUUM 错跳脏页，或</text>
+              <text x="984" y="118" class="svg-terra" font-size="14">Index-Only Scan 返回错误数据！</text>
+              <text x="972" y="148" class="svg-body" font-size="14">• 因此 heap 修改会清 VM，VACUUM 设 bit</text>
+              <text x="984" y="172" class="svg-body" font-size="14">必须持页锁并满足 WAL / LSN 顺序约束。</text>
+
+              <rect x="954" y="225" width="446" height="205" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="954" y="225" width="446" height="36" fill="#AE8A3E"/>
+              <text x="972" y="248" class="svg-head-inv" font-size="15">FSM 为什么允许「近似与滞后」？</text>
+              <text x="972" y="290" class="svg-body" font-size="14">• 目标是空间寻址导航，而非正确性防线</text>
+              <text x="972" y="318" class="svg-body" font-size="14">• 就算值偏旧，写入找页时检查实际页空位</text>
+              <text x="984" y="342" class="svg-body" font-size="14">放不下再顺延并顺手修正 FSM 树即可。</text>
+              <text x="972" y="376" class="svg-gold" font-size="14">工程结论：把 FSM 当「近似导航」，</text>
+              <text x="972" y="400" class="svg-gold" font-size="14">绝不要把 pg_freespace 当精确空间账本！</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>理解了空间复用与跳页地图后，还有一个更致命的问题：只做 INSERT、毫无死元组的表为何也必须做 VACUUM？</div>
+          <div class="slide-footer">
+            <span>依据：src/backend/access/heap/visibilitymap.c · storage/freespace/README</span>
+            <span class="page-num">07 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-index="7" data-title="核心原理 V：32 位 XID 冻结与三档防回绕模式">
+          <div class="slide-eyebrow">STRATUM 07 · 08 / 14 · 核心原理 V · XID 冻结保命</div>
+          <h1 class="slide-title">Freezing 是垃圾回收的保命职责：三档模式守住 XID 安全线</h1>
+          <p class="slide-lead">普通 XID 是 32 位循环空间（maintenance.sgml）：老旧 xmin 不冻结会在绕回后变成「未来事务」，导致数据瞬间不可见；VACUUM 通过三档模式逐级兜底。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-ter-8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#BE653B"/>
+                </marker>
+              </defs>
+
+              <!-- Top Band: XID Age Progression & Parameter Thresholds -->
+              <rect x="0" y="0" width="1400" height="142" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="20" y="28" class="svg-mono" font-size="13">32-BIT XID AGE ESCALATION · 事务年龄递增与核心参数防线（同步覆盖 MultiXact 对应参数）</text>
+
+              <!-- Horizontal Gauge Bar -->
+              <rect x="30" y="54" width="330" height="24" fill="#CFE0DC" stroke="#245A6B" stroke-width="1"/>
+              <rect x="360" y="54" width="340" height="24" fill="#74A5AD" stroke="#245A6B" stroke-width="1"/>
+              <rect x="700" y="54" width="350" height="24" fill="#AE8A3E" stroke="#1B2B33" stroke-width="1"/>
+              <rect x="1050" y="54" width="320" height="24" fill="#BE653B" stroke="#1B2B33" stroke-width="1"/>
+
+              <text x="120" y="70" class="svg-head" font-size="12">安全期（普通冻结）</text>
+              <text x="455" y="70" class="svg-head-inv" font-size="12">表级主动冻结区间</text>
+              <text x="795" y="70" class="svg-head-inv" font-size="12">防回绕强制触发区间</text>
+              <text x="1140" y="70" class="svg-head-inv" font-size="12">Failsafe 最后防线</text>
+
+              <!-- Threshold Markers -->
+              <line x1="360" y1="78" x2="360" y2="96" stroke="#245A6B" stroke-width="2"/>
+              <text x="258" y="112" class="svg-mono" font-size="12">vacuum_freeze_min_age</text>
+              <text x="275" y="130" class="svg-muted" font-size="11.5">达到即可顺手冻结行</text>
+
+              <line x1="700" y1="78" x2="700" y2="96" stroke="#245A6B" stroke-width="2"/>
+              <text x="588" y="112" class="svg-mono" font-size="12">vacuum_freeze_table_age</text>
+              <text x="615" y="130" class="svg-muted" font-size="11.5">升级为 aggressive 模式</text>
+
+              <line x1="1050" y1="78" x2="1050" y2="96" stroke="#BE653B" stroke-width="2"/>
+              <text x="920" y="112" class="svg-terra" font-size="12">autovacuum_freeze_max_age</text>
+              <text x="926" y="130" class="svg-body" font-size="11.5">强制启动 &amp; 裁剪 pg_xact 文件</text>
+
+              <line x1="1368" y1="78" x2="1368" y2="96" stroke="#BE653B" stroke-width="2"/>
+              <text x="1196" y="112" class="svg-terra" font-size="12">vacuum_failsafe_age</text>
+              <text x="1196" y="130" class="svg-terra" font-size="11.5">逼近 20 亿回绕红线！</text>
+
+              <!-- Vertical Drop Connectors to 3 Mode Cards -->
+              <path d="M220,142 V164" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-ind-8)"/>
+              <path d="M700,142 V164" stroke="#245A6B" stroke-width="1.5" marker-end="url(#arr-ind-8)"/>
+              <path d="M1180,142 V164" stroke="#BE653B" stroke-width="1.5" marker-end="url(#arr-ter-8)"/>
+
+              <!-- Mode 1: Normal -->
+              <rect x="0" y="168" width="446" height="262" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="0" y="168" width="446" height="40" fill="#245A6B"/>
+              <text x="18" y="193" class="svg-head-inv" font-size="16">模式 1：normal（常规模式）</text>
+              <text x="18" y="232" class="svg-mono" font-size="12.5">触发原因</text>
+              <text x="18" y="254" class="svg-body" font-size="14">update / delete / insert 阈值达到，或手工执行。</text>
+              <line x1="18" y1="270" x2="428" y2="270" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="18" y="294" class="svg-mono" font-size="12.5">核心目标</text>
+              <text x="18" y="316" class="svg-body" font-size="14">清理 dead tuple、更新 VM/FSM、顺手冻结老行。</text>
+              <line x1="18" y1="332" x2="428" y2="332" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="18" y="356" class="svg-teal" font-size="13.5">扫描代价：最低</text>
+              <text x="18" y="380" class="svg-body" font-size="13.5">可跳过 VM 已标记 all-visible 的干净页；</text>
+              <text x="18" y="402" class="svg-body" font-size="13.5">新版本支持 eager freeze 分摊未来冻结压力。</text>
+
+              <!-- Mode 2: Aggressive -->
+              <rect x="477" y="168" width="446" height="262" fill="#F6F0E1" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="477" y="168" width="446" height="40" fill="#AE8A3E"/>
+              <text x="495" y="193" class="svg-head-inv" font-size="16">模式 2：aggressive（主动冻结）</text>
+              <text x="495" y="232" class="svg-gold" font-size="12.5">触发原因</text>
+              <text x="495" y="254" class="svg-body" font-size="14">relfrozenxid 或 relminmxid 触及表级冻结年龄。</text>
+              <line x1="495" y1="270" x2="905" y2="270" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="495" y="294" class="svg-gold" font-size="12.5">核心目标</text>
+              <text x="495" y="316" class="svg-body" font-size="14">扫描所有「非 all-frozen」页，推进冻结边界。</text>
+              <line x1="495" y1="332" x2="905" y2="332" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="495" y="356" class="svg-terra" font-size="13.5">扫描代价：显著上升</text>
+              <text x="495" y="380" class="svg-body" font-size="13.5">即使页是 all-visible 但未 all-frozen 也必须扫；</text>
+              <text x="495" y="402" class="svg-body" font-size="13.5">把老行标记为「对所有当前与未来事务可见」。</text>
+
+              <!-- Mode 3: Failsafe -->
+              <rect x="954" y="168" width="446" height="262" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="954" y="168" width="446" height="40" fill="#BE653B"/>
+              <text x="972" y="193" class="svg-head-inv" font-size="16">模式 3：failsafe（保命熔断）</text>
+              <text x="972" y="232" class="svg-terra" font-size="12.5">触发原因</text>
+              <text x="972" y="254" class="svg-body" font-size="14">wraparound 风险逼近系统级最后安全线。</text>
+              <line x1="972" y1="270" x2="1382" y2="270" stroke="#BE653B" stroke-width="1" opacity="0.35"/>
+              <text x="972" y="294" class="svg-terra" font-size="12.5">核心目标</text>
+              <text x="972" y="316" class="svg-body" font-size="14">不惜代价最快推进 relfrozenxid，避免停库！</text>
+              <line x1="972" y1="332" x2="1382" y2="332" stroke="#BE653B" stroke-width="1" opacity="0.35"/>
+              <text x="972" y="356" class="svg-terra" font-size="13.5">特殊行为：放弃次要优化</text>
+              <text x="972" y="380" class="svg-body" font-size="13.5">• 跳过索引清理等非必要工作</text>
+              <text x="972" y="402" class="svg-body" font-size="13.5">• 取消 cost delay 限速，全速推进冻结</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>面对成百上千张表的死元组与冻结年龄，靠人工巡检根本管不过来——PostgreSQL 靠什么自动调度它们？</div>
+          <div class="slide-footer">
+            <span>依据：doc/src/sgml/maintenance.sgml · vacuum_max_eager_freeze_failure_rate</span>
+            <span class="page-num">08 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 (INTERACTIVE 4) ==================== -->
+        <section class="slide" data-index="8" data-title="核心原理 VI：Autovacuum 自动调度与决策模拟">
+          <div class="slide-eyebrow">CONTROL PLANE · 09 / 14 · 核心原理 VI · Autovacuum 调度器</div>
+          <h1 class="slide-title">Autovacuum 不是简单开关，而是分优先级的后台调度器</h1>
+          <p class="slide-lead">autovacuum.c 由 launcher 按库分配 worker，worker 遵循「防回绕保命 → 死元组阈值 → 插入阈值 → ANALYZE」逐级判定；调整参数体验大表触发盲区。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone has-controls">
+            <div class="sim-bar">
+              <div class="sim-controls">
+                <div class="sim-input-group">
+                  <label for="s9-rows">表行数 reltuples:</label>
+                  <select id="s9-rows">
+                    <option value="100000">10 万行（小表）</option>
+                    <option value="10000000">1000 万行（大表）</option>
+                  </select>
+                </div>
+                <div class="sim-input-group">
+                  <label for="s9-dead">死元组 n_dead_tup:</label>
+                  <input type="range" id="s9-dead" min="0" max="2500000" step="10000" value="15000"/>
+                  <span id="s9-dead-val" style="font-family:var(--font-mono);min-width:74px;">15,000</span>
+                </div>
+                <button class="sim-btn" id="s9-wrap">模拟逼近 Freeze Max Age：关</button>
+              </div>
+              <div class="sim-status" id="s9-status">阈值 = 50 + 0.2 × 100,000 = 20,050 → 未触发</div>
+            </div>
+            <svg class="diagram-svg" viewBox="0 0 1400 382" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-ter-9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#BE653B"/>
+                </marker>
+              </defs>
+
+              <!-- Left: Launcher -> Worker -->
+              <rect x="0" y="12" width="240" height="150" fill="#1E4B5A" stroke="#1B2B33" stroke-width="1"/>
+              <text x="18" y="42" class="svg-mono-inv" font-size="12">AutoVacLauncherMain()</text>
+              <text x="18" y="70" class="svg-head-inv" font-size="16">Launcher 进程</text>
+              <text x="18" y="98" class="svg-body-inv" font-size="13">周期性巡检各数据库，</text>
+              <text x="18" y="120" class="svg-body-inv" font-size="13">按需向 postmaster 申请</text>
+              <text x="18" y="142" class="svg-body-inv" font-size="13">派生 worker 进程。</text>
+
+              <path d="M120,162 V210" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-9)"/>
+
+              <rect x="0" y="214" width="240" height="156" fill="#2E6373" stroke="#1B2B33" stroke-width="1"/>
+              <text x="18" y="244" class="svg-mono-inv" font-size="12">AutoVacWorkerMain()</text>
+              <text x="18" y="272" class="svg-head-inv" font-size="16">Worker 进程</text>
+              <text x="18" y="300" class="svg-body-inv" font-size="13">连接单个库，调用</text>
+              <text x="18" y="322" class="svg-mono-inv" font-size="12">relation_needs_vacanalyze()</text>
+              <text x="18" y="346" class="svg-body-inv" font-size="13">按优先级逐表筛选执行。</text>
+
+              <!-- Connector Worker -> Priority Stack -->
+              <path d="M240,292 H286 V191 H318" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-ind-9)"/>
+
+              <!-- Center: 4-Stage Priority Decision Stack -->
+              <rect x="322" y="12" width="600" height="358" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="340" y="38" class="svg-mono" font-size="12.5">PRIORITY DECISION FLOW · 单表判定优先级（从上到下）</text>
+
+              <!-- P1 Wraparound -->
+              <rect id="s9-b1" x="340" y="52" width="564" height="68" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="358" y="78" class="svg-terra" font-size="14.5">P1 最高优：防 Wraparound 冻结检查</text>
+              <text x="358" y="104" class="svg-body" font-size="13.5">age(relfrozenxid) &gt; autovacuum_freeze_max_age → 强制启动（不可忽略）</text>
+
+              <!-- P2 Dead Tuple Threshold -->
+              <rect id="s9-b2" x="340" y="132" width="564" height="72" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="358" y="158" class="svg-head" font-size="14.5">P2 常规回收：Dead Tuple 阈值公式</text>
+              <text id="s9-formula" x="358" y="184" class="svg-mono" font-size="13">threshold = 50 + 0.2 × 100,000 = 20,050（受 max_threshold 限制）</text>
+
+              <!-- P3 Insert Vacuum -->
+              <rect id="s9-b3" x="340" y="216" width="564" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="358" y="242" class="svg-head" font-size="14.5">P3 插入推进：Insert Vacuum 阈值</text>
+              <text x="358" y="266" class="svg-body" font-size="13.5">针对 append-only 表，及时推进 VM all-visible / all-frozen 与冻结</text>
+
+              <!-- P4 Analyze -->
+              <rect id="s9-b4" x="340" y="294" width="564" height="64" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1.5"/>
+              <text x="358" y="320" class="svg-head" font-size="14.5">P4 统计刷新：ANALYZE 独立阈值</text>
+              <text x="358" y="344" class="svg-body" font-size="13.5">更新 pg_statistic，确保优化器执行计划不因数据分布变化跑偏</text>
+
+              <!-- Right: 4 Common Misconceptions -->
+              <rect x="946" y="12" width="454" height="358" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="946" y="12" width="454" height="36" fill="#BE653B"/>
+              <text x="964" y="35" class="svg-head-inv" font-size="15">四大极易误解的真实行为</text>
+
+              <rect x="964" y="62" width="418" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="980" y="86" class="svg-terra" font-size="13.5">1. autovacuum = off ≠ 永不执行</text>
+              <text x="980" y="110" class="svg-body" font-size="13">防 wraparound 的 autovacuum 仍会强制拉起！</text>
+
+              <rect x="964" y="138" width="418" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="980" y="162" class="svg-terra" font-size="13.5">2. 锁冲突让路机制有别</text>
+              <text x="980" y="186" class="svg-body" font-size="13">普通 worker 遇冲突锁自动让路；防回绕 worker 不会。</text>
+
+              <rect x="964" y="214" width="418" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="980" y="238" class="svg-terra" font-size="13.5">3. 分区父表统计盲区</text>
+              <text x="980" y="262" class="svg-body" font-size="13">父表不存 tuple，autovacuum 不会自动 ANALYZE 父表。</text>
+
+              <rect x="964" y="290" width="418" height="66" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="980" y="314" class="svg-terra" font-size="13.5">4. 临时表完全不在管辖内</text>
+              <text x="980" y="338" class="svg-body" font-size="13">autovacuum 无法访问临时表，需会话自行 VACUUM。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>至此四大机制全部拆透——把标准 VACUUM、VACUUM FULL、HOT 与 autovacuum 摆上同一张工程规格表横向对比！</div>
+          <div class="slide-footer">
+            <span>依据：src/backend/postmaster/autovacuum.c · maintenance.sgml</span>
+            <span class="page-num">09 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-index="9" data-title="横向对比与效果权衡：边界与收益代价">
+          <div class="slide-eyebrow">EVALUATION · 10 / 14 · 横向对比与效果评估</div>
+          <h1 class="slide-title">四种手段边界分明：稳态靠标准 VACUUM，重写只是重灾手术</h1>
+          <p class="slide-lead">核心不是「谁更强」，而是各自职责边界不同；同时必须把空间复用、Index-Only Scan 收益与 IO/CPU/WAL 开销分开评估。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top Matrix Table (y: 0..274) -->
+              <rect x="0" y="0" width="1400" height="274" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <!-- Header Row -->
+              <rect x="0" y="0" width="160" height="40" fill="#1E4B5A"/>
+              <rect x="160" y="0" width="310" height="40" fill="#245A6B"/>
+              <rect x="470" y="0" width="310" height="40" fill="#BE653B"/>
+              <rect x="780" y="0" width="310" height="40" fill="#2F7A66"/>
+              <rect x="1090" y="0" width="310" height="40" fill="#47808D"/>
+
+              <text x="16" y="25" class="svg-head-inv" font-size="14">对比维度</text>
+              <text x="176" y="25" class="svg-head-inv" font-size="14">标准 VACUUM</text>
+              <text x="486" y="25" class="svg-head-inv" font-size="14">VACUUM FULL / 表重写</text>
+              <text x="796" y="25" class="svg-head-inv" font-size="14">heap pruning / HOT</text>
+              <text x="1106" y="25" class="svg-head-inv" font-size="14">autovacuum</text>
+
+              <!-- Row 1: Goal -->
+              <rect x="0" y="40" width="1400" height="46" fill="#F1EFE9"/>
+              <text x="16" y="68" class="svg-head" font-size="13.5">核心目标</text>
+              <text x="176" y="68" class="svg-body" font-size="13">同表复用空间、推进 VM/FSM/冻结</text>
+              <text x="486" y="68" class="svg-body" font-size="13">重写整表压缩空洞，缩小物理文件</text>
+              <text x="796" y="68" class="svg-body" font-size="13">页内剪枝与整理，减少索引垃圾</text>
+              <text x="1106" y="68" class="svg-body" font-size="13">按阈值与回绕风险自动调度维护</text>
+
+              <!-- Row 2: Lock -->
+              <rect x="0" y="86" width="1400" height="46" fill="#F7F6F2"/>
+              <text x="16" y="114" class="svg-head" font-size="13.5">锁影响</text>
+              <text x="176" y="114" class="svg-teal" font-size="13">与读写并行（SHARE UPDATE EXCL）</text>
+              <text x="486" y="114" class="svg-terra" font-size="13">强锁阻断读写（ACCESS EXCLUSIVE）</text>
+              <text x="796" y="114" class="svg-teal" font-size="13">buffer cleanup lock（多非阻塞尝试）</text>
+              <text x="1106" y="114" class="svg-body" font-size="13">普通 worker 遇冲突自动让路</text>
+
+              <!-- Row 3: OS Disk Return -->
+              <rect x="0" y="132" width="1400" height="46" fill="#F1EFE9"/>
+              <text x="16" y="160" class="svg-head" font-size="13.5">归还磁盘 OS</text>
+              <text x="176" y="160" class="svg-body" font-size="13">通常不归还（仅尾部全空页可截断）</text>
+              <text x="486" y="160" class="svg-teal" font-size="13">通常可显著缩小文件并归还 OS</text>
+              <text x="796" y="160" class="svg-body" font-size="13">不归还 OS，仅改善 8KB 页内复用</text>
+              <text x="1106" y="160" class="svg-body" font-size="13">不执行 FULL，行为同标准 VACUUM</text>
+
+              <!-- Row 4: Index -->
+              <rect x="0" y="178" width="1400" height="46" fill="#F7F6F2"/>
+              <text x="16" y="206" class="svg-head" font-size="13.5">索引处理</text>
+              <text x="176" y="206" class="svg-body" font-size="13">经索引 AM 删死项（可并行）</text>
+              <text x="486" y="206" class="svg-body" font-size="13">随表重建索引，空间彻底重排</text>
+              <text x="796" y="206" class="svg-teal" font-size="13">HOT 更新根本不新增普通索引项</text>
+              <text x="1106" y="206" class="svg-body" font-size="13">调用标准 VACUUM 路径</text>
+
+              <!-- Row 5: Fit Scenario -->
+              <rect x="0" y="224" width="1400" height="50" fill="#F1EFE9"/>
+              <text x="16" y="254" class="svg-head" font-size="13.5">定位与风险</text>
+              <text x="176" y="254" class="svg-body" font-size="13">日常稳态维护；怕长事务与 IO 干扰</text>
+              <text x="486" y="254" class="svg-terra" font-size="13">重灾后窗口手术；忌高峰无窗口使用</text>
+              <text x="796" y="254" class="svg-body" font-size="13">高频改非索引列；受 fillfactor 限制</text>
+              <text x="1106" y="254" class="svg-body" font-size="13">生产常态底座；忌大表用默认比例</text>
+
+              <!-- Column Dividers -->
+              <line x1="160" y1="0" x2="160" y2="274" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="470" y1="0" x2="470" y2="274" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="780" y1="0" x2="780" y2="274" stroke="#D9D5CB" stroke-width="1"/>
+              <line x1="1090" y1="0" x2="1090" y2="274" stroke="#D9D5CB" stroke-width="1"/>
+
+              <!-- Bottom Band: Benefits vs Costs (y: 292..430) -->
+              <rect x="0" y="292" width="688" height="138" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="0" y="292" width="688" height="32" fill="#2F7A66"/>
+              <text x="16" y="313" class="svg-head-inv" font-size="14">核心收益（BENEFITS）</text>
+              <text x="16" y="346" class="svg-body" font-size="13.5">• dead tuple 回收后同表复用，FSM 减少 relation 物理扩展</text>
+              <text x="16" y="370" class="svg-body" font-size="13.5">• dead index tuple 清理，降低索引页分裂与扫描版本 churn</text>
+              <text x="16" y="394" class="svg-body" font-size="13.5">• VM all-visible 提速 Index-Only Scan，all-frozen 减未来扫页</text>
+              <text x="16" y="418" class="svg-teal" font-size="13.5">• 推进 relfrozenxid / datfrozenxid，降低回绕风险并裁剪 pg_xact</text>
+
+              <rect x="712" y="292" width="688" height="138" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="712" y="292" width="688" height="32" fill="#BE653B"/>
+              <text x="728" y="313" class="svg-head-inv" font-size="14">明确代价（COSTS · 切忌套用不存在的「标准膨胀比例」）</text>
+              <text x="728" y="346" class="svg-body" font-size="13.5">• 扫描 Heap 与索引消耗磁盘 IO，冲击缓存命中率与 IO 队列</text>
+              <text x="728" y="370" class="svg-body" font-size="13.5">• pruning、freezing、VM/FSM 更新持续消耗 CPU 与 WAL 带宽</text>
+              <text x="728" y="394" class="svg-body" font-size="13.5">• 多索引表 Phase II 代价高；TidStore 满载会触发多轮索引扫描</text>
+              <text x="728" y="418" class="svg-terra" font-size="13.5">• 长事务阻塞时 VACUUM 做了扫描却清不掉关键垃圾（白费 IO）</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>理论和权衡都到位了，在测试库里用哪五个系统视图与扩展，就能把垃圾回收全过程看得一清二楚？</div>
+          <div class="slide-footer">
+            <span>依据：原文第四章横向对比 &amp; 第五章收益代价分析</span>
+            <span class="page-num">10 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-index="10" data-title="实操观测：五步可验证 SQL 仪表盘">
+          <div class="slide-eyebrow">VERIFICATION · 11 / 14 · 实操 DEMO 与观测视图</div>
+          <h1 class="slide-title">用五个系统视图与扩展，把黑盒垃圾回收变成透明仪表盘</h1>
+          <p class="slide-lead">以下为测试库最小可验证路径（切勿在生产直接造数压测）：从死元组压力、实时阶段进度、VM/FSM 地图到冻结年龄与阻塞源，全链路实证。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+              </defs>
+
+              <!-- 5 Pipeline Cards (each width 264, gap 20 -> 5*264 + 4*20 = 1320+80 = 1400) -->
+              <!-- Step 1 -->
+              <rect x="0" y="16" width="264" height="398" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="0" y="16" width="264" height="44" fill="#1E4B5A"/>
+              <text x="14" y="43" class="svg-head-inv" font-size="14.5">01 观测死元组压力</text>
+              <text x="14" y="84" class="svg-mono" font-size="12.5">pg_stat_user_tables</text>
+              <line x1="14" y1="96" x2="250" y2="96" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="14" y="108" width="236" height="126" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="24" y="130" class="svg-mono" font-size="11.5">SELECT relname,</text>
+              <text x="24" y="148" class="svg-mono" font-size="11.5">  n_live_tup,</text>
+              <text x="24" y="166" class="svg-mono" font-size="11.5">  n_dead_tup,</text>
+              <text x="24" y="184" class="svg-mono" font-size="11.5">  n_tup_upd, n_tup_del,</text>
+              <text x="24" y="202" class="svg-mono" font-size="11.5">  last_autovacuum</text>
+              <text x="24" y="220" class="svg-mono" font-size="11.5">FROM pg_stat_user_tables;</text>
+              <text x="14" y="262" class="svg-head" font-size="13.5">关键观察点：</text>
+              <text x="14" y="286" class="svg-body" font-size="13">UPDATE/DELETE 后 dead</text>
+              <text x="14" y="308" class="svg-body" font-size="13">压力显著攀升；但注意</text>
+              <text x="14" y="330" class="svg-terra" font-size="13">n_dead_tup 是估算值，</text>
+              <text x="14" y="352" class="svg-body" font-size="13">适合趋势监控非逐行审计。</text>
+
+              <path d="M264,215 H280" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-11)"/>
+
+              <!-- Step 2 -->
+              <rect x="284" y="16" width="264" height="398" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="284" y="16" width="264" height="44" fill="#2E6373"/>
+              <text x="298" y="43" class="svg-head-inv" font-size="14.5">02 跟踪 VACUUM 进度</text>
+              <text x="298" y="84" class="svg-mono" font-size="12">pg_stat_progress_vacuum</text>
+              <line x1="298" y1="96" x2="534" y2="96" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="298" y="108" width="236" height="126" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="308" y="130" class="svg-mono" font-size="11.5">SELECT pid, phase, mode,</text>
+              <text x="308" y="148" class="svg-mono" font-size="11.5">  heap_blks_scanned,</text>
+              <text x="308" y="166" class="svg-mono" font-size="11.5">  heap_blks_vacuumed,</text>
+              <text x="308" y="184" class="svg-mono" font-size="11.5">  index_vacuum_count,</text>
+              <text x="308" y="202" class="svg-mono" font-size="11.5">  delay_time</text>
+              <text x="308" y="220" class="svg-mono" font-size="11.5">FROM pg_stat_progress_..;</text>
+              <text x="298" y="262" class="svg-head" font-size="13.5">对应状态机 phase：</text>
+              <text x="298" y="286" class="svg-body" font-size="12.5">• scanning heap</text>
+              <text x="298" y="308" class="svg-body" font-size="12.5">• vacuuming indexes</text>
+              <text x="298" y="330" class="svg-body" font-size="12.5">• vacuuming heap</text>
+              <text x="298" y="352" class="svg-body" font-size="12.5">• truncating / final cleanup</text>
+
+              <path d="M548,215 H564" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-11)"/>
+
+              <!-- Step 3 -->
+              <rect x="568" y="16" width="264" height="398" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="568" y="16" width="264" height="44" fill="#47808D"/>
+              <text x="582" y="43" class="svg-head-inv" font-size="14.5">03 检查 VM 与 FSM</text>
+              <text x="582" y="84" class="svg-mono" font-size="11.5">pg_visibility / freespacemap</text>
+              <line x1="582" y1="96" x2="818" y2="96" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="582" y="108" width="236" height="126" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="592" y="130" class="svg-mono" font-size="11.5">SELECT *</text>
+              <text x="592" y="148" class="svg-mono" font-size="11.5">FROM pg_visibility_map</text>
+              <text x="592" y="166" class="svg-mono" font-size="11.5">  _summary('gc_demo');</text>
+              <text x="592" y="190" class="svg-mono" font-size="11.5">SELECT blkno, avail</text>
+              <text x="592" y="208" class="svg-mono" font-size="11.5">FROM pg_freespace(t)</text>
+              <text x="592" y="224" class="svg-mono" font-size="11.5">ORDER BY blkno LIMIT 20;</text>
+              <text x="582" y="262" class="svg-head" font-size="13.5">关键观察点：</text>
+              <text x="582" y="286" class="svg-body" font-size="13">验证 VACUUM 后 all-visible</text>
+              <text x="582" y="308" class="svg-body" font-size="13">与 all-frozen 比例提升；</text>
+              <text x="582" y="330" class="svg-gold" font-size="13">FSM avail 值有取整且</text>
+              <text x="582" y="352" class="svg-body" font-size="13">可能滞后，仅作近似导航。</text>
+
+              <path d="M832,215 H848" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-11)"/>
+
+              <!-- Step 4 -->
+              <rect x="852" y="16" width="264" height="398" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="852" y="16" width="264" height="44" fill="#AE8A3E"/>
+              <text x="866" y="43" class="svg-head-inv" font-size="14.5">04 排查回绕年龄</text>
+              <text x="866" y="84" class="svg-mono" font-size="12">pg_class / pg_database</text>
+              <line x1="866" y1="96" x2="1102" y2="96" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="866" y="108" width="236" height="126" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="876" y="130" class="svg-mono" font-size="11.5">SELECT c.oid::regclass,</text>
+              <text x="876" y="148" class="svg-mono" font-size="11.5">  greatest(</text>
+              <text x="876" y="166" class="svg-mono" font-size="11.5">    age(c.relfrozenxid),</text>
+              <text x="876" y="184" class="svg-mono" font-size="11.5">    age(t.relfrozenxid))</text>
+              <text x="876" y="202" class="svg-mono" font-size="11.5">FROM pg_class c</text>
+              <text x="876" y="220" class="svg-mono" font-size="11.5">LEFT JOIN TOAST t ...;</text>
+              <text x="866" y="262" class="svg-head" font-size="13.5">关键观察点：</text>
+              <text x="866" y="286" class="svg-body" font-size="13">同时监控主表、TOAST 表</text>
+              <text x="866" y="308" class="svg-body" font-size="13">与库级 age(datfrozenxid)，</text>
+              <text x="866" y="330" class="svg-gold" font-size="13">生产中还需一并核查</text>
+              <text x="866" y="352" class="svg-body" font-size="13">MultiXact 年龄避免漏报。</text>
+
+              <path d="M1116,215 H1132" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-11)"/>
+
+              <!-- Step 5 -->
+              <rect x="1136" y="16" width="264" height="398" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="1136" y="16" width="264" height="44" fill="#BE653B"/>
+              <text x="1150" y="43" class="svg-head-inv" font-size="14.5">05 定位三大阻塞源</text>
+              <text x="1150" y="84" class="svg-terra" font-size="12">xmin / prepared / slots</text>
+              <line x1="1150" y1="96" x2="1386" y2="96" stroke="#BE653B" stroke-width="1" opacity="0.35"/>
+              <rect x="1150" y="108" width="236" height="126" fill="#F7F6F2" stroke="#BE653B" stroke-width="1"/>
+              <text x="1160" y="130" class="svg-mono" font-size="11.5">1) pg_stat_activity</text>
+              <text x="1160" y="148" class="svg-body" font-size="11.5">   backend_xmin IS NOT NULL</text>
+              <text x="1160" y="172" class="svg-mono" font-size="11.5">2) pg_prepared_xacts</text>
+              <text x="1160" y="190" class="svg-body" font-size="11.5">   ORDER BY age(transaction)</text>
+              <text x="1160" y="212" class="svg-mono" font-size="11.5">3) pg_replication_slots</text>
+              <text x="1160" y="228" class="svg-body" font-size="11.5">   xmin / catalog_xmin</text>
+              <text x="1150" y="262" class="svg-terra" font-size="13.5">排查纪律：</text>
+              <text x="1150" y="286" class="svg-body" font-size="13">目标不是「看到就杀」，</text>
+              <text x="1150" y="308" class="svg-body" font-size="13">而是先识别为何 VACUUM</text>
+              <text x="1150" y="330" class="svg-body" font-size="13">可见性边界无法前进，</text>
+              <text x="1150" y="352" class="svg-terra" font-size="13">对症解除业务或槽阻塞。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>能看清指标只是起点——如何把垃圾回收压力消灭在上线之前？架构师、DBA 与业务开发者各有哪几条铁律？</div>
+          <div class="slide-footer">
+            <span>依据：doc/src/sgml/monitoring.sgml · pgvisibility.sgml · pgfreespacemap.sgml</span>
+            <span class="page-num">11 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-index="11" data-title="分角色最佳实践：架构师、DBA 与业务开发者">
+          <div class="slide-eyebrow">ENGINEERING PRACTICE · 12 / 14 · 分角色最佳实践</div>
+          <h1 class="slide-title">垃圾回收不是 DBA 独角戏：架构师、DBA 与开发者各守一道防线</h1>
+          <p class="slide-lead">最昂贵的垃圾是靠业务坏习惯和冗余索引造出来的；只有模型设计、表级调度参数与短事务编码三方协同，才能维持低成本稳态。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Column 1: Architect -->
+              <rect x="0" y="0" width="450" height="430" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="0" y="0" width="450" height="44" fill="#1E4B5A"/>
+              <text x="18" y="28" class="svg-head-inv" font-size="16">第一防线 · 数据库架构师（建模与存储）</text>
+
+              <rect x="18" y="60" width="414" height="62" fill="#E5EFF0" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="32" y="84" class="svg-head" font-size="14">1. 把更新频率纳入数据模型</text>
+              <text x="32" y="108" class="svg-body" font-size="13">高频变更列避免进入多个普通二级索引，降低写放大。</text>
+
+              <rect x="18" y="132" width="414" height="62" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="32" y="156" class="svg-head" font-size="14">2. 用 fillfactor 给 HOT 预留空间</text>
+              <text x="32" y="180" class="svg-body" font-size="13">高频更新且常能 HOT 的表调低 fillfactor，留住同页更新。</text>
+
+              <rect x="18" y="204" width="414" height="62" fill="#E5EFF0" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="32" y="228" class="svg-head" font-size="14">3. 分离冷热数据与时间分区</text>
+              <text x="32" y="252" class="svg-body" font-size="13">历史归档与热态流转隔离，别让局部高 churn 拖累整表。</text>
+
+              <rect x="18" y="276" width="414" height="62" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="32" y="300" class="svg-head" font-size="14">4. 谨慎设计高频队列表</text>
+              <text x="32" y="324" class="svg-body" font-size="13">高频 UPDATE status/DELETE 极易膨胀，宜分区+短事务+归档。</text>
+
+              <rect x="18" y="348" width="414" height="64" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="32" y="372" class="svg-teal" font-size="14">5. 按写入与回收代价审核每个索引</text>
+              <text x="32" y="396" class="svg-body" font-size="13">杜绝「为每个查询加一个索引」，避免 Phase II 成瓶颈。</text>
+
+              <!-- Column 2: DBA -->
+              <rect x="475" y="0" width="450" height="430" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="475" y="0" width="450" height="44" fill="#2F7A66"/>
+              <text x="493" y="28" class="svg-head-inv" font-size="16">第二防线 · DBA（参数与告警兜底）</text>
+
+              <rect x="493" y="60" width="414" height="52" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="507" y="81" class="svg-teal" font-size="13.5">1. 绝不全局关闭 autovacuum</text>
+              <text x="507" y="102" class="svg-body" font-size="12.5">特殊表做表级覆盖；全局关闭只会推迟到 wraparound 事故。</text>
+
+              <rect x="493" y="120" width="414" height="52" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="507" y="141" class="svg-head" font-size="13.5">2. 大表配置表级绝对量参数</text>
+              <text x="507" y="162" class="svg-body" font-size="12.5">默认 scale_factor=0.2 对百亿行表过迟，应按绝对死行调小。</text>
+
+              <rect x="493" y="180" width="414" height="52" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="507" y="201" class="svg-head" font-size="13.5">3. 同步监控死元组与冻结年龄</text>
+              <text x="507" y="222" class="svg-body" font-size="12.5">n_dead_tup 低不等于安全，insert-only 大表也需推进冻结。</text>
+
+              <rect x="493" y="240" width="414" height="52" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="507" y="261" class="svg-head" font-size="13.5">4. 监控 worker 饥饿与 IO 匹配</text>
+              <text x="507" y="282" class="svg-body" font-size="12.5">max_workers、cost delay、磁盘 IO 能力与表级参数统筹评估。</text>
+
+              <rect x="493" y="300" width="414" height="52" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="507" y="321" class="svg-head" font-size="13.5">5. 将四大阻塞源纳入年龄告警</text>
+              <text x="507" y="342" class="svg-body" font-size="12.5">idle in xact、超长报表、prepared xact 与逻辑复制槽设红线。</text>
+
+              <rect x="493" y="360" width="414" height="52" fill="#F7E9DE" stroke="#BE653B" stroke-width="1"/>
+              <text x="507" y="381" class="svg-terra" font-size="13.5">6. 先解除阻塞，再决定是否重写</text>
+              <text x="507" y="402" class="svg-body" font-size="12.5">xmin 被固定时盲目 VACUUM FULL 既不治本还可能锁垮业务。</text>
+
+              <!-- Column 3: Developer -->
+              <rect x="950" y="0" width="450" height="430" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="950" y="0" width="450" height="44" fill="#245A6B"/>
+              <text x="968" y="28" class="svg-head-inv" font-size="16">第三防线 · 业务开发者（事务与 SQL）</text>
+
+              <rect x="968" y="60" width="414" height="62" fill="#E5EFF0" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="982" y="84" class="svg-head" font-size="14">1. 事务必须短平快</text>
+              <text x="982" y="108" class="svg-body" font-size="13">严禁把用户交互、RPC 网络调用、长计算包进数据库事务。</text>
+
+              <rect x="968" y="132" width="414" height="62" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="982" y="156" class="svg-head" font-size="14">2. 大批量更新必须分批提交</text>
+              <text x="982" y="180" class="svg-body" font-size="13">一次改几千万行会制造海啸级旧版本与索引垃圾，拖垮回收。</text>
+
+              <rect x="968" y="204" width="414" height="62" fill="#E5EFF0" stroke="#A4C4C6" stroke-width="1"/>
+              <text x="982" y="228" class="svg-head" font-size="14">3. 杜绝无意义空更新</text>
+              <text x="982" y="252" class="svg-body" font-size="13">UPDATE SET col = col 仍会写新版本，应用层须过滤未变字段。</text>
+
+              <rect x="968" y="276" width="414" height="62" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="982" y="300" class="svg-head" font-size="14">4. 严控无用索引</text>
+              <text x="982" y="324" class="svg-body" font-size="13">不参与过滤、排序、唯一性或连接的索引只会纯增写入代价。</text>
+
+              <rect x="968" y="348" width="414" height="64" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1"/>
+              <text x="982" y="372" class="svg-teal" font-size="14">5. 周期清空全表优先评估 TRUNCATE</text>
+              <text x="982" y="396" class="svg-body" font-size="13">相比全表 DELETE 更高效，但须理解其 MVCC 语义与锁差异。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>即便知道最佳实践，生产现场依然有十个反复踩中的经典误区——下面把适用边界和十大常见坑一次排清。</div>
+          <div class="slide-footer">
+            <span>依据：原文第七章分角色最佳实践</span>
+            <span class="page-num">12 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-index="12" data-title="适用边界与生产十大常见坑">
+          <div class="slide-eyebrow">RISK MATRIX · 13 / 14 · 场景边界与十大常见坑</div>
+          <h1 class="slide-title">避开十大认知误区：从「DELETE 降磁盘」到「只调 worker 数」</h1>
+          <p class="slide-lead">先认清哪些场景靠标准 VACUUM 就能稳态运行、哪些必须介入额外策略，再逐条核对十类最容易诱发生产膨胀与锁表雪崩的典型反模式。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <!-- Top Band: 3 Workload Boundaries (y: 0..124) -->
+              <rect x="0" y="0" width="454" height="122" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="16" y="26" class="svg-teal" font-size="14.5">适合标准 VACUUM / autovacuum</text>
+              <text x="16" y="52" class="svg-body" font-size="13">• 普通 OLTP 表，持续短事务更新/删除</text>
+              <text x="16" y="76" class="svg-body" font-size="13">• append-mostly 表推进 VM 与冻结</text>
+              <text x="16" y="100" class="svg-body" font-size="13">• 索引合理、追求长期稳态空间复用</text>
+
+              <rect x="473" y="0" width="454" height="122" fill="#F6F0E1" stroke="#AE8A3E" stroke-width="1.5"/>
+              <text x="489" y="26" class="svg-gold" font-size="14.5">需要额外策略介入的场景</text>
+              <text x="489" y="52" class="svg-body" font-size="13">• 高频更新宽表且更新列被多索引覆盖</text>
+              <text x="489" y="76" class="svg-body" font-size="13">• 大量删除后必须立刻还盘给 OS / 槽固定</text>
+              <text x="489" y="100" class="svg-body" font-size="13">• 分区父表手工 ANALYZE / 临时表自维护</text>
+
+              <rect x="946" y="0" width="454" height="122" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <text x="962" y="26" class="svg-terra" font-size="14.5">不适合指望普通 VACUUM 解决</text>
+              <text x="962" y="52" class="svg-body" font-size="13">• 期望立即缩小物理文件释放磁盘</text>
+              <text x="962" y="76" class="svg-body" font-size="13">• 严重索引膨胀（需 REINDEX / 重建）</text>
+              <text x="962" y="100" class="svg-body" font-size="13">• 长期事务习惯导致旧版本永不过红线</text>
+
+              <!-- Bottom Band: 2x5 Grid of 10 Common Pitfalls (y: 142..430) -->
+              <text x="0" y="160" class="svg-terra" font-size="13.5">生产十大常见坑（PITFALLS 01 – 10）</text>
+
+              <!-- Row 1 (01-05): width 268, gap 15 -> 5*268 + 4*15 = 1340+60 = 1400 -->
+              <rect x="0" y="172" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="0" y="172" width="268" height="4" fill="#BE653B"/>
+              <text x="14" y="198" class="svg-mono" font-size="12">01 · DELETE 误解</text>
+              <text x="14" y="222" class="svg-head" font-size="13.5">以为 DELETE 会释放磁盘</text>
+              <text x="14" y="248" class="svg-body" font-size="12.5">DELETE 只造可删版本；标准</text>
+              <text x="14" y="270" class="svg-body" font-size="12.5">VACUUM 仅留同表复用空间。</text>
+
+              <rect x="283" y="172" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="283" y="172" width="268" height="4" fill="#BE653B"/>
+              <text x="297" y="198" class="svg-mono" font-size="12">02 · 滥用重写</text>
+              <text x="297" y="222" class="svg-head" font-size="13.5">把 VACUUM FULL 当日常</text>
+              <text x="297" y="248" class="svg-body" font-size="12.5">锁重且需额外磁盘，只适合有</text>
+              <text x="297" y="270" class="svg-body" font-size="12.5">维护窗口的物理重整手术。</text>
+
+              <rect x="566" y="172" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="566" y="172" width="268" height="4" fill="#BE653B"/>
+              <text x="580" y="198" class="svg-mono" font-size="12">03 · 忽视索引</text>
+              <text x="580" y="222" class="svg-head" font-size="13.5">只看表大小不看索引大小</text>
+              <text x="580" y="248" class="svg-body" font-size="12.5">非 HOT 更新会冲击全部索引，</text>
+              <text x="580" y="270" class="svg-body" font-size="12.5">索引往往比表更先严重膨胀。</text>
+
+              <rect x="849" y="172" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="849" y="172" width="268" height="4" fill="#BE653B"/>
+              <text x="863" y="198" class="svg-mono" font-size="12">04 · 盲目加并发</text>
+              <text x="863" y="222" class="svg-head" font-size="13.5">只加 worker 不看 IO/cost</text>
+              <text x="863" y="248" class="svg-body" font-size="12.5">磁盘 IO 与 cost 预算不变时，</text>
+              <text x="863" y="270" class="svg-body" font-size="12.5">只会让更多 worker 一起变慢。</text>
+
+              <rect x="1132" y="172" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="1132" y="172" width="268" height="4" fill="#BE653B"/>
+              <text x="1146" y="198" class="svg-mono" font-size="12">05 · 大表迟钝</text>
+              <text x="1146" y="222" class="svg-head" font-size="13.5">大表不设表级绝对策略</text>
+              <text x="1146" y="248" class="svg-body" font-size="12.5">按默认 20% 比例触发过晚，</text>
+              <text x="1146" y="270" class="svg-body" font-size="12.5">应按绝对 dead 预算配置。</text>
+
+              <!-- Row 2 (06-10) -->
+              <rect x="0" y="306" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="0" y="306" width="268" height="4" fill="#245A6B"/>
+              <text x="14" y="332" class="svg-mono" font-size="12">06 · 盲区表</text>
+              <text x="14" y="356" class="svg-head" font-size="13.5">忽略 insert-only 历史表</text>
+              <text x="14" y="382" class="svg-body" font-size="12.5">无删改也须推进 VM 与冻结，</text>
+              <text x="14" y="404" class="svg-body" font-size="12.5">否则积攒巨量 aggressive 债务。</text>
+
+              <rect x="283" y="306" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="283" y="306" width="268" height="4" fill="#245A6B"/>
+              <text x="297" y="332" class="svg-mono" font-size="12">07 · 连接池漏事务</text>
+              <text x="297" y="356" class="svg-head" font-size="13.5">连接归还仍 idle in xact</text>
+              <text x="297" y="382" class="svg-body" font-size="12.5">垃圾回收头号杀手，连接回池</text>
+              <text x="297" y="404" class="svg-body" font-size="12.5">前必须确保彻底结束事务。</text>
+
+              <rect x="566" y="306" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="566" y="306" width="268" height="4" fill="#245A6B"/>
+              <text x="580" y="332" class="svg-mono" font-size="12">08 · 僵尸复制槽</text>
+              <text x="580" y="356" class="svg-head" font-size="13.5">逻辑槽无保留上限策略</text>
+              <text x="580" y="382" class="svg-body" font-size="12.5">下游断开槽仍在，catalog_xmin</text>
+              <text x="580" y="404" class="svg-body" font-size="12.5">停滞拖垮系统目录表清理。</text>
+
+              <rect x="849" y="306" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="849" y="306" width="268" height="4" fill="#245A6B"/>
+              <text x="863" y="332" class="svg-mono" font-size="12">09 · 误用统计</text>
+              <text x="863" y="356" class="svg-head" font-size="13.5">把统计视图当精确账本</text>
+              <text x="863" y="382" class="svg-body" font-size="12.5">n_dead_tup / live_tup 是估算</text>
+              <text x="863" y="404" class="svg-body" font-size="12.5">累计值，仅作趋势判断依据。</text>
+
+              <rect x="1132" y="306" width="268" height="120" fill="#F7F6F2" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="1132" y="306" width="268" height="4" fill="#245A6B"/>
+              <text x="1146" y="332" class="svg-mono" font-size="12">10 · 火上浇油</text>
+              <text x="1146" y="356" class="svg-head" font-size="13.5">临近回绕还跑大事务</text>
+              <text x="1146" y="382" class="svg-body" font-size="12.5">接近告警应全力推进冻结，</text>
+              <text x="1146" y="404" class="svg-body" font-size="12.5">而非继续制造 XID 消耗压力。</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">承接 · NEXT</span>最后一页，把全部机制、视图和铁律收敛成一套可直接上墙的「六步生产排障闭环」。</div>
+          <div class="slide-footer">
+            <span>依据：原文第八章场景边界 &amp; 第九章十大常见坑</span>
+            <span class="page-num">13 / 14</span>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-index="13" data-title="排查闭环、源码索引与架构延伸">
+          <div class="slide-eyebrow">CLOSING LOOP · 14 / 14 · 运维排查闭环与延伸思考</div>
+          <h1 class="slide-title">六步排查闭环：先定位为何清不掉，最后才动用物理重写</h1>
+          <p class="slide-lead">排障铁律是先判断「垃圾为何不能变回可复用空间」，再对症解除阻塞与调参治本；VACUUM FULL / REINDEX 永远是最后的维护窗口工具。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg class="diagram-svg" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <marker id="arr-ind-14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-teal-14" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9 Z" fill="#2F7A66"/>
+                </marker>
+              </defs>
+
+              <!-- Left Panel: 6-Step Troubleshooting Loop (width 880) -->
+              <rect x="0" y="0" width="880" height="430" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="20" y="28" class="svg-mono" font-size="13">OPERATIONS TROUBLESHOOTING LOOP · 六步标准化运维排查闭环</text>
+
+              <!-- Top Row: 1 -> 2 -> 3 -->
+              <rect x="20" y="48" width="256" height="148" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="48" width="256" height="32" fill="#1E4B5A"/>
+              <text x="34" y="69" class="svg-head-inv" font-size="14">Step 01 · 看表级统计</text>
+              <text x="34" y="102" class="svg-mono" font-size="12">pg_stat_user_tables</text>
+              <text x="34" y="128" class="svg-body" font-size="13">查 n_dead_tup、HOT 更新占比</text>
+              <text x="34" y="150" class="svg-body" font-size="13">(n_tup_hot_upd / upd) 与</text>
+              <text x="34" y="172" class="svg-body" font-size="13">last_autovacuum 执行频率。</text>
+
+              <path d="M276,122 H308" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-14)"/>
+
+              <rect x="312" y="48" width="256" height="148" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="312" y="48" width="256" height="32" fill="#2E6373"/>
+              <text x="326" y="69" class="svg-head-inv" font-size="14">Step 02 · 看实时进度</text>
+              <text x="326" y="102" class="svg-mono" font-size="12">pg_stat_progress_vacuum</text>
+              <text x="326" y="128" class="svg-body" font-size="13">确认是否在跑、停在哪个</text>
+              <text x="326" y="150" class="svg-body" font-size="13">phase，区分 normal /</text>
+              <text x="326" y="172" class="svg-body" font-size="13">aggressive / failsafe 模式。</text>
+
+              <path d="M568,122 H600" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-14)"/>
+
+              <rect x="604" y="48" width="256" height="148" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.5"/>
+              <rect x="604" y="48" width="256" height="32" fill="#BE653B"/>
+              <text x="618" y="69" class="svg-head-inv" font-size="14">Step 03 · 查可见性阻塞</text>
+              <text x="618" y="102" class="svg-terra" font-size="12">xmin / prepared / slots</text>
+              <text x="618" y="128" class="svg-body" font-size="13">排查 backend_xmin、未决</text>
+              <text x="618" y="150" class="svg-body" font-size="13">prepared xact、逻辑复制槽</text>
+              <text x="618" y="172" class="svg-body" font-size="13">catalog_xmin，先解阻塞！</text>
+
+              <!-- Orthogonal Down Step 3 -> Step 4 -->
+              <path d="M732,196 V236" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-14)"/>
+
+              <!-- Bottom Row: 6 <- 5 <- 4 -->
+              <rect x="604" y="240" width="256" height="148" fill="#F6F0E1" stroke="#AE8A3E" stroke-width="1.5"/>
+              <rect x="604" y="240" width="256" height="32" fill="#AE8A3E"/>
+              <text x="618" y="261" class="svg-head-inv" font-size="14">Step 04 · 查冻结风险</text>
+              <text x="618" y="294" class="svg-gold" font-size="12">relfrozenxid / mxid 年龄</text>
+              <text x="618" y="320" class="svg-body" font-size="13">核查表级、TOAST、库级</text>
+              <text x="618" y="342" class="svg-body" font-size="13">age(datfrozenxid) 及</text>
+              <text x="618" y="364" class="svg-body" font-size="13">MultiXact 年龄防回绕。</text>
+
+              <path d="M604,314 H572" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-14)"/>
+
+              <rect x="312" y="240" width="256" height="148" fill="#E4F0EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <rect x="312" y="240" width="256" height="32" fill="#2F7A66"/>
+              <text x="326" y="261" class="svg-head-inv" font-size="14">Step 05 · 治本调参治理</text>
+              <text x="326" y="294" class="svg-teal" font-size="12">表级参数 + 应用治理</text>
+              <text x="326" y="320" class="svg-body" font-size="13">为高 churn 表设表级参数，</text>
+              <text x="326" y="342" class="svg-body" font-size="13">砍掉无效索引、消除空更新</text>
+              <text x="326" y="364" class="svg-body" font-size="13">并压短长事务生命周期。</text>
+
+              <path d="M312,314 H280" stroke="#245A6B" stroke-width="2" marker-end="url(#arr-ind-14)"/>
+
+              <rect x="20" y="240" width="256" height="148" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="20" y="240" width="256" height="32" fill="#47808D"/>
+              <text x="34" y="261" class="svg-head-inv" font-size="14">Step 06 · 窗口物理重整</text>
+              <text x="34" y="294" class="svg-mono" font-size="12">最后兜底手段</text>
+              <text x="34" y="320" class="svg-body" font-size="13">若已严重膨胀且短期难复用，</text>
+              <text x="34" y="342" class="svg-body" font-size="13">安排维护窗口执行 FULL /</text>
+              <text x="34" y="364" class="svg-body" font-size="13">CLUSTER / REINDEX 或在线重写。</text>
+
+              <!-- Loop-back orthogonal line Step 6 -> Step 1 -->
+              <path d="M148,240 V200" stroke="#2F7A66" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-teal-14)"/>
+              <text x="156" y="224" class="svg-teal" font-size="11.5">持续回环复检</text>
+
+              <!-- Right Panel Top: Source Code Index -->
+              <rect x="904" y="0" width="496" height="206" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.5"/>
+              <rect x="904" y="0" width="496" height="34" fill="#245A6B"/>
+              <text x="922" y="22" class="svg-mono-inv" font-size="12.5">SOURCE CODE MAP · 关键源码核验入口</text>
+              <text x="922" y="60" class="svg-mono" font-size="11.5">vacuum.c / vacuumlazy.c</text>
+              <text x="1164" y="60" class="svg-body" font-size="13">命令分发与三阶段状态机</text>
+              <text x="922" y="88" class="svg-mono" font-size="11.5">pruneheap.c / README.HOT</text>
+              <text x="1164" y="88" class="svg-body" font-size="13">页内剪枝、HOT 链与冻结</text>
+              <text x="922" y="116" class="svg-mono" font-size="11.5">heapam_visibility.c</text>
+              <text x="1164" y="116" class="svg-body" font-size="13">VACUUM 与快照可见性判断</text>
+              <text x="922" y="144" class="svg-mono" font-size="11.5">visibilitymap.c / freespace.c</text>
+              <text x="1164" y="144" class="svg-body" font-size="13">VM 两位语义与 FSM 树检索</text>
+              <text x="922" y="172" class="svg-mono" font-size="11.5">autovacuum.c / vacuumparallel.c</text>
+              <text x="1164" y="172" class="svg-body" font-size="13">自动调度器与并行索引清理</text>
+              <text x="922" y="196" class="svg-muted" font-size="12">配套官方文档：mvcc / maintenance / storage / monitoring / btree</text>
+
+              <!-- Right Panel Bottom: Architecture Extension Questions -->
+              <rect x="904" y="224" width="496" height="206" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1"/>
+              <rect x="904" y="224" width="496" height="34" fill="#1E4B5A"/>
+              <text x="922" y="246" class="svg-mono-inv" font-size="12.5">EXTENDED THINKING · 课后架构延伸思考</text>
+              <text x="922" y="284" class="svg-body" font-size="13.5">1. 为何 PG 选 MVCC + 后台 GC，而非全原地覆盖？</text>
+              <text x="922" y="312" class="svg-body" font-size="13.5">2. 若更新全部 HOT，表膨胀与索引膨胀分别如何演变？</text>
+              <text x="922" y="340" class="svg-body" font-size="13.5">3. 为何 VM 必须严格保守，而 FSM 允许近似与自修复？</text>
+              <text x="922" y="368" class="svg-body" font-size="13.5">4. 百亿行 append-only 表如何兼顾 insert vacuum、IOS 与冻结？</text>
+              <text x="922" y="396" class="svg-body" font-size="13.5">5. 若自研 table AM，GC 放写/读路径还是后台 compaction？</text>
+            </svg>
+          </div>
+          <div class="slide-next"><span class="next-tag">终章 · END</span>看透地层原理，就能把垃圾回收从不可控的线上暗雷，变成可预测、可观测的稳态基础设施。</div>
+          <div class="slide-footer">
+            <span>数据库筑基课 · PostgreSQL 垃圾回收 · digoal (2026-06-08)</span>
+            <span class="page-num">14 / 14</span>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Right In-Page Split Notes Pane (NO Modal; scales left stage cleanly) -->
+    <aside id="notes-pane" aria-label="演说讲稿面板">
+      <div class="notes-header">
+        <span class="notes-header-title" id="notes-mode-title">本页讲稿</span>
+        <span class="notes-header-badge" id="notes-mode-badge">PAGE · N</span>
+        <button class="notes-close-btn" id="notes-close-btn" title="关闭讲稿">关闭</button>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+  </div>
+
+  <!-- Bottom Persistent Shortcut HUD Bar (Remains Visible in Fullscreen) -->
+  <footer id="hud-bar">
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-prev" title="上一页 (←)">← 上一页</button>
+      <span class="hud-counter" id="hud-counter">01 / 14</span>
+      <button class="hud-btn" id="btn-next" title="下一页 (→ / Space)">下一页 →</button>
+    </div>
+    <div class="hud-group">
+      <button class="hud-btn" id="btn-toc"><span class="kbd">G</span> 目录</button>
+      <button class="hud-btn" id="btn-note-page"><span class="kbd">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="btn-note-all"><span class="kbd">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="btn-autoplay"><span class="kbd">A</span> <span id="autoplay-label">自动播放</span></button>
+      <div class="autoplay-progress" id="autoplay-progress"><div class="autoplay-progress-fill" id="autoplay-fill"></div></div>
+      <button class="hud-btn" id="btn-fullscreen"><span class="kbd">F</span> <span id="fs-label">全屏</span></button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ==================== 1. SPEAKER NOTES (逻辑推演 + 实证 + 口语化 + 连绵不绝) ==================== */
+  const SPEAKER_NOTES = [
+    {
+      title: '封面：PostgreSQL 垃圾回收地层总览',
+      paragraphs: [
+        '各位好，欢迎来到数据库筑基课的「表存储 + MVCC + 维护机制」专题，今天我们专门把 PostgreSQL 的垃圾回收扒个底朝天。很多应用开发者刚接触 PG 时，脑子里有两个最直觉的假设：DELETE 就是把数据从磁盘抹掉，UPDATE 就是把那一行原地改掉。可真到了线上，这两个直觉会直接制造生产事故——删了一半数据磁盘不降、索引比表还先爆掉、一个不写数据的长事务把整个库的写入拖垮、autovacuum 明明开着表还是越膨越大，甚至有人情急之下敲了一句 VACUUM FULL，直接把核心业务锁死。',
+        '所以今天我们不背零散的参数清单，而是像做地质勘探一样，顺着左侧这张七阶地层剖面图，从最表层的应用 SQL 一路钻到最底层的物理存储与后台调度。整套课件里的每一个机制和结论，都核验自 PostgreSQL 本地源码（像 vacuum.c、vacuumlazy.c、pruneheap.c、visibilitymap.c 和 autovacuum.c）以及官方 SGML 文档。咱们现在就从第一层切入：先搞清楚，这些让人头疼的「垃圾」究竟是怎么来的？'
+      ]
+    },
+    {
+      title: '它解决什么问题：MVCC 的四类工程代价',
+      paragraphs: [
+        '一切的源头，都来自 PostgreSQL 的并发基石——MVCC。官方 mvcc.sgml 写得很清楚：每个 SQL 语句看到的都是某个时间点的数据快照，普通读和写互相不阻塞。听起来很美，但工程上从来没有免费午餐，PG 只是把「锁等待的成本」置换成了「多版本维护的成本」。具体来说，UPDATE 会写入一个全新行版本，旧版本必须留着给还在跑的老快照看；DELETE 也只是在旧版本头上打个删除事务标记，并不会立刻从 8KB 数据页里擦除。',
+        '如果不清理这些残留版本，就会顺理成章衍生出中间列出的四类工程问题：第一是空间问题，旧行版本、dead line pointer 和 dead index tuple 越堆越多，表和索引双双膨胀；第二是性能问题，查询扫描不得不跳过大量不可见版本，索引可能撞上多个物理版本，缓存和磁盘 IO 全被垃圾吃掉；第三是致命的正确性问题，PG 的普通事务 ID 是 32 位循环空间，老旧的 xmin 如果长期不冻结，绕回一圈就会触发 transaction ID wraparound 灾难；第四是运维问题，长事务、两阶段未决事务、逻辑复制槽和锁冲突会让回收严重滞后。',
+        '因此请大家先校正一个核心认知：垃圾回收解决的从来不是「把表文件缩到最小」，而是在绝不破坏快照一致性的前提下，让旧版本重新变成「同一张表内可复用的空间」，同时推进 VM、FSM、冻结边界和统计信息。当然代价也很透明：它要吃 IO、CPU、WAL 和内存，而且标准 VACUUM 多数时候不会把磁盘还给操作系统。那么，为了同时扛住这四类问题，PG 到底搭了怎样一套架构？我们看下一页。'
+      ]
+    },
+    {
+      title: '它是什么：三层机制与三个物理 Fork',
+      paragraphs: [
+        '顺着上一页的四个目标往下推，PostgreSQL 在内置 heap table access method 里，并没有指望一个笨重的后台任务包打天下，而是把垃圾回收精巧地拆成了三层——大家看左边这张架构图。最底层是「页内剪枝（heap pruning）」，平时访问页面或者 VACUUM 扫描时顺手就能干，专门剪短 HOT 链、整理页内碎片，能就地消化绝不拖泥带水；中间层是「标准 lazy VACUUM」，负责跨页、跨索引的全表三阶段回收；最上层是「autovacuum」，由 launcher 周期性唤醒 worker，按统计阈值和防回绕风险自动调度。',
+        '而这三层机制在磁盘上共同伺候的，就是右边这三个物理对象：第一是 heap main fork（也就是 relfilenode 文件），存放真正的行版本、page header 和 line pointer；第二是 visibility map，简称 VM（relfilenode_vm），每个 heap 页只用两位 bit——all-visible 和 all-frozen，用来支撑 VACUUM 跳页和 Index-Only Scan 免回表；第三是 free space map，简称 FSM（relfilenode_fsm），近似记录每页还剩多少空位，帮后续 INSERT 和 UPDATE 精准找复用页面。顺带提一句，这都是内置 heap 引擎的常规机制，PG 支持可扩展 table AM，别的存储引擎完全可以有自己的玩法。',
+        '骨架搭好了，接下来咱们逐个拧开核心原理的阀门。第一道、也是线上最常出事故的一道闸门就是：一个已经提交删除的旧版本，到底什么时候才算真正「可以清理的垃圾」？'
+      ]
+    },
+    {
+      title: '核心原理 I：MVCC 可见性边界与长事务阻塞',
+      paragraphs: [
+        '大家先别急着看文字，可以点一下上方工具栏的「播放演进」或者「单步推进」，盯着中间那条蓝色的 GlobalVisHorizon 红线看。一条存活版本 v1（xmin=100）被事务 105 删除并提交之后，很多人以为它立刻就能被清掉。错！在源码 heapam_visibility.c 的 HeapTupleSatisfiesVacuum() 和 pruneheap.c 的 GlobalVisState 逻辑里，第一铁律永远是正确性：宁可晚清，绝不能把某个活跃快照还能看见的版本清掉。',
+        '所以只要 v1 的 xmax=105 还大于等于全局可见性边界 GlobalVisHorizon，它就只能卡在「RECENTLY DEAD（近期死亡）」状态。不信你可以把工具栏里的「模拟长事务阻塞」打开，再推进一次：你会看到一个仅仅持有 xmin=102 的长事务，把整条红线死死钉在了 102 的位置！哪怕系统事务号已经跑到 112，v1 依然过不了红线。',
+        '这就直接解释了生产上四个最让人抓狂的现象：第一，一个 idle in transaction 的空闲连接，一行数据都不写，照样能让全表几千万死行清不掉；第二，一条长查询报表虽然不加表锁，但它的快照会拖住所有新垃圾；第三，prepared transaction 两阶段残留事务；第四，下游断了却没清理的逻辑复制槽，它死死攥着 catalog_xmin，能把系统目录表拖膨。记住这句话：VACUUM 跑过，不等于垃圾被清走了；只要还在红线右侧，它只能下次再来。那好，一旦旧版本终于跨过红线变成 removable，标准 VACUUM 具体是怎么动手清理的？'
+      ]
+    },
+    {
+      title: '核心原理 II：Lazy VACUUM 三阶段状态机',
+      paragraphs: [
+        '现在我们进入 vacuumlazy.c 的核心现场。很多人以为 VACUUM 就是从第 0 页扫到最后一页、见一个死行删一个。其实完全不是！大家可以点击上方的「播放三阶段」，顺着状态机看一遍。vacuum.c 负责命令分发，真正干活的 heap_vacuum_rel() 把标准 VACUUM 拆成了严丝合缝的三个阶段：Phase I（lazy_scan_heap）扫描 heap 页，顺手做页内 pruning 和 freezing，把需要清理索引的 dead TID 记进内存里的 TidStore；Phase II（lazy_vacuum_all_indexes）去遍历表上的所有索引（可以走 vacuumparallel.c 并行），把指向这些 dead TID 的索引项全部拔掉；Phase III（lazy_vacuum_heap_rel）再折回之前记过的 heap 页，把已经没有索引指向的 LP_DEAD 指针正式释放为可复用的 LP_UNUSED。',
+        '为什么一定要分这三步、不能在 Phase I 就把 LP_DEAD 直接复用？原因非常硬核：如果索引里还残留着指向这个槽位的指针，你提前把槽位复用了，旧索引查过来就会读到后来插进去的完全不相关的新行，直接造成数据错乱！',
+        '再试着打开工具栏里的「模拟 TidStore 满载多轮循环」看看：为了保证几百 GB 的超大表也能在有限内存下完成回收，TidStore 受 maintenance_work_mem 或 autovacuum_work_mem 约束。一旦内存装满了，VACUUM 会果断暂停 Phase I，先跑完 Phase II 和 Phase III 清空 TidStore，再沿下面那条陶橙色虚线折回 Phase I 继续扫。这也解释了为什么内存设小了、索引又多的大表，会触发多轮索引全扫，IO 瞬间拉满。当然，如果表没索引、dead 极少或者触发了 wraparound failsafe，Phase II 可以跳过；最后扫尾也只会尝试截断尾部全空页，中间空洞绝不承诺还给 OS。既然 Phase II 扫索引这么贵，有没有办法把一部分垃圾在页内直接化解、根本不惊动索引呢？这就是下一页的 HOT。'
+      ]
+    },
+    {
+      title: '核心原理 III：HOT 更新与页内剪枝',
+      paragraphs: [
+        '上一页刚说完 Phase II 清理索引代价最高，PostgreSQL 工程师在 README.HOT 里就给出了一记非常漂亮的解法：HOT（Heap-Only Tuple）。咱们点一下「播放 HOT 剪枝」，盯着中间这张 8KB 的 Heap Page 7 看。当你的 UPDATE 同时满足两个前提——没有改到任何普通二级索引涉及的列，且当前 8KB 页里还放得下新版本——新版本 v2、v3 就可以直接写成页内 HOT 链，沿 t_ctid 串联，左侧的 B-Tree 索引根本不用新增任何条目，依然只指着 root 也就是 LP[1]！',
+        '精彩的地方来了：因为中间的死版本 v2 没有任何索引直接指向它，所以根本不需要等全表 VACUUM，只要下次读页或者触发页内 pruning，PG 就能当场把 v2 的空间收回来整理碎片，然后把 LP[1] 改成 LP_REDIRECT 直接跳到存活的 v3！不过要注意一个关键边界：LP[1] 这个 root 指针本身还被索引指着，所以它不能被页内 pruning 随便释放成 LP_UNUSED，必须等标准 VACUUM 把索引清理干净才行。',
+        '你可以再点一下工具栏里的「对比：修改了索引列（非 HOT）」，感受一下残酷的反差：一旦更新触碰了索引列，哪怕只改一个字段，表上所有普通索引都得新增指向新物理位置的条目，写入放大和索引膨胀瞬间爆发。所以 HOT 给我们两条立竿见影的工程启发：第一，高频更新但不查的字段尽量别进普通索引；第二，给高频 HOT 表适当调低 fillfactor，在页内留出空位。好了，页内剪枝和 VACUUM 把空位腾出来之后，系统靠什么记住哪些页干净、哪些页有空位？看下一页的 VM 和 FSM。'
+      ]
+    },
+    {
+      title: '核心原理 IV：VM 保守跳页与 FSM 近似寻址',
+      paragraphs: [
+        '这一页我们把目光放到表文件旁边的两张辅助地图：上层的 Visibility Map（VM）和下层的 Free Space Map（FSM）。很多人容易把这两张地图混为一谈，觉得都是空间统计元数据，其实它们在源码里的语义要求天差地别。',
+        '先看上面的 VM（visibilitymap.c）。每个 heap 页只有两个 bit：all-visible 和 all-frozen。VM 是一张「严格保守」的地图——一旦某个 bit 置为 1，它必须百分之百为真；如果为 0，只代表「还不确定」，绝不代表页里一定有垃圾。为什么这么苛刻？因为一旦误设为 1，要么 VACUUM 会错跳过带垃圾的脏页，要么 Index-Only Scan 跳过回表直接把未提交或已删除的错数据吐给业务！所以任何对 heap 页的修改都会先清掉 VM，而 VACUUM 设置 VM 时必须持页锁、严守 WAL 和 LSN 顺序。',
+        '再看下面的 FSM（storage/freespace/README）。它的职责完全不同，它是给 INSERT 和 UPDATE 做「空间寻址导航」的，底层是一棵近似粒度约 1/256 页（也就是 32 字节取整）的搜索树。比如图中 Page 3 还有约 5120 字节空位，新插入就会优先落到这里，避免盲目扩展物理文件。就算 FSM 的数值略微滞后或取整了也没关系，真写进去发现放不下，换一页再顺手把树修好就行。所以工程上千万记住：VM 关乎正确性，FSM 只是近似导航，别把 pg_freespace 当精确空间审计账本。讲到这里，似乎空间问题都闭环了——但等等，如果一张日志表只做 INSERT、从不 UPDATE 也不 DELETE，是不是就永远不需要 VACUUM 了？恰恰相反！'
+      ]
+    },
+    {
+      title: '核心原理 V：32 位 XID 冻结与三档防回绕模式',
+      paragraphs: [
+        '为什么一张从不删改的 insert-only 表也必须做 VACUUM？答案就在这一页：垃圾回收还扛着一项关乎数据库生死的「保命职责」——XID Freezing（冻结）。官方文档 maintenance.sgml 提醒我们，PostgreSQL 的普通事务 ID 是 32 位循环空间。如果一行数据带着非常老的 xmin 一直躺在页里，等事务号转满半圈绕回来时，过去的旧事务在比较逻辑里就会突然变成「未来的事务」，整张表的历史数据瞬间变得不可见！',
+        '解决办法就是冻结：把足够老且已经提交的行版本打上冻结标记，宣告它「对所有当前和未来事务永久可见」。看顶部这条年龄警戒轴，PG 按事务年龄递增排了四道参数防线，并对应下方三档 VACUUM 模式：最左侧是 normal 常规模式，顺手把超过 vacuum_freeze_min_age 的行冻结，还能跳过 VM 证明干净的页，新版本还引入了 vacuum_max_eager_freeze_failure_rate 做提前分摊；一旦表的 relfrozenxid 或 relminmxid 触及 vacuum_freeze_table_age，就升级成中间的 aggressive 模式，必须扫描所有非 all-frozen 的页来推进冻结边界；而一旦触发 autovacuum_freeze_max_age（默认设得相对偏低，也是为了及时裁剪 pg_xact 提交日志），后台会强制拉起防回绕任务。',
+        '最右边是最后的保命熔断——failsafe 模式。当年龄逼近 vacuum_failsafe_age 最后安全线时，PG 明白再不冻结就要停库保数据了，于是果断放弃索引清理等非必要工作、取消 cost delay 限速，全速推进冻结。理解了这三档，你就明白为什么绝不能把 VACUUM 只当「清垃圾工具」。那么在几千张表的生产库里，谁来自动盯着这些死行阈值和冻结年龄呢？我们来看 autovacuum。'
+      ]
+    },
+    {
+      title: '核心原理 VI：Autovacuum 自动调度与决策模拟',
+      paragraphs: [
+        '很多人把 autovacuum 理解成一个简单的开关：on 就是自动扫，off 就是停掉。其实翻开 autovacuum.c 你会发现，它是一套非常严谨的后台调度系统。左边是两个角色：Launcher 进程周期性巡检各个数据库，负责派活；Worker 进程连进具体的库，调用 relation_needs_vacanalyze()，按中间这张优先级阶梯逐表评估。',
+        '最顶端 P1 永远是防 wraparound 保命检查；往下 P2 才是大家熟悉的常规死元组阈值，公式大致是 base threshold（默认 50）加上 scale factor（默认 0.2）乘以 reltuples；P3 是专门照顾 append-only 表的 insert vacuum 阈值，帮只插不改的表及时推进 VM 和冻结；P4 则是独立的 ANALYZE 统计信息刷新。',
+        '大家一定要动手试一下上方工具栏的模拟器！先把表行数选成「10 万行」，拖动滑块只要 2 万多死行就触发 P2；现在把表行数切换成「1000 万行」的大表——你会立刻看到，按默认的 0.2 比例，必须攒够 200 万零 50 条死行才会触发！这期间表早就膨得不像样了。你还可以点一下「模拟逼近 Freeze Max Age」，不管死行是多少，P1 立刻全红强制接管。右边四条真实行为也请务必刻在脑子里：关了 autovacuum=off，防回绕任务照样会启动；普通 worker 遇锁让路，防回绕 worker 不让路；分区父表不会被自动 ANALYZE；临时表更是完全不归 autovacuum 管。至此，核心原理全部打通，咱们把四种手段放一张表里横向比一比。'
+      ]
+    },
+    {
+      title: '横向对比与效果权衡：边界与收益代价',
+      paragraphs: [
+        '到了这一页，我们把前面讲过的标准 VACUUM、VACUUM FULL/表重写、heap pruning/HOT 以及 autovacuum 摆在同一张工程规格表上。读这张表时千万别问「谁最强」，而要看「谁该干什么活」。标准 VACUUM 持 SHARE UPDATE EXCLUSIVE 锁，能和普通读写并行，目标是在表内稳态复用空间并推进 VM/FSM/冻结，它是日常主力；VACUUM FULL 虽然能真正把空洞压平、把磁盘还给操作系统，但它需要 ACCESS EXCLUSIVE 强锁和额外磁盘空间，只能当重灾之后的维护窗口手术；HOT 是把垃圾消化在页内的局部利器；autovacuum 则是调度层，它永远不会替你跑 VACUUM FULL。',
+        '下面左右两翼把收益和代价掰开讲透。收益很实在：同表复用减少文件扩展、索引去死项减少页分裂、VM all-visible 提速 Index-Only Scan、all-frozen 省去未来 aggressive 扫描、推进冻结保命并裁剪 pg_xact。但代价同样摆在台面上：扫表扫索引吃 IO 和缓存、更新地图和冻结吃 CPU 和 WAL、多索引表在 Phase II 代价极高，最惨的是长事务堵着红线时 VACUUM 辛辛苦苦扫完却清不掉关键垃圾。另外一定要记住：千万别拿网上流传的所谓「标准膨胀比例」一刀切套所有表，队列表、宽 JSON 表和历史归档表的健康曲线完全不同。既然不能拍脑袋，我们怎么在库里亲眼观测这些指标？下一页直接上五步实操 SQL。'
+      ]
+    },
+    {
+      title: '实操观测：五步可验证 SQL 仪表盘',
+      paragraphs: [
+        '纸上得来终觉浅，这一页把原文第六章的最小可验证实验浓缩成了五座透明观测站。先强调一句安全红线：造数压测只能在测试库跑，绝不要在生产库直接跑 demo 脚本，但下面这五个查询思路可以直接搬进你的生产监控。',
+        '第一步看 pg_stat_user_tables：做完批量 UPDATE 和 DELETE 后，重点盯 n_dead_tup、n_tup_upd/del 和 last_autovacuum，但要牢记 n_dead_tup 是估算统计，用来抓趋势而不是逐行对账。第二步在另一个会话执行 VACUUM (VERBOSE, ANALYZE) 的同时，查 pg_stat_progress_vacuum：你会亲眼看到 phase 字段在 scanning heap、vacuuming indexes、vacuuming heap 和 truncating heap 之间流转，跟我们前面画的 vacuumlazy.c 三阶段状态机严丝合缝。',
+        '第三步装上 pg_visibility 和 pg_freespacemap 两个官方扩展，分别检查 all-visible/all-frozen 比例有没有涨上去，以及 FSM 里的近似可用字节。第四步查 pg_class 和 pg_database，用 greatest 把主表和 TOAST 表的 relfrozenxid 年龄一起算出来，别漏了 MultiXact 年龄。第五步专门抓阻塞红线的三类对象：pg_stat_activity 的 backend_xmin、pg_prepared_xacts 和 pg_replication_slots 的 xmin/catalog_xmin。注意，查到阻塞源不是让你二话不说直接 kill，而是先搞清它为什么钉住了可见性边界。有了观测手段，下一步就是把问题消灭在源头——三个角色各该守好哪道防线？'
+      ]
+    },
+    {
+      title: '分角色最佳实践：架构师、DBA 与业务开发者',
+      paragraphs: [
+        '线上大量膨胀事故，根源其实不在 DBA 参数没调好，而在表结构和业务代码源源不断地制造高代价垃圾。所以我把最佳实践拆成三道防线，对应三个角色。',
+        '第一道防线是数据库架构师，守在建模与存储层：高频变更的字段尽量别放进多个普通二级索引，否则每次更新都在毁掉 HOT；对高频更新且容易命中 HOT 的表，主动调低 fillfactor 给同页新版本留余地；冷热数据按时间或状态分区隔离，别让少数热数据拖着百亿行大表做全表扫描；高频 UPDATE status 或 DELETE 的队列表是膨胀重灾区，要提前规划分区与归档；最关键的一条，按写入和 VACUUM 代价审核每一个索引，别图省事给每个查询都加索引。',
+        '第二道防线是 DBA，守在调度与监控层：绝不全局关闭 autovacuum；对大表用表级绝对量覆盖默认 0.2 的比例阈值；同时盯死元组和冻结年龄，别漏了 insert-only 表；综合评估 worker 数量、cost delay 与底层磁盘 IO 能力，防止 worker 饥饿；把长事务、prepared xact 和逻辑复制槽全接进年龄告警；出事时牢记「先解阻塞再谈重写」。',
+        '第三道防线是业务开发者，守在事务与 SQL 层：事务一定要短，绝不把网络调用、用户等待塞进事务里；大批量更新拆小分批提交；应用层过滤掉 SET col = col 这种无意义的空更新；定期清空全表时可以评估 TRUNCATE，但务必清楚它的 MVCC 语义和锁级别差异。守住这三道防线，下面咱们再把场景边界和线上十大高频坑一次扫雷。'
+      ]
+    },
+    {
+      title: '适用边界与生产十大常见坑',
+      paragraphs: [
+        '这一页上半部分先帮大家划清三条场景边界：绿区是标准 VACUUM 和 autovacuum 最擅长的稳态 OLTP 与 append-mostly 表；黄区是需要额外策略介入的场景，比如多索引高频更新宽表、大删后必须还盘给 OS、分区父表需要手工 ANALYZE、临时表需要会话自己维护；红区则是千万别指望普通 VACUUM 解决的场景——想立刻缩小磁盘文件、索引本身严重膨胀（需要 REINDEX），或者应用长期挂着大事务导致旧版本永远跨不过红线。',
+        '下半部分这十个坑，几乎囊括了生产上 90% 的垃圾回收工单，咱们快速过一遍：01 以为 DELETE 会立刻降磁盘；02 把 VACUUM FULL 当日常维护导致高峰锁表；03 只盯表大小却没发现索引早就先爆了；04 看到清理慢就盲目调大 worker 数，却不看磁盘 IO 和 cost delay，结果大家一起慢；05 大表只靠默认 20% scale factor 触发太晚；06 忽略 insert-only 表的冻结债务；07 连接池把没结束的 idle in transaction 连接留在池子里；08 逻辑复制槽下游断了却没保留上限，拖垮系统目录表；09 把估算的 n_dead_tup 当精确行数做审计；10 看到 wraparound 告警还继续跑大事务火上浇油。避开这十个坑，如果线上真的已经发生膨胀或回收滞后，最后一页给你一套标准排障闭环。'
+      ]
+    },
+    {
+      title: '排查闭环、源码索引与架构延伸',
+      paragraphs: [
+        '来到最后一页，我们把整堂课的认知沉淀成左侧这套「六步运维排查闭环」。当监控告警某张表膨胀或者清理滞后时，千万别一上来就敲 VACUUM FULL。按顺序走这六步：第一步看 pg_stat_user_tables，先摸清死元组、HOT 更新率和 autovacuum 频次；第二步看 pg_stat_progress_vacuum，确认后台到底有没有在跑、卡在哪个 phase、是不是已经进了 aggressive 或 failsafe；第三步立刻查可见性阻塞——backend_xmin、prepared xacts 和 replication slots，只要红线被钉死，先解阻塞！',
+        '第四步检查表级、TOAST、库级冻结年龄和 MultiXact 年龄，排除回绕危机；第五步做治本治理——给高 churn 表配表级 autovacuum 参数，同时联手研发砍无效索引、消空更新、压短事务；只有走到第六步，确认空间已经严重膨胀且短期内根本不可能自然复用，我们才安排业务低峰的维护窗口，动用 VACUUM FULL、CLUSTER、REINDEX 或在线重写工具做物理重整，并在完成后回环回到第一步持续复检。',
+        '右侧给大家留了两份课后资料：上面是今天涉及的全部 PostgreSQL 源码入口和官方 SGML 文档索引，方便大家直接钻代码深挖；下面是五个值得和团队一起讨论的架构延伸思考题，比如如果你要从零设计一个新的 table access method，会把垃圾回收放在写路径、读路径还是后台 compaction 里？希望这堂课能帮你把 PostgreSQL 的垃圾回收，从线上让人提心吊胆的黑盒暗雷，真正变成可推演、可观测、可掌控的稳态基础设施。感谢聆听！'
+      ]
+    }
+  ];
+
+  /* ==================== 2. CORE SLIDE ENGINE & LAYOUT SCALING ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentIndex = 0;
+  let notesMode = 'closed'; // 'closed' | 'page' | 'all'
+  let tocOpen = false;
+  let autoPlayTimer = null;
+  let autoPlayProgressTimer = null;
+  let autoPlayElapsed = 0;
+  const AUTOPLAY_INTERVAL_MS = 12000;
+
+  const appShell = document.getElementById('app-shell');
+  const stageViewport = document.getElementById('stage-viewport');
+  const stageFrame = document.getElementById('stage-frame');
+  const notesPane = document.getElementById('notes-pane');
+  const notesBody = document.getElementById('notes-body');
+  const notesModeTitle = document.getElementById('notes-mode-title');
+  const notesModeBadge = document.getElementById('notes-mode-badge');
+  const tocDrawer = document.getElementById('toc-drawer');
+  const tocList = document.getElementById('toc-list');
+  const hudCounter = document.getElementById('hud-counter');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNotePage = document.getElementById('btn-note-page');
+  const btnNoteAll = document.getElementById('btn-note-all');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const autoplayLabel = document.getElementById('autoplay-label');
+  const autoplayProgress = document.getElementById('autoplay-progress');
+  const autoplayFill = document.getElementById('autoplay-fill');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const fsLabel = document.getElementById('fs-label');
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function updateStageScale() {
+    const rect = stageViewport.getBoundingClientRect();
+    const pad = 20;
+    const availW = Math.max(100, rect.width - pad);
+    const availH = Math.max(100, rect.height - pad);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageFrame.style.transform = `scale(${scale.toFixed(6)})`;
+  }
+
+  // Observe viewport size changes (window resize, notes pane open/close, fullscreen)
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => updateStageScale());
+    ro.observe(stageViewport);
+  }
+  window.addEventListener('resize', updateStageScale);
+  notesPane.addEventListener('transitionend', updateStageScale);
+
+  /* ==================== 3. TOC & NOTES RENDERING + SYNC SCROLL ==================== */
+  function buildTOC() {
+    tocList.innerHTML = '';
+    slides.forEach((s, idx) => {
+      const item = document.createElement('div');
+      item.className = 'toc-item' + (idx === currentIndex ? ' active' : '');
+      item.dataset.index = idx;
+      item.innerHTML = `<span class="toc-item-num">${pad2(idx + 1)}</span><span>${s.dataset.title || ''}</span>`;
+      item.addEventListener('click', () => {
+        goToSlide(idx);
+        setTocOpen(false);
+      });
+      tocList.appendChild(item);
+    });
+  }
+
+  function updateTOCHighlight() {
+    Array.from(tocList.children).forEach((el, idx) => {
+      el.classList.toggle('active', idx === currentIndex);
+    });
+  }
+
+  function setTocOpen(open) {
+    tocOpen = open;
+    tocDrawer.classList.toggle('open', open);
+    btnToc.classList.toggle('active-indigo', open);
+  }
+
+  function renderNotesContent(shouldScroll) {
+    if (notesMode === 'closed') return;
+    if (notesMode === 'page') {
+      notesModeTitle.textContent = '本页讲稿';
+      notesModeBadge.textContent = `PAGE ${pad2(currentIndex + 1)} · N`;
+      const data = SPEAKER_NOTES[currentIndex];
+      notesBody.innerHTML = `
+        <div class="note-card current" data-note-index="${currentIndex}">
+          <div class="note-card-head">
+            <span class="note-card-num">${pad2(currentIndex + 1)} / ${pad2(totalSlides)}</span>
+            <span class="note-card-title">${data.title}</span>
+          </div>
+          <div class="note-card-text">
+            ${data.paragraphs.map(p => `<p>${p}</p>`).join('')}
+          </div>
+        </div>`;
+      notesBody.scrollTop = 0;
+    } else if (notesMode === 'all') {
+      notesModeTitle.textContent = '全文讲稿（翻页联动定位）';
+      notesModeBadge.textContent = 'FULL · T';
+      if (notesBody.dataset.renderedMode !== 'all') {
+        notesBody.innerHTML = SPEAKER_NOTES.map((data, idx) => `
+          <div class="note-card ${idx === currentIndex ? 'current' : ''}" id="note-card-${idx}" data-note-index="${idx}">
+            <div class="note-card-head">
+              <span class="note-card-num">${pad2(idx + 1)} / ${pad2(totalSlides)}</span>
+              <span class="note-card-title">${data.title}</span>
+            </div>
+            <div class="note-card-text">
+              ${data.paragraphs.map(p => `<p>${p}</p>`).join('')}
+            </div>
+          </div>`).join('');
+        notesBody.dataset.renderedMode = 'all';
+        // Clicking any card jumps to that slide
+        Array.from(notesBody.querySelectorAll('.note-card')).forEach(card => {
+          card.addEventListener('click', () => {
+            const targetIdx = parseInt(card.dataset.noteIndex, 10);
+            if (!isNaN(targetIdx) && targetIdx !== currentIndex) {
+              goToSlide(targetIdx);
+            }
+          });
+        });
+      } else {
+        Array.from(notesBody.querySelectorAll('.note-card')).forEach((card, idx) => {
+          card.classList.toggle('current', idx === currentIndex);
+        });
+      }
+      if (shouldScroll) {
+        const activeCard = document.getElementById(`note-card-${currentIndex}`);
+        if (activeCard) {
+          const targetTop = Math.max(0, activeCard.offsetTop - 14);
+          notesBody.scrollTo({ top: targetTop, behavior: shouldScroll === 'smooth' ? 'smooth' : 'auto' });
+        }
+      }
+    }
+  }
+
+  function setNotesMode(targetMode) {
+    // Toggle loop: pressing same key closes it; pressing the other switches directly
+    if (notesMode === targetMode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = targetMode;
+      if (notesMode === 'page') {
+        notesBody.dataset.renderedMode = 'page';
+      }
+    }
+    const isOpen = notesMode !== 'closed';
+    notesPane.classList.toggle('open', isOpen);
+    btnNotePage.classList.toggle('active', notesMode === 'page');
+    btnNoteAll.classList.toggle('active', notesMode === 'all');
+
+    if (isOpen) {
+      renderNotesContent(true);
+    }
+    // Recalculate stage scale immediately and after CSS width transition
+    requestAnimationFrame(updateStageScale);
+    setTimeout(updateStageScale, 200);
+  }
+
+  /* ==================== 4. NAVIGATION & AUTOPLAY & FULLSCREEN ==================== */
+  function goToSlide(idx, fromAutoPlay) {
+    if (idx < 0 || idx >= totalSlides) return;
+    if (!fromAutoPlay && autoPlayTimer) {
+      stopAutoPlay();
+    }
+    slides[currentIndex].classList.remove('active');
+    currentIndex = idx;
+    slides[currentIndex].classList.add('active');
+    hudCounter.textContent = `${pad2(currentIndex + 1)} / ${pad2(totalSlides)}`;
+    updateTOCHighlight();
+    if (notesMode !== 'closed') {
+      renderNotesContent('smooth');
+    }
+  }
+
+  function nextSlide(fromAutoPlay) {
+    if (currentIndex < totalSlides - 1) {
+      goToSlide(currentIndex + 1, fromAutoPlay);
+    } else if (fromAutoPlay) {
+      stopAutoPlay();
+    }
+  }
+
+  function prevSlide() {
+    if (currentIndex > 0) {
+      goToSlide(currentIndex - 1, false);
+    }
+  }
+
+  function startAutoPlay() {
+    if (autoPlayTimer) return;
+    if (currentIndex === totalSlides - 1) {
+      goToSlide(0, true);
+    }
+    autoPlayElapsed = 0;
+    btnAutoplay.classList.add('active');
+    autoplayLabel.textContent = '暂停播放';
+    autoplayProgress.classList.add('visible');
+    autoplayFill.style.width = '0%';
+
+    autoPlayProgressTimer = setInterval(() => {
+      autoPlayElapsed += 200;
+      const pct = Math.min(100, (autoPlayElapsed / AUTOPLAY_INTERVAL_MS) * 100);
+      autoplayFill.style.width = `${pct}%`;
+    }, 200);
+
+    autoPlayTimer = setInterval(() => {
+      autoPlayElapsed = 0;
+      autoplayFill.style.width = '0%';
+      nextSlide(true);
+    }, AUTOPLAY_INTERVAL_MS);
+  }
+
+  function stopAutoPlay() {
+    if (autoPlayTimer) {
+      clearInterval(autoPlayTimer);
+      autoPlayTimer = null;
+    }
+    if (autoPlayProgressTimer) {
+      clearInterval(autoPlayProgressTimer);
+      autoPlayProgressTimer = null;
+    }
+    btnAutoplay.classList.remove('active');
+    autoplayLabel.textContent = '自动播放';
+    autoplayProgress.classList.remove('visible');
+    autoplayFill.style.width = '0%';
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlayTimer) stopAutoPlay();
+    else startAutoPlay();
+  }
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      if (appShell.requestFullscreen) {
+        appShell.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = !!document.fullscreenElement;
+    btnFullscreen.classList.toggle('active-indigo', isFs);
+    fsLabel.textContent = isFs ? '退出全屏' : '全屏';
+    requestAnimationFrame(updateStageScale);
+    setTimeout(updateStageScale, 120);
+  });
+
+  /* ==================== 5. BUTTON & KEYBOARD BINDINGS ==================== */
+  btnPrev.addEventListener('click', prevSlide);
+  btnNext.addEventListener('click', () => nextSlide(false));
+  btnToc.addEventListener('click', () => setTocOpen(!tocOpen));
+  document.getElementById('toc-close-btn').addEventListener('click', () => setTocOpen(false));
+  btnNotePage.addEventListener('click', () => setNotesMode('page'));
+  btnNoteAll.addEventListener('click', () => setNotesMode('all'));
+  document.getElementById('notes-close-btn').addEventListener('click', () => {
+    notesMode = 'closed';
+    notesPane.classList.remove('open');
+    btnNotePage.classList.remove('active');
+    btnNoteAll.classList.remove('active');
+    requestAnimationFrame(updateStageScale);
+    setTimeout(updateStageScale, 200);
+  });
+  btnAutoplay.addEventListener('click', toggleAutoPlay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    const isInput = tag === 'input' || tag === 'select' || tag === 'textarea';
+    if (isInput && e.key !== 'Escape') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const key = e.key.toLowerCase();
+    if (key === 'arrowright' || key === 'pagedown' || key === ' ') {
+      e.preventDefault();
+      nextSlide(false);
+    } else if (key === 'arrowleft' || key === 'pageup') {
+      e.preventDefault();
+      prevSlide();
+    } else if (key === 'home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (key === 'end') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    } else if (key === 'g') {
+      e.preventDefault();
+      setTocOpen(!tocOpen);
+    } else if (key === 'n') {
+      e.preventDefault();
+      setNotesMode('page');
+    } else if (key === 't') {
+      e.preventDefault();
+      setNotesMode('all');
+    } else if (key === 'a') {
+      e.preventDefault();
+      toggleAutoPlay();
+    } else if (key === 'f') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'escape') {
+      if (tocOpen) setTocOpen(false);
+      else if (notesMode !== 'closed') {
+        notesMode = 'closed';
+        notesPane.classList.remove('open');
+        btnNotePage.classList.remove('active');
+        btnNoteAll.classList.remove('active');
+        requestAnimationFrame(updateStageScale);
+        setTimeout(updateStageScale, 200);
+      }
+    }
+  });
+
+  /* ==================== 6. INTERACTIVE SIMULATOR 1 (SLIDE 04: MVCC LIFECYCLE) ==================== */
+  (function initSlide4Sim() {
+    let step = 0; // 0: LIVE, 1: DELETE/UPDATE, 2: RECENTLY DEAD, 3: DEAD/REMOVABLE (or blocked at 2)
+    let blocked = false;
+    let timer = null;
+
+    const btnPlay = document.getElementById('s4-play');
+    const btnStep = document.getElementById('s4-step');
+    const btnBlock = document.getElementById('s4-block');
+    const btnReset = document.getElementById('s4-reset');
+    const status = document.getElementById('s4-status');
+    const stBoxes = [1,2,3,4].map(i => document.getElementById(`s4-st${i}`));
+    const horizon = document.getElementById('s4-horizon');
+    const horizonLbl = document.getElementById('s4-horizon-lbl');
+    const pin = document.getElementById('s4-pin');
+
+    function render() {
+      stBoxes.forEach(b => {
+        b.setAttribute('fill', '#F7F6F2');
+        b.setAttribute('stroke', '#D9D5CB');
+        b.setAttribute('stroke-width', '1.5');
+      });
+      pin.style.display = blocked ? 'block' : 'none';
+
+      if (step === 0) {
+        stBoxes[0].setAttribute('fill', '#E4F0EC');
+        stBoxes[0].setAttribute('stroke', '#2F7A66');
+        stBoxes[0].setAttribute('stroke-width', '2.5');
+        horizon.setAttribute('transform', 'translate(0, 0)');
+        horizonLbl.textContent = 'Horizon = XID 101';
+        status.textContent = '阶段 1/4：版本 v1 (xmin=100) 正常存活 · 当前 XID=101';
+      } else if (step === 1) {
+        stBoxes[1].setAttribute('fill', '#E5EFF0');
+        stBoxes[1].setAttribute('stroke', '#245A6B');
+        stBoxes[1].setAttribute('stroke-width', '2.5');
+        horizon.setAttribute('transform', 'translate(60, 0)');
+        horizonLbl.textContent = 'Horizon = XID 102';
+        status.textContent = '阶段 2/4：事务 105 执行 DELETE/UPDATE，标记 xmax=105 并提交';
+      } else if (step === 2) {
+        stBoxes[2].setAttribute('fill', '#F7E9DE');
+        stBoxes[2].setAttribute('stroke', '#BE653B');
+        stBoxes[2].setAttribute('stroke-width', '2.5');
+        horizon.setAttribute('transform', 'translate(60, 0)');
+        horizonLbl.textContent = 'Horizon = XID 102';
+        status.textContent = blocked
+          ? '阶段 3/4 [受阻]：长事务钉死 xmin=102，v1 滞留 RECENTLY DEAD！'
+          : '阶段 3/4：尚有旧快照 xmin=102，v1 处于 RECENTLY DEAD（不可清）';
+      } else {
+        if (blocked) {
+          stBoxes[2].setAttribute('fill', '#F7E9DE');
+          stBoxes[2].setAttribute('stroke', '#BE653B');
+          stBoxes[2].setAttribute('stroke-width', '3');
+          horizon.setAttribute('transform', 'translate(60, 0)');
+          horizonLbl.textContent = 'Horizon 被钉在 102';
+          status.textContent = '阶段 4/4 [回收失败]：系统已至 XID=112，但长事务阻止红线越过 105！';
+        } else {
+          stBoxes[3].setAttribute('fill', '#E4F0EC');
+          stBoxes[3].setAttribute('stroke', '#2F7A66');
+          stBoxes[3].setAttribute('stroke-width', '2.5');
+          horizon.setAttribute('transform', 'translate(620, 0)');
+          horizonLbl.textContent = 'Horizon = XID 108';
+          status.textContent = '阶段 4/4 [可回收]：红线推进至 108 > xmax(105)，v1 变为 REMOVABLE！';
+        }
+      }
+    }
+
+    function stopPlay() {
+      if (timer) { clearInterval(timer); timer = null; btnPlay.textContent = '播放演进'; }
+    }
+
+    btnStep.addEventListener('click', () => {
+      stopPlay();
+      step = (step + 1) % 4;
+      render();
+    });
+    btnPlay.addEventListener('click', () => {
+      if (timer) { stopPlay(); return; }
+      btnPlay.textContent = '暂停演进';
+      timer = setInterval(() => {
+        step = (step + 1) % 4;
+        render();
+        if (step === 3) stopPlay();
+      }, 1300);
+    });
+    btnBlock.addEventListener('click', () => {
+      blocked = !blocked;
+      btnBlock.textContent = blocked ? '模拟长事务阻塞：开' : '模拟长事务阻塞：关';
+      btnBlock.classList.toggle('active-warn', blocked);
+      render();
+    });
+    btnReset.addEventListener('click', () => {
+      stopPlay();
+      step = 0;
+      blocked = false;
+      btnBlock.textContent = '模拟长事务阻塞：关';
+      btnBlock.classList.remove('active-warn');
+      render();
+    });
+    render();
+  })();
+
+  /* ==================== 7. INTERACTIVE SIMULATOR 2 (SLIDE 05: LAZY VACUUM) ==================== */
+  (function initSlide5Sim() {
+    let step = 0; // 0: ready, 1: Phase I, 2: Phase II, 3: Phase III, 4: Loop/Done
+    let multiLoop = false;
+    let round = 1;
+    let timer = null;
+
+    const btnPlay = document.getElementById('s5-play');
+    const btnStep = document.getElementById('s5-step');
+    const btnLoop = document.getElementById('s5-loop');
+    const btnReset = document.getElementById('s5-reset');
+    const status = document.getElementById('s5-status');
+    const p1 = document.getElementById('s5-p1');
+    const p2 = document.getElementById('s5-p2');
+    const p3 = document.getElementById('s5-p3');
+    const endBox = document.getElementById('s5-end');
+    const memBar = document.getElementById('s5-membar');
+    const loopPath = document.getElementById('s5-loop-path');
+
+    function resetBoxStyles() {
+      [p1, p2, p3].forEach(b => {
+        b.setAttribute('fill', '#F7F6F2');
+        b.setAttribute('stroke', '#D9D5CB');
+        b.setAttribute('stroke-width', '1.5');
+      });
+      endBox.setAttribute('fill', '#F1EFE9');
+      endBox.setAttribute('stroke', '#D9D5CB');
+      endBox.setAttribute('stroke-width', '1');
+      loopPath.setAttribute('stroke-width', '2');
+    }
+
+    function render() {
+      resetBoxStyles();
+      if (step === 0) {
+        p1.setAttribute('fill', '#E5EFF0');
+        p1.setAttribute('stroke', '#245A6B');
+        p1.setAttribute('stroke-width', '2');
+        memBar.setAttribute('width', '0');
+        memBar.setAttribute('fill', '#245A6B');
+        status.textContent = '就绪 · 入口：vacuum.c → heap_vacuum_rel()';
+      } else if (step === 1) {
+        p1.setAttribute('fill', '#E5EFF0');
+        p1.setAttribute('stroke', '#245A6B');
+        p1.setAttribute('stroke-width', '3');
+        if (multiLoop && round === 1) {
+          memBar.setAttribute('width', '324');
+          memBar.setAttribute('fill', '#BE653B');
+          status.textContent = `第 ${round} 轮 · Phase I：TidStore 达到内存上限，暂停扫描进入 Phase II！`;
+        } else {
+          memBar.setAttribute('width', '180');
+          memBar.setAttribute('fill', '#245A6B');
+          status.textContent = `第 ${round} 轮 · Phase I：扫描 Heap、页内剪枝/冻结，收集 dead TID`;
+        }
+      } else if (step === 2) {
+        p2.setAttribute('fill', '#E5EFF0');
+        p2.setAttribute('stroke', '#2E6373');
+        p2.setAttribute('stroke-width', '3');
+        memBar.setAttribute('width', multiLoop && round === 1 ? '324' : '180');
+        status.textContent = `第 ${round} 轮 · Phase II：遍历全部索引删除 dead index entry（可并行）`;
+      } else if (step === 3) {
+        p3.setAttribute('fill', '#E4F0EC');
+        p3.setAttribute('stroke', '#2F7A66');
+        p3.setAttribute('stroke-width', '3');
+        memBar.setAttribute('width', '0');
+        if (multiLoop && round === 1) {
+          loopPath.setAttribute('stroke-width', '3.5');
+          status.textContent = '第 1 轮 · Phase III：LP_DEAD→LP_UNUSED 并清空 TidStore，准备折回第 2 轮！';
+        } else {
+          status.textContent = `第 ${round} 轮 · Phase III：回收 Heap 页释放 LP_UNUSED，更新 VM 与 FSM`;
+        }
+      } else if (step === 4) {
+        endBox.setAttribute('fill', '#E4F0EC');
+        endBox.setAttribute('stroke', '#2F7A66');
+        endBox.setAttribute('stroke-width', '2.5');
+        memBar.setAttribute('width', '0');
+        status.textContent = `完成（共 ${round} 轮索引清理）· 尝试截断全空尾页并更新统计与 relfrozenxid`;
+      }
+    }
+
+    function advance() {
+      if (step < 3) {
+        step++;
+      } else if (step === 3) {
+        if (multiLoop && round === 1) {
+          round = 2;
+          step = 1;
+        } else {
+          step = 4;
+        }
+      } else {
+        round = 1;
+        step = 0;
+      }
+      render();
+    }
+
+    function stopPlay() {
+      if (timer) { clearInterval(timer); timer = null; btnPlay.textContent = '播放三阶段'; }
+    }
+
+    btnStep.addEventListener('click', () => { stopPlay(); advance(); });
+    btnPlay.addEventListener('click', () => {
+      if (timer) { stopPlay(); return; }
+      if (step === 4) { step = 0; round = 1; }
+      btnPlay.textContent = '暂停演示';
+      timer = setInterval(() => {
+        advance();
+        if (step === 4) stopPlay();
+      }, 1300);
+    });
+    btnLoop.addEventListener('click', () => {
+      multiLoop = !multiLoop;
+      round = 1;
+      step = 0;
+      btnLoop.textContent = multiLoop ? '模拟 TidStore 满载多轮循环：开' : '模拟 TidStore 满载多轮循环：关';
+      btnLoop.classList.toggle('active-warn', multiLoop);
+      render();
+    });
+    btnReset.addEventListener('click', () => {
+      stopPlay();
+      step = 0;
+      round = 1;
+      multiLoop = false;
+      btnLoop.textContent = '模拟 TidStore 满载多轮循环：关';
+      btnLoop.classList.remove('active-warn');
+      render();
+    });
+    render();
+  })();
+
+  /* ==================== 8. INTERACTIVE SIMULATOR 3 (SLIDE 06: HOT PRUNING) ==================== */
+  (function initSlide6Sim() {
+    let step = 0; // 0: v1 live, 1: HOT v2, 2: HOT v3, 3: Pruning done
+    let nonHot = false;
+    let timer = null;
+
+    const btnPlay = document.getElementById('s6-play');
+    const btnStep = document.getElementById('s6-step');
+    const btnNonHot = document.getElementById('s6-nonhot');
+    const btnReset = document.getElementById('s6-reset');
+    const status = document.getElementById('s6-status');
+
+    const nonHotIdx = document.getElementById('s6-nonhot-idx');
+    const hotIdxNote = document.getElementById('s6-hot-idx-note');
+    const lp1 = document.getElementById('s6-lp1');
+    const lp1St = document.getElementById('s6-lp1-st');
+    const lp2 = document.getElementById('s6-lp2');
+    const lp2St = document.getElementById('s6-lp2-st');
+    const lp3 = document.getElementById('s6-lp3');
+    const lp3St = document.getElementById('s6-lp3-st');
+    const redir = document.getElementById('s6-redir');
+    const c1 = document.getElementById('s6-c1');
+    const t1 = document.getElementById('s6-t1');
+    const t1St = document.getElementById('s6-t1-st');
+    const t1Ctid = document.getElementById('s6-t1-ctid');
+    const t2 = document.getElementById('s6-t2');
+    const t2St = document.getElementById('s6-t2-st');
+    const t2Ctid = document.getElementById('s6-t2-ctid');
+    const t3 = document.getElementById('s6-t3');
+    const t3St = document.getElementById('s6-t3-st');
+    const t3Ctid = document.getElementById('s6-t3-ctid');
+    const pageNote = document.getElementById('s6-page-note');
+
+    function render() {
+      nonHotIdx.style.display = nonHot ? 'block' : 'none';
+      hotIdxNote.style.display = nonHot ? 'none' : 'block';
+      redir.style.display = 'none';
+      c1.style.display = 'block';
+
+      if (nonHot) {
+        lp1.setAttribute('fill', '#F7E9DE'); lp1.setAttribute('stroke', '#BE653B');
+        lp1St.textContent = 'LP_DEAD (等清索引)';
+        lp2.setAttribute('fill', '#F7E9DE'); lp2.setAttribute('stroke', '#BE653B');
+        lp2St.textContent = 'LP_DEAD (等清索引)';
+        lp3.setAttribute('fill', '#E4F0EC'); lp3.setAttribute('stroke', '#2F7A66');
+        lp3St.textContent = 'LP_NORMAL → 新页';
+        t1.setAttribute('fill', '#F7E9DE'); t1St.textContent = 'DEAD · 需清索引'; t1Ctid.textContent = '→ (7,2)';
+        t2.setAttribute('fill', '#F7E9DE'); t2St.textContent = 'DEAD · 需清索引'; t2Ctid.textContent = '→ (8,1)';
+        t3.setAttribute('fill', '#F1EFE9'); t3St.textContent = '已跨页写入 Page 8'; t3Ctid.textContent = '非 HOT';
+        pageNote.textContent = '非 HOT 更新：每次修改索引列都向所有二级索引新增条目，引发严重索引膨胀！';
+        status.textContent = '对比模式（非 HOT）：修改了索引列，索引被迫新增多条物理项';
+        return;
+      }
+
+      if (step === 0) {
+        lp1.setAttribute('fill', '#E5EFF0'); lp1.setAttribute('stroke', '#245A6B'); lp1St.textContent = 'LP_NORMAL → v1';
+        lp2.setAttribute('fill', '#F1EFE9'); lp2.setAttribute('stroke', '#D9D5CB'); lp2St.textContent = 'LP_UNUSED';
+        lp3.setAttribute('fill', '#F1EFE9'); lp3.setAttribute('stroke', '#D9D5CB'); lp3St.textContent = 'LP_UNUSED';
+        t1.setAttribute('fill', '#E4F0EC'); t1.setAttribute('stroke', '#2F7A66'); t1St.textContent = 'LIVE · 原始版本'; t1Ctid.textContent = 't_ctid = (7,1)';
+        t2.setAttribute('fill', '#F1EFE9'); t2.setAttribute('stroke', '#D9D5CB'); t2St.textContent = '空闲槽位'; t2Ctid.textContent = '—';
+        t3.setAttribute('fill', '#F1EFE9'); t3.setAttribute('stroke', '#D9D5CB'); t3St.textContent = '空闲槽位'; t3Ctid.textContent = '—';
+        pageNote.textContent = '页内空闲区充足（调低 fillfactor 可为高频 HOT 更新预留空间）。';
+        status.textContent = '阶段 1/4：初始态，索引仅 1 条指针指向 LP[1] → v1(live)';
+      } else if (step === 1) {
+        lp1.setAttribute('fill', '#E5EFF0'); lp1St.textContent = 'LP_NORMAL → v1';
+        lp2.setAttribute('fill', '#E4F0EC'); lp2.setAttribute('stroke', '#2F7A66'); lp2St.textContent = 'LP_NORMAL → v2';
+        lp3.setAttribute('fill', '#F1EFE9'); lp3St.textContent = 'LP_UNUSED';
+        t1.setAttribute('fill', '#F7E9DE'); t1.setAttribute('stroke', '#BE653B'); t1St.textContent = 'DEAD · root 旧版'; t1Ctid.textContent = 't_ctid → (7,2)';
+        t2.setAttribute('fill', '#E4F0EC'); t2.setAttribute('stroke', '#2F7A66'); t2St.textContent = 'LIVE · HOT v2'; t2Ctid.textContent = 't_ctid = (7,2)';
+        t3.setAttribute('fill', '#F1EFE9'); t3St.textContent = '空闲槽位'; t3Ctid.textContent = '—';
+        pageNote.textContent = '第 1 次非索引列更新：同页写入 v2，B-Tree 索引保持 0 新增！';
+        status.textContent = '阶段 2/4：HOT 更新 v1→v2，索引仍指向 LP[1]，沿 t_ctid 查找';
+      } else if (step === 2) {
+        lp1.setAttribute('fill', '#E5EFF0'); lp1St.textContent = 'LP_NORMAL → v1';
+        lp2.setAttribute('fill', '#F7E9DE'); lp2.setAttribute('stroke', '#BE653B'); lp2St.textContent = 'LP_NORMAL → v2';
+        lp3.setAttribute('fill', '#E4F0EC'); lp3.setAttribute('stroke', '#2F7A66'); lp3St.textContent = 'LP_NORMAL → v3';
+        t1.setAttribute('fill', '#F7E9DE'); t1.setAttribute('stroke', '#BE653B'); t1St.textContent = 'DEAD · root 旧版'; t1Ctid.textContent = 't_ctid → (7,2)';
+        t2.setAttribute('fill', '#F7E9DE'); t2.setAttribute('stroke', '#BE653B'); t2St.textContent = 'DEAD · 中间 HOT'; t2Ctid.textContent = 't_ctid → (7,3)';
+        t3.setAttribute('fill', '#E4F0EC'); t3.setAttribute('stroke', '#2F7A66'); t3St.textContent = 'LIVE · HOT v3'; t3Ctid.textContent = 't_ctid = (7,3)';
+        pageNote.textContent = '第 2 次更新形成链 v1(dead) → v2(dead) → v3(live)，仍无新索引项。';
+        status.textContent = '阶段 3/4：HOT 链拉长，v1 与 v2 已不可见，等待页内剪枝';
+      } else {
+        lp1.setAttribute('fill', '#E4F0EC'); lp1.setAttribute('stroke', '#2F7A66'); lp1St.textContent = 'LP_REDIRECT → LP[3]';
+        lp2.setAttribute('fill', '#F1EFE9'); lp2.setAttribute('stroke', '#D9D5CB'); lp2St.textContent = 'LP_UNUSED (已释放)';
+        lp3.setAttribute('fill', '#E4F0EC'); lp3.setAttribute('stroke', '#2F7A66'); lp3St.textContent = 'LP_NORMAL → v3';
+        c1.style.display = 'none';
+        redir.style.display = 'block';
+        t1.setAttribute('fill', '#F1EFE9'); t1.setAttribute('stroke', '#D9D5CB'); t1St.textContent = '空间已页内回收'; t1Ctid.textContent = '—';
+        t2.setAttribute('fill', '#F1EFE9'); t2.setAttribute('stroke', '#D9D5CB'); t2St.textContent = '空间已页内回收'; t2Ctid.textContent = '—';
+        t3.setAttribute('fill', '#E4F0EC'); t3.setAttribute('stroke', '#2F7A66'); t3St.textContent = 'LIVE · 唯一存活版'; t3Ctid.textContent = 't_ctid = (7,3)';
+        pageNote.textContent = '页内 Pruning 完成：v1/v2 物理空间就地复用，LP[1] 重定向至 v3，全程未惊动索引！';
+        status.textContent = '阶段 4/4 [页内剪枝完成]：HOT 链剪短，空间释放，LP[2] 变回 LP_UNUSED';
+      }
+    }
+
+    function stopPlay() {
+      if (timer) { clearInterval(timer); timer = null; btnPlay.textContent = '播放 HOT 剪枝'; }
+    }
+
+    btnStep.addEventListener('click', () => {
+      stopPlay();
+      if (nonHot) { nonHot = false; btnNonHot.classList.remove('active-warn'); }
+      step = (step + 1) % 4;
+      render();
+    });
+    btnPlay.addEventListener('click', () => {
+      if (timer) { stopPlay(); return; }
+      if (nonHot) { nonHot = false; btnNonHot.classList.remove('active-warn'); }
+      btnPlay.textContent = '暂停演进';
+      timer = setInterval(() => {
+        step = (step + 1) % 4;
+        render();
+        if (step === 3) stopPlay();
+      }, 1300);
+    });
+    btnNonHot.addEventListener('click', () => {
+      stopPlay();
+      nonHot = !nonHot;
+      btnNonHot.classList.toggle('active-warn', nonHot);
+      render();
+    });
+    btnReset.addEventListener('click', () => {
+      stopPlay();
+      nonHot = false;
+      step = 0;
+      btnNonHot.classList.remove('active-warn');
+      render();
+    });
+    render();
+  })();
+
+  /* ==================== 9. INTERACTIVE SIMULATOR 4 (SLIDE 09: AUTOVACUUM) ==================== */
+  (function initSlide9Sim() {
+    let wrapRisk = false;
+    const selRows = document.getElementById('s9-rows');
+    const rngDead = document.getElementById('s9-dead');
+    const lblDead = document.getElementById('s9-dead-val');
+    const btnWrap = document.getElementById('s9-wrap');
+    const status = document.getElementById('s9-status');
+    const formula = document.getElementById('s9-formula');
+    const b1 = document.getElementById('s9-b1');
+    const b2 = document.getElementById('s9-b2');
+
+    function fmt(n) { return Number(n).toLocaleString('en-US'); }
+
+    function render() {
+      const rows = parseInt(selRows.value, 10);
+      const dead = parseInt(rngDead.value, 10);
+      lblDead.textContent = fmt(dead);
+      const threshold = 50 + Math.round(0.2 * rows);
+      formula.textContent = `threshold = 50 + 0.2 × ${fmt(rows)} = ${fmt(threshold)}（受 max_threshold 限制）`;
+
+      b1.setAttribute('fill', '#F7F6F2'); b1.setAttribute('stroke', '#D9D5CB'); b1.setAttribute('stroke-width', '1.5');
+      b2.setAttribute('fill', '#F7F6F2'); b2.setAttribute('stroke', '#D9D5CB'); b2.setAttribute('stroke-width', '1.5');
+
+      if (wrapRisk) {
+        b1.setAttribute('fill', '#F7E9DE'); b1.setAttribute('stroke', '#BE653B'); b1.setAttribute('stroke-width', '3');
+        status.textContent = 'P1 强制触发：防 Wraparound 冻结优先执行（即使 autovacuum=off）！';
+      } else if (dead >= threshold) {
+        b2.setAttribute('fill', '#E4F0EC'); b2.setAttribute('stroke', '#2F7A66'); b2.setAttribute('stroke-width', '3');
+        status.textContent = `P2 触发：死元组 ${fmt(dead)} >= 阈值 ${fmt(threshold)} → 派发常规 VACUUM`;
+      } else {
+        status.textContent = `未触发：死元组 ${fmt(dead)} < 阈值 ${fmt(threshold)}（大表宜设表级绝对阈值）`;
+      }
+    }
+
+    selRows.addEventListener('change', render);
+    rngDead.addEventListener('input', render);
+    btnWrap.addEventListener('click', () => {
+      wrapRisk = !wrapRisk;
+      btnWrap.textContent = wrapRisk ? '模拟逼近 Freeze Max Age：开' : '模拟逼近 Freeze Max Age：关';
+      btnWrap.classList.toggle('active-warn', wrapRisk);
+      render();
+    });
+    render();
+  })();
+
+  /* ==================== 10. INIT ==================== */
+  buildTOC();
+  updateStageScale();
+})();
+</script>
+</body>
+</html>

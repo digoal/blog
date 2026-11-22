@@ -1,0 +1,3020 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库筑基课 — PostgreSQL 检查点调度</title>
+<style>
+  :root {
+    --bg: #F7F6F2;
+    --bg-sub: #F1EFE9;
+    --ink: #1B2B33;
+    --ink-sub: #46585F;
+    --ink-muted: #89938F;
+    --stroke: #D9D5CB;
+    --indigo: #245A6B;
+    --indigo-lt: #E5EFF0;
+    --terra: #BE653B;
+    --terra-lt: #F7E9DE;
+    --teal: #2F7A66;
+    --teal-lt: #E4F1EC;
+    --gold: #AE8A3E;
+    --gold-lt: #F6EFE0;
+    --s1: #1E4B5A;
+    --s2: #2E6373;
+    --s3: #47808D;
+    --s4: #74A5AD;
+    --s5: #A4C4C6;
+    --s6: #CFE0DC;
+    --s7: #EBF1EE;
+    --font-serif: 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', Georgia, serif;
+    --font-sans: 'PingFang SC', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #E8E5DD;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #E8E5DD;
+    position: relative;
+  }
+
+  /* Main workspace: left scaled stage + right in-page notes pane */
+  #workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #stage-host {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #E8E5DD;
+  }
+
+  #stage-wrapper {
+    width: 1600px;
+    height: 900px;
+    transform-origin: center center;
+    flex-shrink: 0;
+    position: relative;
+    background: var(--bg);
+    border: 1px solid var(--stroke);
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    width: 1600px;
+    height: 900px;
+    padding: 44px 64px 30px 64px;
+    background: var(--bg);
+    display: none;
+    flex-direction: column;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  /* Blueprint subtle grid top accent */
+  .slide::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--s1) 0%, var(--s1) 24%, var(--s3) 24%, var(--s3) 56%, var(--terra) 56%, var(--terra) 72%, var(--s6) 72%, var(--s6) 100%);
+  }
+
+  .slide-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 3.4px;
+    color: var(--indigo);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    line-height: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .slide-eyebrow .tag-right {
+    color: var(--ink-muted);
+    letter-spacing: 2px;
+    font-size: 12px;
+  }
+
+  .slide-title {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 54px;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .slide-lead {
+    font-size: 19px;
+    line-height: 28px;
+    color: var(--ink-sub);
+    margin-bottom: 14px;
+    max-width: 1440px;
+  }
+
+  .slide-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--stroke);
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Dedicated non-overlapping toolbar for interactive slides */
+  .sim-toolbar {
+    width: 1400px;
+    height: 44px;
+    margin-bottom: 10px;
+    background: var(--bg-sub);
+    border: 1px solid var(--stroke);
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  .sim-btn {
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid var(--indigo);
+    background: var(--bg);
+    color: var(--indigo);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .sim-btn:hover {
+    background: var(--indigo-lt);
+  }
+
+  .sim-btn.primary {
+    background: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  .sim-btn.primary:hover {
+    background: var(--s1);
+  }
+
+  .sim-btn.active-mode {
+    background: var(--terra);
+    border-color: var(--terra);
+    color: #F7F6F2;
+  }
+
+  .sim-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sim-label {
+    font-size: 13px;
+    color: var(--ink-sub);
+    white-space: nowrap;
+  }
+
+  .sim-val {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--indigo);
+    min-width: 44px;
+  }
+
+  .sim-toolbar input[type="range"] {
+    width: 96px;
+    accent-color: var(--indigo);
+    cursor: pointer;
+  }
+
+  .sim-toolbar select {
+    height: 28px;
+    border: 1px solid var(--stroke);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 0 8px;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .sim-sep {
+    width: 1px;
+    height: 22px;
+    background: var(--stroke);
+  }
+
+  .sim-status {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 2px;
+    background: var(--indigo-lt);
+    color: var(--indigo);
+    border: 1px solid var(--s4);
+    white-space: nowrap;
+  }
+
+  /* Diagram container strictly 1400x430 */
+  .diagram-zone {
+    width: 1400px;
+    height: 430px;
+    flex-shrink: 0;
+    position: relative;
+    background: var(--bg);
+    border: 1px solid var(--stroke);
+    overflow: hidden;
+  }
+
+  .diagram-zone svg {
+    width: 1400px;
+    height: 430px;
+    display: block;
+  }
+
+  /* Bottom NEXT transition & footer */
+  .slide-bottom {
+    margin-top: auto;
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .slide-next {
+    border-left: 3px solid var(--terra);
+    padding: 4px 0 4px 16px;
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 28px;
+    color: var(--ink);
+    background: linear-gradient(90deg, rgba(247, 233, 222, 0.45) 0%, rgba(247, 246, 242, 0) 68%);
+  }
+
+  .slide-next .next-label {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--terra);
+    font-weight: 700;
+    margin-right: 12px;
+  }
+
+  .slide-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--stroke);
+    padding-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .slide-footer .page-num {
+    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: 1.5px;
+  }
+
+  /* Right in-page notes pane (NO modal) */
+  #notes-panel {
+    width: 0;
+    flex-shrink: 0;
+    background: var(--bg);
+    border-left: 0 solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.22s ease;
+  }
+
+  #notes-panel.open {
+    width: 430px;
+    border-left-width: 1px;
+  }
+
+  #notes-header {
+    height: 48px;
+    padding: 0 18px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .notes-tabs {
+    display: flex;
+    gap: 8px;
+  }
+
+  .notes-tab {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--stroke);
+    background: var(--bg);
+    color: var(--ink-sub);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+
+  .notes-tab.active {
+    background: var(--indigo);
+    border-color: var(--indigo);
+    color: #F7F6F2;
+  }
+
+  #notes-close {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--stroke);
+    background: var(--bg);
+    color: var(--ink-sub);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+
+  #notes-close:hover {
+    border-color: var(--terra);
+    color: var(--terra);
+  }
+
+  #notes-body {
+    position: relative;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 20px 22px 32px 22px;
+    line-height: 1.82;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .note-card {
+    padding: 16px 16px 18px 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--stroke);
+    border-left: 3px solid var(--s4);
+    background: var(--bg);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .note-card.current {
+    border-color: var(--indigo);
+    border-left: 4px solid var(--terra);
+    background: var(--bg-sub);
+  }
+
+  .note-card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--stroke);
+  }
+
+  .note-card-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--terra);
+    flex-shrink: 0;
+  }
+
+  .note-card-title {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .note-card p {
+    margin-bottom: 10px;
+    text-align: justify;
+  }
+
+  .note-card p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-evidence {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--indigo-lt);
+    border-left: 2px solid var(--indigo);
+    font-size: 13px;
+    color: var(--s1);
+    line-height: 1.6;
+  }
+
+  /* Bottom shortcut HUD bar (always visible, including fullscreen) */
+  #hud-bar {
+    height: 44px;
+    flex-shrink: 0;
+    background: var(--s1);
+    color: #EBF1EE;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    border-top: 1px solid #143642;
+    position: relative;
+    z-index: 40;
+  }
+
+  #autoplay-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 2px;
+    width: 0%;
+    background: var(--terra);
+    transition: width 0.1s linear;
+  }
+
+  .hud-left, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .hud-btn {
+    height: 28px;
+    padding: 0 10px;
+    background: rgba(235, 241, 238, 0.08);
+    border: 1px solid rgba(235, 241, 238, 0.22);
+    color: #EBF1EE;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .hud-btn:hover {
+    background: rgba(235, 241, 238, 0.18);
+  }
+
+  .hud-btn.active {
+    background: var(--terra);
+    border-color: var(--terra);
+    color: #F7F6F2;
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(235, 241, 238, 0.28);
+    border-radius: 2px;
+    color: #CFE0DC;
+  }
+
+  .hud-counter {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #CFE0DC;
+    min-width: 64px;
+    text-align: center;
+  }
+
+  /* In-page TOC Overlay (G) */
+  #toc-overlay {
+    position: absolute;
+    inset: 0 0 44px 0;
+    background: rgba(27, 43, 51, 0.88);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 35;
+    padding: 28px;
+  }
+
+  #toc-overlay.open {
+    display: flex;
+  }
+
+  #toc-box {
+    width: 100%;
+    max-width: 1180px;
+    max-height: 100%;
+    background: var(--bg);
+    border: 1px solid var(--stroke);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #toc-head {
+    padding: 16px 24px;
+    background: var(--bg-sub);
+    border-bottom: 1px solid var(--stroke);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  #toc-head h2 {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    color: var(--ink);
+  }
+
+  #toc-grid {
+    padding: 20px 24px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 12px;
+  }
+
+  .toc-item {
+    border: 1px solid var(--stroke);
+    background: var(--bg);
+    padding: 12px 14px;
+    cursor: pointer;
+    border-left: 3px solid var(--s4);
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .toc-item:hover {
+    background: var(--indigo-lt);
+    border-color: var(--indigo);
+  }
+
+  .toc-item.current {
+    background: var(--terra-lt);
+    border-color: var(--terra);
+    border-left-width: 4px;
+  }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--indigo);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .toc-item.current .toc-num {
+    color: var(--terra);
+  }
+
+  .toc-title {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+
+  /* Toast for non-blocking status feedback */
+  #toast {
+    position: absolute;
+    bottom: 58px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--s1);
+    color: #F7F6F2;
+    padding: 8px 18px;
+    border: 1px solid var(--s4);
+    font-size: 13px;
+    border-radius: 2px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 50;
+  }
+
+  #toast.show {
+    opacity: 1;
+  }
+
+  /* SVG shared typography (inherit default fill from svg root so presentation fill attrs work) */
+  svg {
+    fill: var(--ink);
+  }
+  svg text {
+    font-family: var(--font-sans);
+  }
+  svg .svg-serif {
+    font-family: var(--font-serif);
+  }
+  svg .svg-mono {
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="workspace">
+    <div id="stage-host">
+      <div id="stage-wrapper">
+
+        <!-- ==================== SLIDE 01 ==================== -->
+        <section class="slide active" data-index="0" data-title="PostgreSQL 检查点调度全景">
+          <div class="slide-eyebrow">
+            <span>DATABASE FOUNDATION COURSE · STRATIGRAPHIC BLUEPRINT</span>
+            <span class="tag-right">digoal · 2026-06-08 · PG master 01a80f0</span>
+          </div>
+          <h1 class="slide-title">数据库筑基课：PostgreSQL 检查点调度</h1>
+          <p class="slide-lead">检查点不是「把脏页刷一下盘」，而是数据库在恢复时间、WAL 空间、前台延迟与后台 I/O 之间做的四层动态调度。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PostgreSQL 检查点调度四层地层剖面图">
+              <defs>
+                <marker id="arr-indigo" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#245A6B"/>
+                </marker>
+                <marker id="arr-terra" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#BE653B"/>
+                </marker>
+                <marker id="arr-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#2F7A66"/>
+                </marker>
+                <marker id="arr-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#1B2B33"/>
+                </marker>
+              </defs>
+              <!-- Background strata bands (shallow top to deep bottom) -->
+              <rect x="20" y="18" width="930" height="84" fill="#EBF1EE" stroke="#A4C4C6" stroke-width="1"/>
+              <rect x="20" y="114" width="930" height="84" fill="#CFE0DC" stroke="#74A5AD" stroke-width="1"/>
+              <rect x="20" y="210" width="930" height="84" fill="#A4C4C6" stroke="#47808D" stroke-width="1"/>
+              <rect x="20" y="306" width="930" height="104" fill="#2E6373" stroke="#1E4B5A" stroke-width="1"/>
+
+              <!-- Left layer index labels -->
+              <rect x="20" y="18" width="146" height="84" fill="#74A5AD"/>
+              <text x="93" y="54" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">01 触发层</text>
+              <text x="93" y="78" text-anchor="middle" font-size="12" class="svg-mono" fill="#EBF1EE">TRIGGER</text>
+
+              <rect x="20" y="114" width="146" height="84" fill="#47808D"/>
+              <text x="93" y="150" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">02 合并层</text>
+              <text x="93" y="174" text-anchor="middle" font-size="12" class="svg-mono" fill="#EBF1EE">COALESCE</text>
+
+              <rect x="20" y="210" width="146" height="84" fill="#245A6B"/>
+              <text x="93" y="246" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">03 执行层</text>
+              <text x="93" y="270" text-anchor="middle" font-size="12" class="svg-mono" fill="#CFE0DC">EXECUTE</text>
+
+              <rect x="20" y="306" width="146" height="104" fill="#1E4B5A"/>
+              <text x="93" y="350" text-anchor="middle" font-size="16" font-weight="700" fill="#F7F6F2">04 节流落盘层</text>
+              <text x="93" y="376" text-anchor="middle" font-size="12" class="svg-mono" fill="#A4C4C6">THROTTLE / SYNC</text>
+
+              <!-- Layer 1 boxes -->
+              <rect x="190" y="34" width="172" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="276" y="57" text-anchor="middle" font-size="14" font-weight="700">时间触发</text>
+              <text x="276" y="76" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">checkpoint_timeout</text>
+
+              <rect x="380" y="34" width="172" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="466" y="57" text-anchor="middle" font-size="14" font-weight="700">WAL 消耗触发</text>
+              <text x="466" y="76" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">max_wal_size</text>
+
+              <rect x="570" y="34" width="172" height="52" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="656" y="57" text-anchor="middle" font-size="14" font-weight="700" fill="#BE653B">手工命令</text>
+              <text x="656" y="76" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">CHECKPOINT FAST/SPREAD</text>
+
+              <rect x="760" y="34" width="172" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="846" y="57" text-anchor="middle" font-size="14" font-weight="700">关闭 / 恢复 / DDL</text>
+              <text x="846" y="76" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">SHUTDOWN / RECOVERY</text>
+
+              <!-- Layer 2 boxes -->
+              <rect x="190" y="130" width="350" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="365" y="153" text-anchor="middle" font-size="15" font-weight="700">共享内存 ckpt_flags 位 OR 合并</text>
+              <text x="365" y="172" text-anchor="middle" font-size="12" fill="#46585F">后端发信号唤醒，强请求不被弱请求覆盖</text>
+
+              <rect x="570" y="130" width="362" height="52" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="751" y="153" text-anchor="middle" font-size="15" font-weight="700">CheckpointerMain() 仲裁与空闲跳过</text>
+              <text x="751" y="172" text-anchor="middle" font-size="12" fill="#46585F">区分 num_timed / num_requested 与 num_done</text>
+
+              <!-- Layer 3 boxes -->
+              <rect x="190" y="226" width="232" height="52" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.2"/>
+              <text x="306" y="249" text-anchor="middle" font-size="14" font-weight="700">双 WAL 记录并发机制</text>
+              <text x="306" y="268" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">REDO → ONLINE</text>
+
+              <rect x="442" y="226" width="236" height="52" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.2"/>
+              <text x="560" y="249" text-anchor="middle" font-size="14" font-weight="700">CheckPointGuts() 刷盘核心</text>
+              <text x="560" y="268" text-anchor="middle" font-size="12" fill="#46585F">数据页 + SLRU + 复制槽 + 2PC</text>
+
+              <rect x="698" y="226" width="234" height="52" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.2"/>
+              <text x="815" y="249" text-anchor="middle" font-size="14" font-weight="700">备库 CreateRestartPoint()</text>
+              <text x="815" y="268" text-anchor="middle" font-size="12" fill="#46585F">恢复期推进本地恢复边界</text>
+
+              <!-- Layer 4 boxes -->
+              <rect x="190" y="324" width="232" height="68" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.2"/>
+              <text x="306" y="349" text-anchor="middle" font-size="14" font-weight="700">BufferSync() 冻结排序</text>
+              <text x="306" y="368" text-anchor="middle" font-size="12" class="svg-mono" fill="#245A6B">BM_CHECKPOINT_NEEDED</text>
+              <text x="306" y="384" text-anchor="middle" font-size="11" fill="#46585F">多表空间二叉堆均衡写入</text>
+
+              <rect x="442" y="324" width="236" height="68" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.2"/>
+              <text x="560" y="349" text-anchor="middle" font-size="14" font-weight="700">CheckpointWriteDelay()</text>
+              <text x="560" y="368" text-anchor="middle" font-size="12" class="svg-mono" fill="#245A6B">completion_target = 0.9</text>
+              <text x="560" y="384" text-anchor="middle" font-size="11" fill="#46585F">时间进度 + WAL 进度双维节流</text>
+
+              <rect x="698" y="324" width="234" height="68" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.2"/>
+              <text x="815" y="349" text-anchor="middle" font-size="14" font-weight="700">ProcessSyncRequests()</text>
+              <text x="815" y="368" text-anchor="middle" font-size="12" class="svg-mono" fill="#245A6B">ControlFile &amp; WAL 回收</text>
+              <text x="815" y="384" text-anchor="middle" font-size="11" fill="#46585F">fsync 闭环 + 刷新恢复起点</text>
+
+              <!-- Orthogonal vertical connectors between layers -->
+              <path d="M 365 86 V 130" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 540 156 H 570" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 560 182 V 226" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 560 278 V 324" stroke="#1E4B5A" stroke-width="1.8" fill="none" marker-end="url(#arr-dark)"/>
+
+              <!-- Right Blueprint Fact Sheet Panel -->
+              <rect x="976" y="18" width="404" height="392" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.2"/>
+              <rect x="976" y="18" width="404" height="40" fill="#1E4B5A"/>
+              <text x="996" y="43" font-size="14" font-weight="700" fill="#F7F6F2" class="svg-mono">BLUEPRINT · 核心事实依据</text>
+
+              <text x="996" y="88" font-size="15" font-weight="700" fill="#1B2B33">本次讲演三大主线</text>
+              <rect x="996" y="102" width="364" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="996" y="102" width="4" height="58" fill="#245A6B"/>
+              <text x="1014" y="126" font-size="14" font-weight="700" fill="#245A6B">1. 机制与源码闭环</text>
+              <text x="1014" y="148" font-size="13" fill="#46585F">checkpointer.c · xlog.c · bufmgr.c · sync.c</text>
+
+              <rect x="996" y="172" width="364" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="996" y="172" width="4" height="58" fill="#BE653B"/>
+              <text x="1014" y="196" font-size="14" font-weight="700" fill="#BE653B">2. 矛盾量化与动态节流</text>
+              <text x="1014" y="218" font-size="13" fill="#46585F">RTO · pg_wal 空间 · 前台抖动 · FPI 膨胀</text>
+
+              <rect x="996" y="242" width="364" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="996" y="242" width="4" height="58" fill="#2F7A66"/>
+              <text x="1014" y="266" font-size="14" font-weight="700" fill="#2F7A66">3. 观测诊断与排雷守则</text>
+              <text x="1014" y="288" font-size="13" fill="#46585F">pg_stat_checkpointer · log_checkpoints · 十大坑</text>
+
+              <line x1="996" y1="320" x2="1360" y2="320" stroke="#D9D5CB" stroke-width="1"/>
+              <text x="996" y="346" font-size="13" fill="#46585F">官方 SGML：wal.sgml / config.sgml / monitoring.sgml</text>
+              <text x="996" y="370" font-size="13" fill="#46585F">源码基线：PostgreSQL master 分支 (commit 01a80f0)</text>
+              <text x="996" y="394" font-size="12" class="svg-mono" fill="#89938F">快捷键：G 目录 ｜ N 本页讲稿 ｜ T 全文讲稿 ｜ F 全屏</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>在生产现场，检查点调度失衡会以哪五种典型故障症状暴露出来？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">01 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 02 ==================== -->
+        <section class="slide" data-index="1" data-title="三大目标与四重代价">
+          <div class="slide-eyebrow">
+            <span>PROBLEM STATEMENT · 02 / 14</span>
+            <span class="tag-right">wal.sgml · 生产症状与权衡</span>
+          </div>
+          <h1 class="slide-title">为什么不能只看「刷盘」？三大目标与四重代价</h1>
+          <p class="slide-lead">检查点调度同时约束崩溃恢复长度、旧 WAL 回收边界与写 I/O 平滑度——单边压低任何一项都会放大另一端代价。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="生产症状、三大目标与四重代价关系图">
+              <!-- Column 1: 5 Production Symptoms -->
+              <rect x="20" y="18" width="400" height="394" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="20" y="18" width="400" height="38" fill="#BE653B"/>
+              <text x="38" y="42" font-size="14" font-weight="700" fill="#F7F6F2">生产现场：五类高频异常症状</text>
+
+              <rect x="36" y="70" width="368" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="50" y="93" font-size="13" font-weight="700" fill="#BE653B">1. 日志刷屏 checkpoints too frequently</text>
+              <text x="50" y="114" font-size="12" fill="#46585F">批量导入 / 建索引 / 高频更新期间反复告警</text>
+
+              <rect x="36" y="138" width="368" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="50" y="161" font-size="13" font-weight="700" fill="#BE653B">2. 无慢 SQL，但延迟周期性抖动</text>
+              <text x="50" y="182" font-size="12" fill="#46585F">log_checkpoints 显示 sync 或 write 耗时过长</text>
+
+              <rect x="36" y="206" width="368" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="50" y="229" font-size="13" font-weight="700" fill="#BE653B">3. pg_wal 目录突破 max_wal_size</text>
+              <text x="50" y="250" font-size="12" fill="#46585F">误把参数当硬上限，忽视复制槽 / 归档 / 备份保留</text>
+
+              <rect x="36" y="274" width="368" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="50" y="297" font-size="13" font-weight="700" fill="#BE653B">4. 调小 checkpoint_timeout 反增 WAL</text>
+              <text x="50" y="318" font-size="12" fill="#46585F">full_page_writes=on 下每轮首次改页写整页 FPI</text>
+
+              <rect x="36" y="342" width="368" height="58" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="50" y="365" font-size="13" font-weight="700" fill="#BE653B">5. 手工 CHECKPOINT 打满磁盘 I/O</text>
+              <text x="50" y="386" font-size="12" fill="#46585F">默认手工执行是 FAST 模式，直接绕过后台节流</text>
+
+              <!-- Orthogonal connector Col 1 -> Col 2 -->
+              <path d="M 420 215 H 462" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <!-- Column 2: 3 Core Goals -->
+              <rect x="466" y="18" width="416" height="394" fill="#EBF1EE" stroke="#74A5AD"/>
+              <rect x="466" y="18" width="416" height="38" fill="#245A6B"/>
+              <text x="484" y="42" font-size="14" font-weight="700" fill="#F7F6F2">检查点调度必须同时解决的三大问题</text>
+
+              <rect x="484" y="74" width="380" height="98" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="484" y="74" width="6" height="98" fill="#1E4B5A"/>
+              <text x="506" y="102" font-size="16" font-weight="700" fill="#1E4B5A">目标一：限定崩溃恢复的 REDO 长度</text>
+              <text x="506" y="126" font-size="13" fill="#46585F">保证该点之前的修改已落入 heap / index 文件，</text>
+              <text x="506" y="148" font-size="13" fill="#46585F">崩溃恢复只需从最新 redo record 开始重放 WAL。</text>
+
+              <rect x="484" y="188" width="380" height="98" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="484" y="188" width="6" height="98" fill="#2E6373"/>
+              <text x="506" y="216" font-size="16" font-weight="700" fill="#2E6373">目标二：划定旧 WAL 的可回收边界</text>
+              <text x="506" y="240" font-size="13" fill="#46585F">早于 redo 所在段的 WAL 不再为崩溃恢复所需，</text>
+              <text x="506" y="262" font-size="13" fill="#46585F">但归档、复制槽与备份仍可独立要求继续保留。</text>
+
+              <rect x="484" y="302" width="380" height="94" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="484" y="302" width="6" height="94" fill="#47808D"/>
+              <text x="506" y="330" font-size="16" font-weight="700" fill="#245A6B">目标三：把昂贵的刷脏页 I/O 摊平</text>
+              <text x="506" y="354" font-size="13" fill="#46585F">通过 completion_target 把写脏页节流到目标区间，</text>
+              <text x="506" y="376" font-size="13" fill="#46585F">避免集中刷盘与 fsync 冲击前台事务延迟。</text>
+
+              <!-- Orthogonal connector Col 2 -> Col 3 -->
+              <path d="M 882 215 H 924" stroke="#BE653B" stroke-width="2" fill="none" marker-end="url(#arr-terra)"/>
+
+              <!-- Column 3: 4 Trade-off Costs -->
+              <rect x="928" y="18" width="452" height="394" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="928" y="18" width="452" height="38" fill="#1E4B5A"/>
+              <text x="946" y="42" font-size="14" font-weight="700" fill="#F7F6F2">工程代价矩阵：没有「越少越好」或「越快越好」</text>
+
+              <!-- 2x2 Grid -->
+              <rect x="946" y="72" width="202" height="154" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="962" y="100" font-size="15" font-weight="700" fill="#BE653B">太频繁</text>
+              <text x="962" y="126" font-size="13" fill="#1B2B33">• 脏页反复写出</text>
+              <text x="962" y="150" font-size="13" fill="#1B2B33">• full_page_writes=on</text>
+              <text x="962" y="172" font-size="13" fill="#1B2B33">  触发大量整页 FPI</text>
+              <text x="962" y="196" font-size="13" fill="#1B2B33">• WAL 总量反而增加</text>
+
+              <rect x="1162" y="72" width="202" height="154" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.2"/>
+              <text x="1178" y="100" font-size="15" font-weight="700" fill="#AE8A3E">太稀疏</text>
+              <text x="1178" y="126" font-size="13" fill="#1B2B33">• 崩溃后需重放更多</text>
+              <text x="1178" y="148" font-size="13" fill="#1B2B33">  WAL，RTO 拉长</text>
+              <text x="1178" y="172" font-size="13" fill="#1B2B33">• pg_wal 空间占用增大</text>
+              <text x="1178" y="196" font-size="13" fill="#1B2B33">• 归档与存储压力加重</text>
+
+              <rect x="946" y="242" width="202" height="154" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="962" y="270" font-size="15" font-weight="700" fill="#BE653B">太急（低 target）</text>
+              <text x="962" y="296" font-size="13" fill="#1B2B33">• 短时间集中写出脏页</text>
+              <text x="962" y="320" font-size="13" fill="#1B2B33">• 末尾 fsync 队列堵塞</text>
+              <text x="962" y="344" font-size="13" fill="#1B2B33">• OS page cache 抖动</text>
+              <text x="962" y="368" font-size="13" fill="#1B2B33">• 前台事务延迟尖刺</text>
+
+              <rect x="1162" y="242" width="202" height="154" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.2"/>
+              <text x="1178" y="270" font-size="15" font-weight="700" fill="#AE8A3E">太慢（追不上）</text>
+              <text x="1178" y="296" font-size="13" fill="#1B2B33">• 写盘速度落后于 WAL</text>
+              <text x="1178" y="320" font-size="13" fill="#1B2B33">• 峰值突破 max_wal_size</text>
+              <text x="1178" y="344" font-size="13" fill="#1B2B33">• 下一轮提前到来</text>
+              <text x="1178" y="368" font-size="13" fill="#1B2B33">• target=1.0 易超期</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>PostgreSQL 如何把多种触发源收拢到单一 checkpointer 进程，避免并发打架？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">02 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 03 ==================== -->
+        <section class="slide" data-index="2" data-title="触发源与 ckpt_flags 合并">
+          <div class="slide-eyebrow">
+            <span>TRIGGER &amp; COALESCING · 03 / 14</span>
+            <span class="tag-right">src/backend/postmaster/checkpointer.c</span>
+          </div>
+          <h1 class="slide-title">触发源与请求合并：ckpt_flags 的位 OR 仲裁</h1>
+          <p class="slide-lead">自 PostgreSQL 9.2 起，常规检查点统一由 checkpointer 执行；多路请求按位 OR 合并，空闲时则跳过以省去无意义刷盘。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="检查点触发源与请求合并图">
+              <!-- Left: 5 Trigger Sources -->
+              <text x="34" y="34" font-size="14" font-weight="700" fill="#245A6B">多路触发源（时间由 checkpointer 自判，其余由后端发请求）</text>
+
+              <rect x="34" y="50" width="330" height="58" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="52" y="75" font-size="14" font-weight="700">1. 时间到期 CHECKPOINT_CAUSE_TIME</text>
+              <text x="52" y="96" font-size="12" class="svg-mono" fill="#46585F">now - last_checkpoint_time &gt;= CheckPointTimeout</text>
+
+              <rect x="34" y="122" width="330" height="58" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="52" y="147" font-size="14" font-weight="700">2. WAL 填充 CHECKPOINT_CAUSE_XLOG</text>
+              <text x="52" y="168" font-size="12" class="svg-mono" fill="#46585F">XLogWrite() 写满段时调 RequestCheckpoint()</text>
+
+              <rect x="34" y="194" width="330" height="58" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.2"/>
+              <text x="52" y="219" font-size="14" font-weight="700" fill="#BE653B">3. 手工命令 ExecCheckpoint()</text>
+              <text x="52" y="240" font-size="12" class="svg-mono" fill="#46585F">默认 FAST；master 支持 SPREAD / FLUSH_UNLOGGED</text>
+
+              <rect x="34" y="266" width="330" height="58" fill="#F1EFE9" stroke="#47808D" stroke-width="1.2"/>
+              <text x="52" y="291" font-size="14" font-weight="700">4. 关闭实例 CHECKPOINT_IS_SHUTDOWN</text>
+              <text x="52" y="312" font-size="12" class="svg-mono" fill="#46585F">强制落盘全部状态与 unlogged buffers</text>
+
+              <rect x="34" y="338" width="330" height="58" fill="#F1EFE9" stroke="#47808D" stroke-width="1.2"/>
+              <text x="52" y="363" font-size="14" font-weight="700">5. 恢复结束 / 特定 DDL / 备份</text>
+              <text x="52" y="384" font-size="12" class="svg-mono" fill="#46585F">END_OF_RECOVERY · CREATEDB · CHECKPOINT_FORCE</text>
+
+              <!-- Orthogonal bus connecting 5 sources to Shmem -->
+              <path d="M 364 79 H 416 V 223 H 460" stroke="#245A6B" stroke-width="1.6" fill="none"/>
+              <path d="M 364 151 H 416" stroke="#245A6B" stroke-width="1.6" fill="none"/>
+              <path d="M 364 223 H 460" stroke="#BE653B" stroke-width="1.8" fill="none" marker-end="url(#arr-terra)"/>
+              <path d="M 364 295 H 416 V 223" stroke="#245A6B" stroke-width="1.6" fill="none"/>
+              <path d="M 364 367 H 416 V 223" stroke="#245A6B" stroke-width="1.6" fill="none"/>
+
+              <!-- Center: Shared Memory Merge Box -->
+              <rect x="466" y="96" width="300" height="254" fill="#CFE0DC" stroke="#1E4B5A" stroke-width="1.6"/>
+              <rect x="466" y="96" width="300" height="42" fill="#1E4B5A"/>
+              <text x="616" y="122" text-anchor="middle" font-size="15" font-weight="700" fill="#F7F6F2">共享内存合并层 (CheckpointerShmem)</text>
+
+              <rect x="484" y="154" width="264" height="56" fill="#F7F6F2" stroke="#245A6B"/>
+              <text x="616" y="177" text-anchor="middle" font-size="14" font-weight="700" class="svg-mono" fill="#245A6B">ckpt_flags |= flags</text>
+              <text x="616" y="198" text-anchor="middle" font-size="12" fill="#46585F">按位 OR 合并，强标志不被弱标志覆盖</text>
+
+              <rect x="484" y="222" width="264" height="50" fill="#F7F6F2" stroke="#245A6B"/>
+              <text x="616" y="244" text-anchor="middle" font-size="13" font-weight="700">SetLatch() 唤醒 checkpointer</text>
+              <text x="616" y="263" text-anchor="middle" font-size="12" fill="#46585F">取出并清空 flags，递增 ckpt_started</text>
+
+              <rect x="484" y="284" width="264" height="50" fill="#F7F6F2" stroke="#245A6B"/>
+              <text x="616" y="306" text-anchor="middle" font-size="13" font-weight="700">同步等待者通知 (ckpt_done)</text>
+              <text x="616" y="325" text-anchor="middle" font-size="12" fill="#46585F">带 CHECKPOINT_WAIT 的调用方阻塞等完成</text>
+
+              <!-- Orthogonal connector Shmem -> CheckpointerMain -->
+              <path d="M 766 223 H 830" stroke="#1E4B5A" stroke-width="2" fill="none" marker-end="url(#arr-dark)"/>
+
+              <!-- Right: CheckpointerMain Dispatch -->
+              <rect x="836" y="40" width="532" height="366" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.2"/>
+              <rect x="836" y="40" width="532" height="40" fill="#245A6B"/>
+              <text x="856" y="65" font-size="14" font-weight="700" fill="#F7F6F2">CheckpointerMain() 执行分发与统计口径</text>
+
+              <!-- 3 Branches -->
+              <rect x="858" y="98" width="488" height="72" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.3"/>
+              <rect x="858" y="98" width="6" height="72" fill="#2F7A66"/>
+              <text x="880" y="124" font-size="15" font-weight="700" fill="#2F7A66">路径 A：正常主库 → CreateCheckPoint()</text>
+              <text x="880" y="148" font-size="13" fill="#46585F">RecoveryInProgress() 为 false；推进主库 redo 指针与 ControlFile</text>
+
+              <rect x="858" y="186" width="488" height="72" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="858" y="186" width="6" height="72" fill="#245A6B"/>
+              <text x="880" y="212" font-size="15" font-weight="700" fill="#245A6B">路径 B：恢复/备库 → CreateRestartPoint()</text>
+              <text x="880" y="236" font-size="13" fill="#46585F">RecoveryInProgress() 为 true；依赖已回放 WAL 中的 checkpoint 记录</text>
+
+              <rect x="858" y="274" width="488" height="114" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.3"/>
+              <rect x="858" y="274" width="6" height="114" fill="#AE8A3E"/>
+              <text x="880" y="300" font-size="15" font-weight="700" fill="#AE8A3E">路径 C：空闲跳过（Skip Idle Checkpoint）</text>
+              <text x="880" y="324" font-size="13" fill="#1B2B33">条件：last_important_lsn == 当前 control file 位置，且非 shutdown / force</text>
+              <text x="880" y="348" font-size="13" font-weight="700" fill="#BE653B">监控陷阱（monitoring.sgml）：</text>
+              <text x="880" y="370" font-size="13" fill="#46585F">num_timed / num_requested 含跳过次数；num_done 只统计真正完成！</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>主循环的时间起点怎么记？WAL 消耗又是如何推算出「提前触发阈值」的？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">03 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 04 ==================== -->
+        <section class="slide" data-index="3" data-title="WAL 触发公式与 max_wal_size 边界">
+          <div class="slide-eyebrow">
+            <span>WAL TRIGGER &amp; BOUNDARY · 04 / 14</span>
+            <span class="tag-right">xlog.c · CalculateCheckpointSegments()</span>
+          </div>
+          <h1 class="slide-title">WAL 触发阈值：为何 max_wal_size 不是磁盘硬上限？</h1>
+          <p class="slide-lead">checkpointer 运行期间系统仍在产生新 WAL，因此必须按 1 / (1 + target) 提前触发，而多类外部保留边界可推高 pg_wal。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="WAL 触发距离计算公式与 pg_wal 保留边界图">
+              <!-- Top band: Formula & Worked Example -->
+              <rect x="24" y="18" width="840" height="232" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="24" y="18" width="840" height="36" fill="#245A6B"/>
+              <text x="42" y="41" font-size="14" font-weight="700" fill="#F7F6F2">源码公式：CalculateCheckpointSegments() 提前触发推演</text>
+
+              <!-- Formula box -->
+              <rect x="44" y="68" width="800" height="48" fill="#E5EFF0" stroke="#74A5AD"/>
+              <text x="444" y="98" text-anchor="middle" font-size="16" font-weight="700" class="svg-mono" fill="#1E4B5A">CheckPointSegments = floor( ConvertToXSegs(max_wal_size) / (1.0 + completion_target) )</text>
+
+              <!-- Visual bar of 64 segments (1GB / 16MB) -->
+              <text x="44" y="140" font-size="13" font-weight="700" fill="#1B2B33">公式实算例：wal_segment_size = 16MB，max_wal_size = 1GB（共 64 段），completion_target = 0.9</text>
+
+              <!-- Bar 0..33 -->
+              <rect x="44" y="154" width="412" height="44" fill="#2E6373"/>
+              <text x="250" y="181" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">触发距离：floor(64 / 1.9) = 33 段 (528 MB)</text>
+
+              <!-- Bar 33..64 -->
+              <rect x="456" y="154" width="388" height="44" fill="#A4C4C6" stroke="#2E6373"/>
+              <text x="650" y="181" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B33">预留给检查点运行期间新写 WAL：31 段 (496 MB)</text>
+
+              <!-- Trigger marker -->
+              <line x1="456" y1="146" x2="456" y2="210" stroke="#BE653B" stroke-width="2.5"/>
+              <text x="456" y="232" text-anchor="middle" font-size="13" font-weight="700" fill="#BE653B">▲ 写满第 33 段即触发 RequestCheckpoint(CHECKPOINT_CAUSE_XLOG)</text>
+
+              <!-- Right box: Time anchor detail -->
+              <rect x="888" y="18" width="488" height="232" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.2"/>
+              <rect x="888" y="18" width="488" height="36" fill="#1E4B5A"/>
+              <text x="906" y="41" font-size="14" font-weight="700" fill="#F7F6F2">时间触发关键细节：记录「开始时间」防漂移</text>
+
+              <text x="908" y="76" font-size="14" font-weight="700" fill="#1B2B33">last_checkpoint_time = 本轮开始时刻（非结束时刻）</text>
+              <!-- Timeline diagram inside right box -->
+              <line x1="910" y1="138" x2="1350" y2="138" stroke="#46585F" stroke-width="2"/>
+              <rect x="920" y="126" width="120" height="24" fill="#245A6B"/>
+              <text x="980" y="142" text-anchor="middle" font-size="11" fill="#F7F6F2" class="svg-mono">CKPT #1</text>
+              <rect x="1140" y="126" width="120" height="24" fill="#245A6B"/>
+              <text x="1200" y="142" text-anchor="middle" font-size="11" fill="#F7F6F2" class="svg-mono">CKPT #2</text>
+
+              <path d="M 920 122 V 110 H 1140 V 122" stroke="#2F7A66" stroke-width="1.6" fill="none"/>
+              <text x="1030" y="103" text-anchor="middle" font-size="12" font-weight="700" fill="#2F7A66">间隔恒定 ≈ checkpoint_timeout (默认 5min)</text>
+
+              <rect x="908" y="160" width="448" height="72" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="924" y="184" font-size="13" font-weight="700" fill="#BE653B">若按「结束时间」计时会怎样？</text>
+              <text x="924" y="206" font-size="13" fill="#46585F">刷盘越慢，下一轮越往后漂移，崩溃恢复窗口将变得</text>
+              <text x="924" y="224" font-size="13" fill="#46585F">不可预测；按开始时间锚定才能保持稳定恢复周期。</text>
+
+              <!-- Bottom band: 5 Factors pushing pg_wal beyond max_wal_size -->
+              <rect x="24" y="268" width="1352" height="144" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.3"/>
+              <rect x="24" y="268" width="1352" height="34" fill="#BE653B"/>
+              <text x="42" y="290" font-size="14" font-weight="700" fill="#F7F6F2">为什么生产环境 pg_wal 经常超过 max_wal_size？五大独立保留边界</text>
+
+              <rect x="42" y="316" width="248" height="80" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="56" y="342" font-size="14" font-weight="700" fill="#BE653B">1. 短期写入峰值</text>
+              <text x="56" y="364" font-size="12" fill="#46585F">检查点执行期间突发批量写，</text>
+              <text x="56" y="382" font-size="12" fill="#46585F">新 WAL 增速超过刷脏页速率</text>
+
+              <rect x="308" y="316" width="248" height="80" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="322" y="342" font-size="14" font-weight="700" fill="#BE653B">2. 复制槽滞后 / 失效</text>
+              <text x="322" y="364" font-size="12" fill="#46585F">pg_replication_slots 强保</text>
+              <text x="322" y="382" font-size="12" fill="#46585F">restart_lsn 之后的全部段</text>
+
+              <rect x="574" y="316" width="248" height="80" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="588" y="342" font-size="14" font-weight="700" fill="#BE653B">3. WAL 归档积压</text>
+              <text x="588" y="364" font-size="12" fill="#46585F">archive_command 慢或失败，</text>
+              <text x="588" y="382" font-size="12" fill="#46585F">未归档段禁止回收与删除</text>
+
+              <rect x="840" y="316" width="248" height="80" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="854" y="342" font-size="14" font-weight="700" fill="#BE653B">4. 物理备份与保留参数</text>
+              <text x="854" y="364" font-size="12" fill="#46585F">在线备份期间及 wal_keep_size</text>
+              <text x="854" y="382" font-size="12" fill="#46585F">强制锁定历史 WAL 区间</text>
+
+              <rect x="1106" y="316" width="252" height="80" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="1120" y="342" font-size="14" font-weight="700" fill="#BE653B">5. 故障恢复与距离估计</text>
+              <text x="1120" y="364" font-size="12" fill="#46585F">距离估计「峰值快升、0.9 慢降」，</text>
+              <text x="1120" y="382" font-size="12" fill="#46585F">会动态多保留预分配段</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>触发之后，在线检查点如何在不阻塞前台并发写入的前提下完成全链路落盘？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">04 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 05 (INTERACTIVE ANIMATION 1) ==================== -->
+        <section class="slide" data-index="4" data-title="在线检查点双记录与完成链路（动画演示）">
+          <div class="slide-eyebrow">
+            <span>ONLINE CHECKPOINT LIFECYCLE · 05 / 14</span>
+            <span class="tag-right">xlog.c · CreateCheckPoint() &amp; CheckPointGuts()</span>
+          </div>
+          <h1 class="slide-title">双 WAL 记录与 CheckPointGuts：在线检查点为何不锁全局？</h1>
+          <p class="slide-lead">先写 XLOG_CHECKPOINT_REDO 钉住恢复起点并放行前台并发写，刷完数据与状态后再写 ONLINE 记录并切换 ControlFile。</p>
+          <div class="slide-divider"></div>
+
+          <!-- Dedicated toolbar above SVG -->
+          <div class="sim-toolbar" id="anim1-bar">
+            <button class="sim-btn" id="anim1-prev" type="button">上一步</button>
+            <button class="sim-btn primary" id="anim1-play" type="button">播放推演</button>
+            <button class="sim-btn" id="anim1-next" type="button">下一步</button>
+            <button class="sim-btn" id="anim1-reset" type="button">重置</button>
+            <span class="sim-sep"></span>
+            <span class="sim-label">演进阶段：</span>
+            <span class="sim-val" id="anim1-step-num" style="min-width:60px;">1 / 6</span>
+            <span class="sim-status" id="anim1-status">阶段 1：写入 XLOG_CHECKPOINT_REDO，钉住 RedoRecPtr</span>
+          </div>
+
+          <div class="diagram-zone">
+            <svg id="svg-anim1" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="在线检查点双记录与完成链路交互图">
+              <!-- Top Track: Foreground Concurrent WAL Stream -->
+              <rect x="20" y="16" width="1360" height="72" fill="#EBF1EE" stroke="#A4C4C6"/>
+              <text x="38" y="42" font-size="13" font-weight="700" fill="#245A6B">前台并发事务 WAL 流（仅在确定 RedoRecPtr 短窗口拿锁，刷脏页期间持续并发写入）</text>
+              <line x1="38" y1="64" x2="1340" y2="64" stroke="#74A5AD" stroke-width="3"/>
+              <!-- WAL blocks -->
+              <rect id="a1-wal-1" x="60" y="52" width="110" height="24" fill="#245A6B"/>
+              <text x="115" y="68" text-anchor="middle" font-size="11" class="svg-mono" fill="#F7F6F2">TXN WAL</text>
+              <rect id="a1-wal-redo" x="190" y="48" width="186" height="32" fill="#BE653B"/>
+              <text x="283" y="68" text-anchor="middle" font-size="12" font-weight="700" class="svg-mono" fill="#F7F6F2">XLOG_CHECKPOINT_REDO</text>
+              <rect id="a1-wal-c1" x="400" y="52" width="140" height="24" fill="#2F7A66" opacity="0.35"/>
+              <text x="470" y="68" text-anchor="middle" font-size="11" class="svg-mono" fill="#F7F6F2">并发事务持续写入</text>
+              <rect id="a1-wal-c2" x="560" y="52" width="140" height="24" fill="#2F7A66" opacity="0.35"/>
+              <text x="630" y="68" text-anchor="middle" font-size="11" class="svg-mono" fill="#F7F6F2">并发事务持续写入</text>
+              <rect id="a1-wal-c3" x="720" y="52" width="140" height="24" fill="#2F7A66" opacity="0.35"/>
+              <text x="790" y="68" text-anchor="middle" font-size="11" class="svg-mono" fill="#F7F6F2">并发事务持续写入</text>
+              <rect id="a1-wal-online" x="890" y="48" width="210" height="32" fill="#1E4B5A" opacity="0.35"/>
+              <text x="995" y="68" text-anchor="middle" font-size="12" font-weight="700" class="svg-mono" fill="#F7F6F2">XLOG_CHECKPOINT_ONLINE</text>
+              <rect id="a1-wal-next" x="1130" y="52" width="190" height="24" fill="#74A5AD" opacity="0.35"/>
+              <text x="1225" y="68" text-anchor="middle" font-size="11" class="svg-mono" fill="#1B2B33">后续周期新 WAL</text>
+
+              <!-- Middle: 6 Sequential Stages -->
+              <!-- Step 1 -->
+              <g id="a1-s1">
+                <rect x="20" y="114" width="206" height="176" fill="#F7E9DE" stroke="#BE653B" stroke-width="2"/>
+                <rect x="20" y="114" width="206" height="32" fill="#BE653B"/>
+                <text x="123" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2">1. 插入 REDO 记录</text>
+                <text x="34" y="170" font-size="13" font-weight="700">钉住 RedoRecPtr</text>
+                <text x="34" y="194" font-size="12" fill="#46585F">• 仅短窗口拿锁获取</text>
+                <text x="34" y="214" font-size="12" fill="#46585F">  当前 WAL 插入点</text>
+                <text x="34" y="238" font-size="12" fill="#46585F">• 崩溃恢复将从此处</text>
+                <text x="34" y="258" font-size="12" fill="#46585F">  开始重放</text>
+              </g>
+
+              <!-- Step 2 -->
+              <g id="a1-s2" opacity="0.45">
+                <rect x="248" y="114" width="206" height="176" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="248" y="114" width="206" height="32" fill="#245A6B"/>
+                <text x="351" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2">2. 放行并发写</text>
+                <text x="262" y="170" font-size="13" font-weight="700">前台无阻塞继续运行</text>
+                <text x="262" y="194" font-size="12" fill="#46585F">• 其他事务持续插 WAL</text>
+                <text x="262" y="218" font-size="12" fill="#46585F">• 对照：Shutdown 无并发</text>
+                <text x="262" y="238" font-size="12" fill="#46585F">  只需单条 SHUTDOWN</text>
+                <text x="262" y="258" font-size="12" fill="#46585F">  记录兼作恢复起点</text>
+              </g>
+
+              <!-- Step 3 -->
+              <g id="a1-s3" opacity="0.45">
+                <rect x="476" y="114" width="242" height="176" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="476" y="114" width="242" height="32" fill="#245A6B"/>
+                <text x="597" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2">3. CheckPointGuts() 刷盘</text>
+                <text x="490" y="168" font-size="12" font-weight="700" fill="#245A6B">不只写 heap / index 脏页：</text>
+                <text x="490" y="190" font-size="12" fill="#46585F">• relmap / replication slots</text>
+                <text x="490" y="210" font-size="12" fill="#46585F">• logical decoding / origin</text>
+                <text x="490" y="230" font-size="12" fill="#46585F">• CLOG / CommitTs / MultiXact</text>
+                <text x="490" y="250" font-size="12" fill="#46585F">• BufferSync + fsync + 2PC</text>
+              </g>
+
+              <!-- Step 4 -->
+              <g id="a1-s4" opacity="0.45">
+                <rect x="740" y="114" width="196" height="176" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="740" y="114" width="196" height="32" fill="#245A6B"/>
+                <text x="838" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2">4. 写 ONLINE &amp; Flush</text>
+                <text x="754" y="170" font-size="13" font-weight="700">宣告本轮刷盘完成</text>
+                <text x="754" y="194" font-size="12" fill="#46585F">• 插入 ONLINE 记录，</text>
+                <text x="754" y="214" font-size="12" fill="#46585F">  字段指回前序 REDO</text>
+                <text x="754" y="238" font-size="12" fill="#46585F">• 执行 XLogFlush() 确保</text>
+                <text x="754" y="258" font-size="12" fill="#46585F">  完成记录自身落盘</text>
+              </g>
+
+              <!-- Step 5 -->
+              <g id="a1-s5" opacity="0.45">
+                <rect x="958" y="114" width="196" height="176" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+                <rect x="958" y="114" width="196" height="32" fill="#245A6B"/>
+                <text x="1056" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2">5. 更新 ControlFile</text>
+                <text x="972" y="170" font-size="13" font-weight="700">临界区原子切换</text>
+                <text x="972" y="194" font-size="12" fill="#46585F">• 更新 checkPoint 指针</text>
+                <text x="972" y="214" font-size="12" fill="#46585F">• 写入 checkPointCopy</text>
+                <text x="972" y="238" font-size="12" fill="#46585F">• 清理 minRecoveryPoint</text>
+                <text x="972" y="258" font-size="12" fill="#46585F">• 持久化 unloggedLSN</text>
+              </g>
+
+              <!-- Step 6 -->
+              <g id="a1-s6" opacity="0.45">
+                <rect x="1176" y="114" width="204" height="176" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.2"/>
+                <rect x="1176" y="114" width="204" height="32" fill="#2F7A66"/>
+                <text x="1278" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2">6. 估算距离与回收</text>
+                <text x="1190" y="170" font-size="13" font-weight="700">收尾与下一轮预判</text>
+                <text x="1190" y="194" font-size="12" fill="#46585F">• 距离估计：峰值快升</text>
+                <text x="1190" y="214" font-size="12" fill="#46585F">  低峰 0.90/0.10 慢降</text>
+                <text x="1190" y="238" font-size="12" fill="#46585F">• RemoveOldXlogFiles()</text>
+                <text x="1190" y="258" font-size="12" fill="#46585F">• Prealloc + LogEnd</text>
+              </g>
+
+              <!-- Orthogonal arrows between steps -->
+              <path d="M 226 202 H 244" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 454 202 H 472" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 718 202 H 736" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 936 202 H 954" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+              <path d="M 1154 202 H 1172" stroke="#2F7A66" stroke-width="1.8" fill="none" marker-end="url(#arr-teal)"/>
+
+              <!-- Bottom Detail Explanation Bar (updates dynamically with step) -->
+              <rect x="20" y="310" width="1360" height="102" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="20" y="310" width="6" height="102" fill="#BE653B"/>
+              <text id="a1-detail-title" x="44" y="342" font-size="16" font-weight="700" fill="#1E4B5A">阶段 1 解析：先插 XLOG_CHECKPOINT_REDO —— 为什么不在刷完脏页后再定起点？</text>
+              <text id="a1-detail-line1" x="44" y="370" font-size="14" fill="#1B2B33">如果在刷完脏页后才定 redo 起点，刷盘期间新产生的脏页可能还没落盘就被排除在恢复范围外，导致崩溃丢数据。</text>
+              <text id="a1-detail-line2" x="44" y="394" font-size="14" fill="#46585F">因此必须先钉住 RedoRecPtr，确保该点之前的修改全部落盘，而该点之后的新修改则由 WAL 负责崩溃重放。</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>在 CheckPointGuts() 里最耗时的 BufferSync()，如何在高并发改页下保证本轮一定有终点？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">05 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 06 ==================== -->
+        <section class="slide" data-index="5" data-title="BufferSync 写脏页路径">
+          <div class="slide-eyebrow">
+            <span>BUFFER SYNC PIPELINE · 06 / 14</span>
+            <span class="tag-right">src/backend/storage/buffer/bufmgr.c</span>
+          </div>
+          <h1 class="slide-title">BufferSync()：先冻结本轮脏页集合，再排序与多表空间均衡写</h1>
+          <p class="slide-lead">高写入负载下若追逐新变脏的页面，检查点将永不收敛；BM_CHECKPOINT_NEEDED 冻结范围，排序与二叉堆压平磁盘冲击。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BufferSync 写脏页路径架构图">
+              <!-- Top pipeline 5 stages -->
+              <rect x="24" y="24" width="244" height="218" fill="#EBF1EE" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="24" y="24" width="244" height="36" fill="#1E4B5A"/>
+              <text x="146" y="47" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">1. 扫描 NBuffers 并打标</text>
+              <text x="40" y="84" font-size="13" font-weight="700" fill="#245A6B">只冻结开始时已脏的页</text>
+              <text x="40" y="108" font-size="12" fill="#1B2B33">• 打标 BM_CHECKPOINT_NEEDED</text>
+              <text x="40" y="130" font-size="12" fill="#1B2B33">• 记录 buffer_id / tablespace</text>
+              <text x="40" y="150" font-size="12" fill="#1B2B33">  / relation / fork / block</text>
+              <rect x="40" y="170" width="212" height="56" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="52" y="193" font-size="12" font-weight="700" fill="#BE653B">本轮新变脏的页：不入队！</text>
+              <text x="52" y="213" font-size="12" fill="#46585F">保证高并发下检查点有确定终点</text>
+
+              <path d="M 268 133 H 298" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <rect x="302" y="24" width="244" height="218" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="302" y="24" width="244" height="36" fill="#2E6373"/>
+              <text x="424" y="47" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">2. 物理局部性排序</text>
+              <text x="318" y="84" font-size="13" font-weight="700" fill="#245A6B">化随机 I/O 为顺序写</text>
+              <text x="318" y="108" font-size="12" fill="#1B2B33">排序主键顺序：</text>
+              <rect x="318" y="122" width="212" height="28" fill="#E5EFF0" stroke="#74A5AD"/>
+              <text x="424" y="140" text-anchor="middle" font-size="12" class="svg-mono" fill="#1E4B5A">tablespace → rel → fork → blk</text>
+              <text x="318" y="176" font-size="12" fill="#46585F">相邻数据块紧挨着写出，</text>
+              <text x="318" y="198" font-size="12" fill="#46585F">大幅提升内核写合并效率与</text>
+              <text x="318" y="220" font-size="12" fill="#46585F">磁盘顺序吞吐能力。</text>
+
+              <path d="M 546 133 H 576" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <rect x="580" y="24" width="244" height="218" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="580" y="24" width="244" height="36" fill="#47808D"/>
+              <text x="702" y="47" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">3. 多表空间二叉堆均衡</text>
+              <text x="596" y="84" font-size="13" font-weight="700" fill="#245A6B">防止单块磁盘被连续打满</text>
+              <text x="596" y="108" font-size="12" fill="#1B2B33">• 为每个 tablespace 维护进度</text>
+              <text x="596" y="130" font-size="12" fill="#1B2B33">• 二叉堆每次挑进度最慢者</text>
+              <!-- Mini balanced bars -->
+              <text x="596" y="160" font-size="11" class="svg-mono" fill="#46585F">TS_A</text>
+              <rect x="640" y="149" width="110" height="14" fill="#245A6B"/>
+              <text x="596" y="184" font-size="11" class="svg-mono" fill="#46585F">TS_B</text>
+              <rect x="640" y="173" width="106" height="14" fill="#47808D"/>
+              <text x="596" y="208" font-size="11" class="svg-mono" fill="#46585F">TS_C</text>
+              <rect x="640" y="197" width="108" height="14" fill="#74A5AD"/>
+
+              <path d="M 824 133 H 854" stroke="#245A6B" stroke-width="2" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <rect x="858" y="24" width="244" height="218" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="858" y="24" width="244" height="36" fill="#245A6B"/>
+              <text x="980" y="47" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">4. 逐页写出与实时节流</text>
+              <text x="874" y="84" font-size="13" font-weight="700" fill="#245A6B">SyncOneBuffer() 循环</text>
+              <text x="874" y="108" font-size="12" fill="#1B2B33">• 仍带 BM_CHECKPOINT_NEEDED</text>
+              <text x="874" y="128" font-size="12" fill="#1B2B33">  则执行写出</text>
+              <text x="874" y="152" font-size="12" fill="#1B2B33">• 每处理一页后立即调用：</text>
+              <rect x="874" y="166" width="212" height="32" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="980" y="187" text-anchor="middle" font-size="12" font-weight="700" class="svg-mono" fill="#BE653B">CheckpointWriteDelay()</text>
+              <text x="874" y="220" font-size="12" fill="#46585F">领先则睡 100ms，落后则追赶</text>
+
+              <path d="M 1102 133 H 1132" stroke="#2F7A66" stroke-width="2" fill="none" marker-end="url(#arr-teal)"/>
+
+              <rect x="1136" y="24" width="240" height="218" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.3"/>
+              <rect x="1136" y="24" width="240" height="36" fill="#2F7A66"/>
+              <text x="1256" y="47" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">5. Writeback 与统计</text>
+              <text x="1152" y="84" font-size="13" font-weight="700" fill="#2F7A66">推动内核刷出尾部脏页</text>
+              <text x="1152" y="110" font-size="12" fill="#1B2B33">• 发出 pending writebacks</text>
+              <text x="1152" y="132" font-size="12" fill="#1B2B33">  (受 checkpoint_flush_after</text>
+              <text x="1152" y="152" font-size="12" fill="#1B2B33">  控制，减少末尾 fsync 尖刺)</text>
+              <text x="1152" y="178" font-size="12" fill="#1B2B33">• 累加 buffers_written 指标</text>
+              <text x="1152" y="202" font-size="12" fill="#1B2B33">• 交棒 ProcessSyncRequests()</text>
+
+              <!-- Bottom Boundary Band: Unlogged & Temp Tables -->
+              <rect x="24" y="268" width="1352" height="140" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="24" y="268" width="1352" height="34" fill="#46585F"/>
+              <text x="42" y="290" font-size="14" font-weight="700" fill="#F7F6F2">边界规则：三类表的脏页在 BufferSync() 中的不同命运</text>
+
+              <rect x="44" y="314" width="424" height="82" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.2"/>
+              <rect x="44" y="314" width="5" height="82" fill="#2F7A66"/>
+              <text x="64" y="338" font-size="14" font-weight="700" fill="#2F7A66">常规 Logged 表与索引</text>
+              <text x="64" y="362" font-size="12" fill="#46585F">全部纳入常规 checkpoint 冻结、排序、</text>
+              <text x="64" y="382" font-size="12" fill="#46585F">节流写出与 ProcessSyncRequests() 闭环。</text>
+
+              <rect x="488" y="314" width="432" height="82" fill="#F7F6F2" stroke="#AE8A3E" stroke-width="1.2"/>
+              <rect x="488" y="314" width="5" height="82" fill="#AE8A3E"/>
+              <text x="508" y="338" font-size="14" font-weight="700" fill="#AE8A3E">Unlogged 表（不写 WAL）</text>
+              <text x="508" y="362" font-size="12" fill="#46585F">常规 checkpoint 默认不写；仅 shutdown、</text>
+              <text x="508" y="382" font-size="12" fill="#46585F">恢复结束或显式 FLUSH_UNLOGGED true 写出。</text>
+
+              <rect x="940" y="314" width="416" height="82" fill="#F7F6F2" stroke="#89938F" stroke-width="1.2"/>
+              <rect x="940" y="314" width="5" height="82" fill="#89938F"/>
+              <text x="960" y="338" font-size="14" font-weight="700" fill="#46585F">Temporary 临时表</text>
+              <text x="960" y="362" font-size="12" fill="#46585F">位于会话私有 local buffers，完全不参与</text>
+              <text x="960" y="382" font-size="12" fill="#46585F">checkpointer 的任何刷盘与 fsync 路径。</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>每写一页都会进入的 CheckpointWriteDelay()，如何根据时间与 WAL 两条进度线决定睡眠或追赶？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">06 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 07 (INTERACTIVE SIMULATOR 2) ==================== -->
+        <section class="slide" data-index="6" data-title="双维节流调度模拟器">
+          <div class="slide-eyebrow">
+            <span>THROTTLING SIMULATOR · 07 / 14</span>
+            <span class="tag-right">checkpointer.c · IsCheckpointOnSchedule()</span>
+          </div>
+          <h1 class="slide-title">双维节流模拟器：时间进度与 WAL 进度的动态追赶</h1>
+          <p class="slide-lead">节流并非固定睡眠：progress × completion_target 同时对比 elapsed_time 与 elapsed_xlogs，落后任一维立即取消睡眠追赶。</p>
+          <div class="slide-divider"></div>
+
+          <!-- Dedicated Simulator Toolbar ABOVE SVG -->
+          <div class="sim-toolbar" id="sim2-bar">
+            <div class="sim-group">
+              <span class="sim-label">max_wal_size</span>
+              <input id="sim2-wal" type="range" min="512" max="4096" step="512" value="1024">
+              <span class="sim-val" id="sim2-wal-val">1024M</span>
+            </div>
+            <div class="sim-group">
+              <span class="sim-label">target</span>
+              <input id="sim2-target" type="range" min="0.5" max="1.0" step="0.1" value="0.9">
+              <span class="sim-val" id="sim2-target-val">0.9</span>
+            </div>
+            <div class="sim-group">
+              <span class="sim-label">WAL 压力</span>
+              <select id="sim2-load">
+                <option value="low">平稳低写入</option>
+                <option value="mid" selected>常规业务写入</option>
+                <option value="burst">突发大导入峰值</option>
+              </select>
+            </div>
+            <button class="sim-btn" id="sim2-mode" type="button">模式: SPREAD</button>
+            <button class="sim-btn primary" id="sim2-play" type="button">运行模拟</button>
+            <button class="sim-btn" id="sim2-reset" type="button">重置</button>
+            <span class="sim-status" id="sim2-status">触发阈值: 33 段 · 待运行</span>
+          </div>
+
+          <div class="diagram-zone">
+            <svg id="svg-sim2" viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="检查点双维节流调度模拟器图表">
+              <!-- Left Chart Area -->
+              <rect x="24" y="18" width="880" height="394" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="44" y="44" font-size="14" font-weight="700" fill="#1E4B5A">调度进度坐标系（横轴：检查点周期时间占比 0% → 100% ｜ 纵轴：归一化进度 0.0 → 1.0）</text>
+
+              <!-- Chart Grid: x from 90 to 860 (width 770), y from 72 to 340 (height 268) -->
+              <line x1="90" y1="340" x2="860" y2="340" stroke="#1B2B33" stroke-width="1.5"/>
+              <line x1="90" y1="72" x2="90" y2="340" stroke="#1B2B33" stroke-width="1.5"/>
+
+              <!-- Horizontal grid lines -->
+              <line x1="90" y1="273" x2="860" y2="273" stroke="#D9D5CB" stroke-dasharray="4 4"/>
+              <line x1="90" y1="206" x2="860" y2="206" stroke="#D9D5CB" stroke-dasharray="4 4"/>
+              <line x1="90" y1="139" x2="860" y2="139" stroke="#D9D5CB" stroke-dasharray="4 4"/>
+              <line x1="90" y1="72" x2="860" y2="72" stroke="#D9D5CB" stroke-dasharray="4 4"/>
+
+              <!-- Y labels -->
+              <text x="78" y="344" text-anchor="end" font-size="12" class="svg-mono" fill="#46585F">0.0</text>
+              <text x="78" y="277" text-anchor="end" font-size="12" class="svg-mono" fill="#46585F">0.25</text>
+              <text x="78" y="210" text-anchor="end" font-size="12" class="svg-mono" fill="#46585F">0.50</text>
+              <text x="78" y="143" text-anchor="end" font-size="12" class="svg-mono" fill="#46585F">0.75</text>
+              <text x="78" y="76" text-anchor="end" font-size="12" class="svg-mono" fill="#46585F">1.0</text>
+
+              <!-- X labels -->
+              <text x="90" y="360" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">0%</text>
+              <text x="282" y="360" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">25%</text>
+              <text x="475" y="360" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">50%</text>
+              <text x="667" y="360" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">75%</text>
+              <text x="860" y="360" text-anchor="middle" font-size="12" class="svg-mono" fill="#46585F">100%</text>
+
+              <!-- Target completion vertical boundary line -->
+              <line id="sim2-target-line" x1="783" y1="72" x2="783" y2="340" stroke="#AE8A3E" stroke-width="1.8" stroke-dasharray="6 4"/>
+              <text id="sim2-target-lbl" x="777" y="90" text-anchor="end" font-size="12" font-weight="700" fill="#AE8A3E">目标完成点 90%（末尾留给 fsync）</text>
+
+              <!-- Curves (updated dynamically by JS) -->
+              <polyline id="sim2-curve-time" points="90,340 860,72" fill="none" stroke="#74A5AD" stroke-width="2" stroke-dasharray="5 3"/>
+              <polyline id="sim2-curve-wal" points="90,340 860,120" fill="none" stroke="#BE653B" stroke-width="2.4"/>
+              <polyline id="sim2-curve-buf" points="90,340 783,72" fill="none" stroke="#2F7A66" stroke-width="3"/>
+
+              <!-- Playhead -->
+              <line id="sim2-playhead" x1="90" y1="72" x2="90" y2="340" stroke="#1E4B5A" stroke-width="1.8"/>
+              <circle id="sim2-dot-buf" cx="90" cy="340" r="5" fill="#2F7A66"/>
+              <circle id="sim2-dot-wal" cx="90" cy="340" r="5" fill="#BE653B"/>
+
+              <!-- Legend row at bottom of chart -->
+              <rect x="44" y="376" width="16" height="4" fill="#2F7A66"/>
+              <text x="66" y="382" font-size="12" fill="#1B2B33">实际写脏页进度 progress</text>
+              <rect x="236" y="376" width="16" height="4" fill="#BE653B"/>
+              <text x="258" y="382" font-size="12" fill="#1B2B33">WAL 消耗进度 elapsed_xlogs</text>
+              <rect x="456" y="376" width="16" height="4" fill="#74A5AD"/>
+              <text x="478" y="382" font-size="12" fill="#1B2B33">时间进度 elapsed_time</text>
+              <rect x="640" y="376" width="16" height="4" fill="#AE8A3E"/>
+              <text x="662" y="382" font-size="12" fill="#1B2B33">completion_target 截止线</text>
+
+              <!-- Right Decision Panel -->
+              <rect x="924" y="18" width="452" height="394" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="924" y="18" width="452" height="38" fill="#1E4B5A"/>
+              <text x="942" y="42" font-size="14" font-weight="700" fill="#F7F6F2">实时调度决策面板（纯公式推演）</text>
+
+              <!-- Metric cards -->
+              <rect x="942" y="70" width="200" height="66" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="956" y="92" font-size="12" fill="#46585F">WAL 触发阈值 (16MB/段)</text>
+              <text id="sim2-m-segs" x="956" y="120" font-size="22" font-weight="700" class="svg-mono" fill="#245A6B">33 段</text>
+
+              <rect x="1158" y="70" width="200" height="66" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="1172" y="92" font-size="12" fill="#46585F">预估写脏页窗口 (5m 基准)</text>
+              <text id="sim2-m-win" x="1172" y="120" font-size="22" font-weight="700" class="svg-mono" fill="#245A6B">270 s</text>
+
+              <!-- Decision box -->
+              <rect id="sim2-dec-box" x="942" y="150" width="416" height="106" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.5"/>
+              <text x="958" y="176" font-size="13" font-weight="700" fill="#1E4B5A">CheckpointWriteDelay() 当前动作</text>
+              <text id="sim2-dec-title" x="958" y="204" font-size="16" font-weight="700" fill="#2F7A66">领先计划：休眠 100ms 并吸收 fsync</text>
+              <text id="sim2-dec-sub" x="958" y="232" font-size="12" fill="#46585F">期间同步处理配置 reload、检查 archive_timeout 与汇报统计</text>
+
+              <!-- Source code logic summary -->
+              <rect x="942" y="270" width="416" height="126" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="958" y="294" font-size="13" font-weight="700" fill="#1E4B5A">IsCheckpointOnSchedule() 判定核心</text>
+              <text x="958" y="318" font-size="12" class="svg-mono" fill="#245A6B">scaled = progress * CheckPointCompletionTarget</text>
+              <text x="958" y="340" font-size="12" fill="#46585F">• 若 scaled &lt; elapsed_xlogs → 落后 WAL，不睡，立即追赶</text>
+              <text x="958" y="362" font-size="12" fill="#46585F">• 若 scaled &lt; elapsed_time  → 落后时间，不睡，立即追赶</text>
+              <text x="958" y="384" font-size="12" fill="#BE653B">• 若 MODE FAST / SHUTDOWN  → 直接跳过节流，全速刷盘</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>脏页全部写出后只是到了内核 page cache，真正落盘的 fsync 队列如何防漏、防拖尾？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">07 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 08 ==================== -->
+        <section class="slide" data-index="7" data-title="ProcessSyncRequests 与 fsync 闭环">
+          <div class="slide-eyebrow">
+            <span>FSYNC CLOSURE &amp; WRITEBACK · 08 / 14</span>
+            <span class="tag-right">src/backend/storage/sync/sync.c</span>
+          </div>
+          <h1 class="slide-title">ProcessSyncRequests()：fsync 竞态闭环与尾部抖动治理</h1>
+          <p class="slide-lead">后端写页后把 fsync 请求入队，checkpointer 用 sync_cycle_ctr 划清轮次边界，并用 checkpoint_flush_after 提前排空内核脏页。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ProcessSyncRequests fsync 竞态闭环与 checkpoint_flush_after 原理图">
+              <!-- Left Panel: Race Condition Closure -->
+              <rect x="24" y="18" width="666" height="252" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="24" y="18" width="666" height="36" fill="#245A6B"/>
+              <text x="42" y="41" font-size="14" font-weight="700" fill="#F7F6F2">关键竞态闭环：后端先写页清 dirty，如何保证不漏 fsync？</text>
+
+              <rect x="44" y="74" width="184" height="74" fill="#EBF1EE" stroke="#245A6B"/>
+              <text x="136" y="100" text-anchor="middle" font-size="13" font-weight="700">1. 后端写出页面</text>
+              <text x="136" y="122" text-anchor="middle" font-size="12" fill="#46585F">在清除 dirty bit 之前</text>
+              <text x="136" y="138" text-anchor="middle" font-size="12" fill="#245A6B">先向队列提交 fsync 请求</text>
+
+              <path d="M 228 111 H 260" stroke="#245A6B" stroke-width="1.8" fill="none" marker-end="url(#arr-indigo)"/>
+
+              <rect x="264" y="74" width="184" height="74" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="356" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#BE653B">2. BufferSync 扫描</text>
+              <text x="356" y="122" text-anchor="middle" font-size="12" fill="#46585F">见该页已非 dirty，跳过</text>
+              <text x="356" y="138" text-anchor="middle" font-size="12" fill="#46585F">（无需重复 write）</text>
+
+              <path d="M 448 111 H 480" stroke="#2F7A66" stroke-width="1.8" fill="none" marker-end="url(#arr-teal)"/>
+
+              <rect x="484" y="74" width="186" height="74" fill="#E4F1EC" stroke="#2F7A66"/>
+              <text x="577" y="100" text-anchor="middle" font-size="13" font-weight="700" fill="#2F7A66">3. 再次 Absorb 吸收</text>
+              <text x="577" y="122" text-anchor="middle" font-size="12" fill="#46585F">BufferSync 结束后兜底</text>
+              <text x="577" y="138" text-anchor="middle" font-size="12" fill="#2F7A66">确保该文件必被 fsync</text>
+
+              <rect x="44" y="168" width="626" height="84" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="62" y="194" font-size="13" font-weight="700" fill="#1E4B5A">为什么顺序不能反？</text>
+              <text x="62" y="216" font-size="13" fill="#46585F">只要后端严格遵守「先登记 fsync 请求 → 再清除页 dirty 标志」，checkpointer 在</text>
+              <text x="62" y="238" font-size="13" fill="#46585F">BufferSync 完成后执行 AbsorbSyncRequests()，就一定能捕获本轮全部待持久化文件。</text>
+
+              <!-- Right Panel: sync_cycle_ctr Epoch -->
+              <rect x="712" y="18" width="664" height="252" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.3"/>
+              <rect x="712" y="18" width="664" height="36" fill="#1E4B5A"/>
+              <text x="730" y="41" font-size="14" font-weight="700" fill="#F7F6F2">防无限拖尾：sync_cycle_ctr 划清本轮与下轮 fsync 边界</text>
+
+              <rect x="734" y="74" width="290" height="106" fill="#E5EFF0" stroke="#245A6B" stroke-width="1.2"/>
+              <text x="879" y="100" text-anchor="middle" font-size="14" font-weight="700" fill="#1E4B5A">周期 N（本轮开始前已入队）</text>
+              <text x="752" y="126" font-size="13" fill="#1B2B33">• cycle_id &lt; sync_cycle_ctr</text>
+              <text x="752" y="148" font-size="13" fill="#2F7A66">• 本轮 ProcessSyncRequests() 必做</text>
+              <text x="752" y="168" font-size="13" fill="#46585F">• 逐文件执行 fsync 落盘</text>
+
+              <line x1="1044" y1="74" x2="1044" y2="180" stroke="#BE653B" stroke-width="2.5" stroke-dasharray="6 3"/>
+
+              <rect x="1064" y="74" width="290" height="106" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.2"/>
+              <text x="1209" y="100" text-anchor="middle" font-size="14" font-weight="700" fill="#AE8A3E">周期 N+1（fsync 期间新入队）</text>
+              <text x="1082" y="126" font-size="13" fill="#1B2B33">• cycle_id == sync_cycle_ctr</text>
+              <text x="1082" y="148" font-size="13" fill="#AE8A3E">• 留待下一轮 checkpoint 处理</text>
+              <text x="1082" y="168" font-size="13" fill="#46585F">• 避免本轮永远追不完新请求</text>
+
+              <rect x="734" y="196" width="620" height="56" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <text x="752" y="220" font-size="13" fill="#1B2B33">思想与 BM_CHECKPOINT_NEEDED 完全同构：通过「轮次快照」把并发动态流切分为有界任务。</text>
+              <text x="752" y="240" font-size="12" class="svg-mono" fill="#46585F">AbsorbSyncRequests() 在 CheckpointWriteDelay 睡眠间隙也会持续吸收，防请求队列溢出。</text>
+
+              <!-- Bottom Band: checkpoint_flush_after -->
+              <rect x="24" y="288" width="1352" height="124" fill="#F1EFE9" stroke="#D9D5CB"/>
+              <rect x="24" y="288" width="1352" height="34" fill="#47808D"/>
+              <text x="42" y="310" font-size="14" font-weight="700" fill="#F7F6F2">尾部抖动治理：checkpoint_flush_after 的作用与副作用权衡</text>
+
+              <rect x="44" y="336" width="636" height="62" fill="#E4F1EC" stroke="#2F7A66"/>
+              <text x="62" y="361" font-size="14" font-weight="700" fill="#2F7A66">收益：化整为零推动 OS Writeback</text>
+              <text x="62" y="384" font-size="13" fill="#1B2B33">每写出一定量数据就提示内核刷盘，防止海量脏页堆在 page cache 到末尾 fsync 瞬间引爆延迟尖刺。</text>
+
+              <rect x="704" y="336" width="652" height="62" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="722" y="361" font-size="14" font-weight="700" fill="#BE653B">代价：可能削弱内核合并效果（需实测验证）</text>
+              <text x="722" y="384" font-size="13" fill="#1B2B33">官方文档提醒：当工作集大于 shared_buffers 但小于 OS page cache 时，过早 flush 可能降低吞吐。</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>同样都在把脏页写回磁盘，checkpointer、bgwriter、后端与 OS writeback 的职责边界究竟有何区别？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">08 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 09 ==================== -->
+        <section class="slide" data-index="8" data-title="四类写脏页角色职责对比">
+          <div class="slide-eyebrow">
+            <span>COMPARATIVE MATRIX · 09 / 14</span>
+            <span class="tag-right">职责边界与恢复语义</span>
+          </div>
+          <h1 class="slide-title">写脏页四方分工：为什么 bgwriter 永远不能替代 checkpoint？</h1>
+          <p class="slide-lead">bgwriter 与 OS writeback 只能缓解脏页与内存淘汰压力，唯有 checkpointer 承担建立 redo 恢复起点与 fsync 持久化闭环的语义。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="四类写脏页角色职责矩阵图">
+              <!-- Engineering Table Header -->
+              <rect x="20" y="18" width="1360" height="44" fill="#1E4B5A"/>
+              <text x="115" y="45" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">对比维度</text>
+              <text x="372" y="45" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">checkpointer（检查点）</text>
+              <text x="676" y="45" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">background writer</text>
+              <text x="976" y="45" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">后端自写脏页</text>
+              <text x="1244" y="45" text-anchor="middle" font-size="14" font-weight="700" fill="#F7F6F2">OS writeback</text>
+
+              <!-- Column vertical guides -->
+              <rect x="210" y="62" width="324" height="350" fill="#EBF1EE" opacity="0.55"/>
+
+              <!-- Row 1: 主要目标 -->
+              <rect x="20" y="62" width="1360" height="60" fill="none" stroke="#D9D5CB"/>
+              <text x="36" y="97" font-size="13" font-weight="700" fill="#1E4B5A">主要目标</text>
+              <text x="226" y="88" font-size="13" font-weight="700" fill="#1E4B5A">建立恢复边界，写出本轮</text>
+              <text x="226" y="108" font-size="13" fill="#1B2B33">所需脏页并完成 fsync</text>
+              <text x="550" y="88" font-size="13" fill="#1B2B33">提前清理部分脏页，减少</text>
+              <text x="550" y="108" font-size="13" fill="#46585F">后端分配 buffer 时被迫写</text>
+              <text x="846" y="88" font-size="13" fill="#1B2B33">buffer 淘汰 / 关系扩展时</text>
+              <text x="846" y="108" font-size="13" fill="#46585F">确保当前会话有可用页</text>
+              <text x="1126" y="88" font-size="13" fill="#1B2B33">将内核 page cache 中的</text>
+              <text x="1126" y="108" font-size="13" fill="#46585F">脏页回写至底层存储</text>
+
+              <!-- Row 2: 是否决定 redo 起点 -->
+              <rect x="20" y="122" width="1360" height="52" fill="#F1EFE9" fill-opacity="0.5" stroke="#D9D5CB"/>
+              <text x="36" y="153" font-size="13" font-weight="700" fill="#1E4B5A">决定 redo 起点</text>
+              <rect x="226" y="135" width="96" height="26" fill="#2F7A66"/>
+              <text x="274" y="152" text-anchor="middle" font-size="13" font-weight="700" fill="#F7F6F2">是（唯一）</text>
+              <text x="550" y="153" font-size="13" fill="#89938F">否</text>
+              <text x="846" y="153" font-size="13" fill="#89938F">否</text>
+              <text x="1126" y="153" font-size="13" fill="#89938F">否</text>
+
+              <!-- Row 3: fsync 闭环 -->
+              <rect x="20" y="174" width="1360" height="56" fill="none" stroke="#D9D5CB"/>
+              <text x="36" y="207" font-size="13" font-weight="700" fill="#1E4B5A">fsync 请求闭环</text>
+              <text x="226" y="198" font-size="13" font-weight="700" fill="#2F7A66">是，ProcessSyncRequests()</text>
+              <text x="226" y="218" font-size="12" fill="#46585F">保证 redo 前修改全部持久化</text>
+              <text x="550" y="207" font-size="13" fill="#46585F">否，主要负责写页</text>
+              <text x="846" y="207" font-size="13" fill="#46585F">写出后向队列提交 fsync 请求</text>
+              <text x="1126" y="207" font-size="13" fill="#46585F">不理解数据库恢复边界</text>
+
+              <!-- Row 4: 写页范围 -->
+              <rect x="20" y="230" width="1360" height="58" fill="#F1EFE9" fill-opacity="0.5" stroke="#D9D5CB"/>
+              <text x="36" y="264" font-size="13" font-weight="700" fill="#1E4B5A">写出哪些页</text>
+              <text x="226" y="255" font-size="13" fill="#1B2B33">本轮开始时已脏且符合</text>
+              <text x="226" y="275" font-size="13" fill="#46585F">条件的共享 buffer 集合</text>
+              <text x="550" y="255" font-size="13" fill="#1B2B33">按 buffer 分配压力与 LRU</text>
+              <text x="550" y="275" font-size="13" fill="#46585F">周期性写出部分脏页</text>
+              <text x="846" y="264" font-size="13" fill="#1B2B33">当前路径急需淘汰的页</text>
+              <text x="1126" y="264" font-size="13" fill="#1B2B33">内核脏页比例触发的页</text>
+
+              <!-- Row 5: 前台影响 -->
+              <rect x="20" y="288" width="1360" height="58" fill="none" stroke="#D9D5CB"/>
+              <text x="36" y="322" font-size="13" font-weight="700" fill="#1E4B5A">前台延迟影响</text>
+              <text x="226" y="313" font-size="13" fill="#BE653B">过急会造成写 I/O 与</text>
+              <text x="226" y="333" font-size="13" fill="#BE653B">fsync 尾部抖动</text>
+              <text x="550" y="313" font-size="13" fill="#2F7A66">合理配置可显著降低</text>
+              <text x="550" y="333" font-size="13" fill="#2F7A66">前台被迫写脏页概率</text>
+              <text x="846" y="322" font-size="13" fill="#BE653B">直接拖慢当前事务响应</text>
+              <text x="1126" y="322" font-size="13" fill="#BE653B">集中回写导致不可控抖动</text>
+
+              <!-- Row 6: 调参重点 -->
+              <rect x="20" y="346" width="1360" height="66" fill="#F1EFE9" fill-opacity="0.5" stroke="#D9D5CB"/>
+              <text x="36" y="384" font-size="13" font-weight="700" fill="#1E4B5A">核心调参重点</text>
+              <text x="226" y="372" font-size="12" class="svg-mono" fill="#245A6B">checkpoint_timeout · max_wal_size</text>
+              <text x="226" y="394" font-size="12" class="svg-mono" fill="#245A6B">completion_target · flush_after</text>
+              <text x="550" y="372" font-size="12" class="svg-mono" fill="#46585F">bgwriter_delay</text>
+              <text x="550" y="394" font-size="12" class="svg-mono" fill="#46585F">lru_maxpages · lru_multiplier</text>
+              <text x="846" y="372" font-size="13" fill="#46585F">SQL 写入模式、事务大小</text>
+              <text x="846" y="394" font-size="12" class="svg-mono" fill="#46585F">shared_buffers</text>
+              <text x="1126" y="384" font-size="13" fill="#46585F">OS dirty_* 与存储层参数</text>
+
+              <!-- Column Dividers -->
+              <line x1="210" y1="18" x2="210" y2="412" stroke="#D9D5CB"/>
+              <line x1="534" y1="18" x2="534" y2="412" stroke="#D9D5CB"/>
+              <line x1="830" y1="18" x2="830" y2="412" stroke="#D9D5CB"/>
+              <line x1="1110" y1="18" x2="1110" y2="412" stroke="#D9D5CB"/>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>聚焦 checkpointer 自身：五种不同形态的检查点，在 I/O 特征与统计口径上如何区分？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">09 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 10 ==================== -->
+        <section class="slide" data-index="9" data-title="五种检查点类型与版本边界">
+          <div class="slide-eyebrow">
+            <span>CHECKPOINT TAXONOMY · 10 / 14</span>
+            <span class="tag-right">ref/checkpoint.sgml · master 01a80f0</span>
+          </div>
+          <h1 class="slide-title">五种检查点类型：自动调度、手工 FAST/SPREAD 与 Restartpoint</h1>
+          <p class="slide-lead">手工 CHECKPOINT 默认 FAST 模式会直接绕过节流；备库 restartpoint 受限于已回放 WAL，更容易小幅超出 max_wal_size。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="五种检查点类型对照图">
+              <!-- 5 Columns, each 256px wide with 16px gap: start x=24 -->
+              <!-- Col 1: Timed -->
+              <rect x="24" y="20" width="256" height="390" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="24" y="20" width="256" height="46" fill="#245A6B"/>
+              <text x="152" y="48" text-anchor="middle" font-size="15" font-weight="700" fill="#F7F6F2">1. 时间触发</text>
+              <text x="40" y="92" font-size="12" font-weight="700" fill="#245A6B">触发条件</text>
+              <text x="40" y="112" font-size="12" fill="#1B2B33">checkpoint_timeout 到期</text>
+              <text x="40" y="144" font-size="12" font-weight="700" fill="#245A6B">I/O 形态</text>
+              <text x="40" y="164" font-size="12" fill="#1B2B33">按 completion_target 摊平</text>
+              <text x="40" y="196" font-size="12" font-weight="700" fill="#245A6B">统计字段</text>
+              <text x="40" y="216" font-size="12" class="svg-mono" fill="#1E4B5A">num_timed</text>
+              <text x="40" y="248" font-size="12" font-weight="700" fill="#2F7A66">常见用途</text>
+              <text x="40" y="268" font-size="12" fill="#46585F">最健康的常规自动调度</text>
+              <rect x="38" y="302" width="228" height="92" fill="#F6EFE0" stroke="#AE8A3E"/>
+              <text x="50" y="324" font-size="12" font-weight="700" fill="#AE8A3E">主要风险</text>
+              <text x="50" y="346" font-size="12" fill="#1B2B33">间隔设太短会频繁触发</text>
+              <text x="50" y="366" font-size="12" fill="#1B2B33">整页写 (FPI) 与刷盘</text>
+
+              <!-- Col 2: WAL -->
+              <rect x="298" y="20" width="256" height="390" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="298" y="20" width="256" height="46" fill="#2E6373"/>
+              <text x="426" y="48" text-anchor="middle" font-size="15" font-weight="700" fill="#F7F6F2">2. WAL 消耗触发</text>
+              <text x="314" y="92" font-size="12" font-weight="700" fill="#245A6B">触发条件</text>
+              <text x="314" y="112" font-size="12" fill="#1B2B33">WAL 消耗达触发阈值</text>
+              <text x="314" y="144" font-size="12" font-weight="700" fill="#245A6B">I/O 形态</text>
+              <text x="314" y="164" font-size="12" fill="#1B2B33">写入压力高时积极追赶</text>
+              <text x="314" y="196" font-size="12" font-weight="700" fill="#245A6B">统计字段</text>
+              <text x="314" y="216" font-size="12" class="svg-mono" fill="#1E4B5A">num_requested (XLOG)</text>
+              <text x="314" y="248" font-size="12" font-weight="700" fill="#2F7A66">常见用途</text>
+              <text x="314" y="268" font-size="12" fill="#46585F">写入高峰保护 WAL 空间</text>
+              <rect x="312" y="302" width="228" height="92" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="324" y="324" font-size="12" font-weight="700" fill="#BE653B">主要风险</text>
+              <text x="324" y="346" font-size="12" fill="#1B2B33">max_wal_size 太小导致</text>
+              <text x="324" y="366" font-size="12" fill="#1B2B33">频繁触发与日志刷屏</text>
+
+              <!-- Col 3: Manual FAST -->
+              <rect x="572" y="20" width="256" height="390" fill="#F7F6F2" stroke="#BE653B" stroke-width="1.4"/>
+              <rect x="572" y="20" width="256" height="46" fill="#BE653B"/>
+              <text x="700" y="48" text-anchor="middle" font-size="15" font-weight="700" fill="#F7F6F2">3. 手工 FAST（默认）</text>
+              <text x="588" y="92" font-size="12" font-weight="700" fill="#BE653B">触发条件</text>
+              <text x="588" y="112" font-size="12" class="svg-mono" fill="#1B2B33">CHECKPOINT;</text>
+              <text x="588" y="144" font-size="12" font-weight="700" fill="#BE653B">I/O 形态</text>
+              <text x="588" y="164" font-size="12" fill="#BE653B">绕过节流，全速刷盘！</text>
+              <text x="588" y="196" font-size="12" font-weight="700" fill="#245A6B">权限与统计</text>
+              <text x="588" y="216" font-size="12" class="svg-mono" fill="#1E4B5A">pg_checkpoint · requested</text>
+              <text x="588" y="248" font-size="12" font-weight="700" fill="#2F7A66">常见用途</text>
+              <text x="588" y="268" font-size="12" fill="#46585F">维护窗口、测试、备份前</text>
+              <rect x="586" y="302" width="228" height="92" fill="#F7E9DE" stroke="#BE653B"/>
+              <text x="598" y="324" font-size="12" font-weight="700" fill="#BE653B">主要风险</text>
+              <text x="598" y="346" font-size="12" fill="#1B2B33">生产高峰手工执行会</text>
+              <text x="598" y="366" font-size="12" fill="#1B2B33">瞬间打满磁盘带宽</text>
+
+              <!-- Col 4: Manual SPREAD -->
+              <rect x="846" y="20" width="256" height="390" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.2"/>
+              <rect x="846" y="20" width="256" height="46" fill="#2F7A66"/>
+              <text x="974" y="48" text-anchor="middle" font-size="15" font-weight="700" fill="#F7F6F2">4. 手工 SPREAD</text>
+              <text x="862" y="92" font-size="12" font-weight="700" fill="#2F7A66">触发语法 (master)</text>
+              <text x="862" y="112" font-size="11" class="svg-mono" fill="#1B2B33">CHECKPOINT (MODE SPREAD);</text>
+              <text x="862" y="144" font-size="12" font-weight="700" fill="#2F7A66">I/O 形态</text>
+              <text x="862" y="164" font-size="12" fill="#1B2B33">按常规节流曲线摊开写</text>
+              <text x="862" y="196" font-size="12" font-weight="700" fill="#245A6B">附加选项</text>
+              <text x="862" y="216" font-size="11" class="svg-mono" fill="#1E4B5A">FLUSH_UNLOGGED [bool]</text>
+              <text x="862" y="248" font-size="12" font-weight="700" fill="#2F7A66">常见用途</text>
+              <text x="862" y="268" font-size="12" fill="#46585F">降低手工操作瞬时冲击</text>
+              <rect x="860" y="302" width="228" height="92" fill="#F6EFE0" stroke="#AE8A3E"/>
+              <text x="872" y="324" font-size="12" font-weight="700" fill="#AE8A3E">版本边界提醒</text>
+              <text x="872" y="346" font-size="12" fill="#1B2B33">基于 master (01a80f0)，</text>
+              <text x="872" y="366" font-size="12" fill="#1B2B33">旧版请核对对应官方文档</text>
+
+              <!-- Col 5: Restartpoint -->
+              <rect x="1120" y="20" width="256" height="390" fill="#F7F6F2" stroke="#47808D" stroke-width="1.2"/>
+              <rect x="1120" y="20" width="256" height="46" fill="#47808D"/>
+              <text x="1248" y="48" text-anchor="middle" font-size="15" font-weight="700" fill="#F7F6F2">5. 备库 Restartpoint</text>
+              <text x="1136" y="92" font-size="12" font-weight="700" fill="#245A6B">触发条件</text>
+              <text x="1136" y="112" font-size="12" fill="#1B2B33">恢复期到达新 checkpoint 记录</text>
+              <text x="1136" y="144" font-size="12" font-weight="700" fill="#245A6B">I/O 形态</text>
+              <text x="1136" y="164" font-size="12" fill="#1B2B33">受限于已回放的 WAL 进度</text>
+              <text x="1136" y="196" font-size="12" font-weight="700" fill="#245A6B">统计字段</text>
+              <text x="1136" y="216" font-size="12" class="svg-mono" fill="#1E4B5A">restartpoints_*</text>
+              <text x="1136" y="248" font-size="12" font-weight="700" fill="#2F7A66">常见用途</text>
+              <text x="1136" y="268" font-size="12" fill="#46585F">建立备库恢复边界与回收</text>
+              <rect x="1134" y="302" width="228" height="92" fill="#F6EFE0" stroke="#AE8A3E"/>
+              <text x="1146" y="324" font-size="12" font-weight="700" fill="#AE8A3E">主要风险</text>
+              <text x="1146" y="346" font-size="12" fill="#1B2B33">备库 pg_wal 可能超出</text>
+              <text x="1146" y="366" font-size="12" fill="#1B2B33">max_wal_size 约一个周期</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>如何把这些原理落成可验证的观测探针与实操 SQL，精准定位线上是「过密、过急还是过长」？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">10 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 11 ==================== -->
+        <section class="slide" data-index="10" data-title="观测探针与实操调参闭环">
+          <div class="slide-eyebrow">
+            <span>OBSERVABILITY &amp; DEMO · 11 / 14</span>
+            <span class="tag-right">pg_stat_checkpointer · log_checkpoints</span>
+          </div>
+          <h1 class="slide-title">观测与调参闭环：从统计视图与日志精准定位瓶颈</h1>
+          <p class="slide-lead">不要凭感觉调参，也不要只看 total 耗时——先采集四路可观测信号，再按过密、过急、过长三路闭环施治。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="检查点观测探针与三路诊断闭环图">
+              <!-- Top Half: 4 Observability Probes -->
+              <text x="24" y="30" font-size="14" font-weight="700" fill="#1E4B5A">第一步：四路最小可验证 SQL 探针（生产基线必备）</text>
+
+              <rect x="24" y="42" width="322" height="148" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="24" y="42" width="322" height="30" fill="#245A6B"/>
+              <text x="38" y="62" font-size="13" font-weight="700" fill="#F7F6F2" class="svg-mono">1. pg_settings 参数基线</text>
+              <text x="38" y="94" font-size="12" class="svg-mono" fill="#1E4B5A">SELECT name, setting, unit</text>
+              <text x="38" y="112" font-size="12" class="svg-mono" fill="#1E4B5A">FROM pg_settings WHERE ...</text>
+              <text x="38" y="138" font-size="12" fill="#46585F">核对 timeout / target / flush_after</text>
+              <text x="38" y="158" font-size="12" fill="#46585F">/ max_wal_size / min_wal_size</text>
+              <text x="38" y="178" font-size="12" fill="#46585F">/ checkpoint_warning / log_checkpoints</text>
+
+              <rect x="366" y="42" width="322" height="148" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="366" y="42" width="322" height="30" fill="#245A6B"/>
+              <text x="380" y="62" font-size="13" font-weight="700" fill="#F7F6F2" class="svg-mono">2. pg_stat_checkpointer 累计</text>
+              <text x="380" y="94" font-size="12" class="svg-mono" fill="#1E4B5A">SELECT * FROM pg_stat_checkpointer;</text>
+              <text x="380" y="120" font-size="12" fill="#1B2B33">• num_timed vs num_requested</text>
+              <text x="380" y="140" font-size="12" fill="#1B2B33">• num_done（剔除空闲跳过）</text>
+              <text x="380" y="160" font-size="12" fill="#1B2B33">• write_time vs sync_time</text>
+              <text x="380" y="180" font-size="12" fill="#1B2B33">• buffers_written / slru_written</text>
+
+              <rect x="708" y="42" width="322" height="148" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="708" y="42" width="322" height="30" fill="#245A6B"/>
+              <text x="722" y="62" font-size="13" font-weight="700" fill="#F7F6F2" class="svg-mono">3. log_checkpoints = on</text>
+              <text x="722" y="94" font-size="12" class="svg-mono" fill="#1E4B5A">ALTER SYSTEM SET log_checkpoints=on;</text>
+              <text x="722" y="112" font-size="12" class="svg-mono" fill="#1E4B5A">SELECT pg_reload_conf();</text>
+              <text x="722" y="138" font-size="12" fill="#1B2B33">拆解单次日志中的明细字段：</text>
+              <text x="722" y="158" font-size="12" class="svg-mono" fill="#BE653B">write=.. sync=.. longest=.. total=..</text>
+              <text x="722" y="178" font-size="12" class="svg-mono" fill="#46585F">distance=.. estimate=.. redo lsn=..</text>
+
+              <rect x="1050" y="42" width="326" height="148" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.2"/>
+              <rect x="1050" y="42" width="326" height="30" fill="#245A6B"/>
+              <text x="1064" y="62" font-size="13" font-weight="700" fill="#F7F6F2" class="svg-mono">4. WAL 与复制槽边界</text>
+              <text x="1064" y="94" font-size="12" class="svg-mono" fill="#1E4B5A">pg_current_wal_lsn() / flush_lsn()</text>
+              <text x="1064" y="114" font-size="12" class="svg-mono" fill="#1E4B5A">FROM pg_replication_slots</text>
+              <text x="1064" y="140" font-size="12" fill="#1B2B33">排查 active / restart_lsn /</text>
+              <text x="1064" y="160" font-size="12" fill="#1B2B33">wal_status / safe_wal_size 与</text>
+              <text x="1064" y="180" font-size="12" fill="#1B2B33">归档失败、备库滞后状态</text>
+
+              <!-- Orthogonal connectors down to Diagnosis Bus -->
+              <path d="M 185 190 V 214 H 1213 V 190" stroke="#47808D" stroke-width="1.5" fill="none"/>
+              <path d="M 527 190 V 214" stroke="#47808D" stroke-width="1.5" fill="none"/>
+              <path d="M 869 190 V 214" stroke="#47808D" stroke-width="1.5" fill="none"/>
+              <path d="M 244 214 V 242" stroke="#BE653B" stroke-width="1.8" fill="none" marker-end="url(#arr-terra)"/>
+              <path d="M 700 214 V 242" stroke="#BE653B" stroke-width="1.8" fill="none" marker-end="url(#arr-terra)"/>
+              <path d="M 1156 214 V 242" stroke="#BE653B" stroke-width="1.8" fill="none" marker-end="url(#arr-terra)"/>
+
+              <!-- Bottom Half: 3-Branch Diagnosis & Action Loop -->
+              <rect x="24" y="248" width="436" height="164" fill="#F7E9DE" stroke="#BE653B" stroke-width="1.3"/>
+              <rect x="24" y="248" width="436" height="32" fill="#BE653B"/>
+              <text x="42" y="269" font-size="14" font-weight="700" fill="#F7F6F2">病症 A：过密（num_requested 高 / 日志频报）</text>
+              <text x="42" y="302" font-size="13" font-weight="700" fill="#1B2B33">现象：distance 频超 estimate，WAL 触发占比高</text>
+              <text x="42" y="328" font-size="13" fill="#2F7A66">✓ 动作 1：评估增大 max_wal_size</text>
+              <text x="42" y="352" font-size="13" fill="#2F7A66">✓ 动作 2：核查批量任务、多余索引与无效 UPDATE</text>
+              <text x="42" y="376" font-size="13" fill="#2F7A66">✓ 动作 3：检查复制槽、归档与大事务</text>
+              <text x="42" y="398" font-size="12" fill="#46585F">验证：观察至少一个完整高峰周期后再评估</text>
+
+              <rect x="482" y="248" width="436" height="164" fill="#F6EFE0" stroke="#AE8A3E" stroke-width="1.3"/>
+              <rect x="482" y="248" width="436" height="32" fill="#AE8A3E"/>
+              <text x="500" y="269" font-size="14" font-weight="700" fill="#F7F6F2">病症 B：过急（前台延迟抖动 / 瞬时写峰值）</text>
+              <text x="500" y="302" font-size="13" font-weight="700" fill="#1B2B33">现象：write 集中打满，或有人手工执行 CHECKPOINT</text>
+              <text x="500" y="328" font-size="13" fill="#2F7A66">✓ 动作 1：保持 completion_target = 0.9（不调低）</text>
+              <text x="500" y="352" font-size="13" fill="#2F7A66">✓ 动作 2：禁止高峰手工 FAST，必要时用 SPREAD</text>
+              <text x="500" y="376" font-size="13" fill="#2F7A66">✓ 动作 3：协同优化 bgwriter 缓解脏页堆积</text>
+              <text x="500" y="398" font-size="12" fill="#46585F">验证：对照 pg_stat_io 与业务 P99 延迟</text>
+
+              <rect x="940" y="248" width="436" height="164" fill="#E4F1EC" stroke="#2F7A66" stroke-width="1.3"/>
+              <rect x="940" y="248" width="436" height="32" fill="#2F7A66"/>
+              <text x="958" y="269" font-size="14" font-weight="700" fill="#F7F6F2">病症 C：过长 / sync 尖刺（sync、longest 高）</text>
+              <text x="958" y="302" font-size="13" font-weight="700" fill="#1B2B33">现象：buffers_written 不算大，但单个 fsync 极慢</text>
+              <text x="958" y="328" font-size="13" fill="#2F7A66">✓ 动作 1：压测评估 checkpoint_flush_after</text>
+              <text x="958" y="352" font-size="13" fill="#2F7A66">✓ 动作 2：联动 iostat、云盘吞吐与等待事件排查</text>
+              <text x="958" y="376" font-size="13" fill="#2F7A66">✓ 动作 3：避免 target=1.0 挤压末尾 fsync 空间</text>
+              <text x="958" y="398" font-size="12" fill="#46585F">验证：核对日志 sync 与 longest 尖刺是否收敛</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>放到团队协作层面，架构师、DBA 与业务开发者各自该守住哪些工程红线？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">11 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 12 ==================== -->
+        <section class="slide" data-index="11" data-title="三角色最佳实践与场景适配">
+          <div class="slide-eyebrow">
+            <span>BEST PRACTICES &amp; FIT · 12 / 14</span>
+            <span class="tag-right">架构师 · DBA · 业务开发者协同</span>
+          </div>
+          <h1 class="slide-title">分角色工程守则与场景适配矩阵</h1>
+          <p class="slide-lead">检查点治理不是 DBA 单点改几个参数，而是 RTO 定义、WAL 容量规划与业务写入节奏的三方协同工程。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="三角色最佳实践与场景适配矩阵图">
+              <!-- Top 3 Role Columns -->
+              <rect x="24" y="18" width="436" height="236" fill="#F7F6F2" stroke="#1E4B5A" stroke-width="1.3"/>
+              <rect x="24" y="18" width="436" height="36" fill="#1E4B5A"/>
+              <text x="42" y="41" font-size="14" font-weight="700" fill="#F7F6F2">面向数据库架构师（顶层边界）</text>
+              <text x="42" y="80" font-size="13" font-weight="700" fill="#245A6B">1. 先定 RTO，再定检查点区间</text>
+              <text x="58" y="100" font-size="12" fill="#46585F">低 RTO 不可盲目拉长，高吞吐也不可放任恢复失控</text>
+              <text x="42" y="128" font-size="13" font-weight="700" fill="#245A6B">2. 多维规划 pg_wal 磁盘容量</text>
+              <text x="58" y="148" font-size="12" fill="#46585F">按峰值速率 + 归档延迟 + 复制槽 + 至少一周期余量</text>
+              <text x="42" y="176" font-size="13" font-weight="700" fill="#245A6B">3. 源头减写优于事后调参</text>
+              <text x="58" y="196" font-size="12" fill="#46585F">批量提交、降索引维护、拆冷热，同步复制独立建模</text>
+              <text x="42" y="224" font-size="13" font-weight="700" fill="#245A6B">4. 同步复制系统分开建模 WAL flush 与回放</text>
+
+              <rect x="482" y="18" width="436" height="236" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="482" y="18" width="436" height="36" fill="#245A6B"/>
+              <text x="500" y="41" font-size="14" font-weight="700" fill="#F7F6F2">面向 DBA（基线与调优执行）</text>
+              <text x="500" y="80" font-size="13" font-weight="700" fill="#245A6B">1. 开 log_checkpoints 建完整高低峰基线</text>
+              <text x="516" y="100" font-size="12" fill="#46585F">绝不只凭低峰几分钟数据下结论</text>
+              <text x="500" y="128" font-size="13" font-weight="700" fill="#245A6B">2. 过密先查 WAL 触发，再调 max_wal_size</text>
+              <text x="516" y="148" font-size="12" fill="#46585F">同步核查大事务、归档与复制槽</text>
+              <text x="500" y="176" font-size="13" font-weight="700" fill="#245A6B">3. sync 尖刺再评估 checkpoint_flush_after</text>
+              <text x="516" y="196" font-size="12" fill="#46585F">不随意调低 completion_target 换「快完成」</text>
+              <text x="500" y="224" font-size="13" font-weight="700" fill="#245A6B">4. 调参后看足一个周期；手工仅用于维护边界</text>
+
+              <rect x="940" y="18" width="436" height="236" fill="#F7F6F2" stroke="#2F7A66" stroke-width="1.3"/>
+              <rect x="940" y="18" width="436" height="36" fill="#2F7A66"/>
+              <text x="958" y="41" font-size="14" font-weight="700" fill="#F7F6F2">面向业务开发者（写入源头治理）</text>
+              <text x="958" y="80" font-size="13" font-weight="700" fill="#2F7A66">1. 控制批量导入与大更新节奏</text>
+              <text x="974" y="100" font-size="12" fill="#46585F">单次超大事务集中制造脏页，后果会延迟引爆</text>
+              <text x="958" y="128" font-size="13" font-weight="700" fill="#2F7A66">2. 消除无意义 UPDATE</text>
+              <text x="974" y="148" font-size="12" fill="#46585F">即使值未变，仍会产生新行版本、WAL 与脏页</text>
+              <text x="958" y="176" font-size="13" font-weight="700" fill="#2F7A66">3. 大写入前与 DBA 对齐窗口与容量</text>
+              <text x="974" y="196" font-size="12" fill="#46585F">提前确认 max_wal_size、归档带宽与复制延迟</text>
+              <text x="958" y="224" font-size="13" font-weight="700" fill="#BE653B">4. 严禁在应用代码里执行 CHECKPOINT</text>
+
+              <!-- Bottom Strip: 3 Scenario Fit Cards -->
+              <rect x="24" y="274" width="436" height="138" fill="#EBF1EE" stroke="#74A5AD"/>
+              <text x="42" y="300" font-size="14" font-weight="700" fill="#1E4B5A">场景 A：拉长检查点间隔</text>
+              <text x="42" y="326" font-size="12" fill="#2F7A66">✓ 适合：吞吐优先、批量导入/数仓加载、FPI 膨胀明显</text>
+              <text x="42" y="350" font-size="12" fill="#BE653B">× 不适合：RTO 极紧的核心交易库、pg_wal 磁盘紧张</text>
+              <text x="42" y="376" font-size="12" fill="#46585F">核心权衡：用更长恢复扫描时间换取更低 WAL 放大</text>
+
+              <rect x="482" y="274" width="436" height="138" fill="#EBF1EE" stroke="#74A5AD"/>
+              <text x="500" y="300" font-size="14" font-weight="700" fill="#1E4B5A">场景 B：缩短检查点间隔</text>
+              <text x="500" y="326" font-size="12" fill="#2F7A66">✓ 适合：恢复速度优先、写入平稳的小型业务库</text>
+              <text x="500" y="350" font-size="12" fill="#BE653B">× 不适合：高随机更新库、存储 fsync 延迟不稳定环境</text>
+              <text x="500" y="376" font-size="12" fill="#46585F">核心权衡：高更新下频繁 FPI 会显著推高写放大</text>
+
+              <rect x="940" y="274" width="436" height="138" fill="#EBF1EE" stroke="#74A5AD"/>
+              <text x="958" y="300" font-size="14" font-weight="700" fill="#1E4B5A">场景 C：较高 completion_target (默认 0.9)</text>
+              <text x="958" y="326" font-size="12" fill="#2F7A66">✓ 适合：追求写 I/O 均匀、对写峰值敏感的 OLTP</text>
+              <text x="958" y="350" font-size="12" fill="#BE653B">× 不适合：已常追不上 WAL 的系统；切忌设为 1.0</text>
+              <text x="958" y="376" font-size="12" fill="#46585F">核心权衡：必须给末尾 fsync 与非写页工作留出余量</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>即便懂了原理，生产环境里仍反复出现哪十个检查点调优误区？</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">12 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 13 ==================== -->
+        <section class="slide" data-index="12" data-title="生产十大常见坑排雷图谱">
+          <div class="slide-eyebrow">
+            <span>PITFALLS &amp; ANTI-PATTERNS · 13 / 14</span>
+            <span class="tag-right">十条生产排雷清单</span>
+          </div>
+          <h1 class="slide-title">检查点调优十大常见坑：从认知误区到根因修正</h1>
+          <p class="slide-lead">绝大多数线上事故并非源于不懂参数名，而是把局部现象当成全局真理——逐条排雷十类高频误判。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="检查点调优十大常见坑 2x5 排雷图谱">
+              <!-- Row 1: 5 boxes (width 256, height 184, gap 18, start x=24, y=20) -->
+              <!-- 1 -->
+              <rect x="24" y="20" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="24" y="20" width="256" height="30" fill="#BE653B"/>
+              <text x="38" y="40" font-size="13" font-weight="700" fill="#F7F6F2">01 把 max_wal_size 当硬上限</text>
+              <text x="38" y="74" font-size="12" font-weight="700" fill="#BE653B">误区：磁盘只按它配容量</text>
+              <text x="38" y="102" font-size="12" fill="#2F7A66">正解：仅是触发与回收目标；</text>
+              <text x="38" y="122" font-size="12" fill="#46585F">峰值、复制槽、归档、备份</text>
+              <text x="38" y="142" font-size="12" fill="#46585F">和恢复都可令 pg_wal 超限。</text>
+
+              <!-- 2 -->
+              <rect x="298" y="20" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="298" y="20" width="256" height="30" fill="#BE653B"/>
+              <text x="312" y="40" font-size="13" font-weight="700" fill="#F7F6F2">02 见 warning 只调一个参</text>
+              <text x="312" y="74" font-size="12" font-weight="700" fill="#BE653B">误区：只无脑调大 max_wal</text>
+              <text x="312" y="102" font-size="12" fill="#2F7A66">正解：仅提示 WAL 触发过密；</text>
+              <text x="312" y="122" font-size="12" fill="#46585F">根因常是批量任务、多余</text>
+              <text x="312" y="142" font-size="12" fill="#46585F">索引、无效更新或大事务。</text>
+
+              <!-- 3 -->
+              <rect x="572" y="20" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="572" y="20" width="256" height="30" fill="#BE653B"/>
+              <text x="586" y="40" font-size="13" font-weight="700" fill="#F7F6F2">03 调小 timeout 追求安全</text>
+              <text x="586" y="74" font-size="12" font-weight="700" fill="#BE653B">误区：刷得越勤越稳妥</text>
+              <text x="586" y="102" font-size="12" fill="#2F7A66">正解：恢复虽短，但 FPI</text>
+              <text x="586" y="122" font-size="12" fill="#46585F">整页写与脏页刷盘频次</text>
+              <text x="586" y="142" font-size="12" fill="#46585F">同步飙升，写放大反更重。</text>
+
+              <!-- 4 -->
+              <rect x="846" y="20" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="846" y="20" width="256" height="30" fill="#BE653B"/>
+              <text x="860" y="40" font-size="13" font-weight="700" fill="#F7F6F2">04 手工 CHECKPOINT 优化</text>
+              <text x="860" y="74" font-size="12" font-weight="700" fill="#BE653B">误区：日常拿它「清内存」</text>
+              <text x="860" y="102" font-size="12" fill="#2F7A66">正解：默认 FAST 跳过节流，</text>
+              <text x="860" y="122" font-size="12" fill="#46585F">易制造明显 I/O 尖刺；仅</text>
+              <text x="860" y="142" font-size="12" fill="#46585F">限维护边界与验证使用。</text>
+
+              <!-- 5 -->
+              <rect x="1120" y="20" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="1120" y="20" width="256" height="30" fill="#BE653B"/>
+              <text x="1134" y="40" font-size="13" font-weight="700" fill="#F7F6F2">05 忽略空闲跳过口径</text>
+              <text x="1134" y="74" font-size="12" font-weight="700" fill="#BE653B">误区：时间到必有真实刷盘</text>
+              <text x="1134" y="102" font-size="12" fill="#2F7A66">正解：无重要 WAL 会跳过；</text>
+              <text x="1134" y="122" font-size="12" fill="#46585F">监控须区分 num_timed、</text>
+              <text x="1134" y="142" font-size="12" fill="#46585F">num_requested 与 num_done。</text>
+
+              <!-- Row 2: 5 boxes (y=224) -->
+              <!-- 6 -->
+              <rect x="24" y="224" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="24" y="224" width="256" height="30" fill="#245A6B"/>
+              <text x="38" y="244" font-size="13" font-weight="700" fill="#F7F6F2">06 只看页数不看 sync_time</text>
+              <text x="38" y="278" font-size="12" font-weight="700" fill="#BE653B">误区：写出页少就没问题</text>
+              <text x="38" y="306" font-size="12" fill="#2F7A66">正解：即使页数不大，单个</text>
+              <text x="38" y="326" font-size="12" fill="#46585F">文件 fsync 极慢也会直接</text>
+              <text x="38" y="346" font-size="12" fill="#46585F">引发严重的前台尾部抖动。</text>
+
+              <!-- 7 -->
+              <rect x="298" y="224" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="298" y="224" width="256" height="30" fill="#245A6B"/>
+              <text x="312" y="244" font-size="13" font-weight="700" fill="#F7F6F2">07 误认 bgwriter 可替代</text>
+              <text x="312" y="278" font-size="12" font-weight="700" fill="#BE653B">误区：调激进就能省检查点</text>
+              <text x="312" y="306" font-size="12" fill="#2F7A66">正解：bgwriter 不建 redo</text>
+              <text x="312" y="326" font-size="12" fill="#46585F">边界，也不闭环 fsync，</text>
+              <text x="312" y="346" font-size="12" fill="#46585F">无法替代 checkpoint 语义。</text>
+
+              <!-- 8 -->
+              <rect x="572" y="224" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="572" y="224" width="256" height="30" fill="#245A6B"/>
+              <text x="586" y="244" font-size="13" font-weight="700" fill="#F7F6F2">08 混淆 unlogged/temp 边界</text>
+              <text x="586" y="278" font-size="12" font-weight="700" fill="#BE653B">误区：所有表都同路径刷盘</text>
+              <text x="586" y="306" font-size="12" fill="#2F7A66">正解：常规不写 unlogged，</text>
+              <text x="586" y="326" font-size="12" fill="#46585F">临时表完全不参与；关闭</text>
+              <text x="586" y="346" font-size="12" fill="#46585F">与显式选项路径截然不同。</text>
+
+              <!-- 9 -->
+              <rect x="846" y="224" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="846" y="224" width="256" height="30" fill="#245A6B"/>
+              <text x="860" y="244" font-size="13" font-weight="700" fill="#F7F6F2">09 调参脱离复制槽与归档</text>
+              <text x="860" y="278" font-size="12" font-weight="700" fill="#BE653B">误区：检查点完旧 WAL 必删</text>
+              <text x="860" y="306" font-size="12" fill="#2F7A66">正解：checkpoint 只是保留</text>
+              <text x="860" y="326" font-size="12" fill="#46585F">边界之一；失效复制槽或</text>
+              <text x="860" y="346" font-size="12" fill="#46585F">归档堆积照样撑爆磁盘。</text>
+
+              <!-- 10 -->
+              <rect x="1120" y="224" width="256" height="186" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <rect x="1120" y="224" width="256" height="30" fill="#245A6B"/>
+              <text x="1134" y="244" font-size="13" font-weight="700" fill="#F7F6F2">10 只在低峰测试检查点</text>
+              <text x="1134" y="278" font-size="12" font-weight="700" fill="#BE653B">误区：低峰漂亮即代表稳态</text>
+              <text x="1134" y="306" font-size="12" fill="#2F7A66">正解：必须在批量导入、</text>
+              <text x="1134" y="326" font-size="12" fill="#46585F">建索引与业务高峰期验证</text>
+              <text x="1134" y="346" font-size="12" fill="#46585F">write、sync 与前台延迟。</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>最后，用八道核心推演题与一手 PostgreSQL 源码坐标，把今天整套检查点调度知识彻底锚定。</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">13 / 14</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SLIDE 14 ==================== -->
+        <section class="slide" data-index="13" data-title="八道深度思考题与源码坐标">
+          <div class="slide-eyebrow">
+            <span>SYNTHESIS &amp; SOURCE MAP · 14 / 14</span>
+            <span class="tag-right">postgres/postgres · 一手验证路径</span>
+          </div>
+          <h1 class="slide-title">体系化收束：八道核心推演题与 PostgreSQL 源码坐标</h1>
+          <p class="slide-lead">所有推论均回到官方 SGML 文档与核心 C 源码可复核——带着这八道问题，去对照你生产库的 log_checkpoints。</p>
+          <div class="slide-divider"></div>
+          <div class="diagram-zone">
+            <svg viewBox="0 0 1400 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="八道深度思考题与 PostgreSQL 源码坐标索引图">
+              <!-- Left Panel: 8 Deep Questions -->
+              <rect x="24" y="18" width="724" height="394" fill="#F7F6F2" stroke="#245A6B" stroke-width="1.3"/>
+              <rect x="24" y="18" width="724" height="38" fill="#1E4B5A"/>
+              <text x="42" y="42" font-size="14" font-weight="700" fill="#F7F6F2">八道核心推演题（检验是否真正打通底层逻辑）</text>
+
+              <text x="42" y="84" font-size="13" font-weight="700" fill="#245A6B">Q1.</text>
+              <text x="74" y="84" font-size="13" fill="#1B2B33">为什么在线 checkpoint 要先写 XLOG_CHECKPOINT_REDO，最后再写 ONLINE？</text>
+
+              <text x="42" y="124" font-size="13" font-weight="700" fill="#245A6B">Q2.</text>
+              <text x="74" y="124" font-size="13" fill="#1B2B33">为什么 BufferSync() 只写开始时已脏的页，而不追逐运行期间新变脏的页？</text>
+
+              <text x="42" y="164" font-size="13" font-weight="700" fill="#245A6B">Q3.</text>
+              <text x="74" y="164" font-size="13" fill="#1B2B33">checkpoint_completion_target 越高为什么不一定越好（为何不建议 1.0）？</text>
+
+              <text x="42" y="204" font-size="13" font-weight="700" fill="#245A6B">Q4.</text>
+              <text x="74" y="204" font-size="13" fill="#1B2B33">为什么 WAL 触发距离公式要除以 (1 + checkpoint_completion_target)？</text>
+
+              <text x="42" y="244" font-size="13" font-weight="700" fill="#BE653B">Q5.</text>
+              <text x="74" y="244" font-size="13" fill="#1B2B33">num_requested 增长很快但 num_done 增长较慢，可能意味着什么？</text>
+
+              <text x="42" y="284" font-size="13" font-weight="700" fill="#BE653B">Q6.</text>
+              <text x="74" y="284" font-size="13" fill="#1B2B33">若 log_checkpoints 中 sync 很高但 write 不高，应该优先怀疑哪一层？</text>
+
+              <text x="42" y="324" font-size="13" font-weight="700" fill="#2F7A66">Q7.</text>
+              <text x="74" y="324" font-size="13" fill="#1B2B33">standby 的 restartpoint 为何比 primary 更难严格控制在 max_wal_size 内？</text>
+
+              <text x="42" y="364" font-size="13" font-weight="700" fill="#2F7A66">Q8.</text>
+              <text x="74" y="364" font-size="13" fill="#1B2B33">在 full_page_writes=on 的系统里，checkpoint 频率怎样放大或收敛 WAL 量？</text>
+
+              <!-- Right Panel: Source Code & Official SGML Coordinates -->
+              <rect x="772" y="18" width="604" height="394" fill="#F1EFE9" stroke="#D9D5CB" stroke-width="1.3"/>
+              <rect x="772" y="18" width="604" height="38" fill="#245A6B"/>
+              <text x="790" y="42" font-size="14" font-weight="700" fill="#F7F6F2">一手验证坐标（源码 + 官方 SGML 文档）</text>
+
+              <text x="790" y="80" font-size="13" font-weight="700" fill="#1E4B5A">核心 C 源码路径 (src/backend/)</text>
+              <rect x="790" y="92" width="568" height="148" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="806" y="116" font-size="12" class="svg-mono" fill="#245A6B">postmaster/checkpointer.c</text>
+              <text x="1030" y="116" font-size="12" fill="#46585F">CheckpointerMain / WriteDelay / Exec</text>
+
+              <text x="806" y="144" font-size="12" class="svg-mono" fill="#245A6B">access/transam/xlog.c</text>
+              <text x="1030" y="144" font-size="12" fill="#46585F">CreateCheckPoint / Guts / Segments</text>
+
+              <text x="806" y="172" font-size="12" class="svg-mono" fill="#245A6B">storage/buffer/bufmgr.c</text>
+              <text x="1030" y="172" font-size="12" fill="#46585F">BufferSync / BM_CHECKPOINT_NEEDED</text>
+
+              <text x="806" y="200" font-size="12" class="svg-mono" fill="#245A6B">storage/sync/sync.c</text>
+              <text x="1030" y="200" font-size="12" fill="#46585F">ProcessSyncRequests / sync_cycle_ctr</text>
+
+              <text x="806" y="228" font-size="12" class="svg-mono" fill="#245A6B">utils/misc/guc_parameters.dat</text>
+              <text x="1030" y="228" font-size="12" fill="#46585F">GUC 默认值、上下文与单位</text>
+
+              <text x="790" y="268" font-size="13" font-weight="700" fill="#1E4B5A">官方 SGML 文档路径 (doc/src/sgml/)</text>
+              <rect x="790" y="280" width="568" height="114" fill="#F7F6F2" stroke="#D9D5CB"/>
+              <text x="806" y="304" font-size="12" class="svg-mono" fill="#2F7A66">wal.sgml</text>
+              <text x="976" y="304" font-size="12" fill="#46585F">检查点定义、触发、节流、恢复与回收</text>
+
+              <text x="806" y="330" font-size="12" class="svg-mono" fill="#2F7A66">config.sgml</text>
+              <text x="976" y="330" font-size="12" fill="#46585F">timeout / target / flush_after / max_wal_size</text>
+
+              <text x="806" y="356" font-size="12" class="svg-mono" fill="#2F7A66">monitoring.sgml</text>
+              <text x="976" y="356" font-size="12" fill="#46585F">pg_stat_checkpointer 统计口径说明</text>
+
+              <text x="806" y="382" font-size="12" class="svg-mono" fill="#2F7A66">ref/checkpoint.sgml</text>
+              <text x="976" y="382" font-size="12" fill="#46585F">CHECKPOINT 权限、MODE 与 FLUSH_UNLOGGED</text>
+            </svg>
+          </div>
+          <div class="slide-bottom">
+            <div class="slide-next"><span class="next-label">承接 · NEXT</span>本课完结 —— 按 G 随时打开目录回顾任意页面，按 T 浏览全文连贯讲稿。</div>
+            <div class="slide-footer">
+              <span>数据库筑基课 — 检查点调度</span>
+              <span class="page-num">14 / 14</span>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <!-- In-page Right Speaker Notes Panel (NO modal) -->
+    <aside id="notes-panel" aria-label="演讲稿面板">
+      <div id="notes-header">
+        <div class="notes-tabs">
+          <button class="notes-tab active" id="tab-page" type="button">本页讲稿 (N)</button>
+          <button class="notes-tab" id="tab-all" type="button">全文讲稿 (T)</button>
+        </div>
+        <button id="notes-close" type="button">收起</button>
+      </div>
+      <div id="notes-body"></div>
+    </aside>
+  </div>
+
+  <!-- In-page TOC Overlay (G) -->
+  <div id="toc-overlay" role="dialog" aria-label="演说目录">
+    <div id="toc-box">
+      <div id="toc-head">
+        <h2>目录总览 — 数据库筑基课：PostgreSQL 检查点调度</h2>
+        <button class="sim-btn" id="toc-close" type="button">关闭 (G / Esc)</button>
+      </div>
+      <div id="toc-grid"></div>
+    </div>
+  </div>
+
+  <!-- Non-blocking Toast -->
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Bottom Shortcut Bar (always visible, including fullscreen) -->
+  <footer id="hud-bar">
+    <div id="autoplay-progress"></div>
+    <div class="hud-left">
+      <button class="hud-btn" id="btn-prev" type="button"><span class="kbd">←</span> 上一页</button>
+      <span class="hud-counter" id="hud-counter">01 / 14</span>
+      <button class="hud-btn" id="btn-next" type="button">下一页 <span class="kbd">→</span></button>
+    </div>
+    <div class="hud-right">
+      <button class="hud-btn" id="btn-toc" type="button"><span class="kbd">G</span> 目录</button>
+      <button class="hud-btn" id="btn-notes" type="button"><span class="kbd">N</span> 本页讲稿</button>
+      <button class="hud-btn" id="btn-transcript" type="button"><span class="kbd">T</span> 全文讲稿</button>
+      <button class="hud-btn" id="btn-autoplay" type="button"><span class="kbd">A</span> 自动播放</button>
+      <button class="hud-btn" id="btn-fullscreen" type="button"><span class="kbd">F</span> 全屏</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ==================== SPEAKER NOTES DATA ==================== */
+  const NOTES = [
+    {
+      num: '01',
+      title: 'PostgreSQL 检查点调度全景',
+      paragraphs: [
+        '各位好，欢迎来到数据库筑基课。前面我们聊过 WAL、shared_buffers、WAL flush 和控制文件，今天我们要把这些零件串成一条真正决定生产稳定性的主线——检查点调度。',
+        '很多人一听 checkpoint，脑子里第一反应就是「把内存里的脏页刷到盘上」。这个理解太浅了。如果它只是刷盘，那我们直接全速刷完不就完了？为什么 PostgreSQL 要专门养一个 checkpointer 进程，还要在源码里写上千行复杂的调度和节流代码？',
+        '答案就写在今天的地层剖面图里：检查点本质上是数据库在「崩溃恢复时间」、「WAL 磁盘空间」、「前台事务延迟」和「后台 I/O 吞吐」这四股力量之间做动态调度。整套体系从浅到深分成四层：最上面是触发层，往下是共享内存里的合并层，再往下是 CreateCheckPoint 执行层，最底层是 BufferSync、双维节流和 fsync 落盘闭环。今天我们所有结论，全部严格对照 PostgreSQL 官方 SGML 文档和 master 分支源码一步步推演。'
+      ],
+      evidence: '实证依据：doc/src/sgml/wal.sgml、src/backend/postmaster/checkpointer.c、xlog.c、bufmgr.c、sync.c（基线提交 01a80f0）。'
+    },
+    {
+      num: '02',
+      title: '为什么不能只看「刷盘」？三大目标与四重代价',
+      paragraphs: [
+        '在钻进源码之前，我们先看五个在生产环境里反复上演的真实痛点。比如批量导入或者建索引的时候，日志突然疯狂刷屏 checkpoints are occurring too frequently；或者业务明明没有慢 SQL，延迟却每隔几分钟抖一下，一查 log_checkpoints，发现 sync 或者 write 时间拉得特别长；再比如 pg_wal 目录一路狂飙，DBA 纳闷我明明设了 max_wal_size，怎么根本拦不住？',
+        '这些现象背后，其实是检查点必须同时扛住的三件事：第一，限定崩溃恢复时到底要重放多少 WAL，没有它，重启恢复时间就是无底洞；第二，划定旧 WAL 什么时候不再为崩溃恢复所需，从而允许回收或删除；第三，把集中刷脏页和 fsync 的巨大冲击波，按时间摊平，别把前台业务撞翻。',
+        '但工程世界没有免费午餐。看右侧的代价矩阵：你为了恢复快把检查点调得太频繁，在 full_page_writes 开启时，每轮检查点后页面第一次修改都要写整页镜像 FPI，结果 WAL 反而暴涨；调得太稀疏，崩溃恢复就慢得让人绝望；刷得太急，前台延迟尖刺立刻出现；刷得太慢，又追不上 WAL 写入速率。所以检查点调优从来不是追求「越少越好」或「越快越好」，而是找准匹配你业务 RTO 和磁盘带宽的平衡点。'
+      ],
+      evidence: '推演逻辑：三大目标（REDO 边界 / WAL 回收边界 / I/O 平滑）彼此牵制，任何单边优化都会触发四重代价矩阵中的反向惩罚。'
+    },
+    {
+      num: '03',
+      title: '触发源与请求合并：ckpt_flags 的位 OR 仲裁',
+      paragraphs: [
+        '既然目标和代价都摆清楚了，PostgreSQL 是怎么组织工程架构的呢？从 9.2 版本起，PostgreSQL 不再让各个业务后端各自去干检查点的重活，而是把这件事收拢给专门的辅助进程 checkpointer。',
+        '我们看左侧的五路触发源：时间到期是 checkpointer 自己在主循环里算的；WAL 写满段、手工执行 CHECKPOINT、关闭实例、恢复结束或者特定 DDL，全都是由后端往共享内存里的 ckpt_flags 写标志位，然后 SetLatch 唤醒 checkpointer。',
+        '这里面有个非常精巧的设计叫「位 OR 合并」。假设系统正准备做一个温和的常规检查点，突然运维敲了一条关闭命令或者 FAST 手工命令，两个标志位一做按位 OR，强请求立刻保留下来，绝不会被弱请求覆盖。拿到标志后，CheckpointerMain 会看当前是不是在恢复中：正常主库走 CreateCheckPoint，备库走 CreateRestartPoint。',
+        '还要特别留心右下角的「空闲跳过」：如果 last_important_lsn 跟当前 control file 里的位置一模一样，说明这段时间根本没产生需要保护的新 WAL，而且又不是强制或关机，checkpointer 会直接跳过！这就是为什么官方 monitoring.sgml 专门提醒我们：pg_stat_checkpointer 里的 num_timed 和 num_requested 把跳过的也算进去了，只有 num_done 才统计真正落盘完成的次数。'
+      ],
+      evidence: '源码坐标：checkpointer.c 中 CheckpointerMain() 与 RequestCheckpoint()；monitoring.sgml 中 num_timed / num_requested / num_done 口径差异。'
+    },
+    {
+      num: '04',
+      title: 'WAL 触发阈值：为何 max_wal_size 不是磁盘硬上限？',
+      paragraphs: [
+        '搞懂了合并层，我们马上追问两个最容易踩坑的细节：时间触发怎么防漂移？WAL 触发到底在什么时候点火？',
+        '先看右上角的时间锚点。checkpointer 里的 last_checkpoint_time 记录的是上一轮检查点的「开始时间」，而不是「结束时间」。你想想，如果按结束时间算，磁盘越慢、本轮拖得越久，下一轮就会越往后顺延，你的崩溃恢复窗口就会一路漂移失控。按开始时间锚定，才能保证可预测的周期。',
+        '再看左侧的 WAL 触发公式。很多朋友以为 pg_wal 快碰到 max_wal_size 才会触发检查点，错了！因为检查点跑起来之后，前台业务还在源源不断地写新 WAL。所以 xlog.c 里的 CalculateCheckpointSegments 把总段数除以 1 加 completion_target。拿最经典的例子算一笔账：16MB 一段，max_wal_size 设 1GB 就是 64 段，默认 target 0.9，64 除以 1.9 取整等于 33 段。也就是说，WAL 刚写满一半出头，系统就必须提前点火，把剩下的 31 段空间留给检查点运行期间继续产生的 WAL。',
+        '这就彻底解开了「为什么 pg_wal 会超过 max_wal_size」的谜题：它本来就只是触发和回收的软目标，绝不是磁盘硬上限。只要遇上短期写入峰值、失效的复制槽死死拽着 restart_lsn、归档命令卡死、在线备份或者 wal_keep_size 锁定，pg_wal 目录都会毫不客气地突破它。'
+      ],
+      evidence: '公式验证：CheckPointSegments = floor(ConvertToXSegs(max_wal_size) / (1.0 + completion_target))，1GB/16MB/0.9 实算为 floor(64/1.9)=33 段。'
+    },
+    {
+      num: '05',
+      title: '双 WAL 记录与 CheckPointGuts：在线检查点为何不锁全局？',
+      paragraphs: [
+        '好，现在检查点已经点火启动了。接下来是最考验数据库并发功底的问题：刷几百 GB 内存里的脏页可能需要好几分钟，这期间前台业务难道要全部停下来等吗？当然不行！',
+        '大家可以点击图上方的「播放推演」或者「下一步」，跟着动画走一遍在线检查点的六个阶段。阶段一，CreateCheckPoint 先在极短的持锁窗口里插入一条 XLOG_CHECKPOINT_REDO 记录，把 RedoRecPtr 钉死在 WAL 流上。为什么必须先钉起点？因为如果刷完盘再定起点，刷盘途中新变脏但没来得及落盘的页就会被误判为「不需要重放」，崩溃直接丢数据。',
+        '钉住起点后进入阶段二，立刻放行前台事务继续并发插 WAL。顺便对照一下，关机时的 Shutdown checkpoint 因为没有并发写，所以只需要一条 XLOG_CHECKPOINT_SHUTDOWN 记录就够了。',
+        '阶段三进入核心 CheckPointGuts。请记住，它绝对不只写表和索引的脏页！它按顺序把 relation map、复制槽、逻辑解码快照、CLOG/CommitTs/MultiXact 这些 SLRU 事务状态、共享缓冲池、fsync 队列和两阶段提交状态统统纳入同一个持久化闭环。',
+        '等这些全部落盘，阶段四再插入一条 XLOG_CHECKPOINT_ONLINE 记录指回前面的 REDO 起点，并 XLogFlush 确保它自己落盘；阶段五在临界区原子更新 ControlFile；最后阶段六用「峰值立刻抬高、低峰按 0.90 慢慢回落」的移动估计更新距离，再去回收或预分配旧 WAL。整条链路滴水不漏。'
+      ],
+      evidence: '源码坐标：xlog.c 中 CreateCheckPoint()、CheckPointGuts()、UpdateCheckPointDistanceEstimate() 与 ControlFile 临界区更新。'
+    },
+    {
+      num: '06',
+      title: 'BufferSync()：先冻结本轮脏页集合，再排序与多表空间均衡写',
+      paragraphs: [
+        '刚才我们看到 CheckPointGuts 里最重头戏的就是刷共享缓冲池，也就是 bufmgr.c 里的 BufferSync。这里马上会冒出一个致命问题：如果业务每秒都在疯狂修改几万个页面，你一边刷、它一边又弄脏，检查点会不会永远刷不完？',
+        'PostgreSQL 的解法非常干脆——第一步，先扫描全部 NBuffers，只给「检查点开始那一刻已经脏了」的页面打上 BM_CHECKPOINT_NEEDED 标记，并把它们的物理位置收集进数组。检查点开始之后才新变脏的页面，统统不归本轮管，留给 WAL 兜底和下一轮处理。这就给高并发下的检查点划出了确定无疑的终点。',
+        '拿到本轮清单后，第二步按「表空间、关系、fork、块号」排序，把内存里东一块西一块的随机脏页，整理成磁盘最喜欢的顺序写。第三步，如果你配了多个表空间，它还会用二叉堆维护每个表空间的刷盘进度，每次挑最慢的写，防止某块盘被连续打满而其他盘干闲着。',
+        '第四步，逐页调用 SyncOneBuffer，而且每处理完一页都会立刻进入 CheckpointWriteDelay 判断要不要歇一会儿。最后发出 pending writebacks 推动内核落盘。顺带一提底部三类表的边界：常规表全走这条路；unlogged 表在常规检查点里默认跳过，只有关机、恢复结束或显式指定 FLUSH_UNLOGGED 才会写；临时表住在会话私有内存里，根本不归 checkpointer 管。'
+      ],
+      evidence: '源码坐标：bufmgr.c 中 BufferSync()、BM_CHECKPOINT_NEEDED 标记、tablespace 二叉堆均衡与 unlogged/temporary 边界。'
+    },
+    {
+      num: '07',
+      title: '双维节流模拟器：时间进度与 WAL 进度的动态追赶',
+      paragraphs: [
+        '这一页我们专门做了一个交互式节流模拟器，大家可以亲自拖动顶部的 max_wal_size、completion_target，或者把 WAL 压力切到「突发大导入峰值」，再切换 SPREAD 和 FAST 模式，点击「运行模拟」观察曲线的变化。',
+        '很多人误以为 PostgreSQL 的节流是写几页、固定睡几毫秒。错！打开 checkpointer.c 里的 IsCheckpointOnSchedule 你会发现，它是拿「当前写页进度乘以 completion_target」，同时去和两条参考线比对：一条是时间消耗比例 elapsed_time，另一条是 WAL 消耗比例 elapsed_xlogs。',
+        '只要你的写页进度领先于这两条线，checkpointer 就会安心睡上 100 毫秒——注意，睡之前它还会顺手处理配置 reload、吸收后端发来的 fsync 请求、检查 archive_timeout 并汇报中间统计。可一旦 WAL 写入突然暴涨，elapsed_xlogs 瞬间超过你的写页进度，判定立刻变成「落后」，checkpointer 取消睡眠、全力追赶，防止 WAL 撑爆。',
+        '如果你把模式切到 FAST，或者遇到关机请求，节流逻辑会被直接绕过，写页曲线瞬间垂直拉满。这也直观解释了为什么官方文档不建议把 completion_target 设成 1.0：因为 100% 的时间都用来写脏页，末尾的 fsync 和收尾工作就没余量了，极易超时拖进下一轮。'
+      ],
+      evidence: '源码坐标：checkpointer.c 中 CheckpointWriteDelay() 与 IsCheckpointOnSchedule() 双维进度比较逻辑。'
+    },
+    {
+      num: '08',
+      title: 'ProcessSyncRequests()：fsync 竞态闭环与尾部抖动治理',
+      paragraphs: [
+        '脏页通过 BufferSync 全部写出后，数据其实大多还躺在操作系统的 page cache 里，并没有真正落盘。如果此时断电，数据照样会丢。所以最后必须由 sync.c 里的 ProcessSyncRequests 完成 fsync 闭环。',
+        '这里藏着一个极其隐蔽的并发竞态：假设某个页面在 BufferSync 扫到它之前，刚好被一个业务后端淘汰写出去了，并且清除了 dirty 标志。那 BufferSync 扫过来一看「哦，它不脏了」，就会跳过它。那这个文件谁来 fsync 呢？PostgreSQL 靠一条铁律闭环：后端在清除 dirty 标志之前，必须先把这个文件的 fsync 请求塞进队列；而 checkpointer 在 BufferSync 全部结束后，会再调一次 AbsorbSyncRequests 兜底吸收。这样就绝对不会漏掉任何一个必须落盘的文件。',
+        '同时，为了防止 fsync 期间不断有新请求进来导致本轮永远结束不了，源码引入了 sync_cycle_ctr 轮次计数器——本轮只处理旧周期的请求，新周期的统统留给下一轮。这跟前面的 BM_CHECKPOINT_NEEDED 异曲同工。',
+        '最后看底部：如果海量脏页堆在内核 page cache 里，等到末尾集中 fsync，往往会引爆可怕的尾部停顿。checkpoint_flush_after 就是用来在写脏页途中分批催促内核 writeback 的。但要注意官方文档的提醒：如果你的活跃工作集大于 shared_buffers 又小于 OS page cache，过早 flush 可能会削弱内核写合并，反而降低吞吐，一定要用真实负载压测验证。'
+      ],
+      evidence: '源码坐标：sync.c 中 ProcessSyncRequests()、AbsorbSyncRequests() 与 sync_cycle_ctr；config.sgml 中 checkpoint_flush_after 权衡说明。'
+    },
+    {
+      num: '09',
+      title: '写脏页四方分工：为什么 bgwriter 永远不能替代 checkpoint？',
+      paragraphs: [
+        '机制讲透了，我们跳出来做两组横向对比。第一组，很多同学经常把 checkpointer、background writer、后端自写和 OS writeback 混为一谈，甚至有人问：我把 bgwriter 调得非常激进，是不是就可以不做或者少做 checkpoint 了？',
+        '看这张工程对比表，答案一目了然。决定 redo 恢复起点那一栏，只有 checkpointer 亮着绿灯「是（唯一）」；完成完整 fsync 持久化闭环那一栏，也只有 checkpointer 扛着 ProcessSyncRequests 的责任。',
+        'bgwriter 的活儿是按 LRU 分配压力提前清理一部分脏页，帮前台后端减少「自己被迫写脏页」的概率；后端自写则是实在没空闲页了才临时救火，直接拖慢当前 SQL 延迟；至于 OS writeback，它压根就不懂什么是数据库的 redo LSN 和恢复边界。所以 bgwriter 是好帮手，可以帮你把脏页水位压低，但它永远替代不了 checkpoint 的恢复语义。'
+      ],
+      evidence: '架构对照：结合原文第 4.1 节四方职责矩阵，明确恢复语义与缓存清理语义的本质边界。'
+    },
+    {
+      num: '10',
+      title: '五种检查点类型：自动调度、手工 FAST/SPREAD 与 Restartpoint',
+      paragraphs: [
+        '第二组横向对比，我们聚焦 checkpointer 自己执行的五种形态。最左边的「时间触发」是稳态生产最希望看到的样子，I/O 按 target 平滑摊开，记在 num_timed 里。第二种「WAL 触发」是写入高峰的安全阀，一旦它频繁出现，记在 num_requested 里，往往说明 max_wal_size 偏小或者上游写入太猛。',
+        '重点看第三和第四列的手工 CHECKPOINT。只有超级用户或具备 pg_checkpoint 角色的人能执行。千万记住，你直接敲一句 CHECKPOINT 分号，默认走的是 MODE FAST，它会绕过所有节流全速冲盘，生产高峰敲这一句无异于给磁盘来一记重拳。在本文依据的 PostgreSQL master 源码里，已经支持显式写成 CHECKPOINT (MODE SPREAD) 来摊开 I/O，还支持 FLUSH_UNLOGGED 选项——但大家在生产环境使用前，务必先核对自己线上小版本的官方文档，不要把 master 新语法直接硬套老版本。',
+        '最右边是备库和恢复期的 Restartpoint。它只能推进到备库已经回放完的 WAL 里的某个 checkpoint 记录，受限于主库节奏和回放进度，因此备库的 pg_wal 经常会比 max_wal_size 多出一个周期左右，规划备库磁盘时必须把这段余量算进去。'
+      ],
+      evidence: '源码与文档：ref/checkpoint.sgml（master 01a80f0 支持 MODE FAST/SPREAD 与 FLUSH_UNLOGGED）及 wal.sgml 中 restartpoint 特性。'
+    },
+    {
+      num: '11',
+      title: '观测与调参闭环：从统计视图与日志精准定位瓶颈',
+      paragraphs: [
+        '原理和对比都装进脑子了，回到线上到底怎么动手？记住一条原则：没有观测证据，绝不盲目改参数。上半部分这四路 SQL 探针，是每次排查的最小闭环。',
+        '先查 pg_settings 核对当前生效的七个核心参数；再查 pg_stat_checkpointer，重点盯紧 num_timed 与 num_requested 的比例、剔除跳过后的 num_done，以及 write_time 和 sync_time 的拆解；第三步务必打开 log_checkpoints 并 reload，不要只扫一眼 total 耗时，必须把单次日志里的 write、sync、longest 和 distance 对比 estimate 拆开看；第四步如果 pg_wal 偏大，顺手查 pg_replication_slots 的 restart_lsn 和 safe_wal_size。',
+        '拿到证据后，直接走下半部分的三路诊断树：如果属于「过密」，先查是不是 WAL 触发，再决定调大 max_wal_size 并治理源头批量写入与多余索引；如果属于「过急」，守住 completion_target 等于 0.9 不往下调，严禁高峰手工 FAST；如果属于「过长或 sync 尖刺」，写出页数不大但单个文件 fsync 极慢，就重点压测 checkpoint_flush_after，并联动 iostat 和云盘指标排查底层存储。'
+      ],
+      evidence: '实操闭环：严格对应原文第 6 节五段最小可验证 SQL 与图 5 观测诊断闭环，不编造伪造执行输出。'
+    },
+    {
+      num: '12',
+      title: '分角色工程守则与场景适配矩阵',
+      paragraphs: [
+        '在线上真正把检查点调稳，靠 DBA 一个人单打独斗是不够的，需要架构师、DBA 和业务开发者三方各守其位。',
+        '架构师看顶层：先和业务对齐 RTO 再定检查点周期；规划 pg_wal 磁盘空间时，把峰值速率、归档延迟、复制槽滞后和至少一个检查点周期打包算进去，绝不只看 max_wal_size 一个数；更重要的是，减少无效写入和多余索引，永远比事后拼命调大参数更治本。',
+        'DBA 抓基线和验证：打开 log_checkpoints 至少观察完整的高峰和低峰周期；每次调完 checkpoint_timeout 或 max_wal_size，必须看足一个完整周期，绝不能 reload 完看两分钟就收工；手工 CHECKPOINT 只用于维护边界，绝不当成日常「清内存」。',
+        '业务开发者控源头：大导入、大更新要分批控节奏，避免一个超大事务瞬间制造海量脏页；杜绝值根本没变却照样刷屏的无意义 UPDATE；大批量写入前主动跟 DBA 对齐容量和窗口；并且立一条死规矩——绝对不要在业务应用代码里调用 CHECKPOINT。底部的三张场景卡帮大家快速对号入座：吞吐优先与数仓加载适合拉长间隔，严苛 RTO 小库适合缩短间隔，而绝大多数追求平稳的 OLTP 守住 0.9 的 completion_target 即可。'
+      ],
+      evidence: '工程协同：对应原文第 7 节三角色最佳实践与第 8 节适合/不适合场景判断矩阵。'
+    },
+    {
+      num: '13',
+      title: '检查点调优十大常见坑：从认知误区到根因修正',
+      paragraphs: [
+        '临近收尾，我们把生产环境里最容易踩的十个检查点大坑排成这张 2×5 排雷图谱，大家可以对照自查。',
+        '上面一排五个坑偏向「参数与操作误判」：第一，把 max_wal_size 当成磁盘硬上限，结果复制槽或归档一堵直接打爆磁盘；第二，看到 checkpoint_warning 只会无脑调大一个参数，不查背后的批量任务和无效更新；第三，觉得调小 checkpoint_timeout 更安全，反而引爆整页写 FPI 让 WAL 膨胀；第四，把手工 CHECKPOINT 当日常优化，默认 FAST 模式直接把线上 I/O 打穿；第五，忘了空闲跳过，拿 num_timed 当真实刷盘次数，忘了对照 num_done。',
+        '下面一排五个坑偏向「架构与验证盲区」：第六，只盯 buffers_written 不看 sync_time，漏掉了单个慢 fsync 引发的尾部抖动；第七，以为调激进 bgwriter 就能替代 checkpoint；第八，混淆常规表、unlogged 表和临时表的刷盘边界；第九，调参完全不看复制槽和归档保留；第十，只在业务低峰测试检查点，低峰日志再漂亮，到了大导入高峰照样现原形。避开这十个坑，你的检查点稳定性就已经超越绝大多数线上库了。'
+      ],
+      evidence: '排雷清单：完整对应原文第 9 节十条常见坑，每一条都给出了根因修正动作。'
+    },
+    {
+      num: '14',
+      title: '体系化收束：八道核心推演题与 PostgreSQL 源码坐标',
+      paragraphs: [
+        '最后这一页，留给大家八道深度推演题和一份一手源码坐标图。今天我们讲的所有机制，都不是拍脑袋编出来的经验，而是每一行都能在右侧的 PostgreSQL C 源码和官方 SGML 文档里找到白纸黑字依据的。',
+        '大家课后不妨拿左侧的八个问题考考自己：为什么在线检查点要分 REDO 和 ONLINE 两条记录？为什么 BufferSync 只冻结开始时已脏的页？为什么 WAL 触发距离要除以 1 加 completion_target？为什么 num_requested 飙升但 num_done 没怎么涨？如果这八个问题你都能不看讲稿顺畅推演出来，说明你已经真正把 PostgreSQL 检查点调度内化成自己的底层工程直觉了。',
+        '如果刚才哪一页还想回头复盘，随时按键盘上的 G 键打开目录直达，或者按 T 键在右侧通读全文讲稿。今天的数据库筑基课就讲到这里，谢谢大家！'
+      ],
+      evidence: '一手索引：checkpointer.c · xlog.c · bufmgr.c · sync.c · guc_parameters.dat · wal.sgml · config.sgml · monitoring.sgml · ref/checkpoint.sgml。'
+    }
+  ];
+
+  /* ==================== STATE & DOM REFS ==================== */
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const totalSlides = slides.length;
+  let currentIdx = 0;
+  let notesMode = 'closed'; // 'closed' | 'page' | 'all'
+  let tocOpen = false;
+  let autoplayTimer = null;
+  let autoplayTickTimer = null;
+  let autoplayElapsed = 0;
+  const AUTOPLAY_MS = 8000;
+
+  const appEl = document.getElementById('app');
+  const stageHost = document.getElementById('stage-host');
+  const stageWrapper = document.getElementById('stage-wrapper');
+  const notesPanel = document.getElementById('notes-panel');
+  const notesBody = document.getElementById('notes-body');
+  const tabPage = document.getElementById('tab-page');
+  const tabAll = document.getElementById('tab-all');
+  const notesClose = document.getElementById('notes-close');
+  const tocOverlay = document.getElementById('toc-overlay');
+  const tocGrid = document.getElementById('toc-grid');
+  const tocClose = document.getElementById('toc-close');
+  const hudCounter = document.getElementById('hud-counter');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToc = document.getElementById('btn-toc');
+  const btnNotes = document.getElementById('btn-notes');
+  const btnTranscript = document.getElementById('btn-transcript');
+  const btnAutoplay = document.getElementById('btn-autoplay');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const autoplayProgress = document.getElementById('autoplay-progress');
+  const toastEl = document.getElementById('toast');
+
+  let toastTimer = null;
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  /* ==================== PROPORTIONAL 16:9 SCALING ==================== */
+  function scaleStage() {
+    const rect = stageHost.getBoundingClientRect();
+    const pad = 16;
+    const availW = Math.max(200, rect.width - pad * 2);
+    const availH = Math.max(120, rect.height - pad * 2);
+    const scale = Math.min(availW / 1600, availH / 900);
+    stageWrapper.style.transform = `scale(${scale.toFixed(5)})`;
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => scaleStage()).observe(stageHost);
+  }
+  window.addEventListener('resize', scaleStage);
+
+  /* ==================== SLIDE NAVIGATION ==================== */
+  function goToSlide(idx, fromAutoplay) {
+    const clamped = Math.max(0, Math.min(totalSlides - 1, idx));
+    slides.forEach((s, i) => s.classList.toggle('active', i === clamped));
+    currentIdx = clamped;
+    hudCounter.textContent = `${String(currentIdx + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}`;
+    updateTocActive();
+    syncNotesView(true);
+    if (!fromAutoplay && autoplayTimer) {
+      resetAutoplayClock();
+    }
+  }
+
+  /* ==================== NOTES PANEL (IN-PAGE RIGHT PANE) ==================== */
+  function buildNoteCardHTML(item, idx, isCurrent) {
+    const paras = item.paragraphs.map(p => `<p>${p}</p>`).join('');
+    return `
+      <article class="note-card${isCurrent ? ' current' : ''}" data-note-idx="${idx}">
+        <div class="note-card-head">
+          <span class="note-card-num">${item.num} / ${String(totalSlides).padStart(2, '0')}</span>
+          <span class="note-card-title">${item.title}</span>
+        </div>
+        ${paras}
+        <div class="note-evidence">${item.evidence}</div>
+      </article>
+    `;
+  }
+
+  function renderNotesContent() {
+    if (notesMode === 'page') {
+      notesBody.innerHTML = buildNoteCardHTML(NOTES[currentIdx], currentIdx, true);
+      notesBody.scrollTop = 0;
+    } else if (notesMode === 'all') {
+      notesBody.innerHTML = NOTES.map((item, i) => buildNoteCardHTML(item, i, i === currentIdx)).join('');
+      notesBody.querySelectorAll('.note-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const target = parseInt(card.getAttribute('data-note-idx'), 10);
+          if (!isNaN(target)) goToSlide(target, false);
+        });
+      });
+      scrollActiveNoteIntoView(false);
+    }
+  }
+
+  function scrollActiveNoteIntoView(smooth) {
+    if (notesMode !== 'all') return;
+    const activeCard = notesBody.querySelector(`.note-card[data-note-idx="${currentIdx}"]`);
+    if (!activeCard) return;
+    const topPos = activeCard.offsetTop - 16;
+    notesBody.scrollTo({ top: Math.max(0, topPos), behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  function syncNotesView(smoothScroll) {
+    if (notesMode === 'closed') return;
+    if (notesMode === 'page') {
+      renderNotesContent();
+    } else if (notesMode === 'all') {
+      const cards = notesBody.querySelectorAll('.note-card');
+      if (cards.length !== totalSlides) {
+        renderNotesContent();
+      } else {
+        cards.forEach((c, i) => c.classList.toggle('current', i === currentIdx));
+        scrollActiveNoteIntoView(smoothScroll);
+      }
+    }
+  }
+
+  function setNotesMode(mode) {
+    // Pressing same mode toggles closed (loop)
+    if (notesMode === mode) {
+      notesMode = 'closed';
+    } else {
+      notesMode = mode;
+    }
+    const isOpen = notesMode !== 'closed';
+    notesPanel.classList.toggle('open', isOpen);
+    tabPage.classList.toggle('active', notesMode === 'page');
+    tabAll.classList.toggle('active', notesMode === 'all');
+    btnNotes.classList.toggle('active', notesMode === 'page');
+    btnTranscript.classList.toggle('active', notesMode === 'all');
+
+    if (isOpen) {
+      renderNotesContent();
+    }
+    // Re-scale stage during & after transition so vector scaling stays exact
+    scaleStage();
+    setTimeout(scaleStage, 240);
+  }
+
+  tabPage.addEventListener('click', () => {
+    if (notesMode !== 'page') {
+      notesMode = 'page';
+      tabPage.classList.add('active');
+      tabAll.classList.remove('active');
+      btnNotes.classList.add('active');
+      btnTranscript.classList.remove('active');
+      renderNotesContent();
+    }
+  });
+
+  tabAll.addEventListener('click', () => {
+    if (notesMode !== 'all') {
+      notesMode = 'all';
+      tabAll.classList.add('active');
+      tabPage.classList.remove('active');
+      btnTranscript.classList.add('active');
+      btnNotes.classList.remove('active');
+      renderNotesContent();
+    }
+  });
+
+  notesClose.addEventListener('click', () => setNotesMode(notesMode));
+
+  /* ==================== TOC OVERLAY (G) ==================== */
+  function buildToc() {
+    tocGrid.innerHTML = slides.map((s, i) => `
+      <div class="toc-item${i === currentIdx ? ' current' : ''}" data-toc-idx="${i}">
+        <div class="toc-num">${String(i + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}</div>
+        <div class="toc-title">${s.getAttribute('data-title')}</div>
+      </div>
+    `).join('');
+    tocGrid.querySelectorAll('.toc-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.getAttribute('data-toc-idx'), 10);
+        toggleToc(false);
+        goToSlide(idx, false);
+      });
+    });
+  }
+
+  function updateTocActive() {
+    tocGrid.querySelectorAll('.toc-item').forEach((el, i) => {
+      el.classList.toggle('current', i === currentIdx);
+    });
+  }
+
+  function toggleToc(forceState) {
+    tocOpen = typeof forceState === 'boolean' ? forceState : !tocOpen;
+    tocOverlay.classList.toggle('open', tocOpen);
+    btnToc.classList.toggle('active', tocOpen);
+  }
+
+  tocClose.addEventListener('click', () => toggleToc(false));
+  tocOverlay.addEventListener('click', (e) => {
+    if (e.target === tocOverlay) toggleToc(false);
+  });
+
+  /* ==================== AUTOPLAY (A) ==================== */
+  function stopAutoplay() {
+    clearInterval(autoplayTimer);
+    clearInterval(autoplayTickTimer);
+    autoplayTimer = null;
+    autoplayTickTimer = null;
+    autoplayElapsed = 0;
+    autoplayProgress.style.width = '0%';
+    btnAutoplay.classList.remove('active');
+    btnAutoplay.innerHTML = '<span class="kbd">A</span> 自动播放';
+  }
+
+  function resetAutoplayClock() {
+    autoplayElapsed = 0;
+    autoplayProgress.style.width = '0%';
+  }
+
+  function toggleAutoplay() {
+    if (autoplayTimer) {
+      stopAutoplay();
+      showToast('已暂停自动播放');
+      return;
+    }
+    if (currentIdx >= totalSlides - 1) {
+      goToSlide(0, true);
+    }
+    btnAutoplay.classList.add('active');
+    btnAutoplay.innerHTML = '<span class="kbd">A</span> 停止播放';
+    autoplayElapsed = 0;
+    autoplayTickTimer = setInterval(() => {
+      autoplayElapsed += 100;
+      const pct = Math.min(100, (autoplayElapsed / AUTOPLAY_MS) * 100);
+      autoplayProgress.style.width = `${pct}%`;
+    }, 100);
+    autoplayTimer = setInterval(() => {
+      if (currentIdx < totalSlides - 1) {
+        autoplayElapsed = 0;
+        goToSlide(currentIdx + 1, true);
+      } else {
+        stopAutoplay();
+        showToast('自动播放已到达最后一页');
+      }
+    }, AUTOPLAY_MS);
+    showToast('已开启自动播放（每页 8 秒）');
+  }
+
+  /* ==================== FULLSCREEN (F) ==================== */
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      if (appEl.requestFullscreen) {
+        appEl.requestFullscreen().catch(() => {
+          showToast('当前预览容器限制全屏 API，请在新窗口打开体验完整全屏');
+        });
+      } else {
+        showToast('当前浏览器不支持全屏 API');
+      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = Boolean(document.fullscreenElement);
+    btnFullscreen.classList.toggle('active', isFs);
+    btnFullscreen.innerHTML = isFs ? '<span class="kbd">F</span> 退出全屏' : '<span class="kbd">F</span> 全屏';
+    scaleStage();
+  });
+
+  /* ==================== HUD BUTTONS & KEYBOARD SHORTCUTS ==================== */
+  btnPrev.addEventListener('click', () => goToSlide(currentIdx - 1, false));
+  btnNext.addEventListener('click', () => goToSlide(currentIdx + 1, false));
+  btnToc.addEventListener('click', () => toggleToc());
+  btnNotes.addEventListener('click', () => setNotesMode('page'));
+  btnTranscript.addEventListener('click', () => setNotesMode('all'));
+  btnAutoplay.addEventListener('click', toggleAutoplay);
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+      e.preventDefault();
+      if (!tocOpen) goToSlide(currentIdx + 1, false);
+    } else if (key === 'ArrowLeft' || key === 'PageUp') {
+      e.preventDefault();
+      if (!tocOpen) goToSlide(currentIdx - 1, false);
+    } else if (key === 'Home') {
+      e.preventDefault();
+      goToSlide(0, false);
+    } else if (key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1, false);
+    } else if (key === 'g' || key === 'G') {
+      e.preventDefault();
+      toggleToc();
+    } else if (key === 'n' || key === 'N') {
+      e.preventDefault();
+      setNotesMode('page');
+    } else if (key === 't' || key === 'T') {
+      e.preventDefault();
+      setNotesMode('all');
+    } else if (key === 'a' || key === 'A') {
+      e.preventDefault();
+      toggleAutoplay();
+    } else if (key === 'f' || key === 'F') {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (key === 'Escape') {
+      if (tocOpen) toggleToc(false);
+    }
+  });
+
+  /* ==================== ANIMATION 1: SLIDE 05 ONLINE CHECKPOINT ==================== */
+  const ANIM1_STEPS = [
+    {
+      status: '阶段 1：写入 XLOG_CHECKPOINT_REDO，钉住 RedoRecPtr',
+      title: '阶段 1 解析：先插 XLOG_CHECKPOINT_REDO —— 为什么不在刷完脏页后再定起点？',
+      l1: '如果在刷完脏页后才定 redo 起点，刷盘期间新产生的脏页可能还没落盘就被排除在恢复范围外，导致崩溃丢数据。',
+      l2: '因此必须先钉住 RedoRecPtr，确保该点之前的修改全部落盘，而该点之后的新修改则由 WAL 负责崩溃重放。'
+    },
+    {
+      status: '阶段 2：放行前台并发事务持续插入 WAL',
+      title: '阶段 2 解析：短窗口拿锁后立刻放行 —— 在线检查点的并发核心',
+      l1: '确定 RedoRecPtr 并读取关键共享状态后立即释放锁，前台业务可正常提交事务并持续写入新 WAL 记录。',
+      l2: '对照 Shutdown checkpoint：关闭实例时没有并发写入，因此只需单条 XLOG_CHECKPOINT_SHUTDOWN 记录。'
+    },
+    {
+      status: '阶段 3：执行 CheckPointGuts() 刷数据页与全部事务/复制状态',
+      title: '阶段 3 解析：CheckPointGuts() 不只刷 heap / index 脏页',
+      l1: '依次刷盘 relation map、replication slots、logical decoding、SLRU（CLOG/CommitTs/SUBTRANS/MultiXact）、共享缓冲池与 2PC 状态。',
+      l2: '共享缓冲刷盘与队列 fsync 耗时最长，均在后台节流完成，不阻塞前台事务写入。'
+    },
+    {
+      status: '阶段 4：插入 XLOG_CHECKPOINT_ONLINE 并 XLogFlush() 落盘',
+      title: '阶段 4 解析：写入完成标记并确保 WAL 完成记录自身持久化',
+      l1: 'CheckPointGuts() 全部落盘后，插入 XLOG_CHECKPOINT_ONLINE 记录，其内部指针明确指回阶段 1 的 RedoRecPtr。',
+      l2: '随后执行 XLogFlush(recptr)，保证这条完成记录本身先于 ControlFile 更新落到持久存储。'
+    },
+    {
+      status: '阶段 5：临界区更新 ControlFile，原子切换最新恢复边界',
+      title: '阶段 5 解析：临界区更新 pg_control —— 新恢复起点正式生效',
+      l1: '更新 ControlFile->checkPoint 与 checkPointCopy，清理 minRecoveryPoint 并持久化 unloggedLSN。',
+      l2: '只有这一步完成，后续崩溃恢复才会真正从本轮的 RedoRecPtr 开始扫描，在此之前崩掉仍回退到上一轮检查点。'
+    },
+    {
+      status: '阶段 6：更新 WAL 距离估计，回收或预分配旧 WAL 文件',
+      title: '阶段 6 解析：峰值偏好距离估计与旧 WAL 回收闭环',
+      l1: 'UpdateCheckPointDistanceEstimate() 遇到峰值立即抬高估计值，遇到低峰按 0.90/0.10 缓慢下降。',
+      l2: '随后执行 KeepLogSeg / RemoveOldXlogFiles / PreallocXlogFiles / TruncateSUBTRANS 并输出 LogCheckpointEnd。'
+    }
+  ];
+
+  let anim1Step = 0;
+  let anim1Timer = null;
+
+  const anim1Prev = document.getElementById('anim1-prev');
+  const anim1Play = document.getElementById('anim1-play');
+  const anim1Next = document.getElementById('anim1-next');
+  const anim1Reset = document.getElementById('anim1-reset');
+  const anim1StepNum = document.getElementById('anim1-step-num');
+  const anim1Status = document.getElementById('anim1-status');
+  const a1DetailTitle = document.getElementById('a1-detail-title');
+  const a1DetailL1 = document.getElementById('a1-detail-line1');
+  const a1DetailL2 = document.getElementById('a1-detail-line2');
+
+  function renderAnim1() {
+    const info = ANIM1_STEPS[anim1Step];
+    anim1StepNum.textContent = `${anim1Step + 1} / 6`;
+    anim1Status.textContent = info.status;
+    a1DetailTitle.textContent = info.title;
+    a1DetailL1.textContent = info.l1;
+    a1DetailL2.textContent = info.l2;
+
+    for (let i = 0; i < 6; i++) {
+      const g = document.getElementById(`a1-s${i + 1}`);
+      if (!g) continue;
+      const box = g.querySelector('rect');
+      if (i === anim1Step) {
+        g.setAttribute('opacity', '1');
+        box.setAttribute('fill', '#F7E9DE');
+        box.setAttribute('stroke', '#BE653B');
+        box.setAttribute('stroke-width', '2.2');
+      } else if (i < anim1Step) {
+        g.setAttribute('opacity', '0.92');
+        box.setAttribute('fill', '#EBF1EE');
+        box.setAttribute('stroke', '#2F7A66');
+        box.setAttribute('stroke-width', '1.4');
+      } else {
+        g.setAttribute('opacity', '0.42');
+        box.setAttribute('fill', '#F7F6F2');
+        box.setAttribute('stroke', '#245A6B');
+        box.setAttribute('stroke-width', '1.2');
+      }
+    }
+
+    // Highlight WAL stream elements progressively
+    document.getElementById('a1-wal-c1').setAttribute('opacity', anim1Step >= 1 ? '1' : '0.3');
+    document.getElementById('a1-wal-c2').setAttribute('opacity', anim1Step >= 2 ? '1' : '0.3');
+    document.getElementById('a1-wal-c3').setAttribute('opacity', anim1Step >= 2 ? '1' : '0.3');
+    document.getElementById('a1-wal-online').setAttribute('opacity', anim1Step >= 3 ? '1' : '0.3');
+    document.getElementById('a1-wal-next').setAttribute('opacity', anim1Step >= 5 ? '1' : '0.3');
+  }
+
+  function stopAnim1() {
+    clearInterval(anim1Timer);
+    anim1Timer = null;
+    anim1Play.textContent = '播放推演';
+  }
+
+  anim1Prev.addEventListener('click', () => {
+    stopAnim1();
+    anim1Step = Math.max(0, anim1Step - 1);
+    renderAnim1();
+  });
+
+  anim1Next.addEventListener('click', () => {
+    stopAnim1();
+    anim1Step = Math.min(5, anim1Step + 1);
+    renderAnim1();
+  });
+
+  anim1Reset.addEventListener('click', () => {
+    stopAnim1();
+    anim1Step = 0;
+    renderAnim1();
+  });
+
+  anim1Play.addEventListener('click', () => {
+    if (anim1Timer) {
+      stopAnim1();
+      return;
+    }
+    if (anim1Step >= 5) anim1Step = 0;
+    renderAnim1();
+    anim1Play.textContent = '暂停推演';
+    anim1Timer = setInterval(() => {
+      if (anim1Step < 5) {
+        anim1Step++;
+        renderAnim1();
+      } else {
+        stopAnim1();
+      }
+    }, 1800);
+  });
+
+  /* ==================== ANIMATION 2: SLIDE 07 THROTTLE SIMULATOR ==================== */
+  const sim2Wal = document.getElementById('sim2-wal');
+  const sim2WalVal = document.getElementById('sim2-wal-val');
+  const sim2Target = document.getElementById('sim2-target');
+  const sim2TargetVal = document.getElementById('sim2-target-val');
+  const sim2Load = document.getElementById('sim2-load');
+  const sim2ModeBtn = document.getElementById('sim2-mode');
+  const sim2PlayBtn = document.getElementById('sim2-play');
+  const sim2ResetBtn = document.getElementById('sim2-reset');
+  const sim2Status = document.getElementById('sim2-status');
+
+  const sim2TargetLine = document.getElementById('sim2-target-line');
+  const sim2TargetLbl = document.getElementById('sim2-target-lbl');
+  const sim2CurveWal = document.getElementById('sim2-curve-wal');
+  const sim2CurveBuf = document.getElementById('sim2-curve-buf');
+  const sim2Playhead = document.getElementById('sim2-playhead');
+  const sim2DotBuf = document.getElementById('sim2-dot-buf');
+  const sim2DotWal = document.getElementById('sim2-dot-wal');
+  const sim2MSegs = document.getElementById('sim2-m-segs');
+  const sim2MWin = document.getElementById('sim2-m-win');
+  const sim2DecBox = document.getElementById('sim2-dec-box');
+  const sim2DecTitle = document.getElementById('sim2-dec-title');
+  const sim2DecSub = document.getElementById('sim2-dec-sub');
+
+  let sim2Fast = false;
+  let sim2ProgressT = 0; // 0..1
+  let sim2Raf = null;
+  let sim2Data = [];
+
+  function computeSim2Model() {
+    const maxWalMB = parseInt(sim2Wal.value, 10);
+    const target = parseFloat(sim2Target.value);
+    const load = sim2Load.value;
+    const totalSegs = Math.floor(maxWalMB / 16);
+    const trigSegs = Math.max(1, Math.floor(totalSegs / (1.0 + target)));
+    const winSec = Math.round(300 * target);
+
+    sim2WalVal.textContent = `${maxWalMB}M`;
+    sim2TargetVal.textContent = target.toFixed(1);
+    sim2MSegs.textContent = `${trigSegs} 段`;
+    sim2MWin.textContent = `${winSec} s`;
+
+    // Target vertical boundary in chart (x: 90..860)
+    const tx = 90 + target * 770;
+    sim2TargetLine.setAttribute('x1', tx.toFixed(1));
+    sim2TargetLine.setAttribute('x2', tx.toFixed(1));
+    sim2TargetLbl.setAttribute('x', (tx - 6).toFixed(1));
+    sim2TargetLbl.textContent = target >= 1.0
+      ? '目标完成点 100%（警告：无 fsync 余量）'
+      : `目标完成点 ${Math.round(target * 100)}%（末尾留给 fsync）`;
+
+    // Build 50-step curve for elapsed_xlogs and buffer progress
+    const steps = 50;
+    sim2Data = [];
+    const walPts = [];
+    const bufPts = [];
+    let bufP = 0;
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps; // elapsed_time 0..1
+      let walP = 0;
+      if (load === 'low') {
+        walP = Math.min(1.0, t * 0.55);
+      } else if (load === 'mid') {
+        walP = Math.min(1.0, t * 0.88);
+      } else {
+        // burst: steep spike between t=0.2 and t=0.55
+        if (t < 0.2) walP = t * 0.7;
+        else if (t < 0.55) walP = 0.14 + (t - 0.2) * 2.25;
+        else walP = 0.9275 + (t - 0.55) * 0.2;
+        walP = Math.min(1.0, walP);
+      }
+
+      let state = 'sleep';
+      if (sim2Fast) {
+        bufP = Math.min(1.0, t * 4.5);
+        state = bufP < 1.0 ? 'fast' : 'done';
+      } else {
+        const scaled = bufP * target;
+        const need = Math.max(t, walP);
+        if (bufP >= 1.0) {
+          state = 'done';
+        } else if (scaled < need) {
+          // Catch up: no sleep, write faster
+          const stepInc = load === 'burst' ? 0.055 : 0.038;
+          bufP = Math.min(1.0, bufP + stepInc);
+          state = walP > t ? 'catchup-wal' : 'catchup-time';
+        } else {
+          // On schedule: sleep 100ms, gentle progress
+          bufP = Math.min(1.0, bufP + 0.012);
+          state = 'sleep';
+        }
+      }
+
+      const cx = 90 + t * 770;
+      const cyWal = 340 - walP * 268;
+      const cyBuf = 340 - bufP * 268;
+      walPts.push(`${cx.toFixed(1)},${cyWal.toFixed(1)}`);
+      bufPts.push(`${cx.toFixed(1)},${cyBuf.toFixed(1)}`);
+      sim2Data.push({ t, walP, bufP, cx, cyWal, cyBuf, state, trigSegs });
+    }
+
+    sim2CurveWal.setAttribute('points', walPts.join(' '));
+    sim2CurveBuf.setAttribute('points', bufPts.join(' '));
+    renderSim2At(sim2ProgressT);
+  }
+
+  function renderSim2At(tNorm) {
+    const idx = Math.min(sim2Data.length - 1, Math.max(0, Math.round(tNorm * (sim2Data.length - 1))));
+    const d = sim2Data[idx];
+    if (!d) return;
+
+    sim2Playhead.setAttribute('x1', d.cx.toFixed(1));
+    sim2Playhead.setAttribute('x2', d.cx.toFixed(1));
+    sim2DotBuf.setAttribute('cx', d.cx.toFixed(1));
+    sim2DotBuf.setAttribute('cy', d.cyBuf.toFixed(1));
+    sim2DotWal.setAttribute('cx', d.cx.toFixed(1));
+    sim2DotWal.setAttribute('cy', d.cyWal.toFixed(1));
+
+    sim2Status.textContent = `触发阈值: ${d.trigSegs} 段 · 进度 ${Math.round(d.bufP * 100)}%`;
+
+    if (d.state === 'fast') {
+      sim2DecBox.setAttribute('fill', '#F7E9DE');
+      sim2DecBox.setAttribute('stroke', '#BE653B');
+      sim2DecTitle.setAttribute('fill', '#BE653B');
+      sim2DecTitle.textContent = 'FAST 模式：跳过节流，全速刷脏页';
+      sim2DecSub.textContent = '不休眠直接冲盘，瞬时写 I/O 与 fsync 冲击风险极高';
+    } else if (d.state === 'catchup-wal') {
+      sim2DecBox.setAttribute('fill', '#F7E9DE');
+      sim2DecBox.setAttribute('stroke', '#BE653B');
+      sim2DecTitle.setAttribute('fill', '#BE653B');
+      sim2DecTitle.textContent = '落后 WAL 进度：取消休眠，全力追赶';
+      sim2DecSub.textContent = 'scaled < elapsed_xlogs，checkpointer 主动提速防 WAL 撑爆';
+    } else if (d.state === 'catchup-time') {
+      sim2DecBox.setAttribute('fill', '#F6EFE0');
+      sim2DecBox.setAttribute('stroke', '#AE8A3E');
+      sim2DecTitle.setAttribute('fill', '#AE8A3E');
+      sim2DecTitle.textContent = '落后时间进度：减少休眠，按期追赶';
+      sim2DecSub.textContent = 'scaled < elapsed_time，保证在 completion_target 前刷完';
+    } else if (d.state === 'done') {
+      sim2DecBox.setAttribute('fill', '#E5EFF0');
+      sim2DecBox.setAttribute('stroke', '#245A6B');
+      sim2DecTitle.setAttribute('fill', '#245A6B');
+      sim2DecTitle.textContent = '脏页写出完成 → 进入 ProcessSyncRequests()';
+      sim2DecSub.textContent = '剩余周期留给末尾 fsync、写入 ONLINE 记录与更新 ControlFile';
+    } else {
+      sim2DecBox.setAttribute('fill', '#E4F1EC');
+      sim2DecBox.setAttribute('stroke', '#2F7A66');
+      sim2DecTitle.setAttribute('fill', '#2F7A66');
+      sim2DecTitle.textContent = '领先计划：休眠 100ms 并吸收 fsync';
+      sim2DecSub.textContent = '期间同步处理配置 reload、检查 archive_timeout 与汇报统计';
+    }
+  }
+
+  function stopSim2() {
+    if (sim2Raf) cancelAnimationFrame(sim2Raf);
+    sim2Raf = null;
+    sim2PlayBtn.textContent = '运行模拟';
+  }
+
+  sim2Wal.addEventListener('input', computeSim2Model);
+  sim2Target.addEventListener('input', computeSim2Model);
+  sim2Load.addEventListener('change', computeSim2Model);
+
+  sim2ModeBtn.addEventListener('click', () => {
+    sim2Fast = !sim2Fast;
+    sim2ModeBtn.textContent = sim2Fast ? '模式: FAST' : '模式: SPREAD';
+    sim2ModeBtn.classList.toggle('active-mode', sim2Fast);
+    computeSim2Model();
+  });
+
+  sim2ResetBtn.addEventListener('click', () => {
+    stopSim2();
+    sim2ProgressT = 0;
+    computeSim2Model();
+  });
+
+  sim2PlayBtn.addEventListener('click', () => {
+    if (sim2Raf) {
+      stopSim2();
+      return;
+    }
+    if (sim2ProgressT >= 0.99) sim2ProgressT = 0;
+    sim2PlayBtn.textContent = '暂停模拟';
+    let lastTs = null;
+    function tick(ts) {
+      if (lastTs === null) lastTs = ts;
+      const dt = (ts - lastTs) / 1000;
+      lastTs = ts;
+      sim2ProgressT = Math.min(1.0, sim2ProgressT + dt * 0.22);
+      renderSim2At(sim2ProgressT);
+      if (sim2ProgressT < 1.0) {
+        sim2Raf = requestAnimationFrame(tick);
+      } else {
+        stopSim2();
+      }
+    }
+    sim2Raf = requestAnimationFrame(tick);
+  });
+
+  /* ==================== INIT ==================== */
+  buildToc();
+  renderAnim1();
+  computeSim2Model();
+  goToSlide(0, false);
+  scaleStage();
+})();
+</script>
+</body>
+</html>
